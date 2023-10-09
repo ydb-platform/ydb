@@ -73,7 +73,7 @@ public:
         TReadGuard guard(bucket.RWLock);
 
         typename TActualMap::const_iterator it = bucket.Map.find(key);
-        Y_VERIFY(it != bucket.Map.end(), "not found by key");
+        Y_ABORT_UNLESS(it != bucket.Map.end(), "not found by key");
         return it->second;
     }
 
@@ -94,7 +94,7 @@ public:
         TWriteGuard guard(bucket.RWLock);
 
         typename TActualMap::iterator it = bucket.Map.find(key);
-        Y_VERIFY(it != bucket.Map.end(), "removing non-existent key");
+        Y_ABORT_UNLESS(it != bucket.Map.end(), "removing non-existent key");
         V r = it->second;
         bucket.Map.erase(it);
         return r;

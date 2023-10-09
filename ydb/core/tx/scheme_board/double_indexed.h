@@ -119,7 +119,7 @@ protected:
         }
 
         // storage entry must be kept by other index, we clean only one
-        Y_VERIFY(AnotherIndexIterator(pIt) != sIndex.end());
+        Y_ABORT_UNLESS(AnotherIndexIterator(pIt) != sIndex.end());
 
         IndexIterator(pIt) = pIndex.end();
         pIndex.erase(pIt);
@@ -186,13 +186,13 @@ public:
         } else if (!pIt.second && sIt.second) {
             // has pKey, no sKey, merge val into exited pKey
 
-            Y_VERIFY(AnotherIndexIterator(pIt.first) == AnotherIndex(pIt.first).end());
+            Y_ABORT_UNLESS(AnotherIndexIterator(pIt.first) == AnotherIndex(pIt.first).end());
             Merge(pIt.first->second->Value, std::forward<TV>(val));
             CrossSetIterators(pIt.first->second, sIt.first);
         } else if (pIt.second && !sIt.second) {
             // no pKey, has sKey, merge val into exited sKey
 
-            Y_VERIFY(AnotherIndexIterator(sIt.first) == AnotherIndex(sIt.first).end());
+            Y_ABORT_UNLESS(AnotherIndexIterator(sIt.first) == AnotherIndex(sIt.first).end());
             Merge(sIt.first->second->Value, std::forward<TV>(val));
             CrossSetIterators(sIt.first->second, pIt.first);
         } else if (pIt.first->second != sIt.first->second) {

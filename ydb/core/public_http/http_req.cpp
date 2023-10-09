@@ -121,8 +121,8 @@ namespace NKikimr::NPublicHttp {
         , StartedAt(startedAt)
         , Counters(counters)
     {
-        Y_VERIFY(ActorSystem);
-        Y_VERIFY(Request);
+        Y_ABORT_UNLESS(ActorSystem);
+        Y_ABORT_UNLESS(Request);
         ParseHeaders(Request->Headers);
     }
 

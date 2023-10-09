@@ -24,7 +24,7 @@ class TConfigurePart: public TSubOperationState {
     }
 
     static TVirtualTimestamp GetSnapshotTime(const TSchemeShard* ss, const TPathId& pathId) {
-        Y_VERIFY(ss->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(ss->PathsById.contains(pathId));
         TPathElement::TPtr path = ss->PathsById.at(pathId);
         return TVirtualTimestamp(path->StepCreated, path->CreateTxId);
     }
@@ -57,9 +57,9 @@ public:
                         << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TxType);
-        Y_VERIFY(txState->State == TTxState::ConfigureParts);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TxType);
+        Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
 
         txState->ClearShardsInProgress();
         if constexpr (TKind::NeedSnapshotTime()) {
@@ -168,12 +168,12 @@ public:
             return;
         }
 
-        Y_VERIFY(context.SS->FindTx(operationId));
+        Y_ABORT_UNLESS(context.SS->FindTx(operationId));
         TTxState& txState = *context.SS->FindTx(operationId);
 
         auto tabletId = TTabletId(evRecord.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(tabletId);
-        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
         if (!txState.SchemeChangeNotificationReceived.contains(shardIdx)) {
             return;
@@ -238,7 +238,7 @@ public:
             return false;
         }
 
-        Y_VERIFY(context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(context.SS->FindTx(OperationId));
         TTxState& txState = *context.SS->FindTx(OperationId);
 
         if (!txState.ReadyForNotifications) {
@@ -323,9 +323,9 @@ public:
                     << " at tablet" << ssId);
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TxType);
-        Y_VERIFY(txState->State == TTxState::Aborting);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TxType);
+        Y_ABORT_UNLESS(txState->State == TTxState::Aborting);
 
         txState->ClearShardsInProgress();
 
@@ -411,8 +411,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TxType);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TxType);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -436,8 +436,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TxType);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TxType);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -475,15 +475,15 @@ class TBackupRestoreOperationBase: public TSubOperation {
             return TTxState::ProposedWaitParts;
         case TTxState::ProposedWaitParts: {
             TTxState* txState = context.SS->FindTx(OperationId);
-            Y_VERIFY(txState);
-            Y_VERIFY(txState->TxType == TxType);
+            Y_ABORT_UNLESS(txState);
+            Y_ABORT_UNLESS(txState->TxType == TxType);
 
             if (txState->Cancel) {
                 if (txState->State == TTxState::Done) {
                     return TTxState::Done;
                 }
 
-                Y_VERIFY(txState->State == TTxState::Aborting);
+                Y_ABORT_UNLESS(txState->State == TTxState::Aborting);
                 return TTxState::Aborting;
             }
             return TTxState::Done;
@@ -545,7 +545,7 @@ public:
     }
 
     void PrepareChanges(TPathElement::TPtr path, TOperationContext& context) {
-        Y_VERIFY(context.SS->Tables.contains(path->PathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(path->PathId));
         TTableInfo::TPtr& table = context.SS->Tables.at(path->PathId);
 
         path->LastTxId = OperationId.GetTxId();

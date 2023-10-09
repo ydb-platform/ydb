@@ -20,7 +20,7 @@ public:
             auto expireSec = TDuration::Seconds(ttl.GetExpireAfterSeconds());
 
             Eviction = TEviction{expireSec, ttl.GetColumnName()};
-            Y_VERIFY(!Eviction->ColumnName.empty());
+            Y_ABORT_UNLESS(!Eviction->ColumnName.empty());
 
             switch (ttl.GetColumnUnit()) {
                 case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:

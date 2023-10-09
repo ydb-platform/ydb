@@ -122,7 +122,7 @@ namespace NKikimr {
 
         // start batcher operation; no AddReadItem requests allowed beyond this point
         void Start() {
-            Y_VERIFY(!Started);
+            Y_ABORT_UNLESS(!Started);
             Started = true;
             Iterator = ReadQueue.begin();
         }
@@ -164,7 +164,7 @@ namespace NKikimr {
                     // calculate new number of bytes we are going to read in single request; if this value exceeds
                     // maximum block size, stop generating request (unless read queue is totally empty)
                     const ui32 newTotalBytes = newEnclosingRange.second - newEnclosingRange.first;
-                    Y_VERIFY(newTotalBytes);
+                    Y_ABORT_UNLESS(newTotalBytes);
                     if (newTotalBytes > MaxReadBlockSize && outIt != Iterator) {
                         break;
                     }
@@ -175,7 +175,7 @@ namespace NKikimr {
                     double efficiency = (double)effectiveBytes / newTotalBytes;
                     if (efficiency < EfficiencyThreshold) {
                         // this can't be the first item -- as the efficiency for single item is 1.0
-                        Y_VERIFY(outIt != Iterator);
+                        Y_ABORT_UNLESS(outIt != Iterator);
                         break;
                     }
 
@@ -184,7 +184,7 @@ namespace NKikimr {
                     const i32 addedUselessBytes = newTotalBytes - (totalBytes + it->Size);
                     if (addedUselessBytes > 0 && (ui32)addedUselessBytes > SeekCostInBytes) {
                         // this can't be the first item too for the same reason as above
-                        Y_VERIFY(outIt != Iterator);
+                        Y_ABORT_UNLESS(outIt != Iterator);
                         break;
                     }
 
@@ -219,7 +219,7 @@ namespace NKikimr {
             auto& data = msg->Data;
 
             auto it = ActiveRequests.find(msg->Cookie);
-            Y_VERIFY(it != ActiveRequests.end());
+            Y_ABORT_UNLESS(it != ActiveRequests.end());
 
             for (auto reqIt = it->second.first; reqIt != it->second.second; ++reqIt) {
                 TReadItem& item = *reqIt;
@@ -227,7 +227,7 @@ namespace NKikimr {
                 item.Status = msg->Status;
                 if (msg->Status == NKikimrProto::OK) {
                     // ensure returned area covers this item
-                    Y_VERIFY(item.Offset >= msg->Offset && item.Offset + item.Size <= msg->Offset + data.Size());
+                    Y_ABORT_UNLESS(item.Offset >= msg->Offset && item.Offset + item.Size <= msg->Offset + data.Size());
 
                     // calculate offset of item inside response
                     const ui32 offset = item.Offset - msg->Offset;
@@ -274,7 +274,7 @@ namespace NKikimr {
 
         void Finish() {
             Started = false;
-            Y_VERIFY(NextSerial == NextReadySerial);
+            Y_ABORT_UNLESS(NextSerial == NextReadySerial);
         }
     };
 

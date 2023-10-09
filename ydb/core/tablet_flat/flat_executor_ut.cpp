@@ -171,7 +171,7 @@ namespace NTabletFlatExecutor {
         }
 
         const NTable::TSubset& Result() const {
-            Y_VERIFY(Subset);
+            Y_ABORT_UNLESS(Subset);
             return *Subset;
         }
 
@@ -217,8 +217,8 @@ namespace NTabletFlatExecutor {
             {
                 const ui32 table = Self->Tables.at(0);
                 Self->Subset = txc.DB.Subset(table, Self->Edge(table).Head, { }, { });
-                Y_VERIFY(Self->Subset != nullptr);
-                Y_VERIFY(Self->Subset->Frozen.empty());
+                Y_ABORT_UNLESS(Self->Subset != nullptr);
+                Y_ABORT_UNLESS(Self->Subset->Frozen.empty());
                 txc.Env.DropSnapshot(Self);
                 return true;
             }
@@ -444,7 +444,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
         Scan = new TDummyScan(SelfId(), postpone, abort, rows);
         TScanOptions options;
         if (snap) {
-            Y_VERIFY(ev->Get()->ReadVersion.IsMax(), "Cannot combine multiple snapshot techniques");
+            Y_ABORT_UNLESS(ev->Get()->ReadVersion.IsMax(), "Cannot combine multiple snapshot techniques");
             options.SetSnapshotId(snap);
         } else if (!ev->Get()->ReadVersion.IsMax()) {
             options.SetSnapshotRowVersion(ev->Get()->ReadVersion);
@@ -656,7 +656,7 @@ Y_UNIT_TEST_SUITE(TFlatTableReschedule) {
     class TTxRollbackOnReschedule : public ITransaction {
     public:
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            Y_VERIFY(!Done);
+            Y_ABORT_UNLESS(!Done);
 
             i64 keyId = 42;
 
@@ -671,7 +671,7 @@ Y_UNIT_TEST_SUITE(TFlatTableReschedule) {
                 if (ready == NTable::EReady::Page) {
                     return false;
                 }
-                Y_VERIFY(ready == NTable::EReady::Gone);
+                Y_ABORT_UNLESS(ready == NTable::EReady::Gone);
             }
 
             TString valueText = "value";
@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(TFlatTableReschedule) {
         }
 
         void Complete(const TActorContext& ctx) override {
-            Y_VERIFY(Done);
+            Y_ABORT_UNLESS(Done);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }
 
@@ -1074,7 +1074,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                         match = true;
                     }
                 } else {
-                    Y_VERIFY(!event.TaskType);
+                    Y_ABORT_UNLESS(!event.TaskType);
                     match = true;
                 }
             }
@@ -1848,14 +1848,14 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorColumnGroups) {
                 }
 
                 ui64 key = it->Row().Get(0).AsValue<ui64>();
-                Y_VERIFY(key == next,
+                Y_ABORT_UNLESS(key == next,
                     "Found key %" PRIu64 ", expected %" PRIu64, key, next);
 
                 ++next;
                 last = key;
             }
 
-            Y_VERIFY(last == ToKey,
+            Y_ABORT_UNLESS(last == ToKey,
                 "Last key %" PRIu64 ", expected %" PRIu64, last, ToKey);
 
             return true;
@@ -2023,12 +2023,12 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorCompressedSelectRows) {
             for (keyId = 1000000; keyId < 1000512; ++keyId) {
                 NTable::TRowState row;
                 auto ready = txc.DB.Select(TRowsModel::TableId, key, tags, row);
-                Y_VERIFY(ready == NTable::EReady::Data);
-                Y_VERIFY(row.GetRowState() == NTable::ERowOp::Upsert);
+                Y_ABORT_UNLESS(ready == NTable::EReady::Data);
+                Y_ABORT_UNLESS(row.GetRowState() == NTable::ERowOp::Upsert);
                 TStringBuf selected = row.Get(0).AsBuf();
-                Y_VERIFY(selected.size() == 1024);
+                Y_ABORT_UNLESS(selected.size() == 1024);
                 TString expected(1024, (char)keyId);
-                Y_VERIFY(selected == expected);
+                Y_ABORT_UNLESS(selected == expected);
             }
 
             return true;
@@ -2252,9 +2252,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedRows) {
                     "Found key " << key << ", expected " << expectedKey << " at snapshot " << Snapshot);
 
                 TStringBuf selected = row.Get(1).AsBuf();
-                Y_VERIFY(selected.size() == 1024);
+                Y_ABORT_UNLESS(selected.size() == 1024);
                 TString expected(1024, (char)key);
-                Y_VERIFY(selected == expected);
+                Y_ABORT_UNLESS(selected == expected);
 
                 Y_VERIFY_DEBUG(rit != KeysRanges.end());
                 if (++expectedKey == rit->second) {
@@ -2883,7 +2883,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
                 // Alter destination and stop keeping erase markers
                 {
                     TCompactionPolicy policy = *scheme.GetTableInfo(dst)->CompactionPolicy;
-                    Y_VERIFY(policy.KeepEraseMarkers);
+                    Y_ABORT_UNLESS(policy.KeepEraseMarkers);
                     policy.KeepEraseMarkers = false;
                     txc.DB.Alter().SetCompactionPolicy(dst, policy);
                 }
@@ -3424,13 +3424,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
         }
 
         void ReadyForSecondAttach() {
-            Y_VERIFY(State == EState::Idle);
-            Y_VERIFY(SnapshotCommitResult);
+            Y_ABORT_UNLESS(State == EState::Idle);
+            Y_ABORT_UNLESS(SnapshotCommitResult);
             State = EState::WaitForSecondAttach;
         }
 
         void UnblockSnapshot(TTestActorRuntimeBase& runtime) {
-            Y_VERIFY(SnapshotCommitResult);
+            Y_ABORT_UNLESS(SnapshotCommitResult);
             runtime.Send(SnapshotCommitResult.Release(), 0, true);
         }
     };
@@ -3758,8 +3758,8 @@ Y_UNIT_TEST_SUITE(TFlatTableCold) {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             auto parts = txc.DB.GetTableParts(TRowsModel::TableId);
             auto coldParts = txc.DB.GetTableColdParts(TRowsModel::TableId);
-            Y_VERIFY(parts.empty());
-            Y_VERIFY(!coldParts.empty());
+            Y_ABORT_UNLESS(parts.empty());
+            Y_ABORT_UNLESS(!coldParts.empty());
             return true;
         }
 
@@ -3771,7 +3771,7 @@ Y_UNIT_TEST_SUITE(TFlatTableCold) {
     struct TTxCheckNoColdParts : public ITransaction {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             auto coldParts = txc.DB.GetTableColdParts(TRowsModel::TableId);
-            Y_VERIFY(coldParts.empty());
+            Y_ABORT_UNLESS(coldParts.empty());
             return true;
         }
 
@@ -4910,10 +4910,10 @@ Y_UNIT_TEST_SUITE(TFlatTableSnapshotWithCommits) {
                 if (ready == NTable::EReady::Page)
                     return false;
                 Y_VERIFY_S(ready == NTable::EReady::Data, "Failed to find key " << keyId);
-                Y_VERIFY(row.GetRowState() == NTable::ERowOp::Upsert);
+                Y_ABORT_UNLESS(row.GetRowState() == NTable::ERowOp::Upsert);
                 TStringBuf selected = row.Get(0).AsBuf();
                 TString expected = "value";
-                Y_VERIFY(selected == expected);
+                Y_ABORT_UNLESS(selected == expected);
             }
 
             return true;

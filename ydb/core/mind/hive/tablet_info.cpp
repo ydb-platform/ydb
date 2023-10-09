@@ -41,22 +41,22 @@ TLeaderTabletInfo& TTabletInfo::GetLeader() {
 }
 
 TLeaderTabletInfo& TTabletInfo::AsLeader() {
-    Y_VERIFY(TabletRole == ETabletRole::Leader);
+    Y_ABORT_UNLESS(TabletRole == ETabletRole::Leader);
     return static_cast<TLeaderTabletInfo&>(*this);
 }
 
 const TLeaderTabletInfo& TTabletInfo::AsLeader() const {
-    Y_VERIFY(TabletRole == ETabletRole::Leader);
+    Y_ABORT_UNLESS(TabletRole == ETabletRole::Leader);
     return static_cast<const TLeaderTabletInfo&>(*this);
 }
 
 TFollowerTabletInfo& TTabletInfo::AsFollower() {
-    Y_VERIFY(TabletRole == ETabletRole::Follower);
+    Y_ABORT_UNLESS(TabletRole == ETabletRole::Follower);
     return static_cast<TFollowerTabletInfo&>(*this);
 }
 
 const TFollowerTabletInfo& TTabletInfo::AsFollower() const {
-    Y_VERIFY(TabletRole == ETabletRole::Follower);
+    Y_ABORT_UNLESS(TabletRole == ETabletRole::Follower);
     return static_cast<const TFollowerTabletInfo&>(*this);
 }
 
@@ -245,7 +245,7 @@ bool TTabletInfo::InitiateStop(TSideEffects& sideEffects) {
 bool TTabletInfo::BecomeStarting(TNodeId nodeId) {
     if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_STARTING) {
         Node = Hive.FindNode(nodeId);
-        Y_VERIFY(Node != nullptr);
+        Y_ABORT_UNLESS(Node != nullptr);
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STARTING);
         return true;
     }
@@ -256,14 +256,14 @@ bool TTabletInfo::BecomeRunning(TNodeId nodeId) {
     if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_RUNNING || NodeId != nodeId || (Node != nullptr && Node->Id != nodeId)) {
         NodeId = nodeId;
         PreferredNodeId = 0;
-        Y_VERIFY(NodeId != 0);
+        Y_ABORT_UNLESS(NodeId != 0);
         if (Node == nullptr) {
             Node = Hive.FindNode(NodeId);
-            Y_VERIFY(Node != nullptr);
+            Y_ABORT_UNLESS(Node != nullptr);
         } else if (Node->Id != NodeId) {
             ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STOPPED);
             Node = Hive.FindNode(NodeId);
-            Y_VERIFY(Node != nullptr);
+            Y_ABORT_UNLESS(Node != nullptr);
         }
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
         return true;
@@ -275,7 +275,7 @@ bool TTabletInfo::BecomeStopped() {
     if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_STOPPED) {
         if (Node == nullptr && NodeId != 0) {
             Node = Hive.FindNode(NodeId);
-            Y_VERIFY(Node != nullptr);
+            Y_ABORT_UNLESS(Node != nullptr);
         }
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STOPPED);
         BootState.clear();
@@ -291,8 +291,8 @@ bool TTabletInfo::BecomeStopped() {
 }
 
 void TTabletInfo::BecomeUnknown(TNodeInfo* node) {
-    Y_VERIFY(VolatileState == EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN);
-    Y_VERIFY(Node == nullptr || node == Node);
+    Y_ABORT_UNLESS(VolatileState == EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN);
+    Y_ABORT_UNLESS(Node == nullptr || node == Node);
     Node = node;
     if (Node->Freeze) {
         PreferredNodeId = Node->Id;

@@ -33,7 +33,7 @@ TBufferPoolHugePages::TBufferPoolHugePages(ui32 bufferSize, ui32 bufferCount, TB
     constexpr ui32 alignment = 512;
     auto spdkState = Singleton<TSpdkStateOSS>();
     AlignedBuffer = spdkState->Malloc(AlignUp(ui32(bufferSize), ui32(alignment)) * bufferCount, alignment);
-    Y_VERIFY((ui64)AlignedBuffer % alignment == 0);
+    Y_ABORT_UNLESS((ui64)AlignedBuffer % alignment == 0);
     MarkUpPool(AlignedBuffer);
 }
 
@@ -239,7 +239,7 @@ public:
 
     bool DoTrim(IAsyncIoOperation *op) override {
         TAsyncIoOperation *trim = static_cast<TAsyncIoOperation*>(op);
-        Y_VERIFY(trim->IsTrim);
+        Y_ABORT_UNLESS(trim->IsTrim);
 
         ui64 range[2] = {trim->GetOffset(), trim->GetSize()};
         bool tryAgain = true;
@@ -541,7 +541,7 @@ public:
         Y_VERIFY_DEBUG(File);
 
         auto tOp = dynamic_cast<TAsyncIoOperationLiburing*>(op);
-        Y_VERIFY(tOp != nullptr);
+        Y_ABORT_UNLESS(tOp != nullptr);
 
         tOp->IsReadOp = true;
         tOp->DataPtr = destination;
@@ -553,7 +553,7 @@ public:
         Y_VERIFY_DEBUG(File);
 
         auto tOp = dynamic_cast<TAsyncIoOperationLiburing*>(op);
-        Y_VERIFY(tOp != nullptr);
+        Y_ABORT_UNLESS(tOp != nullptr);
 
         tOp->IsReadOp = false;
         tOp->DataPtr = const_cast<void*>(source);
@@ -568,8 +568,8 @@ public:
 
     bool DoTrim(IAsyncIoOperation *op) override {
         auto trim = dynamic_cast<TAsyncIoOperationLiburing*>(op);
-        Y_VERIFY(trim != nullptr);
-        Y_VERIFY(trim->IsTrim);
+        Y_ABORT_UNLESS(trim != nullptr);
+        Y_ABORT_UNLESS(trim->IsTrim);
 
         ui64 range[2] = {trim->GetOffset(), trim->GetSize()};
         bool tryAgain = true;
@@ -670,7 +670,7 @@ public:
         }
 
         auto tOp = dynamic_cast<TAsyncIoOperationLiburing*>(op);
-        Y_VERIFY(tOp != nullptr);
+        Y_ABORT_UNLESS(tOp != nullptr);
 
         if (tOp->IsReadOp) {
             io_uring_prep_read(sqe, static_cast<FHANDLE>(*File), tOp->DataPtr, tOp->DataSize, tOp->DataOffset);

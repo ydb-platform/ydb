@@ -27,12 +27,12 @@ ui16 TResult::GetType() const {
 }
 
 template <> const NKikimrClient::TResponse& TResult::GetResult<NKikimrClient::TResponse>() const {
-    Y_VERIFY(GetType() == NMsgBusProxy::MTYPE_CLIENT_RESPONSE, "Unexpected response type: %d", GetType());
+    Y_ABORT_UNLESS(GetType() == NMsgBusProxy::MTYPE_CLIENT_RESPONSE, "Unexpected response type: %d", GetType());
     return static_cast<NMsgBusProxy::TBusResponse*>(Reply.Get())->Record;
 }
 
 template <> const NKikimrClient::TBsTestLoadResponse& TResult::GetResult<NKikimrClient::TBsTestLoadResponse>() const {
-    Y_VERIFY(GetType() == NMsgBusProxy::MTYPE_CLIENT_LOAD_RESPONSE, "Unexpected response type: %d", GetType());
+    Y_ABORT_UNLESS(GetType() == NMsgBusProxy::MTYPE_CLIENT_LOAD_RESPONSE, "Unexpected response type: %d", GetType());
     return static_cast<NMsgBusProxy::TBusBsTestLoadResponse*>(Reply.Get())->Record;
 }
 
@@ -80,7 +80,7 @@ TQueryResult::TQueryResult(const TResult& result)
 
 TValue TQueryResult::GetValue() const {
     const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>();
-    Y_VERIFY(response.HasExecutionEngineEvaluatedResponse());
+    Y_ABORT_UNLESS(response.HasExecutionEngineEvaluatedResponse());
     const auto& result = response.GetExecutionEngineEvaluatedResponse();
     // TODO: type caching
     return TValue::Create(result.GetValue(), result.GetType());
@@ -288,9 +288,9 @@ TPrepareResult::TPrepareResult(const TResult& result, const TQuery& query)
 
 TPreparedQuery TPrepareResult::GetQuery() const {
     const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>();
-    Y_VERIFY(response.HasMiniKQLCompileResults());
+    Y_ABORT_UNLESS(response.HasMiniKQLCompileResults());
     const auto& compileResult = response.GetMiniKQLCompileResults();
-    Y_VERIFY(compileResult.HasCompiledProgram(), "Compile error (%" PRIu64 "): %" PRIu32 ":%" PRIu32 " %s",
+    Y_ABORT_UNLESS(compileResult.HasCompiledProgram(), "Compile error (%" PRIu64 "): %" PRIu32 ":%" PRIu32 " %s",
         compileResult.ProgramCompileErrorsSize(),
         (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).position().row() : 0u),
         (compileResult.ProgramCompileErrorsSize() ? compileResult.GetProgramCompileErrors(0).position().column() : 0u),

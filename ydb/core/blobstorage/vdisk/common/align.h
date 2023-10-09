@@ -18,7 +18,7 @@ namespace NKikimr {
     static inline void AlignUpAppendBlockSize(T &buf, ui32 appendBlockSize) {
         ui32 bufSize = buf.Size();
         ui32 expected = AlignUpAppendBlockSize(bufSize, appendBlockSize);
-        Y_VERIFY(expected >= bufSize);
+        Y_ABORT_UNLESS(expected >= bufSize);
         ui32 padding = expected - bufSize;
 
         struct TZeroPadder {

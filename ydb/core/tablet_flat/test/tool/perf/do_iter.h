@@ -43,7 +43,7 @@ namespace NPerf {
             Iter.Make(&Env);
             auto ready = Iter.Seek(key, seek);
 
-            Y_VERIFY(ready != EReady::Page);
+            Y_ABORT_UNLESS(ready != EReady::Page);
         }
 
         ui64 Scan(ui64 items, TSponge &aggr) override

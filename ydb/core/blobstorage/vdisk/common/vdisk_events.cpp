@@ -36,7 +36,7 @@ namespace NKikimr {
     }
 
     void TEvBlobStorage::TEvVPut::StorePayload(TRope&& buffer) {
-        Y_VERIFY(KIKIMR_USE_PROTOBUF_WITH_PAYLOAD);
+        Y_ABORT_UNLESS(KIKIMR_USE_PROTOBUF_WITH_PAYLOAD);
         AddPayload(std::move(buffer));
     }
 

@@ -4,8 +4,8 @@
 namespace NKikimr::NOlap::NCompaction {
 
 bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
-    Y_VERIFY(ChunkIdx < ColumnChunks.size());
-    Y_VERIFY(RecordIndexStart);
+    Y_ABORT_UNLESS(ChunkIdx < ColumnChunks.size());
+    Y_ABORT_UNLESS(RecordIndexStart);
     ui32 currentStartPortionIdx = *RecordIndexStart;
     ui32 currentFinishPortionIdx = RecordIndexFinish;
 
@@ -32,7 +32,7 @@ bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
 
     const ui32 currentFinish = currentFinishPortionIdx - ChunkRecordIndexStartPosition;
     if (currentStart < currentFinish) {
-        Y_VERIFY(currentFinish < CurrentColumnChunk->GetMeta().GetNumRowsVerified());
+        Y_ABORT_UNLESS(currentFinish < CurrentColumnChunk->GetMeta().GetNumRowsVerified());
         column.AppendSlice(GetCurrentBatch().Slice(currentStart, currentFinish - currentStart));
     }
 
@@ -42,7 +42,7 @@ bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
 }
 
 bool TPortionColumnCursor::Next(const ui32 portionRecordIdx, TMergedColumn& column) {
-    Y_VERIFY(ChunkRecordIndexStartPosition <= portionRecordIdx);
+    Y_ABORT_UNLESS(ChunkRecordIndexStartPosition <= portionRecordIdx);
     if (!RecordIndexStart) {
         RecordIndexStart = portionRecordIdx;
         RecordIndexFinish = portionRecordIdx + 1;
@@ -69,8 +69,8 @@ bool TPortionColumnCursor::NextChunk() {
 }
 
 const arrow::RecordBatch& TPortionColumnCursor::GetCurrentBatch() {
-    Y_VERIFY(ChunkIdx < ColumnChunks.size());
-    Y_VERIFY(CurrentBlobChunk);
+    Y_ABORT_UNLESS(ChunkIdx < ColumnChunks.size());
+    Y_ABORT_UNLESS(CurrentBlobChunk);
 
     if (!CurrentBatch) {
         CurrentBatch = NArrow::TStatusValidator::GetValid(ColumnLoader->Apply(CurrentBlobChunk->GetData()));

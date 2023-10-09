@@ -57,7 +57,7 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> TMarksGranules::SliceIntoGra
 }
 
 THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> TMarksGranules::SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::pair<TMark, ui64>>& granules, const TIndexInfo& indexInfo) {
-    Y_VERIFY(batch);
+    Y_ABORT_UNLESS(batch);
     if (batch->num_rows() == 0) {
         return {};
     }
@@ -68,7 +68,7 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> TMarksGranules::SliceIntoGra
         out.emplace(granules[0].second, batch);
     } else {
         const auto effKey = GetEffectiveKey(batch, indexInfo);
-        Y_VERIFY(effKey->num_columns() && effKey->num_rows());
+        Y_ABORT_UNLESS(effKey->num_columns() && effKey->num_rows());
 
         std::vector<NArrow::TRawReplaceKey> keys;
         {
@@ -88,7 +88,7 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> TMarksGranules::SliceIntoGra
                 : NArrow::TReplaceKeyHelper::LowerBound(keys, granules[i + 1].first.GetBorder(), offset);
 
             if (const i64 size = end - offset) {
-                Y_VERIFY(out.emplace(granules[i].second, batch->Slice(offset, size)).second);
+                Y_ABORT_UNLESS(out.emplace(granules[i].second, batch->Slice(offset, size)).second);
             }
 
             offset = end;

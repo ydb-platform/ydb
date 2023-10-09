@@ -88,7 +88,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     const TExportInfo::TPtr exportInfo,
     ui32 itemIdx
 ) {
-    Y_VERIFY(itemIdx < exportInfo->Items.size());
+    Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
 
@@ -116,7 +116,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     case TExportInfo::EKind::YT:
         {
             Ydb::Export::ExportToYtSettings exportSettings;
-            Y_VERIFY(exportSettings.ParseFromString(exportInfo->Settings));
+            Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo->Settings));
 
             task.SetNumberOfRetries(exportSettings.number_of_retries());
             auto& backupSettings = *task.MutableYTSettings();
@@ -131,7 +131,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     case TExportInfo::EKind::S3:
         {
             Ydb::Export::ExportToS3Settings exportSettings;
-            Y_VERIFY(exportSettings.ParseFromString(exportInfo->Settings));
+            Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo->Settings));
 
             task.SetNumberOfRetries(exportSettings.number_of_retries());
             auto& backupSettings = *task.MutableS3Settings();
@@ -158,7 +158,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             }
 
             if (const auto compression = exportSettings.compression()) {
-                Y_VERIFY(FillCompression(*task.MutableCompression(), compression));
+                Y_ABORT_UNLESS(FillCompression(*task.MutableCompression(), compression));
             }
         }
         break;

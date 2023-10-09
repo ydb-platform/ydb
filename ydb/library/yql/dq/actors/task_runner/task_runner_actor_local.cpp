@@ -258,7 +258,7 @@ private:
         auto finish = ev->Get()->Finish;
         auto channelId = ev->Get()->ChannelId;
         if (ev->Get()->IsOut) {
-            Y_VERIFY(ev->Get()->Finish, "dont know what to do with the output channel");
+            Y_ABORT_UNLESS(ev->Get()->Finish, "dont know what to do with the output channel");
             TaskRunner->GetOutputChannel(channelId)->Finish();
             return;
         }

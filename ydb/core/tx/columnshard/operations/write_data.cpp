@@ -18,7 +18,7 @@ bool TArrowData::Parse(const NKikimrDataEvents::TOperationData& proto, const IPa
 }
 
 std::shared_ptr<arrow::RecordBatch> TArrowData::ExtractBatch() {
-    Y_VERIFY(!!IncomingData);
+    Y_ABORT_UNLESS(!!IncomingData);
     auto result = IndexSchema->PrepareForInsert(IncomingData, BatchSchema->GetSchema());
     IncomingData = "";
     return result;
@@ -46,7 +46,7 @@ bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto
 }
 
 std::shared_ptr<arrow::RecordBatch> TProtoArrowData::ExtractBatch() {
-    Y_VERIFY(!!IncomingData);
+    Y_ABORT_UNLESS(!!IncomingData);
     auto result = IndexSchema->PrepareForInsert(IncomingData, ArrowSchema);
     IncomingData = "";
     return result;

@@ -173,7 +173,7 @@ namespace NUtil {
          */
         void truncate(size_t new_size) {
             size_t prev_size = Count.load(std::memory_order_relaxed);
-            Y_VERIFY(new_size <= prev_size);
+            Y_ABORT_UNLESS(new_size <= prev_size);
 
             if (new_size < prev_size) {
                 auto* tail = Tail.load(std::memory_order_acquire);
@@ -224,13 +224,13 @@ namespace NUtil {
          */
         template<class TCallback>
         void Enumerate(size_t index, size_t endIndex, TCallback&& callback) {
-            Y_VERIFY(index <= endIndex);
+            Y_ABORT_UNLESS(index <= endIndex);
             if (index == endIndex) {
                 return;
             }
 
             size_t count = Count.load(std::memory_order_acquire);
-            Y_VERIFY(endIndex <= count);
+            Y_ABORT_UNLESS(endIndex <= count);
 
             auto* tail = Tail.load(std::memory_order_acquire);
             while (tail && index < tail->Offset) {

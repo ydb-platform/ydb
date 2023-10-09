@@ -101,7 +101,7 @@ bool TLeaderTabletInfo::InitiateBlockStorage(TSideEffects& sideEffects, ui32 gen
     if (IsDeleting() && channel == nullptr) {
         return false;
     }
-    Y_VERIFY(channel != nullptr && !channel->History.empty());
+    Y_ABORT_UNLESS(channel != nullptr && !channel->History.empty());
     IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), generation, false);
     sideEffects.Register(x);
     return true;
@@ -156,12 +156,12 @@ TActorId TLeaderTabletInfo::SetLockedToActor(const TActorId& actor, const TDurat
         if (LockedToActor.NodeId() != actor.NodeId()) {
             if (LockedToActor) {
                 TNodeId oldNodeId = LockedToActor.NodeId();
-                Y_VERIFY(oldNodeId != 0, "Unexpected oldNodeId == 0");
+                Y_ABORT_UNLESS(oldNodeId != 0, "Unexpected oldNodeId == 0");
                 Hive.GetNode(oldNodeId).LockedTablets.erase(this);
             }
             if (actor) {
                 TNodeId newNodeId = actor.NodeId();
-                Y_VERIFY(newNodeId != 0, "Unexpected newNodeId == 0");
+                Y_ABORT_UNLESS(newNodeId != 0, "Unexpected newNodeId == 0");
                 Hive.GetNode(newNodeId).LockedTablets.insert(this);
             }
         }

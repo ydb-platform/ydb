@@ -214,11 +214,11 @@ void ChaChaVec::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len)
 
     const ui32 unalignment = intptr_t(plaintext) % 16;
     if constexpr (!Aligned) {
-        Y_VERIFY(unalignment == 8, "Unalignment# %d", (int)unalignment);
+        Y_ABORT_UNLESS(unalignment == 8, "Unalignment# %d", (int)unalignment);
     }
 
-    Y_VERIFY(intptr_t(ip) % 16 == 0);
-    Y_VERIFY(intptr_t(op) % 16 == 0);
+    Y_ABORT_UNLESS(intptr_t(ip) % 16 == 0);
+    Y_ABORT_UNLESS(intptr_t(op) % 16 == 0);
 
     // Unused if Aligned
     vec i_v[4];

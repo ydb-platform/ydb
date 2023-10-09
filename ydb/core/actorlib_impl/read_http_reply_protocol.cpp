@@ -8,7 +8,7 @@ bool TReadHTTPReplyProtocol::CatchReadDataComplete(
         const TActorContext& ctx, size_t amount) noexcept
 {
     Filled += amount;
-    Y_VERIFY(Buf.size() >= Filled);
+    Y_ABORT_UNLESS(Buf.size() >= Filled);
 
     if (Filled < MINIMUM_HTTP_REPLY_SIZE) {
         if (Buf.size() - Filled < FREE_SPACE_LOW_WATER_MARK)

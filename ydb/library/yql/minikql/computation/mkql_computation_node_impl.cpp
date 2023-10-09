@@ -12,7 +12,7 @@ void TRefCountedComputationNode<IComputationNodeInterface>::Ref() {
 
 template <class IComputationNodeInterface>
 void TRefCountedComputationNode<IComputationNodeInterface>::UnRef() {
-    Y_VERIFY(Refs_ > 0);
+    Y_ABORT_UNLESS(Refs_ > 0);
     if (--Refs_ == 0) {
         delete this;
     }

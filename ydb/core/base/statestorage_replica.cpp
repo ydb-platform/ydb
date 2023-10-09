@@ -343,7 +343,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         TFollowerEntryInfo &followerInfo = insIt.first->second;
 
         if (insIt.second == false) { // already known
-            Y_VERIFY(insIt.first->second.FollowerSys == follower);
+            Y_ABORT_UNLESS(insIt.first->second.FollowerSys == follower);
 
             const bool hasChanges = (followerInfo.FollowerTablet != tablet) || (followerInfo.Candidate != isCandidate);
             if (!hasChanges)

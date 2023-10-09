@@ -84,7 +84,7 @@ namespace NKikimr {
 
         static void UpdatePDiskIfNeeded(const TPDiskId& pdiskId, const TDiskInfo& disk, ui32 defaultMaxSlots, TBlobStorageController::TConfigState& state) {
             auto pdiskInfo = state.PDisks.Find(pdiskId);
-            Y_VERIFY(pdiskInfo != nullptr);
+            Y_ABORT_UNLESS(pdiskInfo != nullptr);
             if (pdiskInfo->Kind != disk.PDiskCategory ||
                 pdiskInfo->SharedWithOs != disk.SharedWithOs ||
                 pdiskInfo->ReadCentric != disk.ReadCentric ||
@@ -93,7 +93,7 @@ namespace NKikimr {
             {
                 // update PDisk configuration
                 auto pdiskInfo = state.PDisks.FindForUpdate(pdiskId);
-                Y_VERIFY(pdiskInfo != nullptr);
+                Y_ABORT_UNLESS(pdiskInfo != nullptr);
                 pdiskInfo->Kind = disk.PDiskCategory;
                 pdiskInfo->SharedWithOs = disk.SharedWithOs;
                 pdiskInfo->ReadCentric = disk.ReadCentric;

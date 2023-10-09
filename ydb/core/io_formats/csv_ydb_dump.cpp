@@ -122,12 +122,12 @@ namespace {
     }
 
     TStringBuf BinaryJsonToStringBuf(const TMaybe<NBinaryJson::TBinaryJson>& v) {
-        Y_VERIFY(v.Defined());
+        Y_ABORT_UNLESS(v.Defined());
         return TStringBuf(v->Data(), v->Size());
     }
 
     TStringBuf DyNumberToStringBuf(const TMaybe<TString>& v) {
-        Y_VERIFY(v.Defined());
+        Y_ABORT_UNLESS(v.Defined());
         return TStringBuf(*v);
     }
 
@@ -215,7 +215,7 @@ bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeInfo type, TMemoryPoo
         return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value, pool, &Int128ToPair);
     case NScheme::NTypeIds::Pg:
         // TODO: support pg types
-        Y_VERIFY(false, "pg types are not supported");
+        Y_ABORT_UNLESS(false, "pg types are not supported");
     default:
         return false;
     }
@@ -262,7 +262,7 @@ bool CheckCellValue(const TCell& cell, NScheme::TTypeInfo type) {
         return !NYql::NDecimal::IsError(cell.AsValue<NYql::NDecimal::TInt128>());
     case NScheme::NTypeIds::Pg:
         // TODO: support pg types
-        Y_VERIFY(false, "pg types are not supported");
+        Y_ABORT_UNLESS(false, "pg types are not supported");
     default:
         return false;
     }
@@ -290,7 +290,7 @@ bool TYdbDump::ParseLine(TStringBuf line, const std::vector<std::pair<i32, NSche
             cell = &values.emplace_back();
         }
 
-        Y_VERIFY(cell);
+        Y_ABORT_UNLESS(cell);
 
         if (!MakeCell(*cell, value, pType, pool) || !CheckCellValue(*cell, pType)) {
             strError = TStringBuilder() << "Invalid value: '" << value << "'";

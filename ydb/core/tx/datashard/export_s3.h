@@ -16,7 +16,7 @@ public:
         : Task(task)
         , Columns(columns)
     {
-        Y_VERIFY(task.HasS3Settings());
+        Y_ABORT_UNLESS(task.HasS3Settings());
     }
 
     IActor* CreateUploader(const TActorId& dataShard, ui64 txId) const override;

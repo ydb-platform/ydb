@@ -72,8 +72,8 @@ void TIntervalsOptimizerPlanner::RemovePortion(const std::shared_ptr<TPortionInf
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion")("portion_id", info->GetPortion());
     auto itStart = Positions.find(info->IndexKeyStart());
     auto itFinish = Positions.find(info->IndexKeyEnd());
-    Y_VERIFY(itStart != Positions.end());
-    Y_VERIFY(itFinish != Positions.end());
+    Y_ABORT_UNLESS(itStart != Positions.end());
+    Y_ABORT_UNLESS(itFinish != Positions.end());
     if (itStart == itFinish) {
         RemoveRanged(itStart->second);
         itStart->second.RemoveSummary(info);
@@ -115,15 +115,15 @@ void TIntervalsOptimizerPlanner::AddPortion(const std::shared_ptr<TPortionInfo>&
     auto itEnd = Positions.find(info->IndexKeyEnd());
     if (itEnd == Positions.end()) {
         itEnd = Positions.emplace(info->IndexKeyEnd(), TBorderPositions(info->IndexKeyEnd())).first;
-        Y_VERIFY(itEnd != Positions.begin());
+        Y_ABORT_UNLESS(itEnd != Positions.begin());
         auto itEndCopy = itEnd;
         --itEndCopy;
         itEnd->second.CopyFrom(itEndCopy->second);
         AddRanged(itEnd->second);
         itStart = Positions.find(info->IndexKeyStart());
     }
-    Y_VERIFY(itStart != Positions.end());
-    Y_VERIFY(itEnd != Positions.end());
+    Y_ABORT_UNLESS(itStart != Positions.end());
+    Y_ABORT_UNLESS(itEnd != Positions.end());
     itStart->second.AddStart(info);
     itEnd->second.AddFinish(info);
     if (itStart != itEnd) {
@@ -156,7 +156,7 @@ void TIntervalsOptimizerPlanner::RemoveRanged(const TBorderPositions& data) {
     if (!!data.GetFeatures()) {
         Counters->OnRemoveIntervalsCount(data.GetFeatures().GetPortionsCount(), data.GetFeatures().GetPortionsRawWeight(), data.GetFeatures().GetPortionsWeight());
         auto itFeatures = RangedSegments.find(data.GetFeatures());
-        Y_VERIFY(itFeatures->second.erase(&data));
+        Y_ABORT_UNLESS(itFeatures->second.erase(&data));
         if (itFeatures->second.empty()) {
             RangedSegments.erase(itFeatures);
         }
@@ -166,7 +166,7 @@ void TIntervalsOptimizerPlanner::RemoveRanged(const TBorderPositions& data) {
 void TIntervalsOptimizerPlanner::AddRanged(const TBorderPositions& data) {
     if (!!data.GetFeatures()) {
         Counters->OnAddIntervalsCount(data.GetFeatures().GetPortionsCount(), data.GetFeatures().GetPortionsRawWeight(), data.GetFeatures().GetPortionsWeight());
-        Y_VERIFY(RangedSegments[data.GetFeatures()].emplace(&data).second);
+        Y_ABORT_UNLESS(RangedSegments[data.GetFeatures()].emplace(&data).second);
     }
 }
 

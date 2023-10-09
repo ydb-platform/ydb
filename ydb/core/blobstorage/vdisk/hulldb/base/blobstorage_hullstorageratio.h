@@ -102,7 +102,7 @@ namespace NKikimr {
             }
 
             static TString Fraction(ui64 keep, ui64 total) {
-                Y_VERIFY(keep <= total);
+                Y_ABORT_UNLESS(keep <= total);
                 if (total == 0)
                     return "NA";
                 ui64 percent = keep * 100 / total;

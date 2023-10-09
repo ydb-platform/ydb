@@ -50,7 +50,7 @@ class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpo
         void Clear();
 
         bool IsReady() const {
-            Y_VERIFY(Checkpoint);
+            Y_ABORT_UNLESS(Checkpoint);
             return SavedComputeActorState && SinksCount == SavedSinkStatesCount;
         }
 

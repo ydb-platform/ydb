@@ -80,7 +80,7 @@ public:
     }
 
     EReady Next(TPartDataStats& stats) {
-        Y_VERIFY(IsValid());
+        Y_ABORT_UNLESS(IsValid());
 
         auto curPageId = Pos.GetPageId();
         LastRowId = Pos.GetRowId();
@@ -145,7 +145,7 @@ public:
     }
 
     TDbTupleRef GetCurrentKey() const {
-        Y_VERIFY(KeyColumns->BasicTypes().size() == CurrentKey.size());
+        Y_ABORT_UNLESS(KeyColumns->BasicTypes().size() == CurrentKey.size());
         return TDbTupleRef(KeyColumns->BasicTypes().data(), CurrentKey.data(), CurrentKey.size());
     }
 

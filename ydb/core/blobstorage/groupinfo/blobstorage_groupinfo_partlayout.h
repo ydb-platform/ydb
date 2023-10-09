@@ -24,12 +24,12 @@ namespace NKikimr {
         }
 
         void AddItem(ui32 nodeId, ui32 partIdx, const TBlobStorageGroupType &gtype) {
-            Y_VERIFY(nodeId < gtype.BlobSubgroupSize() && partIdx < gtype.TotalPartCount());
+            Y_ABORT_UNLESS(nodeId < gtype.BlobSubgroupSize() && partIdx < gtype.TotalPartCount());
             PerPartStatus[partIdx] |= TRowBitMask(1) << nodeId;
         }
 
         void ClearItem(ui32 nodeId, ui32 partIdx, const TBlobStorageGroupType& gtype) {
-            Y_VERIFY(nodeId < gtype.BlobSubgroupSize() && partIdx < gtype.TotalPartCount());
+            Y_ABORT_UNLESS(nodeId < gtype.BlobSubgroupSize() && partIdx < gtype.TotalPartCount());
             PerPartStatus[partIdx] &= ~(TRowBitMask(1) << nodeId);
         }
 

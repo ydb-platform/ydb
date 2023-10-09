@@ -31,7 +31,7 @@ TCompatibilityInfo::TCompatibilityInfo() {
     }.ToPB();
 
     // bool success = CompleteFromTag(current);
-    // Y_VERIFY(success);
+    // Y_ABORT_UNLESS(success);
 
     CurrentCompatibilityInfo.CopyFrom(current);
 
@@ -123,7 +123,7 @@ bool CheckComponentId(const NKikimrConfig::TCompatibilityRule& rule, TComponentI
 }
 
 TStored TCompatibilityInfo::MakeStored(TComponentId componentId, const TCurrent* current) const {
-    Y_VERIFY(current);
+    Y_ABORT_UNLESS(current);
 
     TStored stored;
     stored.SetApplication(current->GetApplication());
@@ -218,12 +218,12 @@ bool IsVersionComplete(const NKikimrConfig::TYdbVersion& version) {
 // - compare current to DefaultCompatibilityInfo if current is stable version
 // - consider versions compatible otherwise
 bool CheckNonPresent(const TCurrent* current, TComponentId componentId, TString& errorReason) {
-    Y_VERIFY(current);
+    Y_ABORT_UNLESS(current);
     if (!current->HasVersion()) {
         return true;
     }
     const auto* lastUnsupported = CompatibilityInfo.GetDefault(componentId);
-    Y_VERIFY(lastUnsupported);
+    Y_ABORT_UNLESS(lastUnsupported);
 
     TString errorReason1;
     if (!CompatibilityInfo.CheckCompatibility(lastUnsupported, componentId, errorReason1)) {
@@ -291,7 +291,7 @@ bool CheckRule(std::optional<TString> app, const NKikimrConfig::TYdbVersion* ver
 }
 
 bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStored* stored, TComponentId componentId, TString& errorReason) const {
-    Y_VERIFY(current);
+    Y_ABORT_UNLESS(current);
     if (!stored) {
         // version record is not found
         return CheckNonPresent(current, componentId, errorReason);
@@ -517,20 +517,20 @@ bool TCompatibilityInfo::CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInf
             auto versionFromTag = *tryParse;
             auto version = current.MutableVersion();
             if (version->HasYear()) {
-                Y_VERIFY(version->GetYear() == versionFromTag.GetYear());
+                Y_ABORT_UNLESS(version->GetYear() == versionFromTag.GetYear());
             } else {
                 version->SetYear(versionFromTag.GetYear());
             }
             
             if (version->HasMajor()) {
-                Y_VERIFY(version->GetMajor() == versionFromTag.GetMajor());
+                Y_ABORT_UNLESS(version->GetMajor() == versionFromTag.GetMajor());
             } else {
                 version->SetMajor(versionFromTag.GetMajor());
             }
 
             if (versionFromTag.HasMinor()) {
                 if (version->HasMinor()) {
-                    Y_VERIFY(version->GetMinor() == versionFromTag.GetMinor());
+                    Y_ABORT_UNLESS(version->GetMinor() == versionFromTag.GetMinor());
                 } else {
                     version->SetMinor(versionFromTag.GetMinor());
                 }
@@ -538,7 +538,7 @@ bool TCompatibilityInfo::CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInf
 
             if (versionFromTag.HasHotfix()) {
                 if (version->HasHotfix()) {
-                    Y_VERIFY(version->GetHotfix() == versionFromTag.GetHotfix());
+                    Y_ABORT_UNLESS(version->GetHotfix() == versionFromTag.GetHotfix());
                 } else {
                     version->SetHotfix(versionFromTag.GetHotfix());
                 }
@@ -568,8 +568,8 @@ void CheckVersionTag() {
 
 bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldFormat& peer, TComponentId componentId, TString& errorReason) const {
     // stored version is peer version in terms of Interconnect
-    Y_VERIFY(current);
-    Y_VERIFY(componentId == EComponentId::Interconnect); // old version control is only implemented in IC
+    Y_ABORT_UNLESS(current);
+    Y_ABORT_UNLESS(componentId == EComponentId::Interconnect); // old version control is only implemented in IC
 
     std::optional<TString> peerApplication;
 

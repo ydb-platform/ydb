@@ -95,9 +95,9 @@ public:
                 storageStats.push_back(std::move(entry));
             } else {
                 const auto& entry = storageStats[index];
-                Y_VERIFY(entry.GetPDiskFilter() == value.GetPDiskFilter());
-                Y_VERIFY(entry.GetErasureSpecies() == value.GetErasureSpeciesV2());
-                Y_VERIFY(entry.GetPDiskFilterData() == value.GetPDiskFilterData());
+                Y_ABORT_UNLESS(entry.GetPDiskFilter() == value.GetPDiskFilter());
+                Y_ABORT_UNLESS(entry.GetErasureSpecies() == value.GetErasureSpeciesV2());
+                Y_ABORT_UNLESS(entry.GetPDiskFilterData() == value.GetPDiskFilterData());
             }
             spToEntity[key] = index;
         }
@@ -147,7 +147,7 @@ public:
                                 .Operational = true,
                                 .Decommitted = false,
                             });
-                            Y_VERIFY(ok);
+                            Y_ABORT_UNLESS(ok);
                             break;
                         }
                     }

@@ -173,7 +173,7 @@ TReplication::TReplication(ui64 id, const TPathId& pathId, NKikimrReplication::T
 
 static auto ParseConfig(const TString& config) {
     NKikimrReplication::TReplicationConfig cfg;
-    Y_VERIFY(cfg.ParseFromString(config));
+    Y_ABORT_UNLESS(cfg.ParseFromString(config));
     return cfg;
 }
 

@@ -35,7 +35,7 @@ inline void UuidToMkqlProto(const char* str, size_t sz, NKikimrMiniKQL::TValue& 
         ui64 half[2];
         char bytes[sizeof(ui64) * 2];
     } buf;
-    Y_VERIFY(sizeof(buf) == sz);
+    Y_ABORT_UNLESS(sizeof(buf) == sz);
     memcpy(buf.bytes, str, sizeof(buf));
     res.SetLow128(buf.half[0]);
     res.SetHi128(buf.half[1]);
@@ -46,7 +46,7 @@ inline void UuidToYdbProto(const char* str, size_t sz, Ydb::Value& res) {
         ui64 half[2];
         char bytes[sizeof(ui64) * 2];
     } buf;
-    Y_VERIFY(sizeof(buf) == sz);
+    Y_ABORT_UNLESS(sizeof(buf) == sz);
     memcpy(buf.bytes, str, sizeof(buf));
     res.set_low_128(buf.half[0]);
     res.set_high_128(buf.half[1]);

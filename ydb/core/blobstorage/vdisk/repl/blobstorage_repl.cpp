@@ -187,7 +187,7 @@ namespace NKikimr {
         }
 
         void Transition(EState current, EState next) {
-            Y_VERIFY(State == current, "State# %s Expected# %s", StateToStr(State), StateToStr(current));
+            Y_ABORT_UNLESS(State == current, "State# %s Expected# %s", StateToStr(State), StateToStr(current));
             State = next;
         }
 
@@ -269,7 +269,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvReplStarted::TPtr& ev) {
-            Y_VERIFY(ReplJobActorId == ev->Sender);
+            Y_ABORT_UNLESS(ReplJobActorId == ev->Sender);
 
             switch (State) {
                 case Plan:
@@ -330,11 +330,11 @@ namespace NKikimr {
         }
 
         void Handle(TEvReplFinished::TPtr &ev) {
-            Y_VERIFY(ev->Sender == ReplJobActorId);
+            Y_ABORT_UNLESS(ev->Sender == ReplJobActorId);
             ReplJobActorId = {};
 
             // replication can be finished only from the following states
-            Y_VERIFY(State == Plan || State == Replication, "State# %s", StateToStr(State));
+            Y_ABORT_UNLESS(State == Plan || State == Replication, "State# %s", StateToStr(State));
 
             TEvReplFinished *msg = ev->Get();
             TEvReplFinished::TInfoPtr info = msg->Info;
@@ -360,7 +360,7 @@ namespace NKikimr {
                 }
                 if (!finished) {
                     if (info->DropDonor) {
-                        Y_VERIFY(!DonorQueue.empty() && DonorQueue.front());
+                        Y_ABORT_UNLESS(!DonorQueue.empty() && DonorQueue.front());
                         DropDonor(*DonorQueue.front());
                         DonorQueue.pop_front();
                     } else {
@@ -419,7 +419,7 @@ namespace NKikimr {
 
         void RunRepl(const TLogoBlobID& from) {
             LastReplQuantumStart = TAppData::TimeProvider->Now();
-            Y_VERIFY(!ReplJobActorId);
+            Y_ABORT_UNLESS(!ReplJobActorId);
             const auto& donor = DonorQueue.front();
             STLOG(PRI_DEBUG, BS_REPL, BSVR32, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TReplScheduler::RunRepl"),
                 (From, from), (Donor, donor ? TString(TStringBuilder() << "{VDiskId# " << donor->VDiskId << " VSlotId# " <<
@@ -549,7 +549,7 @@ namespace NKikimr {
 
         void Handle(TEvents::TEvActorDied::TPtr ev) {
             const size_t num = DonorQueryActors.erase(ev->Sender);
-            Y_VERIFY(num);
+            Y_ABORT_UNLESS(num);
         }
 
         void Ignore()

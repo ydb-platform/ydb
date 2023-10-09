@@ -279,7 +279,7 @@ namespace NKikimr::NStorage {
         THashMap<ui64, const NKikimrBlobStorage::TDefineHostConfig*> hostConfigs;
         for (const auto& hc : settings.GetDefineHostConfig()) {
             const bool inserted = hostConfigs.try_emplace(hc.GetHostConfigId(), &hc).second;
-            Y_VERIFY(inserted);
+            Y_ABORT_UNLESS(inserted);
         }
 
         // find all drives
@@ -352,7 +352,7 @@ namespace NKikimr::NStorage {
                     });
 
                     const auto [pdiskIt, inserted] = pdiskMap.try_emplace(fullPDiskId);
-                    Y_VERIFY(inserted);
+                    Y_ABORT_UNLESS(inserted);
                     auto& pdisk = pdiskIt->second;
                     pdisk.SetNodeID(nodeId);
                     pdisk.SetPDiskID(pdiskId);
@@ -397,7 +397,7 @@ namespace NKikimr::NStorage {
                     const NBsController::TPDiskId pdiskId = domain[vdiskIdx];
 
                     const auto pdiskIt = pdiskMap.find(pdiskId);
-                    Y_VERIFY(pdiskIt != pdiskMap.end());
+                    Y_ABORT_UNLESS(pdiskIt != pdiskMap.end());
                     const auto& pdisk = pdiskIt->second;
 
                     if (addedPDisks.insert(pdiskId).second) {
@@ -458,8 +458,8 @@ namespace NKikimr::NStorage {
                     ProposedStorageConfig.emplace(task.Request.GetProposeStorageConfig().GetConfig());
 
                     PersistConfig([this, cookie](TEvPrivate::TEvStorageConfigStored& msg) {
-                        Y_VERIFY(ProposedStorageConfigCookie);
-                        Y_VERIFY(cookie == ProposedStorageConfigCookie);
+                        Y_ABORT_UNLESS(ProposedStorageConfigCookie);
+                        Y_ABORT_UNLESS(cookie == ProposedStorageConfigCookie);
                         ProposedStorageConfigCookie.reset();
 
                         if (auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()) {

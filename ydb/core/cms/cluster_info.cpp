@@ -28,7 +28,7 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
                              TInstant now, TDuration duration) const
 {
     if (State == RESTART) {
-        Y_VERIFY(Lock.Defined());
+        Y_ABORT_UNLESS(Lock.Defined());
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s is restarting (permission %s owned by %s)",
                                PrettyItemName().data(), Lock->PermissionId.data(), Lock->Owner.data());
@@ -83,7 +83,7 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
 bool TLockableItem::IsDown(TErrorInfo &error, TInstant defaultDeadline) const
 {
     if (State == RESTART) {
-        Y_VERIFY(Lock.Defined());
+        Y_ABORT_UNLESS(Lock.Defined());
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s is restarting (permission %s owned by %s)",
                                PrettyItemName().data(), Lock->PermissionId.data(), Lock->Owner.data());
@@ -591,7 +591,7 @@ void TClusterInfo::AddNodeTenants(ui32 nodeId, const NKikimrTenantPool::TTenantP
 
     for (const auto& slot : info.GetSlots()) {
         TString slotTenant = slot.GetAssignedTenant();
-        Y_VERIFY(slotTenant.empty() || nodeTenant.empty() || slotTenant == nodeTenant);
+        Y_ABORT_UNLESS(slotTenant.empty() || nodeTenant.empty() || slotTenant == nodeTenant);
         if (!slotTenant.empty())
             nodeTenant = slotTenant;
     }

@@ -79,7 +79,7 @@ void TActivation::OnModificationFinished(const TString& modificationId) {
     } else if (modificationId == "access") {
         NMetadata::NRequest::TYQLRequestExecutor::Execute(BuildUpdateRequest(), NACLib::TSystemUsers::Metadata(), SelfContainer);
     } else {
-        Y_VERIFY(false);
+        Y_ABORT_UNLESS(false);
     }
 }
 
@@ -89,7 +89,7 @@ void TActivation::OnModificationFailed(const TString& errorMessage, const TStrin
 }
 
 void TActivation::Start(std::shared_ptr<TActivation> selfContainer) {
-    Y_VERIFY(!!selfContainer);
+    Y_ABORT_UNLESS(!!selfContainer);
     SelfContainer = selfContainer;
     TActivationContext::ActorSystem()->Register(new NMetadata::NProvider::TSchemeDescriptionActor(SelfContainer, RequestId, Object.GetTablePath()));
 }

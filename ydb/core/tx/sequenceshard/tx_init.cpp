@@ -47,7 +47,7 @@ namespace NSequenceShard {
                     }
                     case Schema::SysParam_ProcessingParams: {
                         auto binary = rowset.GetValue<Schema::SysParams::BinaryValue>();
-                        Y_VERIFY(Self->ProcessingParams.emplace().ParseFromString(binary));
+                        Y_ABORT_UNLESS(Self->ProcessingParams.emplace().ParseFromString(binary));
                         break;
                     }
                     default: {

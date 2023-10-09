@@ -160,7 +160,7 @@ public:
 
     void TryToRegister(const TActorContext &ctx)
     {
-        Y_VERIFY(!TenantSlotBroker.Pipe);
+        Y_ABORT_UNLESS(!TenantSlotBroker.Pipe);
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {
@@ -214,7 +214,7 @@ public:
     void SendSlotStatus(TDynamicSlotInfo::TPtr slot, NKikimrTenantPool::EStatus status,
                         const TString &error, const TActorContext &ctx)
     {
-        Y_VERIFY(slot->ActiveAction);
+        Y_ABORT_UNLESS(slot->ActiveAction);
         auto event = MakeHolder<TEvTenantPool::TEvConfigureSlotResult>();
         event->Record.SetStatus(status);
         event->Record.SetError(error);
@@ -250,7 +250,7 @@ public:
     void ProcessPendingActions(const THashSet<TDynamicSlotInfo::TPtr, TPtrHash> &slots, const TActorContext &ctx)
     {
         for (auto &slot : slots) {
-            Y_VERIFY(!slot->ActiveAction);
+            Y_ABORT_UNLESS(!slot->ActiveAction);
             if (slot->PendingActions) {
                 slot->ActiveAction = std::move(slot->PendingActions.front());
                 slot->PendingActions.pop();
@@ -310,8 +310,8 @@ public:
     void AttachSlot(TDynamicSlotInfo::TPtr slot, TTenantInfo::TPtr tenant,
                     const TString &label, const TActorContext &ctx)
     {
-        Y_VERIFY(!slot->AssignedTenant);
-        Y_VERIFY(!tenant->AssignedSlots.contains(slot));
+        Y_ABORT_UNLESS(!slot->AssignedTenant);
+        Y_ABORT_UNLESS(!tenant->AssignedSlots.contains(slot));
         slot->AssignedTenant = tenant;
         slot->Label = label;
         tenant->AssignedSlots.insert(slot);
@@ -323,8 +323,8 @@ public:
 
     void DetachSlot(TDynamicSlotInfo::TPtr slot, const TActorContext &ctx)
     {
-        Y_VERIFY(slot->AssignedTenant);
-        Y_VERIFY(slot->AssignedTenant->AssignedSlots.contains(slot));
+        Y_ABORT_UNLESS(slot->AssignedTenant);
+        Y_ABORT_UNLESS(slot->AssignedTenant->AssignedSlots.contains(slot));
 
         LOG_NOTICE_S(ctx, NKikimrServices::TENANT_POOL,
                      LogPrefix << "detach tenant " << slot->AssignedTenant->Name
@@ -374,8 +374,8 @@ public:
 
     void ProcessActiveAction(TDynamicSlotInfo::TPtr slot, const TActorContext &ctx)
     {
-        Y_VERIFY(slot->ActiveAction);
-        Y_VERIFY(slot->ActiveAction->GetTypeRewrite() == TEvTenantPool::EvConfigureSlot);
+        Y_ABORT_UNLESS(slot->ActiveAction);
+        Y_ABORT_UNLESS(slot->ActiveAction->GetTypeRewrite() == TEvTenantPool::EvConfigureSlot);
         auto &rec = slot->ActiveAction->Get<TEvTenantPool::TEvConfigureSlot>()->Record;
         bool ready = true;
         bool updated = false;
@@ -412,7 +412,7 @@ public:
         SubscribeForConfig(ctx);
 
         auto domain = AppData(ctx)->DomainsInfo->GetDomainByName(DomainName);
-        Y_VERIFY(domain);
+        Y_ABORT_UNLESS(domain);
         TenantSlotBroker.TabletId = MakeTenantSlotBrokerID(domain->DefaultStateStorageGroup);
 
         for (auto &pr : Config->StaticSlots) {
@@ -499,8 +499,8 @@ public:
     void Handle(TEvLocal::TEvTenantStatus::TPtr &ev, const TActorContext &ctx)
     {
         auto tenant = Tenants[ev->Get()->TenantName];
-        Y_VERIFY(tenant, "status for unknown tenant");
-        Y_VERIFY(!tenant->HasStaticSlot || ev->Get()->Status == TEvLocal::TEvTenantStatus::STARTED,
+        Y_ABORT_UNLESS(tenant, "status for unknown tenant");
+        Y_ABORT_UNLESS(!tenant->HasStaticSlot || ev->Get()->Status == TEvLocal::TEvTenantStatus::STARTED,
                  "Cannot start static tenant %s: %s", ev->Get()->TenantName.data(), ev->Get()->Error.data());
 
         bool modified = false;
@@ -844,7 +844,7 @@ public:
 
         for (auto &pr : Config->StaticSlots) {
             TString domain = TString(ExtractDomain(pr.second.GetTenantName()));
-            Y_VERIFY(domain, "cannot extract domain from tenant name");
+            Y_ABORT_UNLESS(domain, "cannot extract domain from tenant name");
             if (!domainConfigs.contains(domain))
                 domainConfigs[domain] = CreateDomainConfig();
             domainConfigs[domain]->AddStaticSlot(pr.second);
@@ -853,7 +853,7 @@ public:
         auto domains = AppData(ctx)->DomainsInfo;
         for (auto &pr : domainConfigs) {
             auto *domain = domains->GetDomainByName(pr.first);
-            Y_VERIFY(domain, "unknown domain %s in Tenant Pool config", pr.first.data());
+            Y_ABORT_UNLESS(domain, "unknown domain %s in Tenant Pool config", pr.first.data());
             auto aid = ctx.RegisterWithSameMailbox(new TDomainTenantPool(pr.first, LocalID, pr.second));
             DomainTenantPools[pr.first] = aid;
             auto serviceId = MakeTenantPoolID(SelfId().NodeId(), domain->DomainUid);
@@ -913,8 +913,8 @@ TTenantPoolConfig::TTenantPoolConfig(const NKikimrTenantPool::TTenantPoolConfig 
 void TTenantPoolConfig::AddStaticSlot(const NKikimrTenantPool::TSlotConfig &slot)
 {
     TString name = CanonizePath(slot.GetTenantName());
-    Y_VERIFY(IsEnabled);
-    Y_VERIFY(!StaticSlots.contains(name),
+    Y_ABORT_UNLESS(IsEnabled);
+    Y_ABORT_UNLESS(!StaticSlots.contains(name),
              "two static slots for the same tenant '%s'", name.data());
     StaticSlots[name] = slot;
     StaticSlots[name].SetTenantName(name);

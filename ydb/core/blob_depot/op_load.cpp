@@ -32,7 +32,7 @@ namespace NKikimr::NBlobDepot {
                     } else if (table.IsValid()) {
                         if (table.HaveValue<Schema::Config::ConfigProtobuf>()) {
                             Self->Configured = Self->Config.ParseFromString(table.GetValue<Schema::Config::ConfigProtobuf>());
-                            Y_VERIFY(Self->Configured);
+                            Y_ABORT_UNLESS(Self->Configured);
                         }
                         Self->DecommitState = table.GetValueOrDefault<Schema::Config::DecommitState>();
                         if (table.HaveValue<Schema::Config::AssimilatorState>()) {

@@ -17,11 +17,11 @@ public:
     TSnapshotGetter(std::shared_ptr<arrow::Array> steps, std::shared_ptr<arrow::Array> ids, const TSnapshot& snapshot)
         : Snapshot(snapshot)
     {
-        Y_VERIFY(steps);
-        Y_VERIFY(ids);
-        Y_VERIFY(steps->length() == ids->length());
-        Y_VERIFY(steps->type() == arrow::uint64());
-        Y_VERIFY(ids->type() == arrow::uint64());
+        Y_ABORT_UNLESS(steps);
+        Y_ABORT_UNLESS(ids);
+        Y_ABORT_UNLESS(steps->length() == ids->length());
+        Y_ABORT_UNLESS(steps->type() == arrow::uint64());
+        Y_ABORT_UNLESS(ids->type() == arrow::uint64());
         RawSteps = std::static_pointer_cast<arrow::UInt64Array>(steps)->raw_values();
         RawIds = std::static_pointer_cast<arrow::UInt64Array>(ids)->raw_values();
     }
@@ -34,9 +34,9 @@ public:
 NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
                                      const std::shared_ptr<arrow::Schema>& snapSchema,
                                      const TSnapshot& snapshot) {
-    Y_VERIFY(batch);
-    Y_VERIFY(snapSchema);
-    Y_VERIFY(snapSchema->num_fields() == 2);
+    Y_ABORT_UNLESS(batch);
+    Y_ABORT_UNLESS(snapSchema);
+    Y_ABORT_UNLESS(snapSchema->num_fields() == 2);
     auto steps = batch->GetColumnByName(snapSchema->fields()[0]->name());
     auto ids = batch->GetColumnByName(snapSchema->fields()[1]->name());
     NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
@@ -46,7 +46,7 @@ NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatc
 }
 
 NArrow::TColumnFilter FilterPortion(const std::shared_ptr<arrow::RecordBatch>& portion, const TReadMetadata& readMetadata) {
-    Y_VERIFY(portion);
+    Y_ABORT_UNLESS(portion);
     NArrow::TColumnFilter result = readMetadata.GetPKRangesFilter().BuildFilter(portion);
     if (readMetadata.GetSnapshot().GetPlanStep()) {
         auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();

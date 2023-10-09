@@ -28,11 +28,11 @@ namespace NKikimr {
         }
 
         uintptr_t TPerThreadStorage::Set(size_t key, void* ptr) {
-            Y_VERIFY(ptr != nullptr, "Value cannot be null");
+            Y_ABORT_UNLESS(ptr != nullptr, "Value cannot be null");
 
             if (key < FAST_COUNT) {
                 void* old = Values[key].exchange(ptr, std::memory_order_acq_rel);
-                Y_VERIFY(old == nullptr, "Unexpected non-null previous value in a fast slot");
+                Y_ABORT_UNLESS(old == nullptr, "Unexpected non-null previous value in a fast slot");
                 return uintptr_t(key << 1) | uintptr_t(1);
             }
 
@@ -64,21 +64,21 @@ namespace NKikimr {
                 std::piecewise_construct,
                 std::forward_as_tuple(key),
                 std::forward_as_tuple(ptr));
-            Y_VERIFY(res.second, "Unexpected existing value in a slow slot");
+            Y_ABORT_UNLESS(res.second, "Unexpected existing value in a slow slot");
 
             TSlowSlot* slot = &res.first->second;
             uintptr_t token = uintptr_t(slot);
-            Y_VERIFY((token & 1) == 0, "Unexpected unaligned pointer");
+            Y_ABORT_UNLESS((token & 1) == 0, "Unexpected unaligned pointer");
             return token;
         }
 
         void TPerThreadStorage::Clear(uintptr_t token, void* ptr) {
-            Y_VERIFY(token != 0, "Cannot clear empty token");
+            Y_ABORT_UNLESS(token != 0, "Cannot clear empty token");
 
             if (token & 1) {
                 size_t key = token >> 1;
                 void* old = Values[key].exchange(nullptr, std::memory_order_release);
-                Y_VERIFY(old == ptr, "Unexpected pointer mismatch when clearing a fast slot");
+                Y_ABORT_UNLESS(old == ptr, "Unexpected pointer mismatch when clearing a fast slot");
                 return;
             }
 
@@ -88,7 +88,7 @@ namespace NKikimr {
             // with the slow hash table. However, since *slot != nullptr it
             // cannot be collected until this atomic store succeeds.
             void* old = slot->exchange(nullptr);
-            Y_VERIFY(old == ptr, "Unexpected pointer mismatch when clearing a slow slot");
+            Y_ABORT_UNLESS(old == ptr, "Unexpected pointer mismatch when clearing a slow slot");
             SlowGarbage.fetch_add(1, std::memory_order_release);
         }
 
@@ -101,7 +101,7 @@ namespace NKikimr {
             if (key < FAST_COUNT) {
                 // Initialize a new fast slot
                 auto* slot = &state.Slots[key];
-                Y_VERIFY(slot->Key == size_t(-1));
+                Y_ABORT_UNLESS(slot->Key == size_t(-1));
                 slot->Key = key;
             }
             return key;

@@ -21,7 +21,7 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
     }
     for (auto it = Commits.begin(); it != Commits.end(); ++it) {
         TLogWrite *evLog = *it;
-        Y_VERIFY(evLog);
+        Y_ABORT_UNLESS(evLog);
         if (evLog->Result->Status == NKikimrProto::OK) {
             TRequestBase *req = PDisk->ReqCreator.CreateFromArgs<TLogCommitDone>(*evLog);
             PDisk->InputRequest(req);
@@ -144,8 +144,8 @@ TBuffer *TCompletionChunkReadPart::GetBuffer() {
 }
 
 void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
-    Y_VERIFY(actorSystem);
-    Y_VERIFY(CumulativeCompletion);
+    Y_ABORT_UNLESS(actorSystem);
+    Y_ABORT_UNLESS(CumulativeCompletion);
     if (TCompletionAction::Result != EIoResult::Ok) {
         Release(actorSystem);
         return;
@@ -158,7 +158,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
     ui64 sectorOffset;
     bool isOk = ParseSectorOffset(PDisk->Format, actorSystem, PDisk->PDiskId,
             Read->Offset + CommonBufferOffset, PayloadReadSize, firstSector, lastSector, sectorOffset);
-    Y_VERIFY(isOk);
+    Y_ABORT_UNLESS(isOk);
 
     TBufferWithGaps *commonBuffer = CumulativeCompletion->GetCommonBuffer();
     ui8 *destination = commonBuffer->RawDataPtr(CommonBufferOffset, PayloadReadSize);
@@ -211,7 +211,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
             }
         }
 
-        Y_VERIFY(sectorIdx >= firstSector);
+        Y_ABORT_UNLESS(sectorIdx >= firstSector);
 
         // Decrypt data
         if (beginBadUserOffset != 0xffffffff) {
@@ -293,8 +293,8 @@ void TCompletionChunkReadPart::Release(TActorSystem *actorSystem) {
 
 TCompletionChunkRead::~TCompletionChunkRead() {
     OnDestroy();
-    Y_VERIFY(CommonBuffer.Empty());
-    Y_VERIFY(DoubleFreeCanary == ReferenceCanary, "DoubleFreeCanary in TCompletionChunkRead is dead!");
+    Y_ABORT_UNLESS(CommonBuffer.Empty());
+    Y_ABORT_UNLESS(DoubleFreeCanary == ReferenceCanary, "DoubleFreeCanary in TCompletionChunkRead is dead!");
     // Set DoubleFreeCanary to 0 and make sure compiler will not eliminate that action
     SecureWipeBuffer((ui8*)&DoubleFreeCanary, sizeof(DoubleFreeCanary));
 }
@@ -304,11 +304,11 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
         Read->ChunkIdx, Read->Offset, Read->Cookie, PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), "");
     result->Data = std::move(CommonBuffer);
     CommonBuffer.Clear();
-    //Y_VERIFY(result->Data.IsDetached());
+    //Y_ABORT_UNLESS(result->Data.IsDetached());
 
     result->Data.Commit();
 
-    Y_VERIFY(Read);
+    Y_ABORT_UNLESS(Read);
     LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId << " ReqId# " << Read->ReqId.Id
             << " " << result->ToString() << " To# " << Read->Sender.LocalId());
 
@@ -324,7 +324,7 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
 }
 
 void TCompletionChunkRead::ReplyError(TActorSystem *actorSystem, TString reason) {
-    Y_VERIFY(!Read->IsReplied);
+    Y_ABORT_UNLESS(!Read->IsReplied);
     CommonBuffer.Clear();
 
     TStringStream error;

@@ -58,12 +58,12 @@ public:
     TString DebugString() const;
 
     ui64 GetExpectedBlobsSize() const {
-        Y_VERIFY(WaitBlobsSize);
+        Y_ABORT_UNLESS(WaitBlobsSize);
         return *WaitBlobsSize;
     }
 
     ui64 GetExpectedBlobsCount() const {
-        Y_VERIFY(WaitBlobsCount);
+        Y_ABORT_UNLESS(WaitBlobsCount);
         return *WaitBlobsCount;
     }
 

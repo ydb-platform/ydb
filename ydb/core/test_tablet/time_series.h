@@ -41,7 +41,7 @@ namespace NKikimr {
             std::vector<ui32> res(ps.size());
             for (const auto& [_, duration] : Queue) {
                 const size_t index = std::lower_bound(ps.begin(), ps.end(), duration) - ps.begin();
-                Y_VERIFY(index < ps.size());
+                Y_ABORT_UNLESS(index < ps.size());
                 ++res[index];
             }
             return res;

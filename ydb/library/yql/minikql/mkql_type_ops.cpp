@@ -601,7 +601,7 @@ public:
 
         for (ui16 date = 0; date < Days_.size(); ++date) {
             ui32 year, month, day;
-            Y_VERIFY(SplitDateUncached(date, year, month, day));
+            Y_ABORT_UNLESS(SplitDateUncached(date, year, month, day));
 
             ++dayOfYear;
             if (++dayOfWeek > 7) {

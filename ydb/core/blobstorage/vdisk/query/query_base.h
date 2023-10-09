@@ -47,7 +47,7 @@ namespace NKikimr {
 
         ui8 PDiskPriority() const {
             ui8 priority = 0;
-            Y_VERIFY(Record.HasHandleClass());
+            Y_ABORT_UNLESS(Record.HasHandleClass());
             switch (Record.GetHandleClass()) {
                 case NKikimrBlobStorage::EGetHandleClass::AsyncRead:
                     priority = NPriRead::HullOnlineOther;

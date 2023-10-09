@@ -24,7 +24,7 @@ namespace NDeprecatedUserData {
     }
 
     void Parse(const TString& data, ui64& offset, ui32& gen, ui32& step, TString& session) {
-        Y_VERIFY(sizeof(ui64) <= data.size());
+        Y_ABORT_UNLESS(sizeof(ui64) <= data.size());
 
         offset = *reinterpret_cast<const ui64*>(data.c_str());
         gen = 0;
@@ -62,9 +62,9 @@ TUsersInfoStorage::TUsersInfoStorage(
 }
 
 void TUsersInfoStorage::Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx) {
-    Y_VERIFY(UsersInfo.empty());
-    Y_VERIFY(!TabletActor);
-    Y_VERIFY(!PartitionActor);
+    Y_ABORT_UNLESS(UsersInfo.empty());
+    Y_ABORT_UNLESS(!TabletActor);
+    Y_ABORT_UNLESS(!PartitionActor);
     TabletActor = tabletActor;
     PartitionActor = partitionActor;
 
@@ -78,8 +78,8 @@ void TUsersInfoStorage::Init(TActorId tabletActor, TActorId partitionActor, cons
 }
 
 void TUsersInfoStorage::ParseDeprecated(const TString& key, const TString& data, const TActorContext& ctx) {
-    Y_VERIFY(key.size() >= TKeyPrefix::MarkedSize());
-    Y_VERIFY(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUserDeprecated);
+    Y_ABORT_UNLESS(key.size() >= TKeyPrefix::MarkedSize());
+    Y_ABORT_UNLESS(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUserDeprecated);
     TString user = key.substr(TKeyPrefix::MarkedSize());
 
     TUserInfo* userInfo = GetIfExists(user);
@@ -92,7 +92,7 @@ void TUsersInfoStorage::ParseDeprecated(const TString& key, const TString& data,
     ui32 step = 0;
     TString session;
     NDeprecatedUserData::Parse(data, offset, gen, step, session);
-    Y_VERIFY(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
+    Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
 
     if (!userInfo) {
         Create(ctx, user, 0, false, session, gen, step, static_cast<i64>(offset), 0, TInstant::Zero());
@@ -105,17 +105,17 @@ void TUsersInfoStorage::ParseDeprecated(const TString& key, const TString& data,
 }
 
 void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TActorContext& ctx) {
-    Y_VERIFY(key.size() >= TKeyPrefix::MarkedSize());
-    Y_VERIFY(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUser);
+    Y_ABORT_UNLESS(key.size() >= TKeyPrefix::MarkedSize());
+    Y_ABORT_UNLESS(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUser);
     TString user = key.substr(TKeyPrefix::MarkedSize());
 
-    Y_VERIFY(sizeof(ui64) <= data.size());
+    Y_ABORT_UNLESS(sizeof(ui64) <= data.size());
 
     NKikimrPQ::TUserInfo userData;
     bool res = userData.ParseFromString(data);
-    Y_VERIFY(res);
+    Y_ABORT_UNLESS(res);
 
-    Y_VERIFY(userData.GetOffset() <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, userData.GetOffset());
+    Y_ABORT_UNLESS(userData.GetOffset() <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, userData.GetOffset());
     i64 offset = static_cast<i64>(userData.GetOffset());
 
     TUserInfo* userInfo = GetIfExists(user);
@@ -133,18 +133,18 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
         userInfo->ReadRuleGeneration = userData.GetReadRuleGeneration();
     }
     userInfo = GetIfExists(user);
-    Y_VERIFY(userInfo);
+    Y_ABORT_UNLESS(userInfo);
     userInfo->Parsed = true;
 }
 
 void TUsersInfoStorage::Remove(const TString& user, const TActorContext&) {
     auto it = UsersInfo.find(user);
-    Y_VERIFY(it != UsersInfo.end());
+    Y_ABORT_UNLESS(it != UsersInfo.end());
     UsersInfo.erase(it);
 }
 
 TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorContext& ctx, TMaybe<ui64> readRuleGeneration) {
-    Y_VERIFY(!user.empty());
+    Y_ABORT_UNLESS(!user.empty());
     auto it = UsersInfo.find(user);
     if (it == UsersInfo.end()) {
         return Create(ctx, user, readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration, false, "", 0, 0, 0, 0, TInstant::Zero());
@@ -202,7 +202,7 @@ TUserInfo& TUsersInfoStorage::Create(
 ) {
     auto userInfo = CreateUserInfo(ctx, user, readRuleGeneration, important, session, gen, step, offset, readOffsetRewindSum, readFromTimestamp);
     auto result = UsersInfo.emplace(user, std::move(userInfo));
-    Y_VERIFY(result.second);
+    Y_ABORT_UNLESS(result.second);
     return result.first->second;
 }
 

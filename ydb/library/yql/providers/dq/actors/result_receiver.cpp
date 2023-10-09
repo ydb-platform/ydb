@@ -97,7 +97,7 @@ private:
 
     void SendAck(const TString& messageId) {
         const auto messageIt = PendingMessages.find(messageId);
-        Y_VERIFY(messageIt != PendingMessages.end());
+        Y_ABORT_UNLESS(messageIt != PendingMessages.end());
         const auto& message = messageIt->second;
 
         auto req = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();

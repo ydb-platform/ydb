@@ -3,7 +3,7 @@
 namespace NKikimr::NMetadata::NSecret {
 
 bool TSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawDataResult) {
-    Y_VERIFY(rawDataResult.result_sets().size() == 2);
+    Y_ABORT_UNLESS(rawDataResult.result_sets().size() == 2);
     ParseSnapshotObjects<TSecret>(rawDataResult.result_sets()[0], [this](TSecret&& s) {Secrets.emplace(s, s); });
     ParseSnapshotObjects<TAccess>(rawDataResult.result_sets()[1], [this](TAccess&& s) {Access.emplace_back(std::move(s)); });
     return true;

@@ -87,16 +87,16 @@ namespace NKikimr {
         bool Keep(const TLogoBlobID& id) {
             if (!KeepData) {
                 // seek to the desired key; the key MUST exist in the whole database
-                Y_VERIFY(Iter.Valid());
-                Y_VERIFY(Iter.GetCurKey() <= id);
+                Y_ABORT_UNLESS(Iter.Valid());
+                Y_ABORT_UNLESS(Iter.GetCurKey() <= id);
                 if (Iter.GetCurKey() < id) {
                     Iter.Next();
-                    Y_VERIFY(Iter.Valid());
+                    Y_ABORT_UNLESS(Iter.Valid());
                     if (Iter.GetCurKey() < id) {
                         Iter.Seek(id);
                     }
                 }
-                Y_VERIFY(Iter.Valid() && Iter.GetCurKey() == id);
+                Y_ABORT_UNLESS(Iter.Valid() && Iter.GetCurKey() == id);
 
                 // put iterator value to merger
                 Iter.PutToMerger(&Merger);

@@ -407,7 +407,7 @@ private:
 
     static TIteratorIndex IteratorIndexFromSize(size_t size) {
         TIteratorIndex index = size;
-        Y_VERIFY(index == size, "Iterator index overflow");
+        Y_ABORT_UNLESS(index == size, "Iterator index overflow");
         return index;
     }
 
@@ -546,7 +546,7 @@ inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TRunIt> it)
 template<class TIteratorOps>
 inline void TTableItBase<TIteratorOps>::StopBefore(TArrayRef<const TCell> key)
 {
-    Y_VERIFY(!StopKey, "Using multiple stop keys not allowed");
+    Y_ABORT_UNLESS(!StopKey, "Using multiple stop keys not allowed");
 
     if (Y_UNLIKELY(!key)) {
         return;
@@ -563,7 +563,7 @@ inline void TTableItBase<TIteratorOps>::StopBefore(TArrayRef<const TCell> key)
 template<class TIteratorOps>
 inline void TTableItBase<TIteratorOps>::StopAfter(TArrayRef<const TCell> key)
 {
-    Y_VERIFY(!StopKey, "Using multiple stop keys not allowed");
+    Y_ABORT_UNLESS(!StopKey, "Using multiple stop keys not allowed");
 
     if (Y_UNLIKELY(!key)) {
         return;

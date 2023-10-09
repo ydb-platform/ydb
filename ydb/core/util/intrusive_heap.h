@@ -39,7 +39,7 @@ public:
     }
 
     void Add(T* value) {
-        Y_VERIFY(HeapIndex(value) == size_t(-1), "Value is already on the heap");
+        Y_ABORT_UNLESS(HeapIndex(value) == size_t(-1), "Value is already on the heap");
         Data.emplace_back(value);
         HeapIndex(value) = Data.size() - 1;
         SiftUp(value);
@@ -47,8 +47,8 @@ public:
 
     void Remove(T* value) {
         size_t index = std::exchange(HeapIndex(value), size_t(-1));
-        Y_VERIFY(index != size_t(-1), "Value is not on the heap");
-        Y_VERIFY(index < Data.size() && Data[index] == value, "Heap index is out of sync");
+        Y_ABORT_UNLESS(index != size_t(-1), "Value is not on the heap");
+        Y_ABORT_UNLESS(index < Data.size() && Data[index] == value, "Heap index is out of sync");
 
         for (;;) {
             size_t child = (index << 1) + 1;
@@ -85,8 +85,8 @@ public:
     bool SiftDown(T* value) {
         bool moved = false;
         size_t index = HeapIndex(value);
-        Y_VERIFY(index != size_t(-1), "Value is not on the heap");
-        Y_VERIFY(index < Data.size() && Data[index] == value, "Heap index is out of sync");
+        Y_ABORT_UNLESS(index != size_t(-1), "Value is not on the heap");
+        Y_ABORT_UNLESS(index < Data.size() && Data[index] == value, "Heap index is out of sync");
 
         for (;;) {
             size_t child = (index << 1) + 1;
@@ -124,8 +124,8 @@ public:
     bool SiftUp(T* value) {
         bool moved = false;
         size_t index = HeapIndex(value);
-        Y_VERIFY(index != size_t(-1), "Value is not on the heap");
-        Y_VERIFY(index < Data.size() && Data[index] == value, "Heap index is out of sync");
+        Y_ABORT_UNLESS(index != size_t(-1), "Value is not on the heap");
+        Y_ABORT_UNLESS(index < Data.size() && Data[index] == value, "Heap index is out of sync");
 
         while (index > 0) {
             size_t parent = (index - 1) >> 1;

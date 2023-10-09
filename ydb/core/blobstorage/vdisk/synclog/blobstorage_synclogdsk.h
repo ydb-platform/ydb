@@ -134,7 +134,7 @@ namespace NKikimr {
 
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
                 const bool inserted = chunks.insert(ChunkIdx).second;
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
             }
 
             static std::pair<TOneChunkPtr, const char *> Construct(const char *serialized);

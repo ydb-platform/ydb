@@ -48,7 +48,7 @@ public:
             Signals->OnAddCriticalCount(p->NumRows());
 
             NormalizedWeight -= p->NumRows();
-            Y_VERIFY(NormalizedWeight >= 0);
+            Y_ABORT_UNLESS(NormalizedWeight >= 0);
 
             Signals->OnRemoveNormalCount(p->NumRows());
         } else if (it->second >= 2 && refCountPred == 0) {
@@ -56,7 +56,7 @@ public:
             Signals->OnAddCriticalCount(p->NumRows());
         } else if (it->second >= 2 && refCountPred >= 2) {
         } else {
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
         }
     }
 
@@ -65,31 +65,31 @@ public:
             Signals->OnRemoveSmallPortion();
         }
         auto it = Counters.find(p->GetPortion());
-        Y_VERIFY(it != Counters.end());
+        Y_ABORT_UNLESS(it != Counters.end());
         const i64 refCountPred = it->second;
         it->second -= refCount;
-        Y_VERIFY(it->second >= 0);
+        Y_ABORT_UNLESS(it->second >= 0);
         if (it->second >= 2) {
         } else if (it->second == 1) {
-            Y_VERIFY(refCountPred >= 2);
+            Y_ABORT_UNLESS(refCountPred >= 2);
             CriticalWeight -= p->NumRows();
-            Y_VERIFY(CriticalWeight >= 0);
+            Y_ABORT_UNLESS(CriticalWeight >= 0);
             Signals->OnRemoveCriticalCount(p->NumRows());
-            Y_VERIFY(CriticalWeight >= 0);
+            Y_ABORT_UNLESS(CriticalWeight >= 0);
             NormalizedWeight += p->NumRows();
             Signals->OnAddNormalCount(p->NumRows());
         } else if (it->second == 0) {
             if (refCountPred >= 2) {
-                Y_VERIFY(refCountPred >= 2);
+                Y_ABORT_UNLESS(refCountPred >= 2);
                 CriticalWeight -= p->NumRows();
-                Y_VERIFY(CriticalWeight >= 0);
+                Y_ABORT_UNLESS(CriticalWeight >= 0);
                 Signals->OnRemoveCriticalCount(p->NumRows());
             } else if (refCountPred == 1) {
                 NormalizedWeight -= p->NumRows();
-                Y_VERIFY(NormalizedWeight >= 0);
+                Y_ABORT_UNLESS(NormalizedWeight >= 0);
                 Signals->OnRemoveNormalCount(p->NumRows());
             } else {
-                Y_VERIFY(false);
+                Y_ABORT_UNLESS(false);
             }
             Counters.erase(it);
         }
@@ -108,7 +108,7 @@ private:
     std::shared_ptr<TLevelInfo> LevelInfo;
 public:
     void InitInternalPoint(const TBorderPoint& predPoint) {
-        Y_VERIFY(predPoint.MiddleWeight.size() == predPoint.MiddlePortions.size());
+        Y_ABORT_UNLESS(predPoint.MiddleWeight.size() == predPoint.MiddlePortions.size());
         for (auto&& i : predPoint.MiddlePortions) {
             auto it = predPoint.MiddleWeight.find(i.first);
             if (it->second != 2) {
@@ -118,8 +118,8 @@ public:
     }
 
     std::shared_ptr<TPortionInfo> GetOnlyPortion() const {
-        Y_VERIFY(MiddlePortions.size() == 1);
-        Y_VERIFY(!IsCritical());
+        Y_ABORT_UNLESS(MiddlePortions.size() == 1);
+        Y_ABORT_UNLESS(!IsCritical());
         return MiddlePortions.begin()->second;
     }
 
@@ -156,28 +156,28 @@ public:
     }
 
     void AddStart(const std::shared_ptr<TPortionInfo>& p) {
-        Y_VERIFY(StartPortions.emplace(p->GetPortion(), p).second);
+        Y_ABORT_UNLESS(StartPortions.emplace(p->GetPortion(), p).second);
     }
     void RemoveStart(const std::shared_ptr<TPortionInfo>& p) {
-        Y_VERIFY(StartPortions.erase(p->GetPortion()));
+        Y_ABORT_UNLESS(StartPortions.erase(p->GetPortion()));
     }
 
     void AddMiddle(const std::shared_ptr<TPortionInfo>& p, const ui32 portionCriticalWeight) {
-        Y_VERIFY(MiddleWeight.emplace(p->GetPortion(), portionCriticalWeight).second);
-        Y_VERIFY(MiddlePortions.emplace(p->GetPortion(), p).second);
+        Y_ABORT_UNLESS(MiddleWeight.emplace(p->GetPortion(), portionCriticalWeight).second);
+        Y_ABORT_UNLESS(MiddlePortions.emplace(p->GetPortion(), p).second);
         LevelInfo->AddPortion(p, portionCriticalWeight);
     }
     void RemoveMiddle(const std::shared_ptr<TPortionInfo>& p, const ui32 portionCriticalWeight) {
-        Y_VERIFY(MiddleWeight.erase(p->GetPortion()));
-        Y_VERIFY(MiddlePortions.erase(p->GetPortion()));
+        Y_ABORT_UNLESS(MiddleWeight.erase(p->GetPortion()));
+        Y_ABORT_UNLESS(MiddlePortions.erase(p->GetPortion()));
         LevelInfo->RemovePortion(p, portionCriticalWeight);
     }
 
     void AddFinish(const std::shared_ptr<TPortionInfo>& p) {
-        Y_VERIFY(FinishPortions.emplace(p->GetPortion(), p).second);
+        Y_ABORT_UNLESS(FinishPortions.emplace(p->GetPortion(), p).second);
     }
     void RemoveFinish(const std::shared_ptr<TPortionInfo>& p) {
-        Y_VERIFY(FinishPortions.erase(p->GetPortion()));
+        Y_ABORT_UNLESS(FinishPortions.erase(p->GetPortion()));
     }
 
     bool IsEmpty() const {
@@ -296,7 +296,7 @@ public:
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
-        Y_VERIFY(PortionIds.erase(portion->GetPortion()));
+        Y_ABORT_UNLESS(PortionIds.erase(portion->GetPortion()));
         auto itStart = Borders.find(portion->IndexKeyStart());
         AFL_VERIFY(itStart != Borders.end());
         auto itFinish = Borders.find(portion->IndexKeyEnd());
@@ -309,10 +309,10 @@ public:
                 it->second.RemoveMiddle(portion, 1);
             }
             if (itFinish->second.IsEmpty()) {
-                Y_VERIFY(Borders.erase(portion->IndexKeyEnd()));
+                Y_ABORT_UNLESS(Borders.erase(portion->IndexKeyEnd()));
             }
             if (itStart->second.IsEmpty()) {
-                Y_VERIFY(Borders.erase(portion->IndexKeyStart()));
+                Y_ABORT_UNLESS(Borders.erase(portion->IndexKeyStart()));
             }
         } else {
             itStart->second.RemoveMiddle(portion, 2);
@@ -323,7 +323,7 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion) {
-        Y_VERIFY(PortionIds.emplace(portion->GetPortion()).second);
+        Y_ABORT_UNLESS(PortionIds.emplace(portion->GetPortion()).second);
         auto itStartInfo = Borders.emplace(portion->IndexKeyStart(), TBorderPoint(LevelInfo));
         auto itStart = itStartInfo.first;
         if (itStartInfo.second && itStart != Borders.begin()) {
@@ -334,7 +334,7 @@ public:
         auto itFinishInfo = Borders.emplace(portion->IndexKeyEnd(), TBorderPoint(LevelInfo));
         auto itFinish = itFinishInfo.first;
         if (itFinishInfo.second) {
-            Y_VERIFY(itFinish != Borders.begin());
+            Y_ABORT_UNLESS(itFinish != Borders.begin());
             auto itFinishCopy = itFinish;
             --itFinishCopy;
             itFinish->second.InitInternalPoint(itFinishCopy->second);
@@ -406,13 +406,13 @@ public:
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portionInfo, const TInstant addInstant) {
         if (TInstant::MilliSeconds(portionInfo->RecordSnapshotMax().GetPlanStep()) + CriticalAge < addInstant) {
-            Y_VERIFY(!PortionIds.contains(portionInfo->GetPortion()));
+            Y_ABORT_UNLESS(!PortionIds.contains(portionInfo->GetPortion()));
             if (NextLevel) {
                 return NextLevel->AddPortion(portionInfo, addInstant);
             }
         }
         PortionsPlacement.AddPortion(portionInfo);
-        Y_VERIFY(PortionByAge[portionInfo->RecordSnapshotMax()].emplace(portionInfo->GetPortion(), portionInfo).second);
+        Y_ABORT_UNLESS(PortionByAge[portionInfo->RecordSnapshotMax()].emplace(portionInfo->GetPortion(), portionInfo).second);
         ProvidePortionsNextLevel(addInstant);
     }
 
@@ -420,8 +420,8 @@ public:
         PortionsPlacement.RemovePortion(portionInfo);
         {
             auto it = PortionByAge.find(portionInfo->RecordSnapshotMax());
-            Y_VERIFY(it != PortionByAge.end());
-            Y_VERIFY(it->second.erase(portionInfo->GetPortion()));
+            Y_ABORT_UNLESS(it != PortionByAge.end());
+            Y_ABORT_UNLESS(it->second.erase(portionInfo->GetPortion()));
             if (it->second.empty()) {
                 PortionByAge.erase(it);
             }
@@ -446,7 +446,7 @@ public:
                     position = pos;
                 }
             }
-            Y_VERIFY(position);
+            Y_ABORT_UNLESS(position);
             positions.emplace_back(*position);
         }
         TSaverContext saverContext(StoragesManager->GetOperator(IStoragesManager::DefaultStorageId), StoragesManager);

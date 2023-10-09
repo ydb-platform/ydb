@@ -174,17 +174,17 @@ private:
     ui32 Raw = Max<ui32>();
 
     void Set(EGroupConfigurationType configurationType, ui32 availabilityDomainID, ui32 groupLocalId) {
-        Y_VERIFY(groupLocalId <= MaxValidGroup);
+        Y_ABORT_UNLESS(groupLocalId <= MaxValidGroup);
 
         switch (configurationType) {
             case EGroupConfigurationType::Static:
             case EGroupConfigurationType::Dynamic:
-                Y_VERIFY(availabilityDomainID <= MaxValidDomain);
+                Y_ABORT_UNLESS(availabilityDomainID <= MaxValidDomain);
                 Raw = static_cast<ui32>(configurationType) << TypeShift | availabilityDomainID << DomainShift | groupLocalId;
                 break;
 
             case EGroupConfigurationType::Virtual:
-                Y_VERIFY(availabilityDomainID == 1);
+                Y_ABORT_UNLESS(availabilityDomainID == 1);
                 Raw = static_cast<ui32>(EGroupConfigurationType::Dynamic) << TypeShift | VirtualGroupDomain << DomainShift | groupLocalId;
                 break;
         }
@@ -265,7 +265,7 @@ struct TTabletChannelInfo {
 
     ui32 GroupForGeneration(ui32 gen) const {
         const size_t historySize = History.size();
-        Y_VERIFY(historySize > 0, "empty channel history");
+        Y_ABORT_UNLESS(historySize > 0, "empty channel history");
 
         const THistoryEntry * const first = &*History.begin();
         if (historySize == 1) {
@@ -408,7 +408,7 @@ public:
 
 inline TActorId TTabletStorageInfo::BSProxyIDForChannel(ui32 channel, ui32 generation) const {
     const ui32 group = GroupFor(channel, generation);
-    Y_VERIFY(group != Max<ui32>());
+    Y_ABORT_UNLESS(group != Max<ui32>());
     const TActorId proxy = MakeBlobStorageProxyID(group);
     return proxy;
 }
@@ -419,7 +419,7 @@ inline ui32 GroupIDFromBlobStorageProxyID(TActorId actorId) {
         (((actorId.RawX2() >> (0 * 8)) & 0xff) << 8) |
         (((actorId.RawX2() >> (1 * 8)) & 0xff) << 16) |
         (((actorId.RawX2() >> (2 * 8)) & 0xff) << 24));
-    Y_VERIFY(MakeBlobStorageProxyID(blobStorageGroup) == actorId);
+    Y_ABORT_UNLESS(MakeBlobStorageProxyID(blobStorageGroup) == actorId);
     return blobStorageGroup;
 }
 
@@ -944,11 +944,11 @@ struct TEvBlobStorage {
             , HandleClass(handleClass)
             , Tactic(tactic)
         {
-            Y_VERIFY(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());
-            Y_VERIFY(Buffer.size() < (40 * 1024 * 1024),
+            Y_ABORT_UNLESS(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());
+            Y_ABORT_UNLESS(Buffer.size() < (40 * 1024 * 1024),
                    "EvPut invalid: LogoBlobId# %s buffer.Size# %zu",
                    id.ToString().data(), Buffer.size());
-            Y_VERIFY(Buffer.size() == id.BlobSize(),
+            Y_ABORT_UNLESS(Buffer.size() == id.BlobSize(),
                    "EvPut invalid: LogoBlobId# %s buffer.Size# %zu",
                    id.ToString().data(), Buffer.size());
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&id, sizeof(id));
@@ -1052,8 +1052,8 @@ struct TEvBlobStorage {
                 Shift = sh;
                 Size = sz;
 
-                Y_VERIFY(id.BlobSize() > 0, "Please, don't read/write 0-byte blobs!");
-                Y_VERIFY(sh < id.BlobSize(),
+                Y_ABORT_UNLESS(id.BlobSize() > 0, "Please, don't read/write 0-byte blobs!");
+                Y_ABORT_UNLESS(sh < id.BlobSize(),
                     "Please, don't read behind the end of the blob! BlobSize# %" PRIu32 " sh# %" PRIu32,
                     (ui32)id.BlobSize(), (ui32)sh);
             }
@@ -1119,7 +1119,7 @@ struct TEvBlobStorage {
             , ReportDetailedPartMap(reportDetailedPartMap)
             , ForceBlockTabletData(forceBlockTabletData)
         {
-            Y_VERIFY(QuerySize > 0, "can't execute empty get queries");
+            Y_ABORT_UNLESS(QuerySize > 0, "can't execute empty get queries");
             VerifySameTabletId();
         }
 
@@ -1139,8 +1139,8 @@ struct TEvBlobStorage {
             Queries[0].Id = id;
             Queries[0].Shift = shift;
             Queries[0].Size = size;
-            Y_VERIFY(id.BlobSize() > 0, "Please, don't read/write 0-byte blobs!");
-            Y_VERIFY(shift < id.BlobSize(),
+            Y_ABORT_UNLESS(id.BlobSize() > 0, "Please, don't read/write 0-byte blobs!");
+            Y_ABORT_UNLESS(shift < id.BlobSize(),
                     "Please, don't read behind the end of the blob! Id# %s BlobSize# %" PRIu32 " shift# %" PRIu32,
                     id.ToString().c_str(), (ui32)id.BlobSize(), (ui32)shift);
         }
@@ -1190,7 +1190,7 @@ struct TEvBlobStorage {
     private:
         void VerifySameTabletId() const {
             for (ui32 i = 1; i < QuerySize; ++i) {
-                Y_VERIFY(Queries[i].Id.TabletID() == Queries[0].Id.TabletID(),
+                Y_ABORT_UNLESS(Queries[i].Id.TabletID() == Queries[0].Id.TabletID(),
                         "Trying to request blobs for different tablets in one request: %" PRIu64 ", %" PRIu64,
                         Queries[0].Id.TabletID(), Queries[i].Id.TabletID());
             }
@@ -1473,12 +1473,12 @@ struct TEvBlobStorage {
             }
 
             ui32 expectedValue = originalId.Hash() % BaseDomainsCount;
-            Y_VERIFY(patchedId);
+            Y_ABORT_UNLESS(patchedId);
             if (patchedId->Hash() % BaseDomainsCount == expectedValue) {
                 return true;
             }
 
-            Y_VERIFY(bitsForBruteForce <= TLogoBlobID::MaxCookie);
+            Y_ABORT_UNLESS(bitsForBruteForce <= TLogoBlobID::MaxCookie);
             ui32 baseCookie = ~bitsForBruteForce & patchedId->Cookie();
             ui32 extraCookie = TLogoBlobID::MaxCookie + 1;
             ui32 steps = 0;
@@ -2398,7 +2398,7 @@ inline bool SendPutToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorag
         const ui32 expectedGroupId = storage->GroupFor(id.Channel(), id.Generation());
         return id.TabletID() == storage->TabletID && expectedGroupId != Max<ui32>() && groupId == expectedGroupId;
     };
-    Y_VERIFY(checkGroupId(), "groupId# %" PRIu32 " does not match actual one LogoBlobId# %s", groupId,
+    Y_ABORT_UNLESS(checkGroupId(), "groupId# %" PRIu32 " does not match actual one LogoBlobId# %s", groupId,
         event->Id.ToString().data());
     return SendToBSProxy(ctx, groupId, event.Release(), cookie, std::move(traceId));
     // TODO(alexvru): check if return status is actually needed?

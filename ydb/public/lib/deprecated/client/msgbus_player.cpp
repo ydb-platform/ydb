@@ -46,7 +46,7 @@ public:
         : MaxInFlight(maxInFlight)
         , ComputedMaxInFlight(0)
     {
-        Y_VERIFY(maxInFlight > 0);
+        Y_ABORT_UNLESS(maxInFlight > 0);
     }
 
     void Start(TType item) {

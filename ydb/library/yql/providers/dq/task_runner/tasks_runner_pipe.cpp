@@ -76,19 +76,19 @@ public:
     void Run()
     {
 #ifdef _win_
-        Y_VERIFY(false);
+        Y_ABORT_UNLESS(false);
 #else
         int input[2];
         int output[2];
         int error[2];
 
-        Y_VERIFY(pipe(input) == 0);
-        Y_VERIFY(pipe(output) == 0);
-        Y_VERIFY(pipe(error) == 0);
+        Y_ABORT_UNLESS(pipe(input) == 0);
+        Y_ABORT_UNLESS(pipe(output) == 0);
+        Y_ABORT_UNLESS(pipe(error) == 0);
 
         PrepareForExec();
         Pid = fork();
-        Y_VERIFY(Pid >= 0);
+        Y_ABORT_UNLESS(Pid >= 0);
 
         if (Pid == 0) {
             try {
@@ -1511,7 +1511,7 @@ public:
     {
         Y_UNUSED(memoryLimits);
         Y_UNUSED(execCtx);
-        Y_VERIFY(Task.GetId() == task.GetId());
+        Y_ABORT_UNLESS(Task.GetId() == task.GetId());
         try {
             auto result = Delegate->Prepare();
             Y_UNUSED(result);
@@ -1803,11 +1803,11 @@ private:
             Start(exePath, portoSettings);
         });
 
-        Y_VERIFY(TaskScheduler.Add(MakeIntrusive<TJob>(promise), TInstant()));
+        Y_ABORT_UNLESS(TaskScheduler.Add(MakeIntrusive<TJob>(promise), TInstant()));
     }
 
     void StopJobs(TList<THolder<TChildProcess>>&& stopList) {
-        Y_VERIFY(TaskScheduler.Add(MakeIntrusive<TStopJob>(std::move(stopList)), TInstant()));
+        Y_ABORT_UNLESS(TaskScheduler.Add(MakeIntrusive<TStopJob>(std::move(stopList)), TInstant()));
     }
 
     TString GetKey(const TString& exePath, const TPortoSettings& settings)
@@ -1840,7 +1840,7 @@ private:
                         file.SetLocalPath(InitializeLocalFile(result->ExternalWorkDir(), *maybeFile, name));
                         break;
                     default:
-                        Y_VERIFY(false);
+                        Y_ABORT_UNLESS(false);
                 }
             }
         }

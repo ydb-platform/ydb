@@ -299,7 +299,7 @@ public:
         }
 
         Self->ReadGroups(groupIDsToRead, false, res.get(), nodeId);
-        Y_VERIFY(groupIDsToRead.empty());
+        Y_ABORT_UNLESS(groupIDsToRead.empty());
 
         Self->ReadGroups(groupsToDiscard, true, res.get(), nodeId);
 
@@ -371,7 +371,7 @@ void TBlobStorageController::ReadGroups(TSet<ui32>& groupIDsToRead, bool discard
                 if (info.SchemeshardId && info.PathItemId) {
                     scopeId.ConstructInPlace(*info.SchemeshardId, *info.PathItemId);
                 } else {
-                    Y_VERIFY(!info.SchemeshardId && !info.PathItemId);
+                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
                 }
 
                 SerializeGroupInfo(groupProto, *group, info.Name, scopeId);
@@ -445,7 +445,7 @@ void TBlobStorageController::ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::
 
         SerializeDonors(vDisk, vslot, *group, vslotFinder);
     } else {
-        Y_VERIFY(vslot.Mood != TMood::Donor);
+        Y_ABORT_UNLESS(vslot.Mood != TMood::Donor);
     }
 }
 

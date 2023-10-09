@@ -261,7 +261,7 @@ namespace NDiscoveryPrivate {
 
             auto& currentCachedMessage = CurrentCachedMessages[path];
 
-            Y_VERIFY(currentCachedMessage);
+            Y_ABORT_UNLESS(currentCachedMessage);
 
             currentCachedMessage = std::make_shared<NDiscovery::TCachedMessageData>(
                 NDiscovery::CreateCachedMessage(
@@ -269,7 +269,7 @@ namespace NDiscoveryPrivate {
             );
 
             auto it = Requested.find(path);
-            Y_VERIFY(it == Requested.end());
+            Y_ABORT_UNLESS(it == Requested.end());
         }
 
         void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
@@ -429,7 +429,7 @@ public:
     }
 
     void Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev) {
-        Y_VERIFY(ev->Get()->CachedMessageData);
+        Y_ABORT_UNLESS(ev->Get()->CachedMessageData);
 
         DLOG_T("Handle " << ev->ToString()
             << ": cookie# " << ev->Cookie);
@@ -451,7 +451,7 @@ public:
 
         const auto* response = SchemeCacheResponse.Get()->Request.Get();
 
-        Y_VERIFY(response->ResultSet.size() == 1);
+        Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
         DLOG_T("Handle " << SchemeCacheResponse->ToString()

@@ -202,7 +202,7 @@ void CollectItems(THashMap<ui64, TConfigItem::TPtr> &)
 void CollectItems(THashMap<ui64, TConfigItem::TPtr> &items,
                   const NKikimrConsole::TConfigItem &item)
 {
-    Y_VERIFY(!items.contains(item.GetId().GetId()));
+    Y_ABORT_UNLESS(!items.contains(item.GetId().GetId()));
     items.emplace(item.GetId().GetId(), new TConfigItem(item));
 }
 

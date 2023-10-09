@@ -28,7 +28,7 @@ namespace NKikimr {
             , CurSegIt()
         {
             Y_UNUSED(hullCtx);
-            Y_VERIFY(!All->Segments.empty());
+            Y_ABORT_UNLESS(!All->Segments.empty());
         }
 
         bool Valid() const {
@@ -69,21 +69,21 @@ namespace NKikimr {
         }
 
         void SeekToFirst() {
-            Y_VERIFY(!All->Segments.empty());
+            Y_ABORT_UNLESS(!All->Segments.empty());
             CrossSegIt = All->Segments.begin();
             CurSegIt = TSegIt((*CrossSegIt).Get());
             CurSegIt.SeekToFirst();
         }
 
         void SeekToLast() {
-            Y_VERIFY(!All->Segments.empty());
+            Y_ABORT_UNLESS(!All->Segments.empty());
             CrossSegIt = All->Segments.end() - 1;
             CurSegIt = TSegIt((*CrossSegIt).Get());
             CurSegIt.SeekToLast();
         }
 
         void Seek(const TKey &key) {
-            Y_VERIFY(!All->Segments.empty());
+            Y_ABORT_UNLESS(!All->Segments.empty());
             TCrossSegIt b = All->Segments.begin();
             TCrossSegIt e = All->Segments.end();
             CrossSegIt = ::LowerBound(b, e, key, TVectorLess());

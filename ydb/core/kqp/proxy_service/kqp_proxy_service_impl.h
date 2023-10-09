@@ -145,7 +145,7 @@ public:
             TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos),
                 NActors::TActivationContext::Monotonic() + idleDuration, IdleSessions.end()));
         SessionsCountPerDatabase[database]++;
-        Y_VERIFY(result.second, "Duplicate session id!");
+        Y_ABORT_UNLESS(result.second, "Duplicate session id!");
         TargetIdIndex.emplace(workerId, sessionId);
         StartIdleCheck(&(result.first->second), idleDuration);
         return &result.first->second;
@@ -321,7 +321,7 @@ private:
             auto& sessions = ReadySessions.at(i);
             if (pos != -1 && pos + 1 != static_cast<i32>(sessions.size())) {
                 auto& lastPos = LocalSessions.at(sessions.back()).ReadyPos.at(i);
-                Y_VERIFY(lastPos + 1 == static_cast<i32>(sessions.size()));
+                Y_ABORT_UNLESS(lastPos + 1 == static_cast<i32>(sessions.size()));
                 std::swap(sessions[pos], sessions[lastPos]);
                 lastPos = pos;
             }

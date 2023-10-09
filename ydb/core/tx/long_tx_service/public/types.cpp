@@ -151,7 +151,7 @@ namespace NLongTxService {
 
     void TLongTxId::ParseProto(const NKikimrLongTxService::TLongTxId& proto) noexcept {
         if (proto.HasNodeId()) {
-            Y_VERIFY(proto.HasUniqueId() && proto.GetUniqueId().size() == 16,
+            Y_ABORT_UNLESS(proto.HasUniqueId() && proto.GetUniqueId().size() == 16,
                 "Unexpected malformed UniqueId in TLongTxId");
             UniqueId.SetBinary(proto.GetUniqueId());
             NodeId = proto.GetNodeId();

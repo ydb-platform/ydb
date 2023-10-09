@@ -332,7 +332,7 @@ public:
 
     template <typename T>
     const T& GetResponse() const { // msgbus event
-        Y_VERIFY(HaveResponse<T>());
+        Y_ABORT_UNLESS(HaveResponse<T>());
         return *static_cast<T*>(Reply.Get());
     }
 

@@ -78,41 +78,41 @@ struct TAstNode {
     }
 
     inline TStringBuf GetContent() const {
-        Y_VERIFY(IsAtom());
+        Y_ABORT_UNLESS(IsAtom());
         return TStringBuf(Data.A.Content, Data.A.Size);
     }
 
     inline void SetContent(TStringBuf newContent, TMemoryPool& pool) {
-        Y_VERIFY(IsAtom());
+        Y_ABORT_UNLESS(IsAtom());
         auto poolContent = pool.AppendString(newContent);
         Data.A.Content = poolContent.data();
         Data.A.Size = poolContent.size();
     }
 
     inline void SetLiteralContent(TStringBuf newContent) {
-        Y_VERIFY(IsAtom());
+        Y_ABORT_UNLESS(IsAtom());
         Data.A.Content = newContent.data();
         Data.A.Size = newContent.size();
     }
 
     inline ui32 GetFlags() const {
-        Y_VERIFY(IsAtom());
+        Y_ABORT_UNLESS(IsAtom());
         return Data.A.Flags;
     }
 
     inline void SetFlags(ui32 flags) {
-        Y_VERIFY(IsAtom());
+        Y_ABORT_UNLESS(IsAtom());
         Data.A.Flags = flags;
     }
 
     inline ui32 GetChildrenCount() const {
-        Y_VERIFY(IsList());
+        Y_ABORT_UNLESS(IsList());
         return ListCount;
     }
 
     inline const TAstNode* GetChild(ui32 index) const {
-        Y_VERIFY(IsList());
-        Y_VERIFY(index < ListCount);
+        Y_ABORT_UNLESS(IsList());
+        Y_ABORT_UNLESS(index < ListCount);
         if (ListCount <= SmallListCount) {
             return Data.S.Children[index];
         } else {
@@ -121,8 +121,8 @@ struct TAstNode {
     }
 
     inline TAstNode* GetChild(ui32 index) {
-        Y_VERIFY(IsList());
-        Y_VERIFY(index < ListCount);
+        Y_ABORT_UNLESS(IsList());
+        Y_ABORT_UNLESS(index < ListCount);
         if (ListCount <= SmallListCount) {
             return Data.S.Children[index];
         } else {
@@ -131,7 +131,7 @@ struct TAstNode {
     }
     
     inline TArrayRef<TAstNode* const> GetChildren() const {
-        Y_VERIFY(IsList());
+        Y_ABORT_UNLESS(IsList());
         return {ListCount <= SmallListCount ? Data.S.Children : Data.L.Children, ListCount};
     }
 
@@ -160,7 +160,7 @@ struct TAstNode {
             }
 
             for (ui32 index = 0; index < childrenCount; ++index) {
-                Y_VERIFY(poolChildren[index]);
+                Y_ABORT_UNLESS(poolChildren[index]);
             }
         }
 

@@ -46,7 +46,7 @@ namespace NKikimr::NStorage {
             size_t tokenCount = Split(path, ":", splitted);
 
             if (splitted[0] == "SectorMap") {
-                Y_VERIFY(tokenCount >= 2);
+                Y_ABORT_UNLESS(tokenCount >= 2);
                 ui64 size = (ui64)100 << 30; // 100GB is default
                 if (splitted.size() >= 3) {
                     ui64 minSize = (ui64)100 << 30;
@@ -131,7 +131,7 @@ namespace NKikimr::NStorage {
         auto [it, inserted] = LocalPDisks.try_emplace(key, pdisk);
         TPDiskRecord& record = it->second;
         if (!inserted) {
-            Y_VERIFY(record.Record.GetPDiskGuid() == pdisk.GetPDiskGuid());
+            Y_ABORT_UNLESS(record.Record.GetPDiskGuid() == pdisk.GetPDiskGuid());
             return;
         }
 

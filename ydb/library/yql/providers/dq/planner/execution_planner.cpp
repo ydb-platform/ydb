@@ -299,7 +299,7 @@ namespace NYql::NDqs {
 
         while (!tasksStack.empty()) {
             TDqsTasksGraph::TTaskType& task = *tasksStack.top();
-            Y_VERIFY(task.Id && task.Id <= processedTasks.size());
+            Y_ABORT_UNLESS(task.Id && task.Id <= processedTasks.size());
             if (processedTasks[task.Id - 1]) {
                 tasksStack.pop();
                 continue;
@@ -310,7 +310,7 @@ namespace NYql::NDqs {
             for (const auto& input : task.Inputs) {
                 for (ui64 channelId : input.Channels) {
                     const NDq::TChannel& channel = TasksGraph.GetChannel(channelId);
-                    Y_VERIFY(channel.SrcTask && channel.SrcTask <= processedTasks.size());
+                    Y_ABORT_UNLESS(channel.SrcTask && channel.SrcTask <= processedTasks.size());
                     if (!processedTasks[channel.SrcTask - 1]) {
                         allInputsAreReady = false;
                         tasksStack.push(&TasksGraph.GetTask(channel.SrcTask));
@@ -621,7 +621,7 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
             if (status != IGraphTransformer::TStatus::Ok) {
                 ExprContext.AddError(TIssue(ExprContext.GetPosition(lambdaInput->Pos()), TString("Peephole optimization failed for Dq stage")));
                 ExprContext.IssueManager.GetIssues().PrintTo(Cerr);
-                Y_VERIFY(false);
+                Y_ABORT_UNLESS(false);
             }
 */
             StagePrograms[stageInfo.first] = std::make_tuple(

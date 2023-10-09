@@ -53,7 +53,7 @@ namespace NTest {
 
         const TSharedData* GetPage(ui32 room, ui32 page) const noexcept
         {
-            Y_VERIFY(room < PageCollections.size(), "Room is out of bounds");
+            Y_ABORT_UNLESS(room < PageCollections.size(), "Room is out of bounds");
 
             if (page == Max<TPageId>()) return nullptr;
 
@@ -62,21 +62,21 @@ namespace NTest {
 
         size_t GetPageSize(ui32 room, ui32 page) const noexcept
         {
-            Y_VERIFY(room < PageCollections.size(), "Room is out of bounds");
+            Y_ABORT_UNLESS(room < PageCollections.size(), "Room is out of bounds");
 
             return PageCollections.at(room).at(page).size();
         }
 
         NPage::EPage GetPageType(ui32 room, ui32 page) const noexcept
         {
-            Y_VERIFY(room < PageCollections.size(), "Room is out of bounds");
+            Y_ABORT_UNLESS(room < PageCollections.size(), "Room is out of bounds");
 
             return PageTypes.at(room).at(page);
         }
 
         TArrayRef<const TSharedData> PageCollectionArray(ui32 room) const noexcept
         {
-            Y_VERIFY(room < PageCollections.size(), "Only regular rooms can be used as arr");
+            Y_ABORT_UNLESS(room < PageCollections.size(), "Only regular rooms can be used as arr");
 
             return PageCollections[room];
         }
@@ -118,10 +118,10 @@ namespace NTest {
                 Y_FAIL("Cannot construct an empty part");
             }
 
-            Y_VERIFY(!Rooted, "Legacy store must not be rooted");
-            Y_VERIFY(Groups == 1, "Legacy store must have a single main group");
-            Y_VERIFY(Indexes.size() == 1, "Legacy store must have a single index");
-            Y_VERIFY(Scheme != Max<TPageId>(), "Legacy store is missing a scheme page");
+            Y_ABORT_UNLESS(!Rooted, "Legacy store must not be rooted");
+            Y_ABORT_UNLESS(Groups == 1, "Legacy store must have a single main group");
+            Y_ABORT_UNLESS(Indexes.size() == 1, "Legacy store must have a single index");
+            Y_ABORT_UNLESS(Scheme != Max<TPageId>(), "Legacy store is missing a scheme page");
 
             return {
                 Rooted,
@@ -157,7 +157,7 @@ namespace NTest {
             for (auto it: xrange(pages.size())) {
                 auto got = NPage::TLabelWrapper().Read(pages[it], EPage::Undef);
 
-                Y_VERIFY(got.Page.end() == pages[it].end());
+                Y_ABORT_UNLESS(got.Page.end() == pages[it].end());
 
                 out.Put(pages[it]);
             }
@@ -169,7 +169,7 @@ namespace NTest {
             NPage::TLabel label;
 
             while (auto got = in.Load(&label, sizeof(label))) {
-                Y_VERIFY(got == sizeof(label), "Invalid pages stream");
+                Y_ABORT_UNLESS(got == sizeof(label), "Invalid pages stream");
 
                 TSharedData to = TSharedData::Uninitialized(label.Size);
 
@@ -199,7 +199,7 @@ namespace NTest {
 
         TPageId WriteOuter(TSharedData page) noexcept
         {
-            Y_VERIFY(!Finished, "This store is already finished");
+            Y_ABORT_UNLESS(!Finished, "This store is already finished");
 
             auto& pages = PageCollections[GetOuterRoom()];
 
@@ -210,8 +210,8 @@ namespace NTest {
 
         TPageId Write(TSharedData page, EPage type, ui32 group) noexcept
         {
-            Y_VERIFY(group < PageCollections.size() - 1, "Invalid column group");
-            Y_VERIFY(!Finished, "This store is already finished");
+            Y_ABORT_UNLESS(group < PageCollections.size() - 1, "Invalid column group");
+            Y_ABORT_UNLESS(!Finished, "This store is already finished");
             NPageCollection::Checksum(page); /* will catch uninitialised values */
 
             TPageId id = PageCollections[group].size();
@@ -247,14 +247,14 @@ namespace NTest {
 
         void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept
         {
-            Y_VERIFY(page == Scheme);
+            Y_ABORT_UNLESS(page == Scheme);
 
             Meta = TSharedData::Copy(body.data(), body.size());
         }
 
         NPageCollection::TGlobId WriteLarge(TSharedData data) noexcept
         {
-            Y_VERIFY(!Finished, "This store is already finished");
+            Y_ABORT_UNLESS(!Finished, "This store is already finished");
 
             auto& pages = PageCollections[GetExternRoom()];
 
@@ -265,7 +265,7 @@ namespace NTest {
 
         void Finish() noexcept
         {
-            Y_VERIFY(!Finished, "Cannot finish test store more than once");
+            Y_ABORT_UNLESS(!Finished, "Cannot finish test store more than once");
             Finished = true;
         }
 

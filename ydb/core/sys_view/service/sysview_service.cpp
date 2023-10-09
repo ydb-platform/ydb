@@ -942,7 +942,7 @@ private:
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
         THolder<TNavigate> request(ev->Get()->Request.Release());
-        Y_VERIFY(request->ResultSet.size() == 1);
+        Y_ABORT_UNLESS(request->ResultSet.size() == 1);
         auto& entry = request->ResultSet.back();
 
         if (entry.RequestType == TNavigate::TEntry::ERequestType::ByTableId) {

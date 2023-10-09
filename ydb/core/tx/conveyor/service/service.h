@@ -56,7 +56,7 @@ public:
         ++Size;
     }
     TWorkerTask pop() {
-        Y_VERIFY(Size);
+        Y_ABORT_UNLESS(Size);
         auto result = Tasks.rbegin()->second.front();
         Tasks.rbegin()->second.pop_front();
         if (Tasks.rbegin()->second.size() == 0) {

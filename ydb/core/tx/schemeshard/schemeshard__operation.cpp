@@ -155,7 +155,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                 response = part->Propose(owner, context);
             }
 
-            Y_VERIFY(response);
+            Y_ABORT_UNLESS(response);
 
             LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "IgniteOperation"
@@ -264,7 +264,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_VERIFY(Response);
+        Y_ABORT_UNLESS(Response);
 
         const auto& record = Request->Get()->Record;
         const auto txId = TTxId(record.GetTxId());
@@ -418,8 +418,8 @@ struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeS
         , OperationId(id)
         , EvReply(ev)
     {
-        Y_VERIFY(TEvType::EventType != TEvPrivate::TEvOperationPlan::EventType);
-        Y_VERIFY(TEvType::EventType != TEvTxProcessing::TEvPlanStep::EventType);
+        Y_ABORT_UNLESS(TEvType::EventType != TEvPrivate::TEvOperationPlan::EventType);
+        Y_ABORT_UNLESS(TEvType::EventType != TEvTxProcessing::TEvPlanStep::EventType);
     }
 
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
@@ -588,7 +588,7 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperati
 
 
 TString JoinPath(const TString& workingDir, const TString& name) {
-    Y_VERIFY(!name.StartsWith('/') && !name.EndsWith('/'));
+    Y_ABORT_UNLESS(!name.StartsWith('/') && !name.EndsWith('/'));
     return TStringBuilder()
                << workingDir
                << (workingDir.EndsWith('/') ? "" : "/")
@@ -1338,7 +1338,7 @@ void TOperation::AddPart(ISubOperation::TPtr part) {
 }
 
 bool TOperation::AddPublishingPath(TPathId pathId, ui64 version) {
-    Y_VERIFY(!IsReadyToNotify());
+    Y_ABORT_UNLESS(!IsReadyToNotify());
     return Publications.emplace(pathId, version).second;
 }
 
@@ -1365,12 +1365,12 @@ bool TOperation::IsReadyToNotify() const {
 }
 
 void TOperation::AddNotifySubscriber(const TActorId& actorId) {
-    Y_VERIFY(!IsReadyToNotify());
+    Y_ABORT_UNLESS(!IsReadyToNotify());
     Subscribers.insert(actorId);
 }
 
 void TOperation::DoNotify(TSchemeShard*, TSideEffects& sideEffects, const TActorContext& ctx) {
-    Y_VERIFY(IsReadyToNotify());
+    Y_ABORT_UNLESS(IsReadyToNotify());
 
     for (auto& subscriber: Subscribers) {
         THolder<TEvSchemeShard::TEvNotifyTxCompletionResult> msg = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletionResult>(ui64(TxId));
@@ -1419,7 +1419,7 @@ void TOperation::ProposePart(TSubTxId partId, TTabletId tableId) {
 }
 
 void TOperation::DoPropose(TSchemeShard* ss, TSideEffects& sideEffects, const TActorContext& ctx) const {
-    Y_VERIFY(IsReadyToPropose());
+    Y_ABORT_UNLESS(IsReadyToPropose());
 
     //aggregate
     TTabletId selfTabletId = ss->SelfTabletId();
@@ -1432,7 +1432,7 @@ void TOperation::DoPropose(TSchemeShard* ss, TSideEffects& sideEffects, const TA
             if (coordinatorId == InvalidTabletId) {
                 coordinatorId = curCoordinatorId;
             }
-            Y_VERIFY(coordinatorId == curCoordinatorId);
+            Y_ABORT_UNLESS(coordinatorId == curCoordinatorId);
         }
 
         effectiveMinStep = Max<TStepId>(effectiveMinStep, minStep);
@@ -1515,7 +1515,7 @@ TSubTxId TOperation::FindRelatedPartByTabletId(TTabletId tablet, const TActorCon
 
 void TOperation::RegisterRelationByShardIdx(TSubTxId partId, TShardIdx shardIdx, const TActorContext& ctx) {
     if (RelationsByShardIdx.contains(shardIdx)) {
-        Y_VERIFY(RelationsByShardIdx.at(shardIdx) == partId);
+        Y_ABORT_UNLESS(RelationsByShardIdx.at(shardIdx) == partId);
         return;
     }
 
@@ -1554,7 +1554,7 @@ TVector<TSubTxId> TOperation::ActivateShardCreated(TShardIdx shardIdx) {
     if (it != WaitingShardCreatedByShard.end()) {
         for (auto partId : it->second) {
             auto itByPart = WaitingShardCreatedByPart.find(partId);
-            Y_VERIFY(itByPart != WaitingShardCreatedByPart.end());
+            Y_ABORT_UNLESS(itByPart != WaitingShardCreatedByPart.end());
             itByPart->second.erase(shardIdx);
             if (itByPart->second.empty()) {
                 WaitingShardCreatedByPart.erase(itByPart);

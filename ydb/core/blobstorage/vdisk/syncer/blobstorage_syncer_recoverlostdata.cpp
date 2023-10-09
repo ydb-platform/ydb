@@ -50,7 +50,7 @@ namespace NKikimr {
         {}
 
         void FullSyncedWithPeer(const TVDiskIdShort &vdisk) {
-            Y_VERIFY(Neighbors[vdisk].VDiskIdShort == vdisk);
+            Y_ABORT_UNLESS(Neighbors[vdisk].VDiskIdShort == vdisk);
 
             Sublog.Log() << "RESPONSE: vdisk# " << vdisk.ToString() << " full synced";
 
@@ -119,7 +119,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         void StopAllRunningProxy(const TActorContext &ctx) {
             auto stopFunc = [&ctx] (TVDiskInfo<TPeerState>& x) {
-                Y_VERIFY(x.Get().ProxyId);
+                Y_ABORT_UNLESS(x.Get().ProxyId);
                 ctx.Send(x.Get().ProxyId, new NActors::TEvents::TEvPoisonPill());
             };
             State.NotifyAliveProxies(stopFunc);
@@ -256,7 +256,7 @@ namespace NKikimr {
             JobCtx = TSjCtx::Create(SyncerCtx, GInfo);
             // reconfigure alive proxies
             auto reconfigureFunc = [&ctx, &msg] (TVDiskInfo<TPeerState>& x) {
-                Y_VERIFY(x.Get().ProxyId);
+                Y_ABORT_UNLESS(x.Get().ProxyId);
                 ctx.Send(x.Get().ProxyId, msg->Clone());
             };
             State.NotifyAliveProxies(reconfigureFunc);

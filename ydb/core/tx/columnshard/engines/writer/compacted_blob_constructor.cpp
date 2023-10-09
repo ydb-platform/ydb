@@ -16,7 +16,7 @@ TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, T
             continue;
         }
         auto* pInfo = changes.GetWritePortionInfo(i);
-        Y_VERIFY(pInfo);
+        Y_ABORT_UNLESS(pInfo);
         TPortionInfoWithBlobs& portionWithBlobs = *pInfo;
         auto action = changes.MutableBlobsAction().GetWriting(portionWithBlobs.GetPortionInfo());
         for (auto&& b : portionWithBlobs.GetBlobs()) {

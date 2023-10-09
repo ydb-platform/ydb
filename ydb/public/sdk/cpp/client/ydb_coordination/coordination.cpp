@@ -206,7 +206,7 @@ public:
     TAsyncSessionResult TakeStartResult() {
         TAsyncSessionResult result;
         result.Swap(SessionFuture);
-        Y_VERIFY(result.Initialized(), "TakeStartResult cannot be called more than once");
+        Y_ABORT_UNLESS(result.Initialized(), "TakeStartResult cannot be called more than once");
         return result;
     }
 
@@ -703,7 +703,7 @@ private:
 
     template<class TSource>
     void SetCurrentFailure(TSource&& source) {
-        Y_VERIFY(!CurrentFailure);
+        Y_ABORT_UNLESS(!CurrentFailure);
         CurrentFailure.Reset(new TStatus(std::forward<TSource>(source)));
     }
 
@@ -720,8 +720,8 @@ private:
     }
 
     void SendCloseRequest() {
-        Y_VERIFY(Processor);
-        Y_VERIFY(ClosedPromise.Initialized());
+        Y_ABORT_UNLESS(Processor);
+        Y_ABORT_UNLESS(ClosedPromise.Initialized());
         TRequest req;
         auto* stop = req.mutable_session_stop();
         Y_UNUSED(stop);
@@ -729,8 +729,8 @@ private:
     }
 
     void SessionAttached() {
-        Y_VERIFY(SessionState != ESessionState::ATTACHED);
-        Y_VERIFY(ConnectionState == EConnectionState::ATTACHING);
+        Y_ABORT_UNLESS(SessionState != ESessionState::ATTACHED);
+        Y_ABORT_UNLESS(ConnectionState == EConnectionState::ATTACHING);
         SessionState = ESessionState::ATTACHED;
         ConnectionState = EConnectionState::CONNECTED;
         SessionExpireDeadline.Clear();
@@ -765,9 +765,9 @@ private:
     }
 
     void DoSemaphoreSendOp(TSemaphoreState* state, TIntrusivePtr<TSemaphoreOp> op) {
-        Y_VERIFY(IsWriteAllowed());
-        Y_VERIFY(op->ReqId > 0);
-        Y_VERIFY(!state->WaitingOps.contains(op->ReqId));
+        Y_ABORT_UNLESS(IsWriteAllowed());
+        Y_ABORT_UNLESS(op->ReqId > 0);
+        Y_ABORT_UNLESS(!state->WaitingOps.contains(op->ReqId));
         SemaphoreByReqId[op->ReqId] = state;
         state->WaitingOps[op->ReqId] = op;
         state->LastSentOp = op;
@@ -796,7 +796,7 @@ private:
             return false;
         }
         auto op = std::move(state->WaitingOps[reqId]);
-        Y_VERIFY(op, "SemaphoreByReqId and WaitingOps desync");
+        Y_ABORT_UNLESS(op, "SemaphoreByReqId and WaitingOps desync");
         state->WaitingOps.erase(reqId);
         SemaphoreByReqId.erase(reqId);
         UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
@@ -855,7 +855,7 @@ private:
     }
 
     ui64 DoSendSimpleOp(THolder<TSimpleOp> op) {
-        Y_VERIFY(IsWriteAllowed());
+        Y_ABORT_UNLESS(IsWriteAllowed());
         ui64 reqId = NextReqId++;
         TRequest req;
         op->FillRequest(req, reqId);
@@ -892,10 +892,10 @@ private:
         with_lock (Lock) {
             Processor.Reset();
 
-            Y_VERIFY(LocalContext, "Processing event without a valid context");
+            Y_ABORT_UNLESS(LocalContext, "Processing event without a valid context");
 
             // We must have detached by the time status is processed
-            Y_VERIFY(SessionState != ESessionState::ATTACHED);
+            Y_ABORT_UNLESS(SessionState != ESessionState::ATTACHED);
 
             stopped = IsStopping;
 
@@ -1069,7 +1069,7 @@ private:
                 sleepDuration = TDuration::Zero();
             }
 
-            Y_VERIFY(!SleepContext, "Unexpected multiple concurrent sleeps scheduled");
+            Y_ABORT_UNLESS(!SleepContext, "Unexpected multiple concurrent sleeps scheduled");
             SleepContext = sleepContext = context->CreateContext();
         }
 
@@ -1084,7 +1084,7 @@ private:
     }
 
     void OnConnectTimeout(IQueueClientContextPtr context) {
-        Y_VERIFY(context, "Connection timeout context is unexpectedly empty");
+        Y_ABORT_UNLESS(context, "Connection timeout context is unexpectedly empty");
 
         with_lock (Lock) {
             if (ConnectTimeoutContext != context) {
@@ -1095,7 +1095,7 @@ private:
             ConnectTimeoutContext.reset();
 
             // Timer succeeded and still current, cancel connection attempt
-            Y_VERIFY(ConnectContext, "Connection context is unexpectedly empty");
+            Y_ABORT_UNLESS(ConnectContext, "Connection context is unexpectedly empty");
             ConnectContext->Cancel();
             ConnectContext.reset();
 
@@ -1279,7 +1279,7 @@ private:
         with_lock (Lock) {
             processor = Processor;
         }
-        Y_VERIFY(processor, "Processor is missing for some reason");
+        Y_ABORT_UNLESS(processor, "Processor is missing for some reason");
 
         if (ProcessResponse(processor)) {
             // Start reading the next response
@@ -1315,11 +1315,11 @@ private:
 
         with_lock (Lock) {
             sleepContext.swap(SleepContext);
-            Y_VERIFY(sleepContext, "Unexpected missing SleepContext in OnSleepFinished");
+            Y_ABORT_UNLESS(sleepContext, "Unexpected missing SleepContext in OnSleepFinished");
             if (!(stopping = IsStopping)) {
                 ConnectionState = EConnectionState::CONNECTING;
                 context = LocalContext;
-                Y_VERIFY(context);
+                Y_ABORT_UNLESS(context);
             }
         }
 
@@ -1460,7 +1460,7 @@ private:
             }
             case TResponse::kSessionStarted: {
                 const auto& source = Response->session_started();
-                Y_VERIFY(source.session_id() > 0);
+                Y_ABORT_UNLESS(source.session_id() > 0);
                 TPromise<TSessionResult> replyPromise;
                 IQueueClientContextPtr sessionStartTimeoutContext;
                 IQueueClientContextPtr sessionSelfPingContext;
@@ -1523,7 +1523,7 @@ private:
                         SessionState = ESessionState::EXPIRED;
                         expired = true;
                     }
-                    Y_VERIFY(SessionState != ESessionState::ATTACHED);
+                    Y_ABORT_UNLESS(SessionState != ESessionState::ATTACHED);
                 }
                 if (expired && Settings_.OnStateChanged_) {
                     Settings_.OnStateChanged_(ESessionState::EXPIRED);
@@ -1538,7 +1538,7 @@ private:
                 with_lock (Lock) {
                     if (auto* state = SemaphoreByReqId.Value(reqId, nullptr)) {
                         auto op = state->LastSentOp;
-                        Y_VERIFY(op && op->ReqId == reqId && op->OpType == SEM_OP_ACQUIRE,
+                        Y_ABORT_UNLESS(op && op->ReqId == reqId && op->OpType == SEM_OP_ACQUIRE,
                             "Received AcquireSemaphorePending for an unexpected request");
                         UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
                         if (state->Restoring && state->LastAckedOp && state->LastAckedOp != op) {
@@ -1705,7 +1705,7 @@ private:
     }
 
     void OnSessionStartTimeout(IQueueClientContextPtr context) {
-        Y_VERIFY(context, "Unexpected empty timeout context");
+        Y_ABORT_UNLESS(context, "Unexpected empty timeout context");
 
         with_lock (Lock) {
             if (SessionStartTimeoutContext != context) {

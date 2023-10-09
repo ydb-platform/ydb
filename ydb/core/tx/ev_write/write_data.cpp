@@ -10,7 +10,7 @@ TWriteData::TWriteData(const TWriteMeta& writeMeta, IDataContainer::TPtr data)
     : WriteMeta(writeMeta)
     , Data(data)
 {
-    Y_VERIFY(Data);
+    Y_ABORT_UNLESS(Data);
 }
 
 const NKikimr::NEvWrite::IDataContainer& TWriteData::GetData() const {

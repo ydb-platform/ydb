@@ -236,7 +236,7 @@ public:
             DescribeResult = GetSchemeShardDescribeSchemeInfo();
         } else if (CacheResult != nullptr) {
             NSchemeCache::TSchemeCacheNavigate *navigate = CacheResult->Request.Get();
-            Y_VERIFY(navigate->ResultSet.size() == 1);
+            Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
             if (navigate->ErrorCount == 0) {
                 DescribeResult = GetCacheDescribeSchemeInfo();
             }

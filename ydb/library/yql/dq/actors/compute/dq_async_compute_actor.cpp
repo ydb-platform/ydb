@@ -221,7 +221,7 @@ private:
                 << ", peerState:(" << peerState.DebugString() << ")"
             );
             auto ev = MakeHolder<NTaskRunnerActor::TEvChannelPopFinished>(channelId);
-            Y_VERIFY(!ev->Finished);
+            Y_ABORT_UNLESS(!ev->Finished);
             Send(SelfId(), std::move(ev));  // try again, ev.Finished == false
             return;
         }
@@ -238,8 +238,8 @@ private:
             return;
         }
 
-        Y_VERIFY(sinkInfo.AsyncOutput);
-        Y_VERIFY(sinkInfo.Actor);
+        Y_ABORT_UNLESS(sinkInfo.AsyncOutput);
+        Y_ABORT_UNLESS(sinkInfo.Actor);
 
         const ui32 allowedOvercommit = AllowedChannelsOvercommit();
         const i64 sinkFreeSpaceBeforeSend = sinkInfo.AsyncOutput->GetFreeSpace();
@@ -259,7 +259,7 @@ private:
     }
 
     bool DoHandleChannelsAfterFinishImpl() override {
-        Y_VERIFY(Checkpoints);
+        Y_ABORT_UNLESS(Checkpoints);
         auto req = GetCheckpointRequest();
         if (!req.Defined()) {
             return true;  // handled channels syncronously
@@ -336,8 +336,8 @@ private:
         Send(TaskRunnerActorId, ev.Release(), 0, Cookie);
 
         if (channelData.HasCheckpoint()) {
-            Y_VERIFY(inputChannel->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
-            Y_VERIFY(Checkpoints);
+            Y_ABORT_UNLESS(inputChannel->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
+            Y_ABORT_UNLESS(Checkpoints);
             const auto& checkpoint = channelData.GetCheckpoint();
             inputChannel->Pause(checkpoint);
             Checkpoints->RegisterCheckpoint(checkpoint, channelData.GetChannelId());
@@ -503,7 +503,7 @@ private:
             CheckpointRequestedFromTaskRunner = false;
         }
         if (ReadyToCheckpointFlag) {
-            Y_VERIFY(!ProgramState);
+            Y_ABORT_UNLESS(!ProgramState);
             ProgramState = std::move(ev->Get()->ProgramState);
             Checkpoints->DoCheckpoint();
         }
@@ -521,7 +521,7 @@ private:
 
     void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const override {
         CA_LOG_D("Save state");
-        Y_VERIFY(ProgramState);
+        Y_ABORT_UNLESS(ProgramState);
         state.MutableMiniKqlProgram()->Swap(&*ProgramState);
         ProgramState.Destroy();
 
@@ -536,7 +536,7 @@ private:
 
     void OnAsyncInputPushFinished(NTaskRunnerActor::TEvAsyncInputPushFinished::TPtr& ev) {
         auto it = SourcesMap.find(ev->Get()->Index);
-        Y_VERIFY(it != SourcesMap.end());
+        Y_ABORT_UNLESS(it != SourcesMap.end());
         auto& source = it->second;
         source.PushStarted = false;
         source.FreeSpace = ev->Get()->FreeSpaceLeft;
@@ -551,9 +551,9 @@ private:
             Stat->AddCounters2(ev->Get()->Sensors);
         }
         auto it = OutputChannelsMap.find(ev->Get()->ChannelId);
-        Y_VERIFY(it != OutputChannelsMap.end());
+        Y_ABORT_UNLESS(it != OutputChannelsMap.end());
         TOutputChannelInfo& outputChannel = it->second;
-        Y_VERIFY(!outputChannel.AsyncData); // have finished previous cycle
+        Y_ABORT_UNLESS(!outputChannel.AsyncData); // have finished previous cycle
         outputChannel.AsyncData.ConstructInPlace();
         outputChannel.AsyncData->Watermark = std::move(ev->Get()->Watermark);
         outputChannel.AsyncData->Data = std::move(ev->Get()->Data);
@@ -681,7 +681,7 @@ private:
         }
 
         TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(it->second.ChannelId);
-        Y_VERIFY(inputChannel);
+        Y_ABORT_UNLESS(inputChannel);
         inputChannel->FreeSpace = ev->Get()->FreeSpace;
 
         if (it->second.Ack) {
@@ -705,7 +705,7 @@ private:
         auto dataWasSent = finished || changed;
         auto dataSize = size;
         auto it = SinksMap.find(outputIndex);
-        Y_VERIFY(it != SinksMap.end());
+        Y_ABORT_UNLESS(it != SinksMap.end());
 
         TAsyncOutputInfoBase& sinkInfo = it->second;
         sinkInfo.Finished = finished;
@@ -727,7 +727,7 @@ private:
             sinkInfo.AsyncOutput->SendData(std::move(data), size, std::move(checkpoint), finished);
         }
 
-        Y_VERIFY(batch.empty());
+        Y_ABORT_UNLESS(batch.empty());
         CA_LOG_T("Sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier");
 
         CA_LOG_T("Drain sink " << outputIndex
@@ -764,7 +764,7 @@ private:
     }
 
     void InjectBarrierToOutputs(const NDqProto::TCheckpoint&) override {
-        Y_VERIFY(CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
+        Y_ABORT_UNLESS(CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
         // already done in task_runner_actor
     }
 
@@ -787,7 +787,7 @@ private:
         if (TypeEnv) {
             ForwardToCheckpoints(std::move(ev));
         } else {
-            Y_VERIFY(!DeferredInjectCheckpointEvent);
+            Y_ABORT_UNLESS(!DeferredInjectCheckpointEvent);
             DeferredInjectCheckpointEvent = std::move(ev);
         }
     }
@@ -796,7 +796,7 @@ private:
         if (TypeEnv) {
             ForwardToCheckpoints(std::move(ev));
         } else {
-            Y_VERIFY(!DeferredRestoreFromCheckpointEvent);
+            Y_ABORT_UNLESS(!DeferredRestoreFromCheckpointEvent);
             DeferredRestoreFromCheckpointEvent = std::move(ev);
         }
     }
@@ -806,7 +806,7 @@ private:
     }
 
     void AskCpuQuota() {
-        Y_VERIFY(!CpuTimeQuotaAsked);
+        Y_ABORT_UNLESS(!CpuTimeQuotaAsked);
         if (CpuTimeSpent >= MIN_QUOTED_CPU_TIME) {
             CA_LOG_T("Ask CPU quota: " << CpuTimeSpent.MilliSeconds() << "ms");
             if (CpuTime) {
@@ -823,7 +823,7 @@ private:
     }
 
     void AskContinueRun(TMaybe<NDqProto::TCheckpoint>&& checkpointRequest, bool checkpointOnly) {
-        Y_VERIFY(!checkpointOnly || !ContinueRunEvent);
+        Y_ABORT_UNLESS(!checkpointOnly || !ContinueRunEvent);
         if (!ContinueRunEvent) {
             ContinueRunStartWaitTime = TInstant::Now();
             ContinueRunEvent = std::make_unique<NTaskRunnerActor::TEvContinueRun>();
@@ -850,8 +850,8 @@ private:
             if (!ContinueRunEvent->CheckpointRequest) {
                 ContinueRunEvent->CheckpointRequest.ConstructInPlace(GetIds(OutputChannelsMap), GetIds(SinksMap), *checkpointRequest);
             } else {
-                Y_VERIFY(ContinueRunEvent->CheckpointRequest->Checkpoint.GetGeneration() == checkpointRequest->GetGeneration());
-                Y_VERIFY(ContinueRunEvent->CheckpointRequest->Checkpoint.GetId() == checkpointRequest->GetId());
+                Y_ABORT_UNLESS(ContinueRunEvent->CheckpointRequest->Checkpoint.GetGeneration() == checkpointRequest->GetGeneration());
+                Y_ABORT_UNLESS(ContinueRunEvent->CheckpointRequest->Checkpoint.GetId() == checkpointRequest->GetId());
             }
         }
 

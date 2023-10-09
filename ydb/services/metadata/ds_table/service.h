@@ -57,7 +57,7 @@ public:
             hFunc(TEvUnsubscribeExternal, Handle);
 
             default:
-                Y_VERIFY(false);
+                Y_ABORT_UNLESS(false);
         }
     }
 

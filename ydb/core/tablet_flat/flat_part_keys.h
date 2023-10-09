@@ -31,8 +31,8 @@ namespace NTable {
 
         const TSharedData* TryGetPage(const TPart* part, TPageId id, TGroupId groupId) override
         {
-            Y_VERIFY(part == Part, "Unsupported part");
-            Y_VERIFY(groupId.IsMain(), "Unsupported column group");
+            Y_ABORT_UNLESS(part == Part, "Unsupported part");
+            Y_ABORT_UNLESS(groupId.IsMain(), "Unsupported column group");
 
             if (auto* extra = ExtraPages.FindPtr(id)) {
                 return extra;
@@ -48,7 +48,7 @@ namespace NTable {
 
         void Check(bool has) const noexcept
         {
-            Y_VERIFY(bool(NeedPages) == has, "Loader does not have some ne");
+            Y_ABORT_UNLESS(bool(NeedPages) == has, "Loader does not have some ne");
         }
 
         TAutoPtr<NPageCollection::TFetch> GetFetches()
@@ -161,11 +161,11 @@ namespace NTable {
                     return true;
                 }
 
-                Y_VERIFY(Index.GetRowId() <= rowId, "SeekIndex invariant failure");
+                Y_ABORT_UNLESS(Index.GetRowId() <= rowId, "SeekIndex invariant failure");
                 if (!LoadPage(Index.GetPageId())) {
                     return false;
                 }
-                Y_VERIFY(Page.BaseRow() == Index.GetRowId(), "Index and data are out of sync");
+                Y_ABORT_UNLESS(Page.BaseRow() == Index.GetRowId(), "Index and data are out of sync");
                 auto lastRowId = Page.BaseRow() + (Page->Count - 1);
                 if (lastRowId < rowId) {
                     // Row is out of range for this page
@@ -184,12 +184,12 @@ namespace NTable {
             if (hasLast == EReady::Page) {
                 return false;
             }
-            Y_VERIFY(hasLast != EReady::Gone, "Unexpected failure to find the last index record");
+            Y_ABORT_UNLESS(hasLast != EReady::Gone, "Unexpected failure to find the last index record");
 
             if (!LoadPage(Index.GetPageId())) {
                 return false;
             }
-            Y_VERIFY(Page.BaseRow() == Index.GetRowId(), "Index and data are out of sync");
+            Y_ABORT_UNLESS(Page.BaseRow() == Index.GetRowId(), "Index and data are out of sync");
             auto lastRowId = Page.BaseRow() + (Page->Count - 1);
             LoadRow(lastRowId);
             return true;
@@ -197,10 +197,10 @@ namespace NTable {
 
         bool LoadPage(TPageId pageId) noexcept
         {
-            Y_VERIFY(pageId != Max<TPageId>(), "Unexpected seek to an invalid page id");
+            Y_ABORT_UNLESS(pageId != Max<TPageId>(), "Unexpected seek to an invalid page id");
             if (PageId != pageId) {
                 if (auto* data = Env->TryGetPage(Part, pageId)) {
-                    Y_VERIFY(Page.Set(data), "Unexpected failure to load data page");
+                    Y_ABORT_UNLESS(Page.Set(data), "Unexpected failure to load data page");
                     PageId = pageId;
                 } else {
                     return false;
@@ -213,7 +213,7 @@ namespace NTable {
         {
             if (RowId != rowId) {
                 auto it = Page->Begin() + (rowId - Page.BaseRow());
-                Y_VERIFY(it, "Unexpected failure to find row on the data page");
+                Y_ABORT_UNLESS(it, "Unexpected failure to find row on the data page");
                 Key.clear();
                 for (const auto& info : Part->Scheme->Groups[0].ColsKeyData) {
                     Key.push_back(it->Cell(info));

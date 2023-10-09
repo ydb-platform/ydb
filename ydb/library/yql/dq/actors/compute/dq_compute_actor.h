@@ -236,9 +236,9 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
 
     TGuaranteeQuotaManager(ui64 limit, ui64 guarantee, ui64 step = 1_MB, ui64 quota = 0)
         : Limit(limit), Guarantee(guarantee), Step(step), Quota(quota) {
-        Y_VERIFY(Limit >= Guarantee);
-        Y_VERIFY(Limit >= Quota);
-        Y_VERIFY((Step ^ ~Step) + 1 == 0);
+        Y_ABORT_UNLESS(Limit >= Guarantee);
+        Y_ABORT_UNLESS(Limit >= Quota);
+        Y_ABORT_UNLESS((Step ^ ~Step) + 1 == 0);
     }
 
     bool AllocateQuota(ui64 memorySize) override {
@@ -259,7 +259,7 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
     }
 
     void FreeQuota(ui64 memorySize) override {
-        Y_VERIFY(Quota >= memorySize);
+        Y_ABORT_UNLESS(Quota >= memorySize);
         Quota -= memorySize;
         ui64 delta = Limit - std::max(Quota, Guarantee);
         if (delta >= Step) {

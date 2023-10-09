@@ -52,7 +52,7 @@ struct TKesusTablet::TTxQuoterResourceAdd : public TTxBase {
             return true;
         }
 
-        Y_VERIFY(Self->NextQuoterResourceId > 0);
+        Y_ABORT_UNLESS(Self->NextQuoterResourceId > 0);
 
         TString errorMessage;
         TQuoterResourceTree* resource = Self->QuoterResources.AddResource(Self->NextQuoterResourceId, Record.GetResource(), errorMessage);
@@ -84,7 +84,7 @@ struct TKesusTablet::TTxQuoterResourceAdd : public TTxBase {
             "[" << Self->TabletID() << "] TTxQuoterResourceAdd::Complete (sender=" << Sender
                 << ", cookie=" << Cookie << ")");
 
-        Y_VERIFY(Reply);
+        Y_ABORT_UNLESS(Reply);
         ctx.Send(Sender, std::move(Reply), 0, Cookie);
     }
 };

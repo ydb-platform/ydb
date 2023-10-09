@@ -93,7 +93,7 @@ void ResolveAndParseYamlConfig(
     }
 
     NJson::TJsonValue json;
-    Y_VERIFY(NJson::ReadJsonTree(resolvedJsonConfigStream.Str(), &json), "Got invalid config from Console");
+    Y_ABORT_UNLESS(NJson::ReadJsonTree(resolvedJsonConfigStream.Str(), &json), "Got invalid config from Console");
 
     NKikimr::NYaml::TransformConfig(json, true);
 

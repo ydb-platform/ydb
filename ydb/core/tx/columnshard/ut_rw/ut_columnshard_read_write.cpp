@@ -2844,7 +2844,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 // Cerr <<  "EvWriteIndex" << Endl << *msg->IndexChanges << Endl;
 
                 if (auto append = dynamic_pointer_cast<NOlap::TChangesWithAppend>(msg->IndexChanges)) {
-                    Y_VERIFY(append->AppendedPortions.size());
+                    Y_ABORT_UNLESS(append->AppendedPortions.size());
                     Cerr << "Added portions:";
                     for (const auto& portion : append->AppendedPortions) {
                         ++addedPortions;
@@ -2854,7 +2854,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Cerr << Endl;
                 }
                 if (auto compact = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(msg->IndexChanges)) {
-                    Y_VERIFY(compact->SwitchedPortions.size());
+                    Y_ABORT_UNLESS(compact->SwitchedPortions.size());
                     ++compactionsHappened;
                     Cerr << "Compaction old portions:";
                     ui64 srcGranule{0};
@@ -2867,7 +2867,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Cerr << Endl;
                 }
                 if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupColumnEngineChanges>(msg->IndexChanges)) {
-                    Y_VERIFY(cleanup->PortionsToDrop.size());
+                    Y_ABORT_UNLESS(cleanup->PortionsToDrop.size());
                     ++cleanupsHappened;
                     Cerr << "Cleanup old portions:";
                     for (const auto& portion : cleanup->PortionsToDrop) {

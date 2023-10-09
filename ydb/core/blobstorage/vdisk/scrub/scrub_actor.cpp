@@ -193,7 +193,7 @@ namespace NKikimr {
         if (State) {
             TString serialized;
             const bool success = State->SerializeToString(&serialized);
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
             finish(serialized);
             ScrubEntrypoint.MutableScrubState()->CopyFrom(*State);
         } else {
@@ -217,7 +217,7 @@ namespace NKikimr {
         TRcBuf data(TRcBuf::Uninitialized(ScrubEntrypoint.ByteSizeLong()));
         //FIXME(innokentii): better use SerializeWithCachedSizesToArray + check that all fields are set
         const bool success = ScrubEntrypoint.SerializeToArray(reinterpret_cast<uint8_t*>(data.UnsafeGetDataMut()), data.GetSize());
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
 
         auto seg = ScrubCtx->LsnMngr->AllocLsnForLocalUse();
         ScrubEntrypointLsn = seg.Point();

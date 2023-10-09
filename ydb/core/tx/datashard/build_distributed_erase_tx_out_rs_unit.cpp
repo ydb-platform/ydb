@@ -18,7 +18,7 @@ class TBuildDistributedEraseTxOutRSUnit : public TExecutionUnit {
     static TVector<NTable::TTag> MakeTags(const TVector<NTable::TTag>& conditionTags,
             const google::protobuf::RepeatedField<ui32>& indexColumnIds) {
 
-        Y_VERIFY(conditionTags.size() == 1, "Multi-column conditions are not supported");
+        Y_ABORT_UNLESS(conditionTags.size() == 1, "Multi-column conditions are not supported");
         TVector<NTable::TTag> tags = conditionTags;
 
         THashSet<NTable::TTag> uniqTags(tags.begin(), tags.end());
@@ -45,10 +45,10 @@ class TBuildDistributedEraseTxOutRSUnit : public TExecutionUnit {
         TVector<TCell> result;
         for (const auto columnId : indexColumnIds) {
             auto it = tagToPos.find(columnId);
-            Y_VERIFY(it != tagToPos.end());
+            Y_ABORT_UNLESS(it != tagToPos.end());
 
             const auto pos = it->second;
-            Y_VERIFY(pos < row.Size());
+            Y_ABORT_UNLESS(pos < row.Size());
 
             result.push_back(row.Get(pos));
         }
@@ -57,7 +57,7 @@ class TBuildDistributedEraseTxOutRSUnit : public TExecutionUnit {
     }
 
     static bool CompareCells(const TVector<TRawTypeValue>& expectedValue, const TVector<TCell>& actualValue) {
-        Y_VERIFY(expectedValue.size() == actualValue.size());
+        Y_ABORT_UNLESS(expectedValue.size() == actualValue.size());
 
         for (ui32 pos = 0; pos < expectedValue.size(); ++pos) {
             const auto& expected = expectedValue.at(pos);
@@ -81,7 +81,7 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext&) override {
-        Y_VERIFY(op->IsDistributedEraseTx());
+        Y_ABORT_UNLESS(op->IsDistributedEraseTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
@@ -95,11 +95,11 @@ public:
         const ui64 tableId = request.GetTableId();
         const TTableId fullTableId(DataShard.GetPathOwnerId(), tableId);
 
-        Y_VERIFY(DataShard.GetUserTables().contains(tableId));
+        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
         const TUserTable& tableInfo = *DataShard.GetUserTables().at(tableId);
 
         THolder<IEraseRowsCondition> condition{CreateEraseRowsCondition(request)};
-        Y_VERIFY(condition.Get());
+        Y_ABORT_UNLESS(condition.Get());
         condition->Prepare(txc.DB.GetRowScheme(tableInfo.LocalTid), 0);
 
         const auto tags = MakeTags(condition->Tags(), eraseTx->GetIndexColumnIds());
@@ -110,8 +110,8 @@ public:
         TDynBitMap confirmedRows;
         for (ui32 i = 0; i < request.KeyColumnsSize(); ++i) {
             TSerializedCellVec keyCells;
-            Y_VERIFY(TSerializedCellVec::TryParse(request.GetKeyColumns(i), keyCells));
-            Y_VERIFY(keyCells.GetCells().size() == tableInfo.KeyColumnTypes.size());
+            Y_ABORT_UNLESS(TSerializedCellVec::TryParse(request.GetKeyColumns(i), keyCells));
+            Y_ABORT_UNLESS(keyCells.GetCells().size() == tableInfo.KeyColumnTypes.size());
 
             TVector<TRawTypeValue> key;
             for (ui32 pos = 0; pos < tableInfo.KeyColumnTypes.size(); ++pos) {
@@ -123,13 +123,13 @@ public:
             TSerializedCellVec indexCells;
             TVector<TRawTypeValue> indexTypedVals;
             if (!eraseTx->GetIndexColumns().empty()) {
-                Y_VERIFY(i < static_cast<ui32>(eraseTx->GetIndexColumns().size()));
-                Y_VERIFY(TSerializedCellVec::TryParse(eraseTx->GetIndexColumns().at(i), indexCells));
-                Y_VERIFY(indexCells.GetCells().size() == static_cast<ui32>(eraseTx->GetIndexColumnIds().size()));
+                Y_ABORT_UNLESS(i < static_cast<ui32>(eraseTx->GetIndexColumns().size()));
+                Y_ABORT_UNLESS(TSerializedCellVec::TryParse(eraseTx->GetIndexColumns().at(i), indexCells));
+                Y_ABORT_UNLESS(indexCells.GetCells().size() == static_cast<ui32>(eraseTx->GetIndexColumnIds().size()));
 
                 for (ui32 pos = 0; pos < static_cast<ui32>(eraseTx->GetIndexColumnIds().size()); ++pos) {
                     auto it = tableInfo.Columns.find(eraseTx->GetIndexColumnIds().Get(pos));
-                    Y_VERIFY(it != tableInfo.Columns.end());
+                    Y_ABORT_UNLESS(it != tableInfo.Columns.end());
 
                     const NScheme::TTypeInfo type = it->second.Type;
                     const TCell& cell = indexCells.GetCells()[pos];
@@ -168,7 +168,7 @@ public:
                 bool ok = DataShard.GetVolatileTxManager().AttachBlockedOperation(txId, op->GetTxId());
                 Y_VERIFY_S(ok, "Unexpected failure to attach " << *op << " to volatile tx " << txId);
             }
-            Y_VERIFY(!txc.DB.HasChanges(),
+            Y_ABORT_UNLESS(!txc.DB.HasChanges(),
                 "Unexpected database changes while building distributed erase outgoing readsets");
             return EExecutionStatus::Continue;
         }

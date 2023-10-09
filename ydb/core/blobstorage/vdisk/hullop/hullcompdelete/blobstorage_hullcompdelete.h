@@ -71,7 +71,7 @@ namespace NKikimr {
 
     public:
         void SetActorId(const TActorId& actorId) {
-            Y_VERIFY(!ActorId);
+            Y_ABORT_UNLESS(!ActorId);
             ActorId = actorId;
         }
 
@@ -91,7 +91,7 @@ namespace NKikimr {
         void Update(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, TVector<TChunkIdx> chunksToForget, TLogSignature signature,
                 const TActorContext& ctx, const TActorId& hugeKeeperId, const TActorId& skeletonId, const TPDiskCtxPtr& pdiskCtx,
                 const TVDiskContextPtr& vctx) {
-            Y_VERIFY(recordLsn > LastDeletionLsn);
+            Y_ABORT_UNLESS(recordLsn > LastDeletionLsn);
             LastDeletionLsn = recordLsn;
             ReleaseQueue.emplace_back(recordLsn, std::move(removedHugeBlobs), std::move(chunksToForget), signature);
             ProcessReleaseQueue(ctx, hugeKeeperId, skeletonId, pdiskCtx, vctx);
@@ -147,7 +147,7 @@ namespace NKikimr {
                             }
                             for (const TChunkIdx chunkIdx : record.ChunksToForget) {
                                 ui32& value = slots[chunkIdx];
-                                Y_VERIFY(!value);
+                                Y_ABORT_UNLESS(!value);
                                 value = Max<ui32>();
                             }
 
@@ -200,7 +200,7 @@ namespace NKikimr {
         void ReleaseSnapshot(ui64 cookie, const TActorContext& ctx, const TActorId& hugeKeeperId, const TActorId& skeletonId,
                 const TPDiskCtxPtr& pdiskCtx, const TVDiskContextPtr& vctx) {
             auto it = CurrentSnapshots.find(cookie);
-            Y_VERIFY(it != CurrentSnapshots.end() && it->second > 0);
+            Y_ABORT_UNLESS(it != CurrentSnapshots.end() && it->second > 0);
             if (!--it->second) {
                 CurrentSnapshots.erase(it);
                 ProcessReleaseQueue(ctx, hugeKeeperId, skeletonId, pdiskCtx, vctx);

@@ -29,7 +29,7 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
         ui64 sequenceId, bool sendMeCostSettings, NWilson::TTraceId traceId, const NBackpressure::TQueueClientId& clientId,
         const THPTimer& processingTimer) {
     // check that we are not discarded yet
-    Y_VERIFY(Type != 0);
+    Y_ABORT_UNLESS(Type != 0);
 
     auto processMsgQoS = [&](auto& record) {
         // prepare extra buffer with some changed params
@@ -71,7 +71,7 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
         // serialize that extra buffer
         TString buf;
         const bool status = record.SerializeToString(&buf);
-        Y_VERIFY(status);
+        Y_ABORT_UNLESS(status);
 
         // send it to disk
         ctx.ExecutorThread.Send(new IEventHandle(Type, flags, remoteVDisk, ctx.SelfID,

@@ -36,13 +36,13 @@ void TKesusTablet::DoDeleteSession(
     for (auto& kv : session->OwnedSemaphores) {
         ui64 semaphoreId = kv.first;
         auto* semaphore = Semaphores.FindPtr(semaphoreId);
-        Y_VERIFY(semaphore, "Session %" PRIu64 " owns missing semaphore: %" PRIu64, sessionId, semaphoreId);
+        Y_ABORT_UNLESS(semaphore, "Session %" PRIu64 " owns missing semaphore: %" PRIu64, sessionId, semaphoreId);
         DoDeleteSessionSemaphore(db, semaphore, &kv.second, events);
     }
     for (auto& kv : session->WaitingSemaphores) {
         ui64 semaphoreId = kv.first;
         auto* semaphore = Semaphores.FindPtr(semaphoreId);
-        Y_VERIFY(semaphore, "Session %" PRIu64 " waiting for missing semaphore: %" PRIu64, sessionId, semaphoreId);
+        Y_ABORT_UNLESS(semaphore, "Session %" PRIu64 " waiting for missing semaphore: %" PRIu64, sessionId, semaphoreId);
         DoDeleteSessionSemaphore(db, semaphore, &kv.second, events);
     }
     Sessions.erase(sessionId);
@@ -58,7 +58,7 @@ void TKesusTablet::DoDeleteSemaphore(
         "[" << TabletID() << "] Deleting semaphore " << semaphoreId << " " << semaphore->Name.Quote());
     for (auto* owner : semaphore->Owners) {
         auto* session = Sessions.FindPtr(owner->SessionId);
-        Y_VERIFY(session);
+        Y_ABORT_UNLESS(session);
         PersistDeleteSessionSemaphore(db, owner->SessionId, semaphoreId);
         session->OwnedSemaphores.erase(semaphoreId);
         TabletCounters->Simple()[COUNTER_SEMAPHORE_OWNER_COUNT].Add(-1);
@@ -96,7 +96,7 @@ void TKesusTablet::DoDeleteSessionSemaphore(
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
         "[" << TabletID() << "] Deleting session " << sessionId << " / semaphore " << semaphoreId << " " << semaphore->Name.Quote()
             << " owner link");
-    Y_VERIFY(semaphore->Owners.contains(owner));
+    Y_ABORT_UNLESS(semaphore->Owners.contains(owner));
     semaphore->Count -= owner->Count;
     semaphore->Owners.erase(owner);
     PersistDeleteSessionSemaphore(db, sessionId, semaphoreId);
@@ -109,7 +109,7 @@ void TKesusTablet::DoDeleteSessionSemaphore(
         TabletCounters->Simple()[COUNTER_SEMAPHORE_COUNT].Add(-1);
     } else {
         DoProcessSemaphoreQueue(semaphore, events, true);
-        Y_VERIFY(!semaphore->Ephemeral || !semaphore->IsEmpty());
+        Y_ABORT_UNLESS(!semaphore->Ephemeral || !semaphore->IsEmpty());
     }
 }
 
@@ -122,15 +122,15 @@ void TKesusTablet::DoDeleteSessionSemaphore(
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
         "[" << TabletID() << "] Deleting session " << sessionId << " / semaphore " << semaphoreId << " " << semaphore->Name.Quote()
             << " waiter link");
-    Y_VERIFY(semaphore->Waiters.Value(orderId, nullptr) == waiter);
+    Y_ABORT_UNLESS(semaphore->Waiters.Value(orderId, nullptr) == waiter);
     bool needProcessSemaphoreQueue = semaphore->GetFirstOrderId() == orderId;
     semaphore->Waiters.erase(orderId);
     PersistDeleteSessionSemaphore(db, sessionId, semaphoreId);
     TabletCounters->Simple()[COUNTER_SEMAPHORE_WAITER_COUNT].Add(-1);
     if (needProcessSemaphoreQueue) {
-        Y_VERIFY(!semaphore->IsEmpty());
+        Y_ABORT_UNLESS(!semaphore->IsEmpty());
         DoProcessSemaphoreQueue(semaphore, events);
-        Y_VERIFY(!semaphore->IsEmpty());
+        Y_ABORT_UNLESS(!semaphore->IsEmpty());
     }
 }
 
@@ -152,11 +152,11 @@ void TKesusTablet::DoProcessSemaphoreQueue(
                 << " queue: next order #" << orderId << " session " << sessionId);
 
         auto* session = Sessions.FindPtr(sessionId);
-        Y_VERIFY(session,
+        Y_ABORT_UNLESS(session,
             "Semaphore %s points to missing session: %" PRIu64 " (wait order %" PRIu64 ")",
             semaphore->Name.Quote().data(), sessionId, orderId);
 
-        Y_VERIFY(!session->OwnedSemaphores.contains(semaphoreId));
+        Y_ABORT_UNLESS(!session->OwnedSemaphores.contains(semaphoreId));
         auto* owner = &session->OwnedSemaphores[semaphoreId];
         owner->OrderId = orderId;
         owner->SessionId = sessionId;
@@ -197,7 +197,7 @@ void TKesusTablet::TSemaphoreInfo::NotifyWatchers(TVector<TDelayedEvent>& events
     if (dataChanged) {
         for (auto* session : DataWatchers) {
             OwnersWatchers.erase(session);
-            Y_VERIFY(session->OwnerProxy, "unexpected notify for unattached session");
+            Y_ABORT_UNLESS(session->OwnerProxy, "unexpected notify for unattached session");
             events.emplace_back(
                 session->OwnerProxy->ActorID,
                 session->RemoveSemaphoreWatchCookie(this),
@@ -211,7 +211,7 @@ void TKesusTablet::TSemaphoreInfo::NotifyWatchers(TVector<TDelayedEvent>& events
             if (!dataChanged) {
                 DataWatchers.erase(session);
             }
-            Y_VERIFY(session->OwnerProxy, "unexpected notify for unattached session");
+            Y_ABORT_UNLESS(session->OwnerProxy, "unexpected notify for unattached session");
             events.emplace_back(
                 session->OwnerProxy->ActorID,
                 session->RemoveSemaphoreWatchCookie(this),

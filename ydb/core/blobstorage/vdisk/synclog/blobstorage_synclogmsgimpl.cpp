@@ -245,7 +245,7 @@ namespace NKikimr {
                 pos += bufSize;
 
                 size_t decodedSize = decoded.Size();
-                Y_VERIFY(decodedSize == blobsSize * sizeof(TNumber),
+                Y_ABORT_UNLESS(decodedSize == blobsSize * sizeof(TNumber),
                        "decodedSize# %zu blobSize# %" PRIu32 " sizeof(TNumber)=%zu",
                        decodedSize, blobsSize, sizeof(TNumber));
                 v.clear();

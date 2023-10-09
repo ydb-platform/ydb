@@ -70,7 +70,7 @@ namespace NPageCollection {
             if (Buffer) {
                 auto glob = CookieAllocator.Do(Channel, Buffer.size());
 
-                Y_VERIFY(glob.Group == Record.Group, "Unexpected BS group");
+                Y_ABORT_UNLESS(glob.Group == Record.Group, "Unexpected BS group");
 
                 Blobs.emplace_back(glob, TakeBuffer());
                 Record.Push(glob.Logo);

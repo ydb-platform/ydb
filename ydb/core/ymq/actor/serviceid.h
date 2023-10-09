@@ -10,12 +10,12 @@
 namespace NKikimr::NSQS {
 
 inline TActorId MakeSqsServiceID(ui32 nodeId) {
-    Y_VERIFY(nodeId != 0);
+    Y_ABORT_UNLESS(nodeId != 0);
     return TActorId(nodeId, TStringBuf("SQS_SERVICE"));
 }
 
 inline TActorId MakeSqsProxyServiceID(ui32 nodeId) {
-    Y_VERIFY(nodeId != 0);
+    Y_ABORT_UNLESS(nodeId != 0);
     return TActorId(nodeId, TStringBuf("SQS_PROXY"));
 }
 

@@ -39,7 +39,7 @@ private:
             : TReadBlobRangeOptions(opts)
             , BlobRange(blobRange)
         {
-            Y_VERIFY(blobRange.BlobId.IsValid());
+            Y_ABORT_UNLESS(blobRange.BlobId.IsValid());
         }
 
         bool PromoteInCache() const {
@@ -63,7 +63,7 @@ private:
         std::tuple<ui64, ui32, EReadVariant> BlobSource() const {
             const TUnifiedBlobId& blobId = BlobRange.BlobId;
 
-            Y_VERIFY(blobId.IsValid());
+            Y_ABORT_UNLESS(blobId.IsValid());
 
             if (blobId.IsDsBlob()) {
                 // Tablet & group restriction
@@ -353,7 +353,7 @@ private:
 
         TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queires(new TEvBlobStorage::TEvGet::TQuery[blobRanges.size()]);
         for (size_t i = 0; i < blobRanges.size(); ++i) {
-            Y_VERIFY(dsGroup == blobRanges[i].BlobId.GetDsGroup());
+            Y_ABORT_UNLESS(dsGroup == blobRanges[i].BlobId.GetDsGroup());
             queires[i].Set(blobRanges[i].BlobId.GetLogoBlobId(), blobRanges[i].Offset, blobRanges[i].Size);
         }
 
@@ -409,7 +409,7 @@ private:
             ui64 requestSize = 0;
             ui32 dsGroup = std::get<1>(target);
             TReadItem::EReadVariant readVariant = std::get<2>(target);
-            Y_VERIFY(rangesGroup.begin()->BlobId.IsDsBlob());
+            Y_ABORT_UNLESS(rangesGroup.begin()->BlobId.IsDsBlob());
 
             std::vector<ui64> dsReads;
 
@@ -467,7 +467,7 @@ private:
         std::vector<TBlobRange> blobRanges = std::move(cookieIt->second);
         CookieToRange.erase(readCookie);
 
-        Y_VERIFY(blobRanges.size() == ev->Get()->ResponseSz, "Mismatched number of results for read request!");
+        Y_ABORT_UNLESS(blobRanges.size() == ev->Get()->ResponseSz, "Mismatched number of results for read request!");
 
         for (size_t i = 0; i < ev->Get()->ResponseSz; ++i) {
             const auto& res = ev->Get()->Responses[i];
@@ -492,11 +492,11 @@ private:
         SizeBlobsInFlight->Dec();
         InFlightDataSize -= blobRange.Size;
 
-        Y_VERIFY(Cache.Find(blobRange) == Cache.End(),
+        Y_ABORT_UNLESS(Cache.Find(blobRange) == Cache.End(),
             "Range %s must not be already in cache", blobRange.ToString().c_str());
 
         if (status == NKikimrProto::EReplyStatus::OK) {
-            Y_VERIFY(blobRange.Size == data.size(),
+            Y_ABORT_UNLESS(blobRange.Size == data.size(),
                 "Read %s, size %" PRISZT, blobRange.ToString().c_str(), data.size());
             ReadBytes->Add(blobRange.Size);
 
@@ -537,7 +537,7 @@ private:
             CookieToRange.erase(readCookie);
 
             for (size_t i = 0; i < blobRanges.size(); ++i) {
-                Y_VERIFY(blobRanges[i].BlobId.GetTabletId() == tabletId);
+                Y_ABORT_UNLESS(blobRanges[i].BlobId.GetTabletId() == tabletId);
                 ProcessSingleRangeResult(blobRanges[i], readCookie, NKikimrProto::EReplyStatus::NOTREADY, {}, ctx);
             }
         }
@@ -548,7 +548,7 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         const ui64 tabletId = msg->TabletId;
-        Y_VERIFY(tabletId != 0);
+        Y_ABORT_UNLESS(tabletId != 0);
         if (msg->Status == NKikimrProto::OK) {
             LOG_S_DEBUG("Pipe connected to tablet: " << tabletId);
         } else {
@@ -559,7 +559,7 @@ private:
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
         const ui64 tabletId = ev->Get()->TabletId;
-        Y_VERIFY(tabletId != 0);
+        Y_ABORT_UNLESS(tabletId != 0);
 
         LOG_S_DEBUG("Closed pipe connection to tablet: " << tabletId);
         DestroyPipe(tabletId, ctx);

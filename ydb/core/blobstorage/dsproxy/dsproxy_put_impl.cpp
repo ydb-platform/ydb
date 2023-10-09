@@ -45,7 +45,7 @@ NLog::EPriority GetPriorityForReply(TAtomicLogPriorityMuteChecker<NLog::PRI_ERRO
 
 void TPutImpl::PrepareOneReply(NKikimrProto::EReplyStatus status, TLogoBlobID blobId, ui64 blobIdx, TLogContext &logCtx,
         TString errorReason, TPutResultVec &outPutResults) {
-    Y_VERIFY(IsInitialized);
+    Y_ABORT_UNLESS(IsInitialized);
     if (!IsDone[blobIdx]) {
         outPutResults.emplace_back(blobIdx, new TEvBlobStorage::TEvPutResult(status, blobId, StatusFlags, Info->GroupID,
                     ApproximateFreeSpaceShare));
@@ -83,14 +83,14 @@ void TPutImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logC
 void TPutImpl::PrepareReply(TLogContext &logCtx, TString errorReason,
         TBatchedVec<TBlackboard::TBlobStates::value_type*>& finished, TPutResultVec &outPutResults) {
     A_LOG_DEBUG_SX(logCtx, "BPP36", "PrepareReply errorReason# " << errorReason);
-    Y_VERIFY(IsInitialized);
+    Y_ABORT_UNLESS(IsInitialized);
     for (auto item : finished) {
         auto &[blobId, state] = *item;
         const ui64 idx = state.BlobIdx;
-        Y_VERIFY(blobId == Blobs[idx].BlobId, "BlobIdx# %" PRIu64 " BlobState# %s Blackboard# %s",
+        Y_ABORT_UNLESS(blobId == Blobs[idx].BlobId, "BlobIdx# %" PRIu64 " BlobState# %s Blackboard# %s",
             idx, state.ToString().c_str(), Blackboard.ToString().c_str());
-        Y_VERIFY(!IsDone[idx]);
-        Y_VERIFY(state.Status != NKikimrProto::UNKNOWN);
+        Y_ABORT_UNLESS(!IsDone[idx]);
+        Y_ABORT_UNLESS(state.Status != NKikimrProto::UNKNOWN);
         outPutResults.emplace_back(idx, new TEvBlobStorage::TEvPutResult(state.Status, blobId, StatusFlags,
             Info->GroupID, ApproximateFreeSpaceShare));
         outPutResults.back().second->ErrorReason = errorReason;
@@ -104,7 +104,7 @@ void TPutImpl::PrepareReply(TLogContext &logCtx, TString errorReason,
 
 ui64 TPutImpl::GetTimeToAccelerateNs(TLogContext &logCtx) {
     Y_UNUSED(logCtx);
-    Y_VERIFY(!Blackboard.BlobStates.empty());
+    Y_ABORT_UNLESS(!Blackboard.BlobStates.empty());
     TBatchedVec<ui64> nextToWorstPredictedNsVec(Blackboard.BlobStates.size());
     ui64 idx = 0;
     for (auto &[_, state] : Blackboard.BlobStates) {
@@ -147,8 +147,8 @@ TString TPutImpl::DumpFullState() const {
 }
 
 bool TPutImpl::MarkBlobAsSent(ui64 idx) {
-    Y_VERIFY(idx < Blobs.size());
-    Y_VERIFY(!IsDone[idx]);
+    Y_ABORT_UNLESS(idx < Blobs.size());
+    Y_ABORT_UNLESS(!IsDone[idx]);
     Blackboard.MoveBlobStateToDone(Blobs[idx].BlobId);
     IsDone[idx] = true;
     DoneBlobs++;

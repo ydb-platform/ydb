@@ -584,7 +584,7 @@ namespace NKikimr {
                     continue;
                 }
 
-                Y_VERIFY(lsnBatch.First <= lsnBatch.Last);
+                Y_ABORT_UNLESS(lsnBatch.First <= lsnBatch.Last);
 
                 info.Lsn = TLsnSeg(lsnBatch.First, lsnBatch.First);
                 lsnBatch.First++;
@@ -617,7 +617,7 @@ namespace NKikimr {
         }
 
         void HandlePutSyncGuidRecovery(TEvBlobStorage::TEvVPut::TPtr& ev, const TActorContext& ctx) {
-            Y_VERIFY(ev->Get()->RewriteBlob);
+            Y_ABORT_UNLESS(ev->Get()->RewriteBlob);
             Handle(ev, ctx);
         }
 
@@ -1252,7 +1252,7 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvMonStreamActorDeathNote::TPtr& ev, const TActorContext& /*ctx*/) {
             auto it = MonStreamActors.find(ev->Get()->StreamId);
-            Y_VERIFY(it != MonStreamActors.end());
+            Y_ABORT_UNLESS(it != MonStreamActors.end());
             ActiveActors.erase(it->second);
             MonStreamActors.erase(it);
         }
@@ -1310,7 +1310,7 @@ namespace NKikimr {
                 switch (opType) {
                     case NKikimrBlobStorage::TEvVCompact::ASYNC:
                     {
-                        Y_VERIFY(Db->LoggerID);
+                        Y_ABORT_UNLESS(Db->LoggerID);
                         // forward this message to logger, because it knows correct lsn
                         ctx.Send(ev->Forward(Db->LoggerID));
                         // reply back
@@ -1343,7 +1343,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvHullCompactResult::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY(VDiskCompactionState);
+            Y_ABORT_UNLESS(VDiskCompactionState);
             VDiskCompactionState->Compacted(ctx, ev->Get()->RequestId, ev->Get()->Type);
         }
 
@@ -1370,7 +1370,7 @@ namespace NKikimr {
             if (!SelfVDiskId.SameDisk(record.GetVDiskID())) {
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, now);
             } else {
-                Y_VERIFY(Db->SyncLogID);
+                Y_ABORT_UNLESS(Db->SyncLogID);
                 // forward this message to SyncLog
                 ctx.Send(ev->Forward(Db->SyncLogID));
                 // reply back
@@ -1457,7 +1457,7 @@ namespace NKikimr {
             }
 
 #ifdef UNPACK_LOCALSYNCDATA
-            Y_VERIFY(ev->Get()->Extracted.IsReady());
+            Y_ABORT_UNLESS(ev->Get()->Extracted.IsReady());
             TLsnSeg seg = Hull->AllocateLsnForSyncDataCmd(ev->Get()->Extracted);
 #else
             TLsnSeg seg = Hull->AllocateLsnForSyncDataCmd(ev->Get()->Data);
@@ -1612,7 +1612,7 @@ namespace NKikimr {
 
             TRope buf = std::move(msg->Data);
             const ui64 bufSize = buf.GetSize();
-            Y_VERIFY(bufSize <= Config->MaxLogoBlobDataSize && HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID()),
+            Y_ABORT_UNLESS(bufSize <= Config->MaxLogoBlobDataSize && HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID()),
                     "TEvRecoveredHugeBlob: blob is too small/huge bufSize# %zu", bufSize);
             UpdatePDiskWriteBytes(bufSize);
 
@@ -1653,7 +1653,7 @@ namespace NKikimr {
             }
             TString data;
             bool res = record.SerializeToString(&data);
-            Y_VERIFY(res);
+            Y_ABORT_UNLESS(res);
 
             intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecPhantoms(seg, true, ev));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
@@ -1680,7 +1680,7 @@ namespace NKikimr {
             // dump db
             TStringStream dump;
             typename TDumper::EDumpRes status = dumper.Dump(dump);
-            Y_VERIFY(status == TDumper::EDumpRes::OK);
+            Y_ABORT_UNLESS(status == TDumper::EDumpRes::OK);
 
             str << "========= " << VCtx->VDiskLogPrefix << " ==========\n";
             str << dump.Str() << "\n";
@@ -1828,7 +1828,7 @@ namespace NKikimr {
 
                 // run SyncLogActor
                 std::unique_ptr<NSyncLog::TSyncLogRepaired> repairedSyncLog = std::move(ev->Get()->RepairedSyncLog);
-                Y_VERIFY(SelfVDiskId == GInfo->GetVDiskId(VCtx->ShortSelfVDisk));
+                Y_ABORT_UNLESS(SelfVDiskId == GInfo->GetVDiskId(VCtx->ShortSelfVDisk));
                 auto slCtx = MakeIntrusive<NSyncLog::TSyncLogCtx>(
                         VCtx,
                         Db->LsnMngr,
@@ -2168,7 +2168,7 @@ namespace NKikimr {
 
             if (LocalDbInitialized) {
                 Y_VERIFY_DEBUG(msg->Owner == PDiskCtx->Dsk->Owner);
-                Y_VERIFY(!CutLogDelayedMsg);
+                Y_ABORT_UNLESS(!CutLogDelayedMsg);
                 LOG_DEBUG_S(ctx, BS_LOGCUTTER, VCtx->VDiskLogPrefix
                         << "Handle " << msg->ToString()
                         << " actorid# " << ctx.SelfID.ToString()
@@ -2235,7 +2235,7 @@ namespace NKikimr {
             if (CutLogDelayedMsg) {
                 Y_VERIFY_DEBUG(CutLogDelayedMsg->Owner == PDiskCtx->Dsk->Owner);
                 SpreadCutLog(std::exchange(CutLogDelayedMsg, nullptr), ctx);
-                Y_VERIFY(!CutLogDelayedMsg);
+                Y_ABORT_UNLESS(!CutLogDelayedMsg);
             }
         }
 
@@ -2417,7 +2417,7 @@ namespace NKikimr {
         void CheckSnapshotExpiration(TAutoPtr<IEventHandle> ev, const TActorContext& ctx) {
             auto schedIt = std::find(SnapshotExpirationCheckSchedule.begin(), SnapshotExpirationCheckSchedule.end(),
                 TMonotonic::FromValue(ev->Cookie));
-            Y_VERIFY(schedIt != SnapshotExpirationCheckSchedule.end());
+            Y_ABORT_UNLESS(schedIt != SnapshotExpirationCheckSchedule.end());
             SnapshotExpirationCheckSchedule.erase(schedIt);
 
             const TMonotonic now = ctx.Monotonic();

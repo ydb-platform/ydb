@@ -107,7 +107,7 @@ namespace NKikimr {
         void TKeeper::InvokeCallback(void *cookie, NKikimrProto::EReplyStatus status, IEventBase *msg,
                 const TActorContext& ctx) {
             auto it = CallbackMap.find(cookie);
-            Y_VERIFY(it != CallbackMap.end());
+            Y_ABORT_UNLESS(it != CallbackMap.end());
             it->second->Apply(status, msg, ctx);
             CallbackMap.erase(it);
         }
@@ -132,7 +132,7 @@ namespace NKikimr {
 
         void TKeeper::Handle(TEvIncrHugeCallback::TPtr& ev, const TActorContext& ctx) {
             TEvIncrHugeCallback *msg = ev->Get();
-            Y_VERIFY(msg->Callback);
+            Y_ABORT_UNLESS(msg->Callback);
             msg->Callback->Apply(NKikimrProto::OK, msg, ctx);
         }
 

@@ -4,13 +4,13 @@
 namespace NKikimr::NColumnShard {
 
 void TBackgroundController::StartTtl(const NOlap::TColumnEngineChanges& changes) {
-    Y_VERIFY(TtlPortions.empty());
+    Y_ABORT_UNLESS(TtlPortions.empty());
     TtlPortions = changes.GetTouchedPortions();
 }
 
 bool TBackgroundController::StartCompaction(const NOlap::TPlanCompactionInfo& info, const NOlap::TColumnEngineChanges& changes) {
-    Y_VERIFY(ActiveCompactionInfo.emplace(info.GetPathId(), info).second);
-    Y_VERIFY(CompactionInfoPortions.emplace(info.GetPathId(), changes.GetTouchedPortions()).second);
+    Y_ABORT_UNLESS(ActiveCompactionInfo.emplace(info.GetPathId(), info).second);
+    Y_ABORT_UNLESS(CompactionInfoPortions.emplace(info.GetPathId(), changes.GetTouchedPortions()).second);
     return true;
 }
 
@@ -18,7 +18,7 @@ THashSet<NOlap::TPortionAddress> TBackgroundController::GetConflictTTLPortions()
     THashSet<NOlap::TPortionAddress> result = TtlPortions;
     for (auto&& i : CompactionInfoPortions) {
         for (auto&& g : i.second) {
-            Y_VERIFY(result.emplace(g).second);
+            Y_ABORT_UNLESS(result.emplace(g).second);
         }
     }
     return result;
@@ -28,7 +28,7 @@ THashSet<NOlap::TPortionAddress> TBackgroundController::GetConflictCompactionPor
     THashSet<NOlap::TPortionAddress> result = TtlPortions;
     for (auto&& i : CompactionInfoPortions) {
         for (auto&& g : i.second) {
-            Y_VERIFY(result.emplace(g).second);
+            Y_ABORT_UNLESS(result.emplace(g).second);
         }
     }
     return result;
@@ -53,11 +53,11 @@ void TBackgroundController::CheckDeadlinesIndexation() {
 }
 
 void TBackgroundController::StartIndexing(const NOlap::TColumnEngineChanges& changes) {
-    Y_VERIFY(ActiveIndexationTasks.emplace(changes.GetTaskIdentifier(), TMonotonic::Now()).second);
+    Y_ABORT_UNLESS(ActiveIndexationTasks.emplace(changes.GetTaskIdentifier(), TMonotonic::Now()).second);
 }
 
 void TBackgroundController::FinishIndexing(const NOlap::TColumnEngineChanges& changes) {
-    Y_VERIFY(ActiveIndexationTasks.erase(changes.GetTaskIdentifier()));
+    Y_ABORT_UNLESS(ActiveIndexationTasks.erase(changes.GetTaskIdentifier()));
 }
 
 TString TBackgroundController::DebugStringIndexation() const {

@@ -35,8 +35,8 @@ public:
             }
         }
 
-        Y_VERIFY(!tags.empty());
-        Y_VERIFY(!IndexTags.empty());
+        Y_ABORT_UNLESS(!tags.empty());
+        Y_ABORT_UNLESS(!IndexTags.empty());
 
         return TCachedTags(std::move(tags), std::make_pair(0, IndexTags.size() - 1));
     }
@@ -118,8 +118,8 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     needDeletion = true;
                 }
 
-                Y_VERIFY(tagToPos.contains(tag));
-                Y_VERIFY(userTable->Columns.contains(tag));
+                Y_ABORT_UNLESS(tagToPos.contains(tag));
+                Y_ABORT_UNLESS(userTable->Columns.contains(tag));
                 AddCellValue(KeyVals, tag, row.Get(tagToPos.at(tag)), userTable->Columns.at(tag).Type);
                 KeyTagsSeen.insert(tag);
             }
@@ -147,14 +147,14 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     AddValue(KeyVals, updates.at(updatedTagToPos.at(tag)));
                     KeyTagsSeen.insert(tag);
                 } else {
-                    Y_VERIFY(userTable->Columns.contains(tag));
+                    Y_ABORT_UNLESS(userTable->Columns.contains(tag));
                     const auto& column = userTable->Columns.at(tag);
 
                     if (rop == ERowOp::Reset && !column.IsKey) {
                         AddNullValue(KeyVals, tag, column.Type);
                         KeyTagsSeen.insert(tag);
                     } else {
-                        Y_VERIFY(tagToPos.contains(tag));
+                        Y_ABORT_UNLESS(tagToPos.contains(tag));
                         AddCellValue(KeyVals, tag, row.Get(tagToPos.at(tag)), column.Type);
                         KeyTagsSeen.insert(tag);
                     }
@@ -173,13 +173,13 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     needUpdate = true;
                     AddValue(DataVals, updates.at(updatedTagToPos.at(tag)));
                 } else {
-                    Y_VERIFY(userTable->Columns.contains(tag));
+                    Y_ABORT_UNLESS(userTable->Columns.contains(tag));
                     const auto& column = userTable->Columns.at(tag);
 
                     if (rop == ERowOp::Reset && !column.IsKey) {
                         AddNullValue(DataVals, tag, column.Type);
                     } else {
-                        Y_VERIFY(tagToPos.contains(tag));
+                        Y_ABORT_UNLESS(tagToPos.contains(tag));
                         AddCellValue(DataVals, tag, row.Get(tagToPos.at(tag)), column.Type);
                     }
                 }
@@ -197,7 +197,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
 }
 
 auto TAsyncIndexChangeCollector::CacheTags(const TTableId& tableId) const {
-    Y_VERIFY(Self->GetUserTables().contains(tableId.PathId.LocalPathId));
+    Y_ABORT_UNLESS(Self->GetUserTables().contains(tableId.PathId.LocalPathId));
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
 
     TCachedTagsBuilder builder;

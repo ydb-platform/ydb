@@ -26,7 +26,7 @@ Iterator SelectByHashAndWeight(Iterator begin, Iterator end, const ui64 hashValu
         borders.emplace_back(total, it);
     }
 
-    Y_VERIFY(total);
+    Y_ABORT_UNLESS(total);
     const ui64 borderToFind = hashValue % total + 1;
 
     const auto bordersIt = lower_bound(borders.begin(), borders.end(), borderToFind,

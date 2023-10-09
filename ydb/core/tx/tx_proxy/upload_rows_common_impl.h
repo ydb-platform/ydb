@@ -252,7 +252,7 @@ protected:
     }
 
     const TKeyDesc* GetKeyRange() const {
-        Y_VERIFY(ResolvePartitionsResult->ResultSet.size() == 1);
+        Y_ABORT_UNLESS(ResolvePartitionsResult->ResultSet.size() == 1);
         return ResolvePartitionsResult->ResultSet[0].KeyDescription.Get();
     }
 
@@ -278,7 +278,7 @@ protected:
 
     TVector<std::pair<TSerializedCellVec, TString>> BatchToRows(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                                 TString& errorMessage) {
-        Y_VERIFY(batch);
+        Y_ABORT_UNLESS(batch);
         TVector<std::pair<TSerializedCellVec, TString>> out;
         out.reserve(batch->num_rows());
 
@@ -367,7 +367,7 @@ private:
 
     bool BuildSchema(const NActors::TActorContext& ctx, TString& errorMessage, bool makeYqbSchema) {
         Y_UNUSED(ctx);
-        Y_VERIFY(ResolveNamesResult);
+        Y_ABORT_UNLESS(ResolveNamesResult);
 
         auto& entry = ResolveNamesResult->ResultSet.front();
 
@@ -401,7 +401,7 @@ private:
             columnByName[name] = id;
             i32 keyOrder = colInfo.KeyOrder;
             if (keyOrder != -1) {
-                Y_VERIFY(keyOrder >= 0);
+                Y_ABORT_UNLESS(keyOrder >= 0);
                 KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), keyOrder + 1));
                 KeyColumnTypes[keyOrder] = type;
                 keyColumnIds.resize(Max<size_t>(keyColumnIds.size(), keyOrder + 1));
@@ -588,7 +588,7 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
 
-        Y_VERIFY(request.ResultSet.size() == 1);
+        Y_ABORT_UNLESS(request.ResultSet.size() == 1);
         const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request.ResultSet.front();
 
         switch (entry.Status) {
@@ -679,7 +679,7 @@ private:
                 }
 
                 // (re)calculate RuCost for batch variant if it's bigger then RuCost calculated in ExtractRows()
-                Y_VERIFY(Batch && Batch->num_rows() >= 0);
+                Y_ABORT_UNLESS(Batch && Batch->num_rows() >= 0);
                 ui32 numRows = Batch->num_rows();
                 ui64 bytesSize = Max<ui64>(NArrow::GetBatchDataSize(Batch), GetSourceData().Size());
                 float batchRuCost = TUpsertCost::CostToRu(TUpsertCost::BatchCost(bytesSize, numRows));
@@ -762,7 +762,7 @@ private:
                 return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "cannot prepare data", ctx);
             }
 
-            Y_VERIFY(batch);
+            Y_ABORT_UNLESS(batch);
 
 #if 1 // TODO: check we call ValidateFull() once over pipeline (upsert -> long tx -> shard insert)
             auto validationInfo = batch->ValidateFull();
@@ -780,7 +780,7 @@ private:
     }
 
     std::vector<TString> GetOutputColumns(const NActors::TActorContext& ctx) {
-        Y_VERIFY(ResolveNamesResult);
+        Y_ABORT_UNLESS(ResolveNamesResult);
 
         if (ResolveNamesResult->ErrorCount > 0) {
             ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "failed to get table schema", ctx);
@@ -814,13 +814,13 @@ private:
             outColumns.push_back(YdbSchema[position].first);
         }
 
-        Y_VERIFY(!outColumns.empty());
+        Y_ABORT_UNLESS(!outColumns.empty());
         return outColumns;
     }
 
     void WriteBatchInLongTx(const TActorContext& ctx) {
-        Y_VERIFY(ResolveNamesResult);
-        Y_VERIFY(Batch);
+        Y_ABORT_UNLESS(ResolveNamesResult);
+        Y_ABORT_UNLESS(Batch);
 
         TBase::Become(&TThis::StateWaitWriteBatchResult);
         ui32 batchNo = 0;
@@ -848,7 +848,7 @@ private:
     void HandleWriteBatchResult(TEvents::TEvCompleted::TPtr& ev, const TActorContext& ctx) {
         Ydb::StatusIds::StatusCode status = (Ydb::StatusIds::StatusCode)ev->Get()->Status;
         if (status != Ydb::StatusIds::SUCCESS) {
-            Y_VERIFY(Issues);
+            Y_ABORT_UNLESS(Issues);
             for (const auto& issue: *Issues) {
                 RaiseIssue(issue);
             }
@@ -920,7 +920,7 @@ private:
             return ReplyIfDone(ctx);
         }
 
-        Y_VERIFY(ResolveNamesResult);
+        Y_ABORT_UNLESS(ResolveNamesResult);
 
         auto& entry = ResolveNamesResult->ResultSet.front();
 
@@ -985,7 +985,7 @@ private:
     }
 
     void RetryShardRequest(ui64 shardId, TShardUploadRetryState* state, const TActorContext& ctx) {
-        Y_VERIFY(ShardRepliesLeft.contains(shardId));
+        Y_ABORT_UNLESS(ShardRepliesLeft.contains(shardId));
 
         auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record = state->Headers;
@@ -1006,7 +1006,7 @@ private:
     void MakeShardRequests(const NActors::TActorContext& ctx) {
         const auto* keyRange = GetKeyRange();
 
-        Y_VERIFY(!keyRange->GetPartitions().empty());
+        Y_ABORT_UNLESS(!keyRange->GetPartitions().empty());
 
         // Group rows by shard id
         TVector<TShardUploadRetryState*> uploadRetryStates(keyRange->GetPartitions().size());

@@ -653,7 +653,7 @@ public:
         NUdf::TUnboxedValue *items = nullptr;
         const auto result = Cache.NewArray(ctx, ValueNodes.size(), items);
         if (!ValueNodes.empty()) {
-            Y_VERIFY(items);
+            Y_ABORT_UNLESS(items);
             for (const auto& node : ValueNodes) {
                 *items++ = node->GetValue(ctx);
             }

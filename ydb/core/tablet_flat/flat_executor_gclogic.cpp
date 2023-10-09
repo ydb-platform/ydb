@@ -66,7 +66,7 @@ TGCLogEntry TExecutorGCLogic::SnapshotLog(ui32 step) {
     TGCLogEntry snapshot(snapshotTime);
     for (const auto& chIt : ChannelInfo) {
         for (const auto& le : chIt.second.CommittedDelta) {
-            Y_VERIFY(le.first <= snapshotTime);
+            Y_ABORT_UNLESS(le.first <= snapshotTime);
             TExecutorGCLogic::MergeVectors(snapshot.Delta.Created, le.second.Created);
             TExecutorGCLogic::MergeVectors(snapshot.Delta.Deleted, le.second.Deleted);
         }
@@ -142,11 +142,11 @@ void TExecutorGCLogic::ApplyLogSnapshot(TGCLogEntry &snapshot, const TVector<std
 }
 
 void TExecutorGCLogic::HoldBarrier(ui32 step) {
-    Y_VERIFY(true == HoldBarriersSet.insert(TGCTime(Generation, step)).second);
+    Y_ABORT_UNLESS(true == HoldBarriersSet.insert(TGCTime(Generation, step)).second);
 }
 
 void TExecutorGCLogic::ReleaseBarrier(ui32 step) {
-    Y_VERIFY(1 == HoldBarriersSet.erase(TGCTime(Generation, step)));
+    Y_ABORT_UNLESS(1 == HoldBarriersSet.erase(TGCTime(Generation, step)));
 }
 
 ui32 TExecutorGCLogic::GetActiveGcBarrier() {
@@ -164,7 +164,7 @@ void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
     for (const TLogoBlobID &blobId : delta.Created) {
         auto &channel = ChannelInfo[blobId.Channel()];
         TGCTime gcTime(blobId.Generation(), blobId.Step());
-        Y_VERIFY(channel.KnownGcBarrier < gcTime);
+        Y_ABORT_UNLESS(channel.KnownGcBarrier < gcTime);
         channel.CommittedDelta[gcTime].Created.push_back(blobId);
     }
 
@@ -317,14 +317,14 @@ TExecutorGCLogic::TIntrospection TExecutorGCLogic::IntrospectStateSize() const {
 namespace {
     void ValidateGCVector(ui64 tabletId, ui32 channel, const char* name, const TVector<TLogoBlobID>& vec) {
         for (size_t i = 0; i < vec.size(); ++i) {
-            Y_VERIFY(vec[i].TabletID() == tabletId,
+            Y_ABORT_UNLESS(vec[i].TabletID() == tabletId,
                 "Foreign blob %s in %s vector (tablet %" PRIu64 ", channel %" PRIu32 ")",
                 vec[i].ToString().c_str(), name, tabletId, channel);
-            Y_VERIFY(vec[i].Channel() == channel,
+            Y_ABORT_UNLESS(vec[i].Channel() == channel,
                 "Wrong channel blob %s in %s vector (tablet %" PRIu64 ", channel %" PRIu32 ")",
                 vec[i].ToString().c_str(), name, tabletId, channel);
             if (i > 0) {
-                Y_VERIFY(vec[i-1] < vec[i],
+                Y_ABORT_UNLESS(vec[i-1] < vec[i],
                     "Out of order blobs %s and %s in %s vector (tablet %" PRIu64 ", channel %" PRIu32 ")",
                     vec[i-1].ToString().c_str(), vec[i].ToString().c_str(), name, tabletId, channel);
             }
@@ -388,7 +388,7 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
         KnownGcBarrier = collectBarrier;
 
         const auto *channelInfo = tabletStorageInfo->ChannelInfo(channel);
-        Y_VERIFY(channelInfo);
+        Y_ABORT_UNLESS(channelInfo);
 
 
         const ui32 lastCommitedGcBarrier = CommitedGcBarrier.Generation;

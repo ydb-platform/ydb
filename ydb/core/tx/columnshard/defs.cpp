@@ -16,7 +16,7 @@ ui64 TLimits::GetBlobSizeLimit() {
 }
 
 void TLimits::SetMaxBlobSize(const ui64 value) {
-    Y_VERIFY(value <= MAX_BLOB_SIZE_LIMIT);
+    Y_ABORT_UNLESS(value <= MAX_BLOB_SIZE_LIMIT);
     MaxBlobSize = value;
 }
 

@@ -38,7 +38,7 @@ public:
         TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
         TDirectTransaction* tx = dynamic_cast<TDirectTransaction*>(op.Get());
-        Y_VERIFY(tx != nullptr);
+        Y_ABORT_UNLESS(tx != nullptr);
 
         try {
             if (!tx->Execute(&DataShard, txc)) {
@@ -83,7 +83,7 @@ public:
         DataShard.EmitHeartbeats(ctx);
 
         TDirectTransaction* tx = dynamic_cast<TDirectTransaction*>(op.Get());
-        Y_VERIFY(tx != nullptr);
+        Y_ABORT_UNLESS(tx != nullptr);
 
         tx->SendResult(&DataShard, ctx);
     }

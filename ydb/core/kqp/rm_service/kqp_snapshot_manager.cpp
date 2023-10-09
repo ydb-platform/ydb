@@ -106,8 +106,8 @@ private:
     }
 
     void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) {
-        Y_VERIFY(MvccSnapshot);
-        Y_VERIFY(Tables.empty());
+        Y_ABORT_UNLESS(MvccSnapshot);
+        Y_ABORT_UNLESS(Tables.empty());
         Orbit = std::move(ev->Get()->Orbit);
 
         const auto& record = ev->Get()->Record;
@@ -131,7 +131,7 @@ private:
     }
 
     void HandleCleanup(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        Y_VERIFY(!MvccSnapshot);
+        Y_ABORT_UNLESS(!MvccSnapshot);
 
         using EStatus = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus;
 
@@ -157,7 +157,7 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        Y_VERIFY(!MvccSnapshot);
+        Y_ABORT_UNLESS(!MvccSnapshot);
 
         using EStatus = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus;
 

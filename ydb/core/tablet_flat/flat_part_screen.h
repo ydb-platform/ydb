@@ -64,7 +64,7 @@ namespace NTable {
 
             void Pass(TRowId ref) noexcept
             {
-                Y_VERIFY(Tail <= ref, "Got page ref from the past");
+                Y_ABORT_UNLESS(Tail <= ref, "Got page ref from the past");
 
                 if (Open != Max<TRowId>() && Tail != ref) {
                     auto begin = std::exchange(Open, Max<TRowId>());
@@ -137,7 +137,7 @@ namespace NTable {
 
         size_t Lookup(TRowId rowId, int dir) const noexcept
         {
-            Y_VERIFY(dir == +1, "Only forward direction supported");
+            Y_ABORT_UNLESS(dir == +1, "Only forward direction supported");
 
             auto less = [](TRowId rowId, const THole &hole) {
                 return rowId < hole.End;
@@ -165,7 +165,7 @@ namespace NTable {
         {
             TRowId last = 0;
             for (const auto &hole : Holes) {
-                Y_VERIFY(std::exchange(last, hole.End) <= hole.Begin,
+                Y_ABORT_UNLESS(std::exchange(last, hole.End) <= hole.Begin,
                     "Screen not sorted or has intersections");
             }
         }

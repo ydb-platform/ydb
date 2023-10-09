@@ -54,11 +54,11 @@ public:
 
         void RemoveInFlight(const ui64 bytes, const ui64 rows) {
             InFlightBytes -= (bytes + InterconnectHeadersSize);
-            Y_VERIFY(InFlightBytes >= 0);
+            Y_ABORT_UNLESS(InFlightBytes >= 0);
             InFlightRows -= rows;
-            Y_VERIFY(InFlightRows >= 0);
+            Y_ABORT_UNLESS(InFlightRows >= 0);
             InFlightCount -= 1;
-            Y_VERIFY(InFlightCount >= 0);
+            Y_ABORT_UNLESS(InFlightCount >= 0);
         }
     };
 

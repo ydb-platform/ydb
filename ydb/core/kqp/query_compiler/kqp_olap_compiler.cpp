@@ -329,7 +329,7 @@ ui64 ConvertSafeCastToColumn(const TCoSafeCast& cast, TKqpOlapCompileContext& ct
 }
 
 ui64 ConvertJsonValueToColumn(const TKqpOlapJsonValue& jsonValueCallable, TKqpOlapCompileContext& ctx) {
-    Y_VERIFY(NKikimr::NSsa::RuntimeVersion >= 3, "JSON_VALUE pushdown is supported starting from the v3 of SSA runtime.");
+    Y_ABORT_UNLESS(NKikimr::NSsa::RuntimeVersion >= 3, "JSON_VALUE pushdown is supported starting from the v3 of SSA runtime.");
 
     ui32 columnId = GetOrCreateColumnId(jsonValueCallable.Column(), ctx);
     ui32 pathId = GetOrCreateColumnId(jsonValueCallable.Path(), ctx);
@@ -501,7 +501,7 @@ TProgram::TAssignment* CompileExists(const TKqpOlapFilterExists& exists,
 }
 
 TProgram::TAssignment* CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallable, TKqpOlapCompileContext& ctx) {
-    Y_VERIFY(NKikimr::NSsa::RuntimeVersion >= 3, "JSON_EXISTS pushdown is supported starting from the v3 of SSA runtime.");
+    Y_ABORT_UNLESS(NKikimr::NSsa::RuntimeVersion >= 3, "JSON_EXISTS pushdown is supported starting from the v3 of SSA runtime.");
 
     ui32 columnId = GetOrCreateColumnId(jsonExistsCallable.Column(), ctx);
     ui32 pathId = GetOrCreateColumnId(jsonExistsCallable.Path(), ctx);

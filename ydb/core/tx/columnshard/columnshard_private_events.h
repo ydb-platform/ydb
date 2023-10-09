@@ -75,17 +75,17 @@ struct TEvPrivate {
         }
 
         const TBlobPutResult& GetPutResult() const {
-            Y_VERIFY(PutResult);
+            Y_ABORT_UNLESS(PutResult);
             return *PutResult;
         }
 
         NKikimrProto::EReplyStatus GetPutStatus() const {
-            Y_VERIFY(PutResult);
+            Y_ABORT_UNLESS(PutResult);
             return PutResult->GetPutStatus();
         }
 
         void SetPutStatus(const NKikimrProto::EReplyStatus& status) {
-            Y_VERIFY(PutResult);
+            Y_ABORT_UNLESS(PutResult);
             PutResult->SetPutStatus(status);
         }
     };
@@ -114,10 +114,10 @@ struct TEvPrivate {
             : ExportNo(exportNo)
             , TierName(tierName)
         {
-            Y_VERIFY(ExportNo);
-            Y_VERIFY(!TierName.empty());
-            Y_VERIFY(pathId);
-            Y_VERIFY(!blobIds.empty());
+            Y_ABORT_UNLESS(ExportNo);
+            Y_ABORT_UNLESS(!TierName.empty());
+            Y_ABORT_UNLESS(pathId);
+            Y_ABORT_UNLESS(!blobIds.empty());
 
             for (auto& blobId : blobIds) {
                 Blobs.emplace(blobId, TString());
@@ -129,13 +129,13 @@ struct TEvPrivate {
             : ExportNo(exportNo)
             , TierName(tierName)
         {
-            Y_VERIFY(ExportNo);
-            Y_VERIFY(!TierName.empty());
-            Y_VERIFY(!evictSet.empty());
+            Y_ABORT_UNLESS(ExportNo);
+            Y_ABORT_UNLESS(!TierName.empty());
+            Y_ABORT_UNLESS(!evictSet.empty());
 
             for (auto& evict : evictSet) {
-                Y_VERIFY(evict.IsEvicting());
-                Y_VERIFY(evict.ExternBlob.IsS3Blob());
+                Y_ABORT_UNLESS(evict.IsEvicting());
+                Y_ABORT_UNLESS(evict.ExternBlob.IsS3Blob());
 
                 Blobs.emplace(evict.Blob, TString());
                 SrcToDstBlobs[evict.Blob] = evict.ExternBlob;
@@ -145,10 +145,10 @@ struct TEvPrivate {
         void AddResult(const TUnifiedBlobId& blobId, const TString& key, const bool hasError, const TString& errStr) {
             if (hasError) {
                 Status = NKikimrProto::ERROR;
-                Y_VERIFY(ErrorStrings.emplace(key, errStr).second, "%s", key.data());
+                Y_ABORT_UNLESS(ErrorStrings.emplace(key, errStr).second, "%s", key.data());
                 Blobs.erase(blobId);
             } else if (!ErrorStrings.contains(key)) { // (OK + !OK) == !OK
-                Y_VERIFY(Blobs.contains(blobId));
+                Y_ABORT_UNLESS(Blobs.contains(blobId));
                 if (Status == NKikimrProto::UNKNOWN) {
                     Status = NKikimrProto::OK;
                 }
@@ -247,7 +247,7 @@ struct TEvPrivate {
             : PutResult(putResult)
             , WriteMeta(writeMeta)
         {
-            Y_VERIFY(PutResult);
+            Y_ABORT_UNLESS(PutResult);
         }
 
         TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, TVector<TPutBlobData>&& blobData, const std::vector<std::shared_ptr<NOlap::IBlobsWritingAction>>& actions, const NEvWrite::TWriteMeta& writeMeta, const ui64 schemaVersion)

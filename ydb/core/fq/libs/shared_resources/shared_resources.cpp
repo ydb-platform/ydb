@@ -50,7 +50,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
     }
 
     void Init(NActors::TActorSystem* actorSystem) override {
-        Y_VERIFY(!ActorSystemPtr->load(std::memory_order_relaxed), "Double IYqSharedResources init");
+        Y_ABORT_UNLESS(!ActorSystemPtr->load(std::memory_order_relaxed), "Double IYqSharedResources init");
         ActorSystemPtr->store(actorSystem, std::memory_order_relaxed);
     }
 

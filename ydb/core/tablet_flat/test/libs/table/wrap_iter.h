@@ -24,9 +24,9 @@ namespace NTest {
             TVector<const TPartView*> parts;
             parts.reserve(Flatten.size());
             for (auto &partView: Flatten) {
-                Y_VERIFY(partView.Part, "Creating TWrapIter without a part");
-                Y_VERIFY(partView.Slices, "Creating TWrapIter without slices");
-                Y_VERIFY(!partView.Screen, "Creating TWrapIter with a screen");
+                Y_ABORT_UNLESS(partView.Part, "Creating TWrapIter without a part");
+                Y_ABORT_UNLESS(partView.Slices, "Creating TWrapIter without slices");
+                Y_ABORT_UNLESS(!partView.Screen, "Creating TWrapIter with a screen");
                 parts.push_back(&partView);
             }
             std::sort(parts.begin(), parts.end(),

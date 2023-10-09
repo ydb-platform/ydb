@@ -340,7 +340,7 @@ namespace NKikimr {
         }
 
         TEvVStatusResult(NKikimrProto::EReplyStatus status, const NKikimrBlobStorage::TVDiskID &vdisk) {
-            Y_VERIFY(status != NKikimrProto::OK);
+            Y_ABORT_UNLESS(status != NKikimrProto::OK);
             Record.SetStatus(status);
             Record.SetJoinedGroup(false);
             Record.SetReplicated(false);

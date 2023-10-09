@@ -91,7 +91,7 @@ void TQueryInterval::Add(TQueryStatsPtr stats) {
                 break;
             }
         }
-        Y_VERIFY(it != range.second);
+        Y_ABORT_UNLESS(it != range.second);
         ByCpu.erase(it);
 
         auto newCpu = metricsIt->second.GetCpuTimeUs().GetSum();

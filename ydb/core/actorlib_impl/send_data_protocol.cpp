@@ -39,7 +39,7 @@ void TSendDataProtocol::TryAgain(const TActorContext& ctx) noexcept {
         sendResult = Socket->Send(Data, Len);
 
         if (sendResult > 0) {
-            Y_VERIFY(Len >= (size_t)sendResult);
+            Y_ABORT_UNLESS(Len >= (size_t)sendResult);
             MemLogPrintF("TSendDataProtocol::TryAgain, sent %d bytes",
                          sendResult);
 

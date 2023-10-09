@@ -404,7 +404,7 @@ TDuration TSnapshotManager::GetCleanupSnapshotPeriod() const {
 }
 
 bool TSnapshotManager::ChangeMvccState(ui64 step, ui64 txId, TTransactionContext& txc, EMvccState state) {
-    Y_VERIFY(state != EMvccState::MvccUnspecified);
+    Y_ABORT_UNLESS(state != EMvccState::MvccUnspecified);
 
     if (MvccState == state)
         return false;
@@ -569,7 +569,7 @@ bool TSnapshotManager::AddSnapshot(NTable::TDatabase& db, const TSnapshotKey& ke
     const TRowVersion newVersion(key.Step, key.TxId);
 
     // N.B. no colocated tables support for now
-    Y_VERIFY(Self->GetUserTables().size() == 1, "Multiple co-located tables not supported");
+    Y_ABORT_UNLESS(Self->GetUserTables().size() == 1, "Multiple co-located tables not supported");
 
     Y_VERIFY_S(oldVersion <= newVersion,
         "DataShard " << Self->TabletID()

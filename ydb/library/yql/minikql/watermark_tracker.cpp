@@ -11,7 +11,7 @@ TWatermarkTracker::TWatermarkTracker(
     : Delay(delay)
     , Granularity(granularity)
 {
-    Y_VERIFY(granularity > 0);
+    Y_ABORT_UNLESS(granularity > 0);
 }
 
 std::optional<ui64> TWatermarkTracker::HandleNextEventTime(ui64 ts) {

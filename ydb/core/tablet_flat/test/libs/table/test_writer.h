@@ -38,7 +38,7 @@ namespace NTest {
             using NPage::TExtBlobs;
             using NPage::TBloom;
 
-            Y_VERIFY(Store, "Cannot load from an empty store");
+            Y_ABORT_UNLESS(Store, "Cannot load from an empty store");
 
             if (Store->PageCollectionPagesCount(0 /* primary room */) == 0) {
                 return nullptr;
@@ -48,7 +48,7 @@ namespace NTest {
 
             if (auto *raw = Store->GetMeta()) {
                 TMemoryInput stream(raw->data(), raw->size());
-                Y_VERIFY(root.ParseFromArcadiaStream(&stream));
+                Y_ABORT_UNLESS(root.ParseFromArcadiaStream(&stream));
             } else {
                 root.SetEpoch(0); /* for loading from abi blobs */
             }
@@ -157,8 +157,8 @@ namespace NTest {
 
         TPartEggs Flush(TIntrusiveConstPtr<TRowScheme> scheme, const TWriteStats &written)
         {
-            Y_VERIFY(!Store, "Writer has not been flushed");
-            Y_VERIFY(written.Parts == Parts.size());
+            Y_ABORT_UNLESS(!Store, "Writer has not been flushed");
+            Y_ABORT_UNLESS(written.Parts == Parts.size());
 
             return
                 { new TWriteStats(written), std::move(scheme), std::move(Parts) };
@@ -193,7 +193,7 @@ namespace NTest {
 
         void Finish(TString overlay) noexcept override
         {
-            Y_VERIFY(Store, "Finish called without any writes");
+            Y_ABORT_UNLESS(Store, "Finish called without any writes");
 
             Growth->Unwrap();
             Store->Finish();
@@ -353,7 +353,7 @@ namespace NTest {
             }
 
             if (NextTxId != 0) {
-                Y_VERIFY(CurrentVersions == 0, "Cannot write deltas after committed versions");
+                Y_ABORT_UNLESS(CurrentVersions == 0, "Cannot write deltas after committed versions");
                 Writer->AddKeyDelta(row, NextTxId);
                 ++CurrentDeltas;
             } else {

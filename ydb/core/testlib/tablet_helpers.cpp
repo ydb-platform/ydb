@@ -135,7 +135,7 @@ namespace NKikimr {
                 return;
             }
 
-            Y_VERIFY(domainsInfo->Domains.size() == 1);
+            Y_ABORT_UNLESS(domainsInfo->Domains.size() == 1);
             for (const auto &xpair : domainsInfo->Domains) {
                 const TDomainsInfo::TDomain *domain = xpair.second.Get();
                 UseFakeTimeCast |= domain->Mediators.size() == 0;
@@ -477,7 +477,7 @@ namespace NKikimr {
                     if (currentItem->DelayedExecution) {
                         if (TRACE_DELAY_TIMING)
                             Cout << "= ";
-                        Y_VERIFY(currentItem->DelayedExecution->Complete);
+                        Y_ABORT_UNLESS(currentItem->DelayedExecution->Complete);
                     } else {
                         if (TRACE_DELAY_TIMING)
                             Cout << "+ ";
@@ -588,7 +588,7 @@ namespace NKikimr {
             new TEvTabletResolver::TEvForward(tabletId, nullptr)),
             nodeIndex, true);
         auto ev = runtime.GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(sender);
-        Y_VERIFY(ev->Get()->Status == NKikimrProto::OK, "Failed to resolve tablet %" PRIu64, tabletId);
+        Y_ABORT_UNLESS(ev->Get()->Status == NKikimrProto::OK, "Failed to resolve tablet %" PRIu64, tabletId);
         if (sysTablet) {
             return ev->Get()->Tablet;
         } else {
@@ -669,9 +669,9 @@ namespace NKikimr {
     }
 
     void SetupChannelProfiles(TAppPrepare &app, ui32 domainId, ui32 nchannels) {
-        Y_VERIFY(app.Domains && app.Domains->Domains.contains(domainId));
+        Y_ABORT_UNLESS(app.Domains && app.Domains->Domains.contains(domainId));
         auto& poolKinds = app.Domains->GetDomain(domainId).StoragePoolTypes;
-        Y_VERIFY(!poolKinds.empty());
+        Y_ABORT_UNLESS(!poolKinds.empty());
 
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
 
@@ -729,7 +729,7 @@ namespace NKikimr {
         boxConfig.SetBoxId(1);
 
         ui32 nodeId = runtime.GetNodeId(0);
-        Y_VERIFY(nodesInfo->Nodes[0].NodeId == nodeId);
+        Y_ABORT_UNLESS(nodesInfo->Nodes[0].NodeId == nodeId);
         auto& nodeInfo = nodesInfo->Nodes[0];
 
         NKikimrBlobStorage::TDefineHostConfig hostConfig;
@@ -1416,7 +1416,7 @@ namespace NKikimr {
 
             auto key = State->TabletIdToOwner[tabletId];
             auto it = State->Tablets.find(key);
-            Y_VERIFY(it != State->Tablets.end());
+            Y_ABORT_UNLESS(it != State->Tablets.end());
 
             THolder<TTabletStorageInfo> tabletInfo(CreateTestTabletInfo(tabletId, it->second.Type));
             ctx.Send(ev->Sender, new TEvLocal::TEvBootTablet(*tabletInfo.Get(), 0), 0, ev->Cookie);

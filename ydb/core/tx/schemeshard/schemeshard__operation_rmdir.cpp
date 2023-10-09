@@ -142,7 +142,7 @@ public:
         auto path = context.SS->PathsById.at(pathId);
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
 
-        Y_VERIFY(!path->Dropped());
+        Y_ABORT_UNLESS(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
@@ -191,7 +191,7 @@ ISubOperation::TPtr CreateRmDir(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr CreateRmDir(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
+    Y_ABORT_UNLESS(state == TTxState::Invalid || state == TTxState::Propose);
     return MakeSubOperation<TRmDir>(id);
 }
 

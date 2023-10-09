@@ -205,7 +205,7 @@ void ApplySharding(TTxId txId,
     pqGroup->AlterVersion = 0;
     TShardInfo shardInfo = TShardInfo::PersQShardInfo(txId, pathId);
     shardInfo.BindedChannels = pqBindedChannels;
-    Y_VERIFY(pqGroup->TotalGroupCount == pqGroup->PartitionsToAdd.size());
+    Y_ABORT_UNLESS(pqGroup->TotalGroupCount == pqGroup->PartitionsToAdd.size());
     const ui64 count = pqGroup->ExpectedShardCount();
     txState.Shards.reserve(count + 1);
     const auto startShardIdx = ss->ReserveShardIdxs(count + 1);
@@ -383,10 +383,10 @@ public:
 
         auto tabletConfig = pqGroup->TabletConfig;
         NKikimrPQ::TPQTabletConfig config;
-        Y_VERIFY(!tabletConfig.empty());
+        Y_ABORT_UNLESS(!tabletConfig.empty());
 
         bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
-        Y_VERIFY(parseOk);
+        Y_ABORT_UNLESS(parseOk);
 
         const PQGroupReserve reserve(config, partitionsToCreate);
 
@@ -486,11 +486,11 @@ public:
         context.SS->PersistAddPersQueueGroupAlter(db, pathId, pqGroup);
 
         for (auto shard : txState.Shards) {
-            Y_VERIFY(shard.Operation == TTxState::CreateParts);
+            Y_ABORT_UNLESS(shard.Operation == TTxState::CreateParts);
             context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, pathId, OperationId.GetTxId(), shard.TabletType);
             context.SS->PersistChannelsBinding(db, shard.Idx, tabletChannelsBinding);
         }
-        Y_VERIFY(txState.Shards.size() == shardsToCreate);
+        Y_ABORT_UNLESS(txState.Shards.size() == shardsToCreate);
         context.SS->TabletCounters->Simple()[COUNTER_PQ_SHARD_COUNT].Add(shardsToCreate-1);
         context.SS->TabletCounters->Simple()[COUNTER_PQ_RB_SHARD_COUNT].Add(1);
 
@@ -506,9 +506,9 @@ public:
 
         if (parentPath.Base()->IsCdcStream()) {
             auto tablePath = parentPath.Parent();
-            Y_VERIFY(tablePath.IsResolved());
+            Y_ABORT_UNLESS(tablePath.IsResolved());
 
-            Y_VERIFY(context.SS->Tables.contains(tablePath.Base()->PathId));
+            Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
             auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
             for (const auto& splitOpId : table->GetSplitOpsInFlight()) {
@@ -580,7 +580,7 @@ ISubOperation::TPtr CreateNewPQ(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr CreateNewPQ(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TCreatePQ>(id, state);
 }
 

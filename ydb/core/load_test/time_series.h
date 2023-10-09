@@ -29,7 +29,7 @@ namespace NKikimr {
 
         void Add(TInstant timestamp, T value) {
             // ensure that timestamps are coming in nondecreasing order
-            Y_VERIFY(!Items || Items.back().Timestamp <= timestamp);
+            Y_ABORT_UNLESS(!Items || Items.back().Timestamp <= timestamp);
 
             // drop old entries
             auto comp = [](const TItem &x, TInstant y) { return x.Timestamp < y; };

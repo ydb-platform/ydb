@@ -1330,11 +1330,11 @@ public:
         bool closed() const override { return false; }
         // must not be used currently
         arrow::Result<int64_t> Read(int64_t, void*) override {
-            Y_VERIFY(0);
+            Y_ABORT_UNLESS(0);
             return arrow::Result<int64_t>();
         }
         arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t) override {
-            Y_VERIFY(0);
+            Y_ABORT_UNLESS(0);
             return arrow::Result<std::shared_ptr<arrow::Buffer>>();
         }
         // useful ones

@@ -23,7 +23,7 @@ public:
 
     void Remove(TEndpointObj* obj) {
         std::unique_lock lock(Mutex_);
-        Y_VERIFY(Objs_.find(obj) != Objs_.end());
+        Y_ABORT_UNLESS(Objs_.find(obj) != Objs_.end());
         Objs_.erase(obj);
     }
 
@@ -95,7 +95,7 @@ std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
                 removed.emplace_back(record.Endpoint);
 
                 auto it = KnownEndpoints_.find(record.Endpoint);
-                Y_VERIFY(it != KnownEndpoints_.end());
+                Y_ABORT_UNLESS(it != KnownEndpoints_.end());
                 KnownEndpoints_.erase(it);
 
                 auto nodeIdIt = KnownEndpointsByNodeId_.find(record.NodeId);
@@ -113,7 +113,7 @@ std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
             KnownEndpoints_[record.Endpoint] = record;
             KnownEndpointsByNodeId_[record.NodeId].Record = record;
         }
-        Y_VERIFY(Records_.size() == KnownEndpoints_.size());
+        Y_ABORT_UNLESS(Records_.size() == KnownEndpoints_.size());
         EndpointCountGauge_.SetValue(Records_.size());
         EndpointActiveGauge_.SetValue(Records_.size());
         BestK_ = bestK;

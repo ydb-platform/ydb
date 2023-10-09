@@ -4,7 +4,7 @@
 namespace NKikimr {
 
     void FormatHumanReadable(IOutputStream& out, ui64 number, ui32 base, unsigned fracw, const char *suffixes[]) {
-        Y_VERIFY(suffixes[0]);
+        Y_ABORT_UNLESS(suffixes[0]);
 
         ui64 exp = 1;
         ui64 top = base;
@@ -36,7 +36,7 @@ namespace NKikimr {
                     r = 0;
                 }
             }
-            Y_VERIFY(out == res);
+            Y_ABORT_UNLESS(out == res);
         }
 
         if (fracw) {

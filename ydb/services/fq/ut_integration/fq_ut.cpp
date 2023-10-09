@@ -98,7 +98,7 @@ namespace {
             TString str = item.DebugString();
             TVector<TString> arr;
             StringSplitter(str).Split(' ').SkipEmpty().AddTo(&arr);
-            Y_VERIFY(arr.size() == 2, "Incorrect numeric result");
+            Y_ABORT_UNLESS(arr.size() == 2, "Incorrect numeric result");
             UNIT_ASSERT_VALUES_EQUAL(std::stoi(arr.back()), answer);
         }
     }

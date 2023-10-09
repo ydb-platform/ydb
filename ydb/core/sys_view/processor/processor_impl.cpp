@@ -558,7 +558,7 @@ void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
         }
     }
 
-    Y_VERIFY(entries);
+    Y_ABORT_UNLESS(entries);
 
     auto from = entries->begin();
     auto to = entries->end();
@@ -651,7 +651,7 @@ bool TSysViewProcessor::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                 {
                     const auto queryHash = it->second;
                     auto queryIt = Queries.find(queryHash);
-                    Y_VERIFY(queryIt != Queries.end());
+                    Y_ABORT_UNLESS(queryIt != Queries.end());
                     const auto& query = queryIt->second;
 
                     str << "    Hash: " << queryHash

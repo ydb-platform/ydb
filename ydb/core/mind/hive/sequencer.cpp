@@ -7,7 +7,7 @@ namespace NHive {
 TSequencer::TSequence TSequencer::NO_SEQUENCE;
 
 bool TSequenceGenerator::AddFreeSequence(TOwnerType owner, TSequencer::TSequence sequence) {
-    Y_VERIFY(sequence.Begin != NO_ELEMENT);
+    Y_ABORT_UNLESS(sequence.Begin != NO_ELEMENT);
     auto [it, inserted] = SequenceByOwner.emplace(owner, sequence);
     if (inserted) {
         if (!sequence.Empty()) {
@@ -20,16 +20,16 @@ bool TSequenceGenerator::AddFreeSequence(TOwnerType owner, TSequencer::TSequence
 }
 
 void TSequenceGenerator::AddAllocatedSequence(TOwnerType owner, TSequence sequence) {
-    Y_VERIFY(owner.first != NO_OWNER);
-    Y_VERIFY(sequence.Begin != NO_ELEMENT);
+    Y_ABORT_UNLESS(owner.first != NO_OWNER);
+    Y_ABORT_UNLESS(sequence.Begin != NO_ELEMENT);
     {
         auto [it, inserted] = AllocatedSequences.emplace(sequence, owner);
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
         AllocatedSize_ += sequence.Size();
     }
     {
         auto [it, inserted] = SequenceByOwner.emplace(owner, sequence);
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
     }
 }
 
@@ -48,7 +48,7 @@ TSequencer::TElementType TSequenceGenerator::AllocateElement(std::vector<TOwnerT
 
 TSequencer::TSequence TSequenceGenerator::AllocateSequence(TSequencer::TOwnerType owner, size_t size, std::vector<TOwnerType>& modified) {
     if (size > 1) {
-        Y_VERIFY(owner.first != NO_OWNER);
+        Y_ABORT_UNLESS(owner.first != NO_OWNER);
         auto it = SequenceByOwner.find(owner);
         if (it != SequenceByOwner.end()) {
             return it->second;
@@ -138,11 +138,11 @@ void TSequenceGenerator::Clear() {
 }
 
 bool TOwnershipKeeper::AddOwnedSequence(TOwnerType owner, TSequence sequence) {
-    Y_VERIFY(owner != NO_OWNER);
-    Y_VERIFY(sequence.Begin != NO_ELEMENT);
+    Y_ABORT_UNLESS(owner != NO_OWNER);
+    Y_ABORT_UNLESS(sequence.Begin != NO_ELEMENT);
 
     auto [it, inserted] = OwnedSequences.emplace(sequence, owner);
-    Y_VERIFY(inserted || it->second == owner);
+    Y_ABORT_UNLESS(inserted || it->second == owner);
 
     return inserted;
 }

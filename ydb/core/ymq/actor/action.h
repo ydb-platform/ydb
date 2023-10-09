@@ -45,7 +45,7 @@ public:
         , Shards_(1)
         , SourceSqsRequest_(sourceSqsRequest)
     {
-        Y_VERIFY(RequestId_);
+        Y_ABORT_UNLESS(RequestId_);
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -115,7 +115,7 @@ public:
             FillAuthInformation(request);                                       \
             response->SetRequestId(RequestId_);
             
-        SQS_SWITCH_REQUEST_CUSTOM(SourceSqsRequest_, ENUMERATE_ALL_ACTIONS, Y_VERIFY(false));
+        SQS_SWITCH_REQUEST_CUSTOM(SourceSqsRequest_, ENUMERATE_ALL_ACTIONS, Y_ABORT_UNLESS(false));
         #undef SQS_REQUEST_CASE 
 
         RLOG_SQS_DEBUG("Request started. Actor: " << this->SelfId()); // log new request id
@@ -166,12 +166,12 @@ protected:
     }
 
     virtual bool IsFifoQueue() const {
-        Y_VERIFY(IsFifo_);
+        Y_ABORT_UNLESS(IsFifo_);
         return *IsFifo_;
     }
 
     virtual bool TablesFormat() const {
-        Y_VERIFY(TablesFormat_);
+        Y_ABORT_UNLESS(TablesFormat_);
         return *TablesFormat_;
     }
 
@@ -422,7 +422,7 @@ protected:
         if (sanitizedPath.SkipPrefix(TStringBuf(Cfg().GetRoot()))) { // always skip SQS root prefix
             return TString(sanitizedPath);
         } else {
-            Y_VERIFY(false); // should never be applied in any other way
+            Y_ABORT_UNLESS(false); // should never be applied in any other way
         }
 
         return {};
@@ -595,7 +595,7 @@ private:
         QueueLeader_ = ev->Get()->QueueLeader;
         QuoterResources_ = std::move(ev->Get()->QuoterResources);
 
-        Y_VERIFY(SchemeCache_);
+        Y_ABORT_UNLESS(SchemeCache_);
 
         RLOG_SQS_TRACE("Got configuration. Root url: " << RootUrl_
                         << ", Shards: " << Shards_
@@ -611,7 +611,7 @@ private:
 
         const bool needQueueAttributes = TDerived::NeedQueueAttributes();
         if (needQueueAttributes) {
-            Y_VERIFY(ev->Get()->Fail || !ev->Get()->QueueExists || QueueAttributes_.Defined());
+            Y_ABORT_UNLESS(ev->Get()->Fail || !ev->Get()->QueueExists || QueueAttributes_.Defined());
 
             if (QueueAttributes_.Defined()) {
                 RLOG_SQS_TRACE("Got configuration. Attributes: " << *QueueAttributes_);
@@ -662,7 +662,7 @@ private:
         TEvTxProxySchemeCache::TEvNavigateKeySetResult* msg = ev->Get();
         const NSchemeCache::TSchemeCacheNavigate* navigate = msg->Request.Get();
 
-        Y_VERIFY(navigate->ResultSet.size() == 1);
+        Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
 
         if (navigate->ErrorCount > 0) {
             const NSchemeCache::TSchemeCacheNavigate::EStatus status = navigate->ResultSet.front().Status;
@@ -692,7 +692,7 @@ private:
             return;
         } else {
             UserToken_ = ev->Get()->Token;
-            Y_VERIFY(UserToken_);
+            Y_ABORT_UNLESS(UserToken_);
         }
 
         OnAuthCheckMessage();

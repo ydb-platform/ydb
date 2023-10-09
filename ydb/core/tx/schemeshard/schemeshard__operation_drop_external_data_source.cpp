@@ -26,8 +26,8 @@ public:
         LOG_I(DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropExternalDataSource);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropExternalDataSource);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -42,12 +42,12 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
         TPathId pathId = txState->TargetPathId;
         auto path = context.SS->PathsById.at(pathId);
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
 
-        Y_VERIFY(!path->Dropped());
+        Y_ABORT_UNLESS(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
@@ -172,7 +172,7 @@ public:
         context.DbChanges.PersistPath(pathId);
         context.DbChanges.PersistPath(path->ParentPathId);
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropExternalDataSource, path.Base()->PathId);
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);
@@ -211,7 +211,7 @@ ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, const TTxTrans
 }
 
 ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropExternalDataSource>(id, state);
 }
 

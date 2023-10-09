@@ -46,7 +46,7 @@ void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
 void THive::Handle(TEvHive::TEvAdoptTablet::TPtr& ev) {
     BLOG_D("Handle TEvHive::TEvAdoptTablet");
     NKikimrHive::TEvAdoptTablet& rec = ev->Get()->Record;
-    Y_VERIFY(rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType());
+    Y_ABORT_UNLESS(rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType());
     Execute(CreateAdoptTablet(rec, ev->Sender, ev->Cookie));
 }
 
@@ -325,7 +325,7 @@ void THive::Handle(TEvPrivate::TEvBalancerOut::TPtr&) {
 void THive::Handle(TEvHive::TEvBootTablet::TPtr& ev) {
     TTabletId tabletId = ev->Get()->Record.GetTabletID();
     TTabletInfo* tablet = FindTablet(tabletId);
-    Y_VERIFY(tablet != nullptr);
+    Y_ABORT_UNLESS(tablet != nullptr);
     if (tablet->IsReadyToBoot()) {
         tablet->InitiateBoot();
     }
@@ -876,7 +876,7 @@ void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
             groups.resize(forcedGroupsSize);
             for (ui32 i = 0; i < forcedGroupsSize; ++i) {
                 ui32 channel = record.GetChannels(i);
-                Y_VERIFY(channel < channels);
+                Y_ABORT_UNLESS(channel < channels);
                 auto parameters = BuildGroupParametersForChannel(*tablet, channel);
                 const auto& groupParameters = parameters->GroupParameters;
                 if (groupParameters.HasStoragePoolSpecifier()) {
@@ -901,7 +901,7 @@ void THive::OnActivateExecutor(const TActorContext&) {
     HiveDomain = domainsInfo->GetHiveDomainUid(HiveUid);
     const TDomainsInfo::TDomain& domain = domainsInfo->GetDomain(HiveDomain);
     RootHiveId = domainsInfo->GetHive(domain.DefaultHiveUid);
-    Y_VERIFY(HiveUid != Max<ui32>() && HiveDomain != TDomainsInfo::BadDomainId);
+    Y_ABORT_UNLESS(HiveUid != Max<ui32>() && HiveDomain != TDomainsInfo::BadDomainId);
     HiveId = TabletID();
     HiveGeneration = Executor()->Generation();
     RootDomainKey = TSubDomainKey(domain.SchemeRoot, 1);
@@ -972,7 +972,7 @@ void THive::AssignTabletGroups(TLeaderTabletInfo& tablet) {
 
 void THive::SendToBSControllerPipe(IEventBase* payload) {
     if (!BSControllerPipeClient) {
-        Y_VERIFY(AppData()->DomainsInfo);
+        Y_ABORT_UNLESS(AppData()->DomainsInfo);
         ui32 domainUid = HiveDomain;
         ui64 defaultStateStorageGroup = AppData()->DomainsInfo->GetDefaultStateStorageGroup(domainUid);
 
@@ -2444,7 +2444,7 @@ const TVector<i64>& THive::GetTabletTypeAllowedMetricIds(TTabletTypes::EType typ
 
 THolder<TGroupFilter> THive::BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId) {
     auto filter = MakeHolder<TGroupFilter>();
-    Y_VERIFY(channelId < tablet.BoundChannels.size());
+    Y_ABORT_UNLESS(channelId < tablet.BoundChannels.size());
     const auto& binding = tablet.BoundChannels[channelId];
     filter->GroupParameters.MutableStoragePoolSpecifier()->SetName(binding.GetStoragePoolName());
     if (binding.HasPhysicalGroupsOnly()) {

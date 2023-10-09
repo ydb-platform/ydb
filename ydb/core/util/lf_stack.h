@@ -36,7 +36,7 @@ namespace NKikimr {
 
             // First we mark item as possibly shared on the list
             TItem* marker = item->Next.exchange(nullptr, std::memory_order_relaxed);
-            Y_VERIFY(marker == (TItem*)-1, "Pushing item that is not marked exclusive");
+            Y_ABORT_UNLESS(marker == (TItem*)-1, "Pushing item that is not marked exclusive");
 
             // The item we push is guaranteed to have flag not set
             // N.B. release here synchronizes with fast path acquire during refcount decrement
@@ -115,7 +115,7 @@ namespace NKikimr {
                     Y_VERIFY_DEBUG((count & FlagAddingToStack) == 0, "Flag invariant failure during pop");
                     // We are the owner, should be safe to change the Next pointer however we want
                     TItem* marker = item->Next.exchange((TItem*)-1, std::memory_order_relaxed);
-                    Y_VERIFY(marker != (TItem*)-1, "Popped item that is already marked exclusive");
+                    Y_ABORT_UNLESS(marker != (TItem*)-1, "Popped item that is already marked exclusive");
                     return item;
                 }
 
@@ -135,7 +135,7 @@ namespace NKikimr {
                     Y_VERIFY_DEBUG(count == FlagAddingToStack, "Flag invariant failure during pop");
                     // We are the owner, should be safe to change the Next pointer however we want
                     TItem* marker = item->Next.exchange((TItem*)-1, std::memory_order_relaxed);
-                    Y_VERIFY(marker != (TItem*)-1, "Popped item that is already marked exclusive");
+                    Y_ABORT_UNLESS(marker != (TItem*)-1, "Popped item that is already marked exclusive");
                     return item;
                 }
             }

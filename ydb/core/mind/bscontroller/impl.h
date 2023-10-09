@@ -162,8 +162,8 @@ public:
 
         void PutInVSlotReadyTimestampQ(TMonotonic now) {
             const TMonotonic readyAfter = now + ReadyStablePeriod; // vdisk will be treated as READY one shortly, but not now
-            Y_VERIFY(VSlotReadyTimestampIter == TVSlotReadyTimestampQ::iterator());
-            Y_VERIFY(Group);
+            Y_ABORT_UNLESS(VSlotReadyTimestampIter == TVSlotReadyTimestampQ::iterator());
+            Y_ABORT_UNLESS(Group);
             Y_VERIFY_DEBUG(VSlotReadyTimestampQ.empty() || VSlotReadyTimestampQ.back().first <= readyAfter);
             VSlotReadyTimestampIter = VSlotReadyTimestampQ.emplace(VSlotReadyTimestampQ.end(), readyAfter, this);
         }
@@ -229,7 +229,7 @@ public:
         }
 
         void ScheduleForDeletion(TBoxStoragePoolId deletedFromStoragePoolId) {
-            Y_VERIFY(!IsBeingDeleted());
+            Y_ABORT_UNLESS(!IsBeingDeleted());
             Mood = TMood::Delete;
             GroupPrevGeneration = std::exchange(GroupGeneration, 0);
             Group = nullptr;
@@ -237,22 +237,22 @@ public:
         }
 
         void MakeDonorFor(TVSlotInfo *newSlot) {
-            Y_VERIFY(newSlot);
-            Y_VERIFY(!IsBeingDeleted());
-            Y_VERIFY(GroupId == newSlot->GroupId);
-            Y_VERIFY(GetShortVDiskId() == newSlot->GetShortVDiskId());
+            Y_ABORT_UNLESS(newSlot);
+            Y_ABORT_UNLESS(!IsBeingDeleted());
+            Y_ABORT_UNLESS(GroupId == newSlot->GroupId);
+            Y_ABORT_UNLESS(GetShortVDiskId() == newSlot->GetShortVDiskId());
             Mood = TMood::Donor;
             Group = nullptr; // we are not part of this group anymore
             Donors.insert(VSlotId);
             Donors.swap(newSlot->Donors);
-            Y_VERIFY(Donors.empty());
+            Y_ABORT_UNLESS(Donors.empty());
         }
 
         TVDiskID GetVDiskId() const {
             ui32 generation = IsBeingDeleted() // when the slot is scheduled for deletion, its last known generation is
                 ? GroupPrevGeneration          // stored in GroupPrevGeneration
                 : GroupGeneration;             // otherwise actual value is held in GroupGeneration
-            Y_VERIFY(generation);
+            Y_ABORT_UNLESS(generation);
             return TVDiskID(GroupId, generation, RingIdx, FailDomainIdx, VDiskIdx);
         }
 
@@ -689,7 +689,7 @@ public:
                 NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain))
         {
             Topology->FinalizeConstruction();
-            Y_VERIFY(VDisksInGroup.size() == Topology->GetTotalVDisksNum());
+            Y_ABORT_UNLESS(VDisksInGroup.size() == Topology->GetTotalVDisksNum());
         }
 
         bool Listable() const {
@@ -704,15 +704,15 @@ public:
         }
 
         void AddVSlot(const TVSlotInfo *vslot) {
-            Y_VERIFY(vslot->Group == this);
+            Y_ABORT_UNLESS(vslot->Group == this);
             const ui32 index = Topology->GetOrderNumber(vslot->GetShortVDiskId());
-            Y_VERIFY(!VDisksInGroup[index]);
+            Y_ABORT_UNLESS(!VDisksInGroup[index]);
             VDisksInGroup[index] = vslot;
         }
 
         void FinishVDisksInGroup() {
             for (const TVSlotInfo *slot : VDisksInGroup) {
-                Y_VERIFY(slot);
+                Y_ABORT_UNLESS(slot);
             }
         }
 
@@ -1579,12 +1579,12 @@ private:
     void ValidateInternalState();
 
     const TVSlotInfo* FindAcceptor(const TVSlotInfo& donor) {
-        Y_VERIFY(donor.Mood == TMood::Donor);
+        Y_ABORT_UNLESS(donor.Mood == TMood::Donor);
         TGroupInfo *group = FindGroup(donor.GroupId);
-        Y_VERIFY(group);
+        Y_ABORT_UNLESS(group);
         const ui32 orderNumber = group->Topology->GetOrderNumber(donor.GetShortVDiskId());
         const TVSlotInfo *acceptor = group->VDisksInGroup[orderNumber];
-        Y_VERIFY(donor.GroupId == acceptor->GroupId && donor.GroupGeneration < acceptor->GroupGeneration &&
+        Y_ABORT_UNLESS(donor.GroupId == acceptor->GroupId && donor.GroupGeneration < acceptor->GroupGeneration &&
             donor.GetShortVDiskId() == acceptor->GetShortVDiskId());
         return acceptor;
     }
@@ -1596,10 +1596,10 @@ private:
 
     TVSlotInfo* FindVSlot(TVDiskID id) { // GroupGeneration may be zero
         if (TGroupInfo *group = FindGroup(id.GroupID); group && !group->VDisksInGroup.empty()) {
-            Y_VERIFY(group->Topology->IsValidId(id));
+            Y_ABORT_UNLESS(group->Topology->IsValidId(id));
             const ui32 index = group->Topology->GetOrderNumber(id);
             const TVSlotInfo *slot = group->VDisksInGroup[index];
-            Y_VERIFY(slot->GetShortVDiskId() == TVDiskIdShort(id)); // sanity check
+            Y_ABORT_UNLESS(slot->GetShortVDiskId() == TVDiskIdShort(id)); // sanity check
             if (id.GroupGeneration == 0 || id.GroupGeneration == slot->GroupGeneration) {
                 return const_cast<TVSlotInfo*>(slot);
             }
@@ -1638,7 +1638,7 @@ private:
     TGroupInfo& AddGroup(TGroupId id, Types&&... values) {
         SysViewChangedGroups.insert(id);
         auto&& [it, inserted] = GroupMap.emplace(id, MakeHolder<TGroupInfo>(id, std::forward<Types>(values)...));
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
         GroupLookup.emplace(id, it->second.Get());
         return *it->second;
     }
@@ -1674,7 +1674,7 @@ private:
     TPDiskInfo& AddPDisk(TPDiskId id, Types&&... values) {
         SysViewChangedPDisks.insert(id);
         auto&& [it, inserted] = PDisks.emplace(id, MakeHolder<TPDiskInfo>(std::forward<Types>(values)...));
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
         return *it->second;
     }
 
@@ -1966,7 +1966,7 @@ public:
     }
 
     void ProcessIncomingEvent() {
-        Y_VERIFY(!IncomingEventQ.empty());
+        Y_ABORT_UNLESS(!IncomingEventQ.empty());
         const auto it = IncomingEventQ.begin();
         ProcessControllerEvent(it->second.release());
         IncomingEventQ.erase(it);
@@ -2147,7 +2147,7 @@ public:
     void VSlotReadyUpdate() {
         std::vector<TVDiskAvailabilityTiming> timingQ;
 
-        Y_VERIFY(VSlotReadyUpdateScheduled);
+        Y_ABORT_UNLESS(VSlotReadyUpdateScheduled);
         VSlotReadyUpdateScheduled = false;
 
         const TMonotonic now = TActivationContext::Monotonic();
@@ -2197,7 +2197,7 @@ public:
         histoReplOther.Clear();
         for (const TVSlotId vslotId : NotReadyVSlotIds) {
             if (const TVSlotInfo *slot = FindVSlot(vslotId)) {
-                Y_VERIFY(slot->LastSeenReady != TInstant::Zero());
+                Y_ABORT_UNLESS(slot->LastSeenReady != TInstant::Zero());
                 const TDuration passed = now - slot->LastSeenReady;
                 histo.IncrementFor(passed.Seconds());
 
@@ -2261,7 +2261,7 @@ public:
             if (pdisk.HasPDiskConfig()) {
                 const auto& cfg = pdisk.GetPDiskConfig();
                 bool success = cfg.SerializeToString(&PDiskConfig);
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
                 ExpectedSlotCount = cfg.GetExpectedSlotCount();
             }
         }

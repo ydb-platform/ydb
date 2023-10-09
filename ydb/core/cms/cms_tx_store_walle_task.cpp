@@ -13,8 +13,8 @@ public:
         , Request(std::move(req))
         , Response(std::move(resp))
     {
-        Y_VERIFY(Request);
-        Y_VERIFY(Response);
+        Y_ABORT_UNLESS(Request);
+        Y_ABORT_UNLESS(Response);
     }
 
     TTxType GetTxType() const override { return TXTYPE_STORE_WALLE_TASK; }

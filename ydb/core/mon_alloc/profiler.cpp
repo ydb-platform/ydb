@@ -174,7 +174,7 @@ namespace NActors {
                 char* buf = nullptr;
                 size_t len = 0;
                 FILE* stream = open_memstream(&buf, &len);
-                Y_VERIFY(stream);
+                Y_ABORT_UNLESS(stream);
 
                 EndProfiling(stream);
                 fflush(stream);

@@ -43,7 +43,7 @@ public:
 
     explicit TEvGetObjectResponse(const TBase::TKey& key, const typename TBase::TOutcome& outcome)
         : TBase(key, outcome) {
-        Y_VERIFY(false);
+        Y_ABORT_UNLESS(false);
     }
 
     explicit TEvGetObjectResponse(const TBase::TKey& key, const std::pair<ui64, ui64> range, const typename TBase::TOutcome& outcome)

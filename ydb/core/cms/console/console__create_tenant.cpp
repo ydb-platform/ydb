@@ -236,7 +236,7 @@ public:
                             TStringBuilder() << "Database is not running: " << sharedDbPath, ctx);
                     }
 
-                    Y_VERIFY(tenant->DomainId);
+                    Y_ABORT_UNLESS(tenant->DomainId);
                     Tenant->SharedDomainId = tenant->DomainId;
                     tenant->HostedTenants.emplace(Tenant);
 
@@ -290,7 +290,7 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         LOG_DEBUG(ctx, NKikimrServices::CMS_TENANTS, "TTxCreateTenant Complete");
 
-        Y_VERIFY(Response);
+        Y_ABORT_UNLESS(Response);
 
         if (Response->Record.GetResponse().operation().status())
             Self->Counters.Inc(Response->Record.GetResponse().operation().status(),

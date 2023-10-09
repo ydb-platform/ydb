@@ -133,7 +133,7 @@ public:
 
     NArrow::TReplaceKey DeserializeMark(const TString& key, std::optional<ui32> markNumKeys) const override {
         if (markNumKeys) {
-            Y_VERIFY(*markNumKeys == (ui32)MarkSchema()->num_fields());
+            Y_ABORT_UNLESS(*markNumKeys == (ui32)MarkSchema()->num_fields());
             return TMark::DeserializeComposite(key, MarkSchema());
         } else {
             NArrow::TReplaceKey markKey = TMark::DeserializeScalar(key, MarkSchema());
@@ -189,7 +189,7 @@ public:
 
     std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const ui64 granuleId) const {
         auto result = GetGranuleOptional(granuleId);
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
         return result;
     }
 

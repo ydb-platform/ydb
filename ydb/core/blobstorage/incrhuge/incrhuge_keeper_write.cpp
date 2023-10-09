@@ -210,7 +210,7 @@ namespace NKikimr {
 
             // calculate payload size in bytes and ensure it fits into required boundaries
             const ui32 payloadSize = item.Data.size();
-            Y_VERIFY(payloadSize >= Keeper.State.Settings.MinHugeBlobInBytes && payloadSize < 0x1000000);
+            Y_ABORT_UNLESS(payloadSize >= Keeper.State.Settings.MinHugeBlobInBytes && payloadSize < 0x1000000);
 
             // calculate full data record size in blocks; round total size of header and payload up to a block size
             const ui32 sizeInBlocks = (sizeof(TBlobHeader) + payloadSize + Keeper.State.BlockSize - 1) / Keeper.State.BlockSize;
@@ -232,9 +232,9 @@ namespace NKikimr {
             }
 
             // ensure we have a chunk to write into
-            Y_VERIFY(Keeper.State.CurrentChunk);
+            Y_ABORT_UNLESS(Keeper.State.CurrentChunk);
             TChunkInfo& chunk = Keeper.State.Chunks.at(Keeper.State.CurrentChunk);
-            Y_VERIFY(chunk.State == EChunkState::Current);
+            Y_ABORT_UNLESS(chunk.State == EChunkState::Current);
 
             // store chunk we are writing to into queue item
             item.ChunkIdx = Keeper.State.CurrentChunk;
@@ -343,7 +343,7 @@ namespace NKikimr {
             IHLOG_DEBUG(ctx, "QueryId# %" PRIu64 " ApplyBlobWrite Status# %s", item.QueryId,
                     NKikimrProto::EReplyStatus_Name(status).data());
 
-            Y_VERIFY(status == NKikimrProto::OK, "don't know how to handle errors yet");
+            Y_ABORT_UNLESS(status == NKikimrProto::OK, "don't know how to handle errors yet");
 
             // check if this item is from defragmenter
             if (item.Defrag) {
@@ -354,7 +354,7 @@ namespace NKikimr {
 
                 // remove item from set and kick deleter to resume operation for this item (if any)
                 auto it = Keeper.State.DefragWriteInProgress.find(item.Id);
-                Y_VERIFY(it != Keeper.State.DefragWriteInProgress.end());
+                Y_ABORT_UNLESS(it != Keeper.State.DefragWriteInProgress.end());
                 if (it->second) {
                     Keeper.Deleter.OnItemDefragWritten(item.Id, ctx);
                 }
@@ -365,13 +365,13 @@ namespace NKikimr {
             item.Callback->Apply(status, result, ctx);
 
             if (item.ChunkIdx == Keeper.State.CurrentChunk) {
-                Y_VERIFY(CurrentChunkWritesInFlight > 0);
+                Y_ABORT_UNLESS(CurrentChunkWritesInFlight > 0);
                 --CurrentChunkWritesInFlight;
             } else {
                 auto it = FinalizingChunks.find(item.ChunkIdx);
-                Y_VERIFY(it != FinalizingChunks.end());
+                Y_ABORT_UNLESS(it != FinalizingChunks.end());
                 TFinalizingChunk& fin = it->second;
-                Y_VERIFY(fin.WritesInFlight > 0);
+                Y_ABORT_UNLESS(fin.WritesInFlight > 0);
                 --fin.WritesInFlight;
                 if (CheckFinalizingChunk(item.ChunkIdx, fin, ctx)) {
                     FinalizingChunks.erase(it);
@@ -393,7 +393,7 @@ namespace NKikimr {
                     if (!obsolete) {
                         // find locator
                         const TBlobLocator& locator = Keeper.State.BlobLookup.Lookup(item.Header.IndexRecord.Id);
-                        Y_VERIFY(locator.ChunkIdx == item.OriginalChunkIdx);
+                        Y_ABORT_UNLESS(locator.ChunkIdx == item.OriginalChunkIdx);
                         obsolete = locator.DeleteInProgress;
                         IHLOG_DEBUG(ctx, "QueryId# %" PRIu64 " DeleteInProgress# %s", item.QueryId,
                                 obsolete ? "true" : "false");
@@ -428,9 +428,9 @@ namespace NKikimr {
 
             // find matching item in chunk set and set it as current
             auto it = Keeper.State.Chunks.find(chunkIdx);
-            Y_VERIFY(it != Keeper.State.Chunks.end());
+            Y_ABORT_UNLESS(it != Keeper.State.Chunks.end());
             TChunkInfo& chunk = it->second;
-            Y_VERIFY(chunk.State == EChunkState::WriteIntent);
+            Y_ABORT_UNLESS(chunk.State == EChunkState::WriteIntent);
             chunk.State = EChunkState::Current;
 
             // store current chunk index in common state
@@ -474,12 +474,12 @@ namespace NKikimr {
             TIndexWriteQueueItem& item = *it;
 
             // ensure we have current chunk we are writing into and store it into item
-            Y_VERIFY(Keeper.State.CurrentChunk);
+            Y_ABORT_UNLESS(Keeper.State.CurrentChunk);
             item.ChunkIdx = Keeper.State.CurrentChunk;
 
             // find current chunk and update its state
             TChunkInfo& chunk = Keeper.State.Chunks.at(Keeper.State.CurrentChunk);
-            Y_VERIFY(chunk.State == EChunkState::Current);
+            Y_ABORT_UNLESS(chunk.State == EChunkState::Current);
             chunk.State = EChunkState::Finalizing;
 
             // calculate alignment up to data section end
@@ -517,12 +517,12 @@ namespace NKikimr {
             for (ui32 i = 0; i < numParts; ++i) {
                 totalSize += item.Parts[i].Size;
             }
-            Y_VERIFY(totalSize % Keeper.State.PDiskParams->AppendBlockSize == 0, "totalSize# %" PRIu32
+            Y_ABORT_UNLESS(totalSize % Keeper.State.PDiskParams->AppendBlockSize == 0, "totalSize# %" PRIu32
                     " AppendBlockSize# %" PRIu32, totalSize, Keeper.State.PDiskParams->AppendBlockSize);
 
             // calculate and validate offset
             const ui32 offset = CurrentChunkOffsetInBlocks * Keeper.State.BlockSize;
-            Y_VERIFY(offset + totalSize <= Keeper.State.PDiskParams->ChunkSize);
+            Y_ABORT_UNLESS(offset + totalSize <= Keeper.State.PDiskParams->ChunkSize);
 
             // create callback object
             auto callback = [this, it](NKikimrProto::EReplyStatus status, IEventBase* /*result*/, const TActorContext& ctx) {
@@ -545,12 +545,12 @@ namespace NKikimr {
         }
 
         void TWriter::ApplyIndexWrite(NKikimrProto::EReplyStatus status, TIndexWriteQueueItem& item, const TActorContext& ctx) {
-            Y_VERIFY(status == NKikimrProto::OK, "don't know how to handle errors yet");
+            Y_ABORT_UNLESS(status == NKikimrProto::OK, "don't know how to handle errors yet");
 
             auto it = FinalizingChunks.find(item.ChunkIdx);
-            Y_VERIFY(it != FinalizingChunks.end());
+            Y_ABORT_UNLESS(it != FinalizingChunks.end());
             TFinalizingChunk& fin = it->second;
-            Y_VERIFY(!fin.IndexWritten);
+            Y_ABORT_UNLESS(!fin.IndexWritten);
             fin.IndexWritten = true;
             if (CheckFinalizingChunk(item.ChunkIdx, fin, ctx)) {
                 FinalizingChunks.erase(it);
@@ -560,7 +560,7 @@ namespace NKikimr {
         bool TWriter::CheckFinalizingChunk(ui32 chunkIdx, TFinalizingChunk& fin, const TActorContext& ctx) {
             if (fin.WritesInFlight == 0 && fin.IndexWritten) {
                 TChunkInfo& chunk = Keeper.State.Chunks.at(chunkIdx);
-                Y_VERIFY(chunk.State == EChunkState::Finalizing);
+                Y_ABORT_UNLESS(chunk.State == EChunkState::Finalizing);
 
                 // check if all chunk contents were deleted while finalizing; if so, this record should be deleted
                 if (!chunk.NumUsedBlocks) {
@@ -570,7 +570,7 @@ namespace NKikimr {
                 }
 
                 // ensure the chunk is not empty
-                Y_VERIFY(chunk.NumUsedBlocks > 0);
+                Y_ABORT_UNLESS(chunk.NumUsedBlocks > 0);
 
                 // set state to complete
                 chunk.State = EChunkState::Complete;
@@ -593,7 +593,7 @@ namespace NKikimr {
             TVector<TEvIncrHugeInitResult::TItem> res;
             auto scanChunk = [&](TChunkIdx chunkIdx, const TVector<TBlobIndexRecord>& index) {
                 auto it = Keeper.State.Chunks.find(chunkIdx);
-                Y_VERIFY(it != Keeper.State.Chunks.end());
+                Y_ABORT_UNLESS(it != Keeper.State.Chunks.end());
                 TChunkInfo& chunk = it->second;
                 for (ui32 i = 0; i < index.size(); ++i) {
                     const TBlobIndexRecord& record = index[i];

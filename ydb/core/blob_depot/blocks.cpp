@@ -128,7 +128,7 @@ namespace NKikimr::NBlobDepot {
                     const auto [it, inserted] = agent.BlockToDeliver.try_emplace(TabletId, BlockedGeneration, IssuerGuid, SelfId());
                     if (!inserted) {
                         const auto& [currentBlockedGeneration, _1, _2] = it->second;
-                        Y_VERIFY(currentBlockedGeneration < BlockedGeneration);
+                        Y_ABORT_UNLESS(currentBlockedGeneration < BlockedGeneration);
                         it->second = {BlockedGeneration, IssuerGuid, SelfId()};
                     }
 
@@ -181,7 +181,7 @@ namespace NKikimr::NBlobDepot {
 
                 TAgent& agent = Self->GetAgent(agentId);
                 const auto it = agent.BlockToDeliver.find(TabletId);
-                Y_VERIFY(it != agent.BlockToDeliver.end() && it->second == std::make_tuple(BlockedGeneration, IssuerGuid, SelfId()));
+                Y_ABORT_UNLESS(it != agent.BlockToDeliver.end() && it->second == std::make_tuple(BlockedGeneration, IssuerGuid, SelfId()));
                 agent.BlockToDeliver.erase(it);
 
                 if (NodesWaitingForPushResult.empty()) {

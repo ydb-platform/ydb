@@ -91,7 +91,7 @@ namespace NTest {
 
         void Check(TArrayRef<const ui64> rows) const override
         {
-            Y_VERIFY(rows.size() == 1);
+            Y_ABORT_UNLESS(rows.size() == 1);
 
             if (rows[0] != Sub[0]) {
                 throw

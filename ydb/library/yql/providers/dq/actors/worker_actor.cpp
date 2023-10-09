@@ -187,7 +187,7 @@ private:
         auto convertedError = MakeHolder<TEvDqFailure>();
         convertedError->Record.SetStatusCode(ev->Get()->Record.GetStatusCode());
         convertedError->Record.MutableIssues()->Swap(ev->Get()->Record.MutableIssues());
-        Y_VERIFY(convertedError->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
+        Y_ABORT_UNLESS(convertedError->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
         SendFailure(std::move(convertedError));  // enreached with stats inside
     }
 
@@ -216,8 +216,8 @@ private:
 
         TFailureInjector::Reach("dq_task_failure", [] {::_exit(1); });
 
-        Y_VERIFY(!TaskRunnerActor);
-        Y_VERIFY(!Executer);
+        Y_ABORT_UNLESS(!TaskRunnerActor);
+        Y_ABORT_UNLESS(!Executer);
         Executer = ev->Sender;
         Task = ev->Get()->Record.GetTask();
 
@@ -372,7 +372,7 @@ private:
                 response.SetResponseType(EPullResponseType::YIELD);
             }
 
-            Y_VERIFY(ev->Get()->Data.size() <= 1);
+            Y_ABORT_UNLESS(ev->Get()->Data.size() <= 1);
 
             if (ev->Get()->Data.size() == 1) {
                 TDqSerializedBatch& batch = ev->Get()->Data.front();
@@ -777,7 +777,7 @@ NActors::IActor* CreateWorkerActor(
     const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
     const IDqAsyncIoFactory::TPtr& asyncIoFactory)
 {
-    Y_VERIFY(taskRunnerActorFactory);
+    Y_ABORT_UNLESS(taskRunnerActorFactory);
     return new TLogWrapReceive(
         new TDqWorker(
             taskRunnerActorFactory,

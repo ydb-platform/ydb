@@ -38,9 +38,9 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
-        Y_VERIFY(txState->State == TTxState::ConfigureParts);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
+        Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
 
         TTabletId tabletId = TTabletId(ev->Get()->Record.GetTabletId());
         TShardIdx idx = context.SS->MustGetShardIdx(tabletId);
@@ -82,9 +82,9 @@ public:
                        << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
-        Y_VERIFY(txState->State == TTxState::ConfigureParts);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
+        Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
 
         txState->ClearShardsInProgress();
 
@@ -111,13 +111,13 @@ public:
         // Save updated split description
         TString extraData;
         bool serializeRes = txState->SplitDescription->SerializeToString(&extraData);
-        Y_VERIFY(serializeRes);
+        Y_ABORT_UNLESS(serializeRes);
         NIceDb::TNiceDb db(context.GetDB());
         db.Table<Schema::TxInFlightV2>().Key(OperationId.GetTxId(), OperationId.GetSubTxId()).Update(
                     NIceDb::TUpdate<Schema::TxInFlightV2::ExtraBytes>(extraData));
 
         const auto tableInfo = context.SS->Tables.FindPtr(txState->TargetPathId);
-        Y_VERIFY(tableInfo);
+        Y_ABORT_UNLESS(tableInfo);
 
         const ui64 alterVersion = (*tableInfo)->AlterVersion;
 
@@ -147,7 +147,7 @@ public:
             splitDescForShard.MutableSourceRanges()->CopyFrom(txState->SplitDescription->GetSourceRanges());
             splitDescForShard.AddDestinationRanges()->CopyFrom(rangeDescr);
 
-            Y_VERIFY(txState->SplitDescription);
+            Y_ABORT_UNLESS(txState->SplitDescription);
             auto event = MakeHolder<TEvDataShard::TEvInitSplitMergeDestination>(
                 ui64(OperationId.GetTxId()),
                 context.SS->TabletID(),
@@ -207,9 +207,9 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
-        Y_VERIFY(txState->State == TTxState::TransferData);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
+        Y_ABORT_UNLESS(txState->State == TTxState::TransferData);
 
         auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
         auto srcShardIdx = context.SS->GetShardIdx(tabletId);
@@ -239,7 +239,7 @@ public:
         // Switch table partitioning: exclude src shard and include all dst shards
         TPathId tableId = txState->TargetPathId;
         TTableInfo::TPtr tableInfo = *context.SS->Tables.FindPtr(tableId);
-        Y_VERIFY(tableInfo);
+        Y_ABORT_UNLESS(tableInfo);
 
         // Replace all Src datashard(s) with Dst datashard(s)
         TVector<TTableShardInfo> newPartitioning;
@@ -267,7 +267,7 @@ public:
                         continue;
 
                     // TODO: make sure dst are sorted by range end
-                    Y_VERIFY(context.SS->ShardInfos.contains(txShard.Idx));
+                    Y_ABORT_UNLESS(context.SS->ShardInfos.contains(txShard.Idx));
                     TTableShardInfo dst(txShard.Idx, txShard.RangeEnd);
 
                     if (tableInfo->IsTTLEnabled()) {
@@ -309,7 +309,7 @@ public:
             }
         }
 
-        Y_VERIFY(txState->ShardsInProgress.empty(), "All shards should have already completed their steps");
+        Y_ABORT_UNLESS(txState->ShardsInProgress.empty(), "All shards should have already completed their steps");
 
         context.SS->ChangeTxState(db, OperationId, TTxState::NotifyPartitioningChanged);
         context.OnComplete.ActivateTx(OperationId);
@@ -327,9 +327,9 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
-        Y_VERIFY(txState->State == TTxState::TransferData);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
+        Y_ABORT_UNLESS(txState->State == TTxState::TransferData);
 
         txState->ClearShardsInProgress();
 
@@ -347,7 +347,7 @@ public:
 
             auto event = MakeHolder<TEvDataShard::TEvSplit>(ui64(OperationId.GetTxId()));
 
-            Y_VERIFY(txState->SplitDescription);
+            Y_ABORT_UNLESS(txState->SplitDescription);
             event->Record.MutableSplitDescription()->CopyFrom(*txState->SplitDescription);
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shard.Idx, event.Release());
@@ -385,9 +385,9 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
-        Y_VERIFY(txState->State == TTxState::NotifyPartitioningChanged);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
+        Y_ABORT_UNLESS(txState->State == TTxState::NotifyPartitioningChanged);
 
 
         auto idx = context.SS->GetShardIdx(tabletId);
@@ -430,11 +430,11 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
-        Y_VERIFY(txState->State == TTxState::NotifyPartitioningChanged);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
+        Y_ABORT_UNLESS(txState->State == TTxState::NotifyPartitioningChanged);
 
-//        Y_VERIFY(txState->Notify.Empty(), "All notifications for split op shouldn't have been sent before switching to NotifyPartitioningChanged state");
+//        Y_ABORT_UNLESS(txState->Notify.Empty(), "All notifications for split op shouldn't have been sent before switching to NotifyPartitioningChanged state");
 
         txState->ClearShardsInProgress();
 
@@ -530,8 +530,8 @@ public:
             TOperationContext& context)
     {
         // N source shards are merged into 1
-        Y_VERIFY(srcPartitionIdxs.size() > 1);
-        Y_VERIFY(info.SplitBoundarySize() == 0);
+        Y_ABORT_UNLESS(srcPartitionIdxs.size() > 1);
+        Y_ABORT_UNLESS(info.SplitBoundarySize() == 0);
 
         if (tableInfo->GetExpectedPartitionCount() + 1 - srcPartitionIdxs.size() < tableInfo->GetMinPartitionsCount()) {
             errStr = "Reached MinPartitionsCount limit: " + ToString(tableInfo->GetMinPartitionsCount());
@@ -773,9 +773,9 @@ public:
             return result;
         }
 
-        Y_VERIFY(context.SS->Tables.contains(path.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
         TTableInfo::TCPtr tableInfo = context.SS->Tables.at(path.Base()->PathId);
-        Y_VERIFY(tableInfo);
+        Y_ABORT_UNLESS(tableInfo);
 
         if (tableInfo->IsBackup) {
             TString errMsg = TStringBuilder()
@@ -953,9 +953,9 @@ public:
         context.OnComplete.ActivateTx(OperationId);
 
         for (const auto& shard : op.Shards) {
-            Y_VERIFY(shard.Operation == TTxState::TransferData || shard.Operation == TTxState::CreateParts);
+            Y_ABORT_UNLESS(shard.Operation == TTxState::TransferData || shard.Operation == TTxState::CreateParts);
             // Add new (DST) shards to the list of all shards and update LastTxId for the old (SRC) shards
-            Y_VERIFY(context.SS->ShardInfos.contains(shard.Idx));
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
             TShardInfo& shardInfo = context.SS->ShardInfos[shard.Idx];
             shardInfo.CurrentTxId = OperationId.GetTxId();
 
@@ -985,16 +985,16 @@ public:
                          << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         TPathId pathId = txState->TargetPathId;
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-        Y_VERIFY(path);
+        Y_ABORT_UNLESS(path);
 
-        Y_VERIFY(context.SS->Tables.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
-        Y_VERIFY(tableInfo);
+        Y_ABORT_UNLESS(tableInfo);
         tableInfo->AbortSplitMergeOp(OperationId);
 
         context.OnComplete.DoneOperation(OperationId);
@@ -1010,7 +1010,7 @@ ISubOperation::TPtr CreateSplitMerge(TOperationId id, const TTxTransaction& tx) 
 }
 
 ISubOperation::TPtr CreateSplitMerge(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TSplitMerge>(id, state);
 }
 

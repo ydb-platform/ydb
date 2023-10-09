@@ -26,7 +26,7 @@ inline NLWTrace::TOrbit MoveOrbit(TPtr&) {
 
 template<>
 inline NLWTrace::TOrbit MoveOrbit<TEvBlobStorage::TEvVPut::TPtr>(TEvBlobStorage::TEvVPut::TPtr& ev) {
-    Y_VERIFY(ev->Get());
+    Y_ABORT_UNLESS(ev->Get());
     return std::move(ev->Get()->Orbit);
 }
 

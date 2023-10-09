@@ -13,7 +13,7 @@ private:
 public:
     TEvAddTask(TTask&& task)
         : Task(std::move(task)) {
-        Y_VERIFY(!!Task.GetActivity());
+        Y_ABORT_UNLESS(!!Task.GetActivity());
     }
 };
 
@@ -29,7 +29,7 @@ public:
         , SuccessFlag(success)
         , Report(report)
     {
-        Y_VERIFY(!!TaskId);
+        Y_ABORT_UNLESS(!!TaskId);
     }
 
     TString GetDebugString() const {
@@ -59,7 +59,7 @@ public:
         : TaskId(taskId)
         , Enabled(enabled)
     {
-        Y_VERIFY(!!TaskId);
+        Y_ABORT_UNLESS(!!TaskId);
     }
 };
 

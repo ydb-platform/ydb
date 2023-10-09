@@ -215,7 +215,7 @@ private:
     // Event in case of error in registering script in database
     // Just pass away, because we have not started execution.
     void Handle(NActors::TEvents::TEvPoison::TPtr&) {
-        Y_VERIFY(RunState == ERunState::Created);
+        Y_ABORT_UNLESS(RunState == ERunState::Created);
         PassAway();
     }
 

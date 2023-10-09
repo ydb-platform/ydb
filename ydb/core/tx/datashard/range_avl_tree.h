@@ -517,13 +517,13 @@ namespace NDataShard {
             i64 maxHeight = 1;
 
             if (auto* l = t->Left) {
-                Y_VERIFY(l->Parent == t, "Left child parent is incorrect");
+                Y_ABORT_UNLESS(l->Parent == t, "Left child parent is incorrect");
                 cmp = this->CompareBorders(l->LeftBorder(), t->LeftBorder());
-                Y_VERIFY(cmp < 0 || cmp == 0 && l->Value < t->Value, "Left child must be smaller than t");
+                Y_ABORT_UNLESS(cmp < 0 || cmp == 0 && l->Value < t->Value, "Left child must be smaller than t");
                 TNode* leftRightMost;
                 std::tie(leftMost, leftRightMost) = DoValidate(l);
                 cmp = this->CompareBorders(leftRightMost->LeftBorder(), t->LeftBorder());
-                Y_VERIFY(cmp < 0 || cmp == 0 && leftRightMost->Value < t->Value, "Left child rightmost node must be smaller than t");
+                Y_ABORT_UNLESS(cmp < 0 || cmp == 0 && leftRightMost->Value < t->Value, "Left child rightmost node must be smaller than t");
                 cmp = this->CompareBorders(maxRightBorder, l->MaxRightBorder());
                 if (cmp < 0) {
                     maxRightBorder = l->MaxRightBorder();
@@ -533,13 +533,13 @@ namespace NDataShard {
             }
 
             if (auto* r = t->Right) {
-                Y_VERIFY(r->Parent == t, "Right child parent is incorrect");
+                Y_ABORT_UNLESS(r->Parent == t, "Right child parent is incorrect");
                 cmp = this->CompareBorders(t->LeftBorder(), r->LeftBorder());
-                Y_VERIFY(cmp < 0 || cmp == 0 && t->Value < r->Value, "Right child must be bigger than t");
+                Y_ABORT_UNLESS(cmp < 0 || cmp == 0 && t->Value < r->Value, "Right child must be bigger than t");
                 TNode* rightLeftMost;
                 std::tie(rightLeftMost, rightMost) = DoValidate(r);
                 cmp = this->CompareBorders(t->LeftBorder(), rightLeftMost->LeftBorder());
-                Y_VERIFY(cmp < 0 || cmp == 0 && t->Value < rightLeftMost->Value, "Right child leftmost node must be bigger than t");
+                Y_ABORT_UNLESS(cmp < 0 || cmp == 0 && t->Value < rightLeftMost->Value, "Right child leftmost node must be bigger than t");
                 cmp = this->CompareBorders(maxRightBorder, r->MaxRightBorder());
                 if (cmp < 0) {
                     maxRightBorder = r->MaxRightBorder();
@@ -548,11 +548,11 @@ namespace NDataShard {
                 maxHeight = Max(maxHeight, r->Height + 1);
             }
 
-            Y_VERIFY(t->Height == maxHeight, "Subtree height is incorrect");
+            Y_ABORT_UNLESS(t->Height == maxHeight, "Subtree height is incorrect");
 
             cmp = this->CompareBorders(maxRightBorder, t->MaxRightBorder());
-            Y_VERIFY(cmp == 0, "Subtree must have max right key equal to the calculated max");
-            Y_VERIFY(maxRightTrivial == t->MaxRightTrivial,
+            Y_ABORT_UNLESS(cmp == 0, "Subtree must have max right key equal to the calculated max");
+            Y_ABORT_UNLESS(maxRightTrivial == t->MaxRightTrivial,
                 "Subtree must have correct MaxRightTrivial flag (computed=%d, stored=%d)",
                 int(maxRightTrivial), int(t->MaxRightTrivial));
 
@@ -565,7 +565,7 @@ namespace NDataShard {
          */
         void Validate() const noexcept {
             if (Root) {
-                Y_VERIFY(Root->Parent == nullptr, "Root must not have a parent");
+                Y_ABORT_UNLESS(Root->Parent == nullptr, "Root must not have a parent");
                 DoValidate(Root);
             }
         }
@@ -590,8 +590,8 @@ namespace NDataShard {
          * Adds mapping from the given range to the given value
          */
         void AddRange(TOwnedRange range, TValue value) {
-            Y_VERIFY(range.LeftKey.size() <= KeyTypes.size(), "Range left key is too large");
-            Y_VERIFY(range.RightKey.size() <= KeyTypes.size(), "Range right key is too large");
+            Y_ABORT_UNLESS(range.LeftKey.size() <= KeyTypes.size(), "Range left key is too large");
+            Y_ABORT_UNLESS(range.RightKey.size() <= KeyTypes.size(), "Range right key is too large");
 
             auto leftBorder = TBorder::MakeLeft(range.LeftKey, range.LeftInclusive);
             auto rightBorder = TBorder::MakeRight(range.RightKey, range.RightInclusive);

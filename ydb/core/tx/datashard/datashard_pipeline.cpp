@@ -42,7 +42,7 @@ TPipeline::~TPipeline()
 bool TPipeline::Load(NIceDb::TNiceDb& db) {
     using Schema = TDataShard::Schema;
 
-    Y_VERIFY(!SchemaTx);
+    Y_ABORT_UNLESS(!SchemaTx);
 
     bool ready = true;
     ready &= Self->SysGetUi64(db, Schema::Sys_LastPlannedStep, LastPlannedTx.Step);
@@ -154,7 +154,7 @@ ECleanupStatus TPipeline::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx,
                         << Self->TabletID());
 
             ui64 lastStep = LastPlannedTx.Step;
-            Y_VERIFY(lastStep >= step,
+            Y_ABORT_UNLESS(lastStep >= step,
                      "TX [%" PRIu64 ":%" PRIu64 "] is unknown while LastPlannedStep is %" PRIu64 " at tablet %" PRIu64,
                      step, txId, lastStep, Self->TabletID());
 
@@ -322,7 +322,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
     // mode just fail.
     for (auto &pr : ActiveOps) {
         const TOperation::TPtr &op = pr.second;
-        Y_VERIFY(!op->IsExecutionPlanFinished());
+        Y_ABORT_UNLESS(!op->IsExecutionPlanFinished());
 
         if (checkedOps.contains(op) || op->IsInProgress())
             continue;
@@ -408,8 +408,8 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
             }
         }
         auto pr = ActivePlannedOps.emplace(op->GetStepOrder(), op);
-        Y_VERIFY(pr.second, "AddActiveOp must never add duplicate transactions");
-        Y_VERIFY(pr.first == std::prev(ActivePlannedOps.end()), "AddActiveOp must always add transactions in order");
+        Y_ABORT_UNLESS(pr.second, "AddActiveOp must never add duplicate transactions");
+        Y_ABORT_UNLESS(pr.first == std::prev(ActivePlannedOps.end()), "AddActiveOp must always add transactions in order");
         bool isComplete = op->HasFlag(TTxFlags::BlockingImmediateOps);
         if (ActivePlannedOpsLogicallyCompleteEnd == ActivePlannedOps.end() && !isComplete) {
             ActivePlannedOpsLogicallyCompleteEnd = pr.first;
@@ -451,7 +451,7 @@ void TPipeline::RemoveActiveOp(TOperation::TPtr op)
         RemoveImmediateOp(op);
     } else {
         auto it = ActivePlannedOps.find(op->GetStepOrder());
-        Y_VERIFY(it != ActivePlannedOps.end());
+        Y_ABORT_UNLESS(it != ActivePlannedOps.end());
         auto next = std::next(it);
         if (ActivePlannedOpsLogicallyIncompleteEnd == it) {
             ActivePlannedOpsLogicallyIncompleteEnd = next;
@@ -473,7 +473,7 @@ void TPipeline::UnblockNormalDependencies(const TOperation::TPtr &op)
     // wait for their Dependencies, never for their Depenents
     for (auto &dep : op->GetDependents()) {
         if (dep->GetDependencies().size() == 1) {
-            Y_VERIFY(op == *dep->GetDependencies().begin());
+            Y_ABORT_UNLESS(op == *dep->GetDependencies().begin());
             if (dep->GetSpecialDependencies().empty()) {
                 AddCandidateOp(dep);
             }
@@ -492,7 +492,7 @@ void TPipeline::UnblockSpecialDependencies(const TOperation::TPtr &op)
 {
     for (auto &dep : op->GetSpecialDependents()) {
         if (dep->GetSpecialDependencies().size() == 1) {
-            Y_VERIFY(op == *dep->GetSpecialDependencies().begin());
+            Y_ABORT_UNLESS(op == *dep->GetSpecialDependencies().begin());
             if (dep->GetDependencies().empty()) {
                 AddCandidateOp(dep);
             }
@@ -771,7 +771,7 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
         // Parse track
         NKikimrTx::TBalanceTrackList balanceTrackList;
         bool success = balanceTrackList.ParseFromArray(track.data(), track.size());
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
 
         TReadSetKey rsKey(op->GetTxId(), origin, from, to);
         loadedReadSets.insert(rsKey);
@@ -831,13 +831,13 @@ const TSchemaOperation* TPipeline::FindSchemaTx(ui64 txId) const {
 }
 
 void TPipeline::CompleteSchemaTx(NIceDb::TNiceDb& db, ui64 txId) {
-    Y_VERIFY(txId);
+    Y_ABORT_UNLESS(txId);
     TSchemaOperation * op = Self->TransQueue.FindSchemaTx(txId);
     if (!op)
         return;
 
-    Y_VERIFY(txId == op->TxId);
-    Y_VERIFY(op->Done);
+    Y_ABORT_UNLESS(txId == op->TxId);
+    Y_ABORT_UNLESS(op->Done);
 
     Self->TransQueue.RemoveScanProgress(db, txId);
     Self->TransQueue.RemoveSchemaOperation(db, txId);
@@ -850,7 +850,7 @@ bool TPipeline::PlanTxs(ui64 step,
     Sort(txIds.begin(), txIds.end());
     // check uniqueness
     for (ui32 i = 1; i < txIds.size(); ++i) {
-        Y_VERIFY(txIds[i - 1] < txIds[i]);
+        Y_ABORT_UNLESS(txIds[i - 1] < txIds[i]);
     }
 
     if (step <= LastPlannedTx.Step)
@@ -893,7 +893,7 @@ bool TPipeline::PlanTxs(ui64 step,
         // queue as 'wait for plan' time.
         if (op->GetCurrentUnit() == EExecutionUnitKind::WaitForPlan) {
             auto status = RunExecutionUnit(op, txc, ctx);
-            Y_VERIFY(status == EExecutionStatus::Executed);
+            Y_ABORT_UNLESS(status == EExecutionStatus::Executed);
         }
     }
 
@@ -931,7 +931,7 @@ void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, 
         Self->PromoteCompleteEdge(op.Get(), txc);
     }
 
-    Y_VERIFY(ActivePlannedOps);
+    Y_ABORT_UNLESS(ActivePlannedOps);
     if (ActivePlannedOps.begin()->first == op->GetStepOrder()) {
         LastCompleteTx = op->GetStepOrder();
         if (LastCompleteTx < UtmostCompleteTx && ActivePlannedOps.size() == 1) {
@@ -1165,7 +1165,7 @@ ui64 TPipeline::GetInactiveTxSize() const {
 }
 
 bool TPipeline::SaveForPropose(TValidatedDataTx::TPtr tx) {
-    Y_VERIFY(tx && tx->TxId());
+    Y_ABORT_UNLESS(tx && tx->TxId());
     if (DataTxCache.size() <= Config.LimitDataTxCache) {
         ui64 quota = tx->GetTxSize() + tx->GetMemoryAllocated();
         if (Self->TryCaptureTxCache(quota)) {
@@ -1207,7 +1207,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                                            const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
-    Y_VERIFY(!(rec.GetFlags() & TTxFlags::PrivateFlagsMask));
+    Y_ABORT_UNLESS(!(rec.GetFlags() & TTxFlags::PrivateFlagsMask));
     TBasicOpInfo info(rec.GetTxId(),
                       static_cast<EOperationKind>(rec.GetTxKind()),
                       rec.GetFlags(), 0,
@@ -1247,10 +1247,10 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     };
 
     if (tx->IsSchemeTx()) {
-        Y_VERIFY(!tx->HasVolatilePrepareFlag(), "Volatile scheme transactions not supported");
+        Y_ABORT_UNLESS(!tx->HasVolatilePrepareFlag(), "Volatile scheme transactions not supported");
 
-        Y_VERIFY(rec.HasSchemeShardId());
-        Y_VERIFY(rec.HasProcessingParams());
+        Y_ABORT_UNLESS(rec.HasSchemeShardId());
+        Y_ABORT_UNLESS(rec.HasProcessingParams());
 
         tx->SetSchemeShardId(rec.GetSchemeShardId());
         tx->SetSubDomainPathId(rec.GetSubDomainPathId());
@@ -1318,7 +1318,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
 
         tx->SetGlobalWriterFlag();
     } else {
-        Y_VERIFY(tx->IsReadTable() || tx->IsDataTx());
+        Y_ABORT_UNLESS(tx->IsReadTable() || tx->IsDataTx());
         auto dataTx = tx->BuildDataTx(Self, txc, ctx);
         if (dataTx->Ready() && (dataTx->ProgramSize() || dataTx->IsKqpDataTx()))
             dataTx->ExtractKeys(true);
@@ -1378,7 +1378,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                 return tx;
             }
 
-            Y_VERIFY(!tx->IsImmediate(), "Sanity check failed: volatile tx cannot be immediate");
+            Y_ABORT_UNLESS(!tx->IsImmediate(), "Sanity check failed: volatile tx cannot be immediate");
         }
 
         // Make config checks for immediate tx.
@@ -1457,7 +1457,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
 void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx)
 {
     auto dataTx = tx->BuildDataTx(Self, txc, ctx);
-    Y_VERIFY(dataTx->Ready());
+    Y_ABORT_UNLESS(dataTx->Ready());
     // TODO: we should have no requirement to have keys
     // for restarted immediate tx.
     if (dataTx->ProgramSize() || dataTx->IsKqpDataTx())
@@ -1491,7 +1491,7 @@ void TPipeline::RegisterDistributedWrites(const TOperation::TPtr& op, NTable::TD
 
 EExecutionStatus TPipeline::RunExecutionUnit(TOperation::TPtr op, TTransactionContext &txc, const TActorContext &ctx)
 {
-    Y_VERIFY(!op->IsExecutionPlanFinished());
+    Y_ABORT_UNLESS(!op->IsExecutionPlanFinished());
     auto &unit = GetExecutionUnit(op->GetCurrentUnit());
 
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -1603,7 +1603,7 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
 
 void TPipeline::MoveToNextUnit(TOperation::TPtr op)
 {
-    Y_VERIFY(!op->IsExecutionPlanFinished());
+    Y_ABORT_UNLESS(!op->IsExecutionPlanFinished());
     GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
 
     LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
@@ -1638,7 +1638,7 @@ void TPipeline::RunCompleteList(TOperation::TPtr op,
         op->SetCompleteTime(kind, AppData()->TimeProvider->Now() - start);
 
         if (!op->IsExecutionPlanFinished() && op->GetCurrentUnit() == kind) {
-            Y_VERIFY(completeList.back() == kind);
+            Y_ABORT_UNLESS(completeList.back() == kind);
             MoveToNextUnit(op);
         }
     }
@@ -1689,7 +1689,7 @@ bool TPipeline::AddWaitingSchemeOp(const TOperation::TPtr& op) {
 
     auto itOrder = WaitingSchemeOpsOrder.insert(WaitingSchemeOpsOrder.end(), op);
     auto res = WaitingSchemeOps.emplace(op, itOrder);
-    Y_VERIFY(res.second, "Unexpected duplicate when inserting op into THashMap");
+    Y_ABORT_UNLESS(res.second, "Unexpected duplicate when inserting op into THashMap");
     return true;
 }
 
@@ -1856,7 +1856,7 @@ bool TPipeline::CancelWaitingReadIterator(const TReadIteratorId& readId) {
 
 void TPipeline::RegisterWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event) {
     auto res = WaitingReadIteratorsById.emplace(readId, event);
-    Y_VERIFY(res.second);
+    Y_ABORT_UNLESS(res.second);
 }
 
 bool TPipeline::HandleWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event) {
@@ -2094,14 +2094,14 @@ bool TPipeline::AddLockDependencies(const TOperation::TPtr& op, TLocksUpdate& gu
 }
 
 void TPipeline::ProvideGlobalTxId(const TOperation::TPtr& op, ui64 globalTxId) {
-    Y_VERIFY(op->HasWaitingForGlobalTxIdFlag());
+    Y_ABORT_UNLESS(op->HasWaitingForGlobalTxIdFlag());
     ui64 localTxId = op->GetTxId();
 
     auto itImmediate = ImmediateOps.find(localTxId);
-    Y_VERIFY(itImmediate != ImmediateOps.end());
+    Y_ABORT_UNLESS(itImmediate != ImmediateOps.end());
     ImmediateOps.erase(itImmediate);
     auto itActive = ActiveOps.find(op->GetStepOrder());
-    Y_VERIFY(itActive != ActiveOps.end());
+    Y_ABORT_UNLESS(itActive != ActiveOps.end());
     ActiveOps.erase(itActive);
     bool removedCandidate = false;
     auto itCandidate = CandidateOps.find(op->GetStepOrder());
@@ -2113,12 +2113,12 @@ void TPipeline::ProvideGlobalTxId(const TOperation::TPtr& op, ui64 globalTxId) {
     op->SetGlobalTxId(globalTxId);
     op->SetWaitingForGlobalTxIdFlag(false);
     auto resImmediate = ImmediateOps.emplace(op->GetTxId(), op);
-    Y_VERIFY(resImmediate.second);
+    Y_ABORT_UNLESS(resImmediate.second);
     auto resActive = ActiveOps.emplace(op->GetStepOrder(), op);
-    Y_VERIFY(resActive.second);
+    Y_ABORT_UNLESS(resActive.second);
     if (removedCandidate) {
         auto resCandidate = CandidateOps.emplace(op->GetStepOrder(), op);
-        Y_VERIFY(resCandidate.second);
+        Y_ABORT_UNLESS(resCandidate.second);
     }
 }
 

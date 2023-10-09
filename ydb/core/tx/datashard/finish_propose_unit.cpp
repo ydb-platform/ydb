@@ -152,7 +152,7 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
                                          const TActorContext &ctx)
 {
     auto res = std::move(op->Result());
-    Y_VERIFY(res);
+    Y_ABORT_UNLESS(res);
 
     TDuration duration = TAppData::TimeProvider->Now() - op->GetReceivedAt();
     res->Record.SetProposeLatency(duration.MilliSeconds());
@@ -220,7 +220,7 @@ void TFinishProposeUnit::UpdateCounters(TOperation::TPtr op,
                                         const TActorContext &ctx)
 {
     auto &res = op->Result();
-    Y_VERIFY(res);
+    Y_ABORT_UNLESS(res);
     auto execLatency = TAppData::TimeProvider->Now() - op->GetReceivedAt();
 
     res->Record.SetExecLatency(execLatency.MilliSeconds());

@@ -123,7 +123,7 @@ void TKqpTasksRunner::Prepare(const TDqTaskRunnerMemoryLimits& memoryLimits, con
     for (auto& [taskId, taskRunner] : TaskRunners) {
         ComputeCtx->SetCurrentTaskId(taskId);
         auto it = Tasks.find(taskId);
-        Y_VERIFY(it != Tasks.end());
+        Y_ABORT_UNLESS(it != Tasks.end());
         taskRunner->Prepare(it->second, memoryLimits, execCtx);
     }
 

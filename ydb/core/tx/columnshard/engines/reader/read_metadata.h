@@ -79,13 +79,13 @@ public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
 
     void SetPKRangesFilter(const TPKRangesFilter& value) {
-        Y_VERIFY(IsSorted() && value.IsReverse() == IsDescSorted());
-        Y_VERIFY(!PKRangesFilter);
+        Y_ABORT_UNLESS(IsSorted() && value.IsReverse() == IsDescSorted());
+        Y_ABORT_UNLESS(!PKRangesFilter);
         PKRangesFilter = value;
     }
 
     const TPKRangesFilter& GetPKRangesFilter() const {
-        Y_VERIFY(!!PKRangesFilter);
+        Y_ABORT_UNLESS(!!PKRangesFilter);
         return *PKRangesFilter;
     }
 
@@ -217,7 +217,7 @@ public:
     std::set<ui32> GetPKColumnIds() const;
 
     bool Empty() const {
-        Y_VERIFY(SelectInfo);
+        Y_ABORT_UNLESS(SelectInfo);
         return SelectInfo->PortionsOrderedPK.empty() && CommittedBlobs.empty();
     }
 
@@ -232,7 +232,7 @@ public:
     std::vector<TNameTypeInfo> GetResultYqlSchema() const override {
         auto& indexInfo = ResultIndexSchema->GetIndexInfo();
         auto resultSchema = GetResultSchema();
-        Y_VERIFY(resultSchema);
+        Y_ABORT_UNLESS(resultSchema);
         std::vector<NTable::TTag> columnIds;
         columnIds.reserve(resultSchema->num_fields());
         for (const auto& field: resultSchema->fields()) {
@@ -247,12 +247,12 @@ public:
     }
 
     size_t NumIndexedChunks() const {
-        Y_VERIFY(SelectInfo);
+        Y_ABORT_UNLESS(SelectInfo);
         return SelectInfo->NumChunks();
     }
 
     size_t NumIndexedBlobs() const {
-        Y_VERIFY(SelectInfo);
+        Y_ABORT_UNLESS(SelectInfo);
         return SelectInfo->Stats().Blobs;
     }
 

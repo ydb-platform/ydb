@@ -143,7 +143,7 @@ public:
     {
         using NGrpc::TGrpcStatus;
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
-        Y_VERIFY(dbState);
+        Y_ABORT_UNLESS(dbState);
 
         if (!TryCreateContext(context)) {
             TPlainStatus status(EStatus::CLIENT_CANCELLED, "Client is stopped");
@@ -335,9 +335,9 @@ public:
         requestSettings.UseAuth = false;
         // TODO: Change implementation of Run, to use ICoreFacility and remove this cast
         auto dbState = std::dynamic_pointer_cast<TDbDriverState>(facility);
-        Y_VERIFY(dbState);
+        Y_ABORT_UNLESS(dbState);
         auto self = dynamic_cast<TGRpcConnectionsImpl*>(dbState->Client);
-        Y_VERIFY(self);
+        Y_ABORT_UNLESS(self);
         self->Run<TService, TRequest, TResponse>(
             std::move(request),
             std::move(responseCb),
@@ -450,7 +450,7 @@ public:
                         dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
 
                         if (grpcStatus.Ok()) {
-                            Y_VERIFY(processor);
+                            Y_ABORT_UNLESS(processor);
                             auto finishedCallback = [dbState, endpoint] (TGrpcStatus grpcStatus) {
                                 if (!grpcStatus.Ok() && grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
                                     dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
@@ -546,7 +546,7 @@ public:
                         dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
 
                         if (grpcStatus.Ok()) {
-                            Y_VERIFY(processor);
+                            Y_ABORT_UNLESS(processor);
                             auto finishedCallback = [dbState, endpoint] (TGrpcStatus grpcStatus) {
                                 if (!grpcStatus.Ok() && grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
                                     dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());

@@ -11,9 +11,9 @@ TTableSchema::TTableSchema(const THashMap<ui32, TSysTables::TTableColumnInfo>& d
         column.set_name(i.Name);
         column.mutable_type()->set_type_id(::Ydb::Type::PrimitiveTypeId(i.PType.GetTypeId()));
         if (i.KeyOrder >= 0) {
-            Y_VERIFY(pkColumns.emplace(i.KeyOrder, std::move(column)).second);
+            Y_ABORT_UNLESS(pkColumns.emplace(i.KeyOrder, std::move(column)).second);
         } else {
-            Y_VERIFY(columns.emplace(i.Name, std::move(column)).second);
+            Y_ABORT_UNLESS(columns.emplace(i.Name, std::move(column)).second);
         }
     }
     for (auto&& i : pkColumns) {

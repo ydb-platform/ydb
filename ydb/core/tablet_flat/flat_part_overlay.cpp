@@ -51,7 +51,7 @@ TString TOverlay::Encode() const noexcept
     NProto::TOverlay plain;
 
     if (Screen) {
-        Y_VERIFY(Screen->Size() > 0,
+        Y_ABORT_UNLESS(Screen->Size() > 0,
             "Cannot serialize a screen with 0 holes");
 
         Screen->Validate();
@@ -63,7 +63,7 @@ TString TOverlay::Encode() const noexcept
     }
 
     if (Slices) {
-        Y_VERIFY(Slices->size() > 0,
+        Y_ABORT_UNLESS(Slices->size() > 0,
             "Cannot serialize a run with 0 slices");
 
         Slices->Validate();
@@ -203,7 +203,7 @@ TString TOverlay::EncodeRemoveSlices(const TIntrusiveConstPtr<TSlices>& slices) 
 {
     NProto::TOverlayDelta plain;
 
-    Y_VERIFY(slices, "Cannot encode an empty remove slices");
+    Y_ABORT_UNLESS(slices, "Cannot encode an empty remove slices");
 
     SlicesToProto(*slices, plain.MutableRemovedSlices());
 
@@ -216,7 +216,7 @@ TString TOverlay::EncodeChangeSlices(TConstArrayRef<TSlice> slices) noexcept
 {
     NProto::TOverlayDelta plain;
 
-    Y_VERIFY(slices, "Cannot encode an empty change slices");
+    Y_ABORT_UNLESS(slices, "Cannot encode an empty change slices");
 
     SlicesToProto(slices, plain.MutableChangedSlices());
 

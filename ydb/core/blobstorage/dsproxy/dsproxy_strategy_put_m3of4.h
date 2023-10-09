@@ -46,7 +46,7 @@ protected:
             }
         }
         const TIntervalVec<i32> interval(0, state.Id.BlobSize());
-        Y_VERIFY(interval.IsSubsetOf(state.Whole.Here()), "missing blob data State# %s", state.ToString().data());
+        Y_ABORT_UNLESS(interval.IsSubsetOf(state.Whole.Here()), "missing blob data State# %s", state.ToString().data());
         std::array<TRope, 3> parts;
         ErasureSplit((TErasureType::ECrcMode)state.Id.CrcMode(), info.Type,
             state.Whole.Data.Read(0, state.Id.BlobSize()), parts);
@@ -161,7 +161,7 @@ protected:
                         continue;
                     }
                     auto& part = disk.DiskParts[2];
-                    Y_VERIFY(part.Situation != TBlobState::ESituation::Present && part.Situation != TBlobState::ESituation::Sent);
+                    Y_ABORT_UNLESS(part.Situation != TBlobState::ESituation::Present && part.Situation != TBlobState::ESituation::Sent);
                     if (considerLost && part.Situation != TBlobState::ESituation::Lost) {
                         continue; // here we process only lost disks
                     }
@@ -181,7 +181,7 @@ protected:
             }
         }
 
-        Y_VERIFY(anyPresent != any || dataPresent != data, "state# %s", state.ToString().data());
+        Y_ABORT_UNLESS(anyPresent != any || dataPresent != data, "state# %s", state.ToString().data());
         return EStrategyOutcome::IN_PROGRESS;
     }
 };

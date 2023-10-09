@@ -322,7 +322,7 @@ public:
         , Used(false)
     {
         if (ref.Used) {
-            Y_VERIFY(Use());
+            Y_ABORT_UNLESS(Use());
         }
     }
 
@@ -338,7 +338,7 @@ public:
             Handle = ref.Handle;
             GCList = ref.GCList;
             if (ref.Used) {
-                Y_VERIFY(Use());
+                Y_ABORT_UNLESS(Use());
             }
         }
 
@@ -447,7 +447,7 @@ public:
     { }
 
     explicit TPinnedPageRef(const TSharedPageRef& ref) noexcept {
-        Y_VERIFY(ref.IsUsed(), "Cannot pin pages not marked as used");
+        Y_ABORT_UNLESS(ref.IsUsed(), "Cannot pin pages not marked as used");
         Data_ = ref.GetHandle()->Pin();
         Handle_ = ref.GetHandle();
     }

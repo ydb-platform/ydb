@@ -181,11 +181,11 @@ Ydb::TypedValue GetTypedValueFromParam(int16_t format, const std::vector<uint8_t
         } else if (format == EFormatBinary) {
             typedValue.mutable_value()->set_bytes_value(TString(reinterpret_cast<const char*>(&value.front()), value.size()));
         } else {
-            Y_VERIFY(false/*unknown format type*/);
+            Y_ABORT_UNLESS(false/*unknown format type*/);
         }
     } else {
         // it's not supported yet
-        Y_VERIFY(false/*non-PG type*/);
+        Y_ABORT_UNLESS(false/*non-PG type*/);
     }
     return typedValue;
 }

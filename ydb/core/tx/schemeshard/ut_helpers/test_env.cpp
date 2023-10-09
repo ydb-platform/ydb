@@ -478,7 +478,7 @@ private:
     TPreSerializedMessage GetSerializedMessage(TAutoPtr<IEventBase> message) {
         TAllocChunkSerializer serializer;
         const bool success = message->SerializeToArcadiaStream(&serializer);
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
         TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo());
         return TPreSerializedMessage(message->Type(), data);
     }
@@ -1022,7 +1022,7 @@ void NSchemeShardUT_Private::TTestWithReboots::Prepare(const TString &dispatchNa
 
 void NSchemeShardUT_Private::TTestWithReboots::EnableTabletResolverScheduling(ui32 nodeIdx) {
     auto actorId = Runtime->GetLocalServiceId(MakeTabletResolverID(), nodeIdx);
-    Y_VERIFY(actorId);
+    Y_ABORT_UNLESS(actorId);
     Runtime->EnableScheduleForActor(actorId);
 }
 

@@ -35,7 +35,7 @@ namespace NKikimr {
 
             bool IsSameSst(const TLevelSstPtr &x) const {
                 bool equal = SstPtr.Get() == x.SstPtr.Get();
-                Y_VERIFY(!equal || (equal && Level == x.Level));
+                Y_ABORT_UNLESS(!equal || (equal && Level == x.Level));
                 return equal;
             }
 
@@ -46,7 +46,7 @@ namespace NKikimr {
         private:
             bool LessAtSameLevel(const TLevelSstPtr &x) const {
                 if (Level == 0) {
-                    Y_VERIFY(SstPtr->VolatileOrderId != 0 && x.SstPtr->VolatileOrderId != 0);
+                    Y_ABORT_UNLESS(SstPtr->VolatileOrderId != 0 && x.SstPtr->VolatileOrderId != 0);
                     // unordered level, compare by VolatileOrderId that grows sequentially
                     return SstPtr->VolatileOrderId < x.SstPtr->VolatileOrderId;
                 } else {
@@ -155,7 +155,7 @@ namespace NKikimr {
             // here we handle SST itself (index part) + any referenced data chunks
             for (TChunkIdx chunkIdx : AllChunks) {
                 const bool inserted = chunks.insert(chunkIdx).second;
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
             }
 
             // iterate through referenced huge blobs and add their chunks to map
@@ -170,7 +170,7 @@ namespace NKikimr {
                         it.GetDiskData(&extr);
                         for (const TDiskPart *part = extr.Begin; part != extr.End; ++part) {
                             if (part->Size) {
-                                Y_VERIFY(part->ChunkIdx);
+                                Y_ABORT_UNLESS(part->ChunkIdx);
                                 chunks.insert(part->ChunkIdx);
                             }
                         }

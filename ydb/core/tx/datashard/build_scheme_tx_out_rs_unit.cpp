@@ -47,7 +47,7 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
     if (!schemeTx.HasSendSnapshot())
         return EExecutionStatus::Executed;
 
-    Y_VERIFY(!op->InputSnapshots().empty(), "Snapshots expected");
+    Y_ABORT_UNLESS(!op->InputSnapshots().empty(), "Snapshots expected");
 
     auto &outReadSets = op->OutReadSets();
     ui64 srcTablet = DataShard.TabletID();
@@ -56,20 +56,20 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
     ui64 targetTablet = snapshot.GetSendTo(0).GetShard();
     ui64 tableId = snapshot.GetTableId_Deprecated();
     if (snapshot.HasTableId()) {
-        Y_VERIFY(DataShard.GetPathOwnerId() == snapshot.GetTableId().GetOwnerId());
+        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == snapshot.GetTableId().GetOwnerId());
         tableId = snapshot.GetTableId().GetTableId();
     }
-    Y_VERIFY(DataShard.GetUserTables().contains(tableId));
+    Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
     ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
 
     for (auto &snapshot : op->InputSnapshots()) {
         auto* txSnapshot = dynamic_cast<TTxTableSnapshotContext*>(snapshot.Get());
-        Y_VERIFY(txSnapshot, "Unexpected input snapshot type");
+        Y_ABORT_UNLESS(txSnapshot, "Unexpected input snapshot type");
 
         TString snapBody = DataShard.BorrowSnapshot(localTableId, *snapshot, { }, { }, targetTablet);
         txc.Env.DropSnapshot(snapshot);
 
-        Y_VERIFY(snapBody, "Failed to make full borrow snap. w/o tx restarts");
+        Y_ABORT_UNLESS(snapBody, "Failed to make full borrow snap. w/o tx restarts");
 
         TString rsBody;
         bool extended = false;

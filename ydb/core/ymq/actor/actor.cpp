@@ -34,7 +34,7 @@ private:
 };
 
 IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb) {
-    Y_VERIFY(req.GetRequestId());
+    Y_ABORT_UNLESS(req.GetRequestId());
 
 #define REQUEST_CASE(action) \
     case NKikimrClient::TSqsRequest::Y_CAT(k, action): {                \

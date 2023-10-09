@@ -26,11 +26,11 @@ void TChangeRecord::SerializeToProto(NKikimrChangeExchange::TChangeRecord& recor
 
     switch (Kind) {
         case EKind::AsyncIndex: {
-            Y_VERIFY(record.MutableAsyncIndex()->ParseFromArray(Body.data(), Body.size()));
+            Y_ABORT_UNLESS(record.MutableAsyncIndex()->ParseFromArray(Body.data(), Body.size()));
             break;
         }
         case EKind::CdcDataChange: {
-            Y_VERIFY(record.MutableCdcDataChange()->ParseFromArray(Body.data(), Body.size()));
+            Y_ABORT_UNLESS(record.MutableCdcDataChange()->ParseFromArray(Body.data(), Body.size()));
             break;
         }
         case EKind::CdcHeartbeat: {
@@ -41,19 +41,19 @@ void TChangeRecord::SerializeToProto(NKikimrChangeExchange::TChangeRecord& recor
 
 static auto ParseBody(const TString& protoBody) {
     NKikimrChangeExchange::TDataChange body;
-    Y_VERIFY(body.ParseFromArray(protoBody.data(), protoBody.size()));
+    Y_ABORT_UNLESS(body.ParseFromArray(protoBody.data(), protoBody.size()));
     return body;
 }
 
 static NJson::TJsonValue StringToJson(TStringBuf in) {
     NJson::TJsonValue result;
-    Y_VERIFY(NJson::ReadJsonTree(in, &result));
+    Y_ABORT_UNLESS(NJson::ReadJsonTree(in, &result));
     return result;
 }
 
 static NJson::TJsonValue YsonToJson(TStringBuf in) {
     NJson::TJsonValue result;
-    Y_VERIFY(NJson2Yson::DeserializeYsonAsJsonValue(in, &result));
+    Y_ABORT_UNLESS(NJson2Yson::DeserializeYsonAsJsonValue(in, &result));
     return result;
 }
 
@@ -120,15 +120,15 @@ static NJson::TJsonValue ToJson(const TCell& cell, NScheme::TTypeInfo type) {
 static void SerializeJsonKey(TUserTable::TCPtr schema, NJson::TJsonValue& key,
     const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
 {
-    Y_VERIFY(in.TagsSize() == schema->KeyColumnIds.size());
+    Y_ABORT_UNLESS(in.TagsSize() == schema->KeyColumnIds.size());
     for (size_t i = 0; i < schema->KeyColumnIds.size(); ++i) {
-        Y_VERIFY(in.GetTags(i) == schema->KeyColumnIds.at(i));
+        Y_ABORT_UNLESS(in.GetTags(i) == schema->KeyColumnIds.at(i));
     }
 
     TSerializedCellVec cells;
-    Y_VERIFY(TSerializedCellVec::TryParse(in.GetData(), cells));
+    Y_ABORT_UNLESS(TSerializedCellVec::TryParse(in.GetData(), cells));
 
-    Y_VERIFY(cells.GetCells().size() == schema->KeyColumnTypes.size());
+    Y_ABORT_UNLESS(cells.GetCells().size() == schema->KeyColumnTypes.size());
     for (size_t i = 0; i < schema->KeyColumnTypes.size(); ++i) {
         const auto type = schema->KeyColumnTypes.at(i);
         const auto& cell = cells.GetCells().at(i);
@@ -140,15 +140,15 @@ static void SerializeJsonValue(TUserTable::TCPtr schema, NJson::TJsonValue& valu
     const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
 {
     TSerializedCellVec cells;
-    Y_VERIFY(TSerializedCellVec::TryParse(in.GetData(), cells));
-    Y_VERIFY(in.TagsSize() == cells.GetCells().size());
+    Y_ABORT_UNLESS(TSerializedCellVec::TryParse(in.GetData(), cells));
+    Y_ABORT_UNLESS(in.TagsSize() == cells.GetCells().size());
 
     for (ui32 i = 0; i < in.TagsSize(); ++i) {
         const auto tag = in.GetTags(i);
         const auto& cell = cells.GetCells().at(i);
 
         auto it = schema->Columns.find(tag);
-        Y_VERIFY(it != schema->Columns.end());
+        Y_ABORT_UNLESS(it != schema->Columns.end());
 
         const auto& column = it->second;
         value.InsertValue(column.Name, ToJson(cell, column.Type));
@@ -156,8 +156,8 @@ static void SerializeJsonValue(TUserTable::TCPtr schema, NJson::TJsonValue& valu
 }
 
 static void MergeJsonMaps(NJson::TJsonValue& mergeTo, NJson::TJsonValue& mergeFrom) {
-    Y_VERIFY(mergeTo.GetType() == NJson::EJsonValueType::JSON_MAP);
-    Y_VERIFY(mergeFrom.GetType() == NJson::EJsonValueType::JSON_MAP);
+    Y_ABORT_UNLESS(mergeTo.GetType() == NJson::EJsonValueType::JSON_MAP);
+    Y_ABORT_UNLESS(mergeFrom.GetType() == NJson::EJsonValueType::JSON_MAP);
     for (const auto& entry : mergeFrom.GetMap()) {
         mergeTo.InsertValue(entry.first, entry.second);
     }
@@ -174,8 +174,8 @@ void TChangeRecord::SerializeToYdbJson(NJson::TJsonValue& json, bool virtualTime
         return SerializeVirtualTimestamp(json["resolved"], {Step, TxId});
     }
 
-    Y_VERIFY(Kind == EKind::CdcDataChange);
-    Y_VERIFY(Schema);
+    Y_ABORT_UNLESS(Kind == EKind::CdcDataChange);
+    Y_ABORT_UNLESS(Schema);
 
     const auto body = ParseBody(Body);
     SerializeJsonKey(Schema, json["key"], body.GetKey());
@@ -215,7 +215,7 @@ void TChangeRecord::SerializeToYdbJson(NJson::TJsonValue& json, bool virtualTime
 }
 
 static void ExtendJson(NJson::TJsonValue& value, const NJson::TJsonValue& ext) {
-    Y_VERIFY(ext.GetType() == NJson::JSON_MAP);
+    Y_ABORT_UNLESS(ext.GetType() == NJson::JSON_MAP);
     for (const auto& [k, v] : ext.GetMapSafe()) {
         value.InsertValue(k, v);
     }
@@ -225,8 +225,8 @@ static void ToAttributeValues(TUserTable::TCPtr schema, NJson::TJsonValue& value
     const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
 {
     TSerializedCellVec cells;
-    Y_VERIFY(TSerializedCellVec::TryParse(in.GetData(), cells));
-    Y_VERIFY(in.TagsSize() == cells.GetCells().size());
+    Y_ABORT_UNLESS(TSerializedCellVec::TryParse(in.GetData(), cells));
+    Y_ABORT_UNLESS(in.TagsSize() == cells.GetCells().size());
 
     for (ui32 i = 0; i < in.TagsSize(); ++i) {
         const auto tag = in.GetTags(i);
@@ -237,7 +237,7 @@ static void ToAttributeValues(TUserTable::TCPtr schema, NJson::TJsonValue& value
         }
 
         auto it = schema->Columns.find(tag);
-        Y_VERIFY(it != schema->Columns.end());
+        Y_ABORT_UNLESS(it != schema->Columns.end());
 
         const auto& column = it->second;
         const auto& name = column.Name;
@@ -248,7 +248,7 @@ static void ToAttributeValues(TUserTable::TCPtr schema, NJson::TJsonValue& value
         } else if (name.StartsWith("__Hash_")) {
             bool indexed = false;
             for (const auto& [_, index] : schema->Indexes) {
-                Y_VERIFY(index.KeyColumnIds.size() >= 1);
+                Y_ABORT_UNLESS(index.KeyColumnIds.size() >= 1);
                 if (index.KeyColumnIds.at(0) == tag) {
                     indexed = true;
                     break;
@@ -283,8 +283,8 @@ static void ToAttributeValues(TUserTable::TCPtr schema, NJson::TJsonValue& value
 }
 
 void TChangeRecord::SerializeToDynamoDBStreamsJson(NJson::TJsonValue& json, const TAwsJsonOptions& opts) const {
-    Y_VERIFY(Kind == EKind::CdcDataChange);
-    Y_VERIFY(Schema);
+    Y_ABORT_UNLESS(Kind == EKind::CdcDataChange);
+    Y_ABORT_UNLESS(Schema);
 
     json = NJson::TJsonMap({
         {"awsRegion", opts.AwsRegion},
@@ -351,8 +351,8 @@ void TChangeRecord::SerializeToDynamoDBStreamsJson(NJson::TJsonValue& json, cons
 }
 
 void TChangeRecord::SerializeToDebeziumJson(NJson::TJsonValue& keyJson, NJson::TJsonValue& valueJson, bool virtualTimestamps, TUserTable::TCdcStream::EMode streamMode) const {
-    Y_VERIFY(Kind == EKind::CdcDataChange);
-    Y_VERIFY(Schema);
+    Y_ABORT_UNLESS(Kind == EKind::CdcDataChange);
+    Y_ABORT_UNLESS(Schema);
 
     const auto body = ParseBody(Body);
     keyJson["payload"].SetType(NJson::JSON_MAP);
@@ -413,7 +413,7 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
             const auto parsed = ParseBody(Body);
 
             TSerializedCellVec key;
-            Y_VERIFY(TSerializedCellVec::TryParse(parsed.GetKey().GetData(), key));
+            Y_ABORT_UNLESS(TSerializedCellVec::TryParse(parsed.GetKey().GetData(), key));
 
             Key.ConstructInPlace(key.GetCells());
             break;
@@ -424,12 +424,12 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
         }
     }
 
-    Y_VERIFY(Key);
+    Y_ABORT_UNLESS(Key);
     return *Key;
 }
 
 i64 TChangeRecord::GetSeqNo() const {
-    Y_VERIFY(Order <= Max<i64>());
+    Y_ABORT_UNLESS(Order <= Max<i64>());
     return static_cast<i64>(Order);
 }
 
@@ -440,7 +440,7 @@ TString TChangeRecord::GetPartitionKey() const {
 
     switch (Kind) {
         case EKind::CdcDataChange: {
-            Y_VERIFY(Schema);
+            Y_ABORT_UNLESS(Schema);
             const auto body = ParseBody(Body);
 
             NJson::TJsonValue key;
@@ -456,7 +456,7 @@ TString TChangeRecord::GetPartitionKey() const {
         }
     }
 
-    Y_VERIFY(PartitionKey);
+    Y_ABORT_UNLESS(PartitionKey);
     return *PartitionKey;
 }
 

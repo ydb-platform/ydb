@@ -158,7 +158,7 @@ namespace NKikimr {
         }
 
         void Finish(const TActorContext &ctx) {
-            Y_VERIFY(RestToReadIndex == 0 && RestToReadOutbound == 0);
+            Y_ABORT_UNLESS(RestToReadIndex == 0 && RestToReadOutbound == 0);
 
             // add data chunks to ChunksBuilder
             typedef typename TLevelSegment::TMemIterator TMemIterator;
@@ -177,7 +177,7 @@ namespace NKikimr {
                 if (first) {
                     first = false;
                 } else {
-                    Y_VERIFY(prevKey < key && !prevKey.IsSameAs(key));
+                    Y_ABORT_UNLESS(prevKey < key && !prevKey.IsSameAs(key));
                 }
                 prevKey = key;
 
@@ -233,7 +233,7 @@ namespace NKikimr {
                 size_t partSize = data.Size() - sizeof(TIdxDiskPlaceHolder);
                 memcpy(&placeHolder, data.DataPtr<const TIdxDiskPlaceHolder>(partSize), sizeof(TIdxDiskPlaceHolder));
 
-                Y_VERIFY(placeHolder.MagicNumber == TIdxDiskPlaceHolder::Signature);
+                Y_ABORT_UNLESS(placeHolder.MagicNumber == TIdxDiskPlaceHolder::Signature);
                 RestToReadIndex = placeHolder.Info.IdxTotalSize;
                 RestToReadOutbound = placeHolder.Info.OutboundItems * sizeof(TDiskPart);
                 LevelSegment->LoadedIndex.resize(placeHolder.Info.Items);

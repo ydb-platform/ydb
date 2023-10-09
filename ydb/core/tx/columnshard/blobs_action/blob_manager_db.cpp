@@ -40,7 +40,7 @@ bool TBlobManagerDb::LoadLists(std::vector<NOlap::TUnifiedBlobId>& blobsToKeep, 
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToKeep::BlobId>();
             NOlap::TUnifiedBlobId unifiedBlobId = NOlap::TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
-            Y_VERIFY(unifiedBlobId.IsValid(), "%s", error.c_str());
+            Y_ABORT_UNLESS(unifiedBlobId.IsValid(), "%s", error.c_str());
 
             blobsToKeep.push_back(unifiedBlobId);
             if (!rowset.Next())
@@ -58,7 +58,7 @@ bool TBlobManagerDb::LoadLists(std::vector<NOlap::TUnifiedBlobId>& blobsToKeep, 
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToDelete::BlobId>();
             NOlap::TUnifiedBlobId unifiedBlobId = NOlap::TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
-            Y_VERIFY(unifiedBlobId.IsValid(), "%s", error.c_str());
+            Y_ABORT_UNLESS(unifiedBlobId.IsValid(), "%s", error.c_str());
             blobsToDelete.push_back(unifiedBlobId);
             if (!rowset.Next())
                 return false;
@@ -106,7 +106,7 @@ bool TBlobManagerDb::LoadTierLists(const TString& storageId, std::deque<NOlap::T
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::TierBlobsToDelete::BlobId>();
             NOlap::TUnifiedBlobId unifiedBlobId = NOlap::TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
-            Y_VERIFY(unifiedBlobId.IsValid(), "%s", error.c_str());
+            Y_ABORT_UNLESS(unifiedBlobId.IsValid(), "%s", error.c_str());
 
             blobsToDelete.emplace_back(std::move(unifiedBlobId));
             if (!rowset.Next())
@@ -124,7 +124,7 @@ bool TBlobManagerDb::LoadTierLists(const TString& storageId, std::deque<NOlap::T
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::TierBlobsDraft::BlobId>();
             NOlap::TUnifiedBlobId unifiedBlobId = NOlap::TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
-            Y_VERIFY(unifiedBlobId.IsValid(), "%s", error.c_str());
+            Y_ABORT_UNLESS(unifiedBlobId.IsValid(), "%s", error.c_str());
 
             draftBlobsToDelete.emplace_back(std::move(unifiedBlobId));
             if (!rowset.Next())

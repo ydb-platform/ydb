@@ -189,7 +189,7 @@ namespace NKikimr::NBlobDepot {
         for (const auto& item : ev->Get()->Record.GetItems()) {
             const auto blobSeqId = TBlobSeqId::FromProto(item);
             if (blobSeqId.Generation == generation) {
-                Y_VERIFY(blobSeqId.Channel < Channels.size());
+                Y_ABORT_UNLESS(blobSeqId.Channel < Channels.size());
                 auto& channel = Channels[blobSeqId.Channel];
 
                 const TBlobSeqId leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);

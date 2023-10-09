@@ -38,7 +38,7 @@ void TLoader::StageParseMeta() noexcept
 
     TPageId pageId = meta.TotalPages();
 
-    Y_VERIFY(pageId > 0, "Got page collection without pages");
+    Y_ABORT_UNLESS(pageId > 0, "Got page collection without pages");
 
     if (EPage(meta.Page(pageId - 1).Type) == EPage::Schem2) {
         /* New styled page collection with layout meta. Later root meta will
@@ -50,7 +50,7 @@ void TLoader::StageParseMeta() noexcept
 
         ParseMeta(meta.GetPageInplaceData(SchemeId));
 
-        Y_VERIFY(Root.HasLayout(), "Rooted page collection has no layout");
+        Y_ABORT_UNLESS(Root.HasLayout(), "Rooted page collection has no layout");
 
         if (auto *abi = Root.HasEvol() ? &Root.GetEvol() : nullptr)
             TAbi().Check(abi->GetTail(), abi->GetHead(), "part");
@@ -120,8 +120,8 @@ void TLoader::StageParseMeta() noexcept
 
 TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
 {
-    Y_VERIFY(!PartView, "PartView already initialized in CreatePartView stage");
-    Y_VERIFY(Packs && Packs.front());
+    Y_ABORT_UNLESS(!PartView, "PartView already initialized in CreatePartView stage");
+    Y_ABORT_UNLESS(Packs && Packs.front());
 
     TVector<TPageId> load;
     for (auto page: { SchemeId, GlobsId,
@@ -202,7 +202,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     partStore->PageCollections = std::move(Packs);
 
     if (partStore->Blobs) {
-        Y_VERIFY(partStore->Large, "Cannot use blobs without frames");
+        Y_ABORT_UNLESS(partStore->Large, "Cannot use blobs without frames");
 
         partStore->Pseudo = new TCache(partStore->Blobs);
     }
@@ -218,7 +218,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
 
 TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
 {
-    Y_VERIFY(PartView, "Cannot generate bounds for a missing part");
+    Y_ABORT_UNLESS(PartView, "Cannot generate bounds for a missing part");
 
     if (PartView.Slices) {
         TOverlay{ PartView.Screen, PartView.Slices }.Validate();
@@ -244,8 +244,8 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
 
 void TLoader::StageDeltas() noexcept
 {
-    Y_VERIFY(PartView, "Cannot apply deltas to a missing part");
-    Y_VERIFY(PartView.Slices, "Missing slices in deltas stage");
+    Y_ABORT_UNLESS(PartView, "Cannot apply deltas to a missing part");
+    Y_ABORT_UNLESS(PartView.Slices, "Missing slices in deltas stage");
 
     for (const TString& rawDelta : Deltas) {
         TOverlay overlay{ std::move(PartView.Screen), std::move(PartView.Slices) };
@@ -259,7 +259,7 @@ void TLoader::StageDeltas() noexcept
 
 void TLoader::Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded> blocks) noexcept
 {
-    Y_VERIFY(cookie == 0, "Only the leader pack is used on load");
+    Y_ABORT_UNLESS(cookie == 0, "Only the leader pack is used on load");
 
     if (Stage == EStage::PartView) {
         for (auto& loaded : blocks) {

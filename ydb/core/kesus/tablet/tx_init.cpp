@@ -72,7 +72,7 @@ struct TKesusTablet::TTxInit : public TTxBase {
                         Self->NextSemaphoreOrderId = FromString<ui64>(value);
                         break;
                     case Schema::SysParam_LastLeaderActor:
-                        Y_VERIFY(PreviousTabletActorID.Parse(value.data(), value.size()));
+                        Y_ABORT_UNLESS(PreviousTabletActorID.Parse(value.data(), value.size()));
                         break;
                     case Schema::SysParam_SelfCheckPeriodMillis:
                         if (auto millis = FromString<ui64>(value)) {
@@ -129,8 +129,8 @@ struct TKesusTablet::TTxInit : public TTxBase {
                 ui64 timeoutMillis = sessionsRowset.GetValue<Schema::Sessions::TimeoutMillis>();
                 TString description = sessionsRowset.GetValue<Schema::Sessions::Description>();
                 TString protectionKey = sessionsRowset.GetValueOrDefault<Schema::Sessions::ProtectionKey>(TString());
-                Y_VERIFY(sessionId > 0);
-                Y_VERIFY(!Self->Sessions.contains(sessionId));
+                Y_ABORT_UNLESS(sessionId > 0);
+                Y_ABORT_UNLESS(!Self->Sessions.contains(sessionId));
                 auto* session = &Self->Sessions[sessionId];
                 session->Id = sessionId;
                 session->TimeoutMillis = timeoutMillis;
@@ -153,8 +153,8 @@ struct TKesusTablet::TTxInit : public TTxBase {
                 TString data = semaphoresRowset.GetValue<Schema::Semaphores::Data>();
                 ui64 limit = semaphoresRowset.GetValue<Schema::Semaphores::Limit>();
                 bool ephemeral = semaphoresRowset.GetValue<Schema::Semaphores::Ephemeral>();
-                Y_VERIFY(semaphoreId > 0);
-                Y_VERIFY(!Self->Semaphores.contains(semaphoreId));
+                Y_ABORT_UNLESS(semaphoreId > 0);
+                Y_ABORT_UNLESS(!Self->Semaphores.contains(semaphoreId));
                 auto* semaphore = &Self->Semaphores[semaphoreId];
                 semaphore->Id = semaphoreId;
                 semaphore->Name = std::move(name);
@@ -162,7 +162,7 @@ struct TKesusTablet::TTxInit : public TTxBase {
                 semaphore->Limit = limit;
                 semaphore->Count = 0;
                 semaphore->Ephemeral = ephemeral;
-                Y_VERIFY(!Self->SemaphoresByName.contains(semaphore->Name), "Duplicate semaphore: %s", semaphore->Name.Quote().data());
+                Y_ABORT_UNLESS(!Self->SemaphoresByName.contains(semaphore->Name), "Duplicate semaphore: %s", semaphore->Name.Quote().data());
                 Self->SemaphoresByName[semaphore->Name] = semaphore;
                 Self->TabletCounters->Simple()[COUNTER_SEMAPHORE_COUNT].Add(1);
                 if (!semaphoresRowset.Next())
@@ -182,17 +182,17 @@ struct TKesusTablet::TTxInit : public TTxBase {
                 ui64 timeoutMillis = sessionSemaphoresRowset.GetValue<Schema::SessionSemaphores::TimeoutMillis>();
                 ui64 count = sessionSemaphoresRowset.GetValue<Schema::SessionSemaphores::Count>();
                 TString data = sessionSemaphoresRowset.GetValue<Schema::SessionSemaphores::Data>();
-                Y_VERIFY(sessionId > 0);
-                Y_VERIFY(Self->Sessions.contains(sessionId), "Missing session: %" PRIu64, sessionId);
-                Y_VERIFY(semaphoreId > 0);
-                Y_VERIFY(Self->Semaphores.contains(semaphoreId), "Missing semaphore: %" PRIu64, semaphoreId);
-                Y_VERIFY(orderId > 0);
-                Y_VERIFY(count > 0, "Unexpected count: %" PRIu64, count);
+                Y_ABORT_UNLESS(sessionId > 0);
+                Y_ABORT_UNLESS(Self->Sessions.contains(sessionId), "Missing session: %" PRIu64, sessionId);
+                Y_ABORT_UNLESS(semaphoreId > 0);
+                Y_ABORT_UNLESS(Self->Semaphores.contains(semaphoreId), "Missing semaphore: %" PRIu64, semaphoreId);
+                Y_ABORT_UNLESS(orderId > 0);
+                Y_ABORT_UNLESS(count > 0, "Unexpected count: %" PRIu64, count);
                 auto* session = &Self->Sessions[sessionId];
                 auto* semaphore = &Self->Semaphores[semaphoreId];
-                Y_VERIFY(!session->WaitingSemaphores.contains(semaphoreId),
+                Y_ABORT_UNLESS(!session->WaitingSemaphores.contains(semaphoreId),
                     "Session %" PRIu64 " has duplicate semaphore %s", sessionId, semaphore->Name.Quote().data());
-                Y_VERIFY(!semaphore->Waiters.contains(orderId),
+                Y_ABORT_UNLESS(!semaphore->Waiters.contains(orderId),
                     "Semaphore %s has duplicate order id: %" PRIu64, semaphore->Name.Quote().data(), orderId);
                 auto* waiter = &session->WaitingSemaphores[semaphoreId];
                 waiter->OrderId = orderId;
@@ -251,25 +251,25 @@ struct TKesusTablet::TTxInit : public TTxBase {
         TDuration sessionGraceTimeout = Max(Min(Self->SessionGracePeriod, MAX_SESSION_GRACE_PERIOD), selfCheckPeriod + MIN_SESSION_GRACE_PERIOD);
         for (auto& kv : Self->Sessions) {
             auto* session = &kv.second;
-            Y_VERIFY(Self->ScheduleSessionTimeout(session, ctx, sessionGraceTimeout));
+            Y_ABORT_UNLESS(Self->ScheduleSessionTimeout(session, ctx, sessionGraceTimeout));
         }
 
         // Deterministically restore state of all semaphores
         for (auto& kv : Self->Semaphores) {
             ui64 semaphoreId = kv.first;
             auto* semaphore = &kv.second;
-            Y_VERIFY(!semaphore->Ephemeral || !semaphore->IsEmpty(),
+            Y_ABORT_UNLESS(!semaphore->Ephemeral || !semaphore->IsEmpty(),
                 "Ephemeral semaphore %s restored in an empty state", semaphore->Name.Quote().data());
 
             TVector<TDelayedEvent> events;
             Self->DoProcessSemaphoreQueue(semaphore, events);
-            Y_VERIFY(events.empty(),
+            Y_ABORT_UNLESS(events.empty(),
                 "Semaphore %s tried to send events during init", semaphore->Name.Quote().data());
 
             // Schedule timeout for all other waiters
             for (auto& kv : semaphore->Waiters) {
                 auto* waiter = kv.second;
-                Y_VERIFY(Self->ScheduleWaiterTimeout(semaphoreId, waiter, ctx));
+                Y_ABORT_UNLESS(Self->ScheduleWaiterTimeout(semaphoreId, waiter, ctx));
             }
         }
 

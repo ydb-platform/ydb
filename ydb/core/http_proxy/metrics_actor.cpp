@@ -46,7 +46,7 @@ namespace NKikimr::NHttpProxy {
     };
 
     void TMetricsActor::Handle(TEvServerlessProxy::TEvCounter::TPtr& ev, const TActorContext&) {
-        Y_VERIFY(ev->Get()->Labels.size() > 1);
+        Y_ABORT_UNLESS(ev->Get()->Labels.size() > 1);
         auto group = Settings.Counters->GetSubgroup(ev->Get()->Labels[0].first, ev->Get()->Labels[0].second);
         for (ui32 i = 1; i + 1 < ev->Get()->Labels.size(); ++i) {
             if (ev->Get()->Labels[i].second.empty())
@@ -59,7 +59,7 @@ namespace NKikimr::NHttpProxy {
     }
 
     void TMetricsActor::Handle(TEvServerlessProxy::TEvHistCounter::TPtr& ev, const TActorContext&) {
-        Y_VERIFY(ev->Get()->Labels.size() > 1);
+        Y_ABORT_UNLESS(ev->Get()->Labels.size() > 1);
         auto group = Settings.Counters->GetSubgroup(ev->Get()->Labels[0].first, ev->Get()->Labels[0].second);
         for (ui32 i = 1; i + 1 < ev->Get()->Labels.size(); ++i) {
             if (ev->Get()->Labels[i].second.empty())

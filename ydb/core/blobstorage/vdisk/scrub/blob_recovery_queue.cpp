@@ -34,7 +34,7 @@ namespace NKikimr {
 
     void TBlobRecoveryActor::Handle(TEvProxyQueueState::TPtr ev) {
         const auto it = Queues.find(ev->Get()->VDiskId);
-        Y_VERIFY(it != Queues.end());
+        Y_ABORT_UNLESS(it != Queues.end());
         it->second.IsConnected = ev->Get()->IsConnected;
         STLOG(PRI_INFO, BS_VDISK_SCRUB, VDS29, VDISKP(LogPrefix, "BS_QUEUE state update"), (SelfId, SelfId()),
             (VDiskId, it->first), (IsConnected, it->second.IsConnected));

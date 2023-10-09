@@ -32,7 +32,7 @@ namespace NFmt {
             , Types(types)
             , Registry(reg)
         {
-            Y_VERIFY(cells.size() == Types.size(), "Cells and types size missmatch");
+            Y_ABORT_UNLESS(cells.size() == Types.size(), "Cells and types size missmatch");
         }
 
         TOut& Do(TOut &out) const noexcept

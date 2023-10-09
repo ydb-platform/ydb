@@ -14,8 +14,8 @@ public:
     void EvaluateRestoreLayout(TLogContext &logCtx, TBlobState &state,
             const TBlobStorageGroupInfo &info, TBlobStorageGroupInfo::EBlobState *pessimisticState,
             TBlobStorageGroupInfo::EBlobState *optimisticState) {
-        Y_VERIFY(pessimisticState);
-        Y_VERIFY(optimisticState);
+        Y_ABORT_UNLESS(pessimisticState);
+        Y_ABORT_UNLESS(optimisticState);
         const ui32 totalPartCount = info.Type.TotalPartCount();
         ui32 errorDisks = 0;
         ui32 unknownDisks = 0;
@@ -166,7 +166,7 @@ public:
             PreparePartLayout(state, info, &layout, InvalidVDiskIdx);
             TBlobStorageGroupType::TPartPlacement partPlacement;
             bool isCorrectable = info.Type.CorrectLayout(layout, partPlacement);
-            Y_VERIFY(isCorrectable);
+            Y_ABORT_UNLESS(isCorrectable);
             if (IsPutNeeded(state, partPlacement)) {
                 PreparePutsForPartPlacement(logCtx, state, info, groupDiskRequests, partPlacement);
             }

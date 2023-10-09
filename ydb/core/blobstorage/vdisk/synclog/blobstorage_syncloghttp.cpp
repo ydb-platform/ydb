@@ -41,7 +41,7 @@ namespace NKikimr {
             }
 
             void Handle(TEvSyncLogSnapshotResult::TPtr &ev, const TActorContext &ctx) {
-                Y_VERIFY(!SnapPtr);
+                Y_ABORT_UNLESS(!SnapPtr);
                 SnapPtr = std::move(ev->Get()->SnapshotPtr);
                 SublogContent = std::move(ev->Get()->SublogContent);
                 if (NodesInfoMsg)
@@ -49,7 +49,7 @@ namespace NKikimr {
             }
 
             void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
-                Y_VERIFY(!NodesInfoMsg);
+                Y_ABORT_UNLESS(!NodesInfoMsg);
                 NodesInfoMsg = ev;
                 if (SnapPtr)
                     Finish(ctx);

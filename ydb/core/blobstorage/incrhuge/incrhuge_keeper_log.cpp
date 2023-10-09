@@ -14,13 +14,13 @@ namespace NKikimr {
 
         void TChunkRecordMerger::operator ()(const NKikimrVDiskData::TIncrHugeChunks& record) {
             for (const auto& c : record.GetChunks()) {
-                Y_VERIFY(c.HasChunkIdx() && c.HasChunkSerNum() && c.HasState());
+                Y_ABORT_UNLESS(c.HasChunkIdx() && c.HasChunkSerNum() && c.HasState());
                 const TChunkIdx chunkIdx = c.GetChunkIdx();
                 const TChunkSerNum chunkSerNum(c.GetChunkSerNum());
                 auto it = Chunks.find(chunkIdx);
                 if (it != Chunks.end()) {
                     TChunkInfo& chunk = it->second;
-                    Y_VERIFY(chunk.ChunkSerNum == chunkSerNum);
+                    Y_ABORT_UNLESS(chunk.ChunkSerNum == chunkSerNum);
                     chunk.State = c.GetState();
                 } else {
                     Chunks.emplace(chunkIdx, TChunkInfo{chunkSerNum, c.GetState()});
@@ -28,7 +28,7 @@ namespace NKikimr {
             }
             for (TChunkIdx chunkIdx : record.GetDeletedChunks()) {
                 auto it = Chunks.find(chunkIdx);
-                Y_VERIFY(it != Chunks.end());
+                Y_ABORT_UNLESS(it != Chunks.end());
                 Chunks.erase(it);
             }
             if (record.HasCurrentSerNum()) {
@@ -39,7 +39,7 @@ namespace NKikimr {
         void TChunkRecordMerger::operator ()(const TChunkAllocation& record) {
             for (size_t i = 0; i < record.NewChunkIds.size(); ++i) {
                 const TChunkIdx chunkIdx = record.NewChunkIds[i];
-                Y_VERIFY(!Chunks.count(chunkIdx));
+                Y_ABORT_UNLESS(!Chunks.count(chunkIdx));
                 Chunks[chunkIdx] = TChunkInfo{
                     record.BaseSerNum.Add(i),
                     NKikimrVDiskData::TIncrHugeChunks::WriteIntent
@@ -50,16 +50,16 @@ namespace NKikimr {
 
         void TChunkRecordMerger::operator ()(const TChunkDeletion& record) {
             auto it = Chunks.find(record.ChunkIdx);
-            Y_VERIFY(it != Chunks.end());
+            Y_ABORT_UNLESS(it != Chunks.end());
             Chunks.erase(it);
         }
 
         void TChunkRecordMerger::operator ()(const TCompleteChunk& record) {
             auto it = Chunks.find(record.ChunkIdx);
-            Y_VERIFY(it != Chunks.end());
+            Y_ABORT_UNLESS(it != Chunks.end());
             TChunkInfo& chunk = it->second;
-            Y_VERIFY(chunk.ChunkSerNum == record.ChunkSerNum);
-            Y_VERIFY(chunk.State == NKikimrVDiskData::TIncrHugeChunks::WriteIntent);
+            Y_ABORT_UNLESS(chunk.ChunkSerNum == record.ChunkSerNum);
+            Y_ABORT_UNLESS(chunk.State == NKikimrVDiskData::TIncrHugeChunks::WriteIntent);
             chunk.State = NKikimrVDiskData::TIncrHugeChunks::Complete;
         }
 
@@ -82,7 +82,7 @@ namespace NKikimr {
         TString TChunkRecordMerger::Serialize(const NKikimrVDiskData::TIncrHugeChunks& record) {
             TString data;
             bool status = record.SerializeToString(&data);
-            Y_VERIFY(status);
+            Y_ABORT_UNLESS(status);
             return data;
         }
 
@@ -161,7 +161,7 @@ namespace NKikimr {
                         deletedItems.Set(index);
                     }
                     for (const auto& range : x.GetRanges()) {
-                        Y_VERIFY(range.HasFirst() && range.HasCount());
+                        Y_ABORT_UNLESS(range.HasFirst() && range.HasCount());
                         const ui32 first = range.GetFirst();
                         const ui32 count = range.GetCount();
                         deletedItems.Set(first, first + count);
@@ -182,7 +182,7 @@ namespace NKikimr {
 
         void TDeleteRecordMerger::operator ()(const NKikimrVDiskData::TIncrHugeDelete& record) {
             for (const auto& c : record.GetChunks()) {
-                Y_VERIFY(c.HasChunkSerNum());
+                Y_ABORT_UNLESS(c.HasChunkSerNum());
                 const TChunkSerNum chunkSerNum(c.GetChunkSerNum());
 
                 // find matching entry
@@ -193,7 +193,7 @@ namespace NKikimr {
                 DeserializeDeletes(newDeletes, c);
 
                 // ensure that there are no intersections
-                Y_VERIFY((newDeletes & deletedItems).Count() == 0);
+                Y_ABORT_UNLESS((newDeletes & deletedItems).Count() == 0);
 
                 // combine items
                 deletedItems |= newDeletes;
@@ -201,12 +201,12 @@ namespace NKikimr {
 
             // merge owner to seq no map
             for (const auto& o : record.GetOwners()) {
-                Y_VERIFY(o.HasOwner() && o.HasSeqNo());
+                Y_ABORT_UNLESS(o.HasOwner() && o.HasSeqNo());
 
                 // verify that owner's sequence numbers are logged in strictly increasing order
                 auto it = OwnerToSeqNo.find(o.GetOwner());
                 if (it != OwnerToSeqNo.end()) {
-                    Y_VERIFY(it->second < o.GetSeqNo(), "Delete record reordering OldSeqNo# %" PRIu64 " NewSeqNo# %"
+                    Y_ABORT_UNLESS(it->second < o.GetSeqNo(), "Delete record reordering OldSeqNo# %" PRIu64 " NewSeqNo# %"
                             PRIu64, it->second, o.GetSeqNo());
                 }
 
@@ -220,7 +220,7 @@ namespace NKikimr {
                 const TChunkIdx chunkIdx = it->ChunkIdx;
                 TDynBitMap& deletedItems = SerNumToChunk[it->ChunkSerNum];
                 for (; it != record.DeleteLocators.end() && it->ChunkIdx == chunkIdx; ++it) {
-                    Y_VERIFY(!deletedItems.Get(it->IndexInsideChunk), "trying to delete already deleted item ChunkIdx# %"
+                    Y_ABORT_UNLESS(!deletedItems.Get(it->IndexInsideChunk), "trying to delete already deleted item ChunkIdx# %"
                             PRIu32 " ChunkSerNum# %s Id# %016" PRIx64 " IndexInsideChunk# %" PRIu32 " SizeInBlocks# %"
                             PRIu32, it->ChunkIdx, it->ChunkSerNum.ToString().data(), it->Id, it->IndexInsideChunk,
                             it->SizeInBlocks);
@@ -231,7 +231,7 @@ namespace NKikimr {
             if (record.Owner) {
                 auto it = OwnerToSeqNo.find(record.Owner);
                 if (it != OwnerToSeqNo.end()) {
-                    Y_VERIFY(it->second < record.SeqNo, "Delete record reordering OldSeqNo# %" PRIu64 " NewSeqNo# %"
+                    Y_ABORT_UNLESS(it->second < record.SeqNo, "Delete record reordering OldSeqNo# %" PRIu64 " NewSeqNo# %"
                             PRIu64, it->second, record.SeqNo);
                 }
 
@@ -241,12 +241,12 @@ namespace NKikimr {
 
         void TDeleteRecordMerger::operator ()(const TDeleteChunk& record) {
             auto it = SerNumToChunk.find(record.ChunkSerNum);
-            Y_VERIFY(it != SerNumToChunk.end());
+            Y_ABORT_UNLESS(it != SerNumToChunk.end());
             TDynBitMap& deletedItems = it->second;
-            Y_VERIFY(record.NumItems == deletedItems.Count());
+            Y_ABORT_UNLESS(record.NumItems == deletedItems.Count());
             for (ui32 i = 0; i < record.NumItems; ++i) {
                 // ensure that there are no gaps in deleted items
-                Y_VERIFY(deletedItems.Get(i));
+                Y_ABORT_UNLESS(deletedItems.Get(i));
             }
             SerNumToChunk.erase(it);
         }
@@ -272,7 +272,7 @@ namespace NKikimr {
         TString TDeleteRecordMerger::Serialize(const NKikimrVDiskData::TIncrHugeDelete& record) {
             TString data;
             bool status = record.SerializeToString(&data);
-            Y_VERIFY(status);
+            Y_ABORT_UNLESS(status);
             return data;
         }
 
@@ -454,7 +454,7 @@ namespace NKikimr {
 
         void TLogger::ApplyLogChunkItem(TChunkQueueItem& item, NKikimrProto::EReplyStatus status, IEventBase *msg,
                 const TActorContext& ctx) {
-            Y_VERIFY(ChunkQueue && &item == &ChunkQueue.front());
+            Y_ABORT_UNLESS(ChunkQueue && &item == &ChunkQueue.front());
 
             IHLOG_DEBUG(ctx, "ApplyLogChunkItem Lsn# %" PRIu64 " Status# %s",
                     item.Lsn, NKikimrProto::EReplyStatus_Name(status).data());
@@ -462,7 +462,7 @@ namespace NKikimr {
             if (status == NKikimrProto::OK) {
                 // if this was an entrypoint, reset merger and update LSN
                 if (item.Entrypoint) {
-                    Y_VERIFY(item.Lsn > ChunksEntrypointLsn);
+                    Y_ABORT_UNLESS(item.Lsn > ChunksEntrypointLsn);
                     ChunksEntrypointLsn = item.Lsn;
                     ConfirmedChunkMerger = TChunkRecordMerger();
                 }
@@ -508,7 +508,7 @@ namespace NKikimr {
         }
 
         void TLogger::GenerateChunkEntrypoint(const TActorContext& ctx) {
-            Y_VERIFY(LogChunksEntrypointPending);
+            Y_ABORT_UNLESS(LogChunksEntrypointPending);
             LogChunksEntrypointPending = false;
 
             // create new queue of requests, starting from entrypoint and including all pending items
@@ -533,8 +533,8 @@ namespace NKikimr {
         void TLogger::LogBlobDeletes(ui8 owner, ui64 seqNo, TVector<TBlobDeleteLocator>&& deleteLocators,
                 std::unique_ptr<IEventCallback>&& callback, const TActorContext& ctx) {
             // check that locators are sorted and do not repeat
-            Y_VERIFY(std::is_sorted(deleteLocators.begin(), deleteLocators.end()));
-            Y_VERIFY(std::adjacent_find(deleteLocators.begin(), deleteLocators.end()) == deleteLocators.end());
+            Y_ABORT_UNLESS(std::is_sorted(deleteLocators.begin(), deleteLocators.end()));
+            Y_ABORT_UNLESS(std::adjacent_find(deleteLocators.begin(), deleteLocators.end()) == deleteLocators.end());
 
             for (const TBlobDeleteLocator& deleteLocator : deleteLocators) {
                 IHLOG_DEBUG(ctx, "LogBlobDeletes ChunkIdx# %" PRIu32 " ChunkSerNum# %s"
@@ -548,7 +548,7 @@ namespace NKikimr {
             TDeleteRecordMerger::TBlobDeletes record{owner, seqNo, std::move(deleteLocators)};
 
             // ensure that user has provided us a callback
-            Y_VERIFY(callback);
+            Y_ABORT_UNLESS(callback);
             TVector<std::unique_ptr<IEventCallback>> callbacks;
             callbacks.push_back(std::move(callback));
 
@@ -570,8 +570,8 @@ namespace NKikimr {
 
         void TLogger::LogVirtualBlobDeletes(TVector<TBlobDeleteLocator>&& deleteLocators, const TActorContext& ctx) {
             // check that locators are sorted and do not repeat
-            Y_VERIFY(std::is_sorted(deleteLocators.begin(), deleteLocators.end()));
-            Y_VERIFY(std::adjacent_find(deleteLocators.begin(), deleteLocators.end()) == deleteLocators.end());
+            Y_ABORT_UNLESS(std::is_sorted(deleteLocators.begin(), deleteLocators.end()));
+            Y_ABORT_UNLESS(std::adjacent_find(deleteLocators.begin(), deleteLocators.end()) == deleteLocators.end());
 
             for (const TBlobDeleteLocator& deleteLocator : deleteLocators) {
                 IHLOG_DEBUG(ctx, "LogVirtualBlobDeletes ChunkIdx# %" PRIu32 " ChunkSerNum# %s"
@@ -667,17 +667,17 @@ namespace NKikimr {
         void TLogger::ApplyLogDeleteItem(TDeleteQueueItem& item, NKikimrProto::EReplyStatus status, IEventBase *msg,
                 const TActorContext& ctx) {
             // ensure FIFO order of records processing
-            Y_VERIFY(DeleteQueue && &item == &DeleteQueue.front());
+            Y_ABORT_UNLESS(DeleteQueue && &item == &DeleteQueue.front());
 
             // check if this item was virtual
             bool v = item.Virtual;
 
             if (status == NKikimrProto::OK) {
                 // ensure that failure is not expected for this item (if it is not virtual)
-                Y_VERIFY(!item.FailureExpected || v);
+                Y_ABORT_UNLESS(!item.FailureExpected || v);
                 // if this was an entrypoint, reset merger, update LSN
                 if (item.Entrypoint) {
-                    Y_VERIFY(item.Lsn > DeletesEntrypointLsn);
+                    Y_ABORT_UNLESS(item.Lsn > DeletesEntrypointLsn);
                     DeletesEntrypointLsn = item.Lsn;
                     ConfirmedDeletesMerger = TDeleteRecordMerger();
                 }

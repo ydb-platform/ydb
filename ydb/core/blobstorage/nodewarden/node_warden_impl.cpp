@@ -264,8 +264,8 @@ void TNodeWarden::HandleReadCache() {
                     return;
                 }
 
-                Y_VERIFY(proto.HasInstanceId());
-                Y_VERIFY(proto.HasAvailDomain() && proto.GetAvailDomain() == AvailDomainId);
+                Y_ABORT_UNLESS(proto.HasInstanceId());
+                Y_ABORT_UNLESS(proto.HasAvailDomain() && proto.GetAvailDomain() == AvailDomainId);
                 if (!InstanceId) {
                     InstanceId.emplace(proto.GetInstanceId());
                 }
@@ -416,16 +416,16 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev)
     auto differs = [](const auto& updated, const auto& current) {
         TString xUpdated, xCurrent;
         bool success = updated.SerializeToString(&xUpdated);
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
         success = current.SerializeToString(&xCurrent);
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
         return xUpdated != xCurrent;
     };
 
     auto& record = ev->Get()->Record;
 
     for (const NKikimrBlobStorage::TVDiskMetrics& m : record.GetVDisksMetrics()) {
-        Y_VERIFY(m.HasVSlotId());
+        Y_ABORT_UNLESS(m.HasVSlotId());
         const TVSlotId vslotId(m.GetVSlotId());
         if (const auto it = LocalVDisks.find(vslotId); it != LocalVDisks.end()) {
             TVDiskRecord& vdisk = it->second;
@@ -445,7 +445,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev)
     }
 
     for (const NKikimrBlobStorage::TPDiskMetrics& m : record.GetPDisksMetrics()) {
-        Y_VERIFY(m.HasPDiskId());
+        Y_ABORT_UNLESS(m.HasPDiskId());
         if (const auto it = LocalPDisks.find({LocalNodeId, m.GetPDiskId()}); it != LocalPDisks.end()) {
             TPDiskRecord& pdisk = it->second;
             if (pdisk.PDiskMetrics) {
@@ -497,11 +497,11 @@ void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
 
     if (reportMetrics) {
         for (auto& vdisk : std::exchange(VDisksWithUnreportedMetrics, {})) {
-            Y_VERIFY(vdisk.VDiskMetrics);
+            Y_ABORT_UNLESS(vdisk.VDiskMetrics);
             record.AddVDisksMetrics()->CopyFrom(*vdisk.VDiskMetrics);
         }
         for (auto& pdisk : std::exchange(PDisksWithUnreportedMetrics, {})) {
-            Y_VERIFY(pdisk.PDiskMetrics);
+            Y_ABORT_UNLESS(pdisk.PDiskMetrics);
             record.AddPDisksMetrics()->CopyFrom(*pdisk.PDiskMetrics);
         }
     }
@@ -585,7 +585,7 @@ bool ObtainKey(TEncryptionKey *key, const NKikimrProto::TKeyRecord& record) {
     ui8 *keyBytes = 0;
     ui32 keySize = 0;
     key->Key.MutableKeyBytes(&keyBytes, &keySize);
-    Y_VERIFY(keySize == 4 * sizeof(ui64));
+    Y_ABORT_UNLESS(keySize == 4 * sizeof(ui64));
     ui64 *p = (ui64*)keyBytes;
 
     hasher.SetKey((const ui8*)pin.data(), pin.size());

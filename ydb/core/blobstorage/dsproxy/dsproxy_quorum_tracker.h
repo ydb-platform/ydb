@@ -49,9 +49,9 @@ namespace NKikimr {
 
         NKikimrProto::EReplyStatus ProcessReply(const TVDiskID& from, NKikimrProto::EReplyStatus status) {
             // should be handled in CheckForTermErrors
-            Y_VERIFY(status != NKikimrProto::RACE && status != NKikimrProto::BLOCKED && status != NKikimrProto::DEADLINE);
+            Y_ABORT_UNLESS(status != NKikimrProto::RACE && status != NKikimrProto::BLOCKED && status != NKikimrProto::DEADLINE);
 
-            Y_VERIFY(status == NKikimrProto::OK || status == NKikimrProto::ERROR ||
+            Y_ABORT_UNLESS(status == NKikimrProto::OK || status == NKikimrProto::ERROR ||
                 status == NKikimrProto::VDISK_ERROR_STATE || status == NKikimrProto::OUT_OF_SPACE,
                 "unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
 

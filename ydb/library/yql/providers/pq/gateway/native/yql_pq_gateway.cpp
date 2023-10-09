@@ -84,7 +84,7 @@ void TPqNativeGateway::UpdateClusterConfigs(
 {
     with_lock (Mutex) {
         const auto foundCluster = ClusterConfigs->find(clusterName);
-        Y_VERIFY(foundCluster != ClusterConfigs->end());
+        Y_ABORT_UNLESS(foundCluster != ClusterConfigs->end());
         auto& cluster = foundCluster->second;
         cluster.SetEndpoint(endpoint);
         cluster.SetDatabase(database);

@@ -29,7 +29,7 @@ void SerializeMetadata(const IBuiltinFunctionRegistry& funcRegistry, TString* ou
 void DeserializeMetadata(TStringBuf buffer, IBuiltinFunctionRegistry& funcRegistry)
 {
     NKikimrSchemeTypeOperation::TMetadata metadata;
-    Y_VERIFY(metadata.ParseFromArray(buffer.data(), buffer.size()));
+    Y_ABORT_UNLESS(metadata.ParseFromArray(buffer.data(), buffer.size()));
     size_t totalArgsToAllocate = 0;
     for (const auto& protoOp : metadata.GetOperation()) {
         for (const auto& protoDesc : protoOp.GetDescription()) {
@@ -46,7 +46,7 @@ void DeserializeMetadata(TStringBuf buffer, IBuiltinFunctionRegistry& funcRegist
     size_t argPosition = 0;
     for (const auto& protoOp : metadata.GetOperation()) {
         auto& desc = functions[protoOp.GetName()];
-        Y_VERIFY(desc.empty());
+        Y_ABORT_UNLESS(desc.empty());
         desc.reserve(protoOp.DescriptionSize());
         for (const auto& protoDesc : protoOp.GetDescription()) {
             const size_t firstArg = argPosition;
@@ -62,7 +62,7 @@ void DeserializeMetadata(TStringBuf buffer, IBuiltinFunctionRegistry& funcRegist
         }
     }
 
-    Y_VERIFY(argPosition == arguments.size());
+    Y_ABORT_UNLESS(argPosition == arguments.size());
 
     funcRegistry.RegisterAll(std::move(functions), std::move(arguments));
 }

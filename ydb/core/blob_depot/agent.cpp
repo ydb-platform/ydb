@@ -8,14 +8,14 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "TEvServerConnected", (Id, GetLogId()), (ClientId, ev->Get()->ClientId),
             (ServerId, ev->Get()->ServerId));
         const auto [it, inserted] = PipeServers.try_emplace(ev->Get()->ServerId);
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
     }
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT02, "TEvServerDisconnected", (Id, GetLogId()), (PipeServerId, ev->Get()->ServerId));
 
         const auto it = PipeServers.find(ev->Get()->ServerId);
-        Y_VERIFY(it != PipeServers.end());
+        Y_ABORT_UNLESS(it != PipeServers.end());
         if (const auto& nodeId = it->second.NodeId) {
             if (const auto agentIt = Agents.find(*nodeId); agentIt != Agents.end() && agentIt->second.Connection &&
                     agentIt->second.Connection->PipeServerId == it->first) {
@@ -41,8 +41,8 @@ namespace NKikimr::NBlobDepot {
             (PipeServerId, pipeServerId), (Id, ev->Cookie));
 
         const auto it = PipeServers.find(pipeServerId);
-        Y_VERIFY(it != PipeServers.end());
-        Y_VERIFY(!it->second.NodeId || *it->second.NodeId == nodeId);
+        Y_ABORT_UNLESS(it != PipeServers.end());
+        Y_ABORT_UNLESS(!it->second.NodeId || *it->second.NodeId == nodeId);
         it->second.NodeId = nodeId;
         auto& agent = Agents[nodeId];
         agent.Connection = {
@@ -170,16 +170,16 @@ namespace NKikimr::NBlobDepot {
 
     TBlobDepot::TAgent& TBlobDepot::GetAgent(const TActorId& pipeServerId) {
         const auto it = PipeServers.find(pipeServerId);
-        Y_VERIFY(it != PipeServers.end());
-        Y_VERIFY(it->second.NodeId);
+        Y_ABORT_UNLESS(it != PipeServers.end());
+        Y_ABORT_UNLESS(it->second.NodeId);
         TAgent& agent = GetAgent(*it->second.NodeId);
-        Y_VERIFY(agent.Connection && agent.Connection->PipeServerId == pipeServerId);
+        Y_ABORT_UNLESS(agent.Connection && agent.Connection->PipeServerId == pipeServerId);
         return agent;
     }
 
     TBlobDepot::TAgent& TBlobDepot::GetAgent(ui32 nodeId) {
         const auto agentIt = Agents.find(nodeId);
-        Y_VERIFY(agentIt != Agents.end());
+        Y_ABORT_UNLESS(agentIt != Agents.end());
         TAgent& agent = agentIt->second;
         return agent;
     }
@@ -231,7 +231,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare) {
         for (auto& [nodeId, agent] : Agents) {
             if (agent.Connection && (agent.LastPushedSpaceColor != spaceColor || agent.LastPushedApproximateFreeSpaceShare != approximateFreeSpaceShare)) {
-                Y_VERIFY(agent.Connection->NodeId == nodeId);
+                Y_ABORT_UNLESS(agent.Connection->NodeId == nodeId);
                 const ui64 id = ++agent.LastRequestId;
                 agent.PushCallbacks.emplace(id, [](TEvBlobDepot::TEvPushNotifyResult::TPtr) {});
                 auto ev = std::make_unique<TEvBlobDepot::TEvPushNotify>();

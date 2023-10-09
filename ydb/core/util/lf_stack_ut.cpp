@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TLockFreeIntrusiveStackTest) {
                             stack.Push(item);
                             ++added;
                         } else {
-                            Y_VERIFY(itemsCount < workersCount, "Unexpected nullptr from stack.Pop()");
+                            Y_ABORT_UNLESS(itemsCount < workersCount, "Unexpected nullptr from stack.Pop()");
                         }
                     }
                     totalCount.fetch_add(added, std::memory_order_relaxed);

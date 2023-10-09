@@ -21,7 +21,7 @@ namespace NKikimr {
             , Result(std::move(msg.Result))
             , Donors(std::move(donors))
         {
-            Y_VERIFY(!Query->Record.HasRangeQuery());
+            Y_ABORT_UNLESS(!Query->Record.HasRangeQuery());
         }
 
         void Bootstrap(const TActorId& parentId) {

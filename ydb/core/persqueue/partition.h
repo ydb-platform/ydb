@@ -41,7 +41,7 @@ struct TTransaction {
         Tx(tx),
         Predicate(predicate)
     {
-        Y_VERIFY(Tx);
+        Y_ABORT_UNLESS(Tx);
     }
 
     TTransaction(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> changeConfig,
@@ -49,13 +49,13 @@ struct TTransaction {
         ChangeConfig(changeConfig),
         SendReply(sendReply)
     {
-        Y_VERIFY(ChangeConfig);
+        Y_ABORT_UNLESS(ChangeConfig);
     }
 
     explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> proposeConfig) :
         ProposeConfig(proposeConfig)
     {
-        Y_VERIFY(ProposeConfig);
+        Y_ABORT_UNLESS(ProposeConfig);
     }
 
     TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> Tx;

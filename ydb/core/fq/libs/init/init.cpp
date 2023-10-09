@@ -71,7 +71,7 @@ void Init(
     const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories
     )
 {
-    Y_VERIFY(iyqSharedResources, "No YQ shared resources created");
+    Y_ABORT_UNLESS(iyqSharedResources, "No YQ shared resources created");
     TYqSharedResources::TPtr yqSharedResources = TYqSharedResources::Cast(iyqSharedResources);
 
     auto yqCounters = appData->Counters->GetSubgroup("counters", "yq");
@@ -128,7 +128,7 @@ void Init(
     }
 
     if (protoConfig.GetRateLimiter().GetControlPlaneEnabled()) {
-        Y_VERIFY(protoConfig.GetQuotasManager().GetEnabled()); // Rate limiter resources want to know CPU quota on creation
+        Y_ABORT_UNLESS(protoConfig.GetQuotasManager().GetEnabled()); // Rate limiter resources want to know CPU quota on creation
         NActors::IActor* rateLimiterService = NFq::CreateRateLimiterControlPlaneService(protoConfig.GetRateLimiter(), yqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory);
         actorRegistrator(NFq::RateLimiterControlPlaneServiceId(), rateLimiterService);
     }

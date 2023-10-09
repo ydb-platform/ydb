@@ -7,15 +7,15 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////////
     void TAddBulkSstEssence::DestructiveMerge(TAddBulkSstEssence &&e) {
         if (!e.LogoBlobsAdditions.empty()) {
-            Y_VERIFY(LogoBlobsAdditions.empty());
+            Y_ABORT_UNLESS(LogoBlobsAdditions.empty());
             LogoBlobsAdditions = std::move(e.LogoBlobsAdditions);
         }
         if (!e.BlocksAdditions.empty()) {
-            Y_VERIFY(BlocksAdditions.empty());
+            Y_ABORT_UNLESS(BlocksAdditions.empty());
             BlocksAdditions = std::move(e.BlocksAdditions);
         }
         if (!e.BarriersAdditions.empty()) {
-            Y_VERIFY(BarriersAdditions.empty());
+            Y_ABORT_UNLESS(BarriersAdditions.empty());
             BarriersAdditions = std::move(e.BarriersAdditions);
         }
     }
@@ -76,7 +76,7 @@ namespace NKikimr {
         NKikimrVDiskData::TAddBulkSstRecoveryLogRec logRec;
         Essence.SerializeToProto(logRec);
         bool success = logRec.SerializeToString(&data);
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
 
         // copy
         commitRecord.CommitChunks = ChunksToCommit;

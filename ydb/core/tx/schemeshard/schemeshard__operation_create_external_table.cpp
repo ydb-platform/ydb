@@ -195,8 +195,8 @@ public:
             << ": step# " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateExternalTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateExternalTable);
 
         auto pathId = txState->TargetPathId;
         auto dataSourcePathId = txState->SourcePathId;
@@ -226,8 +226,8 @@ public:
         LOG_I(DebugHint() << " ProgressState");
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateExternalTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateExternalTable);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -440,7 +440,7 @@ ISubOperation::TPtr CreateNewExternalTable(TOperationId id, const TTxTransaction
 }
 
 ISubOperation::TPtr CreateNewExternalTable(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TCreateExternalTable>(id, state);
 }
 

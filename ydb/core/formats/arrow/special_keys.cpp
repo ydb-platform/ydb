@@ -16,7 +16,7 @@ bool TSpecialKeys::DeserializeFromString(const TString& data) {
 }
 
 std::optional<NKikimr::NArrow::TReplaceKey> TSpecialKeys::GetKeyByIndex(const ui32 position, const std::shared_ptr<arrow::Schema>& schema) const {
-    Y_VERIFY(position < Data->num_rows());
+    Y_ABORT_UNLESS(position < Data->num_rows());
     if (schema) {
         return NArrow::TReplaceKey::FromBatch(Data, schema, position);
     } else {
@@ -33,8 +33,8 @@ TString TSpecialKeys::SerializeToStringDataOnlyNoCompression() const {
 }
 
 TFirstLastSpecialKeys::TFirstLastSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::vector<TString>& columnNames /*= {}*/) {
-    Y_VERIFY(batch);
-    Y_VERIFY(batch->num_rows());
+    Y_ABORT_UNLESS(batch);
+    Y_ABORT_UNLESS(batch->num_rows());
     std::shared_ptr<arrow::RecordBatch> keyBatch = batch;
     if (columnNames.size()) {
         keyBatch = NArrow::ExtractColumns(batch, columnNames);
@@ -45,13 +45,13 @@ TFirstLastSpecialKeys::TFirstLastSpecialKeys(std::shared_ptr<arrow::RecordBatch>
     }
 
     Data = NArrow::CopyRecords(keyBatch, indexes);
-    Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);
+    Y_ABORT_UNLESS(Data->num_rows() == 1 || Data->num_rows() == 2);
 }
 
 TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& schema) {
-    Y_VERIFY(batch);
-    Y_VERIFY(batch->num_rows());
-    Y_VERIFY(schema);
+    Y_ABORT_UNLESS(batch);
+    Y_ABORT_UNLESS(batch->num_rows());
+    Y_ABORT_UNLESS(schema);
 
     NOlap::NIndexedReader::TSortableBatchPosition record(batch, 0, schema->field_names(), {}, false);
     std::optional<NOlap::NIndexedReader::TSortableBatchPosition> minValue;
@@ -67,7 +67,7 @@ TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch
             break;
         }
     }
-    Y_VERIFY(minValue && maxValue);
+    Y_ABORT_UNLESS(minValue && maxValue);
     std::vector<ui64> indexes;
     indexes.emplace_back(minValue->GetPosition());
     if (maxValue->GetPosition() != minValue->GetPosition()) {
@@ -81,13 +81,13 @@ TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch
 
     auto dataBatch = NArrow::ExtractColumns(batch, columnNamesString);
     Data = NArrow::CopyRecords(dataBatch, indexes);
-    Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);
+    Y_ABORT_UNLESS(Data->num_rows() == 1 || Data->num_rows() == 2);
 }
 
 TFirstLastSpecialKeys::TFirstLastSpecialKeys(const TString& data)
     : TBase(data) {
     Y_VERIFY_DEBUG(Data->ValidateFull().ok());
-    Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);
+    Y_ABORT_UNLESS(Data->num_rows() == 1 || Data->num_rows() == 2);
 }
 
 std::shared_ptr<NKikimr::NArrow::TFirstLastSpecialKeys> TFirstLastSpecialKeys::BuildAccordingToSchemaVerified(const std::shared_ptr<arrow::Schema>& schema) const {
@@ -100,7 +100,7 @@ TMinMaxSpecialKeys::TMinMaxSpecialKeys(const TString& data)
     : TBase(data)
 {
     Y_VERIFY_DEBUG(Data->ValidateFull().ok());
-    Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);
+    Y_ABORT_UNLESS(Data->num_rows() == 1 || Data->num_rows() == 2);
 }
 
 std::shared_ptr<NKikimr::NArrow::TMinMaxSpecialKeys> TMinMaxSpecialKeys::BuildAccordingToSchemaVerified(const std::shared_ptr<arrow::Schema>& schema) const {

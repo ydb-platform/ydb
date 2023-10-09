@@ -239,7 +239,7 @@ void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev
 
 void TInfoCollector::RequestStateStorageConfig() {
     const auto& domains = AppData()->DomainsInfo->Domains;
-    Y_VERIFY(domains.size() <= 1);
+    Y_ABORT_UNLESS(domains.size() <= 1);
 
     for (const auto& domain : domains) {
         const auto ssProxyId = MakeStateStorageProxyID(domain.second->DefaultStateStorageGroup);
@@ -265,7 +265,7 @@ void TInfoCollector::RequestBaseConfig() {
     using namespace NTabletPipe;
 
     const auto& domains = AppData()->DomainsInfo->Domains;
-    Y_VERIFY(domains.size() <= 1);
+    Y_ABORT_UNLESS(domains.size() <= 1);
 
     for (const auto& domain : domains) {
         const auto bscId = MakeBSControllerID(domain.second->DefaultStateStorageGroup);
@@ -338,7 +338,7 @@ void TInfoCollector::SendNodeRequests(ui32 nodeId) {
     SendNodeEvent(nodeId, whiteBoardId, new TEvWhiteboard::TEvVDiskStateRequest(), TEvWhiteboard::EvVDiskStateResponse);
 
     const auto& domains = AppData()->DomainsInfo->Domains;
-    Y_VERIFY(domains.size() <= 1);
+    Y_ABORT_UNLESS(domains.size() <= 1);
 
     for (const auto& domain : domains) {
         const TActorId tenantPoolId = MakeTenantPoolID(nodeId, domain.second->DomainUid);

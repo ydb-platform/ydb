@@ -18,7 +18,7 @@ public:
         auto &rec = Request->Get()->Record;
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TTxUpdateLastProvidedConfig Execute: " << rec.ShortDebugString());
 
-        Y_VERIFY(Self->PendingSubscriptionModifications.IsEmpty());
+        Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
         auto subscription = Self->SubscriptionIndex.GetSubscription(rec.GetSubscriptionId());
         if (!subscription) {
@@ -31,7 +31,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
                         "Config notification response cookie mismatch for"
                         << " subscription id=" << rec.GetSubscriptionId());
-            Y_VERIFY(subscription->Subscriber.ServiceId,
+            Y_ABORT_UNLESS(subscription->Subscriber.ServiceId,
                      "%s  ==>  %s",
                      rec.ShortDebugString().c_str(),
                      subscription->ToString().c_str());

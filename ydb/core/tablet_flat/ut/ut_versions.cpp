@@ -56,7 +56,7 @@ namespace {
 
         for (auto &one: eggs) {
             for (const auto &part : one->Parts) {
-                Y_VERIFY(part->Slices, "Missing part slices");
+                Y_ABORT_UNLESS(part->Slices, "Missing part slices");
                 partView.push_back({ part, nullptr, part->Slices });
             }
         }

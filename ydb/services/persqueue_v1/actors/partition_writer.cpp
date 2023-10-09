@@ -18,17 +18,17 @@ template<class TEvWrite>
 void TPartitionWriterImpl<TEvWrite>::OnEvInitResult(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev)
 {
     const auto& result = *ev->Get();
-    Y_VERIFY(result.IsSuccess());
+    Y_ABORT_UNLESS(result.IsSuccess());
     OwnerCookie = result.GetResult().OwnerCookie;
 }
 
 template<class TEvWrite>
 ui64 TPartitionWriterImpl<TEvWrite>::OnEvWriteAccepted(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev)
 {
-    Y_VERIFY(!SentRequests.empty());
+    Y_ABORT_UNLESS(!SentRequests.empty());
 
     auto request = std::move(SentRequests.front());
-    Y_VERIFY(ev->Get()->Cookie == request->Cookie);
+    Y_ABORT_UNLESS(ev->Get()->Cookie == request->Cookie);
 
     SentRequests.pop_front();
 
@@ -42,13 +42,13 @@ ui64 TPartitionWriterImpl<TEvWrite>::OnEvWriteAccepted(NPQ::TEvPartitionWriter::
 template<class TEvWrite>
 auto TPartitionWriterImpl<TEvWrite>::OnEvWriteResponse(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev) -> TWriteRequestInfoPtr
 {
-    Y_VERIFY(!AcceptedRequests.empty());
+    Y_ABORT_UNLESS(!AcceptedRequests.empty());
 
     auto request = std::move(AcceptedRequests.front());
     AcceptedRequests.pop_front();
 
     const auto& resp = ev->Get()->Record.GetPartitionResponse();
-    Y_VERIFY(resp.GetCookie() == request->Cookie);
+    Y_ABORT_UNLESS(resp.GetCookie() == request->Cookie);
 
     return request;
 }
@@ -85,14 +85,14 @@ bool TPartitionWriterImpl<TEvWrite>::TrySendNextQuotedRequest(const TActorContex
 template<class TEvWrite>
 void TPartitionWriterImpl<TEvWrite>::SendRequest(TWriteRequestInfoPtr request, const TActorContext& ctx)
 {
-    Y_VERIFY(request->PartitionWriteRequest);
+    Y_ABORT_UNLESS(request->PartitionWriteRequest);
 
     i64 diff = 0;
     for (const auto& w : request->UserWriteRequests) {
         diff -= w->Request.ByteSize();
     }
 
-    Y_VERIFY(-diff <= (i64)BytesInflight_);
+    Y_ABORT_UNLESS(-diff <= (i64)BytesInflight_);
     diff += request->PartitionWriteRequest->Record.ByteSize();
     BytesInflight_ += diff;
     BytesInflightTotal_ += diff;

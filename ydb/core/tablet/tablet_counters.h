@@ -215,7 +215,7 @@ public:
     }
 
     TTabletPercentileCounter& DecrementFor(ui64 what) {
-        Y_VERIFY(Integral);
+        Y_ABORT_UNLESS(Integral);
         ui32 index = FindSlot(what);
         Y_VERIFY_DEBUG(Values[index] > 0);
         Values[index] -= 1;
@@ -378,7 +378,7 @@ public:
 private:
     //
     void Reset(const TCountersArray<T>& rp) {
-        Y_VERIFY(!CountersQnt);
+        Y_ABORT_UNLESS(!CountersQnt);
         CountersHolder.reset();
         Counters = nullptr;
 

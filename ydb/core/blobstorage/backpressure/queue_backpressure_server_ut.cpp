@@ -117,13 +117,13 @@ namespace NKikimr {
                     if (InFlight == MaxInFlight) {
                         const TMessageId temp(MsgId.SequenceId, MsgId.MsgId - InFlight);
                         auto res = qb.Processed(ActorId, temp, 1, now);
-                        Y_VERIFY(Good(res.first.Status));
+                        Y_ABORT_UNLESS(Good(res.first.Status));
                         VERBOSE_STR << "LOAD: Processed: MsgId# " << temp.ToString() << "\n";
                         InFlight--;
                         return res;
                     } else {
                         auto res = qb.Push(Id, ActorId, MsgId, 1, now);
-                        Y_VERIFY(Good(res.first.Status));
+                        Y_ABORT_UNLESS(Good(res.first.Status));
                         VERBOSE_STR << "LOAD: Push: MsgId# " << MsgId.ToString() << "\n";
                         InFlight++;
                         MsgId.MsgId++;

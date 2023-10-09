@@ -496,7 +496,7 @@ private:
         if (FiltersMerged.empty()) {
             FiltersMerged.resize(array.length(), true);
         } else {
-            Y_VERIFY(FiltersMerged.size() == (size_t)array.length());
+            Y_ABORT_UNLESS(FiltersMerged.size() == (size_t)array.length());
         }
     }
 };

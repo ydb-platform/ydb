@@ -40,7 +40,7 @@ public:
         , RecordGeneration(recordGeneration)
         , PerGenerationCounter(perGenerationCounter)
     {
-        Y_VERIFY(CollectOperation.Get());
+        Y_ABORT_UNLESS(CollectOperation.Get());
     }
 
     void Bootstrap() {
@@ -60,7 +60,7 @@ public:
         for (const auto& id : CollectOperation->DoNotKeep) {
             push(id, &TCollectInfo::DoNotKeep);
         }
-        Y_VERIFY(!CollectOperation->Keep || CollectOperation->AdvanceBarrier);
+        Y_ABORT_UNLESS(!CollectOperation->Keep || CollectOperation->AdvanceBarrier);
 
         // fill in required channel/group pairs
         if (CollectOperation->AdvanceBarrier) {
@@ -125,9 +125,9 @@ public:
             (Status, status));
 
         const auto it = Collects.find(key);
-        Y_VERIFY(it != Collects.end());
+        Y_ABORT_UNLESS(it != Collects.end());
         TCollectInfo& info = it->second;
-        Y_VERIFY(info.RequestInFlight);
+        Y_ABORT_UNLESS(info.RequestInFlight);
         info.RequestInFlight = false;
 
         if (status == NKikimrProto::OK) {
@@ -156,7 +156,7 @@ public:
 
     void HandleWakeup(STATEFN_SIG) {
         const size_t numErased = WakeupScheduled.erase(TMonotonic::FromValue(ev->Cookie));
-        Y_VERIFY(numErased == 1);
+        Y_ABORT_UNLESS(numErased == 1);
         Action();
     }
 

@@ -47,7 +47,7 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxForceDropSubDomain);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropSubDomain);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -81,8 +81,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxForceDropSubDomain);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropSubDomain);
 
         auto paths = context.SS->ListSubTree(txState->TargetPathId, context.Ctx);
         NForceDrop::ValidateNoTransactionOnPaths(OperationId, paths, context);
@@ -235,7 +235,7 @@ public:
 
             context.OnComplete.Dependence(otherTxId, OperationId.GetTxId());
 
-            Y_VERIFY(context.SS->Operations.contains(otherTxId));
+            Y_ABORT_UNLESS(context.SS->Operations.contains(otherTxId));
             auto otherOperation = context.SS->Operations.at(otherTxId);
             for (ui32 partId = 0; partId < otherOperation->Parts.size(); ++partId) {
                 if (auto part = otherOperation->Parts.at(partId)) {
@@ -284,7 +284,7 @@ ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, const TTxTransaction&
 }
 
 ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropForceUnsafe>(id, state);
 }
 
@@ -293,7 +293,7 @@ ISubOperation::TPtr CreateForceDropSubDomain(TOperationId id, const TTxTransacti
 }
 
 ISubOperation::TPtr CreateForceDropSubDomain(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropForceUnsafe>(id, state);
 }
 

@@ -32,7 +32,7 @@ namespace NKikimr {
                 // everything is in place -- all data is present; generate output blob content and signal success for
                 // this one
                 const bool success = RestoreWholeFromMirror(state);
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
                 state.WholeSituation = TBlobState::ESituation::Present;
                 return EStrategyOutcome::DONE;
             }
@@ -50,7 +50,7 @@ namespace NKikimr {
             // Try to send puts considering the slow disk
             //   on failure, send puts
             // On 'accelerate' signal, try to send more puts considering the slow disk
-            Y_VERIFY(state.WholeSituation == TBlobState::ESituation::Unknown,
+            Y_ABORT_UNLESS(state.WholeSituation == TBlobState::ESituation::Unknown,
                     "Blob Id# %s unexpected whole situation %" PRIu32,
                     state.Id.ToString().c_str(), ui32(state.WholeSituation));
             state.WholeSituation = TBlobState::ESituation::Present;
@@ -86,7 +86,7 @@ namespace NKikimr {
                                 << " Requested# " << diskPart.Requested.ToString()
                                 << " Id# " << id.ToString());
                     } else {
-                        Y_VERIFY(diskPart.Requested == needed);
+                        Y_ABORT_UNLESS(diskPart.Requested == needed);
                     }
                 }
             }

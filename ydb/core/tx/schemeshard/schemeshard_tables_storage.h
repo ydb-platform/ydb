@@ -208,7 +208,7 @@ public:
             , Owner(owner)
 
         {
-            Y_VERIFY(!Owner.contains(id));
+            Y_ABORT_UNLESS(!Owner.contains(id));
         }
 
         TColumnTableInfo::TPtr GetPtr() const {
@@ -219,7 +219,7 @@ public:
             : TTableCreateOperator(new TColumnTableInfo)
             , PathId(id)
             , Owner(owner) {
-            Y_VERIFY(!Owner.contains(id));
+            Y_ABORT_UNLESS(!Owner.contains(id));
         }
         TColumnTableInfo* operator->() {
             return Object.Get();
@@ -228,7 +228,7 @@ public:
             return Object.Get();
         }
         ~TTableCreatedGuard() {
-            Y_VERIFY(Owner.Tables.emplace(PathId, Object).second);
+            Y_ABORT_UNLESS(Owner.Tables.emplace(PathId, Object).second);
             Owner.OnAddObject(PathId, Object);
         }
     };

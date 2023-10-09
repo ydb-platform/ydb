@@ -56,7 +56,7 @@ public:
 
     void AssignChannel(EPurpose purpose, ui32 channel) {
         bool repeated = Purposes.emplace(purpose, channel).second;
-        Y_VERIFY(repeated, "reassign is forbided, channle purpose was %s chennel id was %d",
+        Y_ABORT_UNLESS(repeated, "reassign is forbided, channle purpose was %s chennel id was %d",
                  NKikimrStorageSettings::TChannelPurpose::EPurpose_Name(purpose).c_str(),
                  channel);
     }

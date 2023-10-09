@@ -109,7 +109,7 @@ namespace NKikimr {
 
             void Initialize(size_t key) {
                 Token = Storage->Set(key, this);
-                Y_VERIFY(Token != 0);
+                Y_ABORT_UNLESS(Token != 0);
             }
 
         public:
@@ -206,12 +206,12 @@ namespace NKikimr {
 
                 auto* head = Head.load(std::memory_order_relaxed);
                 do {
-                    Y_VERIFY(head != (TValueStorage*)-1, "TFastThreadLocal::GetValueStorage() race with destructor");
+                    Y_ABORT_UNLESS(head != (TValueStorage*)-1, "TFastThreadLocal::GetValueStorage() race with destructor");
                     ptr->Next = head;
                 } while (!Head.compare_exchange_weak(head, ptr, std::memory_order_release));
             }
 
-            Y_VERIFY(ptr->Owner == this, "TFastThreadLocal::GetValueStorage() found unexpected storage pointer");
+            Y_ABORT_UNLESS(ptr->Owner == this, "TFastThreadLocal::GetValueStorage() found unexpected storage pointer");
 
             return *ptr;
         }

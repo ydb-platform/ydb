@@ -12,7 +12,7 @@ namespace NTest {
     public:
         TImpl& To(size_t seq) noexcept
         {
-            Y_VERIFY(seq >= Seq, "Invalid sequence flow");
+            Y_ABORT_UNLESS(seq >= Seq, "Invalid sequence flow");
 
             Seq = seq;
 

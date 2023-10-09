@@ -257,12 +257,12 @@ namespace NKikimr {
             }
 
             void WindowUpdate(const TWindowStatus &s) {
-                Y_VERIFY(ClientId == s.ClientId);
+                Y_ABORT_UNLESS(ClientId == s.ClientId);
                 // don't touch Status
                 Notify = Notify || s.Notify;
                 ActualWindowSize = s.ActualWindowSize;
                 MaxWindowSize = s.MaxWindowSize;
-                Y_VERIFY(ExpectedMsgId == s.ExpectedMsgId);
+                Y_ABORT_UNLESS(ExpectedMsgId == s.ExpectedMsgId);
                 // don't touch FailedMsgId
             }
 
@@ -391,7 +391,7 @@ namespace NKikimr {
         {}
 
         ui32 GetChannelToSend() {
-            Y_VERIFY(!ResultSent);
+            Y_ABORT_UNLESS(!ResultSent);
             ResultSent = true;
             return Channel;
         }
@@ -412,11 +412,11 @@ namespace NKikimr {
         {}
 
         virtual ~TEvVResultBase() {
-            //Y_VERIFY(Finalized);
+            //Y_ABORT_UNLESS(Finalized);
         }
 
         virtual void FinalizeAndSend(const TActorContext& /*ctx*/, std::unique_ptr<IEventHandle> ev) {
-            Y_VERIFY(!Finalized); // call Finalize only once
+            Y_ABORT_UNLESS(!Finalized); // call Finalize only once
             Finalized = true;
 
             if (CounterPtr) {
@@ -487,13 +487,13 @@ namespace NKikimr {
             , SkeletonFrontIDPtr(skeletonFrontIDPtr)
         {
             if (queryRecord) {
-                Y_VERIFY(queryRecord->HasMsgQoS());
+                Y_ABORT_UNLESS(queryRecord->HasMsgQoS());
                 auto *resultQoS = TBase::Record.MutableMsgQoS();
                 resultQoS->Swap(queryRecord->MutableMsgQoS());
                 resultQoS->ClearDeadlineSeconds();
                 resultQoS->ClearSendMeCostSettings();
             } else {
-                Y_VERIFY(!SkeletonFrontIDPtr);
+                Y_ABORT_UNLESS(!SkeletonFrontIDPtr);
             }
         }
 
@@ -520,7 +520,7 @@ namespace NKikimr {
             }
 
             size_t byteSize = TBase::Record.ByteSize();
-            Y_VERIFY(byteSize <= NActors::EventMaxByteSize,
+            Y_ABORT_UNLESS(byteSize <= NActors::EventMaxByteSize,
                 "event suspiciously large: %zu\n%s",
                 byteSize, this->ToString().data());
 
@@ -1019,7 +1019,7 @@ namespace NKikimr {
             }
 
             for (auto &item : request.GetItems()) {
-                Y_VERIFY(item.HasBlobID());
+                Y_ABORT_UNLESS(item.HasBlobID());
                 TLogoBlobID logoBlobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
                 ui64 cookieValue = 0;
                 ui64 *cookie = nullptr;
@@ -1149,7 +1149,7 @@ namespace NKikimr {
         }
 
         void AddExtremeQuery(const TLogoBlobID &logoBlobId, ui32 sh, ui32 sz, const ui64 *cookie = nullptr) {
-            Y_VERIFY(Extreme);
+            Y_ABORT_UNLESS(Extreme);
 
             NKikimrBlobStorage::TExtremeQuery *q = Record.AddExtremeQueries();
             LogoBlobIDFromLogoBlobID(logoBlobId, q->MutableId());
@@ -1162,7 +1162,7 @@ namespace NKikimr {
 #if BS_EVVGET_SIZE_VERIFY
             if (Record.HasIndexOnly() && Record.GetIndexOnly()) {
                 ExpectedReplySize += BlobProtobufHeaderMaxSize;
-                Y_VERIFY(TBlobStorageGroupType::GetMaxDataSizeWithErasureOverhead(ExpectedReplySize) <= MaxProtobufSize,
+                Y_ABORT_UNLESS(TBlobStorageGroupType::GetMaxDataSizeWithErasureOverhead(ExpectedReplySize) <= MaxProtobufSize,
                         "Possible protobuf overflow for indexOnly get request. ExpectedReplySize# %" PRIu64
                         " MaxProtobufSize# %" PRIu64 " ExtremeQueries# %" PRIu64, (ui64)ExpectedReplySize,
                         (ui64)MaxProtobufSize, (ui64)Record.ExtremeQueriesSize());
@@ -1177,7 +1177,7 @@ namespace NKikimr {
                     payloadSize = blobSize > sh ? blobSize - sh : 0;
                 }
                 ExpectedReplySize += BlobProtobufHeaderMaxSize + payloadSize;
-                Y_VERIFY(TBlobStorageGroupType::GetMaxDataSizeWithErasureOverhead(ExpectedReplySize) <= MaxProtobufSize,
+                Y_ABORT_UNLESS(TBlobStorageGroupType::GetMaxDataSizeWithErasureOverhead(ExpectedReplySize) <= MaxProtobufSize,
                     "Possible protobuf overflow for get request. ExpectedReplySize# %" PRIu64
                     " MaxProtobufSize# %" PRIu64 " ExtremeQueries# %" PRIu64, (ui64)ExpectedReplySize,
                     (ui64)MaxProtobufSize, (ui64)Record.ExtremeQueriesSize());
@@ -1477,7 +1477,7 @@ namespace NKikimr {
             size_t size = request.ExtremeQueriesSize();
             for (unsigned i = 0; i < size; i++) {
                 const NKikimrBlobStorage::TExtremeQuery &query = request.GetExtremeQueries(i);
-                Y_VERIFY(request.HasVDiskID());
+                Y_ABORT_UNLESS(request.HasVDiskID());
                 TLogoBlobID id = LogoBlobIDFromLogoBlobID(query.GetId());
                 ui64 shift = (query.HasShift() ? query.GetShift() : 0);
                 ui64 *cookie = nullptr;
@@ -1558,10 +1558,10 @@ namespace NKikimr {
 
         void AddDiff(ui64 startIdx, const TString &buffer) {
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(this->Record.GetOriginalBlobId());
-            Y_VERIFY(startIdx < id.BlobSize());
+            Y_ABORT_UNLESS(startIdx < id.BlobSize());
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&buffer, sizeof(buffer));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.data(), buffer.size() + 1);
-            Y_VERIFY(startIdx + buffer.size() <= id.BlobSize());
+            Y_ABORT_UNLESS(startIdx + buffer.size() <= id.BlobSize());
 
             NKikimrBlobStorage::TDiffBlock *diffBlock = this->Record.AddDiffs();
             diffBlock->SetOffset(startIdx);
@@ -1570,10 +1570,10 @@ namespace NKikimr {
 
         void AddDiff(ui64 startIdx, const TRcBuf &buffer) {
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(this->Record.GetOriginalBlobId());
-            Y_VERIFY(startIdx < id.BlobSize());
+            Y_ABORT_UNLESS(startIdx < id.BlobSize());
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&buffer, sizeof(buffer));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.data(), buffer.size() + 1);
-            Y_VERIFY(startIdx + buffer.size() <= id.BlobSize());
+            Y_ABORT_UNLESS(startIdx + buffer.size() <= id.BlobSize());
 
             NKikimrBlobStorage::TDiffBlock *diffBlock = this->Record.AddDiffs();
             diffBlock->SetOffset(startIdx);
@@ -1688,14 +1688,14 @@ namespace NKikimr {
             if (status != NKikimrProto::OK && errorReason) {
                 this->Record.SetErrorReason(errorReason);
             }
-            Y_VERIFY(request.HasOriginalBlobId());
-            Y_VERIFY(request.HasPatchedBlobId());
+            Y_ABORT_UNLESS(request.HasOriginalBlobId());
+            Y_ABORT_UNLESS(request.HasPatchedBlobId());
             TLogoBlobID originalBlobId = LogoBlobIDFromLogoBlobID(request.GetOriginalBlobId());
             TLogoBlobID patchedBlobId = LogoBlobIDFromLogoBlobID(request.GetPatchedBlobId());
             LogoBlobIDFromLogoBlobID(originalBlobId, this->Record.MutableOriginalBlobId());
             LogoBlobIDFromLogoBlobID(patchedBlobId, this->Record.MutablePatchedBlobId());
 
-            Y_VERIFY(request.HasVDiskID());
+            Y_ABORT_UNLESS(request.HasVDiskID());
             TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
             VDiskIDFromVDiskID(vDiskId, this->Record.MutableVDiskID());
             if (request.HasCookie()) {
@@ -1887,11 +1887,11 @@ namespace NKikimr {
         void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
                 const NKikimrBlobStorage::TEvVBlock &request) {
             Record.SetStatus(status);
-            Y_VERIFY(request.HasTabletId());
+            Y_ABORT_UNLESS(request.HasTabletId());
             Record.SetTabletId(request.GetTabletId());
-            Y_VERIFY(request.HasGeneration());
+            Y_ABORT_UNLESS(request.HasGeneration());
             Record.SetGeneration(request.GetGeneration());
-            Y_VERIFY(request.HasVDiskID());
+            Y_ABORT_UNLESS(request.HasVDiskID());
             TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
             VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
         }
@@ -1976,13 +1976,13 @@ namespace NKikimr {
                 const NKikimrBlobStorage::TEvVPatchStart &request) {
             Record.SetErrorReason(errorReason);
             Record.SetStatus(status);
-            Y_VERIFY(request.HasOriginalBlobId());
+            Y_ABORT_UNLESS(request.HasOriginalBlobId());
             TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(request.GetOriginalBlobId());
             LogoBlobIDFromLogoBlobID(blobId, Record.MutableOriginalBlobId());
-            Y_VERIFY(request.HasVDiskID());
+            Y_ABORT_UNLESS(request.HasVDiskID());
             TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
             VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
-            Y_VERIFY(request.HasCookie());
+            Y_ABORT_UNLESS(request.HasCookie());
             Record.SetCookie(request.GetCookie());
         }
     };
@@ -2187,17 +2187,17 @@ namespace NKikimr {
             Record.SetErrorReason(errorReason);
             Record.SetStatus(status);
 
-            Y_VERIFY(request.HasOriginalPartBlobId());
+            Y_ABORT_UNLESS(request.HasOriginalPartBlobId());
             TLogoBlobID originalPartBlobId = LogoBlobIDFromLogoBlobID(request.GetOriginalPartBlobId());
             LogoBlobIDFromLogoBlobID(originalPartBlobId, Record.MutableOriginalPartBlobId());
 
-            Y_VERIFY(request.HasPatchedPartBlobId());
+            Y_ABORT_UNLESS(request.HasPatchedPartBlobId());
             TLogoBlobID patchedPartBlobId = LogoBlobIDFromLogoBlobID(request.GetPatchedPartBlobId());
             LogoBlobIDFromLogoBlobID(patchedPartBlobId, Record.MutablePatchedPartBlobId());
 
-            Y_VERIFY(request.HasVDiskID());
+            Y_ABORT_UNLESS(request.HasVDiskID());
             Record.MutableVDiskID()->CopyFrom(request.GetVDiskID());
-            Y_VERIFY(request.HasCookie());
+            Y_ABORT_UNLESS(request.HasCookie());
             Record.SetCookie(request.GetCookie());
         }
     };
@@ -2270,10 +2270,10 @@ namespace NKikimr {
         void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
                 const NKikimrBlobStorage::TEvVGetBlock &request) {
             Record.SetStatus(status);
-            Y_VERIFY(request.HasTabletId());
+            Y_ABORT_UNLESS(request.HasTabletId());
             Record.SetTabletId(request.GetTabletId());
             // WARNING: Generation is not set!
-            Y_VERIFY(request.HasVDiskID());
+            Y_ABORT_UNLESS(request.HasVDiskID());
             TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
             VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
         }
@@ -2394,13 +2394,13 @@ namespace NKikimr {
         void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
                 const NKikimrBlobStorage::TEvVCollectGarbage &request) {
             Record.SetStatus(status);
-            Y_VERIFY(request.HasTabletId());
+            Y_ABORT_UNLESS(request.HasTabletId());
             Record.SetTabletId(request.GetTabletId());
-            Y_VERIFY(request.HasRecordGeneration());
+            Y_ABORT_UNLESS(request.HasRecordGeneration());
             Record.SetRecordGeneration(request.GetRecordGeneration());
-            Y_VERIFY(request.HasChannel());
+            Y_ABORT_UNLESS(request.HasChannel());
             Record.SetChannel(request.GetChannel());
-            Y_VERIFY(request.HasVDiskID());
+            Y_ABORT_UNLESS(request.HasVDiskID());
             TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
             VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
         }

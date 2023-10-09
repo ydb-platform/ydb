@@ -32,7 +32,7 @@ private:
         Singleton<TSelf>()->IsEnabledFlag = serviceConfig.IsEnabled();
     }
     static const TString& GetConveyorName() {
-        Y_VERIFY(TConveyorPolicy::Name.size() == 4);
+        Y_ABORT_UNLESS(TConveyorPolicy::Name.size() == 4);
         return TConveyorPolicy::Name;
     }
 public:

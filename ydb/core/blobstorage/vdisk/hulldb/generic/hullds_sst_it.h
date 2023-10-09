@@ -110,7 +110,7 @@ namespace NKikimr {
         }
 
         bool operator == (const TMemIterator &it) const {
-            Y_VERIFY(Segment == it.Segment);
+            Y_ABORT_UNLESS(Segment == it.Segment);
             return Ptr == it.Ptr;
         }
 

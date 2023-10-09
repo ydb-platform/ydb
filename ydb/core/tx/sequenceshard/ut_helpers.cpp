@@ -66,7 +66,7 @@ namespace NSequenceShard {
                 clientId,
                 0);
             auto res = MarkedClientIds.emplace(key, clientId);
-            Y_VERIFY(res.second);
+            Y_ABORT_UNLESS(res.second);
             it = res.first;
         }
         ClientId = it->second;

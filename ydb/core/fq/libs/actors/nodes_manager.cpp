@@ -118,7 +118,7 @@ private:
                 if (!Peers.empty()) {
                     auto FirstPeer = NextPeer;
                     while (true) {
-                        Y_VERIFY(NextPeer < Peers.size());
+                        Y_ABORT_UNLESS(NextPeer < Peers.size());
                         auto& nextNode = Peers[NextPeer];
 
                         if (++NextPeer >= Peers.size()) {

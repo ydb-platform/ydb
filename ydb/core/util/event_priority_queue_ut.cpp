@@ -48,7 +48,7 @@ public:
 
     void Handle(TEvPriorityTest::TPtr& ev) {
         ProcessedPriorities_.push_back(ev->Get()->Priority);
-        Y_VERIFY(EventsToProcess_ > 0);
+        Y_ABORT_UNLESS(EventsToProcess_ > 0);
         --EventsToProcess_;
     }
 

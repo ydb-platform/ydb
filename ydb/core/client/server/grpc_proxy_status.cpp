@@ -97,7 +97,7 @@ public:
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
         const TEvInterconnect::TEvNodesInfo* nodesInfo = ev->Get();
-        Y_VERIFY(!nodesInfo->Nodes.empty());
+        Y_ABORT_UNLESS(!nodesInfo->Nodes.empty());
         Nodes.reserve(nodesInfo->Nodes.size());
         for (const auto& ni : nodesInfo->Nodes) {
             if (ni.Port > AppData(ctx)->PQConfig.GetMaxStorageNodePort()) continue;
@@ -259,8 +259,8 @@ TGRpcProxyStatusActor::Handle(TEvGRpcProxyStatus::TEvSetup::TPtr &ev, const TAct
 void
 TGRpcProxyStatusActor::Handle(TEvGRpcProxyStatus::TEvUpdateStatus::TPtr &ev, const TActorContext&) {
 
-    Y_VERIFY((i32)WriteSessions + ev->Get()->WriteSessions >= 0);
-    Y_VERIFY((i32)ReadSessions + ev->Get()->ReadSessions >= 0);
+    Y_ABORT_UNLESS((i32)WriteSessions + ev->Get()->WriteSessions >= 0);
+    Y_ABORT_UNLESS((i32)ReadSessions + ev->Get()->ReadSessions >= 0);
     WriteSessions += ev->Get()->WriteSessions;
     ReadSessions += ev->Get()->ReadSessions;
     //TODO: count here write/read speed

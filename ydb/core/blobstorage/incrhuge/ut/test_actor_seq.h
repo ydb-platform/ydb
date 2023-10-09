@@ -55,7 +55,7 @@ public:
 
     void Handle(TEvIncrHugeInitResult::TPtr& ev, const TActorContext& ctx) {
         TEvIncrHugeInitResult *msg = ev->Get();
-        Y_VERIFY(msg->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 
         for (const auto& item : msg->Items) {
             LOG_DEBUG(ctx, NActorsServices::TEST, "Item# {Id# %016" PRIx64 " Lsn# %" PRIu64 " LogoBlobId# %s}",
@@ -71,25 +71,25 @@ public:
                 // we have an entry in confirmed state that is not in msg->Items; this happens only if we had delete
                 // request in flight that succeeded, but we haven't received reply
                 LOG_DEBUG(ctx, NActorsServices::TEST, "deleted Id# %016" PRIx64, stateIt->second.Id);
-                Y_VERIFY(State.DeleteRequest);
-                Y_VERIFY(*State.DeleteRequest == stateIt->second.Lsn);
+                Y_ABORT_UNLESS(State.DeleteRequest);
+                Y_ABORT_UNLESS(*State.DeleteRequest == stateIt->second.Lsn);
                 stateIt = State.ConfirmedState.erase(stateIt);
                 continue;
             } else if (!stateValid || itemIt->Lsn < stateIt->second.Lsn) {
                 // here we have entry in msg->Items that is not in confirmed state -- this happens only if we had
                 // in-flight write request, but haven't got reply
                 LOG_DEBUG(ctx, NActorsServices::TEST, "added Id# %016" PRIx64, itemIt->Id);
-                Y_VERIFY(State.WriteRequest);
-                Y_VERIFY(itemIt->Lsn == State.WriteRequest->Lsn);
-                Y_VERIFY(TLogoBlobID(itemIt->Meta.RawU64) == State.WriteRequest->LogoBlobId);
+                Y_ABORT_UNLESS(State.WriteRequest);
+                Y_ABORT_UNLESS(itemIt->Lsn == State.WriteRequest->Lsn);
+                Y_ABORT_UNLESS(TLogoBlobID(itemIt->Meta.RawU64) == State.WriteRequest->LogoBlobId);
                 State.WriteRequest->Id = itemIt->Id;
                 stateIt = State.ConfirmedState.insert(stateIt, std::make_pair(itemIt->Lsn, *State.WriteRequest));
             }
 
             // LSNs are identical -- compare other values
-            Y_VERIFY(itemIt->Lsn == stateIt->second.Lsn);
-            Y_VERIFY(itemIt->Id == stateIt->second.Id);
-            Y_VERIFY(TLogoBlobID(itemIt->Meta.RawU64) == stateIt->second.LogoBlobId);
+            Y_ABORT_UNLESS(itemIt->Lsn == stateIt->second.Lsn);
+            Y_ABORT_UNLESS(itemIt->Id == stateIt->second.Id);
+            Y_ABORT_UNLESS(TLogoBlobID(itemIt->Meta.RawU64) == stateIt->second.LogoBlobId);
 
             // issue read request to verify data
             if (!stateIt->second.Data) {
@@ -112,10 +112,10 @@ public:
 
     void Handle(TEvIncrHugeReadResult::TPtr& ev, const TActorContext& ctx) {
         TEvIncrHugeReadResult *msg = ev->Get();
-        Y_VERIFY(msg->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
         auto it = State.ConfirmedState.find(ev->Cookie);
-        Y_VERIFY(it != State.ConfirmedState.end());
-        Y_VERIFY(it->second.Data == msg->Data);
+        Y_ABORT_UNLESS(it != State.ConfirmedState.end());
+        Y_ABORT_UNLESS(it->second.Data == msg->Data);
         if (!--NumReadsPending) {
             DoSomething(ctx);
         }
@@ -126,7 +126,7 @@ public:
             Event->Signal();
         }
 
-        Y_VERIFY(!State.DeleteRequest && !State.WriteRequest);
+        Y_ABORT_UNLESS(!State.DeleteRequest && !State.WriteRequest);
 
         ui32 deleteScore = State.ConfirmedState ? 3 : 0;
         ui32 writeScore = 5;
@@ -183,8 +183,8 @@ public:
         TEvIncrHugeDeleteResult *msg = ev->Get();
         LOG_DEBUG(ctx, NActorsServices::TEST, "finished Delete Status# %s Id# %016" PRIx64,
                 NKikimrProto::EReplyStatus_Name(msg->Status).data(), ev->Cookie);
-        Y_VERIFY(msg->Status == NKikimrProto::OK);
-        Y_VERIFY(ev->Cookie == *State.DeleteRequest);
+        Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(ev->Cookie == *State.DeleteRequest);
         State.DeleteRequest.Clear();
         State.ConfirmedState.erase(ev->Cookie);
         DoSomething(ctx);
@@ -195,8 +195,8 @@ public:
         TPayload *payload = static_cast<TPayload *>(msg->Payload.get());
         LOG_DEBUG(ctx, NActorsServices::TEST, "finished Write Status# %s Lsn# %" PRIu64 " LogoBlobId# %s Id# %016" PRIx64,
                 NKikimrProto::EReplyStatus_Name(msg->Status).data(), payload->Lsn, payload->LogoBlobId.ToString().data(), msg->Id);
-        Y_VERIFY(msg->Status == NKikimrProto::OK);
-        Y_VERIFY(State.WriteRequest);
+        Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(State.WriteRequest);
         State.WriteRequest->Id = msg->Id;
         State.ConfirmedState.emplace(payload->Lsn, *State.WriteRequest);
         State.WriteRequest.Clear();

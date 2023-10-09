@@ -33,20 +33,20 @@ public:
         LOG_I(DebugHint() << "ProgressState");
 
         auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateReplication);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateReplication);
         const auto& pathId = txState->TargetPathId;
 
-        Y_VERIFY(context.SS->Replications.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->Replications.contains(pathId));
         auto alterData = context.SS->Replications.at(pathId)->AlterData;
-        Y_VERIFY(alterData);
+        Y_ABORT_UNLESS(alterData);
 
         txState->ClearShardsInProgress();
 
         for (const auto& shard : txState->Shards) {
-            Y_VERIFY(shard.TabletType == ETabletType::ReplicationController);
+            Y_ABORT_UNLESS(shard.TabletType == ETabletType::ReplicationController);
 
-            Y_VERIFY(context.SS->ShardInfos.contains(shard.Idx));
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
             const auto tabletId = context.SS->ShardInfos.at(shard.Idx).TabletID;
 
             if (tabletId == InvalidTabletId) {
@@ -90,9 +90,9 @@ public:
         }
 
         auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateReplication);
-        Y_VERIFY(txState->State == TTxState::ConfigureParts);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateReplication);
+        Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
 
         const auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
@@ -139,8 +139,8 @@ public:
         LOG_I(DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateReplication);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateReplication);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -153,18 +153,18 @@ public:
             << ": step# " << step);
 
         const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateReplication);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateReplication);
         const auto& pathId = txState->TargetPathId;
 
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         auto path = context.SS->PathsById.at(pathId);
 
-        Y_VERIFY(context.SS->Replications.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->Replications.contains(pathId));
         auto replication = context.SS->Replications.at(pathId);
 
         auto alterData = replication->AlterData;
-        Y_VERIFY(alterData);
+        Y_ABORT_UNLESS(alterData);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -175,7 +175,7 @@ public:
         context.SS->PersistReplicationAlterRemove(db, pathId);
         context.SS->PersistReplication(db, pathId, *alterData);
 
-        Y_VERIFY(context.SS->PathsById.contains(path->ParentPathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(path->ParentPathId));
         auto parentPath = context.SS->PathsById.at(path->ParentPathId);
 
         ++parentPath->DirAlterVersion;
@@ -337,7 +337,7 @@ public:
                 .WithBindedChannels(channelsBindings));
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_CONTROLLER_COUNT].Add(1);
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateReplication, path->PathId);
         txState.Shards.emplace_back(replication->AlterData->ControllerShardIdx,
             ETabletType::ReplicationController, TTxState::CreateParts);
@@ -362,9 +362,9 @@ public:
         context.SS->PersistReplication(db, path->PathId, *replication);
         context.SS->PersistReplicationAlter(db, path->PathId, *replication->AlterData);
 
-        Y_VERIFY(txState.Shards.size() == 1);
+        Y_ABORT_UNLESS(txState.Shards.size() == 1);
         for (const auto& shard : txState.Shards) {
-            Y_VERIFY(context.SS->ShardInfos.contains(shard.Idx));
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
             const TShardInfo& shardInfo = context.SS->ShardInfos.at(shard.Idx);
 
             if (shard.Operation == TTxState::CreateParts) {

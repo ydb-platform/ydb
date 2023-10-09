@@ -35,7 +35,7 @@ struct TCommitRecord {
             TChunkIdx lastIdx = chunks[0];
             for (size_t i = 1; i < chunks.size(); ) {
                 if (chunks[i] == lastIdx) {
-                    //Y_VERIFY(false);
+                    //Y_ABORT_UNLESS(false);
                     chunks.erase(chunks.begin() + i);
                 } else {
                     lastIdx = chunks[i];
@@ -176,7 +176,7 @@ struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage:
         , PDiskParams(new TPDiskParams(0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
         , ErrorReason(errorReason)
     {
-        Y_VERIFY(status != NKikimrProto::OK, "Single-parameter constructor is for error responses only");
+        Y_ABORT_UNLESS(status != NKikimrProto::OK, "Single-parameter constructor is for error responses only");
     }
 
     TEvYardInitResult(NKikimrProto::EReplyStatus status, ui64 seekTimeUs, ui64 readSpeedBps,
@@ -258,7 +258,7 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
         , Cookie(cookie)
         , LogCallback(std::move(cb))
     {
-        Y_VERIFY(Owner);
+        Y_ABORT_UNLESS(Owner);
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&owner, sizeof(owner));
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&ownerRound, sizeof(ownerRound));
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&signature, sizeof(signature));
@@ -948,7 +948,7 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
         }
 
         TDataRef operator[] (ui32 index) const override {
-            Y_VERIFY(index < PartsNum);
+            Y_ABORT_UNLESS(index < PartsNum);
             const TPart &part = Parts[index];
             return TDataRef(part.Data, part.Size);
         }
@@ -1103,7 +1103,7 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
     void Validate() const {
         const ui32 count = PartsPtr ? PartsPtr->Size() : 0;
         for (ui32 idx = 0; idx < count; ++idx) {
-            Y_VERIFY((*PartsPtr)[idx].second);
+            Y_ABORT_UNLESS((*PartsPtr)[idx].second);
             if ((*PartsPtr)[idx].first) {
                 REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED((*PartsPtr)[idx].first, (*PartsPtr)[idx].second);
             }

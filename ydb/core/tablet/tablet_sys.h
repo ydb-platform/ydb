@@ -49,7 +49,7 @@ class TTablet : public TActor<TTablet> {
         }
 
         void MergeSignature(ui64 *sig, ui32 sigsz) {
-            Y_VERIFY(sigsz == SignatureSz);
+            Y_ABORT_UNLESS(sigsz == SignatureSz);
             for (ui32 i = 0; i != sigsz; ++i)
                 if (const ui64 x = sig[i])
                     Signature[i] = x;

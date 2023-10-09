@@ -15,9 +15,9 @@ void TPortionMeta::FillBatchInfo(const NArrow::TFirstLastSpecialKeys& primaryKey
     {
         auto cPlanStep = snapshotKeys.GetBatch()->GetColumnByName(TIndexInfo::SPEC_COL_PLAN_STEP);
         auto cTxId = snapshotKeys.GetBatch()->GetColumnByName(TIndexInfo::SPEC_COL_TX_ID);
-        Y_VERIFY(cPlanStep && cTxId);
-        Y_VERIFY(cPlanStep->type_id() == arrow::UInt64Type::type_id);
-        Y_VERIFY(cTxId->type_id() == arrow::UInt64Type::type_id);
+        Y_ABORT_UNLESS(cPlanStep && cTxId);
+        Y_ABORT_UNLESS(cPlanStep->type_id() == arrow::UInt64Type::type_id);
+        Y_ABORT_UNLESS(cTxId->type_id() == arrow::UInt64Type::type_id);
         const arrow::UInt64Array& cPlanStepArray = static_cast<const arrow::UInt64Array&>(*cPlanStep);
         const arrow::UInt64Array& cTxIdArray = static_cast<const arrow::UInt64Array&>(*cTxId);
         RecordSnapshotMin = TSnapshot(cPlanStepArray.GetView(0), cTxIdArray.GetView(0));
@@ -69,7 +69,7 @@ std::optional<NKikimrTxColumnShard::TIndexPortionMeta> TPortionMeta::SerializeTo
 
     switch (Produced) {
         case TPortionMeta::EProduced::UNSPECIFIED:
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
         case TPortionMeta::EProduced::INSERTED:
             portionMeta.SetIsInserted(true);
             break;

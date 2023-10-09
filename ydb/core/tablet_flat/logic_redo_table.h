@@ -45,7 +45,7 @@ namespace NRedo {
                     return stamp < entry->Stamp;
                 });
 
-            Y_VERIFY(end != Trace.begin());
+            Y_ABORT_UNLESS(end != Trace.begin());
 
             for (auto it = Trace.begin(); it != end; ++it) {
                 NUtil::SubSafe(Bytes, (*it)->BytesData());

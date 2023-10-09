@@ -556,7 +556,7 @@ void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const
                 NodeList.push_back(node);
                 node->SetCookie(IS_NODE_EXITED);
             } else {
-                Y_VERIFY(node->GetCookie() <= IS_NODE_EXITED, "TNode graph should not be reused");
+                Y_ABORT_UNLESS(node->GetCookie() <= IS_NODE_EXITED, "TNode graph should not be reused");
             }
 
             Stack->pop_back();
@@ -576,9 +576,9 @@ const std::vector<TNode*>& TExploringNodeVisitor::GetNodes() {
 }
 
 const TExploringNodeVisitor::TNodesVec& TExploringNodeVisitor::GetConsumerNodes(TNode& node) {
-    Y_VERIFY(BuildConsumersMap);
+    Y_ABORT_UNLESS(BuildConsumersMap);
     const auto consumers = ConsumersMap.find(&node);
-    Y_VERIFY(consumers != ConsumersMap.cend());
+    Y_ABORT_UNLESS(consumers != ConsumersMap.cend());
     return consumers->second;
 }
 

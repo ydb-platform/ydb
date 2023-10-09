@@ -175,7 +175,7 @@ TVector<TClickBenchCommandRun::TQueryFullInfo> TClickBenchCommandRun::GetQueries
         std::sort(queriesList.begin(), queriesList.end());
         for (auto&& i : queriesList) {
             const TString expectedFileName = "q" + ::ToString(queries.size()) + ".sql";
-            Y_VERIFY(i == expectedFileName, "incorrect files naming. have to be q<number>.sql where number in [0, N - 1], where N is requests count");
+            Y_ABORT_UNLESS(i == expectedFileName, "incorrect files naming. have to be q<number>.sql where number in [0, N - 1], where N is requests count");
             TFileInput fInput(ExternalQueriesDir + "/" + expectedFileName);
             queries.emplace_back(fInput.ReadAll());
         }
@@ -186,7 +186,7 @@ TVector<TClickBenchCommandRun::TQueryFullInfo> TClickBenchCommandRun::GetQueries
     TVector<TExternalVariable> vars;
     for (auto&& i : strVariables) {
         TExternalVariable v;
-        Y_VERIFY(v.DeserializeFromString(i));
+        Y_ABORT_UNLESS(v.DeserializeFromString(i));
         vars.emplace_back(v);
     }
     vars.emplace_back("table", "`" + fullTablePath + "`");
@@ -206,7 +206,7 @@ TVector<TClickBenchCommandRun::TQueryFullInfo> TClickBenchCommandRun::GetQueries
             result.emplace_back(queries[i], "");
         }
     }
-    Y_VERIFY(resultsUsage == qResults.size(), "there are unused files with results in directory");
+    Y_ABORT_UNLESS(resultsUsage == qResults.size(), "there are unused files with results in directory");
     return result;
 }
 
@@ -298,7 +298,7 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
         }
 
         auto [inserted, success] = QueryRuns.emplace(queryN, TTestInfo(std::move(clientTimings), std::move(serverTimings)));
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
         auto& testInfo = inserted->second;
 
         report << Sprintf("|   %02u    | %8.3f | %7.3f | %7.3f | %8.3f | %7.3f | %7.3f | %7.3f | %7.3f |", queryN,
@@ -589,12 +589,12 @@ TMap<ui32, TString> TClickBenchCommandRun::LoadExternalResults() const {
         dir.ListNames(filesList);
         std::sort(filesList.begin(), filesList.end());
         for (auto&& i : filesList) {
-            Y_VERIFY(i.StartsWith("q") && i.EndsWith(".result"));
+            Y_ABORT_UNLESS(i.StartsWith("q") && i.EndsWith(".result"));
             TStringBuf sb(i.data(), i.size());
             sb.Skip(1);
             sb.Chop(7);
             ui32 qId;
-            Y_VERIFY(TryFromString<ui32>(sb, qId));
+            Y_ABORT_UNLESS(TryFromString<ui32>(sb, qId));
             TFileInput fInput(ExternalResultsDir + "/" + i);
             result.emplace(qId, fInput.ReadAll());
         }

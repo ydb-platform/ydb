@@ -86,7 +86,7 @@ namespace NKikimr::NBlobDepot {
                         if (tag == Reads.size()) {
                             Reads.push_back(TRead{id});
                         } else {
-                            Y_VERIFY(Reads[tag].Id == id);
+                            Y_ABORT_UNLESS(Reads[tag].Id == id);
                         }
                         TReadArg arg{
                             key,
@@ -117,12 +117,12 @@ namespace NKikimr::NBlobDepot {
             void OnRead(ui64 tag, TReadOutcome&& outcome) override {
                 --ReadsInFlight;
 
-                Y_VERIFY(tag < Reads.size());
+                Y_ABORT_UNLESS(tag < Reads.size());
                 TRead& read = Reads[tag];
 
                 const bool success = std::visit(TOverloaded{
                     [&](TReadOutcome::TOk& ok) {
-                        Y_VERIFY(ok.Data.size() == read.Id.BlobSize());
+                        Y_ABORT_UNLESS(ok.Data.size() == read.Id.BlobSize());
                         const bool inserted = FoundBlobs.try_emplace(read.Id, ok.Data.ConvertToString()).second;
                         Y_VERIFY_S(inserted, "AgentId# " << Agent.LogId << " QueryId# " << GetQueryId()
                             << " duplicate BlobId# " << read.Id << " received");

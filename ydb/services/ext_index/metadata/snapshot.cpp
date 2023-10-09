@@ -3,7 +3,7 @@
 namespace NKikimr::NMetadata::NCSIndex {
 
 bool TSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawDataResult) {
-    Y_VERIFY(rawDataResult.result_sets().size() == 1);
+    Y_ABORT_UNLESS(rawDataResult.result_sets().size() == 1);
     ParseSnapshotObjects<TObject>(rawDataResult.result_sets()[0], [this](TObject&& s) {
         const TString tablePath = s.GetTablePath();
         Objects[tablePath].emplace_back(std::move(s));

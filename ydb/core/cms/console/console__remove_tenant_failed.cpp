@@ -20,7 +20,7 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         // We can cancel tenant removal only if the first stage
         // (subdomain removal) fails.
-        Y_VERIFY(Tenant->State == TTenant::REMOVING_SUBDOMAIN);
+        Y_ABORT_UNLESS(Tenant->State == TTenant::REMOVING_SUBDOMAIN);
 
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
                     "TTxRemoveTenantFailed for tenant " << Tenant->Path

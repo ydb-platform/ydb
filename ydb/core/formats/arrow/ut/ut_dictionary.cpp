@@ -15,13 +15,13 @@ Y_UNIT_TEST_SUITE(Dictionary) {
         std::shared_ptr<arrow::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(bSize);
         const TString data = NSerialization::TFullDataSerializer(options).Serialize(batch);
         auto deserializedBatch = *NSerialization::TFullDataDeserializer().Deserialize(data);
-        Y_VERIFY(!!deserializedBatch);
+        Y_ABORT_UNLESS(!!deserializedBatch);
         auto originalBatchTransformed = DictionaryToArray(batch);
         auto roundBatchTransformed = DictionaryToArray(deserializedBatch);
         const TString roundUnpacked = NSerialization::TFullDataSerializer(options).Serialize(roundBatchTransformed);
         const TString roundTransformed = NSerialization::TFullDataSerializer(options).Serialize(originalBatchTransformed);
-        Y_VERIFY(roundBatchTransformed->num_rows() == originalBatchTransformed->num_rows());
-        Y_VERIFY(roundUnpacked == roundTransformed);
+        Y_ABORT_UNLESS(roundBatchTransformed->num_rows() == originalBatchTransformed->num_rows());
+        Y_ABORT_UNLESS(roundUnpacked == roundTransformed);
         return data.size();
     }
 

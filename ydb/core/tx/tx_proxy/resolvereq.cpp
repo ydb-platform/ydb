@@ -65,7 +65,7 @@ namespace {
                 continue;
             }
 
-            Y_VERIFY(entry.DomainInfo);
+            Y_ABORT_UNLESS(entry.DomainInfo);
 
             if (!domainInfo) {
                 domainInfo = entry.DomainInfo;

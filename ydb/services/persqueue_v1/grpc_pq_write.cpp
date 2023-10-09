@@ -63,8 +63,8 @@ void TPQWriteService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpda
 
 
 void TPQWriteService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx) {
-    Y_VERIFY(ev->Get()->ClustersList);
-    Y_VERIFY(ev->Get()->ClustersList->Clusters.size());
+    Y_ABORT_UNLESS(ev->Get()->ClustersList);
+    Y_ABORT_UNLESS(ev->Get()->ClustersList->Clusters.size());
 
     const auto& clusters = ev->Get()->ClustersList->Clusters;
 

@@ -149,8 +149,8 @@ public:
         }
 
         auto domainPathId = parentPath.GetPathIdForDomain();
-        Y_VERIFY(context.SS->PathsById.contains(domainPathId));
-        Y_VERIFY(context.SS->SubDomains.contains(domainPathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(domainPathId));
+        Y_ABORT_UNLESS(context.SS->SubDomains.contains(domainPathId));
         if (domainPathId != context.SS->RootPathId()) {
             result->SetError(NKikimrScheme::StatusNameConflict, "Nested subdomains is forbidden");
             return result;
@@ -203,7 +203,7 @@ public:
 
         context.SS->TabletCounters->Simple()[COUNTER_EXTSUB_DOMAIN_COUNT].Add(1);
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateExtSubDomain, newNode->PathId);
 
         TSubDomainInfo::TPtr alter = new TSubDomainInfo(1, 0, 0, resourcesDomainId ? resourcesDomainId : newNode->PathId);
@@ -231,7 +231,7 @@ public:
             alter->SetAuditSettings(settings.GetAuditSettings());
         }
 
-        Y_VERIFY(!context.SS->SubDomains.contains(newNode->PathId));
+        Y_ABORT_UNLESS(!context.SS->SubDomains.contains(newNode->PathId));
         auto& subDomainInfo = context.SS->SubDomains[newNode->PathId];
         subDomainInfo = new TSubDomainInfo();
         subDomainInfo->SetAlter(alter);
@@ -258,7 +258,7 @@ public:
         context.SS->ClearDescribePathCaches(newNode);
         context.OnComplete.PublishToSchemeBoard(OperationId, newNode->PathId);
 
-        Y_VERIFY(0 == txState.Shards.size());
+        Y_ABORT_UNLESS(0 == txState.Shards.size());
         parentPath.DomainInfo()->IncPathsInside();
         parentPath.Base()->IncAliveChildren();
 
@@ -290,7 +290,7 @@ ISubOperation::TPtr CreateExtSubDomain(TOperationId id, const TTxTransaction& tx
 }
 
 ISubOperation::TPtr CreateExtSubDomain(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TCreateExtSubDomain>(id, state);
 }
 

@@ -128,7 +128,7 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
     if (connected) {
         ConnectedQueuesMask[orderNumber] |= 1 << queueId;
         q.ExtraBlockChecksSupport = extraGroupChecksSupport;
-        Y_VERIFY(costModel);
+        Y_ABORT_UNLESS(costModel);
         if (!q.CostModel || *q.CostModel != *costModel) {
             updated = true;
             q.CostModel = costModel;

@@ -129,12 +129,12 @@ struct CastFunctor<TimestampType, UInt32Type> {
         if (batch.num_values() == 0) {
             return ::arrow::Status::IndexError("Cast from uint32 to timestamp received empty batch.");
         }
-        Y_VERIFY(batch[0].kind() == Datum::ARRAY, "Cast from uint32 to timestamp expected ARRAY as input.");
+        Y_ABORT_UNLESS(batch[0].kind() == Datum::ARRAY, "Cast from uint32 to timestamp expected ARRAY as input.");
 
         const auto& out_type = checked_cast<const ::arrow::TimestampType&>(*out->type());
         // get conversion MICROSECONDS -> unit
         auto conversion = ::arrow::util::GetTimestampConversion(::arrow::TimeUnit::MICRO, out_type.unit());
-        Y_VERIFY(conversion.first == ::arrow::util::MULTIPLY, "Cast from uint32 to timestamp failed because timestamp unit is greater than seconds.");
+        Y_ABORT_UNLESS(conversion.first == ::arrow::util::MULTIPLY, "Cast from uint32 to timestamp failed because timestamp unit is greater than seconds.");
 
         auto input = batch[0].array();
         auto output = out->mutable_array();

@@ -273,7 +273,7 @@ namespace NYql::NDqs {
         }
 
         auto* sa = response->ai_addr;
-        Y_VERIFY(sa->sa_family == AF_INET6);
+        Y_ABORT_UNLESS(sa->sa_family == AF_INET6);
         inet_ntop(AF_INET6, &(((struct sockaddr_in6*)sa)->sin6_addr),
                     &buffer[0], buffer.size() - 1);
 

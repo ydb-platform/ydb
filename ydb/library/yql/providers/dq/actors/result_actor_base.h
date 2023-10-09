@@ -213,7 +213,7 @@ namespace NYql::NDqs::NExecutionHelpers {
             if (ev->Get()->Record.IssuesSize() == 0) {  // weird way used by writer to acknowledge it's death
                 DoFinish();
             } else {
-                Y_VERIFY(ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
+                Y_ABORT_UNLESS(ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
                 TBase::Send(ExecuterID, ev->Release().Release());
             }
         }
@@ -229,7 +229,7 @@ namespace NYql::NDqs::NExecutionHelpers {
         void OnFullResultWriterAck(TEvFullResultWriterAck::TPtr& ev, const NActors::TActorContext&) {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
             YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
-            Y_VERIFY(ev->Get()->Record.GetMessageId() == WriteQueue.front().MessageId);
+            Y_ABORT_UNLESS(ev->Get()->Record.GetMessageId() == WriteQueue.front().MessageId);
             if (!WriteQueue.front().SentProcessedEvent) {  // messages, received before limits exceeded, are already been reported
                 TBase::Send(TBase::SelfId(), MakeHolder<TEvMessageProcessed>(WriteQueue.front().MessageId));
             }
@@ -280,7 +280,7 @@ namespace NYql::NDqs::NExecutionHelpers {
             record.MutableMessage()->PackFrom(payload);
             TBase::Send(GraphExecutionEventsId, new TEvGraphExecutionEvent(record));
             TBase::template Synchronize<TEvGraphExecutionEvent>([this](TEvGraphExecutionEvent::TPtr& ev) {
-                Y_VERIFY(ev->Get()->Record.GetEventType() == NYql::NDqProto::EGraphExecutionEventType::SYNC);
+                Y_ABORT_UNLESS(ev->Get()->Record.GetEventType() == NYql::NDqProto::EGraphExecutionEventType::SYNC);
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
 
                 if (auto msg = ev->Get()->Record.GetErrorMessage()) {

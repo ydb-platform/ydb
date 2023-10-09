@@ -75,7 +75,7 @@ bool TDataShard::TTxExecuteMvccStateChange::Execute(TTransactionContext& txc, co
         return true; // already switched
 
     if (Self->State == TShardState::Ready || Self->State == TShardState::Frozen) {
-        Y_VERIFY(Self->TxInFly() == 0 && Self->ImmediateInFly() == 0);
+        Y_ABORT_UNLESS(Self->TxInFly() == 0 && Self->ImmediateInFly() == 0);
 
         auto [step, txId] = Self->LastCompleteTxVersion();
         Self->SnapshotManager.ChangeMvccState(step, txId, txc,

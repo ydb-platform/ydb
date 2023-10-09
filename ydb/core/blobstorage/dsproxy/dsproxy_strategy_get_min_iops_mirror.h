@@ -97,7 +97,7 @@ public:
                     TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
                     if (partSituation == TBlobState::ESituation::Unknown ||
                             partSituation == TBlobState::ESituation::Present) {
-                        Y_VERIFY(false, "Inconsistent state# %s", state.ToString().data());
+                        Y_ABORT_UNLESS(false, "Inconsistent state# %s", state.ToString().data());
                     }
                 }
             }

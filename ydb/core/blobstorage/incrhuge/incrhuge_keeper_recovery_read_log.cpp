@@ -57,7 +57,7 @@ namespace NKikimr {
                 // parse log items
                 TMaybe<ui64> maxLsn;
                 for (const auto& item : msg->Results) {
-                    Y_VERIFY(!maxLsn || item.Lsn > *maxLsn);
+                    Y_ABORT_UNLESS(!maxLsn || item.Lsn > *maxLsn);
                     maxLsn = item.Lsn;
 
                     switch (item.Signature) {
@@ -65,7 +65,7 @@ namespace NKikimr {
                             if (!ChunksEntrypointLsn || item.Lsn >= *ChunksEntrypointLsn) {
                                 NKikimrVDiskData::TIncrHugeChunks record;
                                 bool status = record.ParseFromArray(item.Data.GetData(), item.Data.GetSize());
-                                Y_VERIFY(status);
+                                Y_ABORT_UNLESS(status);
                                 ChunkMerger(record);
                             }
                             break;
@@ -74,7 +74,7 @@ namespace NKikimr {
                             if (!DeletesEntrypointLsn || item.Lsn >= *DeletesEntrypointLsn) {
                                 NKikimrVDiskData::TIncrHugeDelete record;
                                 bool status = record.ParseFromArray(item.Data.GetData(), item.Data.GetSize());
-                                Y_VERIFY(status);
+                                Y_ABORT_UNLESS(status);
 
                                 TStringStream s;
                                 s << "Chunks# [";

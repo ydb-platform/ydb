@@ -13,7 +13,7 @@ protected:
     THashMap<TString, std::shared_ptr<IBlobsStorageOperator>> Constructed;
     std::shared_ptr<IBlobsStorageOperator> BuildOperator(const TString& storageId) {
         auto result = DoBuildOperator(storageId);
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
         return result;
     }
 

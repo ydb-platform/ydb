@@ -17,7 +17,7 @@ namespace NKikimr {
             void Insert(const TVector<ui32> &chunks) {
                 for (auto chunkIdx : chunks) {
                     bool inserted = Chunks.insert(chunkIdx).second;
-                    Y_VERIFY(inserted);
+                    Y_ABORT_UNLESS(inserted);
                 }
             }
 
@@ -30,7 +30,7 @@ namespace NKikimr {
 
             void Erase(ui32 chunkIdx) {
                 const ui32 del = Chunks.erase(chunkIdx);
-                Y_VERIFY(del == 1);
+                Y_ABORT_UNLESS(del == 1);
             }
 
             TString ToString() const {

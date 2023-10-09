@@ -102,7 +102,7 @@ public:
     }
 
     void StartRequest() {
-        Y_VERIFY(!RequestInFlight);
+        Y_ABORT_UNLESS(!RequestInFlight);
         RequestInFlight = true;
         LOG_D("Make request for read rule creation for topic `" << TopicConsumer.topic_path() << "` [" << Index << "]");
         PqClient.AddReadRule(
@@ -127,7 +127,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvAddReadRuleStatus::TPtr& ev) {
-        Y_VERIFY(RequestInFlight);
+        Y_ABORT_UNLESS(RequestInFlight);
         RequestInFlight = false;
         const NYdb::TStatus& status = ev->Get()->Status;
         if (status.IsSuccess() || status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
@@ -161,7 +161,7 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvPoison::TPtr& ev) {
-        Y_VERIFY(ev->Sender == Owner);
+        Y_ABORT_UNLESS(ev->Sender == Owner);
         Finishing = true;
         CheckFinish();
     }
@@ -220,7 +220,7 @@ public:
         , TopicConsumers(VectorFromProto(topicConsumers))
         , Credentials(std::move(credentials))
     {
-        Y_VERIFY(!TopicConsumers.empty());
+        Y_ABORT_UNLESS(!TopicConsumers.empty());
         Results.resize(TopicConsumers.size());
     }
 
@@ -239,7 +239,7 @@ public:
 
     void Handle(TEvPrivate::TEvSingleReadRuleCreatorResult::TPtr& ev) {
         const ui64 index = ev->Cookie;
-        Y_VERIFY(!Results[index]);
+        Y_ABORT_UNLESS(!Results[index]);
         if (ev->Get()->Issues) {
             Ok = false;
         }
@@ -249,14 +249,14 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvPoison::TPtr& ev) {
-        Y_VERIFY(ev->Sender == Owner);
+        Y_ABORT_UNLESS(ev->Sender == Owner);
         for (const NActors::TActorId& child : Children) {
             Send(child, new NActors::TEvents::TEvPoison());
         }
     }
 
     void SendResultsAndPassAwayIfDone() {
-        Y_VERIFY(ResultsGot <= TopicConsumers.size());
+        Y_ABORT_UNLESS(ResultsGot <= TopicConsumers.size());
         if (ResultsGot == TopicConsumers.size()) {
             NYql::TIssues issues;
             if (!Ok) {

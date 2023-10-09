@@ -285,7 +285,7 @@ public:
 
         auto now = TAppData::TimeProvider->Now();
         auto it = InFlightWrites.find(record.GetCookie());
-        Y_VERIFY(it != InFlightWrites.end());
+        Y_ABORT_UNLESS(it != InFlightWrites.end());
         const auto& stats = it->second;
         ResponseTimes.Increment((now - stats.SentTime).MicroSeconds());
         auto& worker = Workers[stats.WorkerIdx];

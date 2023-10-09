@@ -260,7 +260,7 @@ namespace NKikimr {
 
                 template<bool OtherConst>
                 bool EqualTo(const TFailDomainIteratorImpl<OtherConst>& other) const {
-                    Y_VERIFY(&Ref == &other.Ref);
+                    Y_ABORT_UNLESS(&Ref == &other.Ref);
                     return FailRealm == other.FailRealm && FailDomain == other.FailDomain;
                 }
             };
@@ -409,11 +409,11 @@ namespace NKikimr {
                     if (first) {
                         DisksInDomain = numDisks;
                     } else {
-                        Y_VERIFY(DisksInDomain == numDisks);
+                        Y_ABORT_UNLESS(DisksInDomain == numDisks);
                     }
                 }
 
-                Y_VERIFY(top->GType.GetErasure() == TBlobStorageGroupType::ErasureNone || TotalDisks > 2);
+                Y_ABORT_UNLESS(top->GType.GetErasure() == TBlobStorageGroupType::ErasureNone || TotalDisks > 2);
             }
 
             template <class TPrinter>
@@ -430,7 +430,7 @@ namespace NKikimr {
                                         TConstIterator& x = *colIt++;
                                         printer(str, x++);
                                         if (row + 1 == DisksInDomain) {
-                                            Y_VERIFY(x == vdisks.end());
+                                            Y_ABORT_UNLESS(x == vdisks.end());
                                         }
                                     }
                                 }

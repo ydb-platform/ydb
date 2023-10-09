@@ -62,7 +62,7 @@ public:
         auto itx = ResourceMap.find(txId);
 
         if (Strict) {
-            Y_VERIFY(itx != ResourceMap.end());
+            Y_ABORT_UNLESS(itx != ResourceMap.end());
         } else {
             if(itx == ResourceMap.end()) {
                 return;
@@ -70,17 +70,17 @@ public:
         }
 
         auto itt = itx->second.find(taskId);
-        Y_VERIFY(itt != itx->second.end());
+        Y_ABORT_UNLESS(itt != itx->second.end());
 
         if (Strict) {
-            Y_VERIFY(itt->second.Size >= size);
+            Y_ABORT_UNLESS(itt->second.Size >= size);
         } else {
             if (size > itt->second.Size) {
                 size = itt->second.Size;
             }
         }
 
-        Y_VERIFY(Allocated >= size);
+        Y_ABORT_UNLESS(Allocated >= size);
 
         itt->second.Size -= size;
         if (itt->second.Size == 0) {
@@ -112,7 +112,7 @@ public:
         if (itx != ResourceMap.end()) {
             auto itt = itx->second.find(taskId);
             if (itt != itx->second.end()) {
-                Y_VERIFY(Allocated >= itt->second.Size);
+                Y_ABORT_UNLESS(Allocated >= itt->second.Size);
                 Allocated -= itt->second.Size;
                 itx->second.erase(itt);
                 if (itx->second.size() == 0) {

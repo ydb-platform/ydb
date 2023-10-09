@@ -352,7 +352,7 @@ private:
     void Handle(NEvWrite::TWritersController::TEvPrivate::TEvShardsWriteResult::TPtr& ev) {
         NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "ShardsWriteResult");
         const auto* msg = ev->Get();
-        Y_VERIFY(msg->Status != Ydb::StatusIds::SUCCESS);
+        Y_ABORT_UNLESS(msg->Status != Ydb::StatusIds::SUCCESS);
         for (auto& issue : msg->Issues) {
             RaiseIssue(issue);
         }
@@ -440,7 +440,7 @@ class TLongTxWriteRPC : public TLongTxWriteBase<TLongTxWriteRPC> {
         }
 
         TString GetSerializedData() const override {
-            Y_VERIFY(ProtoRequest);
+            Y_ABORT_UNLESS(ProtoRequest);
             return ProtoRequest->data().data();
         }
     };
@@ -496,7 +496,7 @@ public:
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
-        Y_VERIFY(resp);
+        Y_ABORT_UNLESS(resp);
         ProceedWithSchema(*resp);
     }
 
@@ -581,12 +581,12 @@ public:
         , Batch(batch)
         , Issues(issues)
     {
-        Y_VERIFY(Issues);
+        Y_ABORT_UNLESS(Issues);
         DataAccessor = std::make_shared<TParsedBatchData>(Batch);
     }
 
     void Bootstrap() {
-        Y_VERIFY(NavigateResult);
+        Y_ABORT_UNLESS(NavigateResult);
         ProceedWithSchema(*NavigateResult);
     }
 
@@ -717,8 +717,8 @@ private:
             return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an column table");
         }
 
-        Y_VERIFY(entry.ColumnTableInfo);
-        Y_VERIFY(entry.ColumnTableInfo->Description.HasSharding());
+        Y_ABORT_UNLESS(entry.ColumnTableInfo);
+        Y_ABORT_UNLESS(entry.ColumnTableInfo->Description.HasSharding());
         const auto& sharding = entry.ColumnTableInfo->Description.GetSharding();
 
         TableId = entry.TableId.PathId.LocalPathId;
@@ -746,7 +746,7 @@ private:
     }
 
     void SendRequest(ui64 shard) {
-        Y_VERIFY(shard != 0);
+        Y_ABORT_UNLESS(shard != 0);
         Waits.insert(shard);
         SendToTablet(shard, MakeRequest());
     }

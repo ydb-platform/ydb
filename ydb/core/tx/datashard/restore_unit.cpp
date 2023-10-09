@@ -28,11 +28,11 @@ protected:
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
-        Y_VERIFY(tx->GetSchemeTx().HasRestore());
+        Y_ABORT_UNLESS(tx->GetSchemeTx().HasRestore());
         const auto& restore = tx->GetSchemeTx().GetRestore();
 
         const ui64 tableId = restore.GetTableId();
-        Y_VERIFY(DataShard.GetUserTables().contains(tableId));
+        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
 
         const TTableInfo tableInfo = TTableInfo(tableId, DataShard.GetUserTables().at(tableId));
 

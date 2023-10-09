@@ -66,7 +66,7 @@ void TReadSession::Start() {
 }
 
 void TReadSession::CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>& deferred) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     // Create cluster sessions.
     LOG_LAZY(Log,
@@ -228,13 +228,13 @@ void TReadSession::UpdateOffsets(const NTable::TTransaction& tx)
         }
     }
 
-    Y_VERIFY(!topics.empty());
+    Y_ABORT_UNLESS(!topics.empty());
 
     auto result = Client->UpdateOffsetsInTransaction(tx,
                                                      topics,
                                                      Settings.ConsumerName_,
                                                      {}).GetValueSync();
-    Y_VERIFY(!result.IsTransportError());
+    Y_ABORT_UNLESS(!result.IsTransportError());
 
     if (!result.IsSuccess()) {
         ythrow yexception() << "error on update offsets: " << result;
@@ -345,7 +345,7 @@ void TReadSession::SetupCountersLogger() {
 }
 
 void TReadSession::AbortImpl(NPersQueue::TDeferredActions<false>&) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (!Aborting) {
         Aborting = true;
@@ -364,13 +364,13 @@ void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, NPersQueue::TDefe
 }
 
 void TReadSession::AbortImpl(EStatus statusCode, NYql::TIssues&& issues, NPersQueue::TDeferredActions<false>& deferred) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     AbortImpl(TSessionClosedEvent(statusCode, std::move(issues)), deferred);
 }
 
 void TReadSession::AbortImpl(EStatus statusCode, const TString& message, NPersQueue::TDeferredActions<false>& deferred) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     NYql::TIssues issues;
     issues.AddIssue(message);

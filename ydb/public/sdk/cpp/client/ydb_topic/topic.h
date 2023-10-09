@@ -919,7 +919,7 @@ struct TReadSessionEvent {
 
     private:
         void CheckMessagesFilled(bool compressed) const {
-            Y_VERIFY(!Messages.empty() || !CompressedMessages.empty());
+            Y_ABORT_UNLESS(!Messages.empty() || !CompressedMessages.empty());
             if (compressed && CompressedMessages.empty()) {
                 ythrow yexception() << "cannot get compressed messages, parameter decompress=true for read session";
             }

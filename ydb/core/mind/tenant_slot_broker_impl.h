@@ -562,13 +562,13 @@ private:
 
         void AddAssignedSlot(TSlot::TPtr slot)
         {
-            Y_VERIFY(!AssignedSlots.contains(slot));
+            Y_ABORT_UNLESS(!AssignedSlots.contains(slot));
             AssignedSlots.insert(slot);
         }
 
         void RemoveAssignedSlot(TSlot::TPtr slot)
         {
-            Y_VERIFY(AssignedSlots.contains(slot));
+            Y_ABORT_UNLESS(AssignedSlots.contains(slot));
             AssignedSlots.erase(slot);
         }
 
@@ -592,7 +592,7 @@ private:
 
         void DecPending()
         {
-            Y_VERIFY(PendingCount, "Dec zero pending for %s", Description.ToString().data());
+            Y_ABORT_UNLESS(PendingCount, "Dec zero pending for %s", Description.ToString().data());
             SetPending(PendingCount - 1);
         }
 
@@ -621,7 +621,7 @@ private:
 
         void DecMissing()
         {
-            Y_VERIFY(MissingCount, "Dec zero missing for %s", Description.ToString().data());
+            Y_ABORT_UNLESS(MissingCount, "Dec zero missing for %s", Description.ToString().data());
             SetMissing(MissingCount - 1);
         }
 
@@ -645,7 +645,7 @@ private:
 
         void DecMisplaced()
         {
-            Y_VERIFY(MisplacedCount, "Dec zero misplaced for %s", Description.ToString().data());
+            Y_ABORT_UNLESS(MisplacedCount, "Dec zero misplaced for %s", Description.ToString().data());
             SetMisplaced(MisplacedCount - 1);
         }
 
@@ -669,7 +669,7 @@ private:
 
         void DecSplit()
         {
-            Y_VERIFY(SplitCount, "Dec zero split for %s", Description.ToString().data());
+            Y_ABORT_UNLESS(SplitCount, "Dec zero split for %s", Description.ToString().data());
             SetSplit(SplitCount - 1);
         }
 
@@ -687,7 +687,7 @@ private:
 
         void DecPinned()
         {
-            Y_VERIFY(PinnedCount, "Dec zero pinned for %s", Description.ToString().data());
+            Y_ABORT_UNLESS(PinnedCount, "Dec zero pinned for %s", Description.ToString().data());
             SetPinned(PinnedCount - 1);
         }
 

@@ -136,7 +136,7 @@ void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo::TP
 }
 
 void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
-    Y_VERIFY(itemIdx < importInfo->Items.size());
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
@@ -148,7 +148,7 @@ void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo
 }
 
 void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
-    Y_VERIFY(itemIdx < importInfo->Items.size());
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
@@ -157,7 +157,7 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
 }
 
 void TSchemeShard::PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
-    Y_VERIFY(itemIdx < importInfo->Items.size());
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(

@@ -220,15 +220,15 @@ public:
             auto prevShardId = TLocalShardIdx(partition.GetShardId());
 
             if (adoptedTablets.contains(tabletId)) {
-                Y_VERIFY(adoptedTablets.at(tabletId).PrevOwner == prevOwnerId);
-                Y_VERIFY(adoptedTablets.at(tabletId).PrevShardIdx == prevShardId);
+                Y_ABORT_UNLESS(adoptedTablets.at(tabletId).PrevOwner == prevOwnerId);
+                Y_ABORT_UNLESS(adoptedTablets.at(tabletId).PrevShardIdx == prevShardId);
             } else {
                 adoptedTablets[tabletId] = TAdoptedShard{prevOwnerId, prevShardId};
             }
 
             partitionToGroupAndTablet[partId] = std::make_pair(gId, tabletId);
         }
-        Y_VERIFY(pqGroupInfo->TotalGroupCount == partitionToGroupAndTablet.size());
+        Y_ABORT_UNLESS(pqGroupInfo->TotalGroupCount == partitionToGroupAndTablet.size());
 
         if (pqGroupInfo->ExpectedShardCount() != adoptedTablets.size()) {
             auto errStr = TStringBuilder() << "Invalid tablet count expectation: " << pqGroupInfo->ExpectedShardCount()
@@ -404,7 +404,7 @@ public:
             txState.Shards.emplace_back(balancerIdx, ETabletType::PersQueueReadBalancer, TTxState::CreateParts);
             pqGroupInfo->BalancerTabletID = TTabletId(allocateDesc.GetBalancerTabletID());
             pqGroupInfo->BalancerShardIdx = balancerIdx;
-            Y_VERIFY(!context.SS->AdoptedShards.contains(balancerIdx));
+            Y_ABORT_UNLESS(!context.SS->AdoptedShards.contains(balancerIdx));
             context.SS->AdoptedShards[balancerIdx] = TAdoptedShard{allocateDesc.GetBalancerOwnerId(), TLocalShardIdx(allocateDesc.GetBalancerShardId())};
             context.SS->ShardInfos[balancerIdx].TabletID = pqGroupInfo->BalancerTabletID;
             context.SS->TabletIdToShardIdx[pqGroupInfo->BalancerTabletID] = balancerIdx;
@@ -432,14 +432,14 @@ public:
         context.SS->PersistAddPersQueueGroupAlter(db, pathId, pqGroupInfo);
 
         for (auto shard : txState.Shards) {
-            Y_VERIFY(shard.Operation == TTxState::CreateParts);
+            Y_ABORT_UNLESS(shard.Operation == TTxState::CreateParts);
             auto tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
             context.SS->PersistShardMapping(db, shard.Idx, tabletId, pathId, OperationId.GetTxId(), shard.TabletType);
             context.SS->PersistChannelsBinding(db, shard.Idx, context.SS->ShardInfos[shard.Idx].BindedChannels);
             context.SS->PersistAdoptedShardMapping(db, shard.Idx, tabletId, context.SS->AdoptedShards[shard.Idx].PrevOwner, context.SS->AdoptedShards[shard.Idx].PrevShardIdx);
         }
 
-        Y_VERIFY(txState.Shards.size() == shardsToCreate);
+        Y_ABORT_UNLESS(txState.Shards.size() == shardsToCreate);
         context.SS->TabletCounters->Simple()[COUNTER_PQ_SHARD_COUNT].Add(shardsToCreate-1);
         context.SS->TabletCounters->Simple()[COUNTER_PQ_RB_SHARD_COUNT].Add(1);
 
@@ -514,7 +514,7 @@ ISubOperation::TPtr CreateAllocatePQ(TOperationId id, const TTxTransaction& tx) 
 }
 
 ISubOperation::TPtr CreateAllocatePQ(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TAllocatePQ>(id, state);
 }
 

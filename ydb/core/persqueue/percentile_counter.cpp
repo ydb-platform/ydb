@@ -16,15 +16,15 @@ TMultiCounter::TMultiCounter(::NMonitoring::TDynamicCounterPtr counters,
                              bool expiring)
     : Value(0)
 {
-    Y_VERIFY(counters);
+    Y_ABORT_UNLESS(counters);
 
     for (const auto& counter : counter_names) {
         for (ui32 i = 0; i <= labels.size(); ++i) {
             auto cc = counters;
             for (ui32 j = 0; j < labels.size(); ++j) {
-                Y_VERIFY(!labels[j].Labels.empty());
+                Y_ABORT_UNLESS(!labels[j].Labels.empty());
                 for (ui32 k = 0; k < labels[j].Labels.size(); ++k) {
-                    Y_VERIFY(labels[j].Labels.size() == labels[j].AggrNames.size());
+                    Y_ABORT_UNLESS(labels[j].Labels.size() == labels[j].AggrNames.size());
                     const TString& res = (j < i) ? labels[j].Labels[k].second : labels[j].AggrNames[k];
                     cc = cc->GetSubgroup(labels[j].Labels[k].first, res);
                 }
@@ -67,7 +67,7 @@ TPercentileCounter::TPercentileCounter(
         const TVector<std::pair<TString, TString>>& subgroups, const TString& sensor,
         const TVector<std::pair<ui64, TString>>& intervals, const bool deriv, bool expiring
 ) {
-    Y_VERIFY(!intervals.empty());
+    Y_ABORT_UNLESS(!intervals.empty());
     Counters.reserve(intervals.size());
     Ranges.reserve(intervals.size());
     for (auto& interval : intervals) {

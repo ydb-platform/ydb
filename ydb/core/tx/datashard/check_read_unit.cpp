@@ -19,7 +19,7 @@ public:
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         IReadOperation* readOperation = dynamic_cast<IReadOperation*>(op.Get());
-        Y_VERIFY(readOperation != nullptr);
+        Y_ABORT_UNLESS(readOperation != nullptr);
 
         readOperation->CheckRequestAndInit(txc, ctx);
         return EExecutionStatus::Executed;

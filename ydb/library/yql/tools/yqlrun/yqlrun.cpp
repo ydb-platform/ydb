@@ -558,7 +558,7 @@ int Main(int argc, const char *argv[])
     if (!mountConfig.empty()) {
         TModulesTable modules;
         NYqlMountConfig::TMountConfig mount;
-        Y_VERIFY(NKikimr::ParsePBFromFile(mountConfig, &mount));
+        Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(mountConfig, &mount));
         FillUserDataTableFromFileSystem(mount, filesMapping);
 
         if (!CompileLibraries(filesMapping, ctx, modules)) {
@@ -916,7 +916,7 @@ int RunUI(int argc, const char* argv[])
     if (!mountConfig.empty()) {
         TModulesTable modules;
         NYqlMountConfig::TMountConfig mount;
-        Y_VERIFY(NKikimr::ParsePBFromFile(mountConfig, &mount));
+        Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(mountConfig, &mount));
         FillUserDataTableFromFileSystem(mount, userData);
 
         if (!CompileLibraries(userData, ctx, modules)) {

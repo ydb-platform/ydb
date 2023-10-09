@@ -64,8 +64,8 @@ public:
 
     bool StartCompaction(const NOlap::TPlanCompactionInfo& info, const NOlap::TColumnEngineChanges& changes);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
-        Y_VERIFY(ActiveCompactionInfo.erase(info.GetPathId()));
-        Y_VERIFY(CompactionInfoPortions.erase(info.GetPathId()));
+        Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetPathId()));
+        Y_ABORT_UNLESS(CompactionInfoPortions.erase(info.GetPathId()));
     }
     const TCurrentCompaction& GetActiveCompaction() const {
         return ActiveCompactionInfo;
@@ -82,11 +82,11 @@ public:
     }
 
     void StartCleanup() {
-        Y_VERIFY(!ActiveCleanup);
+        Y_ABORT_UNLESS(!ActiveCleanup);
         ActiveCleanup = true;
     }
     void FinishCleanup() {
-        Y_VERIFY(ActiveCleanup);
+        Y_ABORT_UNLESS(ActiveCleanup);
         ActiveCleanup = false;
     }
     bool IsCleanupActive() const {
@@ -95,7 +95,7 @@ public:
 
     void StartTtl(const NOlap::TColumnEngineChanges& changes);
     void FinishTtl() {
-        Y_VERIFY(!TtlPortions.empty());
+        Y_ABORT_UNLESS(!TtlPortions.empty());
         TtlPortions.clear();
     }
     bool IsTtlActive() const {

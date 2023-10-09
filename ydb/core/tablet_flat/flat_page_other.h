@@ -28,7 +28,7 @@ namespace NPage {
             Tags.resize(TagsCount + (TagsCount & 1), 0);
             Cook.reserve(tags);
 
-            Y_VERIFY(tags <= ui32(-Min<i16>()), "Too many columnt tags");
+            Y_ABORT_UNLESS(tags <= ui32(-Min<i16>()), "Too many columnt tags");
         }
 
         void Put(TRowId row, ui16 tag, ui32 bytes) noexcept
@@ -103,8 +103,8 @@ namespace NPage {
 
             out.Put(Tags).Put(Array);
 
-            Y_VERIFY(*out == buf.mutable_end());
-            Y_VERIFY(buf.size() % alignof(TEntry) == 0);
+            Y_ABORT_UNLESS(*out == buf.mutable_end());
+            Y_ABORT_UNLESS(buf.size() % alignof(TEntry) == 0);
             NSan::CheckMemIsInitialized(buf.data(), buf.size());
 
             return buf;
@@ -190,8 +190,8 @@ namespace NPage {
 
             out.Put(Globs);
 
-            Y_VERIFY(*out == buf.mutable_end());
-            Y_VERIFY(buf.size() % alignof(TEntry) == 0);
+            Y_ABORT_UNLESS(*out == buf.mutable_end());
+            Y_ABORT_UNLESS(buf.size() % alignof(TEntry) == 0);
             NSan::CheckMemIsInitialized(buf.data(), buf.size());
 
             return buf;

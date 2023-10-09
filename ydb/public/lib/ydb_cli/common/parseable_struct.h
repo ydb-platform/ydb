@@ -138,7 +138,7 @@ protected:
 
     static void DefineField(const TString& name, TField field) {
         auto it = Fields.find(name);
-        Y_VERIFY(it != Fields.end());
+        Y_ABORT_UNLESS(it != Fields.end());
         it->second = std::move(field);
     }
 
@@ -148,7 +148,7 @@ protected:
         }
 
         auto it = Fields.find(name);
-        Y_VERIFY(it != Fields.end());
+        Y_ABORT_UNLESS(it != Fields.end());
         return Find(it->second.Aliases, property) != it->second.Aliases.end();
     }
 

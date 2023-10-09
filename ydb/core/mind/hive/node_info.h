@@ -195,7 +195,7 @@ public:
             for (const auto& t : TabletsToRestart) {
                 t->BecomeStopped();
             }
-            Y_VERIFY(GetTabletsTotal() == 0, "%s", DumpTablets().data());
+            Y_ABORT_UNLESS(GetTabletsTotal() == 0, "%s", DumpTablets().data());
             Local = TActorId();
             ChangeVolatileState(EVolatileState::Disconnected);
             for (TTabletInfo* tablet : TabletsToRestart) {

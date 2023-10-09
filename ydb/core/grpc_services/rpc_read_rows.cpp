@@ -88,7 +88,7 @@ public:
     {}
 
     bool BuildSchema(NSchemeCache::TSchemeCacheNavigate* resolveNamesResult, TString& errorMessage) {
-        Y_VERIFY(resolveNamesResult);
+        Y_ABORT_UNLESS(resolveNamesResult);
 
         const auto& entry = resolveNamesResult->ResultSet.front();
 
@@ -106,7 +106,7 @@ public:
 
             const i32 keyOrder = colInfo.KeyOrder;
             if (keyOrder != -1) {
-                Y_VERIFY(keyOrder >= 0);
+                Y_ABORT_UNLESS(keyOrder >= 0);
                 keyColumnNamesInSchema.insert(colInfo.Name);
             }
         }
@@ -362,7 +362,7 @@ public:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& request = *ev->Get()->Request;
 
-        Y_VERIFY(request.ResultSet.size() == 1);
+        Y_ABORT_UNLESS(request.ResultSet.size() == 1);
         const auto& entry = request.ResultSet.front();
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TEvNavigateKeySetResult, " << " OwnerId: " << OwnerId << " TableId: " << TableId);
@@ -451,7 +451,7 @@ public:
                                 range.IsInclusive || range.IsPoint, true, KeyColumnTypes);
                         return (cmp < 0);
                 });
-            Y_VERIFY(it != partitions.end());
+            Y_ABORT_UNLESS(it != partitions.end());
             shardToKey[it->ShardId].emplace_back(std::move(key));
         }
 
@@ -506,7 +506,7 @@ public:
             ss << "Failed to read from ds# " << ShardId << ", code# " << msg->Record.GetStatus().GetCode();
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, ss.Str());
         }
-        Y_VERIFY(msg->Record.HasFinished() && msg->Record.GetFinished());
+        Y_ABORT_UNLESS(msg->Record.HasFinished() && msg->Record.GetFinished());
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC TEvReadResult RowsCount: " << msg->GetRowsCount());
 
         EvReadResults.emplace_back(ev->Release().Release());

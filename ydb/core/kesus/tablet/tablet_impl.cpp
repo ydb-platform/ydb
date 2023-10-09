@@ -82,16 +82,16 @@ void TKesusTablet::ClearProxy(TProxyInfo* proxy, const TActorContext& ctx) {
     auto sessionIds = proxy->AttachedSessions; // make a copy
     for (ui64 sessionId : sessionIds) {
         auto* session = Sessions.FindPtr(sessionId);
-        Y_VERIFY(session);
-        Y_VERIFY(session->OwnerProxy == proxy);
-        Y_VERIFY(ScheduleSessionTimeout(session, ctx));
+        Y_ABORT_UNLESS(session);
+        Y_ABORT_UNLESS(session->OwnerProxy == proxy);
+        Y_ABORT_UNLESS(ScheduleSessionTimeout(session, ctx));
     }
     // All sessions must be detached by now
-    Y_VERIFY(proxy->AttachedSessions.empty());
+    Y_ABORT_UNLESS(proxy->AttachedSessions.empty());
 }
 
 void TKesusTablet::ForgetProxy(TProxyInfo* proxy) {
-    Y_VERIFY(proxy->AttachedSessions.empty());
+    Y_ABORT_UNLESS(proxy->AttachedSessions.empty());
     ui32 nodeId = proxy->ActorID.NodeId();
     if (auto* nodeProxies = ProxiesByNode.FindPtr(nodeId)) {
         nodeProxies->erase(proxy);
@@ -145,7 +145,7 @@ void TKesusTablet::Handle(TEvents::TEvWakeup::TPtr& ev) {
         QuoterTickProcessingIsScheduled = false;
         return HandleQuoterTick();
     default:
-        Y_VERIFY(false, "Unknown Wakeup event with tag #%" PRIu64, ev->Get()->Tag);
+        Y_ABORT_UNLESS(false, "Unknown Wakeup event with tag #%" PRIu64, ev->Get()->Tag);
     }
 }
 
@@ -167,7 +167,7 @@ void TKesusTablet::Handle(TEvKesus::TEvDescribeProxies::TPtr& ev) {
 }
 
 void TKesusTablet::Handle(TEvKesus::TEvRegisterProxy::TPtr& ev) {
-    Y_VERIFY(ev->Sender);
+    Y_ABORT_UNLESS(ev->Sender);
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
     TabletCounters->Cumulative()[COUNTER_REQS_PROXY_REGISTER].Increment(1);
@@ -207,7 +207,7 @@ void TKesusTablet::Handle(TEvKesus::TEvRegisterProxy::TPtr& ev) {
 }
 
 void TKesusTablet::Handle(TEvKesus::TEvUnregisterProxy::TPtr& ev) {
-    Y_VERIFY(ev->Sender);
+    Y_ABORT_UNLESS(ev->Sender);
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
     TabletCounters->Cumulative()[COUNTER_REQS_PROXY_UNREGISTER].Increment(1);

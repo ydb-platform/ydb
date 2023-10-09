@@ -41,12 +41,12 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
     using Schema = TDataShard::Schema;
 
     // Load must be idempotent
-    Y_VERIFY(TxsInFly.empty());
-    Y_VERIFY(SchemaOps.empty());
-    Y_VERIFY(PlannedTxs.empty());
-    Y_VERIFY(DeadlineQueue.empty());
-    Y_VERIFY(ProposeDelayers.empty());
-    Y_VERIFY(PlanWaitingTxCount == 0);
+    Y_ABORT_UNLESS(TxsInFly.empty());
+    Y_ABORT_UNLESS(SchemaOps.empty());
+    Y_ABORT_UNLESS(PlannedTxs.empty());
+    Y_ABORT_UNLESS(DeadlineQueue.empty());
+    Y_ABORT_UNLESS(ProposeDelayers.empty());
+    Y_ABORT_UNLESS(PlanWaitingTxCount == 0);
 
     TInstant now = AppData()->TimeProvider->Now();
 
@@ -194,9 +194,9 @@ void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& o
 
     // Auto-ack previous schema operation
     if (!SchemaOps.empty()) {
-        Y_VERIFY(SchemaOps.begin()->first != op.TxId, "Duplicate Tx %" PRIu64 " wasn't properly handled", op.TxId);
-        Y_VERIFY(SchemaOps.size() == 1, "Cannot have multiple un-Ack-ed previous schema operations");
-        Y_VERIFY(SchemaOps.begin()->second.Done,
+        Y_ABORT_UNLESS(SchemaOps.begin()->first != op.TxId, "Duplicate Tx %" PRIu64 " wasn't properly handled", op.TxId);
+        Y_ABORT_UNLESS(SchemaOps.size() == 1, "Cannot have multiple un-Ack-ed previous schema operations");
+        Y_ABORT_UNLESS(SchemaOps.begin()->second.Done,
             "Previous Tx %" PRIu64 " must be in state when it only waits for Ack", SchemaOps.begin()->first);
         RemoveSchemaOperation(db, SchemaOps.begin()->second.TxId);
     }
@@ -217,7 +217,7 @@ void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& o
         NIceDb::TUpdate<Schema::SchemaOperations::Rows>(op.RowsProcessed));
 
     TSchemaOperation * savedOp = &saved.first->second;
-    Y_VERIFY(savedOp->TabletId);
+    Y_ABORT_UNLESS(savedOp->TabletId);
     Self->Pipeline.SetSchemaOp(savedOp);
 
     db.NoMoreReadsForTx();
@@ -256,7 +256,7 @@ void TTransQueue::UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags) {
     using Schema = TDataShard::Schema;
 
     auto it = TxsInFly.find(txId);
-    Y_VERIFY(it != TxsInFly.end());
+    Y_ABORT_UNLESS(it != TxsInFly.end());
 
     if (it->second->HasVolatilePrepareFlag()) {
         // We keep volatile transactions in memory and don't store anything
@@ -274,9 +274,9 @@ void TTransQueue::UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf&
     using Schema = TDataShard::Schema;
 
     auto it = TxsInFly.find(txId);
-    Y_VERIFY(it != TxsInFly.end());
+    Y_ABORT_UNLESS(it != TxsInFly.end());
 
-    Y_VERIFY(!it->second->HasVolatilePrepareFlag(), "Unexpected UpdateTxBody for a volatile transaction");
+    Y_ABORT_UNLESS(!it->second->HasVolatilePrepareFlag(), "Unexpected UpdateTxBody for a volatile transaction");
 
     db.Table<Schema::TxDetails>().Key(txId, Self->TabletID())
         .Update<Schema::TxDetails::Body>(TString(txBody));
@@ -346,9 +346,9 @@ bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
     using Schema = TDataShard::Schema;
 
     auto it = TxsInFly.find(txId);
-    Y_VERIFY(it != TxsInFly.end());
+    Y_ABORT_UNLESS(it != TxsInFly.end());
 
-    Y_VERIFY(!it->second->HasVolatilePrepareFlag(), "Unexpected LoadTxDetails for a volatile transaction");
+    Y_ABORT_UNLESS(!it->second->HasVolatilePrepareFlag(), "Unexpected LoadTxDetails for a volatile transaction");
 
     auto detailsRow = db.Table<Schema::TxDetails>().Key(txId, Self->TabletID()).Select();
     auto artifactsRow = db.Table<Schema::TxArtifacts>().Key(txId).Select();
@@ -405,7 +405,7 @@ bool TTransQueue::ClearTxDetails(NIceDb::TNiceDb& db, ui64 txId) {
     if (!txdRowset.IsReady())
         return false;
     while (!txdRowset.EndOfSet()) {
-        Y_VERIFY(txId == txdRowset.GetValue<Schema::TxDetails::TxId>());
+        Y_ABORT_UNLESS(txId == txdRowset.GetValue<Schema::TxDetails::TxId>());
         ui64 origin = txdRowset.GetValue<Schema::TxDetails::Origin>();
         db.Table<Schema::TxDetails>().Key(txId, origin).Delete();
         if (!txdRowset.Next())

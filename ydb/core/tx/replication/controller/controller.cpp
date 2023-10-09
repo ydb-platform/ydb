@@ -164,7 +164,7 @@ void TController::Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TAc
     } else {
         CLOG_E(ctx, "Resolve tenant error"
             << ": rid# " << rid);
-        Y_VERIFY(!tenant);
+        Y_ABORT_UNLESS(!tenant);
     }
 
     replication->SetTenant(tenant);
@@ -183,7 +183,7 @@ void TController::Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActo
 }
 
 void TController::Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
-    Y_VERIFY(ev->Get()->CachedMessageData);
+    Y_ABORT_UNLESS(ev->Get()->CachedMessageData);
 
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
 

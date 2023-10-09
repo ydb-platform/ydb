@@ -91,7 +91,7 @@ public:
         , Info(info)
         , GType(info->Type)
     {
-        Y_VERIFY(Info);
+        Y_ABORT_UNLESS(Info);
     }
 
     void Bootstrap(const TActorId& parent, const TActorContext& ctx) {
@@ -99,7 +99,7 @@ public:
         QLOG_INFO_S("BSQ01", "starting parent# " << parent);
         InitCounters();
         RegisteredInUniversalScheduler = RegisterActorInUniversalScheduler(SelfId(), FlowRecord, ctx.ExecutorThread.ActorSystem);
-        Y_VERIFY(!BlobStorageProxy);
+        Y_ABORT_UNLESS(!BlobStorageProxy);
         BlobStorageProxy = parent;
         RequestReadiness(nullptr, ctx);
         UpdateRequestTrackingStats(ctx);
@@ -108,7 +108,7 @@ public:
 
 private:
     void ApplyGroupInfo(const TBlobStorageGroupInfo& info) {
-        Y_VERIFY(info.Type.GetErasure() == GType.GetErasure());
+        Y_ABORT_UNLESS(info.Type.GetErasure() == GType.GetErasure());
         VDiskId = info.CreateVDiskID(VDiskIdShort);
         RemoteVDisk = info.GetActorId(VDiskIdShort);
         VDiskOrderNumber = info.GetOrderNumber(VDiskIdShort);
@@ -157,7 +157,7 @@ private:
     }
 
     void HandleWatchdog(const TActorContext& ctx) {
-        Y_VERIFY(WatchdogTimerScheduled);
+        Y_ABORT_UNLESS(WatchdogTimerScheduled);
         WatchdogTimerScheduled = false;
         const TInstant now = ctx.Now();
         if (now >= WatchdogBarrier) {
@@ -473,7 +473,7 @@ private:
 
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr ev, const TActorContext& ctx) {
         if (ev->Get()->NodeId == RemoteVDisk.NodeId()) {
-            Y_VERIFY(!SessionId || SessionId == ev->Sender, "SessionId# %s Sender# %s", SessionId.ToString().data(),
+            Y_ABORT_UNLESS(!SessionId || SessionId == ev->Sender, "SessionId# %s Sender# %s", SessionId.ToString().data(),
                 ev->Sender.ToString().data());
             SessionId = ev->Sender;
 
@@ -495,7 +495,7 @@ private:
             }
 
             ResetConnection(ctx, NKikimrProto::ERROR, "node disconnected", TDuration::Seconds(1));
-            Y_VERIFY(!SessionId || SessionId == ev->Sender);
+            Y_ABORT_UNLESS(!SessionId || SessionId == ev->Sender);
             SessionId = {};
         }
     }
@@ -719,7 +719,7 @@ private:
     bool RegisteredInUniversalScheduler = false;
 
     void HandleUpdateRequestTrackingStats(const TActorContext& ctx) {
-        Y_VERIFY(UpdateRequestTrackingStatsScheduled || RegisteredInUniversalScheduler);
+        Y_ABORT_UNLESS(UpdateRequestTrackingStatsScheduled || RegisteredInUniversalScheduler);
         UpdateRequestTrackingStatsScheduled = false;
         UpdateRequestTrackingStats(ctx);
     }

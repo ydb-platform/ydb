@@ -62,7 +62,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             }
             if (allocatedSizeIncrement && !slot->IsBeingDeleted()) {
                 const TGroupInfo *group = FindGroup(slot->GroupId);
-                Y_VERIFY(group);
+                Y_ABORT_UNLESS(group);
                 StoragePoolStat->UpdateAllocatedSize(TStoragePoolStat::ConvertId(group->StoragePoolId), allocatedSizeIncrement);
             }
         } else if (const auto it = StaticVDiskMap.find(vdiskId); it != StaticVDiskMap.end()) {

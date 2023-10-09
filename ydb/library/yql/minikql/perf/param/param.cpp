@@ -44,7 +44,7 @@ int main(int, char**) {
             }
 
             auto resVal = graph->GetValue().Get<ui32>();
-            Y_VERIFY(resVal == (pass ? i : 1));
+            Y_ABORT_UNLESS(resVal == (pass ? i : 1));
         }
 
         Cerr << "[" << name << "] Elapsed: " << timer.Get() << "\n";

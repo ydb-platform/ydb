@@ -87,22 +87,22 @@ namespace NKikimr {
                 }
 
                 const TLeveledSsts &GetSstsToDelete() const {
-                    Y_VERIFY(Finalized);
+                    Y_ABORT_UNLESS(Finalized);
                     return TablesToDelete;
                 }
 
                 const TLeveledSsts &GetSstsToAdd() const {
-                    Y_VERIFY(Finalized);
+                    Y_ABORT_UNLESS(Finalized);
                     return TablesToAdd;
                 }
 
                 const TDiskPartVec &GetHugeBlobsToDelete() const {
-                    Y_VERIFY(Finalized);
+                    Y_ABORT_UNLESS(Finalized);
                     return HugeBlobsToDelete;
                 }
 
                 TDiskPartVec ExtractHugeBlobsToDelete() {
-                    Y_VERIFY(Finalized);
+                    Y_ABORT_UNLESS(Finalized);
                     return std::move(HugeBlobsToDelete);
                 }
 
@@ -250,7 +250,7 @@ namespace NKikimr {
                         TablesToAdd.Clear();
                         HugeBlobsToDelete.Clear();
                     } else {
-                        Y_VERIFY(!TablesToDelete.Empty());
+                        Y_ABORT_UNLESS(!TablesToDelete.Empty());
                         HugeBlobsToDelete = std::move(hugeBlobsToDelete);
                         if (segVec) {
                             TLeveledSsts tmp(TargetLevel, *segVec);
@@ -270,7 +270,7 @@ namespace NKikimr {
 
                 void Finalize() {
                     TBase::Finalize();
-                    Y_VERIFY(TargetLevel != (ui32)(-1));
+                    Y_ABORT_UNLESS(TargetLevel != (ui32)(-1));
                 }
             };
 
@@ -362,7 +362,7 @@ namespace NKikimr {
                         bool dregForLevel0);
 
             double GetRate(ui32 virtualLevel, ui32 chunks) const {
-                Y_VERIFY(virtualLevel != 1); // i.e. several physical levels, partially sorted parts
+                Y_ABORT_UNLESS(virtualLevel != 1); // i.e. several physical levels, partially sorted parts
                 return double(chunks) / double(BoundaryPerLevel[virtualLevel]);
             }
 

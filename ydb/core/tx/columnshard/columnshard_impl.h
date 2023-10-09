@@ -171,7 +171,7 @@ class TColumnShard
     }
 
     const NTiers::TManager& GetTierManagerVerified(const TString& tierId) const {
-        Y_VERIFY(!!Tiers);
+        Y_ABORT_UNLESS(!!Tiers);
         return Tiers->GetManagerVerified(tierId);
     }
 
@@ -339,8 +339,8 @@ private:
         }
 
         TGuard FinishWrite(const ui64 dataSize) {
-            Y_VERIFY(WritesInFlight > 0);
-            Y_VERIFY(WritesSizeInFlight >= dataSize);
+            Y_ABORT_UNLESS(WritesInFlight > 0);
+            Y_ABORT_UNLESS(WritesSizeInFlight >= dataSize);
             --WritesInFlight;
             WritesSizeInFlight -= dataSize;
             return TGuard(*this);

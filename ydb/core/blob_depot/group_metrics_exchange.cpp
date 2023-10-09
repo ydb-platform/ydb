@@ -119,7 +119,7 @@ namespace NKikimr::NBlobDepot {
                 if (MetricsQ.size() >= 2) {
                     auto& [xTimestamp, xRead, xWritten] = MetricsQ[0];
                     const auto& [yTimestamp, yRead, yWritten] = MetricsQ[1];
-                    Y_VERIFY(xTimestamp <= left && left < yTimestamp);
+                    Y_ABORT_UNLESS(xTimestamp <= left && left < yTimestamp);
                     static constexpr ui64 scale = 1'000'000;
                     const ui64 factor = (left - xTimestamp).MicroSeconds() * scale / (yTimestamp - xTimestamp).MicroSeconds();
                     xTimestamp = left;

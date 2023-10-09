@@ -30,11 +30,11 @@ public:
 
     const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
     {
-        Y_VERIFY(groupId.IsMain(), "Unsupported column group");
+        Y_ABORT_UNLESS(groupId.IsMain(), "Unsupported column group");
 
         auto *partStore = CheckedCast<const TPartStore*>(part);
         auto *info = partStore->PageCollections.at(groupId.Index).Get();
-        Y_VERIFY(EPage(info->PageCollection->Page(pageId).Type) == EPage::Index);
+        Y_ABORT_UNLESS(EPage(info->PageCollection->Page(pageId).Type) == EPage::Index);
 
         if (auto *partPages = Parts.FindPtr(part)) {
             if (auto *page = partPages->Pages.FindPtr(pageId)) {
@@ -152,8 +152,8 @@ private:
 
     void Handle(TEvResourceBroker::TEvResourceAllocated::TPtr& ev, const TActorContext& ctx) {
         auto* msg = ev->Get();
-        Y_VERIFY(!msg->Cookie.Get(), "Unexpected cookie in TEvResourceAllocated");
-        Y_VERIFY(msg->TaskId == 1, "Unexpected task id in TEvResourceAllocated");
+        Y_ABORT_UNLESS(!msg->Cookie.Get(), "Unexpected cookie in TEvResourceAllocated");
+        Y_ABORT_UNLESS(msg->TaskId == 1, "Unexpected task id in TEvResourceAllocated");
         TryBuildStats(ctx);
     }
 
@@ -187,7 +187,7 @@ private:
             " needs to load " << Env.GetPending() << " pages");
         
         auto fetches = Env.GetFetches();
-        Y_VERIFY(fetches);
+        Y_ABORT_UNLESS(fetches);
         for (auto &fetch : fetches) {
             ctx.Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, std::move(fetch), SelfId()));
         }

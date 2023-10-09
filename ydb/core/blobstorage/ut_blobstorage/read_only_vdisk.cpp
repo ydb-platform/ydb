@@ -75,7 +75,7 @@ struct TTetsEnv {
     auto SendGetWithChecks(ui32 step) {
         const TString& data = DataArr[step % 2];
         auto res = SendGet(step, data.size());
-        Y_VERIFY(res->Get()->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(res->Get()->Status == NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer.size(), data.size());

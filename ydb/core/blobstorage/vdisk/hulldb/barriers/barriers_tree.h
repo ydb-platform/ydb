@@ -98,28 +98,28 @@ namespace NKikimr {
             void LockWrite() {
                 if constexpr (NSan::TSanIsOn()) {
                     const intptr_t x = Lock.exchange(-1);
-                    Y_VERIFY(x == 0);
+                    Y_ABORT_UNLESS(x == 0);
                 }
             }
 
             void UnlockWrite() {
                 if constexpr (NSan::TSanIsOn()) {
                     const intptr_t x = Lock.exchange(0);
-                    Y_VERIFY(x == -1);
+                    Y_ABORT_UNLESS(x == -1);
                 }
             }
 
             void LockRead() const {
                 if constexpr (NSan::TSanIsOn()) {
                     const intptr_t x = Lock++;
-                    Y_VERIFY(x >= 0);
+                    Y_ABORT_UNLESS(x >= 0);
                 }
             }
 
             void UnlockRead() const {
                 if constexpr (NSan::TSanIsOn()) {
                     const intptr_t x = --Lock;
-                    Y_VERIFY(x >= 0);
+                    Y_ABORT_UNLESS(x >= 0);
                 }
             }
         };

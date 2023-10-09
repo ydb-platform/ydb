@@ -152,7 +152,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         bool ReplyIfNotTopic(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_VERIFY(result->ResultSet.size() == 1);
+            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
             const auto& response = result->ResultSet.front();
             const TString path  = JoinPath(response.Path);
 
@@ -169,7 +169,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_VERIFY(result->ResultSet.size() == 1);
+            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
             const auto& response = result->ResultSet.front();
             const TString path  = JoinPath(response.Path);
 
@@ -349,7 +349,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
-                    Y_VERIFY(response.ListNodeEntry->Children.size() == 1);
+                    Y_ABORT_UNLESS(response.ListNodeEntry->Children.size() == 1);
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
 
                     if (response.Self) {
@@ -435,8 +435,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
 
             auto* config = modifyScheme.MutableAlterPersQueueGroup();
-            Y_VERIFY(response.Self);
-            Y_VERIFY(response.PQGroupInfo);
+            Y_ABORT_UNLESS(response.Self);
+            Y_ABORT_UNLESS(response.PQGroupInfo);
             config->CopyFrom(response.PQGroupInfo->Description);
 
             // keep previous values or set in ModifyPersqueueConfig
@@ -461,7 +461,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_VERIFY(result->ResultSet.size() == 1);
+            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
             DescribeSchemeResult = std::move(ev);
             return this->SendProposeRequest(this->ActorContext());
         }
@@ -522,7 +522,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         bool HandleCacheNavigateResponseBase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            Y_VERIFY(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
+            Y_ABORT_UNLESS(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
             if (this->ReplyIfNotTopic(ev)) {
                 return false;
             }

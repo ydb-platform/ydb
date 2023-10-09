@@ -18,8 +18,8 @@ public:
         , Sender(ev->Sender)
     {
         const auto& record = ev->Get()->Record;
-        Y_VERIFY(record.HasTxId());
-        Y_VERIFY(record.HasTargetTxId());
+        Y_ABORT_UNLESS(record.HasTxId());
+        Y_ABORT_UNLESS(record.HasTargetTxId());
     }
 
     const TOperationId& GetOperationId() const override {

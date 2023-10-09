@@ -18,13 +18,13 @@ bool TPathInfo::SetInsertedOverload(const bool value) {
 
 void TPathInfo::AddCommittedSize(const i64 size, const ui64 overloadLimit) {
     CommittedSize += size;
-    Y_VERIFY(CommittedSize >= 0);
+    Y_ABORT_UNLESS(CommittedSize >= 0);
     SetCommittedOverload((ui64)CommittedSize > overloadLimit);
 }
 
 void TPathInfo::AddInsertedSize(const i64 size, const ui64 overloadLimit) {
     InsertedSize += size;
-    Y_VERIFY(InsertedSize >= 0);
+    Y_ABORT_UNLESS(InsertedSize >= 0);
     PathIdCounters.Inserted.OnPathIdDataInfo(InsertedSize, 0);
     SetInsertedOverload((ui64)InsertedSize > overloadLimit);
 }

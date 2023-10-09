@@ -67,7 +67,7 @@ TAwsRequestSignV4::TAwsRequestSignV4(const TString& request) {
             inputData.ConstructInPlace();
             inputData->Resize(contentLength);
             if (input.Load(inputData->Data(), (size_t)contentLength) != contentLength) {
-                Y_VERIFY(false);
+                Y_ABORT_UNLESS(false);
             }
         }
     }

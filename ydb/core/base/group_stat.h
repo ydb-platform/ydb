@@ -86,7 +86,7 @@ namespace NKikimr {
 
             // find it in the buckets array
             size_t index = std::upper_bound(accum.begin(), accum.end(), quantile) - accum.begin();
-            Y_VERIFY(index > 0 && index <= NumGroupStatBuckets);
+            Y_ABORT_UNLESS(index > 0 && index <= NumGroupStatBuckets);
 
             const double w = (quantile - accum[index - 1]) / (accum[index] - accum[index - 1]);
             return TDuration::FromValue(GetBucketValue(index - 1).GetValue() * (1 - w) + GetBucketValue(index).GetValue() * w);

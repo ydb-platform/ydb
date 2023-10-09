@@ -29,7 +29,7 @@ namespace NKikimr::NTestShard {
             {}
 
             ~TKeyInfo() {
-                Y_VERIFY(ConfirmedKeyIndex == Max<size_t>());
+                Y_ABORT_UNLESS(ConfirmedKeyIndex == Max<size_t>());
             }
         };
 
@@ -191,13 +191,13 @@ namespace NKikimr::NTestShard {
             ui64 w = 0;
             cw.reserve(intervals.size());
             for (const auto& interval : intervals) {
-                Y_VERIFY(interval.HasWeight());
-                Y_VERIFY(interval.GetWeight());
+                Y_ABORT_UNLESS(interval.HasWeight());
+                Y_ABORT_UNLESS(interval.GetWeight());
                 w += interval.GetWeight();
                 cw.push_back(w);
             }
             const size_t num = std::upper_bound(cw.begin(), cw.end(), RandomNumber(w)) - cw.begin();
-            Y_VERIFY(num < cw.size());
+            Y_ABORT_UNLESS(num < cw.size());
             return num;
         }
 

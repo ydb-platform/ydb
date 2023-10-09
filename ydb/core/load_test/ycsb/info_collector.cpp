@@ -35,7 +35,7 @@ public:
 
     void Handle(TEvDataShardLoad::TEvTestLoadInfoResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
-        Y_VERIFY(record.ReportsSize() == 1);
+        Y_ABORT_UNLESS(record.ReportsSize() == 1);
         Results[record.GetReports(0).GetTag()] = std::move(record.GetReports(0));
 
         --ResponsesPending;

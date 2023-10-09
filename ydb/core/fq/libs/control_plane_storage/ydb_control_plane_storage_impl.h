@@ -182,7 +182,7 @@ THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultS
     TResultSetParser parser(resultSet);
     while (parser.TryNextRow()) {
         T entity;
-        Y_VERIFY(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
+        Y_ABORT_UNLESS(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
         const auto visibility = entity.content().acl().visibility();
         if (ignorePrivateSources && visibility == FederatedQuery::Acl::PRIVATE) {
             continue;
@@ -207,7 +207,7 @@ TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName, b
     TResultSetParser parser(resultSet);
     while (parser.TryNextRow()) {
         T entity;
-        Y_VERIFY(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
+        Y_ABORT_UNLESS(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
         const auto visibility = entity.content().acl().visibility();
         if (ignorePrivateSources && visibility == FederatedQuery::Acl::PRIVATE) {
             continue;

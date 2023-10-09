@@ -104,8 +104,8 @@ void TApplication::Finalize()
 
 void TApplication::BeginTransaction()
 {
-    Y_VERIFY(!Transaction);
-    Y_VERIFY(TableSession);
+    Y_ABORT_UNLESS(!Transaction);
+    Y_ABORT_UNLESS(TableSession);
 
     auto settings = NYdb::NTable::TTxSettings::SerializableRW();
     auto result = TableSession->BeginTransaction(settings).GetValueSync();
@@ -115,7 +115,7 @@ void TApplication::BeginTransaction()
 
 void TApplication::CommitTransaction()
 {
-    Y_VERIFY(Transaction);
+    Y_ABORT_UNLESS(Transaction);
 
     NYdb::NTable::TCommitTxSettings settings;
 
@@ -127,7 +127,7 @@ void TApplication::CommitTransaction()
 void TApplication::TryCommitTransaction()
 {
     if (!Rows.empty()) {
-        Y_VERIFY(Transaction);
+        Y_ABORT_UNLESS(Transaction);
 
         InsertRowsIntoTable();
         CommitTransaction();
@@ -147,7 +147,7 @@ void TApplication::TryCommitTransaction()
 
 void TApplication::InsertRowsIntoTable()
 {
-    Y_VERIFY(Transaction);
+    Y_ABORT_UNLESS(Transaction);
 
     TString query = "                                                            \
         DECLARE $rows AS List<Struct<                                            \

@@ -63,7 +63,7 @@ TString TStructuredToken::ToJson() const {
 }
 
 TStructuredToken ParseStructuredToken(const TString& content) {
-    Y_VERIFY(IsStructuredTokenJson(content));
+    Y_ABORT_UNLESS(IsStructuredTokenJson(content));
 
     NJson::TJsonValue v;
     // will throw on error

@@ -53,15 +53,15 @@ ui32 TIndexRecord::GetReadItems(ui64 offset, ui64 size, TIntermediate::TRead& re
         return 0;
     }
     auto it = UpperBound(Chain.begin(), Chain.end(), offset);
-    Y_VERIFY(it != Chain.begin());
+    Y_ABORT_UNLESS(it != Chain.begin());
     --it;
-    Y_VERIFY(offset >= it->Offset);
+    Y_ABORT_UNLESS(offset >= it->Offset);
     offset -= it->Offset;
 
     ui64 valueOffset = 0;
     ui32 numReads = 0;
     while (size) {
-        Y_VERIFY(it != Chain.end());
+        Y_ABORT_UNLESS(it != Chain.end());
         ui32 readSize = Min<ui64>(size, it->GetSize() - offset);
         if (it->IsInline()) {
             const auto& rope = it->InlineData;
@@ -121,13 +121,13 @@ TString TIndexRecord::Serialize() const {
 }
 
 EItemType TIndexRecord::ReadItemType(const TString &rawData) {
-    Y_VERIFY(rawData.size() >= sizeof(TDataHeader));
+    Y_ABORT_UNLESS(rawData.size() >= sizeof(TDataHeader));
     const TDataHeader *dataHeader = (const TDataHeader *)rawData.data();
     return (EItemType)dataHeader->ItemType;
 }
 
 bool TIndexRecord::Deserialize1(const TString &rawData, TString &outErrorInfo) {
-    Y_VERIFY(rawData.size() >= sizeof(TKeyValueData1));
+    Y_ABORT_UNLESS(rawData.size() >= sizeof(TKeyValueData1));
     const TKeyValueData1 *data = (const TKeyValueData1 *)rawData.data();
     const ui32 numItems = TKeyValueData1::GetNumItems(rawData.size());
     if (!data->CheckChecksum(numItems)) {
@@ -149,7 +149,7 @@ bool TIndexRecord::Deserialize1(const TString &rawData, TString &outErrorInfo) {
         outErrorInfo = str.Str();
         return false;
     }
-    Y_VERIFY(data->DataHeader.ItemType == EIT_KEYVALUE_1);
+    Y_ABORT_UNLESS(data->DataHeader.ItemType == EIT_KEYVALUE_1);
     ui64 offset = 0;
     if (data->FirstLogoBlobId) {
         Chain.push_back(TIndexRecord::TChainItem(data->FirstLogoBlobId, offset));
@@ -165,7 +165,7 @@ bool TIndexRecord::Deserialize1(const TString &rawData, TString &outErrorInfo) {
 }
 
 bool TIndexRecord::Deserialize2(const TString &rawData, TString &outErrorInfo) {
-    Y_VERIFY(rawData.size() >= sizeof(TKeyValueData2));
+    Y_ABORT_UNLESS(rawData.size() >= sizeof(TKeyValueData2));
     TRcBuf rawDataBuffer(rawData); // encode TString into TRcBuf to slice it further
     const TContiguousSpan rawDataSpan = rawDataBuffer.GetContiguousSpan();
     const TKeyValueData2 *data = reinterpret_cast<const TKeyValueData2*>(rawDataSpan.data());
@@ -182,7 +182,7 @@ bool TIndexRecord::Deserialize2(const TString &rawData, TString &outErrorInfo) {
         outErrorInfo = str.Str();
         return false;
     }
-    Y_VERIFY(data->DataHeader.ItemType == EIT_KEYVALUE_2);
+    Y_ABORT_UNLESS(data->DataHeader.ItemType == EIT_KEYVALUE_2);
     CreationUnixTime = data->CreationUnixTime;
     ui64 chainOffset = 0;
     ui64 endOffset = rawDataSpan.size() - sizeof(TKeyValueData2);

@@ -120,7 +120,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             evx.Record.SetTimeBarrier(CommitedStep);
             TAllocChunkSerializer serializer;
             const bool success = evx.SerializeToArcadiaStream(&serializer);
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
             TIntrusivePtr<TEventSerializedData> data = serializer.Release(evx.CreateSerializationInfo());
 
             // todo: we must throttle delivery
@@ -147,7 +147,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             StepCommitQueue->Push(ActiveStep);
         }
 
-        Y_VERIFY(ActiveStep->Step == step);
+        Y_ABORT_UNLESS(ActiveStep->Step == step);
         ++ActiveStep->RefCounter;
 
         TTabletEntry::TStep *tabletStep = new TTabletEntry::TStep(ActiveStep);
@@ -190,7 +190,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
 
         TTabletEntry &tabletEntry = PerTabletPlanQueue[tablet];
-        Y_VERIFY(tabletEntry.State == TTabletEntry::StateConnect);
+        Y_ABORT_UNLESS(tabletEntry.State == TTabletEntry::StateConnect);
 
         if (!Pipes->OnConnect(ev)) {
             if (msg->Dead) {
@@ -228,7 +228,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         Pipes->OnDisconnect(ev);
 
         TTabletEntry &tabletEntry = PerTabletPlanQueue[tablet];
-        Y_VERIFY(tabletEntry.State == TTabletEntry::StateConnected);
+        Y_ABORT_UNLESS(tabletEntry.State == TTabletEntry::StateConnected);
 
         // if connect to tablet lost and tablet is in no use - just forget connection
         if (tabletEntry.Queue->Head() == nullptr) {

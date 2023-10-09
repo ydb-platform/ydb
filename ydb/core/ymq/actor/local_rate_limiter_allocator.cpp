@@ -18,7 +18,7 @@ THashMultiMap<ui32, ui32> FreeRateToTag;
 TAdaptiveLock RatesLock;
 
 ui32 AllocateLocalRateLimiterTag(ui32 rate) {
-    Y_VERIFY(rate != std::numeric_limits<ui32>::max());
+    Y_ABORT_UNLESS(rate != std::numeric_limits<ui32>::max());
     auto lock = Guard(RatesLock);
     auto freeTagIt = FreeRateToTag.find(rate);
     if (freeTagIt != FreeRateToTag.end()) {

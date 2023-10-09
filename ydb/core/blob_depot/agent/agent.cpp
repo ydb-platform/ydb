@@ -16,7 +16,7 @@ namespace NKikimr::NBlobDepot {
         , BlobMappingCache(*BlobMappingCachePtr)
     {
         if (info) {
-            Y_VERIFY(info->BlobDepotId);
+            Y_ABORT_UNLESS(info->BlobDepotId);
             TabletId = *info->BlobDepotId;
             LogId = TStringBuilder() << '{' << TabletId << '@' << virtualGroupId << '}';
         } else {

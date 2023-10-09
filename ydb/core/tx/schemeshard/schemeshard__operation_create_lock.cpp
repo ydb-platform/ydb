@@ -30,8 +30,8 @@ public:
         LOG_I(DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateLock);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateLock);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -181,14 +181,14 @@ public:
         context.DbChanges.PersistLongLock(pathId, OperationId.GetTxId());
         context.DbChanges.PersistTxState(OperationId);
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateLock, pathId);
         txState.State = ProposeToCoordinator ? TTxState::Propose : TTxState::Done;
 
         tablePath.Base()->LastTxId = OperationId.GetTxId();
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;
 
-        Y_VERIFY(context.SS->Tables.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         auto table = context.SS->Tables.at(pathId);
 
         for (const auto& splitOpId : table->GetSplitOpsInFlight()) {
@@ -225,7 +225,7 @@ ISubOperation::TPtr CreateLock(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr CreateLock(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TCreateLock>(id, state);
 }
 

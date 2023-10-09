@@ -80,10 +80,10 @@ void TCmdSchemeInitShardConfig::Parse(int argc, char **argv) {
 #if 0
     if (!configPbFile.empty()) {
         GlobalConfig.Reset(new NKikimrTxScheme::TConfig);
-        Y_VERIFY(ParsePBFromFile(configPbFile, GlobalConfig.Get()));
+        Y_ABORT_UNLESS(ParsePBFromFile(configPbFile, GlobalConfig.Get()));
     } else if (!configPb.empty()) {
         GlobalConfig.Reset(new NKikimrTxScheme::TConfig);
-        Y_VERIFY(::google::protobuf::TextFormat::ParseFromString(configPb, GlobalConfig.Get()));
+        Y_ABORT_UNLESS(::google::protobuf::TextFormat::ParseFromString(configPb, GlobalConfig.Get()));
     }
 #else
     Cout << "config options for init-root are not used anymore (deprecated)" << Endl;

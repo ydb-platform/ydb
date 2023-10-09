@@ -184,7 +184,7 @@ void TReadSession::ProceedWithoutClusterDiscovery() {
 }
 
 void TReadSession::CreateClusterSessionsImpl(TDeferredActions<true>& deferred) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     // Create cluster sessions.
     ui64 partitionStreamIdStart = 1;
@@ -326,7 +326,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
 }
 
 void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions<true>& deferred) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
     if (Aborting || Closing) {
         return;
     }
@@ -430,10 +430,10 @@ bool TReadSession::Close(TDuration timeout) {
 
 void TReadSession::AbortImpl(TDeferredActions<true>&) {
 
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (!Aborting) {
-        Y_VERIFY(EventsQueue->IsClosed());
+        Y_ABORT_UNLESS(EventsQueue->IsClosed());
         Aborting = true;
         if (ClusterDiscoveryDelayContext) {
             ClusterDiscoveryDelayContext->Cancel();
@@ -452,7 +452,7 @@ void TReadSession::AbortImpl(TDeferredActions<true>&) {
 }
 
 void TReadSession::AbortImpl(EStatus statusCode, NYql::TIssues&& issues, TDeferredActions<true>& deferred) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
     auto closeEvent = TSessionClosedEvent(statusCode, std::move(issues));
     LOG_LAZY(Log, TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
 
@@ -461,7 +461,7 @@ void TReadSession::AbortImpl(EStatus statusCode, NYql::TIssues&& issues, TDeferr
 }
 
 void TReadSession::AbortImpl(EStatus statusCode, const TString& message, TDeferredActions<true>& deferred) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     NYql::TIssues issues;
     issues.AddIssue(message);
@@ -739,7 +739,7 @@ public:
 
     void OnCreatePartitionStream(TReadSessionEvent::TCreatePartitionStreamEvent& event) {
         with_lock (Lock) {
-            Y_VERIFY(PartitionStreamToUncommittedOffsets[event.GetPartitionStream()->GetPartitionStreamId()].Empty());
+            Y_ABORT_UNLESS(PartitionStreamToUncommittedOffsets[event.GetPartitionStream()->GetPartitionStreamId()].Empty());
         }
         event.Confirm();
     }
@@ -747,7 +747,7 @@ public:
     void OnDestroyPartitionStream(TReadSessionEvent::TDestroyPartitionStreamEvent& event) {
         with_lock (Lock) {
             const ui64 partitionStreamId = event.GetPartitionStream()->GetPartitionStreamId();
-            Y_VERIFY(UnconfirmedDestroys.find(partitionStreamId) == UnconfirmedDestroys.end());
+            Y_ABORT_UNLESS(UnconfirmedDestroys.find(partitionStreamId) == UnconfirmedDestroys.end());
             if (PartitionStreamToUncommittedOffsets[partitionStreamId].Empty()) {
                 PartitionStreamToUncommittedOffsets.erase(partitionStreamId);
                 event.Confirm();

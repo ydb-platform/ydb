@@ -426,7 +426,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
 
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr &ev) {
         const TVector<TActorId> &replicasList = ev->Get()->Replicas;
-        Y_VERIFY(!replicasList.empty(), "must not happens, guardian must be created over active tablet");
+        Y_ABORT_UNLESS(!replicasList.empty(), "must not happens, guardian must be created over active tablet");
 
         const ui32 replicaSz = replicasList.size();
 
@@ -559,7 +559,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     }
 
     void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
-        Y_VERIFY(FollowerTracker);
+        Y_ABORT_UNLESS(FollowerTracker);
 
         const NKikimrStateStorage::TEvInfo &record = ev->Get()->Record;
         const TActorId guardian = ev->Sender;
@@ -600,7 +600,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         const auto *msg = ev->Get();
         const ui64 tabletId = FollowerInfo->TabletID;
 
-        Y_VERIFY(msg->FollowerActor == FollowerInfo->Follower);
+        Y_ABORT_UNLESS(msg->FollowerActor == FollowerInfo->Follower);
 
         const bool hasChanges = msg->TabletActor != FollowerInfo->Tablet || msg->IsCandidate != FollowerInfo->IsCandidate;
         if (hasChanges) {

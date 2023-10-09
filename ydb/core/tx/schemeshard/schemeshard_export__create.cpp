@@ -125,7 +125,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             Y_VERIFY_DEBUG(false, "Unknown export kind");
         }
 
-        Y_VERIFY(exportInfo != nullptr);
+        Y_ABORT_UNLESS(exportInfo != nullptr);
 
         if (request.HasUserSID()) {
             exportInfo->UserSID = request.GetUserSID();
@@ -282,7 +282,7 @@ private:
             << ": info# " << exportInfo->ToString()
             << ", txId# " << txId);
 
-        Y_VERIFY(exportInfo->WaitTxId == InvalidTxId);
+        Y_ABORT_UNLESS(exportInfo->WaitTxId == InvalidTxId);
         Send(Self->SelfId(), MkDirPropose(Self, txId, exportInfo));
     }
 
@@ -291,12 +291,12 @@ private:
             << ": info# " << exportInfo->ToString()
             << ", txId# " << txId);
 
-        Y_VERIFY(exportInfo->WaitTxId == InvalidTxId);
+        Y_ABORT_UNLESS(exportInfo->WaitTxId == InvalidTxId);
         Send(Self->SelfId(), CopyTablesPropose(Self, txId, exportInfo));
     }
 
     void TransferData(TExportInfo::TPtr exportInfo, ui32 itemIdx, TTxId txId) {
-        Y_VERIFY(itemIdx < exportInfo->Items.size());
+        Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
         auto& item = exportInfo->Items.at(itemIdx);
 
         item.SubState = ESubState::Proposed;
@@ -306,12 +306,12 @@ private:
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
 
-        Y_VERIFY(item.WaitTxId == InvalidTxId);
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
     }
 
     bool CancelTransferring(TExportInfo::TPtr exportInfo, ui32 itemIdx) {
-        Y_VERIFY(itemIdx < exportInfo->Items.size());
+        Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
         const auto& item = exportInfo->Items.at(itemIdx);
 
         if (item.WaitTxId == InvalidTxId) {
@@ -333,7 +333,7 @@ private:
     }
 
     void DropTable(TExportInfo::TPtr exportInfo, ui32 itemIdx, TTxId txId) {
-        Y_VERIFY(itemIdx < exportInfo->Items.size());
+        Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
         const auto& item = exportInfo->Items.at(itemIdx);
 
         LOG_I("TExport::TTxProgress: Drop propose"
@@ -341,7 +341,7 @@ private:
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
 
-        Y_VERIFY(item.WaitTxId == InvalidTxId);
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         Send(Self->SelfId(), DropPropose(Self, txId, exportInfo, itemIdx));
     }
 
@@ -350,7 +350,7 @@ private:
             << ": info# " << exportInfo->ToString()
             << ", txId# " << txId);
 
-        Y_VERIFY(exportInfo->WaitTxId == InvalidTxId);
+        Y_ABORT_UNLESS(exportInfo->WaitTxId == InvalidTxId);
         Send(Self->SelfId(), DropPropose(Self, txId, exportInfo));
     }
 
@@ -358,12 +358,12 @@ private:
         LOG_I("TExport::TTxProgress: Allocate txId"
             << ": info# " << exportInfo->ToString());
 
-        Y_VERIFY(exportInfo->WaitTxId == InvalidTxId);
+        Y_ABORT_UNLESS(exportInfo->WaitTxId == InvalidTxId);
         Send(Self->TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(), 0, exportInfo->Id);
     }
 
     void AllocateTxId(TExportInfo::TPtr exportInfo, ui32 itemIdx) {
-        Y_VERIFY(itemIdx < exportInfo->Items.size());
+        Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
         auto& item = exportInfo->Items.at(itemIdx);
 
         item.SubState = ESubState::AllocateTxId;
@@ -372,7 +372,7 @@ private:
             << ": info# " << exportInfo->ToString()
             << ", item# " << item.ToString(itemIdx));
 
-        Y_VERIFY(item.WaitTxId == InvalidTxId);
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         Send(Self->TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(), 0, exportInfo->Id);
     }
 
@@ -384,12 +384,12 @@ private:
         LOG_I("TExport::TTxProgress: Wait for completion"
             << ": info# " << exportInfo->ToString());
 
-        Y_VERIFY(exportInfo->WaitTxId != InvalidTxId);
+        Y_ABORT_UNLESS(exportInfo->WaitTxId != InvalidTxId);
         SubscribeTx(exportInfo->WaitTxId);
     }
 
     void SubscribeTx(TExportInfo::TPtr exportInfo, ui32 itemIdx) {
-        Y_VERIFY(itemIdx < exportInfo->Items.size());
+        Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
         auto& item = exportInfo->Items.at(itemIdx);
 
         item.SubState = ESubState::Subscribed;
@@ -398,7 +398,7 @@ private:
             << ": info# " << exportInfo->ToString()
             << ", item# " << item.ToString(itemIdx));
 
-        Y_VERIFY(item.WaitTxId != InvalidTxId);
+        Y_ABORT_UNLESS(item.WaitTxId != InvalidTxId);
         SubscribeTx(item.WaitTxId);
     }
 
@@ -435,10 +435,10 @@ private:
     }
 
     TTxId GetActiveBackupTxId(TExportInfo::TPtr exportInfo, ui32 itemIdx) {
-        Y_VERIFY(itemIdx < exportInfo->Items.size());
+        Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
         const auto& item = exportInfo->Items.at(itemIdx);
 
-        Y_VERIFY(item.State == EState::Transferring);
+        Y_ABORT_UNLESS(item.State == EState::Transferring);
 
         const auto itemPathId = ItemPathId(Self, exportInfo, itemIdx);
         if (!itemPathId) {
@@ -458,7 +458,7 @@ private:
     }
 
     void Cancel(TExportInfo::TPtr exportInfo, ui32 itemIdx, TStringBuf marker) {
-        Y_VERIFY(itemIdx < exportInfo->Items.size());
+        Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
         const auto& item = exportInfo->Items.at(itemIdx);
 
         LOG_N("TExport::TTxProgress: " << marker << ", cancelling"
@@ -520,7 +520,7 @@ private:
     }
 
     void Resume(TTransactionContext& txc, const TActorContext&) {
-        Y_VERIFY(Self->Exports.contains(Id));
+        Y_ABORT_UNLESS(Self->Exports.contains(Id));
         TExportInfo::TPtr exportInfo = Self->Exports.at(Id);
 
         LOG_D("TExport::TTxProgress: Resume"
@@ -609,7 +609,7 @@ private:
     }
 
     void OnAllocateResult(TTransactionContext&, const TActorContext&) {
-        Y_VERIFY(AllocateResult);
+        Y_ABORT_UNLESS(AllocateResult);
 
         const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
         const ui64 id = AllocateResult->Cookie;
@@ -664,12 +664,12 @@ private:
             return;
         }
 
-        Y_VERIFY(!Self->TxIdToExport.contains(txId));
+        Y_ABORT_UNLESS(!Self->TxIdToExport.contains(txId));
         Self->TxIdToExport[txId] = {exportInfo->Id, itemIdx};
     }
 
     void OnModifyResult(TTransactionContext& txc, const TActorContext& ctx) {
-        Y_VERIFY(ModifyResult);
+        Y_ABORT_UNLESS(ModifyResult);
         const auto& record = ModifyResult->Get()->Record;
 
         LOG_D("TExport::TTxProgress: OnModifyResult"
@@ -821,14 +821,14 @@ private:
             break;
 
         case EState::Transferring:
-            Y_VERIFY(itemIdx < exportInfo->Items.size());
+            Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
             exportInfo->Items.at(itemIdx).WaitTxId = txId;
             Self->PersistExportItemState(db, exportInfo, itemIdx);
             break;
 
         case EState::Dropping:
             if (!exportInfo->AllItemsAreDropped()) {
-                Y_VERIFY(itemIdx < exportInfo->Items.size());
+                Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
                 exportInfo->Items.at(itemIdx).WaitTxId = txId;
                 Self->PersistExportItemState(db, exportInfo, itemIdx);
             } else {
@@ -858,7 +858,7 @@ private:
     }
 
     void OnNotifyResult(TTransactionContext& txc, const TActorContext&) {
-        Y_VERIFY(CompletedTxId);
+        Y_ABORT_UNLESS(CompletedTxId);
         LOG_D("TExport::TTxProgress: OnNotifyResult"
             << ": txId# " << CompletedTxId);
 
@@ -929,7 +929,7 @@ private:
             break;
 
         case EState::Transferring: {
-            Y_VERIFY(itemIdx < exportInfo->Items.size());
+            Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
             auto& item = exportInfo->Items.at(itemIdx);
 
             item.State = EState::Done;
@@ -950,7 +950,7 @@ private:
 
         case EState::Dropping:
             if (!exportInfo->AllItemsAreDropped()) {
-                Y_VERIFY(itemIdx < exportInfo->Items.size());
+                Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
                 auto& item = exportInfo->Items.at(itemIdx);
 
                 item.State = EState::Dropped;

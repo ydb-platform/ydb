@@ -172,7 +172,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
 
     void Handle(TEvPrivate::TEvTopicEventReady::TPtr& ev) {
         auto event = Session->GetEvent(true);
-        Y_VERIFY(event.Defined());
+        Y_ABORT_UNLESS(event.Defined());
         Send(ev->Get()->Sender, new TEvYdbProxy::TEvReadTopicResponse(std::move(*event)), 0, ev->Get()->Cookie);
     }
 
@@ -230,7 +230,7 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
     template <typename TClient, typename TSettings>
     TClient* EnsureClient(THolder<TClient>& client) {
         if (!client) {
-            Y_VERIFY(AppData()->YdbDriver);
+            Y_ABORT_UNLESS(AppData()->YdbDriver);
             client.Reset(new TClient(*AppData()->YdbDriver, ClientSettings<TSettings>(CommonSettings)));
         }
 

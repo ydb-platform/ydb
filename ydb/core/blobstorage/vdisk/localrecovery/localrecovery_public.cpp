@@ -163,7 +163,7 @@ namespace NKikimr {
             for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
                 TLogoBlobsSstPtr segment = iter.Get().SstPtr;
                 if (segment->Info.IsCreatedByRepl()) {
-                    Y_VERIFY(segment->Info.FirstLsn == 0 && segment->Info.LastLsn == 0);
+                    Y_ABORT_UNLESS(segment->Info.FirstLsn == 0 && segment->Info.LastLsn == 0);
                     const auto& item = logoBlobs->CurSlice->BulkFormedSegments.FindIntactBulkFormedSst(segment->GetEntryPoint());
                     segment->Info.FirstLsn = item.FirstBlobLsn;
                     segment->Info.LastLsn = item.LastBlobLsn;
@@ -396,13 +396,13 @@ namespace NKikimr {
         bool InitHugeBlobKeeper(const TStartingPoints &startingPoints, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             const ui32 blocksInChunk = LocRecCtx->PDiskCtx->Dsk->ChunkSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
-            Y_VERIFY(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize);
+            Y_ABORT_UNLESS(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize);
 
             ui32 MaxLogoBlobDataSizeInBlocks = Config->MaxLogoBlobDataSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
             MaxLogoBlobDataSizeInBlocks += !!(Config->MaxLogoBlobDataSize -
                     MaxLogoBlobDataSizeInBlocks * LocRecCtx->PDiskCtx->Dsk->AppendBlockSize);
             const ui32 slotsInChunk = blocksInChunk / MaxLogoBlobDataSizeInBlocks;
-            Y_VERIFY(slotsInChunk > 1);
+            Y_ABORT_UNLESS(slotsInChunk > 1);
 
             auto logFunc = [&] (const TString &msg) {
                 LOG_DEBUG(ctx, BS_HULLHUGE, msg);
@@ -481,7 +481,7 @@ namespace NKikimr {
                     "INIT: TEvYardInit OK PDiskId# %s", LocRecCtx->PDiskCtx->PDiskIdString.data()));
 
                 // create context for HullDs
-                Y_VERIFY(LocRecCtx->VCtx && LocRecCtx->VCtx->Top);
+                Y_ABORT_UNLESS(LocRecCtx->VCtx && LocRecCtx->VCtx->Top);
                 auto hullCtx = MakeIntrusive<THullCtx>(
                         LocRecCtx->VCtx,
                         ui32(LocRecCtx->PDiskCtx->Dsk->ChunkSize),

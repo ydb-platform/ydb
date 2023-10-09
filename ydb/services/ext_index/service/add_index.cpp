@@ -31,7 +31,7 @@ public:
         TVector<TCell> key;
         key.reserve(1 + PKColumnsCount);
         key.emplace_back(TCell::Make(Hashes[Index]));
-        Y_VERIFY(PKColumnsCount == cells.size());
+        Y_ABORT_UNLESS(PKColumnsCount == cells.size());
         for (auto&& c : cells) {
             key.emplace_back(c);
         }

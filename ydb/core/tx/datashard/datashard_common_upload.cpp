@@ -36,8 +36,8 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     const ui64 shadowTableId = self->GetShadowTableId(fullTableId);
 
     const TUserTable& tableInfo = *self->GetUserTables().at(tableId); /// ... find
-    Y_VERIFY(tableInfo.LocalTid == localTableId);
-    Y_VERIFY(tableInfo.ShadowTid == shadowTableId);
+    Y_ABORT_UNLESS(tableInfo.LocalTid == localTableId);
+    Y_ABORT_UNLESS(tableInfo.ShadowTid == shadowTableId);
 
     // Check schemas
     if (record.GetRowScheme().KeyColumnIdsSize() != tableInfo.KeyColumnIds.size()) {
@@ -192,7 +192,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
 
             if (ChangeCollector) {
-                Y_VERIFY(CollectChanges);
+                Y_ABORT_UNLESS(CollectChanges);
 
                 if (!volatileDependencies.empty()) {
                     if (!globalTxId) {
@@ -267,7 +267,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 
 template <typename TEvRequest, typename TEvResponse>
 void TCommonUploadOps<TEvRequest, TEvResponse>::GetResult(TDataShard* self, TActorId& target, THolder<IEventBase>& event, ui64& cookie) {
-    Y_VERIFY(Result);
+    Y_ABORT_UNLESS(Result);
 
     if (Result->Record.GetStatus() == NKikimrTxDataShard::TError::OK) {
         self->IncCounter(COUNTER_BULK_UPSERT_SUCCESS);
@@ -287,7 +287,7 @@ const TEvRequest* TCommonUploadOps<TEvRequest, TEvResponse>::GetRequest() const 
 
 template <typename TEvRequest, typename TEvResponse>
 TEvResponse* TCommonUploadOps<TEvRequest, TEvResponse>::GetResult() {
-    Y_VERIFY(Result);
+    Y_ABORT_UNLESS(Result);
     return Result.Get();
 }
 

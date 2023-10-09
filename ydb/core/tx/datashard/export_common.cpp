@@ -19,12 +19,12 @@ static void ResortColumns(
 {
     THashMap<TString, ui32> nameToTag;
     for (const auto& [tag, column] : order) {
-        Y_VERIFY(nameToTag.emplace(column.Name, tag).second);
+        Y_ABORT_UNLESS(nameToTag.emplace(column.Name, tag).second);
     }
 
     SortBy(columns, [&nameToTag](const auto& column) {
         auto it = nameToTag.find(column.name());
-        Y_VERIFY(it != nameToTag.end());
+        Y_ABORT_UNLESS(it != nameToTag.end());
         return it->second;
     });
 }
@@ -78,7 +78,7 @@ TString DecimalToString(const std::pair<ui64, i64>& loHi) {
 
 TString DyNumberToString(TStringBuf data) {
     auto result = NDyNumber::DyNumberToString(data);
-    Y_VERIFY(result.Defined(), "Invalid DyNumber binary representation");
+    Y_ABORT_UNLESS(result.Defined(), "Invalid DyNumber binary representation");
     return *result;
 }
 

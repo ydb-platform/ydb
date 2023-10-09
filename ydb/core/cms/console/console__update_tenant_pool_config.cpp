@@ -76,7 +76,7 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         LOG_DEBUG(ctx, NKikimrServices::CMS_TENANTS, "TTxUpdateTenantPoolConfig Complete");
 
-        Y_VERIFY(Response);
+        Y_ABORT_UNLESS(Response);
         LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, "Send: " << Response->ToString());
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 

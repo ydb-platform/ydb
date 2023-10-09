@@ -132,14 +132,14 @@ namespace NKikimr::NSQS {
             }
             case EState::GetQueueAfterLockUpdate:
             case EState::GetQueue: {
-                Y_VERIFY(response.YdbResultsSize() == 1);
+                Y_ABORT_UNLESS(response.YdbResultsSize() == 1);
                 NYdb::TResultSetParser parser(response.GetYdbResults(0));
                 if (parser.RowsCount() == 0) {
                     LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] there are no queues to delete");
                     LockQueueToRemove(IDLE_TIMEOUT, ctx);
                     return;
                 }
-                Y_VERIFY(parser.RowsCount() == 1);
+                Y_ABORT_UNLESS(parser.RowsCount() == 1);
                 parser.TryNextRow();
                 if (State == EState::GetQueueAfterLockUpdate) {
                     ContinueRemoveData(parser, ctx);
@@ -149,7 +149,7 @@ namespace NKikimr::NSQS {
                 return;
             }
             case EState::RemoveData: {
-                Y_VERIFY(response.YdbResultsSize() == 1);
+                Y_ABORT_UNLESS(response.YdbResultsSize() == 1);
                 NYdb::TResultSetParser parser(response.GetYdbResults(0));
                 ui64 removedRows = 0;
                 if (parser.TryNextRow()) {

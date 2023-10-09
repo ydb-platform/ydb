@@ -75,7 +75,7 @@ public:
         NActors::TActorSystemSetup::TLocalServices&,
         const TAppData&,
         const TSqsConfig& config) final {
-        Y_VERIFY(!config.GetYandexCloudMode());
+        Y_ABORT_UNLESS(!config.GetYandexCloudMode());
     }
 
     void RegisterAuthActor(NActors::TActorSystem& system, TAuthActorData&& data) final;

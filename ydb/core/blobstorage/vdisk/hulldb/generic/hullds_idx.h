@@ -77,7 +77,7 @@ namespace NKikimr {
         }
 
         void SerializeToProto(NKikimrVDiskData::TLevelIndex &pb) const {
-            Y_VERIFY(Valid());
+            Y_ABORT_UNLESS(Valid());
             if (ExplicitlySet) {
                 // we save current value iff if was explicitly set
                 pb.SetCompactedLsn(Lsn.Value());
@@ -85,7 +85,7 @@ namespace NKikimr {
         }
 
         void Update(ui64 lsn) {
-            Y_VERIFY(lsn > 0 && Valid());
+            Y_ABORT_UNLESS(lsn > 0 && Valid());
             ExplicitlySet = true;
             Lsn.SetMax(lsn);
         }
@@ -122,10 +122,10 @@ namespace NKikimr {
             return str.Str();
         }
 
-        bool operator < (ui64 lsn) const { Y_VERIFY(Valid()); return Lsn < lsn; }
-        bool operator <=(ui64 lsn) const { Y_VERIFY(Valid()); return Lsn <= lsn; }
-        bool operator > (ui64 lsn) const { Y_VERIFY(Valid()); return Lsn > lsn; }
-        bool operator >=(ui64 lsn) const { Y_VERIFY(Valid()); return Lsn >= lsn; }
+        bool operator < (ui64 lsn) const { Y_ABORT_UNLESS(Valid()); return Lsn < lsn; }
+        bool operator <=(ui64 lsn) const { Y_ABORT_UNLESS(Valid()); return Lsn <= lsn; }
+        bool operator > (ui64 lsn) const { Y_ABORT_UNLESS(Valid()); return Lsn > lsn; }
+        bool operator >=(ui64 lsn) const { Y_ABORT_UNLESS(Valid()); return Lsn >= lsn; }
 
     private:
         // all log records <= Lsn have been compacted
@@ -388,7 +388,7 @@ namespace NKikimr {
             auto& pbLevel0 = *pb.MutableLevel0();
             auto& bulkFormedSstInfoSet = *pb.MutableBulkFormedSstInfoSet();
             for (const TIntrusivePtr<TLevelSegment>& seg : UncommittedReplSegments) {
-                Y_VERIFY(seg->Info.FirstLsn && seg->Info.LastLsn);
+                Y_ABORT_UNLESS(seg->Info.FirstLsn && seg->Info.LastLsn);
                 // store level-0 SSTable
                 seg->SerializeToProto(*pbLevel0.AddSsts());
 
@@ -404,7 +404,7 @@ namespace NKikimr {
         void ApplyUncommittedReplSegment(TIntrusivePtr<TLevelSegment>&& seg, const THullCtxPtr &hullCtx) {
             // remove this SST from uncommitted list
             auto it = std::find(UncommittedReplSegments.begin(), UncommittedReplSegments.end(), seg);
-            Y_VERIFY(it != UncommittedReplSegments.end());
+            Y_ABORT_UNLESS(it != UncommittedReplSegments.end());
             UncommittedReplSegments.erase(it);
 
             // create matching entry in bulk-formed segments list

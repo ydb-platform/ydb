@@ -21,7 +21,7 @@ void TConsole::OnActivateExecutor(const TActorContext &ctx)
 {
     auto domains = AppData(ctx)->DomainsInfo;
     auto domainId = domains->GetDomainUidByTabletId(TabletID());
-    Y_VERIFY(domainId != TDomainsInfo::BadDomainId);
+    Y_ABORT_UNLESS(domainId != TDomainsInfo::BadDomainId);
 
     auto tabletsCounters = GetServiceCounters(AppData(ctx)->Counters, "tablets");
     tabletsCounters->RemoveSubgroup("type", "CONSOLE");

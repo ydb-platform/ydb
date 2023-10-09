@@ -991,7 +991,7 @@ const TString* IAggregation::GetGenericKey() const {
 }
 
 void IAggregation::Join(IAggregation*) {
-    Y_VERIFY(false);
+    Y_ABORT_UNLESS(false);
 }
 
 const TString& IAggregation::GetName() const {

@@ -46,7 +46,7 @@ class TDataWriterActor : public TActorBootstrapped<TDataWriterActor> {
     }
 
     void HandleWakeup(const TActorContext &ctx) {
-        Y_VERIFY(Iterations);
+        Y_ABORT_UNLESS(Iterations);
         if (--Iterations == 0) {
             ctx.Send(ParentId, new TEvents::TEvCompleted);
             Die(ctx);
@@ -116,9 +116,9 @@ class TSyncerActor : public TActorBootstrapped<TSyncerActor> {
     void Handle(TEvBlobStorage::TEvVSyncResult::TPtr &ev, const TActorContext &ctx) {
         const NKikimrBlobStorage::TEvVSyncResult &record = ev->Get()->Record;
         TVDiskID fromVDisk = VDiskIDFromVDiskID(record.GetVDiskID());
-        Y_VERIFY(SourceVDisk.SameGroupAndGeneration(fromVDisk));
+        Y_ABORT_UNLESS(SourceVDisk.SameGroupAndGeneration(fromVDisk));
         NKikimrProto::EReplyStatus status = record.GetStatus();
-        Y_VERIFY(status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(status == NKikimrProto::OK);
 
         SyncState = SyncStateFromSyncState(record.GetNewSyncState());
 
@@ -181,7 +181,7 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
 
     void Handle(NPDisk::TEvYardInitResult::TPtr &ev, const TActorContext &ctx) {
         NKikimrProto::EReplyStatus status = ev->Get()->Status;
-        Y_VERIFY(ev->Get()->Status == status != NKikimrProto::OK);
+        Y_ABORT_UNLESS(ev->Get()->Status == status != NKikimrProto::OK);
 
         const auto &m = ev->Get();
         TestCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, VDiskConfig);
@@ -213,7 +213,7 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
         TString explanation;
         std::unique_ptr<NSyncLog::TSyncLogRepaired> repaired =
             NSyncLog::TSyncLogRepaired::Construct(std::move(params), TString(), 0, explanation);
-        Y_VERIFY(repaired);
+        Y_ABORT_UNLESS(repaired);
 
         // SyncLogActor
         auto slCtx = MakeIntrusive<NSyncLog::TSyncLogCtx>(

@@ -182,7 +182,7 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
 void TSectorRestorator::WriteSector(ui8 *sectorData, ui64 writeOffset) {
     if (ActorSystem && BufferPool) {
         TBuffer *buffer = BufferPool->Pop();
-        Y_VERIFY(Format.SectorSize <= buffer->Size());
+        Y_ABORT_UNLESS(Format.SectorSize <= buffer->Size());
         memcpy(buffer->Data(), sectorData, (size_t)Format.SectorSize);
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer->Data(), Format.SectorSize);
         ActorSystem->Send(PDiskActorId, new TEvLogSectorRestore(buffer->Data(), Format.SectorSize, writeOffset, buffer));

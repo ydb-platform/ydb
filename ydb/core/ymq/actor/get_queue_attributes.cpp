@@ -327,12 +327,12 @@ private:
     }
 
     void OnResponses(std::vector<NKikimrClient::TSqsResponse>&& responses) override {
-        Y_VERIFY(Request().EntriesSize() == responses.size());
+        Y_ABORT_UNLESS(Request().EntriesSize() == responses.size());
         auto& resp = *Response_.MutableGetQueueAttributesBatch();
         for (size_t i = 0; i < Request().EntriesSize(); ++i) {
             const auto& reqEntry = Request().GetEntries(i);
             auto& respEntry = *resp.AddEntries();
-            Y_VERIFY(responses[i].HasGetQueueAttributes());
+            Y_ABORT_UNLESS(responses[i].HasGetQueueAttributes());
             respEntry = std::move(*responses[i].MutableGetQueueAttributes());
             respEntry.SetId(reqEntry.GetId());
         }

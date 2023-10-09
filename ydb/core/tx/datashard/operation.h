@@ -68,7 +68,7 @@ struct TStepOrder {
     }
 
     ETxOrder CheckOrder(const TStepOrder& stepTxId) const {
-        Y_VERIFY(*this != stepTxId); // avoid self checks
+        Y_ABORT_UNLESS(*this != stepTxId); // avoid self checks
         if (!Step && !stepTxId.Step) // immediate vs immediate
             return ETxOrder::Any;
         if (!Step || !stepTxId.Step) // planned vs immediate
@@ -253,7 +253,7 @@ public:
     bool HasReadOnlyFlag() const { return HasFlag(TTxFlags::ReadOnly); }
     void SetReadOnlyFlag(bool val = true)
     {
-        Y_VERIFY(!val || !IsGlobalWriter());
+        Y_ABORT_UNLESS(!val || !IsGlobalWriter());
         SetFlag(TTxFlags::ReadOnly, val);
     }
     void ResetReadOnlyFlag() { ResetFlag(TTxFlags::ReadOnly); }
@@ -278,7 +278,7 @@ public:
 
     bool HasGlobalWriterFlag() const { return HasFlag(TTxFlags::GlobalWriter); }
     void SetGlobalWriterFlag(bool val = true) {
-        Y_VERIFY(!val || !IsReadOnly());
+        Y_ABORT_UNLESS(!val || !IsReadOnly());
         SetFlag(TTxFlags::GlobalWriter, val);
     }
     void ResetGlobalWriterFlag() { ResetFlag(TTxFlags::GlobalWriter); }

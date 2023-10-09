@@ -26,8 +26,8 @@ public:
         , EvictDuration(evictDuration)
         , TtlUnitsInSecond(unitsInSecond)
     {
-        Y_VERIFY(!!Name);
-        Y_VERIFY(!!EvictColumnName);
+        Y_ABORT_UNLESS(!!Name);
+        Y_ABORT_UNLESS(!!EvictColumnName);
     }
 
     TInstant GetEvictInstant(const TInstant now) const {
@@ -67,7 +67,7 @@ public:
     TTierRef(const std::shared_ptr<TTierInfo>& tierInfo)
         : Info(tierInfo)
     {
-        Y_VERIFY(tierInfo);
+        Y_ABORT_UNLESS(tierInfo);
     }
 
     bool operator < (const TTierRef& b) const {
@@ -119,7 +119,7 @@ public:
     void Add(const std::shared_ptr<TTierInfo>& tier) {
         if (HasTiers()) {
             // TODO: support different ttl columns
-            Y_VERIFY(tier->GetEvictColumnName() == OrderedTiers.begin()->Get().GetEvictColumnName());
+            Y_ABORT_UNLESS(tier->GetEvictColumnName() == OrderedTiers.begin()->Get().GetEvictColumnName());
         }
 
         TierByName.emplace(tier->GetName(), tier);
@@ -136,7 +136,7 @@ public:
     std::optional<NArrow::TCompression> GetCompression(const TString& name) const {
         auto it = TierByName.find(name);
         if (it != TierByName.end()) {
-            Y_VERIFY(!name.empty());
+            Y_ABORT_UNLESS(!name.empty());
             return it->second->GetCompression();
         }
         return {};

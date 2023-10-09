@@ -67,7 +67,7 @@ public:
     {
         AllocatedWorkers.resize(workerCount);
         if (!Tasks.empty()) {
-            Y_VERIFY(workerCount == Tasks.size());
+            Y_ABORT_UNLESS(workerCount == Tasks.size());
         }
     }
 
@@ -106,8 +106,8 @@ private:
         auto& response = ev->Get()->Record;
         auto& nodes = response.GetNodes().GetWorker();
         ResourceId = response.GetNodes().GetResourceId();
-        Y_VERIFY(nodes.size() > 0);
-        Y_VERIFY(static_cast<ui32>(nodes.size()) == RequestedCount);
+        Y_ABORT_UNLESS(nodes.size() > 0);
+        Y_ABORT_UNLESS(static_cast<ui32>(nodes.size()) == RequestedCount);
         RequestedNodes.reserve(RequestedCount);
 
         YQL_CLOG(DEBUG, ProviderDq) << "RequestActorIdsFromNodes " << ev->Sender.NodeId() << " " << ResourceId;

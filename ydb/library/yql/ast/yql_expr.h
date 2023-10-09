@@ -2056,9 +2056,9 @@ public:
     }
 
     ~TExprNode() {
-        Y_VERIFY(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.",
+        Y_ABORT_UNLESS(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.",
             UniqueId_, ToString(Type_).data(),  TString(ContentUnchecked()).data());
-        Y_VERIFY(!UseCount(), "Node (id: %lu, type: %s, content: '%s') has non-zero use count on destruction.",
+        Y_ABORT_UNLESS(!UseCount(), "Node (id: %lu, type: %s, content: '%s') has non-zero use count on destruction.",
             UniqueId_, ToString(Type_).data(),  TString(ContentUnchecked()).data());
     }
 

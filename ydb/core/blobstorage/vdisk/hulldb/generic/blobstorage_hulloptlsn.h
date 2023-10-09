@@ -15,7 +15,7 @@ namespace NKikimr {
         TOptLsn &operator =(const TOptLsn &) = default;
 
         explicit TOptLsn(ui64 lsn) noexcept {
-            Y_VERIFY(lsn != NotSetLsn);
+            Y_ABORT_UNLESS(lsn != NotSetLsn);
             Lsn = lsn;
         }
 
@@ -24,7 +24,7 @@ namespace NKikimr {
         }
 
         void SetMax(ui64 lsn) noexcept {
-            Y_VERIFY(lsn != NotSetLsn);
+            Y_ABORT_UNLESS(lsn != NotSetLsn);
             if (Lsn == NotSetLsn)
                 Lsn = lsn;
             else
@@ -60,12 +60,12 @@ namespace NKikimr {
             return str.Str();
         }
 
-        bool operator < (ui64 lsn) const noexcept { Y_VERIFY(lsn != NotSetLsn); return Lsn != NotSetLsn ? Lsn < lsn : true; }
-        bool operator <=(ui64 lsn) const noexcept { Y_VERIFY(lsn != NotSetLsn); return Lsn != NotSetLsn ? Lsn <= lsn : true; }
-        bool operator > (ui64 lsn) const noexcept { Y_VERIFY(lsn != NotSetLsn); return Lsn != NotSetLsn ? Lsn > lsn : false; }
-        bool operator >=(ui64 lsn) const noexcept { Y_VERIFY(lsn != NotSetLsn); return Lsn != NotSetLsn ? Lsn >= lsn : false; }
-        bool operator ==(ui64 lsn) const noexcept { Y_VERIFY(lsn != NotSetLsn); return Lsn == lsn; }
-        bool operator !=(ui64 lsn) const noexcept { Y_VERIFY(lsn != NotSetLsn); return Lsn != lsn; }
+        bool operator < (ui64 lsn) const noexcept { Y_ABORT_UNLESS(lsn != NotSetLsn); return Lsn != NotSetLsn ? Lsn < lsn : true; }
+        bool operator <=(ui64 lsn) const noexcept { Y_ABORT_UNLESS(lsn != NotSetLsn); return Lsn != NotSetLsn ? Lsn <= lsn : true; }
+        bool operator > (ui64 lsn) const noexcept { Y_ABORT_UNLESS(lsn != NotSetLsn); return Lsn != NotSetLsn ? Lsn > lsn : false; }
+        bool operator >=(ui64 lsn) const noexcept { Y_ABORT_UNLESS(lsn != NotSetLsn); return Lsn != NotSetLsn ? Lsn >= lsn : false; }
+        bool operator ==(ui64 lsn) const noexcept { Y_ABORT_UNLESS(lsn != NotSetLsn); return Lsn == lsn; }
+        bool operator !=(ui64 lsn) const noexcept { Y_ABORT_UNLESS(lsn != NotSetLsn); return Lsn != lsn; }
 
         bool operator < (TOptLsn v) const noexcept { return v.Lsn == NotSetLsn ? false : Lsn < v.Lsn; }
         bool operator <=(TOptLsn v) const noexcept { return v.Lsn == NotSetLsn ? Lsn == NotSetLsn : Lsn <= v.Lsn; }

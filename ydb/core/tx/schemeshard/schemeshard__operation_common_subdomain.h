@@ -33,8 +33,8 @@ public:
                        << " at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSubDomain
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSubDomain
             || txState->TxType == TTxState::TxAlterSubDomain
             || txState->TxType == TTxState::TxAlterExtSubDomain
             || txState->TxType == TTxState::TxAlterExtSubDomainCreateHive
@@ -48,7 +48,7 @@ public:
         auto status = record.GetStatus();
 
         auto shardIdx = context.SS->MustGetShardIdx(tabletId);
-        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
         if (status != NKikimrScheme::EStatus::StatusSuccess && status != NKikimrScheme::EStatus::StatusAlreadyExists) {
             LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -91,8 +91,8 @@ public:
                     << " at schemeshard:" << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSubDomain
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSubDomain
             || txState->TxType == TTxState::TxAlterSubDomain
             || txState->TxType == TTxState::TxAlterExtSubDomain
             || txState->TxType == TTxState::TxAlterExtSubDomainCreateHive
@@ -106,7 +106,7 @@ public:
         auto status = record.GetStatus();
 
         auto shardIdx = context.SS->MustGetShardIdx(tabletId);
-        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
         if (status == NKikimrTx::TEvSubDomainConfigurationAck::REJECT) {
             LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -148,8 +148,8 @@ public:
                        << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSubDomain
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSubDomain
             || txState->TxType == TTxState::TxAlterSubDomain
             || txState->TxType == TTxState::TxAlterExtSubDomain
             || txState->TxType == TTxState::TxAlterExtSubDomainCreateHive
@@ -165,13 +165,13 @@ public:
         }
 
         auto pathId = txState->TargetPathId;
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         TPath path = TPath::Init(pathId, context.SS);
 
-        Y_VERIFY(context.SS->SubDomains.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->SubDomains.contains(pathId));
         auto subDomain = context.SS->SubDomains.at(pathId);
         auto alterData = subDomain->GetAlter();
-        Y_VERIFY(alterData);
+        Y_ABORT_UNLESS(alterData);
         alterData->Initialize(context.SS->ShardInfos);
         auto processing = alterData->GetProcessingParams();
         auto storagePools = alterData->GetStoragePools();
@@ -182,7 +182,7 @@ public:
                 continue;
             }
             TShardIdx idx = shard.Idx;
-            Y_VERIFY(context.SS->ShardInfos.contains(idx));
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(idx));
             TTabletId tabletID = context.SS->ShardInfos[idx].TabletID;
             auto type = context.SS->ShardInfos[idx].TabletType;
 
@@ -289,7 +289,7 @@ public:
         if (!txState) {
             return false;
         }
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSubDomain
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSubDomain
             || txState->TxType == TTxState::TxAlterSubDomain
             || txState->TxType == TTxState::TxCreateExtSubDomain
             || txState->TxType == TTxState::TxAlterExtSubDomain
@@ -297,7 +297,7 @@ public:
         );
 
         TPathId pathId = txState->TargetPathId;
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -307,10 +307,10 @@ public:
             context.SS->PersistCreateStep(db, pathId, step);
         }
 
-        Y_VERIFY(context.SS->SubDomains.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->SubDomains.contains(pathId));
         auto subDomain = context.SS->SubDomains.at(pathId);
         auto alter = subDomain->GetAlter();
-        Y_VERIFY(alter);
+        Y_ABORT_UNLESS(alter);
         Y_VERIFY_S(subDomain->GetVersion() < alter->GetVersion(), "" << subDomain->GetVersion() << " and " << alter->GetVersion());
 
         subDomain->ActualizeAlterData(context.SS->ShardInfos, context.Ctx.Now(),
@@ -352,8 +352,8 @@ public:
                        << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSubDomain
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSubDomain
             || txState->TxType == TTxState::TxAlterSubDomain
             || txState->TxType == TTxState::TxCreateExtSubDomain
             || txState->TxType == TTxState::TxAlterExtSubDomain

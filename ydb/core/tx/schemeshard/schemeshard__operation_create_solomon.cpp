@@ -112,12 +112,12 @@ public:
                                << ", at tablet" << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSolomonVolume);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSolomonVolume);
 
         auto solomonVol = context.SS->SolomonVolumes[txState->TargetPathId];
         Y_VERIFY_S(solomonVol, "solomon volume is null. PathId: " << txState->TargetPathId);
-        Y_VERIFY(solomonVol->Partitions.size() == txState->Shards.size(),
+        Y_ABORT_UNLESS(solomonVol->Partitions.size() == txState->Shards.size(),
                  "%" PRIu64 "solomon shards expected, %" PRIu64 " created",
                  solomonVol->Partitions.size(), txState->Shards.size());
 
@@ -188,8 +188,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSolomonVolume);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSolomonVolume);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -415,7 +415,7 @@ public:
 
         IncParentDirAlterVersionWithRepublish(OperationId, dstPath, context);
 
-        Y_VERIFY(shardsToCreate == txState.Shards.size());
+        Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size());
         dstPath.DomainInfo()->IncPathsInside();
         dstPath.DomainInfo()->AddInternalShards(txState);
 
@@ -450,7 +450,7 @@ ISubOperation::TPtr CreateNewSolomon(TOperationId id, const TTxTransaction& tx) 
 }
 
 ISubOperation::TPtr CreateNewSolomon(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TCreateSolomon>(id, state);
 }
 

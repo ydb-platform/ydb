@@ -332,7 +332,7 @@ namespace NKikimr::NBlobDepot {
                 SerializeToProto(&proto);
                 TString s;
                 const bool success = proto.SerializeToString(&s);
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
                 return s;
             }
 
@@ -538,7 +538,7 @@ namespace NKikimr::NBlobDepot {
                 Y_VERIFY_DEBUG(range.Flags & EScanFlags::INCLUDE_BEGIN ? range.Begin <= key : range.Begin < key);
                 Y_VERIFY_DEBUG(range.Flags & EScanFlags::INCLUDE_END ? key <= range.End : key < range.End);
 #ifndef NDEBUG
-                Y_VERIFY(range.KeysInRange.insert(key).second); // ensure that the generated key is unique
+                Y_ABORT_UNLESS(range.KeysInRange.insert(key).second); // ensure that the generated key is unique
 #endif
                 if (!callback(key, value) || !--range.MaxKeys) {
                     return false; // scan aborted by user or finished scanning the required range
@@ -555,7 +555,7 @@ namespace NKikimr::NBlobDepot {
                     (IsRangeLoaded, isRangeLoaded), (From, from), (To, to));
                 if (!isRangeLoaded) {
                     // we have to load range (left, right), not including both ends
-                    Y_VERIFY(txc && progress);
+                    Y_ABORT_UNLESS(txc && progress);
                     if (!loader(*txc, left, right, issue)) {
                         res = !loader.Processing;
                         return false; // break the iteration

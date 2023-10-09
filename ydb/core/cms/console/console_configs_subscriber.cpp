@@ -196,7 +196,7 @@ public:
             return;
         }
 
-        Y_VERIFY(Pipe);
+        Y_ABORT_UNLESS(Pipe);
 
         if (rec.GetOrder() != (LastOrder + 1)) {
             BLOG_I("Order mismatch, will resubscribe");
@@ -281,7 +281,7 @@ public:
             return;
         }
 
-        Y_VERIFY(Pipe);
+        Y_ABORT_UNLESS(Pipe);
 
         Subscribe(ctx);
     }

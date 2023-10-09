@@ -218,7 +218,7 @@ public:
     void Compile(TFinalizationContext& context) noexcept;
 
     void SetBlobs(THashMap<TBlobRange, TString>&& blobs) {
-        Y_VERIFY(!blobs.empty());
+        Y_ABORT_UNLESS(!blobs.empty());
         Blobs = std::move(blobs);
     }
 
@@ -227,7 +227,7 @@ public:
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
         auto result = BlobsAction.GetReadingActions();
-        Y_VERIFY(result.size());
+        Y_ABORT_UNLESS(result.size());
         return result;
     }
     virtual TString TypeString() const = 0;

@@ -1207,7 +1207,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                     Cerr << record.DebugString() << Endl;
                     if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA) {
                         NKikimrTxDataShard::TDataTransaction tx;
-                        Y_VERIFY(tx.ParseFromString(record.GetTxBody()));
+                        Y_ABORT_UNLESS(tx.ParseFromString(record.GetTxBody()));
                         Cerr << "TxBody (original):" << Endl;
                         Cerr << tx.DebugString() << Endl;
                         if (tx.HasMiniKQL()) {
@@ -1222,7 +1222,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                             if (InjectClearTasks && tx.GetKqpTransaction().TasksSize() > 0) {
                                 tx.MutableKqpTransaction()->ClearTasks();
                                 TString txBody;
-                                Y_VERIFY(tx.SerializeToString(&txBody));
+                                Y_ABORT_UNLESS(tx.SerializeToString(&txBody));
                                 record.SetTxBody(txBody);
                                 Cerr << "TxBody: cleared Tasks" << Endl;
                             }
@@ -1247,7 +1247,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                                     protoLocks->AddReceivingShards(shard);
                                 }
                                 TString txBody;
-                                Y_VERIFY(tx.SerializeToString(&txBody));
+                                Y_ABORT_UNLESS(tx.SerializeToString(&txBody));
                                 record.SetTxBody(txBody);
                                 Cerr << "TxBody: injected Locks" << Endl;
                             }
@@ -1272,7 +1272,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                                 tx.SetLockNodeId(Inject.LockNodeId);
                             }
                             TString txBody;
-                            Y_VERIFY(tx.SerializeToString(&txBody));
+                            Y_ABORT_UNLESS(tx.SerializeToString(&txBody));
                             record.SetTxBody(txBody);
                             Cerr << "TxBody: injected LockId" << Endl;
                         }
@@ -1388,8 +1388,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // We should have been acquiring locks
         TLockSnapshot snapshot = observer.Last;
-        Y_VERIFY(snapshot.LockId != 0);
-        Y_VERIFY(snapshot.MvccSnapshot);
+        Y_ABORT_UNLESS(snapshot.LockId != 0);
+        Y_ABORT_UNLESS(snapshot.MvccSnapshot);
 
         // Perform an immediate write, pretending it happens as part of the above snapshot tx
         observer.Inject = snapshot;
@@ -1484,8 +1484,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // We should have been acquiring locks
         TLockSnapshot snapshot = observer.Last;
-        Y_VERIFY(snapshot.LockId != 0);
-        Y_VERIFY(snapshot.MvccSnapshot);
+        Y_ABORT_UNLESS(snapshot.LockId != 0);
+        Y_ABORT_UNLESS(snapshot.MvccSnapshot);
 
         // Perform an immediate write, pretending it happens as part of the above snapshot tx
         // We expect read lock to be upgraded to write lock and become persistent

@@ -86,7 +86,7 @@ void TKqpScanFetcherActor::Bootstrap() {
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvAckData::TPtr& ev) {
-    Y_VERIFY(ev->Get()->GetFreeSpace());
+    Y_ABORT_UNLESS(ev->Get()->GetFreeSpace());
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "EvAckData (" << SelfId() << "): " << ev->Sender;
     if (!InFlightComputes.OnComputeAck(ev->Sender, ev->Get()->GetFreeSpace())) {
         ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "EvAckData (" << SelfId() << "): " << ev->Sender << " IGNORED";
@@ -257,7 +257,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
     PendingResolveShards.pop_front();
     ResolveNextShard();
 
-    Y_VERIFY(!InFlightShards.GetStateByIndex(state.ScannerIdx));
+    Y_ABORT_UNLESS(!InFlightShards.GetStateByIndex(state.ScannerIdx));
 
     YQL_ENSURE(state.State == EShardState::Resolving);
     CA_LOG_D("Received TEvResolveKeySetResult update for table '" << ScanDataMeta.TablePath << "'");
@@ -731,7 +731,7 @@ bool TKqpScanFetcherActor::StopReadChunk(const TShardState& state) {
         DoAckAvailableWaiting();
     }
 
-    Y_VERIFY(InFlightShards.RemoveIfExists(scannerIdx));
+    Y_ABORT_UNLESS(InFlightShards.RemoveIfExists(scannerIdx));
 
     const size_t remainChunksCount = InFlightShards.GetByTabletId(tabletId).size();
     if (remainChunksCount == 0) {
@@ -838,7 +838,7 @@ void TKqpScanFetcherActor::DoAckAvailableWaiting() {
         if (!ev) {
             ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "EvAckData (" << SelfId() << "): no waiting events";
         } else {
-            Y_VERIFY(SendScanDataAck(ev->GetShardState()));
+            Y_ABORT_UNLESS(SendScanDataAck(ev->GetShardState()));
         }
     } else {
         ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "EvAckData (" << SelfId() << "): no available computes for waiting events usage";

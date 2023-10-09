@@ -174,7 +174,7 @@ void IOptimizer::TInput::Normalize() {
 
     TDisjointSets u(curId + 1);
     for (auto& eq : EqClasses) {
-        Y_VERIFY(!eq.Vars.empty());
+        Y_ABORT_UNLESS(!eq.Vars.empty());
 
         ui32 i = 0;
         TId first = var2id[eq.Vars[i++]];

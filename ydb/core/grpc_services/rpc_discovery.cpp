@@ -67,7 +67,7 @@ public:
     }
 
     void Handle(TEvDiscovery::TEvDiscoveryData::TPtr &ev) {
-        Y_VERIFY(ev->Get()->CachedMessageData);
+        Y_ABORT_UNLESS(ev->Get()->CachedMessageData);
         Discoverer = {};
 
         LookupResponse.Reset(ev->Release().Release());
@@ -123,7 +123,7 @@ public:
         if (!NameserviceResponse || !LookupResponse)
             return;
 
-        Y_VERIFY(LookupResponse->CachedMessageData && !LookupResponse->CachedMessageData->InfoEntries.empty() &&
+        Y_ABORT_UNLESS(LookupResponse->CachedMessageData && !LookupResponse->CachedMessageData->InfoEntries.empty() &&
             LookupResponse->CachedMessageData->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
 
         const TSet<TString> services(

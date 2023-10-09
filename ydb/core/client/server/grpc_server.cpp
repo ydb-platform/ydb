@@ -116,7 +116,7 @@ public:
     }
 
     void DestroyRequest() override {
-        Y_VERIFY(!CallInProgress_, "Unexpected DestroyRequest while another grpc call is still in progress");
+        Y_ABORT_UNLESS(!CallInProgress_, "Unexpected DestroyRequest while another grpc call is still in progress");
         RequestDestroyed_ = true;
         if (RequestRegistered_) {
             Server->DeregisterRequestCtx(this);
@@ -127,16 +127,16 @@ public:
 
 private:
     void OnBeforeCall() {
-        Y_VERIFY(!RequestDestroyed_, "Cannot start grpc calls after request is already destroyed");
-        Y_VERIFY(!Finished_, "Cannot start grpc calls after request is finished");
+        Y_ABORT_UNLESS(!RequestDestroyed_, "Cannot start grpc calls after request is already destroyed");
+        Y_ABORT_UNLESS(!Finished_, "Cannot start grpc calls after request is finished");
         bool wasInProgress = std::exchange(CallInProgress_, true);
-        Y_VERIFY(!wasInProgress, "Another grpc call is already in progress");
+        Y_ABORT_UNLESS(!wasInProgress, "Another grpc call is already in progress");
     }
 
     void OnAfterCall() {
-        Y_VERIFY(!RequestDestroyed_, "Finished grpc call after request is already destroyed");
+        Y_ABORT_UNLESS(!RequestDestroyed_, "Finished grpc call after request is already destroyed");
         bool wasInProgress = std::exchange(CallInProgress_, false);
-        Y_VERIFY(wasInProgress, "Finished grpc call that was not in progress");
+        Y_ABORT_UNLESS(wasInProgress, "Finished grpc call that was not in progress");
     }
 
 public:
@@ -315,7 +315,7 @@ private:
             Name, ok ? "true" : "false", makeRequestString().data(), GetPeerName().c_str(), Server->GetCurrentInFlight());
 
         if (Context.c_call() == nullptr) {
-            Y_VERIFY(!ok);
+            Y_ABORT_UNLESS(!ok);
         } else if (!(RequestRegistered_ = Server->RegisterRequestCtx(this))) {
             // Request cannot be registered due to shutdown
             // It's unsafe to continue, so drop this request without processing
@@ -442,7 +442,7 @@ i64 TGRpcService::GetCurrentInFlight() const {
 }
 
 void TGRpcService::Start() {
-    Y_VERIFY(ActorSystem);
+    Y_ABORT_UNLESS(ActorSystem);
     ui32 nodeId = ActorSystem->NodeId;
     ActorSystem->Send(MakeGRpcProxyStatusID(nodeId), new TEvGRpcProxyStatus::TEvSetup(true, PersQueueWriteSessionsMaxCount,
                                         PersQueueReadSessionsMaxCount));

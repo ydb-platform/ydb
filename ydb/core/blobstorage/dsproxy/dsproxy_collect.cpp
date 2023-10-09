@@ -36,9 +36,9 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
         ProcessReplyFromQueue(ev);
         ResponsesReceived++;
         const NKikimrBlobStorage::TEvVCollectGarbageResult &record = ev->Get()->Record;
-        Y_VERIFY(record.HasStatus());
+        Y_ABORT_UNLESS(record.HasStatus());
         const NKikimrProto::EReplyStatus status = record.GetStatus();
-        Y_VERIFY(record.HasVDiskID());
+        Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
         A_LOG_LOG_S(false, PriorityForStatusInbound(status), "DSPC01", "received"
@@ -101,7 +101,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     }
 
     void CheckProgress() {
-        Y_VERIFY(Dead || ResponsesReceived < RequestsSent, "No more unreplied vdisk requests!"
+        Y_ABORT_UNLESS(Dead || ResponsesReceived < RequestsSent, "No more unreplied vdisk requests!"
             " QuorumTracker# %s RequestsSent# %" PRIu32 " ResponsesReceived# %" PRIu32,
             QuorumTracker.ToString().c_str(), RequestsSent, ResponsesReceived);
     }

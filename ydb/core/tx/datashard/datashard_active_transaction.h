@@ -211,34 +211,34 @@ public:
     }
 
     bool GetUseGenericReadSets() const {
-        Y_VERIFY(IsKqpDataTx());
+        Y_ABORT_UNLESS(IsKqpDataTx());
         return Tx.GetKqpTransaction().GetUseGenericReadSets();
     }
 
     inline const ::NKikimrTxDataShard::TKqpLocks& GetKqpLocks() const {
-        Y_VERIFY(IsKqpDataTx());
+        Y_ABORT_UNLESS(IsKqpDataTx());
         return Tx.GetKqpTransaction().GetLocks();
     }
 
     inline bool HasKqpLocks() const {
-        Y_VERIFY(IsKqpDataTx());
+        Y_ABORT_UNLESS(IsKqpDataTx());
         return Tx.GetKqpTransaction().HasLocks();
     }
 
     inline bool HasKqpSnapshot() const {
-        Y_VERIFY(IsKqpDataTx());
+        Y_ABORT_UNLESS(IsKqpDataTx());
         return Tx.GetKqpTransaction().HasSnapshot();
     }
 
     inline const ::NKikimrKqp::TKqpSnapshot& GetKqpSnapshot() const {
-        Y_VERIFY(IsKqpDataTx());
+        Y_ABORT_UNLESS(IsKqpDataTx());
         return Tx.GetKqpTransaction().GetSnapshot();
     }
 
     inline const ::google::protobuf::RepeatedPtrField<::NYql::NDqProto::TDqTask>& GetTasks() const {
-        Y_VERIFY(IsKqpDataTx());
+        Y_ABORT_UNLESS(IsKqpDataTx());
         // ensure that GetTasks is not called after task runner is built
-        Y_VERIFY(!BuiltTaskRunner);
+        Y_ABORT_UNLESS(!BuiltTaskRunner);
         return Tx.GetKqpTransaction().GetTasks();
     }
 
@@ -252,17 +252,17 @@ public:
     }
 
     NKqp::TKqpTasksRunner& GetKqpTasksRunner() {
-        Y_VERIFY(IsKqpDataTx());
+        Y_ABORT_UNLESS(IsKqpDataTx());
         BuiltTaskRunner = true;
         return EngineBay.GetKqpTasksRunner(*Tx.MutableKqpTransaction());
     }
 
     ::NYql::NDqProto::EDqStatsMode GetKqpStatsMode() const {
-        Y_VERIFY(IsKqpDataTx());
+        Y_ABORT_UNLESS(IsKqpDataTx());
         return Tx.GetKqpTransaction().GetRuntimeSettings().GetStatsMode();
     }
 
-    NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx() { Y_VERIFY(IsKqpDataTx()); return EngineBay.GetKqpComputeCtx(); }
+    NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx() { Y_ABORT_UNLESS(IsKqpDataTx()); return EngineBay.GetKqpComputeCtx(); }
 
     bool HasStreamResponse() const { return Tx.GetStreamResponse(); }
     TActorId GetSink() const { return ActorIdFromProto(Tx.GetSink()); }
@@ -537,7 +537,7 @@ public:
     ui64 GetMemoryConsumption() const;
 
     ui64 GetRequiredMemory() const {
-        Y_VERIFY(!GetTxCacheUsage() || !IsTxDataReleased());
+        Y_ABORT_UNLESS(!GetTxCacheUsage() || !IsTxDataReleased());
         ui64 requiredMem = GetTxCacheUsage() + GetReleasedTxDataSize();
         if (!requiredMem)
             requiredMem = GetMemoryConsumption();
@@ -563,7 +563,7 @@ public:
     const NMiniKQL::IEngineFlat::TValidationInfo &GetKeysInfo() const override
     {
         if (DataTx) {
-            Y_VERIFY(DataTx->TxInfo().Loaded);
+            Y_ABORT_UNLESS(DataTx->TxInfo().Loaded);
             return DataTx->TxInfo();
         }
         Y_VERIFY_DEBUG(IsSchemeTx() || IsSnapshotTx() || IsDistributedEraseTx() || IsCommitWritesTx(),

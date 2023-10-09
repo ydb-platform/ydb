@@ -19,7 +19,7 @@ public:
         i64 prevValue;
         do {
             prevValue = AtomicGet(Count);
-            Y_VERIFY(prevValue >= 0);
+            Y_ABORT_UNLESS(prevValue >= 0);
             if (Limit && prevValue >= Limit) {
                 return false;
             }
@@ -30,7 +30,7 @@ public:
 
     void Dec() {
         i64 newValue = AtomicDecrement(Count);
-        Y_VERIFY(newValue >= 0);
+        Y_ABORT_UNLESS(newValue >= 0);
     }
 
 private:

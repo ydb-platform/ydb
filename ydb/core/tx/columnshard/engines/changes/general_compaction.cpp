@@ -23,7 +23,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
             maxSnapshot = i.GetMinSnapshot();
         }
     }
-    Y_VERIFY(maxSnapshot);
+    Y_ABORT_UNLESS(maxSnapshot);
 
     static const TString portionIdFieldName = "$$__portion_id";
     static const TString portionRecordIndexFieldName = "$$__portion_record_idx";
@@ -64,7 +64,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         }
         batchResults = mergeStream.DrainAllParts(CheckPoints, indexFields, true);
     }
-    Y_VERIFY(batchResults.size());
+    Y_ABORT_UNLESS(batchResults.size());
 
     TSerializationStats stats;
     for (auto&& i : SwitchedPortions) {
@@ -76,7 +76,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     for (auto&& f : resultSchema->GetSchema()->fields()) {
         const ui32 columnId = resultSchema->GetColumnId(f->name());
         auto columnInfo = stats.GetColumnInfo(columnId);
-        Y_VERIFY(columnInfo);
+        Y_ABORT_UNLESS(columnInfo);
 
         std::vector<TPortionColumnCursor> cursors;
         auto loader = resultSchema->GetColumnLoader(f->name());
@@ -100,11 +100,11 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
             auto columnPortionRecordIdx = batchResult->GetColumnByName(portionRecordIndexFieldName);
             auto columnSnapshotPlanStepIdx = batchResult->GetColumnByName(TIndexInfo::SPEC_COL_PLAN_STEP);
             auto columnSnapshotTxIdx = batchResult->GetColumnByName(TIndexInfo::SPEC_COL_TX_ID);
-            Y_VERIFY(columnPortionIdx && columnPortionRecordIdx && columnSnapshotPlanStepIdx && columnSnapshotTxIdx);
-            Y_VERIFY(columnPortionIdx->type_id() == arrow::UInt16Type::type_id);
-            Y_VERIFY(columnPortionRecordIdx->type_id() == arrow::UInt32Type::type_id);
-            Y_VERIFY(columnSnapshotPlanStepIdx->type_id() == arrow::UInt64Type::type_id);
-            Y_VERIFY(columnSnapshotTxIdx->type_id() == arrow::UInt64Type::type_id);
+            Y_ABORT_UNLESS(columnPortionIdx && columnPortionRecordIdx && columnSnapshotPlanStepIdx && columnSnapshotTxIdx);
+            Y_ABORT_UNLESS(columnPortionIdx->type_id() == arrow::UInt16Type::type_id);
+            Y_ABORT_UNLESS(columnPortionRecordIdx->type_id() == arrow::UInt32Type::type_id);
+            Y_ABORT_UNLESS(columnSnapshotPlanStepIdx->type_id() == arrow::UInt64Type::type_id);
+            Y_ABORT_UNLESS(columnSnapshotTxIdx->type_id() == arrow::UInt64Type::type_id);
             const arrow::UInt16Array& pIdxArray = static_cast<const arrow::UInt16Array&>(*columnPortionIdx);
             const arrow::UInt32Array& pRecordIdxArray = static_cast<const arrow::UInt32Array&>(*columnPortionRecordIdx);
 
@@ -135,7 +135,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     for (auto&& columnChunks : chunkGroups) {
         auto batchResult = batchResults[batchIdx];
         ++batchIdx;
-        Y_VERIFY(columnChunks.size());
+        Y_ABORT_UNLESS(columnChunks.size());
 
         for (auto&& i : columnChunks) {
             if (i.second.size() != columnChunks.begin()->second.size()) {

@@ -37,11 +37,11 @@ public:
     void RemovePortion(const TPortionInfo& info) {
         const auto sizes = info.BlobsSizes();
         PortionsSize -= sizes.first;
-        Y_VERIFY(PortionsSize >= 0);
+        Y_ABORT_UNLESS(PortionsSize >= 0);
         RecordsCount -= info.NumRows();
-        Y_VERIFY(RecordsCount >= 0);
+        Y_ABORT_UNLESS(RecordsCount >= 0);
         --PortionsCount;
-        Y_VERIFY(PortionsCount >= 0);
+        Y_ABORT_UNLESS(PortionsCount >= 0);
 
         for (auto&& c : info.Records) {
             auto it = ColumnStats.find(c.ColumnId);

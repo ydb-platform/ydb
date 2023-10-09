@@ -43,11 +43,11 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
 
         TString error;
         NOlap::TUnifiedBlobId blobId = NOlap::TUnifiedBlobId::ParseFromString(strBlobId, dsGroupSelector, error);
-        Y_VERIFY(blobId.IsValid(), "Failied to parse blob id: %s", error.c_str());
+        Y_ABORT_UNLESS(blobId.IsValid(), "Failied to parse blob id: %s", error.c_str());
 
         NKikimrTxColumnShard::TLogicalMetadata meta;
         if (metaStr) {
-            Y_VERIFY(meta.ParseFromString(metaStr));
+            Y_ABORT_UNLESS(meta.ParseFromString(metaStr));
         }
         TInsertedData data(planStep, writeTxId, pathId, dedupId, NOlap::TBlobRange(blobId, 0, blobId.BlobSize()), meta, schemaVersion, {});
 

@@ -152,13 +152,13 @@ private:
             return true;
         }
 
-        Y_VERIFY(Self->PathsById.contains(streamPathId));
+        Y_ABORT_UNLESS(Self->PathsById.contains(streamPathId));
         auto streamPath = Self->PathsById.at(streamPathId);
 
-        Y_VERIFY(Self->PathsById.contains(streamPathId));
+        Y_ABORT_UNLESS(Self->PathsById.contains(streamPathId));
         const auto& tablePathId = Self->PathsById.at(streamPathId)->ParentPathId;
 
-        Y_VERIFY(Self->Tables.contains(tablePathId));
+        Y_ABORT_UNLESS(Self->Tables.contains(tablePathId));
         auto table = Self->Tables.at(tablePathId);
 
         if (streamInfo->ScanShards.empty()) {
@@ -178,7 +178,7 @@ private:
 
             auto it = streamInfo->PendingShards.begin();
 
-            Y_VERIFY(Self->ShardInfos.contains(*it));
+            Y_ABORT_UNLESS(Self->ShardInfos.contains(*it));
             const auto tabletId = Self->ShardInfos.at(*it).TabletID;
 
             streamInfo->InProgressShards.insert(*it);
@@ -358,7 +358,7 @@ private:
     void Bill(const TPathId& pathId, const TShardIdx& shardIdx, ui64 ru, const TActorContext& ctx) {
         const auto domainPathId = Self->ResolvePathIdForDomain(pathId);
 
-        Y_VERIFY(Self->SubDomains.contains(domainPathId));
+        Y_ABORT_UNLESS(Self->SubDomains.contains(domainPathId));
         auto domainInfo = Self->SubDomains.at(domainPathId);
 
         if (!Self->IsServerlessDomain(domainInfo)) {
@@ -368,7 +368,7 @@ private:
             return;
         }
 
-        Y_VERIFY(Self->PathsById.contains(domainPathId));
+        Y_ABORT_UNLESS(Self->PathsById.contains(domainPathId));
         auto domainPath = Self->PathsById.at(domainPathId);
 
         const auto& attrs = domainPath->UserAttrs->Attrs;

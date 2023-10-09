@@ -12,7 +12,7 @@ IActor* CreateNodePersQueueL2Cache(const TCacheL2Parameters& params, TIntrusiveP
 void TPersQueueCacheL2::Bootstrap(const TActorContext& ctx)
 {
     TAppData * appData = AppData(ctx);
-    Y_VERIFY(appData);
+    Y_ABORT_UNLESS(appData);
 
     auto mon = appData->Mon;
     if (mon) {
@@ -28,7 +28,7 @@ void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TA
     THolder<TCacheL2Request> request(ev->Get()->Data.Release());
     ui64 tabletId = request->TabletId;
 
-    Y_VERIFY(tabletId != 0, "PQ L2. Empty tabletID in L2");
+    Y_ABORT_UNLESS(tabletId != 0, "PQ L2. Empty tabletID in L2");
 
     TouchBlobs(ctx, tabletId, request->RequestedBlobs);
     TouchBlobs(ctx, tabletId, request->ExpectedBlobs, false);
@@ -56,7 +56,7 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
             resp->TabletId = key.TabletId;
         }
 
-        Y_VERIFY(key.TabletId == resp->TabletId, "PQ L2. Multiple topics in one PQ tablet.");
+        Y_ABORT_UNLESS(key.TabletId == resp->TabletId, "PQ L2. Multiple topics in one PQ tablet.");
         resp->Removed.push_back({key.Partition, key.Offset, key.PartNo, evicted});
 
         RetentionTime = now - evicted->GetAccessTime();
@@ -78,7 +78,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
 {
     ui32 numUnused = 0;
     for (const TCacheBlobL2& blob : blobs) {
-        Y_VERIFY(blob.Value->DataSize(), "Trying to place empty blob into L2 cache");
+        Y_ABORT_UNLESS(blob.Value->DataSize(), "Trying to place empty blob into L2 cache");
 
         TKey key(tabletId, blob);
         // PQ tablet could send some data twice (if it's restored after die)
@@ -88,14 +88,14 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
             continue;
         }
 
-        Y_VERIFY(CurrentSize <= Cache.Size() * MAX_BLOB_SIZE);
+        Y_ABORT_UNLESS(CurrentSize <= Cache.Size() * MAX_BLOB_SIZE);
 
         CurrentSize += blob.Value->DataSize();
 
         // manualy manage LRU size
         while (CurrentSize > MaxSize) {
             auto oldest = Cache.FindOldest();
-            Y_VERIFY(oldest != Cache.End(), "Tablet %" PRIu64" count %" PRIu64 " size %" PRIu64
+            Y_ABORT_UNLESS(oldest != Cache.End(), "Tablet %" PRIu64" count %" PRIu64 " size %" PRIu64
                 " maxSize %" PRIu64 " blobSize %" PRIu64 " blobs %" PRIu64 " evicted %" PRIu64,
                 tabletId, Cache.Size(), CurrentSize, MaxSize, blob.Value->DataSize(), blobs.size(), outEvicted.size());
 

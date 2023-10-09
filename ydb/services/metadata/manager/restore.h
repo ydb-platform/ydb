@@ -23,7 +23,7 @@ private:
         const NRequest::TDialogSelect::TResponse& result = ev->Get()->GetResult();
         Ydb::Table::ExecuteQueryResult qResult;
         result.operation().result().UnpackTo(&qResult);
-        Y_VERIFY((size_t)qResult.result_sets().size() == 1);
+        Y_ABORT_UNLESS((size_t)qResult.result_sets().size() == 1);
 
         typename TObject::TDecoder decoder(qResult.result_sets()[0]);
         std::vector<TObject> objects;
@@ -50,7 +50,7 @@ public:
         , SessionId(sessionId)
         , UserToken(uToken)
     {
-        Y_VERIFY(SessionId);
+        Y_ABORT_UNLESS(SessionId);
     }
 
     STATEFN(StateMain) {

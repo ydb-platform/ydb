@@ -103,7 +103,7 @@ void TTopicOperationsScenario::CreateTopic(const TString& database,
 void TTopicOperationsScenario::DropTopic(const TString& database,
                                          const TString& topic)
 {
-    Y_VERIFY(Driver);
+    Y_ABORT_UNLESS(Driver);
 
     NTopic::TTopicClient client(*Driver);
     auto topicPath =
@@ -142,7 +142,7 @@ void TTopicOperationsScenario::ExecDataQuery(const TString& query,
 
 void TTopicOperationsScenario::EnsureTopicNotExist(const TString& topic)
 {
-    Y_VERIFY(Driver);
+    Y_ABORT_UNLESS(Driver);
 
     NTopic::TTopicClient client(*Driver);
 
@@ -157,7 +157,7 @@ void TTopicOperationsScenario::CreateTopic(const TString& topic,
                                            ui32 partitionCount,
                                            ui32 consumerCount)
 {
-    Y_VERIFY(Driver);
+    Y_ABORT_UNLESS(Driver);
 
     NTopic::TTopicClient client(*Driver);
 

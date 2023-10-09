@@ -172,7 +172,7 @@ public:
     }
 
     bool ReturnSession(TKqpSessionCommon* sessionImpl) override {
-        Y_VERIFY(sessionImpl->GetState() == TSession::TImpl::S_ACTIVE ||
+        Y_ABORT_UNLESS(sessionImpl->GetState() == TSession::TImpl::S_ACTIVE ||
             sessionImpl->GetState() == TSession::TImpl::S_IDLE);
 
         //TODO: Remove this copy-paste from table client

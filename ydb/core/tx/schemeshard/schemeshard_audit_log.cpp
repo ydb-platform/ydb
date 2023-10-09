@@ -33,7 +33,7 @@ std::tuple<TString, TString, TString> GetDatabaseCloudIds(const TPath &databaseP
     if (databasePath.IsEmpty()) {
         return {};
     }
-    Y_VERIFY(databasePath->IsDomainRoot());
+    Y_ABORT_UNLESS(databasePath->IsDomainRoot());
     auto getAttr = [&databasePath](const TString &name) -> TString {
         if (databasePath.Base()->UserAttrs->Attrs.contains(name)) {
             return databasePath.Base()->UserAttrs->Attrs.at(name);

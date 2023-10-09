@@ -94,11 +94,11 @@ void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config,
     TStringStream description;
     description << "Input format. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    Y_VERIFY(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
+    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
         "Couldn't find default format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
     for (const auto& format : allowedFormats) {
         auto findResult = InputFormatDescriptions.find(format);
-        Y_VERIFY(findResult != InputFormatDescriptions.end(),
+        Y_ABORT_UNLESS(findResult != InputFormatDescriptions.end(),
             "Couldn't find description for %s input format", (TStringBuilder() << format).c_str());
         description << "\n  " << colors.BoldColor() << format << colors.OldColor()
             << "\n    " << findResult->second;
@@ -117,7 +117,7 @@ void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const 
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     for (const auto& format : allowedStdinFormats) {
         auto findResult = StdinFormatDescriptions.find(format);
-        Y_VERIFY(findResult != StdinFormatDescriptions.end(),
+        Y_ABORT_UNLESS(findResult != StdinFormatDescriptions.end(),
                  "Couldn't find description for %s stdin format", (TStringBuilder() << format).c_str());
         description << "\n  " << colors.BoldColor() << format << colors.OldColor()
                     << "\n    " << findResult->second;
@@ -126,7 +126,7 @@ void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const 
     description << "\n2. Framing: defines how parameter sets are delimited on the stdin. Available options: ";
     for (const auto& format : allowedFramingFormats) {
         auto findResult = StdinFormatDescriptions.find(format);
-        Y_VERIFY(findResult != StdinFormatDescriptions.end(),
+        Y_ABORT_UNLESS(findResult != StdinFormatDescriptions.end(),
                  "Couldn't find description for %s framing format", (TStringBuilder() << format).c_str());
         description << "\n  " << colors.BoldColor() << format << colors.OldColor()
                     << "\n    " << findResult->second;
@@ -143,11 +143,11 @@ void TCommandWithFormat::AddFormats(TClientCommand::TConfig& config,
     TStringStream description;
     description << "Output format. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    Y_VERIFY(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
+    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
         "Couldn't find default format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
     for (const auto& format : allowedFormats) {
         auto findResult = FormatDescriptions.find(format);
-        Y_VERIFY(findResult != FormatDescriptions.end(),
+        Y_ABORT_UNLESS(findResult != FormatDescriptions.end(),
             "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
         description << "\n  " << colors.BoldColor() << format << colors.OldColor()
             << "\n    " << findResult->second;
@@ -164,7 +164,7 @@ void TCommandWithFormat::AddMessagingFormats(TClientCommand::TConfig& config, co
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     for (const auto& format : allowedFormats) {
         auto findResult = MessagingFormatDescriptions.find(format);
-        Y_VERIFY(findResult != MessagingFormatDescriptions.end(),
+        Y_ABORT_UNLESS(findResult != MessagingFormatDescriptions.end(),
             "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
         description << "\n  " << colors.BoldColor() << format << colors.OldColor()
             << "\n    " << findResult->second;
@@ -183,7 +183,7 @@ void TCommandWithFormat::ParseFormats() {
 
     if (!StdinFormats.empty()) {
         for (const auto& format : AllowedInputFormats) {
-            Y_VERIFY(std::find(AllowedStdinFormats.begin(), AllowedStdinFormats.end(), format) != AllowedStdinFormats.end(), 
+            Y_ABORT_UNLESS(std::find(AllowedStdinFormats.begin(), AllowedStdinFormats.end(), format) != AllowedStdinFormats.end(), 
                      "Allowed stdin formats should contain all allowed input formats");
         }
         for (const auto& format : StdinFormats) {

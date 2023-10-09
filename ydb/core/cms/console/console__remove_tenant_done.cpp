@@ -15,7 +15,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        Y_VERIFY(Tenant->State == TTenant::REMOVING_POOLS);
+        Y_ABORT_UNLESS(Tenant->State == TTenant::REMOVING_POOLS);
 
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
                     "TTxRemoveTenantDone for tenant " << Tenant->Path

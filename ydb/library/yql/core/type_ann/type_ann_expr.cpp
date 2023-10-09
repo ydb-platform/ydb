@@ -82,7 +82,7 @@ public:
             callable->SetState(TExprNode::EState::TypePending);
             TExprNode::TPtr callableOutput;
             auto status = CallableTransformer->ApplyAsyncChanges(callable, callableOutput, ctx);
-            Y_VERIFY(callableOutput);
+            Y_ABORT_UNLESS(callableOutput);
             YQL_ENSURE(status != TStatus::Async);
             YQL_ENSURE(callableOutput == callable);
             combinedStatus = combinedStatus.Combine(status);

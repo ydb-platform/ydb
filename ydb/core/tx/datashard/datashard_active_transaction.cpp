@@ -43,7 +43,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     ComputeTxSize();
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
 
-    Y_VERIFY(Tx.HasMiniKQL() || Tx.HasReadTableTransaction() || Tx.HasKqpTransaction(),
+    Y_ABORT_UNLESS(Tx.HasMiniKQL() || Tx.HasReadTableTransaction() || Tx.HasKqpTransaction(),
              "One of the fields should be set: MiniKQL, ReadTableTransaction, KqpTransaction");
 
     if (Tx.GetLockTxId())
@@ -59,7 +59,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         auto &tx = Tx.GetReadTableTransaction();
         if (self->TableInfos.contains(tx.GetTableId().GetTableId())) {
             auto* info = self->TableInfos[tx.GetTableId().GetTableId()].Get();
-            Y_VERIFY(info, "Unexpected missing table info");
+            Y_ABORT_UNLESS(info, "Unexpected missing table info");
             TSerializedTableRange range(tx.GetRange());
             EngineBay.AddReadRange(TTableId(tx.GetTableId().GetOwnerId(),
                                             tx.GetTableId().GetTableId()),
@@ -178,7 +178,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             return;
         }
     } else {
-        Y_VERIFY(Tx.HasMiniKQL());
+        Y_ABORT_UNLESS(Tx.HasMiniKQL());
         if (Tx.GetLlvmRuntime()) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                         "Using LLVM runtime to execute transaction: " << StepTxId_.TxId);
@@ -216,7 +216,7 @@ ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
             return 0;
         }
     } else {
-        Y_VERIFY(result == EResult::Ok, "Engine errors: %s", EngineBay.GetEngine()->GetErrors().data());
+        Y_ABORT_UNLESS(result == EResult::Ok, "Engine errors: %s", EngineBay.GetEngine()->GetErrors().data());
     }
     return KeysCount();
 }
@@ -343,8 +343,8 @@ TActiveTransaction::~TActiveTransaction()
 
 void TActiveTransaction::FillTxData(TValidatedDataTx::TPtr dataTx)
 {
-    Y_VERIFY(!DataTx);
-    Y_VERIFY(TxBody.empty() || HasVolatilePrepareFlag());
+    Y_ABORT_UNLESS(!DataTx);
+    Y_ABORT_UNLESS(TxBody.empty() || HasVolatilePrepareFlag());
 
     Target = dataTx->Source();
     DataTx = dataTx;
@@ -363,8 +363,8 @@ void TActiveTransaction::FillTxData(TDataShard *self,
 {
     UntrackMemory();
 
-    Y_VERIFY(!DataTx);
-    Y_VERIFY(TxBody.empty());
+    Y_ABORT_UNLESS(!DataTx);
+    Y_ABORT_UNLESS(TxBody.empty());
 
     Target = target;
     TxBody = txBody;
@@ -374,9 +374,9 @@ void TActiveTransaction::FillTxData(TDataShard *self,
     }
     ArtifactFlags = artifactFlags;
     if (IsDataTx() || IsReadTable()) {
-        Y_VERIFY(!DataTx);
+        Y_ABORT_UNLESS(!DataTx);
         BuildDataTx(self, txc, ctx);
-        Y_VERIFY(DataTx->Ready());
+        Y_ABORT_UNLESS(DataTx->Ready());
 
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
@@ -399,12 +399,12 @@ void TActiveTransaction::FillVolatileTxData(TDataShard *self,
 {
     UntrackMemory();
 
-    Y_VERIFY(!DataTx);
-    Y_VERIFY(!TxBody.empty());
+    Y_ABORT_UNLESS(!DataTx);
+    Y_ABORT_UNLESS(!TxBody.empty());
 
     if (IsDataTx() || IsReadTable()) {
         BuildDataTx(self, txc, ctx);
-        Y_VERIFY(DataTx->Ready());
+        Y_ABORT_UNLESS(DataTx->Ready());
 
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
@@ -421,9 +421,9 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
                                                        TTransactionContext &txc,
                                                        const TActorContext &ctx)
 {
-    Y_VERIFY(IsDataTx() || IsReadTable());
+    Y_ABORT_UNLESS(IsDataTx() || IsReadTable());
     if (!DataTx) {
-        Y_VERIFY(TxBody);
+        Y_ABORT_UNLESS(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
                                                     GetReceivedAt(), TxBody, MvccSnapshotRepeatable);
         if (DataTx->HasStreamResponse())
@@ -434,7 +434,7 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
 
 bool TActiveTransaction::BuildSchemeTx()
 {
-    Y_VERIFY(TxBody);
+    Y_ABORT_UNLESS(TxBody);
     SchemeTx.Reset(new NKikimrTxDataShard::TFlatSchemeTransaction);
     bool res = SchemeTx->ParseFromArray(TxBody.data(), TxBody.size());
     if (!res)
@@ -499,7 +499,7 @@ bool TActiveTransaction::BuildSchemeTx()
 
 bool TActiveTransaction::BuildSnapshotTx()
 {
-    Y_VERIFY(TxBody);
+    Y_ABORT_UNLESS(TxBody);
     SnapshotTx.Reset(new NKikimrTxDataShard::TSnapshotTransaction);
     if (!SnapshotTx->ParseFromArray(TxBody.data(), TxBody.size())) {
         return false;
@@ -524,7 +524,7 @@ bool TDistributedEraseTx::TryParse(const TString& serialized) {
 }
 
 bool TActiveTransaction::BuildDistributedEraseTx() {
-    Y_VERIFY(TxBody);
+    Y_ABORT_UNLESS(TxBody);
     DistributedEraseTx.Reset(new TDistributedEraseTx);
     return DistributedEraseTx->TryParse(TxBody);
 }
@@ -540,7 +540,7 @@ bool TCommitWritesTx::TryParse(const TString& serialized) {
 }
 
 bool TActiveTransaction::BuildCommitWritesTx() {
-    Y_VERIFY(TxBody);
+    Y_ABORT_UNLESS(TxBody);
     CommitWritesTx.Reset(new TCommitWritesTx);
     return CommitWritesTx->TryParse(TxBody);
 }
@@ -646,7 +646,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
             return ERestoreDataStatus::Restart;
         }
     } else {
-        Y_VERIFY(TxBody);
+        Y_ABORT_UNLESS(TxBody);
     }
 
     TrackMemory();
@@ -675,9 +675,9 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
 void TActiveTransaction::FinalizeDataTxPlan()
 {
-    Y_VERIFY(IsDataTx());
-    Y_VERIFY(!IsImmediate());
-    Y_VERIFY(!IsKqpScanTransaction());
+    Y_ABORT_UNLESS(IsDataTx());
+    Y_ABORT_UNLESS(!IsImmediate());
+    Y_ABORT_UNLESS(!IsKqpScanTransaction());
 
     TVector<EExecutionUnitKind> plan;
 
@@ -748,13 +748,13 @@ THolder<TExecutionUnit> CreateFinalizeDataTxPlanUnit(TDataShard &dataShard, TPip
 
 void TActiveTransaction::BuildExecutionPlan(bool loaded)
 {
-    Y_VERIFY(GetExecutionPlan().empty());
-    Y_VERIFY(!IsKqpScanTransaction());
+    Y_ABORT_UNLESS(GetExecutionPlan().empty());
+    Y_ABORT_UNLESS(!IsKqpScanTransaction());
 
     TVector<EExecutionUnitKind> plan;
     if (IsDataTx()) {
         if (IsImmediate()) {
-            Y_VERIFY(!loaded);
+            Y_ABORT_UNLESS(!loaded);
             plan.push_back(EExecutionUnitKind::CheckDataTx);
             plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
             if (IsKqpDataTransaction()) {
@@ -765,16 +765,16 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
             plan.push_back(EExecutionUnitKind::FinishPropose);
             plan.push_back(EExecutionUnitKind::CompletedOperations);
         } else if (HasVolatilePrepareFlag()) {
-            Y_VERIFY(!loaded);
+            Y_ABORT_UNLESS(!loaded);
             plan.push_back(EExecutionUnitKind::CheckDataTx);
             plan.push_back(EExecutionUnitKind::StoreDataTx); // note: stores in memory
             plan.push_back(EExecutionUnitKind::FinishPropose);
-            Y_VERIFY(!GetStep());
+            Y_ABORT_UNLESS(!GetStep());
             plan.push_back(EExecutionUnitKind::WaitForPlan);
             plan.push_back(EExecutionUnitKind::PlanQueue);
             plan.push_back(EExecutionUnitKind::LoadTxDetails); // note: reloads from memory
             plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
-            Y_VERIFY(IsKqpDataTransaction());
+            Y_ABORT_UNLESS(IsKqpDataTransaction());
             // Note: execute will also prepare and send readsets
             plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx);
             // Note: it is important that plan here is the same as regular
@@ -863,7 +863,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     } else if (IsCommitWritesTx()) {
         if (IsImmediate()) {
-            Y_VERIFY(!loaded);
+            Y_ABORT_UNLESS(!loaded);
             plan.push_back(EExecutionUnitKind::CheckCommitWritesTx);
             plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
             plan.push_back(EExecutionUnitKind::ExecuteCommitWritesTx);

@@ -341,7 +341,7 @@ struct Schema : NIceDb::Schema {
         auto rowset = db.Table<Value>().Key(ui32(key)).Select<Value::Bytes>();
         if (rowset.IsReady()) {
             if (rowset.IsValid()) {
-                Y_VERIFY(value.emplace().ParseFromString(rowset.GetValue<Value::Bytes>()));
+                Y_ABORT_UNLESS(value.emplace().ParseFromString(rowset.GetValue<Value::Bytes>()));
             }
             return true;
         }
@@ -359,7 +359,7 @@ struct Schema : NIceDb::Schema {
     template<class TMessage>
     static void SaveSpecialProtoValue(NIceDb::TNiceDb& db, EValueIds key, const TMessage& message) {
         TString serialized;
-        Y_VERIFY(message.SerializeToString(&serialized));
+        Y_ABORT_UNLESS(message.SerializeToString(&serialized));
         SaveSpecialValue(db, key, serialized);
     }
 
@@ -394,7 +394,7 @@ struct Schema : NIceDb::Schema {
             const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info)
     {
         TString serialized;
-        Y_VERIFY(info.SerializeToString(&serialized));
+        Y_ABORT_UNLESS(info.SerializeToString(&serialized));
         db.Table<SchemaPresetVersionInfo>().Key(id, version.Step, version.TxId).Update(
             NIceDb::TUpdate<SchemaPresetVersionInfo::InfoProto>(serialized));
     }
@@ -426,7 +426,7 @@ struct Schema : NIceDb::Schema {
             const NKikimrTxColumnShard::TTableVersionInfo& info)
     {
         TString serialized;
-        Y_VERIFY(info.SerializeToString(&serialized));
+        Y_ABORT_UNLESS(info.SerializeToString(&serialized));
         db.Table<TableVersionInfo>().Key(pathId, version.Step, version.TxId).Update(
             NIceDb::TUpdate<TableVersionInfo::InfoProto>(serialized));
     }
@@ -451,7 +451,7 @@ struct Schema : NIceDb::Schema {
         NKikimrLongTxService::TLongTxId proto;
         longTxId.ToProto(&proto);
         TString serialized;
-        Y_VERIFY(proto.SerializeToString(&serialized));
+        Y_ABORT_UNLESS(proto.SerializeToString(&serialized));
         db.Table<LongTxWrites>().Key((ui64)writeId).Update(
             NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized),
             NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId));
@@ -512,9 +512,9 @@ struct Schema : NIceDb::Schema {
         const auto& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
         if (indexInfo.IsCompositeIndexKey()) {
             NKikimrTxColumnShard::TIndexGranuleMeta meta;
-            Y_VERIFY(indexInfo.GetIndexKey());
+            Y_ABORT_UNLESS(indexInfo.GetIndexKey());
             meta.SetMarkSize(indexInfo.GetIndexKey()->num_fields());
-            Y_VERIFY(meta.SerializeToString(&metaStr));
+            Y_ABORT_UNLESS(meta.SerializeToString(&metaStr));
         }
 
         db.Table<IndexGranules>().Key(index, row.PathId, engine.SerializeMark(row.Mark)).Update(
@@ -547,7 +547,7 @@ struct Schema : NIceDb::Schema {
             std::optional<ui32> markNumKeys;
             if (metaStr.size()) {
                 NKikimrTxColumnShard::TIndexGranuleMeta meta;
-                Y_VERIFY(meta.ParseFromString(metaStr));
+                Y_ABORT_UNLESS(meta.ParseFromString(metaStr));
                 if (meta.HasMarkSize()) {
                     markNumKeys = meta.GetMarkSize();
                 }
@@ -619,7 +619,7 @@ struct Schema : NIceDb::Schema {
         TString metadata;
         NKikimrTxColumnShard::TInternalOperationData proto;
         operation.ToProto(proto);
-        Y_VERIFY(proto.SerializeToString(&metadata));
+        Y_ABORT_UNLESS(proto.SerializeToString(&metadata));
 
         db.Table<Operations>().Key((ui64)operation.GetWriteId()).Update(
             NIceDb::TUpdate<Operations::Status>((ui32)operation.GetStatus()),
@@ -661,7 +661,7 @@ public:
         : Address(rowset.template GetValue<NColumnShard::Schema::IndexColumns::ColumnIdx>(), rowset.template GetValue<NColumnShard::Schema::IndexColumns::Chunk>()) {
         AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
         TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Blob>();
-        Y_VERIFY(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
+        Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
         TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
         BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
         BlobRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Offset>();

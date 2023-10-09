@@ -58,14 +58,14 @@ namespace NKikimr {
         THullDbInsert PrepareInsert(const TBlobStorageGroupInfo::TTopology *top,
                                     const TVDiskIdShort &vd) const {
             if (IsAnubis()) {
-                Y_VERIFY(!LogoBlobId.PartId());
+                Y_ABORT_UNLESS(!LogoBlobId.PartId());
                 TIngress ingressDontKeep;
                 ingressDontKeep.SetKeep(TIngress::IngressMode(top->GType), CollectModeDoNotKeep);
                 return {LogoBlobId, ingressDontKeep};
             } else {
-                Y_VERIFY(LogoBlobId.PartId());
+                Y_ABORT_UNLESS(LogoBlobId.PartId());
                 auto ingressOpt = TIngress::CreateIngressWOLocal(top, vd, LogoBlobId);
-                Y_VERIFY(ingressOpt);
+                Y_ABORT_UNLESS(ingressOpt);
                 TLogoBlobID genId(LogoBlobId, 0);
                 return {genId, *ingressOpt};
             }

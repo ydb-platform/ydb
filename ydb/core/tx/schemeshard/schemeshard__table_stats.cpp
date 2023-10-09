@@ -283,7 +283,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         const ui64 partitionIdx = shardToPartition.at(shardIdx);
         const auto& partitions = table->GetPartitions();
 
-        Y_VERIFY(partitionIdx < partitions.size());
+        Y_ABORT_UNLESS(partitionIdx < partitions.size());
         auto& shardInfo = partitions.at(partitionIdx);
         auto& lag = shardInfo.LastCondEraseLag;
 
@@ -393,7 +393,7 @@ void TTxStoreTableStats::Complete(const TActorContext& ctx) {
     MergeOpSideEffects.ApplyOnComplete(Self, ctx);
 
     for (auto& m: PendingMessages) {
-        Y_VERIFY(m.Event);
+        Y_ABORT_UNLESS(m.Event);
         ctx.Send(m.Actor, m.Event.Release());
     }
 

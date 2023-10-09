@@ -9,7 +9,7 @@ TTestContext::TTestContext()
 {}
 
 void TTestContext::Setup(ui32 nodeCount) {
-    Y_VERIFY(nodeCount >= 2);
+    Y_ABORT_UNLESS(nodeCount >= 2);
     ProxyActors.clear();
     Runtime.Reset(new TTestBasicRuntime(nodeCount));
 

@@ -167,7 +167,7 @@ private:
 
     template<typename TEv>
     static TString ToString(const TAutoPtr<NActors::TEventHandle<TEv>> &ev) {
-        Y_VERIFY(ev && ev->Get());
+        Y_ABORT_UNLESS(ev && ev->Get());
         return ev->Get()->ToString();
     }
 

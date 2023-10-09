@@ -297,7 +297,7 @@ void TConfigsDispatcher::ProcessEnqueuedEvents()
 
 void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription, TActorId subscriber)
 {
-    Y_VERIFY(subscription->UpdateInProcess);
+    Y_ABORT_UNLESS(subscription->UpdateInProcess);
 
     subscription->SubscribersToUpdate.insert(subscriber);
 

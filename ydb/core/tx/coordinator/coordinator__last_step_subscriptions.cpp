@@ -39,7 +39,7 @@ namespace NKikimr::NFlatTxCoordinator {
             }
 
             auto itPrevServer = PipeServers.find(subscriber->PipeServer);
-            Y_VERIFY(itPrevServer != PipeServers.end());
+            Y_ABORT_UNLESS(itPrevServer != PipeServers.end());
             itPrevServer->second.LastStepSubscribers.erase(ev->Sender);
         } else {
             subscriber = &LastStepSubscribers[ev->Sender];
@@ -57,7 +57,7 @@ namespace NKikimr::NFlatTxCoordinator {
         subscriber->Cookie = ev->Cookie;
 
         auto res = itPipeServer->second.LastStepSubscribers.emplace(ev->Sender, subscriber);
-        Y_VERIFY(res.second);
+        Y_ABORT_UNLESS(res.second);
 
         if (VolatileState.LastPlanned > 0) {
             NotifyUpdatedLastStep(ev->Sender, *subscriber);

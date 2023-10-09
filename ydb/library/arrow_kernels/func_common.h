@@ -117,7 +117,7 @@ template <typename Op>
 std::shared_ptr<cp::ScalarFunction> MakeConstNullary(const std::string& name) {
     auto func = std::make_shared<arrow::compute::ScalarFunction>(name, cp::Arity::Nullary(), nullptr);
     cp::ArrayKernelExec exec = SimpleNullaryExec<Op, arrow::DoubleType>;
-    Y_VERIFY(func->AddKernel({}, arrow::float64(), exec).ok());
+    Y_ABORT_UNLESS(func->AddKernel({}, arrow::float64(), exec).ok());
     return func;
 }
 
@@ -127,7 +127,7 @@ std::shared_ptr<cp::ScalarFunction> MakeArithmeticBinary(const std::string& name
     auto func = std::make_shared<TArithmeticFunction>(name, cp::Arity::Binary(), nullptr);
     for (const auto& ty : cp::internal::NumericTypes()) {
         auto exec = ArithmeticBinaryExec<ScalarBinary, Op>(ty);
-        Y_VERIFY(func->AddKernel({ty, ty}, ty, exec).ok());
+        Y_ABORT_UNLESS(func->AddKernel({ty, ty}, ty, exec).ok());
     }
     return func;
 }
@@ -137,7 +137,7 @@ std::shared_ptr<cp::ScalarFunction> MakeArithmeticIntBinary(const std::string& n
     auto func = std::make_shared<TArithmeticFunction>(name, cp::Arity::Binary(), nullptr);
     for (const auto& ty : cp::internal::IntTypes()) {
         auto exec = ArithmeticBinaryIntExec<ScalarBinary, Op>(ty);
-        Y_VERIFY(func->AddKernel({ty, ty}, ty, exec).ok());
+        Y_ABORT_UNLESS(func->AddKernel({ty, ty}, ty, exec).ok());
     }
     return func;
 }
@@ -148,7 +148,7 @@ std::shared_ptr<cp::ScalarFunction> MakeArithmeticUnary(const std::string& name)
     auto func = std::make_shared<TArithmeticFunction>(name, cp::Arity::Unary(), nullptr);
     for (const auto& ty : cp::internal::NumericTypes()) {
         auto exec = ArithmeticUnaryExec<ScalarUnary, Op>(ty);
-        Y_VERIFY(func->AddKernel({ty}, ty, exec).ok());
+        Y_ABORT_UNLESS(func->AddKernel({ty}, ty, exec).ok());
     }
     return func;
 }
@@ -158,7 +158,7 @@ std::shared_ptr<cp::ScalarFunction> MakeMathUnary(const std::string& name) {
     auto func = std::make_shared<TArithmeticFunction>(name, cp::Arity::Unary(), nullptr);
     for (const auto& ty : cp::internal::NumericTypes()) {
         auto exec = MathUnaryExec<ScalarUnary, Op>(ty);
-        Y_VERIFY(func->AddKernel({ty}, arrow::float64(), exec).ok());
+        Y_ABORT_UNLESS(func->AddKernel({ty}, arrow::float64(), exec).ok());
     }
     return func;
 }
@@ -168,7 +168,7 @@ std::shared_ptr<cp::ScalarFunction> MakeMathBinary(const std::string& name) {
     auto func = std::make_shared<TArithmeticFunction>(name, cp::Arity::Binary(), nullptr);
     for (const auto& ty : cp::internal::NumericTypes()) {
         auto exec = MathBinaryExec<ScalarBinary, Op>(ty);
-        Y_VERIFY(func->AddKernel({ty, ty}, arrow::float64(), exec).ok());
+        Y_ABORT_UNLESS(func->AddKernel({ty, ty}, arrow::float64(), exec).ok());
     }
     return func;
 }

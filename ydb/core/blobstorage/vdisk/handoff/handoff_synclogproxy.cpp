@@ -43,9 +43,9 @@ namespace NKikimr {
 
         void Handle(TEvDelLogoBlobDataSyncLogResult::TPtr &ev, const TActorContext &ctx) {
             auto msg = ev->Get();
-            Y_VERIFY(!Queue.empty());
+            Y_ABORT_UNLESS(!Queue.empty());
             const TItem &item = Queue.front();
-            Y_VERIFY(msg->OrderId == item.OrderId);
+            Y_ABORT_UNLESS(msg->OrderId == item.OrderId);
             Queue.pop_front();
 
             CheckAndFinish(ctx);

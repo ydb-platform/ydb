@@ -34,7 +34,7 @@ namespace NKikimr {
                         diskPart.Requested.Add(request);
                     } else {
                         // ensure that we are waiting for some data to come
-                        Y_VERIFY(diskPart.Requested);
+                        Y_ABORT_UNLESS(diskPart.Requested);
                     }
                     // return true indicating that we have a request that is not yet satisfied
                     return true;

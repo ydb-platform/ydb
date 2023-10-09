@@ -31,7 +31,7 @@ bool TAddressClassifier::AddNetByCidrAndLabel(const TString& cidr, const size_t 
         } else if (maybeRange->Type() == TIpAddressRange::TIpType::Ipv6) {
             RegisteredV6Nets[label].Add(*maybeRange);
         } else {
-            Y_VERIFY(false); // unknown net type?
+            Y_ABORT_UNLESS(false); // unknown net type?
         }
     } catch (yexception&) {
         return false;
@@ -61,7 +61,7 @@ std::pair<bool, size_t> TAddressClassifier::ClassifyAddress(const TString& addre
     } else if (inetAddress.Type() == TIpv6Address::TIpType::Ipv6) {
         return findAddress(RegisteredV6Nets);
     } else {
-        Y_VERIFY(false); // unknown net type?
+        Y_ABORT_UNLESS(false); // unknown net type?
     }
 
     return UnknownAddressClass;
@@ -82,7 +82,7 @@ TMaybe<TString> TLabeledAddressClassifier::ClassifyAddress(const TString& addres
 
     const auto netClass = Classifier.ClassifyAddress(address);
     if (netClass != TAddressClassifier::UnknownAddressClass) {
-        Y_VERIFY(netClass.second < Labels.size());
+        Y_ABORT_UNLESS(netClass.second < Labels.size());
         result = Labels[netClass.second];
     }
 

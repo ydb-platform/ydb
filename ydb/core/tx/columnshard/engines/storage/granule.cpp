@@ -55,7 +55,7 @@ void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TPortionIn
     auto it = Portions.find(portion.GetPortion());
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "add_column_record")("portion_info", portion.DebugString())("record", rec.DebugString());
     if (it == Portions.end()) {
-        Y_VERIFY(portion.Records.empty());
+        Y_ABORT_UNLESS(portion.Records.empty());
         auto portionNew = std::make_shared<TPortionInfo>(portion);
         portionNew->AddRecord(indexInfo, rec, portionMeta);
         it = Portions.emplace(portion.GetPortion(), portionNew).first;
@@ -102,9 +102,9 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
     if (portionBefore) {
         {
             auto itByKey = PortionsByPK.find(portionBefore->IndexKeyStart());
-            Y_VERIFY(itByKey != PortionsByPK.end());
+            Y_ABORT_UNLESS(itByKey != PortionsByPK.end());
             auto itPortion = itByKey->second.find(portionBefore->GetPortion());
-            Y_VERIFY(itPortion != itByKey->second.end());
+            Y_ABORT_UNLESS(itPortion != itByKey->second.end());
             itByKey->second.erase(itPortion);
             if (itByKey->second.empty()) {
                 PortionsByPK.erase(itByKey);
@@ -132,21 +132,21 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
 
 void TGranuleMeta::OnCompactionFinished() {
     AllowInsertionFlag = false;
-    Y_VERIFY(Activity.erase(EActivity::GeneralCompaction));
+    Y_ABORT_UNLESS(Activity.erase(EActivity::GeneralCompaction));
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFinished")("info", DebugString());
     Owner->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionFailed(const TString& reason) {
     AllowInsertionFlag = false;
-    Y_VERIFY(Activity.erase(EActivity::GeneralCompaction));
+    Y_ABORT_UNLESS(Activity.erase(EActivity::GeneralCompaction));
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFailed")("reason", reason)("info", DebugString());
     Owner->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionStarted() {
     AllowInsertionFlag = false;
-    Y_VERIFY(Activity.empty());
+    Y_ABORT_UNLESS(Activity.empty());
     Activity.emplace(EActivity::GeneralCompaction);
 }
 
@@ -177,7 +177,7 @@ TGranuleMeta::TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesS
     , PortionInfoGuard(Owner->GetCounters().BuildPortionBlobsGuard())
     , Record(rec)
 {
-    Y_VERIFY(Owner);
+    Y_ABORT_UNLESS(Owner);
     OptimizerPlanner = std::make_shared<NStorageOptimizer::NLevels::TLevelsOptimizerPlanner>(rec.Granule, owner->GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
 
 }

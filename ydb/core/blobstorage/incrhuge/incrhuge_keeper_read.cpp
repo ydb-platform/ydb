@@ -27,7 +27,7 @@ namespace NKikimr {
             const TBlobLocator& locator = Keeper.State.BlobLookup.Lookup(item.Id);
 
             // verify owner
-            Y_VERIFY(locator.Owner == item.Owner);
+            Y_ABORT_UNLESS(locator.Owner == item.Owner);
 
             // calculate size we want to read
             const ui32 maxSize = item.Offset < locator.PayloadSize ? locator.PayloadSize - item.Offset : 0;
@@ -46,7 +46,7 @@ namespace NKikimr {
             auto callback = [this, chunkIdx = locator.ChunkIdx, sender = item.Sender, cookie = item.Cookie]
                     (NKikimrProto::EReplyStatus status, IEventBase *msg, const TActorContext& ctx) {
                 auto it = Keeper.State.Chunks.find(chunkIdx);
-                Y_VERIFY(it != Keeper.State.Chunks.end());
+                Y_ABORT_UNLESS(it != Keeper.State.Chunks.end());
                 TChunkInfo& chunk = it->second;
                 --chunk.InFlightReq;
                 if (!chunk.InFlightReq && chunk.State == EChunkState::Deleting) {
@@ -70,9 +70,9 @@ namespace NKikimr {
 
             // find chunk and spin request counter
             auto it = Keeper.State.Chunks.find(locator.ChunkIdx);
-            Y_VERIFY(it != Keeper.State.Chunks.end());
+            Y_ABORT_UNLESS(it != Keeper.State.Chunks.end());
             TChunkInfo& chunk = it->second;
-            Y_VERIFY(chunk.State != EChunkState::Deleting);
+            Y_ABORT_UNLESS(chunk.State != EChunkState::Deleting);
             ++chunk.InFlightReq;
 
             return true;

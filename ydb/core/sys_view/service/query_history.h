@@ -171,7 +171,7 @@ struct TQueryStatsDedupBucket {
                 }
             }
 
-            Y_VERIFY(it != range.second);
+            Y_ABORT_UNLESS(it != range.second);
             Top.erase(it);
 
             TValue current = TGreater::GetValue(stats);
@@ -209,7 +209,7 @@ struct TQueryStatsDedupBucket {
     void Fill(NKikimrSysView::TTopQueryStats* bucket, TQueryTextsByHash& texts) const {
         for (auto it = Top.rbegin(); it != Top.rend(); ++it) {
             auto hashIt = Stats.find(it->second);
-            Y_VERIFY(hashIt != Stats.end());
+            Y_ABORT_UNLESS(hashIt != Stats.end());
 
             auto* dstStats = bucket->AddStats();
             auto& srcStats = *hashIt->second;
@@ -369,8 +369,8 @@ public:
         : BucketCount(bucketCount)
         , BucketSizeMs(bucketSize.MilliSeconds())
     {
-        Y_VERIFY(bucketCount > 0);
-        Y_VERIFY(BucketSizeMs > 0);
+        Y_ABORT_UNLESS(bucketCount > 0);
+        Y_ABORT_UNLESS(BucketSizeMs > 0);
 
         Buckets.resize(bucketCount);
         LastBucket = now.MilliSeconds() / BucketSizeMs;
@@ -483,7 +483,7 @@ public:
         ui64 lastBucket = message.GetLastBucket();
         this->RefreshBuckets(lastBucket);
 
-        Y_VERIFY(lastBucket + 1 >= message.BucketsSize());
+        Y_ABORT_UNLESS(lastBucket + 1 >= message.BucketsSize());
 
         ui64 startBucket = lastBucket + 1 - message.BucketsSize();
         ui64 thisStartBucket = this->GetStartBucket();
@@ -501,8 +501,8 @@ public:
     }
 
     const NKikimrSysView::TTopQueryStats& GetBucketTop(ui64 bucket) const {
-        Y_VERIFY(bucket >= this->GetStartBucket());
-        Y_VERIFY(bucket <= this->GetLastBucket());
+        Y_ABORT_UNLESS(bucket >= this->GetStartBucket());
+        Y_ABORT_UNLESS(bucket <= this->GetLastBucket());
         return this->Buckets[bucket % this->BucketCount].Top;
     }
 };

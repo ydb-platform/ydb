@@ -284,7 +284,7 @@ TFuture<TStatus> GenerateGraphDescId(const TCheckpointContextPtr& context) {
         return MakeFuture(TStatus(EStatus::SUCCESS, NYql::TIssues()));
     }
 
-    Y_VERIFY(context->EntityIdGenerator);
+    Y_ABORT_UNLESS(context->EntityIdGenerator);
     context->CheckpointGraphDescriptionContext->GraphDescId = context->EntityIdGenerator->Generate(EEntityType::CHECKPOINT_GRAPH_DESCRIPTION);
     return SelectGraphDescId(context)
         .Apply(
@@ -771,7 +771,7 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
     const TString& graphDescId,
     ECheckpointStatus status)
 {
-    Y_VERIFY(graphDescId);
+    Y_ABORT_UNLESS(graphDescId);
     auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, status);
     checkpointContext->CheckpointGraphDescriptionContext = MakeIntrusive<TCheckpointGraphDescriptionContext>(graphDescId);
     return CreateCheckpointImpl(coordinator, checkpointContext);
@@ -790,7 +790,7 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
 }
 
 TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& checkpointContext) {
-    Y_VERIFY(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId || checkpointContext->EntityIdGenerator);
+    Y_ABORT_UNLESS(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId || checkpointContext->EntityIdGenerator);
     auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
@@ -1190,7 +1190,7 @@ TCheckpointStoragePtr NewYdbCheckpointStorage(
     const IEntityIdGenerator::TPtr& entityIdGenerator,
     const TYqSharedResources::TPtr& yqSharedResources)
 {
-    Y_VERIFY(entityIdGenerator);
+    Y_ABORT_UNLESS(entityIdGenerator);
     return new TCheckpointStorage(config, credentialsProviderFactory, entityIdGenerator, yqSharedResources);
 }
 

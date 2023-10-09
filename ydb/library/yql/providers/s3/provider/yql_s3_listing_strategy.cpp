@@ -674,12 +674,12 @@ public:
                 << "[TConcurrentBFSDirectoryResolverIterator] Callback end";
         }
         void RemovePathFromInProgress(const TString& path) {
-            Y_VERIFY(!InProgressPaths.empty());
+            Y_ABORT_UNLESS(!InProgressPaths.empty());
             auto sizeBeforeRemoval = InProgressPaths.size();
             auto pos = std::find(InProgressPaths.begin(), InProgressPaths.end(), path);
-            Y_VERIFY(pos != InProgressPaths.end());
+            Y_ABORT_UNLESS(pos != InProgressPaths.end());
             InProgressPaths.erase(pos);
-            Y_VERIFY(sizeBeforeRemoval == InProgressPaths.size() + 1);
+            Y_ABORT_UNLESS(sizeBeforeRemoval == InProgressPaths.size() + 1);
         }
         void HandleLimitExceeded(const TString& sourcePath, const TListError& error) {
             IsListingFinished = true;
@@ -787,7 +787,7 @@ public:
             return true;
         }
         void ScheduleNextListing() {
-            Y_VERIFY(!DirectoryPrefixQueue.empty());
+            Y_ABORT_UNLESS(!DirectoryPrefixQueue.empty());
             auto prefix = DirectoryPrefixQueue.front();
             DirectoryPrefixQueue.pop_front();
             InProgressPaths.push_back(prefix);

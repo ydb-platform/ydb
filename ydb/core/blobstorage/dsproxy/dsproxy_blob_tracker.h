@@ -37,12 +37,12 @@ namespace NKikimr {
         void UpdateFromResponseData(const NKikimrBlobStorage::TQueryResult& result, const TVDiskID& vdisk,
                 const TBlobStorageGroupInfo *info) {
             // ensure that we have blob id set in reply and that it matches stored one, which we are processing
-            Y_VERIFY(result.HasBlobID());
+            Y_ABORT_UNLESS(result.HasBlobID());
             const TLogoBlobID id = LogoBlobIDFromLogoBlobID(result.GetBlobID());
-            Y_VERIFY(id.FullID() == FullId);
+            Y_ABORT_UNLESS(id.FullID() == FullId);
 
             // check the status
-            Y_VERIFY(result.HasStatus());
+            Y_ABORT_UNLESS(result.HasStatus());
             const NKikimrProto::EReplyStatus status = result.GetStatus();
 
             // get the node id for this blob and check the part index

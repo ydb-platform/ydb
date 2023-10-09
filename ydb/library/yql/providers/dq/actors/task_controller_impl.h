@@ -532,7 +532,7 @@ public:
 
         auto& tasks = *ev->Get()->Record.MutableTask();
         const auto& actorIds = ev->Get()->Record.GetActorId();
-        Y_VERIFY(tasks.size() == actorIds.size());
+        Y_ABORT_UNLESS(tasks.size() == actorIds.size());
 
         SetTaskCountMetric(tasks.size());
 

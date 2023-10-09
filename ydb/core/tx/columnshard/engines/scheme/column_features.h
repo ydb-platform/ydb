@@ -49,7 +49,7 @@ public:
     TColumnSaver(NArrow::NTransformation::ITransformer::TPtr transformer, NArrow::NSerialization::ISerializer::TPtr serializer)
         : Transformer(transformer)
         , Serializer(serializer) {
-        Y_VERIFY(Serializer);
+        Y_ABORT_UNLESS(Serializer);
     }
 
     bool IsHardPacker() const {
@@ -63,7 +63,7 @@ public:
     }
 
     TString Apply(const std::shared_ptr<arrow::RecordBatch>& data) const {
-        Y_VERIFY(Serializer);
+        Y_ABORT_UNLESS(Serializer);
         if (Transformer) {
             return Serializer->Serialize(Transformer->Transform(data));
         } else {
@@ -88,10 +88,10 @@ public:
         , ExpectedSchema(expectedSchema)
         , ColumnId(columnId)
     {
-        Y_VERIFY(ExpectedSchema);
+        Y_ABORT_UNLESS(ExpectedSchema);
         auto fieldsCountStr = ::ToString(ExpectedSchema->num_fields());
-        Y_VERIFY(ExpectedSchema->num_fields() == 1, "%s", fieldsCountStr.data());
-        Y_VERIFY(Deserializer);
+        Y_ABORT_UNLESS(ExpectedSchema->num_fields() == 1, "%s", fieldsCountStr.data());
+        Y_ABORT_UNLESS(Deserializer);
     }
 
     ui32 GetColumnId() const {
@@ -103,7 +103,7 @@ public:
     }
 
     arrow::Result<std::shared_ptr<arrow::RecordBatch>> Apply(const TString& data) const {
-        Y_VERIFY(Deserializer);
+        Y_ABORT_UNLESS(Deserializer);
         arrow::Result<std::shared_ptr<arrow::RecordBatch>> columnArray = Deserializer->Deserialize(data);
         if (!columnArray.ok()) {
             return columnArray;

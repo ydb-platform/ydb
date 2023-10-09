@@ -947,7 +947,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                     if (reference.count(index)) {
                         Ctest << "updating " << index << " -> " << value << Endl;
                         TItem *valp = overlay.FindForUpdate(index);
-                        Y_VERIFY(valp);
+                        Y_ABORT_UNLESS(valp);
                         valp->Value = value;
                     } else {
                         Ctest << "inserting " << index << " -> " << value << Endl;

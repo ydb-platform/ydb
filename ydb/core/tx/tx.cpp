@@ -36,7 +36,7 @@ TEvSubDomain::TEvConfigureStatus::TEvConfigureStatus(NKikimrTx::TEvSubDomainConf
 
 TAutoPtr<TEvSubDomain::TEvConfigure> CreateDomainConfigurationFromStatic(const TAppData *appdata, ui64 tabletId) {
     const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(tabletId);
-    Y_VERIFY(selfDomain != appdata->DomainsInfo->BadDomainId);
+    Y_ABORT_UNLESS(selfDomain != appdata->DomainsInfo->BadDomainId);
     const auto& domain = appdata->DomainsInfo->GetDomain(selfDomain);
 
     return new TEvSubDomain::TEvConfigure(ExtractProcessingParams(domain));

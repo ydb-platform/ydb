@@ -22,7 +22,7 @@ namespace NKikimr {
 
     TString TPutRecoveryLogRecOpt::Serialize(const TBlobStorageGroupType &gtype, const TLogoBlobID &id,
             const TRope &rope) {
-        Y_VERIFY(id.PartId() && rope.GetSize() == gtype.PartSize(id),
+        Y_ABORT_UNLESS(id.PartId() && rope.GetSize() == gtype.PartSize(id),
             "id# %s rope.GetSize()# %zu", id.ToString().data(), rope.GetSize());
 
         TString res = TString::Uninitialized(sizeof(id) + rope.GetSize());
@@ -40,7 +40,7 @@ namespace NKikimr {
 
     TRcBuf TPutRecoveryLogRecOpt::SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id,
             TRcBuf &&data) {
-        Y_VERIFY(id.PartId() && data.GetSize() == gtype.PartSize(id),
+        Y_ABORT_UNLESS(id.PartId() && data.GetSize() == gtype.PartSize(id),
             "id# %s rope.GetSize()# %zu", id.ToString().data(), data.GetSize());
 
         data.GrowFront(sizeof(id));

@@ -14,7 +14,7 @@ TPlainReadData::TPlainReadData(TReadMetadata::TConstPtr readMetadata, const TRea
     FFMinusEFColumns = std::make_shared<TColumnsSet>(*FFColumns - *EFColumns);
     FFMinusEFPKColumns = std::make_shared<TColumnsSet>(*FFColumns - *EFColumns - *PKColumns);
 
-    Y_VERIFY(FFColumns->Contains(EFColumns));
+    Y_ABORT_UNLESS(FFColumns->Contains(EFColumns));
     ui32 sourceIdx = 0;
     std::deque<std::shared_ptr<IDataSource>> sources;
     const auto& portionsOrdered = GetReadMetadata()->SelectInfo->GetPortionsOrdered(GetReadMetadata()->IsDescSorted());

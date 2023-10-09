@@ -16,7 +16,7 @@ void TDomainsView::DeregisterNode(const TNodeInfo& node) {
     for (auto &domainKey: node.ServicedDomains) {
          BLOG_TRACE("Node(" << node.Id << ")"
                     << " DeregisterInDomains (" << domainKey << ") : " << TotalCount[domainKey] << " -> " << TotalCount[domainKey] - 1);
-         Y_VERIFY(TotalCount[domainKey], "try decrement empty counter for DomainKey %s", ToString(domainKey).c_str());
+         Y_ABORT_UNLESS(TotalCount[domainKey], "try decrement empty counter for DomainKey %s", ToString(domainKey).c_str());
         --TotalCount[domainKey];
     }
 }

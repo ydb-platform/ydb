@@ -121,7 +121,7 @@ namespace NKikimr {
          * Sets binary representation of ULID that must be exactly 16 bytes
          */
         void SetBinary(TStringBuf buf) noexcept {
-            Y_VERIFY(buf.size() == 16, "ULID binary representation must have exactly 16 bytes");
+            Y_ABORT_UNLESS(buf.size() == 16, "ULID binary representation must have exactly 16 bytes");
             ::memcpy(Data, buf.data(), 16);
         }
 

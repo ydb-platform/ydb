@@ -119,7 +119,7 @@ protected:
         // Add custom field options to json.
         NJson::TJsonValue val;
         auto ok = ReadJsonTree(json, &val);
-        Y_VERIFY(ok);
+        Y_ABORT_UNLESS(ok);
 
         AddCustomFieldOptions(descriptor, val);
         json = WriteJson(val);
@@ -144,7 +144,7 @@ protected:
             auto &opts = field["options"];
 
             auto *fieldDesc = descriptor.FindFieldByNumber(num);
-            Y_VERIFY(fieldDesc);
+            Y_ABORT_UNLESS(fieldDesc);
 
             auto &optsMsg = fieldDesc->options();
             auto *reflection = optsMsg.GetReflection();

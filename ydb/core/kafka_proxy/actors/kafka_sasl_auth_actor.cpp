@@ -199,7 +199,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
         SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TStringBuilder() << "Database with path '" << DatabasePath << "' doesn't exists", ctx);
         return;
     }
-    Y_VERIFY(navigate->ResultSet.size() == 1);
+    Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
     IsServerless = navigate->ResultSet.front().DomainInfo->IsServerless();
 
     for (const auto& attr : navigate->ResultSet.front().Attributes) {

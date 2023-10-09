@@ -169,8 +169,8 @@ namespace NPDisk {
 
     static TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TVector<TActorId> &replicas, ui32 NToSelect, ui32 nrings, ui32 ringSize)
     {   
-        Y_VERIFY(replicas.size() >= nrings * ringSize);
-        Y_VERIFY(NToSelect <= nrings);
+        Y_ABORT_UNLESS(replicas.size() >= nrings * ringSize);
+        Y_ABORT_UNLESS(NToSelect <= nrings);
 
         auto info = MakeIntrusive<TStateStorageInfo>();
         info->StateStorageGroup = 0;
@@ -327,7 +327,7 @@ namespace NPDisk {
 
         {
             NKikimrBlobStorage::TNodeWardenServiceSet bsConfig;
-            Y_VERIFY(google::protobuf::TextFormat::ParseFromString(disk.MakeTextConf(*app.Domains), &bsConfig));
+            Y_ABORT_UNLESS(google::protobuf::TextFormat::ParseFromString(disk.MakeTextConf(*app.Domains), &bsConfig));
             app.SetBSConf(std::move(bsConfig));
         }
 
@@ -364,13 +364,13 @@ namespace NPDisk {
             auto blobStorageActorId = runtime.GetLocalServiceId(
                 MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)),
                 nodeIndex);
-            Y_VERIFY(blobStorageActorId, "Missing node warden on node %" PRIu32, nodeIndex);
+            Y_ABORT_UNLESS(blobStorageActorId, "Missing node warden on node %" PRIu32, nodeIndex);
             runtime.EnableScheduleForActor(blobStorageActorId);
 
             // SysView Service uses Scheduler to send counters
             auto sysViewServiceId = runtime.GetLocalServiceId(
                 NSysView::MakeSysViewServiceID(runtime.GetNodeId(nodeIndex)), nodeIndex);
-            Y_VERIFY(sysViewServiceId, "Missing SysView Service on node %" PRIu32, nodeIndex);
+            Y_ABORT_UNLESS(sysViewServiceId, "Missing SysView Service on node %" PRIu32, nodeIndex);
             runtime.EnableScheduleForActor(sysViewServiceId);
         }
 

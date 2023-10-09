@@ -124,7 +124,7 @@ public:
         if (it == data.end()) {
             it = data.emplace(portion.GetPortion(), portion.CopyWithFilteredColumns({})).first;
         } else {
-            Y_VERIFY(portion.GetGranule() == it->second.GetGranule() && portion.GetPortion() == it->second.GetPortion());
+            Y_ABORT_UNLESS(portion.GetGranule() == it->second.GetGranule() && portion.GetPortion() == it->second.GetPortion());
         }
         it->second.SetMinSnapshot(portion.GetMinSnapshot());
         it->second.SetRemoveSnapshot(portion.GetRemoveSnapshot());
@@ -145,7 +145,7 @@ public:
     void EraseColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) override {
         auto& data = Indices[index].Columns[portion.GetGranule()];
         auto it = data.find(portion.GetPortion());
-        Y_VERIFY(it != data.end());
+        Y_ABORT_UNLESS(it != data.end());
         auto& portionLocal = it->second;
 
         std::vector<TColumnRecord> filtered;
@@ -166,7 +166,7 @@ public:
                 copy.Records.clear();
                 for (const auto& rec : portionLocal.Records) {
                     auto itContextLoader = LoadContexts[copy.GetAddress()].find(rec.GetAddress());
-                    Y_VERIFY(itContextLoader != LoadContexts[copy.GetAddress()].end());
+                    Y_ABORT_UNLESS(itContextLoader != LoadContexts[copy.GetAddress()].end());
                     callback(copy, itContextLoader->second);
                     LoadContexts[copy.GetAddress()].erase(itContextLoader);
                 }
@@ -230,7 +230,7 @@ public:
         : Schema(NArrow::MakeArrowSchema(testColumns))
     {
         auto status = arrow::RecordBatchBuilder::Make(Schema, arrow::default_memory_pool(), &BatchBuilder);
-        Y_VERIFY(status.ok());
+        Y_ABORT_UNLESS(status.ok());
     }
 
     bool AddRow(const TRow& row) {
@@ -246,7 +246,7 @@ public:
     std::shared_ptr<arrow::RecordBatch> Finish() {
         std::shared_ptr<arrow::RecordBatch> batch;
         auto status = BatchBuilder->Flush(&batch);
-        Y_VERIFY(status.ok());
+        Y_ABORT_UNLESS(status.ok());
         return batch;
     }
 
@@ -309,7 +309,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
     changes->StartEmergency();
 
     NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Indexation"));
-    Y_VERIFY(changes->ConstructBlobs(context).Ok());
+    Y_ABORT_UNLESS(changes->ConstructBlobs(context).Ok());
 
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), 1);
     ui32 blobsCount = 0;
@@ -339,7 +339,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     changes->SetBlobs(std::move(blobs));
     changes->StartEmergency();
     NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Compaction"));
-    Y_VERIFY(changes->ConstructBlobs(context).Ok());
+    Y_ABORT_UNLESS(changes->ConstructBlobs(context).Ok());
 
     //    UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), expected.NewPortions);
     AddIdsToBlobs(changes->AppendedPortions, changes->Blobs, step);
@@ -350,7 +350,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     if (blobsPool) {
         for (auto&& i : changes->AppendedPortions) {
             for (auto&& r : i.GetPortionInfo().Records) {
-                Y_VERIFY(blobsPool->emplace(r.BlobRange, i.GetBlobByRangeVerified(r.ColumnId, r.Chunk)).second);
+                Y_ABORT_UNLESS(blobsPool->emplace(r.BlobRange, i.GetBlobByRangeVerified(r.ColumnId, r.Chunk)).second);
             }
         }
     }
@@ -575,7 +575,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 gt10k = MakeStrPredicate("10000", NArrow::EOperation::Greater);
             }
             NOlap::TPKRangesFilter pkFilter(false);
-            Y_VERIFY(pkFilter.Add(gt10k, nullptr, nullptr));
+            Y_ABORT_UNLESS(pkFilter.Add(gt10k, nullptr, nullptr));
             auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, pkFilter);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
         }
@@ -587,7 +587,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 lt10k = MakeStrPredicate("08999", NArrow::EOperation::Less);
             }
             NOlap::TPKRangesFilter pkFilter(false);
-            Y_VERIFY(pkFilter.Add(nullptr, lt10k, nullptr));
+            Y_ABORT_UNLESS(pkFilter.Add(nullptr, lt10k, nullptr));
             auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, pkFilter);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 9);
         }

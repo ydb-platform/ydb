@@ -277,7 +277,7 @@ TConfigItem::TPtr TConfigIndex::GetItem(ui64 id) const
 
 void TConfigIndex::AddItem(TConfigItem::TPtr item)
 {
-    Y_VERIFY(!ConfigItems.contains(item->Id));
+    Y_ABORT_UNLESS(!ConfigItems.contains(item->Id));
     ConfigItems.emplace(item->Id, item);
 
     if (!item->UsageScope.NodeIds.empty()) {
@@ -300,7 +300,7 @@ void TConfigIndex::AddItem(TConfigItem::TPtr item)
 void TConfigIndex::RemoveItem(ui64 id)
 {
     auto item = GetItem(id);
-    Y_VERIFY(item);
+    Y_ABORT_UNLESS(item);
 
     if (!item->UsageScope.NodeIds.empty()) {
         for (auto nodeId : item->UsageScope.NodeIds)
@@ -667,7 +667,7 @@ const THashMap<ui64, TSubscription::TPtr> &TSubscriptionIndex::GetSubscriptions(
 
 void TSubscriptionIndex::AddSubscription(TSubscription::TPtr subscription)
 {
-    Y_VERIFY(!Subscriptions.contains(subscription->Id));
+    Y_ABORT_UNLESS(!Subscriptions.contains(subscription->Id));
     Subscriptions.emplace(subscription->Id, subscription);
     SubscriptionsBySubscriber[subscription->Subscriber].insert(subscription);
     SubscriptionsByNodeId[subscription->NodeId].insert(subscription);
@@ -679,7 +679,7 @@ void TSubscriptionIndex::AddSubscription(TSubscription::TPtr subscription)
 void TSubscriptionIndex::RemoveSubscription(ui64 id)
 {
     auto subscription = GetSubscription(id);
-    Y_VERIFY(subscription);
+    Y_ABORT_UNLESS(subscription);
     RemoveFromIndex(subscription, subscription->Subscriber, SubscriptionsBySubscriber);
     RemoveFromIndex(subscription, subscription->NodeId, SubscriptionsByNodeId);
     RemoveFromIndex(subscription, subscription->Host, SubscriptionsByHost);
@@ -703,7 +703,7 @@ const THashMap<TActorId, TInMemorySubscription::TPtr> &TInMemorySubscriptionInde
 
 void TInMemorySubscriptionIndex::AddSubscription(TInMemorySubscription::TPtr subscription)
 {
-    Y_VERIFY(!Subscriptions.contains(subscription->Subscriber));
+    Y_ABORT_UNLESS(!Subscriptions.contains(subscription->Subscriber));
 
     Subscriptions.emplace(subscription->Subscriber, subscription);
 
@@ -716,7 +716,7 @@ void TInMemorySubscriptionIndex::AddSubscription(TInMemorySubscription::TPtr sub
 void TInMemorySubscriptionIndex::RemoveSubscription(const TActorId &subscriber)
 {
     auto it = Subscriptions.find(subscriber);
-    Y_VERIFY(it != Subscriptions.end());
+    Y_ABORT_UNLESS(it != Subscriptions.end());
     auto subscription = it->second;
 
     RemoveFromIndex(subscription, subscription->NodeId, SubscriptionsByNodeId);

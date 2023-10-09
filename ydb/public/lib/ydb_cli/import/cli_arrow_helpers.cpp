@@ -17,14 +17,14 @@
 #include <util/string/builder.h>
 #include <util/folder/path.h>
 
-#define Y_VERIFY_OK(status) Y_VERIFY(status.ok(), "%s", status.ToString().c_str())
+#define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
 
 namespace NYdb_cli::NArrow {
     std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& table) {
         std::vector<std::shared_ptr<arrow::Array>> columns;
         columns.reserve(table->num_columns());
         for (auto& col : table->columns()) {
-            Y_VERIFY(col->num_chunks() == 1);
+            Y_ABORT_UNLESS(col->num_chunks() == 1);
             columns.push_back(col->chunk(0));
         }
         return arrow::RecordBatch::Make(table->schema(), table->num_rows(), columns);
@@ -126,7 +126,7 @@ namespace NYdb_cli::NArrow {
 
             arrow::Status Write(const void* data, int64_t nbytes) override {
                 if (Y_LIKELY(nbytes > 0)) {
-                    Y_VERIFY(Out && Out->size() - Position >= ui64(nbytes));
+                    Y_ABORT_UNLESS(Out && Out->size() - Position >= ui64(nbytes));
                     char* dst = &(*Out)[Position];
                     ::memcpy(dst, data, nbytes);
                     Position += nbytes;
@@ -169,7 +169,7 @@ namespace NYdb_cli::NArrow {
         TFixedStringOutputStream out(&str);
         status = arrow::ipc::WriteIpcPayload(payload, options, &out, &metadata_length);
         Y_VERIFY_OK(status);
-        Y_VERIFY(out.GetPosition() == str.size());
+        Y_ABORT_UNLESS(out.GetPosition() == str.size());
 
         return str;
     }

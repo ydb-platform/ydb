@@ -75,11 +75,11 @@ namespace NKikimr {
                 {}
 
                 void AddData(ui32 diskIdx, const TLogoBlobID& id, NKikimrProto::EReplyStatus status, TRope&& data) {
-                    Y_VERIFY(id.FullID() == Id);
+                    Y_ABORT_UNLESS(id.FullID() == Id);
                     switch (status) {
                         case NKikimrProto::OK: {
                             const ui8 partIdx = id.PartId() - 1;
-                            Y_VERIFY(partIdx < Parts.size());
+                            Y_ABORT_UNLESS(partIdx < Parts.size());
                             PartsMask |= 1 << partIdx;
                             Parts[partIdx] = std::move(data);
                             DisksRepliedOK |= 1 << diskIdx;
@@ -123,8 +123,8 @@ namespace NKikimr {
 
             bool Recover(TPartSet& item, TRecoveredBlobsQueue& rbq, NMatrix::TVectorType& parts) {
                 const TLogoBlobID& id = item.Id;
-                Y_VERIFY(!id.PartId());
-                Y_VERIFY(!LastRecoveredId || *LastRecoveredId < id);
+                Y_ABORT_UNLESS(!id.PartId());
+                Y_ABORT_UNLESS(!LastRecoveredId || *LastRecoveredId < id);
                 LastRecoveredId = id;
 
                 RecoverMetadata(id, rbq);
@@ -141,7 +141,7 @@ namespace NKikimr {
                 }
 
                 const TLost& lost = LostVec.front();
-                Y_VERIFY(lost.Id == id);
+                Y_ABORT_UNLESS(lost.Id == id);
 
                 const TBlobStorageGroupType groupType = ReplCtx->VCtx->Top->GType;
 
@@ -201,10 +201,10 @@ namespace NKikimr {
                             }
                             const TLogoBlobID partId(id, i + 1);
                             const ui32 partSize = groupType.PartSize(partId);
-                            Y_VERIFY(partSize); // no metadata here
+                            Y_ABORT_UNLESS(partSize); // no metadata here
                             partsSize += partSize;
                             TRope& data = item.Parts[i];
-                            Y_VERIFY(data.GetSize() == partSize);
+                            Y_ABORT_UNLESS(data.GetSize() == partSize);
                             if (ReplCtx->HugeBlobCtx->IsHugeBlob(groupType, id)) {
                                 AddBlobToQueue(partId, TDiskBlob::Create(id.BlobSize(), i + 1,
                                     groupType.TotalPartCount(), std::move(data), Arena), {}, true, rbq);
@@ -296,8 +296,8 @@ namespace NKikimr {
             // add next task during preparation phase
             void AddTask(const TLogoBlobID &id, const NMatrix::TVectorType &partsToRecover, bool possiblePhantom,
                     TIngress ingress) {
-                Y_VERIFY(!id.PartId());
-                Y_VERIFY(LostVec.empty() || LostVec.back().Id < id);
+                Y_ABORT_UNLESS(!id.PartId());
+                Y_ABORT_UNLESS(LostVec.empty() || LostVec.back().Id < id);
                 LostVec.push_back(TLost(id, partsToRecover, possiblePhantom, ingress));
             }
 

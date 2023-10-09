@@ -111,12 +111,12 @@ private:
     }
 
     void OnResponses(std::vector<NKikimrClient::TSqsResponse>&& responses) override {
-        Y_VERIFY(Request().EntriesSize() == responses.size());
+        Y_ABORT_UNLESS(Request().EntriesSize() == responses.size());
         auto& resp = *Response_.MutableDeleteQueueBatch();
         for (size_t i = 0; i < Request().EntriesSize(); ++i) {
             const auto& reqEntry = Request().GetEntries(i);
             auto& respEntry = *resp.AddEntries();
-            Y_VERIFY(responses[i].HasDeleteQueue());
+            Y_ABORT_UNLESS(responses[i].HasDeleteQueue());
             respEntry = std::move(*responses[i].MutableDeleteQueue());
             respEntry.SetId(reqEntry.GetId());
         }

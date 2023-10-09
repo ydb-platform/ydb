@@ -34,7 +34,7 @@ public:
         : TActor(&TThis::StateWork)
         , StorageOperator(storageOperator)
     {
-        Y_VERIFY(!!StorageOperator, "not initialized operator. incorrect config.");
+        Y_ABORT_UNLESS(!!StorageOperator, "not initialized operator. incorrect config.");
     }
 
     virtual ~TS3Wrapper() = default;

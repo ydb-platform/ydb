@@ -89,7 +89,7 @@ namespace NKikimr::NSysView {
         }
 
         TCell MakeCellFrom(const TString& value, NScheme::TTypeId type) {
-            Y_VERIFY(type == NScheme::NTypeIds::String || type == NScheme::NTypeIds::String4k ||
+            Y_ABORT_UNLESS(type == NScheme::NTypeIds::String || type == NScheme::NTypeIds::String4k ||
                 type == NScheme::NTypeIds::String2m || type == NScheme::NTypeIds::Utf8);
             return TCell(value.data(), value.size());
         }
@@ -165,7 +165,7 @@ namespace NKikimr::NSysView {
                             if (std::next(it) == path.end()) { // terminal entry
                                 cells.push_back(ExtractCell(m, fdesc, column.Type.GetTypeId()));
                             } else { // submessage
-                                Y_VERIFY(fdesc->type() == NProtoBuf::FieldDescriptor::TYPE_MESSAGE);
+                                Y_ABORT_UNLESS(fdesc->type() == NProtoBuf::FieldDescriptor::TYPE_MESSAGE);
                                 m = &m->GetReflection()->GetMessage(*m, fdesc);
                             }
                         }

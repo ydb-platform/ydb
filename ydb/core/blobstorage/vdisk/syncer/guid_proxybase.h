@@ -92,7 +92,7 @@ namespace NKikimr {
                 return;
             }
 
-            Y_VERIFY(record.GetStatus() == NKikimrProto::OK);
+            Y_ABORT_UNLESS(record.GetStatus() == NKikimrProto::OK);
             HandleReply(ctx, record);
             Die(ctx);
         }

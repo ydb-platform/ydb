@@ -30,7 +30,7 @@ namespace NTest {
 
         TRes Make(const TRowsHeap &heap, size_t offset, size_t len)
         {
-            Y_VERIFY(offset < heap.Size(), "Hole offset is out of the heap");
+            Y_ABORT_UNLESS(offset < heap.Size(), "Hole offset is out of the heap");
 
             const auto on = heap.begin() + offset;
 
@@ -71,9 +71,9 @@ namespace NTest {
             TRowId lastEnd = 0;
 
             for (const auto &hole : screen) {
-                Y_VERIFY(lastEnd <= hole.Begin, "Screen is not sorted correctly");
-                Y_VERIFY(first.Seek(hole.Begin) != EReady::Page);
-                Y_VERIFY(last.Seek(hole.End) != EReady::Page);
+                Y_ABORT_UNLESS(lastEnd <= hole.Begin, "Screen is not sorted correctly");
+                Y_ABORT_UNLESS(first.Seek(hole.Begin) != EReady::Page);
+                Y_ABORT_UNLESS(last.Seek(hole.End) != EReady::Page);
                 if (first.GetRowId() < last.GetRowId()) {
                     TArrayRef<const TCell> firstKey;
                     if (first.IsValid()) {

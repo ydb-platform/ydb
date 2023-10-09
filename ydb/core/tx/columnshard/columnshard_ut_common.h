@@ -58,7 +58,7 @@ struct TTestSchema {
             } else if (Codec == "zstd") {
                 return NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
             }
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
         }
 
         bool HasCodec() const {
@@ -230,7 +230,7 @@ struct TTestSchema {
             *schema->MutableColumns()->Add() = CreateColumn(i + 1, columns[i].first, columns[i].second);
         }
 
-        Y_VERIFY(pk.size() > 0);
+        Y_ABORT_UNLESS(pk.size() > 0);
         for (auto& column : ExtractNames(pk)) {
             schema->AddKeyColumnNames(column);
         }
@@ -245,8 +245,8 @@ struct TTestSchema {
     }
 
     static void InitTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle::TTtl* ttl) {
-        Y_VERIFY(specials.HasTtl());
-        Y_VERIFY(!specials.TtlColumn.empty());
+        Y_ABORT_UNLESS(specials.HasTtl());
+        Y_ABORT_UNLESS(!specials.TtlColumn.empty());
         ttl->SetColumnName(specials.TtlColumn);
         ttl->SetExpireAfterSeconds((*specials.EvictAfter).Seconds());
     }
@@ -466,7 +466,7 @@ namespace NKikimr::NColumnShard {
 
             template <class TData>
             TRowBuilder Add(const TData& data) {
-                Y_VERIFY(Index < Owner.Builders.size());
+                Y_ABORT_UNLESS(Index < Owner.Builders.size());
                 auto& builder = Owner.Builders[Index];
                 auto type = builder->type();
 
@@ -479,13 +479,13 @@ namespace NKikimr::NColumnShard {
                     if constexpr (std::is_arithmetic<TData>::value) {
                         if constexpr (arrow::has_c_type<T>::value) {
                             using CType = typename T::c_type;
-                            Y_VERIFY(typedBuilder.Append((CType)data).ok());
+                            Y_ABORT_UNLESS(typedBuilder.Append((CType)data).ok());
                             return true;
                         }
                     }
                     if constexpr (std::is_same<TData, std::string>::value) {
                         if constexpr (arrow::has_string_view<T>::value && arrow::is_parameter_free_type<T>::value) {
-                            Y_VERIFY(typedBuilder.Append(data.data(), data.size()).ok());
+                            Y_ABORT_UNLESS(typedBuilder.Append(data.data(), data.size()).ok());
                             return true;
                         }
                     }
@@ -496,7 +496,7 @@ namespace NKikimr::NColumnShard {
             }
 
             TRowBuilder AddNull() {
-                Y_VERIFY(Index < Owner.Builders.size());
+                Y_ABORT_UNLESS(Index < Owner.Builders.size());
                 auto res = Owner.Builders[Index]->AppendNull();
                 return TRowBuilder(Index + 1, Owner);
             }
@@ -506,7 +506,7 @@ namespace NKikimr::NColumnShard {
             : Schema(schema)
         {
             Builders = NArrow::MakeBuilders(schema);
-            Y_VERIFY(Builders.size() == schema->fields().size());
+            Y_ABORT_UNLESS(Builders.size() == schema->fields().size());
         }
 
         TRowBuilder AddRow() {
@@ -519,7 +519,7 @@ namespace NKikimr::NColumnShard {
             columns.reserve(Builders.size());
             for (auto&& builder : Builders) {
                 auto arrayDataRes = builder->Finish();
-                Y_VERIFY(arrayDataRes.ok());
+                Y_ABORT_UNLESS(arrayDataRes.ok());
                 columns.push_back(*arrayDataRes);
             }
             return arrow::RecordBatch::Make(Schema, RowsCount, columns);

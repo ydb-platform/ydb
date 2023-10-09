@@ -71,7 +71,7 @@ void TCheckpointCoordinator::Handle(NYql::NDqs::TEvReadyState::TPtr& ev) {
 
     int tasksSize = GetTasksSize();
     const auto& actorIds = ev->Get()->Record.GetActorId();
-    Y_VERIFY(tasksSize == actorIds.size());
+    Y_ABORT_UNLESS(tasksSize == actorIds.size());
 
     for (int i = 0; i < tasksSize; ++i) {
         const auto& task = GetTask(i);
@@ -178,7 +178,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
     const auto event = ev->Get();
     const auto& checkpoints = event->Checkpoints;
     CC_LOG_D("Got TEvGetCheckpointsMetadataResponse");
-    Y_VERIFY(!PendingRestoreCheckpoint);
+    Y_ABORT_UNLESS(!PendingRestoreCheckpoint);
 
     if (event->Issues) {
         ++*Metrics.StorageError;
@@ -187,7 +187,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
         return;
     }
 
-    Y_VERIFY(checkpoints.size() < 2);
+    Y_ABORT_UNLESS(checkpoints.size() < 2);
     if (!checkpoints.empty()) {
         const auto& checkpoint = checkpoints.at(0);
         CheckpointIdGenerator = std::make_unique<TCheckpointIdGenerator>(CoordinatorId, checkpoint.CheckpointId);
@@ -335,7 +335,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
 }
 
 void TCheckpointCoordinator::InitCheckpoint() {
-    Y_VERIFY(CheckpointIdGenerator);
+    Y_ABORT_UNLESS(CheckpointIdGenerator);
     const auto nextCheckpointId = CheckpointIdGenerator->NextId();
     CC_LOG_I("[" << nextCheckpointId << "] Registering new checkpoint in storage");
 
@@ -383,10 +383,10 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
     }
 
     if (GraphDescId) {
-        Y_VERIFY(GraphDescId == ev->Get()->GraphDescId);
+        Y_ABORT_UNLESS(GraphDescId == ev->Get()->GraphDescId);
     } else {
         GraphDescId = ev->Get()->GraphDescId;
-        Y_VERIFY(GraphDescId);
+        Y_ABORT_UNLESS(GraphDescId);
     }
 
     if (PendingInit) {
@@ -549,9 +549,9 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvAbortCheckpoi
 
 void TCheckpointCoordinator::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
     const auto actorIt = TaskIdToActor.find(ev->Get()->EventQueueId);
-    Y_VERIFY(actorIt != TaskIdToActor.end());
+    Y_ABORT_UNLESS(actorIt != TaskIdToActor.end());
     const auto transportIt = AllActors.find(actorIt->second);
-    Y_VERIFY(transportIt != AllActors.end());
+    Y_ABORT_UNLESS(transportIt != AllActors.end());
     transportIt->second->EventsQueue.Retry();
 }
 

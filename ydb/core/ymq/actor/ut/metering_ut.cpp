@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(Metering) {
             auto enumValues = GetEnumNames<TProcessedRequestsAggregator::ENetworkClass>();
             TVector<TString> labels(enumValues.size());
             for (auto enumItem : enumValues) {
-                Y_VERIFY(enumItem.first < labels.size());
+                Y_ABORT_UNLESS(enumItem.first < labels.size());
                 labels[enumItem.first] = enumItem.second;
             }
             auto classifier = NAddressClassifier::TLabeledAddressClassifier::MakeLabeledAddressClassifier(std::move(rawClassifier), std::move(labels));

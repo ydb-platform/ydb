@@ -130,7 +130,7 @@ public:
         else if (FixNodeId)
             Self->FixNodeId(Self->Nodes.at(NodeId));
 
-        Y_VERIFY(Response);
+        Y_ABORT_UNLESS(Response);
         // With all modifications applied we may fill node info.
         if (Response->Record.GetStatus().GetCode() == TStatus::OK)
             Self->FillNodeInfo(Self->Nodes.at(NodeId), *Response->Record.MutableNode());

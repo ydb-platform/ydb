@@ -141,13 +141,13 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev) {
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvRegisterFetcher: " << ev->Sender;
-    Y_VERIFY(Fetchers.emplace(ev->Sender).second);
+    Y_ABORT_UNLESS(Fetchers.emplace(ev->Sender).second);
     Send(ev->Sender, new TEvScanExchange::TEvAckData(CalculateFreeSpace()));
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvFetcherFinished::TPtr& ev) {
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvFetcherFinished: " << ev->Sender;
-    Y_VERIFY(Fetchers.erase(ev->Sender) == 1);
+    Y_ABORT_UNLESS(Fetchers.erase(ev->Sender) == 1);
     if (Fetchers.size() == 0) {
         ScanData->Finish();
         DoExecute();

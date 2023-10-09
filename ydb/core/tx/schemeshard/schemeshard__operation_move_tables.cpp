@@ -12,7 +12,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
-    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable);
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable);
 
     TVector<ISubOperation::TPtr> result;
 
@@ -67,7 +67,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
 
         TPath dstIndexPath = dstPath.Child(name);
 
-        Y_VERIFY(srcChildPath.Base()->PathId == child.second);
+        Y_ABORT_UNLESS(srcChildPath.Base()->PathId == child.second);
         Y_VERIFY_S(srcChildPath.Base()->GetChildren().size() == 1,
                    srcChildPath.PathString() << " has children " << srcChildPath.Base()->GetChildren().size());
 
@@ -78,7 +78,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         if (srcImplTable.IsDeleted()) {
             continue;
         }
-        Y_VERIFY(srcImplTable.Base()->PathId == srcChildPath.Base()->GetChildren().begin()->second);
+        Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcChildPath.Base()->GetChildren().begin()->second);
 
         TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 

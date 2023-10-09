@@ -56,16 +56,16 @@ Y_UNIT_TEST_SUITE(BGTaskTests) {
         }
         TDispatchOptions rmReady;
         rmReady.CustomFinalCondition = [activityId] {
-            Y_VERIFY(TTestInsertTaskActivity::GetCounterSum(activityId) <= 6);
+            Y_ABORT_UNLESS(TTestInsertTaskActivity::GetCounterSum(activityId) <= 6);
             if (TTestInsertTaskActivity::IsFinished(activityId)) {
-                Y_VERIFY(TTestInsertTaskActivity::GetCounterSum(activityId) == 6);
+                Y_ABORT_UNLESS(TTestInsertTaskActivity::GetCounterSum(activityId) == 6);
                 return true;
             } else {
                 Cerr << "COUNTER_SUM:" << TTestInsertTaskActivity::GetCounterSum(activityId) << Endl;
             }
             return false;
         };
-        Y_VERIFY(runtime.DispatchEvents(rmReady, TDuration::Seconds(30)));
+        Y_ABORT_UNLESS(runtime.DispatchEvents(rmReady, TDuration::Seconds(30)));
     }
 
     Y_UNIT_TEST(NoArtefactsBeforeUsing) {
@@ -118,16 +118,16 @@ Y_UNIT_TEST_SUITE(BGTaskTests) {
             }
             TDispatchOptions rmReady;
             rmReady.CustomFinalCondition = [activityId] {
-                Y_VERIFY(TTestInsertTaskActivity::GetCounterSum(activityId) <= 6);
+                Y_ABORT_UNLESS(TTestInsertTaskActivity::GetCounterSum(activityId) <= 6);
                 if (TTestInsertTaskActivity::IsFinished(activityId)) {
-                    Y_VERIFY(TTestInsertTaskActivity::GetCounterSum(activityId) == 6);
+                    Y_ABORT_UNLESS(TTestInsertTaskActivity::GetCounterSum(activityId) == 6);
                     return true;
                 } else {
                     Cerr << "COUNTER_SUM:" << TTestInsertTaskActivity::GetCounterSum(activityId) << Endl;
                 }
                 return false;
             };
-            Y_VERIFY(runtime.DispatchEvents(rmReady, TDuration::Seconds(30)));
+            Y_ABORT_UNLESS(runtime.DispatchEvents(rmReady, TDuration::Seconds(30)));
         }
         lHelper.StartDataRequest("SELECT * FROM `/Root/.bg_tasks/tasks`", true);
         lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initialization/migrations`", true);

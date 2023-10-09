@@ -71,8 +71,8 @@ namespace NRedo {
 
         TWriter& EvBegin(ui32 tail, ui32 head, ui64 serial, ui64 stamp)
         {
-            Y_VERIFY(tail <= head, "Invalid ABI/API evolution span");
-            Y_VERIFY(serial > 0, "Serial of EvBegin starts with 1");
+            Y_ABORT_UNLESS(tail <= head, "Invalid ABI/API evolution span");
+            Y_ABORT_UNLESS(serial > 0, "Serial of EvBegin starts with 1");
 
             const ui32 size = sizeof(TEvBegin_v1);
 
@@ -104,7 +104,7 @@ namespace NRedo {
         {
             using namespace  NUtil::NBin;
 
-            Y_VERIFY(blobs.size() <= Max<ui32>(), "Too large blobs catalog");
+            Y_ABORT_UNLESS(blobs.size() <= Max<ui32>(), "Too large blobs catalog");
 
             const ui32 size = sizeof(TEvAnnex) + SizeOf(blobs);
 
@@ -228,7 +228,7 @@ namespace NRedo {
         {
             TotalSize += bytes;
 
-            Y_VERIFY(Events.size() == TotalSize, "Got an inconsistent redo entry size");
+            Y_ABORT_UNLESS(Events.size() == TotalSize, "Got an inconsistent redo entry size");
 
             return *this;
         }
@@ -273,18 +273,18 @@ namespace NRedo {
             for (const auto &one: ops) {
                 /* Log enty cannot represent this ECellOp types with payload */
 
-                Y_VERIFY(!(one.Value && TCellOp::HaveNoPayload(one.Op)));
+                Y_ABORT_UNLESS(!(one.Value && TCellOp::HaveNoPayload(one.Op)));
 
                 const ui16 type = one.Value.Type();
 
                 if (one.Value.IsEmpty()) {
                     // Log entry cannot recover null value type, since we
                     // store null values using a special 0 type id.
-                    Y_VERIFY(type == 0, "Cannot write typed null values");
+                    Y_ABORT_UNLESS(type == 0, "Cannot write typed null values");
                     // Null value cannot have ECellOp::Set as its op, since we
                     // don't have the necessary type id, instead we expect
                     // it to be either ECellOp::Null or ECellOp::Reset.
-                    Y_VERIFY(one.Op != ECellOp::Set, "Cannot write ECellOp::Set with a null value");
+                    Y_ABORT_UNLESS(one.Op != ECellOp::Set, "Cannot write ECellOp::Set with a null value");
                 }
 
                 Write(out, one.Op, one.Tag, type, one.Value.AsRef());

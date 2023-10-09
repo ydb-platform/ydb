@@ -38,7 +38,7 @@ public:
     bool IsDescending() const noexcept { return Descending_; }
 
     TTypeIdOrder& Set(TTypeId typeId, EOrder order = EOrder::Ascending) noexcept {
-        Y_VERIFY(typeId <= 0x7FFF, "Type id is out of bounds");
+        Y_ABORT_UNLESS(typeId <= 0x7FFF, "Type id is out of bounds");
 
         TypeId_ = typeId;
         Descending_ = ui16(order);

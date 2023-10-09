@@ -51,15 +51,15 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::SendEvent(ui32 nodeId, ui64 cookie, TActorId sessionId, std::unique_ptr<IEventBase> ev) {
-        Y_VERIFY(nodeId != SelfId().NodeId());
+        Y_ABORT_UNLESS(nodeId != SelfId().NodeId());
         auto handle = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId), SelfId(), ev.release(), 0, cookie);
-        Y_VERIFY(sessionId);
+        Y_ABORT_UNLESS(sessionId);
         handle->Rewrite(TEvInterconnect::EvForward, sessionId);
         TActivationContext::Send(handle.release());
     }
 
     void TDistributedConfigKeeper::SendEvent(const TBinding& binding, std::unique_ptr<IEventBase> ev) {
-        Y_VERIFY(binding.SessionId);
+        Y_ABORT_UNLESS(binding.SessionId);
         SendEvent(binding.NodeId, binding.Cookie, binding.SessionId, std::move(ev));
     }
 
@@ -74,67 +74,67 @@ namespace NKikimr::NStorage {
 #ifndef NDEBUG
     void TDistributedConfigKeeper::ConsistencyCheck() {
         for (const auto& [nodeId, info] : DirectBoundNodes) {
-            Y_VERIFY(std::binary_search(NodeIds.begin(), NodeIds.end(), nodeId));
+            Y_ABORT_UNLESS(std::binary_search(NodeIds.begin(), NodeIds.end(), nodeId));
         }
         if (Binding) {
-            Y_VERIFY(std::binary_search(NodeIds.begin(), NodeIds.end(), Binding->NodeId));
+            Y_ABORT_UNLESS(std::binary_search(NodeIds.begin(), NodeIds.end(), Binding->NodeId));
         }
 
         for (const auto& [cookie, task] : ScatterTasks) {
             for (const ui32 nodeId : task.PendingNodes) {
                 const auto it = DirectBoundNodes.find(nodeId);
-                Y_VERIFY(it != DirectBoundNodes.end());
+                Y_ABORT_UNLESS(it != DirectBoundNodes.end());
                 TBoundNode& info = it->second;
-                Y_VERIFY(info.ScatterTasks.contains(cookie));
+                Y_ABORT_UNLESS(info.ScatterTasks.contains(cookie));
             }
         }
 
         for (const auto& [nodeId, info] : DirectBoundNodes) {
             for (const ui64 cookie : info.ScatterTasks) {
                 const auto it = ScatterTasks.find(cookie);
-                Y_VERIFY(it != ScatterTasks.end());
+                Y_ABORT_UNLESS(it != ScatterTasks.end());
                 TScatterTask& task = it->second;
-                Y_VERIFY(task.PendingNodes.contains(nodeId));
+                Y_ABORT_UNLESS(task.PendingNodes.contains(nodeId));
             }
         }
 
         for (const auto& [cookie, task] : ScatterTasks) {
             if (task.Origin) {
-                Y_VERIFY(Binding);
-                Y_VERIFY(task.Origin == Binding);
+                Y_ABORT_UNLESS(Binding);
+                Y_ABORT_UNLESS(task.Origin == Binding);
             } else { // locally-generated task
-                Y_VERIFY(RootState != ERootState::INITIAL);
-                Y_VERIFY(!Binding);
+                Y_ABORT_UNLESS(RootState != ERootState::INITIAL);
+                Y_ABORT_UNLESS(!Binding);
             }
         }
 
         for (const auto& [nodeId, sessionId] : SubscribedSessions) {
             bool okay = false;
             if (Binding && Binding->NodeId == nodeId) {
-                Y_VERIFY(sessionId == Binding->SessionId);
+                Y_ABORT_UNLESS(sessionId == Binding->SessionId);
                 okay = true;
             }
             if (const auto it = DirectBoundNodes.find(nodeId); it != DirectBoundNodes.end()) {
-                Y_VERIFY(!sessionId || sessionId == it->second.SessionId);
+                Y_ABORT_UNLESS(!sessionId || sessionId == it->second.SessionId);
                 okay = true;
             }
             if (!sessionId) {
                 okay = true; // may be just obsolete subscription request
             }
-            Y_VERIFY(okay);
+            Y_ABORT_UNLESS(okay);
         }
 
         if (Binding) {
-            Y_VERIFY(SubscribedSessions.contains(Binding->NodeId));
+            Y_ABORT_UNLESS(SubscribedSessions.contains(Binding->NodeId));
         }
         for (const auto& [nodeId, info] : DirectBoundNodes) {
-            Y_VERIFY(SubscribedSessions.contains(nodeId));
+            Y_ABORT_UNLESS(SubscribedSessions.contains(nodeId));
         }
 
-        Y_VERIFY(!StorageConfig || CheckFingerprint(*StorageConfig));
-        Y_VERIFY(!ProposedStorageConfig || CheckFingerprint(*ProposedStorageConfig));
-        Y_VERIFY(CheckFingerprint(BaseConfig));
-        Y_VERIFY(!InitialConfig.GetFingerprint() || CheckFingerprint(InitialConfig));
+        Y_ABORT_UNLESS(!StorageConfig || CheckFingerprint(*StorageConfig));
+        Y_ABORT_UNLESS(!ProposedStorageConfig || CheckFingerprint(*ProposedStorageConfig));
+        Y_ABORT_UNLESS(CheckFingerprint(BaseConfig));
+        Y_ABORT_UNLESS(!InitialConfig.GetFingerprint() || CheckFingerprint(InitialConfig));
     }
 #endif
 
@@ -162,7 +162,7 @@ namespace NKikimr::NStorage {
                 break;
 
             case TEvPrivate::EvProcessPendingEvent:
-                Y_VERIFY(!PendingEvents.empty());
+                Y_ABORT_UNLESS(!PendingEvents.empty());
                 StateFunc(PendingEvents.front());
                 PendingEvents.pop_front();
                 processPendingEvents();

@@ -45,8 +45,8 @@ void TPartition::ReplyWrite(
 
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ReplyWrite. Partition: " << Partition);
 
-    Y_VERIFY(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
-    Y_VERIFY(seqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, seqNo);
+    Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
+    Y_ABORT_UNLESS(seqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, seqNo);
 
     THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
     NKikimrClient::TResponse& resp = response->Response;
@@ -97,7 +97,7 @@ void TPartition::CancelAllWritesOnIdle(const TActorContext& ctx) {
 
     UpdateWriteBufferIsFullState(ctx.Now());
     Requests.clear();
-    Y_VERIFY(Responses.empty());
+    Y_ABORT_UNLESS(Responses.empty());
 
     WriteCycleSize = 0;
 
@@ -110,8 +110,8 @@ void TPartition::FailBadClient(const TActorContext& ctx) {
     for (auto it = Owners.begin(); it != Owners.end();) {
         it = DropOwner(it, ctx);
     }
-    Y_VERIFY(Owners.empty());
-    Y_VERIFY(ReservedSize == 0);
+    Y_ABORT_UNLESS(Owners.empty());
+    Y_ABORT_UNLESS(ReservedSize == 0);
 
     for (const auto& w : Requests) {
         ReplyError(ctx, w.GetCookie(), NPersQueue::NErrorCode::BAD_REQUEST, "previous write request failed");
@@ -146,7 +146,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
         it = Owners.find(owner);
     }
     if (it->second.NeedResetOwner || ev->Force) { //change owner
-        Y_VERIFY(ReservedSize >= it->second.ReservedSize);
+        Y_ABORT_UNLESS(ReservedSize >= it->second.ReservedSize);
         ReservedSize -= it->second.ReservedSize;
 
         it->second.GenerateCookie(owner, ev->PipeClient, ev->Sender, TopicName(), Partition, ctx);//will change OwnerCookie
@@ -164,7 +164,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
 THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator& it, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::DropOwner. Partition: " << Partition);
 
-    Y_VERIFY(ReservedSize >= it->second.ReservedSize);
+    Y_ABORT_UNLESS(ReservedSize >= it->second.ReservedSize);
     ReservedSize -= it->second.ReservedSize;
     UpdateWriteBufferIsFullState(ctx.Now());
     TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
@@ -181,7 +181,7 @@ void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ct
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::HandleOnWrite TEvChangeOwner. Partition: " << Partition);
 
     bool res = OwnerPipes.insert(ev->Get()->PipeClient).second;
-    Y_VERIFY(res);
+    Y_ABORT_UNLESS(res);
     WaitToChangeOwner.push_back(ev->Release());
     ProcessChangeOwnerRequests(ctx);
 }
@@ -301,13 +301,13 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             if (!already) {
                 if (wrOffset) {
-                    Y_VERIFY(*wrOffset >= offset);
+                    Y_ABORT_UNLESS(*wrOffset >= offset);
                     offset = *wrOffset;
                 }
             }
             if (!already && partNo + 1 == totalParts) {
                 if (it == SourceIdStorage.GetInMemorySourceIds().end()) {
-                    Y_VERIFY(!writeResponse.Msg.HeartbeatVersion);
+                    Y_ABORT_UNLESS(!writeResponse.Msg.HeartbeatVersion);
                     TabletCounters.Cumulative()[COUNTER_PQ_SID_CREATED].Increment(1);
                     SourceIdStorage.RegisterSourceId(s, seqNo, offset, CurrentTimestamp);
                 } else if (const auto& hbVersion = writeResponse.Msg.HeartbeatVersion) {
@@ -356,7 +356,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 keyRange = TPartitionKeyRange::Parse(*body.KeyRange);
             }
 
-            Y_VERIFY(body.AssignedOffset);
+            Y_ABORT_UNLESS(body.AssignedOffset);
             SourceIdStorage.RegisterSourceId(body.SourceId, body.SeqNo, *body.AssignedOffset, CurrentTimestamp, std::move(keyRange));
             ReplyOk(ctx, response.GetCookie());
         } else if (response.IsDeregisterMessageGroup()) {
@@ -377,7 +377,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                     keyRange = TPartitionKeyRange::Parse(*body.KeyRange);
                 }
 
-                Y_VERIFY(body.AssignedOffset);
+                Y_ABORT_UNLESS(body.AssignedOffset);
                 SourceIdStorage.RegisterSourceId(body.SourceId, body.SeqNo, *body.AssignedOffset, CurrentTimestamp, std::move(keyRange), true);
             }
 
@@ -410,7 +410,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         return;
     }
 
-    Y_VERIFY(EndOffset == Head.GetNextOffset());
+    Y_ABORT_UNLESS(EndOffset == Head.GetNextOffset());
 
     if (!CompactedKeys.empty() || Head.PackedSize == 0) { //has compactedkeys or head is already empty
         Head.PackedSize = 0;
@@ -422,9 +422,9 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     while (!CompactedKeys.empty()) {
         const auto& ck = CompactedKeys.front();
         BodySize += ck.second;
-        Y_VERIFY(!ck.first.IsHead());
+        Y_ABORT_UNLESS(!ck.first.IsHead());
         ui64 lastOffset = DataKeysBody.empty() ? 0 : (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
-        Y_VERIFY(lastOffset <= ck.first.GetOffset());
+        Y_ABORT_UNLESS(lastOffset <= ck.first.GetOffset());
         if (DataKeysBody.empty()) {
             StartOffset = ck.first.GetOffset() + (ck.first.GetPartNo() > 0 ? 1 : 0);
         } else {
@@ -467,7 +467,7 @@ void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContex
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::HandleWriteResponse. Partition: " << Partition);
 
-    Y_VERIFY(CurrentStateFunc() == &TThis::StateWrite);
+    Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
     ui64 prevEndOffset = EndOffset;
 
     ui32 totalLatencyMs = (ctx.Now() - WriteCycleStartTime).MilliSeconds();
@@ -526,7 +526,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     //if EndOffset changed there could be subscriptions witch could be completed
     TVector<std::pair<TReadInfo, ui64>> reads = Subscriber.GetReads(EndOffset);
     for (auto& read : reads) {
-        Y_VERIFY(EndOffset > read.first.Offset);
+        Y_ABORT_UNLESS(EndOffset > read.first.Offset);
         ProcessRead(ctx, std::move(read.first), read.second, true);
     }
     //same for read requests
@@ -607,8 +607,8 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     }
     for (const auto& msg: ev->Get()->Msgs) {
         //this is checked in pq_impl when forming EvWrite request
-        Y_VERIFY(!msg.SourceId.empty() || ev->Get()->IsDirectWrite || msg.DisableDeduplication);
-        Y_VERIFY(!msg.Data.empty());
+        Y_ABORT_UNLESS(!msg.SourceId.empty() || ev->Get()->IsDirectWrite || msg.DisableDeduplication);
+        Y_ABORT_UNLESS(!msg.Data.empty());
 
         if (msg.SeqNo > (ui64)Max<i64>()) {
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Request to write wrong SeqNo. Partition "
@@ -643,7 +643,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     WriteInflightSize += size;
 
     // TODO: remove decReservedSize == 0
-    Y_VERIFY(size <= decReservedSize || decReservedSize == 0);
+    Y_ABORT_UNLESS(size <= decReservedSize || decReservedSize == 0);
     UpdateWriteBufferIsFullState(ctx.Now());
 }
 
@@ -747,7 +747,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TAct
 std::pair<TKey, ui32> TPartition::Compact(const TKey& key, const ui32 size, bool headCleared) {
     std::pair<TKey, ui32> res({key, size});
     ui32 x = headCleared ? 0 : Head.PackedSize;
-    Y_VERIFY(std::accumulate(DataKeysHead.begin(), DataKeysHead.end(), 0u, [](ui32 sum, const TKeyLevel& level){return sum + level.Sum();}) == NewHead.PackedSize + x);
+    Y_ABORT_UNLESS(std::accumulate(DataKeysHead.begin(), DataKeysHead.end(), 0u, [](ui32 sum, const TKeyLevel& level){return sum + level.Sum();}) == NewHead.PackedSize + x);
     for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
         auto jt = it; ++jt;
         if (it->NeedCompaction()) {
@@ -756,12 +756,12 @@ std::pair<TKey, ui32> TPartition::Compact(const TKey& key, const ui32 size, bool
                 jt->AddKey(res.first, res.second);
             }
         } else {
-            Y_VERIFY(jt == DataKeysHead.rend() || !jt->NeedCompaction()); //compact must start from last level, not internal
+            Y_ABORT_UNLESS(jt == DataKeysHead.rend() || !jt->NeedCompaction()); //compact must start from last level, not internal
         }
-        Y_VERIFY(!it->NeedCompaction());
+        Y_ABORT_UNLESS(!it->NeedCompaction());
     }
-    Y_VERIFY(res.second >= size);
-    Y_VERIFY(res.first.GetOffset() < key.GetOffset() || res.first.GetOffset() == key.GetOffset() && res.first.GetPartNo() <= key.GetPartNo());
+    Y_ABORT_UNLESS(res.second >= size);
+    Y_ABORT_UNLESS(res.first.GetOffset() < key.GetOffset() || res.first.GetOffset() == key.GetOffset() && res.first.GetPartNo() <= key.GetPartNo());
     return res;
 }
 
@@ -818,7 +818,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
     NewHead.PartNo = 0;
     NewHead.PackedSize = 0;
 
-    Y_VERIFY(NewHead.Batches.empty());
+    Y_ABORT_UNLESS(NewHead.Batches.empty());
 
     bool oldPartsCleared = false;
     bool headCleared = (Head.PackedSize == 0);
@@ -860,14 +860,14 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                     sourceIdWriter.RegisterSourceId(body.SourceId, body.SeqNo, curOffset, CurrentTimestamp, std::move(keyRange), true);
                 }
             } else {
-                Y_VERIFY(pp.IsOwnership());
+                Y_ABORT_UNLESS(pp.IsOwnership());
             }
 
             EmplaceResponse(std::move(pp), ctx);
             continue;
         }
 
-        Y_VERIFY(pp.IsWrite());
+        Y_ABORT_UNLESS(pp.IsWrite());
         auto& p = pp.GetWrite();
 
         WriteInflightSize -= p.Msg.Data.size();
@@ -947,7 +947,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             return false;
         }
 
-        Y_VERIFY(poffset >= curOffset);
+        Y_ABORT_UNLESS(poffset >= curOffset);
 
         bool needCompactHead = poffset > curOffset;
         if (needCompactHead) { //got gap
@@ -1042,7 +1042,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             auto write = request->Record.AddCmdWrite();
             write->SetKey(newWrite->first.Data(), newWrite->first.Size());
             write->SetValue(newWrite->second);
-            Y_VERIFY(!newWrite->first.IsHead());
+            Y_ABORT_UNLESS(!newWrite->first.IsHead());
             auto channel = GetChannel(NextChannel(newWrite->first.IsHead(), newWrite->second.Size()));
             write->SetStorageChannel(channel);
             write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
@@ -1064,7 +1064,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
         }
 
         if (lastBlobPart) {
-            Y_VERIFY(PartitionedBlob.IsComplete());
+            Y_ABORT_UNLESS(PartitionedBlob.IsComplete());
             ui32 curWrites = 0;
             for (ui32 i = 0; i < request->Record.CmdWriteSize(); ++i) { //change keys for yet to be writed KV pairs
                 TKey key(request->Record.GetCmdWrite(i).GetKey());
@@ -1074,7 +1074,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                     ++curWrites;
                 }
             }
-            Y_VERIFY(curWrites <= PartitionedBlob.GetFormedBlobs().size());
+            Y_ABORT_UNLESS(curWrites <= PartitionedBlob.GetFormedBlobs().size());
             auto formedBlobs = PartitionedBlob.GetFormedBlobs();
             for (ui32 i = 0; i < formedBlobs.size(); ++i) {
                 const auto& x = formedBlobs[i];
@@ -1086,7 +1086,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                     rename->SetNewKey(TString(key.Data(), key.Size()));
                 }
                 if (!DataKeysBody.empty() && CompactedKeys.empty()) {
-                    Y_VERIFY(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= x.first.GetOffset(),
+                    Y_ABORT_UNLESS(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= x.first.GetOffset(),
                         "LAST KEY %s, HeadOffset %lu, NEWKEY %s", DataKeysBody.back().Key.ToString().c_str(), Head.Offset, x.first.ToString().c_str());
                 }
                 LOG_DEBUG_S(
@@ -1114,7 +1114,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                 if (x.IsLastPart()) {
                     ++countOfLastParts;
                 }
-                Y_VERIFY(!NewHead.Batches.back().Packed);
+                Y_ABORT_UNLESS(!NewHead.Batches.back().Packed);
                 NewHead.Batches.back().AddBlob(x);
                 NewHead.PackedSize += x.GetBlobSize();
                 if (NewHead.Batches.back().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
@@ -1126,7 +1126,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                 }
             }
 
-            Y_VERIFY(countOfLastParts == 1);
+            Y_ABORT_UNLESS(countOfLastParts == 1);
 
             LOG_DEBUG_S(
                     ctx, NKikimrServices::PERSQUEUE,
@@ -1159,7 +1159,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
         NewHead.PackedSize -= NewHead.Batches.back().GetUnpackedSize();
     }
 
-    Y_VERIFY((headCleared ? 0 : Head.PackedSize) + NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl
+    Y_ABORT_UNLESS((headCleared ? 0 : Head.PackedSize) + NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl
     MaxWriteResponsesSize = Max<ui32>(MaxWriteResponsesSize, Responses.size());
 
     return headCleared;
@@ -1177,13 +1177,13 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
         needCompaction = false;
     }
 
-    Y_VERIFY(NewHead.PackedSize > 0 || needCompaction); //smthing must be here
+    Y_ABORT_UNLESS(NewHead.PackedSize > 0 || needCompaction); //smthing must be here
 
     TKey key(TKeyPrefix::TypeData, Partition, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount(), !needCompaction);
 
     if (NewHead.PackedSize > 0)
         DataKeysHead[TotalLevels - 1].AddKey(key, NewHead.PackedSize);
-    Y_VERIFY(HeadSize + NewHead.PackedSize <= 3 * MaxSizeCheck);
+    Y_ABORT_UNLESS(HeadSize + NewHead.PackedSize <= 3 * MaxSizeCheck);
 
     std::pair<TKey, ui32> res;
 
@@ -1198,10 +1198,10 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
         res = std::make_pair(key, HeadSize + NewHead.PackedSize);
     } else {
         res = Compact(key, NewHead.PackedSize, headCleared);
-        Y_VERIFY(res.first.IsHead());//may compact some KV blobs from head, but new KV blob is from head too
-        Y_VERIFY(res.second >= NewHead.PackedSize); //at least new data must be writed
+        Y_ABORT_UNLESS(res.first.IsHead());//may compact some KV blobs from head, but new KV blob is from head too
+        Y_ABORT_UNLESS(res.second >= NewHead.PackedSize); //at least new data must be writed
     }
-    Y_VERIFY(res.second <= MaxBlobSize);
+    Y_ABORT_UNLESS(res.second <= MaxBlobSize);
     return res;
 }
 
@@ -1214,20 +1214,20 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
     valueD.reserve(res.second);
     ui32 pp = Head.FindPos(key.GetOffset(), key.GetPartNo());
     if (pp < Max<ui32>() && key.GetOffset() < EndOffset) { //this batch trully contains this offset
-        Y_VERIFY(pp < Head.Batches.size());
-        Y_VERIFY(Head.Batches[pp].GetOffset() == key.GetOffset());
-        Y_VERIFY(Head.Batches[pp].GetPartNo() == key.GetPartNo());
+        Y_ABORT_UNLESS(pp < Head.Batches.size());
+        Y_ABORT_UNLESS(Head.Batches[pp].GetOffset() == key.GetOffset());
+        Y_ABORT_UNLESS(Head.Batches[pp].GetPartNo() == key.GetPartNo());
         for (; pp < Head.Batches.size(); ++pp) { //TODO - merge small batches here
-            Y_VERIFY(Head.Batches[pp].Packed);
+            Y_ABORT_UNLESS(Head.Batches[pp].Packed);
             Head.Batches[pp].SerializeTo(valueD);
         }
     }
     for (auto& b : NewHead.Batches) {
-        Y_VERIFY(b.Packed);
+        Y_ABORT_UNLESS(b.Packed);
         b.SerializeTo(valueD);
     }
 
-    Y_VERIFY(res.second >= valueD.size());
+    Y_ABORT_UNLESS(res.second >= valueD.size());
 
     if (res.second > valueD.size() && res.first.IsHead()) { //change to real size if real packed size is smaller
 
@@ -1236,22 +1236,22 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
         for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
             if (it->KeysCount() > 0 ) {
                 auto res2 = it->PopBack();
-                Y_VERIFY(res2 == res);
+                Y_ABORT_UNLESS(res2 == res);
                 res2.second = valueD.size();
 
                 DataKeysHead[TotalLevels - 1].AddKey(res2.first, res2.second);
 
                 res2 = Compact(res2.first, res2.second, headCleared);
 
-                Y_VERIFY(res2.first == res.first);
-                Y_VERIFY(res2.second == valueD.size());
+                Y_ABORT_UNLESS(res2.first == res.first);
+                Y_ABORT_UNLESS(res2.second == valueD.size());
                 res = res2;
                 break;
             }
         }
     }
 
-    Y_VERIFY(res.second == valueD.size() || res.first.IsHead());
+    Y_ABORT_UNLESS(res.second == valueD.size() || res.first.IsHead());
 
     TClientBlob::CheckBlob(key, valueD);
 
@@ -1278,7 +1278,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
 
     if (!key.IsHead()) {
         if (!DataKeysBody.empty() && CompactedKeys.empty()) {
-            Y_VERIFY(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= key.GetOffset(),
+            Y_ABORT_UNLESS(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= key.GetOffset(),
                 "LAST KEY %s, HeadOffset %lu, NEWKEY %s", DataKeysBody.back().Key.ToString().c_str(), Head.Offset, key.ToString().c_str());
         }
         CompactedKeys.push_back(res);
@@ -1286,7 +1286,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
         NewHead.Offset = res.first.GetOffset() + res.first.GetCount();
         NewHead.PartNo = 0;
     } else {
-        Y_VERIFY(NewHeadKey.Size == 0);
+        Y_ABORT_UNLESS(NewHeadKey.Size == 0);
         NewHeadKey = {key, res.second, CurrentTimestamp, 0};
     }
     WriteCycleSize += write->GetValue().size();
@@ -1333,9 +1333,9 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, c
     if (Requests.empty())
         return false;
 
-    Y_VERIFY(request->Record.CmdWriteSize() == 0);
-    Y_VERIFY(request->Record.CmdRenameSize() == 0);
-    Y_VERIFY(request->Record.CmdDeleteRangeSize() == 0);
+    Y_ABORT_UNLESS(request->Record.CmdWriteSize() == 0);
+    Y_ABORT_UNLESS(request->Record.CmdRenameSize() == 0);
+    Y_ABORT_UNLESS(request->Record.CmdDeleteRangeSize() == 0);
 
     const auto format = AppData(ctx)->PQConfig.GetEnableProtoSourceIdInfo()
         ? ESourceIdFormat::Proto
@@ -1346,7 +1346,7 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, c
     bool headCleared = AppendHeadWithNewWrites(request, ctx, sourceIdWriter, heartbeatEmitter);
 
     if (headCleared) {
-        Y_VERIFY(!CompactedKeys.empty() || Head.PackedSize == 0);
+        Y_ABORT_UNLESS(!CompactedKeys.empty() || Head.PackedSize == 0);
         for (ui32 i = 0; i < TotalLevels; ++i) {
             DataKeysHead[i].Clear();
         }
@@ -1445,7 +1445,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
 
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
-    Y_VERIFY(Head.PackedSize + NewHead.PackedSize <= 2 * MaxSizeCheck);
+    Y_ABORT_UNLESS(Head.PackedSize + NewHead.PackedSize <= 2 * MaxSizeCheck);
     
     TInstant now = ctx.Now();
     WriteCycleStartTime = now;
@@ -1466,9 +1466,9 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     if (!haveData && !haveDrop && !haveCheckDisk) { //no data writed/deleted
         if (!Requests.empty()) { //there could be change ownership requests that
             bool res = ProcessWrites(request.Get(), now, ctx);
-            Y_VERIFY(!res);
+            Y_ABORT_UNLESS(!res);
         }
-        Y_VERIFY(Requests.empty() || !WriteQuota->CanExaust(now) || WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)); //in this case all writes must be processed or no quota left
+        Y_ABORT_UNLESS(Requests.empty() || !WriteQuota->CanExaust(now) || WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)); //in this case all writes must be processed or no quota left
         AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
         BecomeIdle(ctx);
         return;
@@ -1513,7 +1513,7 @@ void TPartition::WriteBlobWithQuota(const TActorContext& ctx, THolder<TEvKeyValu
     const bool skip = !IsQuotingEnabled() || TopicWriteQuotaResourcePath.empty();
     if (size_t quotaRequestSize = skip ? 0 : GetQuotaRequestSize(*request)) {
         // Request with data. We should check before attempting to write data whether we have enough quota.
-        Y_VERIFY(!WaitingForPreviousBlobQuota());
+        Y_ABORT_UNLESS(!WaitingForPreviousBlobQuota());
 
         TopicQuotaRequestCookie = NextTopicWriteQuotaRequestCookie++;
         RequestQuotaForWriteBlobRequest(quotaRequestSize, TopicQuotaRequestCookie);

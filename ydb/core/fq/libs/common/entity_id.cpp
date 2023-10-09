@@ -48,17 +48,17 @@ TString ConvTime(ui64 time) {
 - random number [6 symbols (30 bit)] - a random number to ensure the uniqueness of the keys within a microsecond
 */
 TString GetEntityIdAsString(const TString& prefix, EEntityType type) {
-    Y_VERIFY(prefix.size() == 2, "prefix must contain exactly two characters");
-    Y_VERIFY(IsValidSymbol(static_cast<char>(type)), "not valid character for type");
-    Y_VERIFY(IsValidSymbol(prefix[0]), "not valid character for prefix[0]");
-    Y_VERIFY(IsValidSymbol(prefix[1]), "not valid character for prefix[1]");
+    Y_ABORT_UNLESS(prefix.size() == 2, "prefix must contain exactly two characters");
+    Y_ABORT_UNLESS(IsValidSymbol(static_cast<char>(type)), "not valid character for type");
+    Y_ABORT_UNLESS(IsValidSymbol(prefix[0]), "not valid character for prefix[0]");
+    Y_ABORT_UNLESS(IsValidSymbol(prefix[1]), "not valid character for prefix[1]");
     return GetEntityIdAsString(prefix, type, TInstant::Now(), RandomNumber<ui32>());
 }
 
 TString GetEntityIdAsString(const TString& prefix, EEntityType type, TInstant now, ui32 rnd) {
     // The maximum time that fits in 55 bits. Necessary for the correct inversion of time
     static constexpr TInstant MaxSeconds = TInstant::FromValue(0x7FFFFFFFFFFFFFULL);
-    Y_VERIFY(MaxSeconds >= now, "lifetime of the id interval has gone beyond the boundaries");
+    Y_ABORT_UNLESS(MaxSeconds >= now, "lifetime of the id interval has gone beyond the boundaries");
     ui64 reversedTime = (MaxSeconds - now).GetValue();
     TStringStream stream;
     stream << prefix << static_cast<char>(type) << ConvTime(reversedTime) << Conv(rnd);
@@ -69,7 +69,7 @@ struct TEntityIdGenerator : public IEntityIdGenerator {
     TEntityIdGenerator(const TString& prefix)
         : Prefix(prefix)
     {
-        Y_VERIFY(Prefix.size() == 2);
+        Y_ABORT_UNLESS(Prefix.size() == 2);
     }
 
     TString Generate(EEntityType type) override {

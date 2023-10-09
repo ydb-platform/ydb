@@ -27,15 +27,15 @@ TVector<std::shared_ptr<arrow::RecordBatch>> SplitData(const TString& data, ui32
 
     NSharding::TLogsSharding sharding(numBatches, { "timestamp", "uid" }, numBatches);
     std::vector<ui32> rowSharding = sharding.MakeSharding(*batch);
-    Y_VERIFY(rowSharding.size() == (size_t)batch->get()->num_rows());
+    Y_ABORT_UNLESS(rowSharding.size() == (size_t)batch->get()->num_rows());
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> sharded = NArrow::ShardingSplit(*batch, rowSharding, numBatches);
-    Y_VERIFY(sharded.size() == numBatches);
+    Y_ABORT_UNLESS(sharded.size() == numBatches);
 
     TVector<std::shared_ptr<arrow::RecordBatch>> out;
     for (size_t i = 0; i < numBatches; ++i) {
         if (sharded[i]) {
-            Y_VERIFY(sharded[i]->ValidateFull().ok());
+            Y_ABORT_UNLESS(sharded[i]->ValidateFull().ok());
             out.emplace_back(sharded[i]);
         }
     }
@@ -47,7 +47,7 @@ bool EqualBatches(const TString& x, const TString& y) {
     auto schema = TTestOlap::ArrowSchema();
     std::shared_ptr<arrow::RecordBatch> batchX = NArrow::DeserializeBatch(x, schema);
     std::shared_ptr<arrow::RecordBatch> batchY = NArrow::DeserializeBatch(y, schema);
-    Y_VERIFY(batchX && batchY);
+    Y_ABORT_UNLESS(batchX && batchY);
     if ((batchX->num_columns() != batchY->num_columns()) ||
         (batchX->num_rows() != batchY->num_rows())) {
         Cerr << __FILE__ << ':' << __LINE__ << " "
@@ -59,7 +59,7 @@ bool EqualBatches(const TString& x, const TString& y) {
     for (auto& column : schema->field_names()) {
         auto filedX = batchX->schema()->GetFieldByName(column);
         auto filedY = batchY->schema()->GetFieldByName(column);
-        Y_VERIFY(filedX->type()->id() == filedY->type()->id());
+        Y_ABORT_UNLESS(filedX->type()->id() == filedY->type()->id());
 
         auto arrX = batchX->GetColumnByName(column);
         auto arrY = batchY->GetColumnByName(column);
@@ -285,8 +285,8 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
 
             TString txId = resBeginTx.GetResult().tx_id();
             NLongTxService::TLongTxId parsed;
-            Y_VERIFY(parsed.ParseString(txId));
-            Y_VERIFY(parsed.Snapshot.Step > 0);
+            Y_ABORT_UNLESS(parsed.ParseString(txId));
+            Y_ABORT_UNLESS(parsed.Snapshot.Step > 0);
             parsed.Snapshot.Step += 2000; // 2 seconds in the future
             futureTxId = parsed.ToString();
             // Cerr << "Future txId " << futureTxId << Endl;

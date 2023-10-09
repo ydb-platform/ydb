@@ -147,7 +147,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         record.SetPathOwnerId(IndexTablePathId.OwnerId);
         record.SetLocalPathId(IndexTablePathId.LocalPathId);
 
-        Y_VERIFY(record.HasAsyncIndex());
+        Y_ABORT_UNLESS(record.HasAsyncIndex());
         AdjustTags(*record.MutableAsyncIndex());
     }
 
@@ -169,7 +169,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
     void AdjustTags(google::protobuf::RepeatedField<ui32>& tags) const {
         for (int i = 0; i < tags.size(); ++i) {
             auto it = TagMap.find(tags[i]);
-            Y_VERIFY(it != TagMap.end());
+            Y_ABORT_UNLESS(it != TagMap.end());
             tags[i] = it->second;
         }
     }
@@ -537,10 +537,10 @@ class TAsyncIndexChangeSenderMain
             return;
         }
 
-        Y_VERIFY(entry.ListNodeEntry->Children.size() == 1);
+        Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
         const auto& indexTable = entry.ListNodeEntry->Children.at(0);
 
-        Y_VERIFY(indexTable.Kind == TNavigate::KindTable);
+        Y_ABORT_UNLESS(indexTable.Kind == TNavigate::KindTable);
         IndexTablePathId = indexTable.PathId;
 
         ResolveIndexTable();
@@ -598,7 +598,7 @@ class TAsyncIndexChangeSenderMain
 
         for (const auto& [tag, column] : entry.Columns) {
             auto it = MainColumnToTag.find(column.Name);
-            Y_VERIFY(it != MainColumnToTag.end());
+            Y_ABORT_UNLESS(it != MainColumnToTag.end());
 
             Y_VERIFY_DEBUG(!TagMap.contains(it->second));
             TagMap.emplace(it->second, tag);
@@ -698,11 +698,11 @@ class TAsyncIndexChangeSenderMain
     }
 
     ui64 GetPartitionId(const TChangeRecord& record) const override {
-        Y_VERIFY(KeyDesc);
-        Y_VERIFY(KeyDesc->GetPartitions());
+        Y_ABORT_UNLESS(KeyDesc);
+        Y_ABORT_UNLESS(KeyDesc->GetPartitions());
 
         const auto range = TTableRange(record.GetKey());
-        Y_VERIFY(range.Point);
+        Y_ABORT_UNLESS(range.Point);
 
         TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
             KeyDesc->GetPartitions().begin(), KeyDesc->GetPartitions().end(), true,
@@ -717,7 +717,7 @@ class TAsyncIndexChangeSenderMain
             }
         );
 
-        Y_VERIFY(it != KeyDesc->GetPartitions().end());
+        Y_ABORT_UNLESS(it != KeyDesc->GetPartitions().end());
         return it->ShardId; // partition = shard
     }
 
@@ -752,7 +752,7 @@ class TAsyncIndexChangeSenderMain
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        Y_VERIFY(ev->Get()->PathId == PathId);
+        Y_ABORT_UNLESS(ev->Get()->PathId == PathId);
 
         RemoveRecords();
         PassAway();

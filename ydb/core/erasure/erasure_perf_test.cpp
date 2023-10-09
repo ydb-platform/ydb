@@ -102,7 +102,7 @@ std::pair<double, double> MeasureTime(TErasureType &type, TVector<ui32> &missedP
                 auto data = partSet.Parts[i].OwnedString.GetContiguousSpan();
                 TString newOwnedString(partSize, '\0');
                 if (data.size() > 0) {
-                    Y_VERIFY(partSize >= data.size());
+                    Y_ABORT_UNLESS(partSize >= data.size());
                     memcpy(newOwnedString.Detach(), data.data(), data.size());
                 }
                 partSet.Parts[i].ReferenceTo(partSet.Parts[i].OwnedString);

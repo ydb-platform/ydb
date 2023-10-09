@@ -34,8 +34,8 @@ bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
 
         TReadSetKey rsInfo(txId, origin, source, target);
 
-        Y_VERIFY(!CurrentReadSets.contains(seqNo));
-        Y_VERIFY(!CurrentReadSetInfos.contains(rsInfo));
+        Y_ABORT_UNLESS(!CurrentReadSets.contains(seqNo));
+        Y_ABORT_UNLESS(!CurrentReadSetInfos.contains(rsInfo));
 
         CurrentReadSets[seqNo] = rsInfo;
         CurrentReadSetInfos[rsInfo] = seqNo;
@@ -51,8 +51,8 @@ bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
 void TOutReadSets::SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const TReadSetKey& rsInfo, TString body) {
     using Schema = TDataShard::Schema;
 
-    Y_VERIFY(!CurrentReadSets.contains(seqNo));
-    Y_VERIFY(!CurrentReadSetInfos.contains(rsInfo));
+    Y_ABORT_UNLESS(!CurrentReadSets.contains(seqNo));
+    Y_ABORT_UNLESS(!CurrentReadSetInfos.contains(rsInfo));
 
     CurrentReadSetInfos[rsInfo] = seqNo;
     CurrentReadSets[seqNo] = rsInfo;
@@ -105,7 +105,7 @@ void TOutReadSets::SaveAck(const TActorContext &ctx, TAutoPtr<TEvTxProcessing::T
 
     if (CurrentReadSets.contains(seqno)) {
         TReadSetKey rsInfo(txId, Self->TabletID(), sender, dest);
-        Y_VERIFY(CurrentReadSetInfos[rsInfo] == seqno);
+        Y_ABORT_UNLESS(CurrentReadSetInfos[rsInfo] == seqno);
 
         CurrentReadSets.erase(seqno);
         CurrentReadSetInfos.erase(rsInfo);

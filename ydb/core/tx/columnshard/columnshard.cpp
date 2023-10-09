@@ -159,9 +159,9 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
 
 void TColumnShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext&) {
     const auto* msg = ev->Get();
-    Y_VERIFY(msg->TabletId == TabletID());
+    Y_ABORT_UNLESS(msg->TabletId == TabletID());
     MediatorTimeCastEntry = msg->Entry;
-    Y_VERIFY(MediatorTimeCastEntry);
+    Y_ABORT_UNLESS(MediatorTimeCastEntry);
     LOG_S_DEBUG("Registered with mediator time cast at tablet " << TabletID());
 
     RescheduleWaitingReads();
@@ -169,9 +169,9 @@ void TColumnShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev
 
 void TColumnShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext&) {
     const auto* msg = ev->Get();
-    Y_VERIFY(msg->TabletId == TabletID());
+    Y_ABORT_UNLESS(msg->TabletId == TabletID());
 
-    Y_VERIFY(MediatorTimeCastEntry);
+    Y_ABORT_UNLESS(MediatorTimeCastEntry);
     ui64 step = MediatorTimeCastEntry->Get(TabletID());
     LOG_S_DEBUG("Notified by mediator time cast with PlanStep# " << step << " at tablet " << TabletID());
 

@@ -79,7 +79,7 @@ namespace NTable {
                 auto &col = *info.emplace(info.end());
 
                 auto familyIt = std::lower_bound(families.begin(), families.end(), meta.Family);
-                Y_VERIFY(familyIt != families.end() && *familyIt == meta.Family);
+                Y_ABORT_UNLESS(familyIt != families.end() && *familyIt == meta.Family);
 
                 col.Tag = meta.Id;
                 col.TypeInfo = meta.PType;

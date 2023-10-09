@@ -107,7 +107,7 @@ struct TPartFragment {
     }
 
     void ReferenceTo(const TRope &whole) {
-        Y_VERIFY(whole.IsContiguous());
+        Y_ABORT_UNLESS(whole.IsContiguous());
         OwnedString = whole;
         Bytes = OwnedString.UnsafeGetContiguousSpanMut().data();
         Offset = 0;
@@ -116,13 +116,13 @@ struct TPartFragment {
     }
 
     void ReferenceTo(const TRope &piece, ui64 offset, ui64 size, ui64 partSize) {
-        Y_VERIFY(piece.IsContiguous());
+        Y_ABORT_UNLESS(piece.IsContiguous());
         OwnedString = piece;
         Bytes = OwnedString.UnsafeGetContiguousSpanMut().data();
         Offset = offset;
-        Y_VERIFY(size <= piece.size());
+        Y_ABORT_UNLESS(size <= piece.size());
         Size = size;
-        Y_VERIFY(offset + size <= partSize);
+        Y_ABORT_UNLESS(offset + size <= partSize);
         PartSize = partSize;
     }
 
@@ -302,7 +302,7 @@ struct TErasureType {
     }
 
     TString ToString() const {
-        Y_VERIFY((ui64)ErasureSpecies < ErasureSpeciesCount);
+        Y_ABORT_UNLESS((ui64)ErasureSpecies < ErasureSpeciesCount);
         return ErasureName[ErasureSpecies];
     }
 

@@ -55,13 +55,13 @@ void TScheduler::AddCbs(ui8 ownerIdx, ui8 gateIdx, TCbs newCbs, ui64 timeNs) {
         owner.Gates.resize(gateIdx + 1);
     }
     auto &gate = owner.Gates[gateIdx];
-    Y_VERIFY(gate.CbsIdx == TCbs::InvalidIdx,
+    Y_ABORT_UNLESS(gate.CbsIdx == TCbs::InvalidIdx,
         "AddCbs double call, ownerId# %" PRIu32 " gateIdx# %" PRIu32 " Marker# SCH01",
         (ui32)ownerIdx, (ui32)gateIdx);
 
     ui32 cbsIdx = NewCbs();
     auto *cbs = &Cbs[cbsIdx];
-    Y_VERIFY(!cbs->IsPresent(), "CbsIdx# %" PRIu32 " ownerId# %" PRIu32 " gateIdx# %" PRIu32 " Marker# SCH02",
+    Y_ABORT_UNLESS(!cbs->IsPresent(), "CbsIdx# %" PRIu32 " ownerId# %" PRIu32 " gateIdx# %" PRIu32 " Marker# SCH02",
         (ui32)cbsIdx, (ui32)ownerIdx, (ui32)gateIdx);
 
     *cbs = newCbs;
@@ -286,7 +286,7 @@ TIntrusivePtr<TJob> TScheduler::SelectJob(ui64 timeNs) {
             bestJob = job;
         }
 
-        Y_VERIFY(bestJob);
+        Y_ABORT_UNLESS(bestJob);
 
         if (accountCbsIdx != TCbs::InvalidIdx) {
             bestJob->State = JobStateRunning;
@@ -406,11 +406,11 @@ void TScheduler::EvaluateNextJob(ui64 cbsIdx, ui64 timeNs, bool doLogCbsUpdate) 
 }
 
 void TScheduler::CompleteJob(ui64 timeNs, TIntrusivePtr<TJob> &job) {
-    Y_VERIFY(job);
-    Y_VERIFY(job->CbsIdx != TCbs::InvalidIdx);
-    Y_VERIFY(job->CbsIdx < Cbs.size());
-    Y_VERIFY(!Cbs[job->CbsIdx].IsEmpty());
-    Y_VERIFY(Cbs[job->CbsIdx].PeekJob() == job.Get());
+    Y_ABORT_UNLESS(job);
+    Y_ABORT_UNLESS(job->CbsIdx != TCbs::InvalidIdx);
+    Y_ABORT_UNLESS(job->CbsIdx < Cbs.size());
+    Y_ABORT_UNLESS(!Cbs[job->CbsIdx].IsEmpty());
+    Y_ABORT_UNLESS(Cbs[job->CbsIdx].PeekJob() == job.Get());
 
 
     AddSchLogFrame(timeNs);

@@ -254,7 +254,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             return TMsgPqCodes(TStringBuilder() << "service type cannot be empty for consumer '" << rr.name() << "'", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
 
-        Y_VERIFY(supportedClientServiceTypes.find(serviceType) != supportedClientServiceTypes.end());
+        Y_ABORT_UNLESS(supportedClientServiceTypes.find(serviceType) != supportedClientServiceTypes.end());
 
         const NKikimr::NGRpcProxy::V1::TClientServiceType& clientServiceType = supportedClientServiceTypes.find(serviceType)->second;
 

@@ -545,13 +545,13 @@ public:
         const TTabletStorageInfo *info = nullptr)
     {
         LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, errorDescription);
-        Y_VERIFY(!intermediate->IsReplied);
+        Y_ABORT_UNLESS(!intermediate->IsReplied);
         std::unique_ptr<TResponse> response = std::make_unique<TResponse>();
         response->Record.set_status(status);
 
         if constexpr (std::is_same_v<TResponse, TEvKeyValue::TEvReadResponse>) {
             auto &cmd = *intermediate->ReadCommand;
-            Y_VERIFY(std::holds_alternative<TIntermediate::TRead>(cmd));
+            Y_ABORT_UNLESS(std::holds_alternative<TIntermediate::TRead>(cmd));
             TIntermediate::TRead &interRead = std::get<TIntermediate::TRead>(cmd);
             response->Record.set_requested_offset(interRead.Offset);
             response->Record.set_requested_size(interRead.ValueSize);

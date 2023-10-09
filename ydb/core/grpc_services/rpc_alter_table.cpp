@@ -378,7 +378,7 @@ private:
         case EOp::AddIndex:
             return AlterTableAddIndexOp(resp, ctx);
         case EOp::Attribute:
-            Y_VERIFY(!resp->ResultSet.empty());
+            Y_ABORT_UNLESS(!resp->ResultSet.empty());
             return AlterUserAttributes(resp->ResultSet.back().TableId.PathId, ctx);
         default:
             TXLOG_E("Got unexpected cache response");

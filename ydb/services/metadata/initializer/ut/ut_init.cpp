@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(Initializer) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
                 default:
-                    Y_VERIFY(false);
+                    Y_ABORT_UNLESS(false);
             }
         }
 

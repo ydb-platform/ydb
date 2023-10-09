@@ -57,10 +57,10 @@ namespace NKikimr {
         {}
 
         void Begin() {
-            Y_VERIFY(State == EState::STOPPED);
+            Y_ABORT_UNLESS(State == EState::STOPPED);
 
             // ensure that we have no pending message and create new one to allocate some chunks for replicated SST
-            Y_VERIFY(!PendingPDiskMsg);
+            Y_ABORT_UNLESS(!PendingPDiskMsg);
             PendingPDiskMsg = std::make_unique<NPDisk::TEvChunkReserve>(ReplCtx->PDiskCtx->Dsk->Owner,
                 ReplCtx->PDiskCtx->Dsk->OwnerRound, MinReservedChunksCount - ReservedChunks.size());
             State = EState::PDISK_MESSAGE_PENDING;
@@ -73,7 +73,7 @@ namespace NKikimr {
         }
 
         std::unique_ptr<IEventBase> GetPendingPDiskMsg() {
-            Y_VERIFY(State == EState::PDISK_MESSAGE_PENDING);
+            Y_ABORT_UNLESS(State == EState::PDISK_MESSAGE_PENDING);
             std::unique_ptr<IEventBase> msg = std::move(PendingPDiskMsg);
 
             if (auto write = dynamic_cast<NPDisk::TEvChunkWrite*>(msg.get())) {
@@ -121,7 +121,7 @@ namespace NKikimr {
         }
 
         void Apply(NPDisk::TEvChunkReserveResult* ev) {
-            Y_VERIFY(State == EState::NOT_READY);
+            Y_ABORT_UNLESS(State == EState::NOT_READY);
 
             if (ev->Status != NKikimrProto::OK) {
                 State = EState::ERROR;
@@ -133,7 +133,7 @@ namespace NKikimr {
             }
 
             // create new writer
-            Y_VERIFY(!Writer);
+            Y_ABORT_UNLESS(!Writer);
             Writer = std::make_unique<TWriter>(ReplCtx->VCtx, EWriterDataType::Replication, 1, ReplCtx->PDiskCtx->Dsk->Owner,
                 ReplCtx->PDiskCtx->Dsk->OwnerRound, ReplCtx->PDiskCtx->Dsk->ChunkSize,
                 ReplCtx->PDiskCtx->Dsk->AppendBlockSize, ReplCtx->PDiskCtx->Dsk->BulkWriteBlockSize,
@@ -144,9 +144,9 @@ namespace NKikimr {
         }
 
         bool AddRecoveredBlob(TRecoveredBlobInfo& record) {
-            Y_VERIFY(State == EState::COLLECT);
-            Y_VERIFY(record.Id > PrevID);
-            Y_VERIFY(!record.Id.PartId());
+            Y_ABORT_UNLESS(State == EState::COLLECT);
+            Y_ABORT_UNLESS(record.Id > PrevID);
+            Y_ABORT_UNLESS(!record.Id.PartId());
 
             // generate merged ingress for all locally recovered parts
             TIngress ingress = TIngress::CreateFromRepl(ReplCtx->VCtx->Top.get(), ReplCtx->VCtx->ShortSelfVDisk,
@@ -182,7 +182,7 @@ namespace NKikimr {
                 return;
             }
 
-            Y_VERIFY(WritesInFlight > 0);
+            Y_ABORT_UNLESS(WritesInFlight > 0);
             --WritesInFlight;
 
             // if we were blocked for some reason when issuing last message, try to determine what to do next
@@ -209,21 +209,21 @@ namespace NKikimr {
         }
 
         void Finish() {
-            Y_VERIFY(State == EState::COLLECT, "unexpected State# %" PRIu32, static_cast<ui32>(State));
+            Y_ABORT_UNLESS(State == EState::COLLECT, "unexpected State# %" PRIu32, static_cast<ui32>(State));
             FlushNextPart();
         }
 
         std::unique_ptr<TEvAddBulkSst> GetPendingCommitMsg() {
-            Y_VERIFY(State == EState::COMMIT_PENDING);
+            Y_ABORT_UNLESS(State == EState::COMMIT_PENDING);
             std::unique_ptr<TEvAddBulkSst> msg;
             msg.swap(PendingCommitMsg);
-            Y_VERIFY(msg);
+            Y_ABORT_UNLESS(msg);
             State = EState::WAITING_FOR_COMMIT;
             return msg;
         }
 
         void ApplyCommit() {
-            Y_VERIFY(State == EState::WAITING_FOR_COMMIT);
+            Y_ABORT_UNLESS(State == EState::WAITING_FOR_COMMIT);
             State = EState::STOPPED;
         }
 
@@ -235,29 +235,29 @@ namespace NKikimr {
         void IssueWriteCmd(std::unique_ptr<NPDisk::TEvChunkWrite>&& ev, EOutputState outputState) {
             State = EState::PDISK_MESSAGE_PENDING;
             PendingPDiskMsg = std::move(ev);
-            Y_VERIFY(outputState >= OutputState);
+            Y_ABORT_UNLESS(outputState >= OutputState);
             OutputState = outputState;
         }
 
         void FlushNextPart() {
-            Y_VERIFY(!FlushFinished);
+            Y_ABORT_UNLESS(!FlushFinished);
             FlushFinished = Writer->FlushNext(0, 0, 1);
             if (auto msg = Writer->GetPendingMessage()) {
                 IssueWriteCmd(std::move(msg), FlushFinished ? EOutputState::FLUSH_LAST_CHUNK : EOutputState::FLUSH_CHUNK);
             } else if (WritesInFlight) {
-                Y_VERIFY(FlushFinished);
-                Y_VERIFY(OutputState == EOutputState::FLUSH_CHUNK);
+                Y_ABORT_UNLESS(FlushFinished);
+                Y_ABORT_UNLESS(OutputState == EOutputState::FLUSH_CHUNK);
                 OutputState = EOutputState::FLUSH_LAST_CHUNK; // promote to final state
                 State = EState::NOT_READY;
             } else {
-                Y_VERIFY(FlushFinished);
+                Y_ABORT_UNLESS(FlushFinished);
                 OnFlushComplete();
             }
         }
 
         void OnFlushComplete() {
-            Y_VERIFY(!WritesInFlight);
-            Y_VERIFY(FlushFinished);
+            Y_ABORT_UNLESS(!WritesInFlight);
+            Y_ABORT_UNLESS(FlushFinished);
             const auto& conclusion = Writer->GetConclusion();
             TVector<ui32> usedChunks = conclusion.UsedChunks;
             PendingCommitMsg = std::make_unique<TEvAddBulkSst>(TVector<ui32>(ReservedChunks.begin(), ReservedChunks.end()),

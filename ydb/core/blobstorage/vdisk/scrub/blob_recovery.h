@@ -35,11 +35,11 @@ namespace NKikimr {
             {}
 
             void SetPartData(TLogoBlobID id, TRope&& data) {
-                Y_VERIFY(id.FullID() == BlobId);
-                Y_VERIFY(id.PartId());
+                Y_ABORT_UNLESS(id.FullID() == BlobId);
+                Y_ABORT_UNLESS(id.PartId());
                 const ui32 partIdx = id.PartId() - 1;
                 if (PartsMask & (1 << partIdx)) {
-                    Y_VERIFY(GetPartData(id) == data);
+                    Y_ABORT_UNLESS(GetPartData(id) == data);
                 } else {
                     PartsMask |= 1 << partIdx;
                     Parts[partIdx] = std::move(data);
@@ -47,10 +47,10 @@ namespace NKikimr {
             }
 
             const TRope& GetPartData(TLogoBlobID id) const {
-                Y_VERIFY(id.FullID() == BlobId);
-                Y_VERIFY(id.PartId());
+                Y_ABORT_UNLESS(id.FullID() == BlobId);
+                Y_ABORT_UNLESS(id.PartId());
                 const ui32 partIdx = id.PartId() - 1;
-                Y_VERIFY(PartsMask & (1 << partIdx));
+                Y_ABORT_UNLESS(PartsMask & (1 << partIdx));
                 return Parts[partIdx];
             }
 

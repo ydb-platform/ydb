@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(TFastTlsTest) {
             for (auto& worker : workers) {
                 size_t current = next++;
                 worker = TWorkerThread::Spawn([current, &value] {
-                    Y_VERIFY(value->Value == 0);
+                    Y_ABORT_UNLESS(value->Value == 0);
 
                     value->Value = current;
                 });
@@ -70,11 +70,11 @@ Y_UNIT_TEST_SUITE(TFastTlsTest) {
         for (size_t i = 0; i < 4; ++i) {
             TFastThreadLocal<size_t> values[4096];
             for (size_t i = 0; i < 4096; ++i) {
-                Y_VERIFY(values[i].Get() == 0);
+                Y_ABORT_UNLESS(values[i].Get() == 0);
                 values[i] = i + 1;
             }
             for (size_t i = 0; i < 4096; ++i) {
-                Y_VERIFY(values[i].Get() == i + 1);
+                Y_ABORT_UNLESS(values[i].Get() == i + 1);
             }
         }
     }

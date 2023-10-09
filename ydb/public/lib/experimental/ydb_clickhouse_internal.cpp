@@ -133,10 +133,10 @@ bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVec
         return false;
 
     NKikimr::TSerializedCellVec last(lastReadKey);
-    Y_VERIFY(last.GetCells().size() <= keyColumnTypes.size());
+    Y_ABORT_UNLESS(last.GetCells().size() <= keyColumnTypes.size());
 
     NKikimr::TSerializedCellVec end(endKey);
-    Y_VERIFY(end.GetCells().size() <= keyColumnTypes.size());
+    Y_ABORT_UNLESS(end.GetCells().size() <= keyColumnTypes.size());
 
     int cmp = NKikimr::CompareTypedCellVectors(
                 last.GetCells().data(), end.GetCells().data(),
@@ -844,7 +844,7 @@ TSnapshotHandle::~TSnapshotHandle() {
 }
 
 TString TSnapshotHandle::GetSnapshotId() const {
-    Y_VERIFY(Impl_, "Empty handle");
+    Y_ABORT_UNLESS(Impl_, "Empty handle");
     return Impl_->GetSnapshotId();
 }
 

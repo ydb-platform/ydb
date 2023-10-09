@@ -51,7 +51,7 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
         for (const auto &service : Description->ServedServices)
             entry.AddServices(service);
 
-        Y_VERIFY(entry.SerializeToString(&payload));
+        Y_ABORT_UNLESS(entry.SerializeToString(&payload));
 
         PublishActor = Register(CreateBoardPublishActor(assignedPath, payload, SelfId(), statestorageGroupId, 0, true));
     }

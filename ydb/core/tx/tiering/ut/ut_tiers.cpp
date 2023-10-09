@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
                 default:
-                    Y_VERIFY(false);
+                    Y_ABORT_UNLESS(false);
             }
         }
 
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
-            Y_VERIFY(IsFound());
+            Y_ABORT_UNLESS(IsFound());
         }
 
         void CheckFound(NMetadata::NProvider::TEvRefreshSubscriberData* event) {
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                     auto value = snapshot->GetTierById(i.first.substr(13));
                     jsonData = value->SerializeConfigToJson();
                 } else {
-                    Y_VERIFY(false);
+                    Y_ABORT_UNLESS(false);
                 }
                 if (!i.second.Check(jsonData)) {
                     Cerr << "config value incorrect:" << snapshot->SerializeToString() << ";snapshot_check_path=" << i.first << Endl;
@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     public:
         virtual void OnAlteringProblem(const TString& errorMessage) override {
             Cerr << errorMessage << Endl;
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
         }
         virtual void OnAlteringFinished() override {
             FinishedFlag = true;
@@ -355,7 +355,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(2000)) {
                     runtime.SimulateSleep(TDuration::Seconds(1));
                 }
-                Y_VERIFY(emulator->IsFound());
+                Y_ABORT_UNLESS(emulator->IsFound());
             }
             {
                 emulator->ResetConditions();
@@ -369,7 +369,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                     while (!emulator->IsFound() && Now() - start < TDuration::Seconds(2000)) {
                         runtime.SimulateSleep(TDuration::Seconds(1));
                     }
-                    Y_VERIFY(emulator->IsFound());
+                    Y_ABORT_UNLESS(emulator->IsFound());
                 }
             }
             {
@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                     while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
                         runtime.SimulateSleep(TDuration::Seconds(1));
                     }
-                    Y_VERIFY(emulator->IsFound());
+                    Y_ABORT_UNLESS(emulator->IsFound());
                 }
             }
         }
@@ -745,10 +745,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
         void ReduceSize(const ui64 size) {
             BytesSize -= size;
-            Y_VERIFY(BytesSize >= 0);
+            Y_ABORT_UNLESS(BytesSize >= 0);
         }
         void SetBarrier(const TCurrentBarrier& b) {
-            Y_VERIFY(!(b < Barrier));
+            Y_ABORT_UNLESS(!(b < Barrier));
             Barrier = b;
             RefreshBarrier();
         }
@@ -865,7 +865,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         TBSDataCollector bsCollector;
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (auto* msg = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult*>(ev->StaticCastAsLocal<IEventBase>())) {
-                Y_VERIFY(msg->Status == NKikimrProto::EReplyStatus::OK);
+                Y_ABORT_UNLESS(msg->Status == NKikimrProto::EReplyStatus::OK);
             }
             if (auto* msg = dynamic_cast<TEvBlobStorage::TEvCollectGarbage*>(ev->StaticCastAsLocal<IEventBase>())) {
                 TGCSource gcSource(msg->TabletId, msg->Channel);
@@ -881,7 +881,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                     }
                 }
 
-                Y_VERIFY(!msg->Hard);
+                Y_ABORT_UNLESS(!msg->Hard);
                 if (msg->Collect) {
                     gcSourceData.SetBarrier(TCurrentBarrier(msg->CollectGeneration, msg->CollectStep));
                     Cerr << "TEvBlobStorage::TEvCollectGarbage COLLECT:" << msg->CollectGeneration << "/" << msg->CollectStep << ":" << gcSource.DebugString() << ":" << ++gcCounter << ";" << bsCollector.StatusString() << Endl;

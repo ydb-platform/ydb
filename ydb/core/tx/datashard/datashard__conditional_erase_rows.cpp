@@ -137,8 +137,8 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
         TVector<TCell> keyCells;
 
         for (const auto& key : keyOrder) {
-            Y_VERIFY(key.Pos != Max<TPos>());
-            Y_VERIFY(key.Pos < row.Size());
+            Y_ABORT_UNLESS(key.Pos != Max<TPos>());
+            Y_ABORT_UNLESS(key.Pos < row.Size());
             keyCells.push_back(row.Get(key.Pos));
         }
 
@@ -154,7 +154,7 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
         request->Record.SetSchemaVersion(tableId.SchemaVersion);
 
         for (const auto& key : keyOrder) {
-            Y_VERIFY(key.Tag != Max<TTag>());
+            Y_ABORT_UNLESS(key.Tag != Max<TTag>());
             request->Record.AddKeyColumnIds(key.Tag);
         }
 
@@ -244,12 +244,12 @@ public:
 
         // fill scan tags & positions in KeyOrder
         ScanTags = Condition->Tags();
-        Y_VERIFY(ScanTags.size() == 1, "Multi-column conditions are not supported");
+        Y_ABORT_UNLESS(ScanTags.size() == 1, "Multi-column conditions are not supported");
 
         THashMap<TTag, TPos> tagToPos;
 
         for (TPos pos = 0; pos < ScanTags.size(); ++pos) {
-            Y_VERIFY(tagToPos.emplace(ScanTags.at(pos), pos).second);
+            Y_ABORT_UNLESS(tagToPos.emplace(ScanTags.at(pos), pos).second);
         }
 
         for (auto& key : KeyOrder) {
@@ -400,8 +400,8 @@ protected:
                 }
 
                 const TColInfo* col = scheme->ColInfo(mainColumnId);
-                Y_VERIFY(col);
-                Y_VERIFY(col->Tag == mainColumnId);
+                Y_ABORT_UNLESS(col);
+                Y_ABORT_UNLESS(col->Tag == mainColumnId);
 
                 keyOrder.emplace_back().Tag = col->Tag;
                 keys.insert(col->Tag);
@@ -412,7 +412,7 @@ protected:
     }
 
     TActorId CreateEraser() override {
-        Y_VERIFY(!Eraser);
+        Y_ABORT_UNLESS(!Eraser);
         Eraser = this->Register(CreateDistributedEraser(this->SelfId(), TableId, Indexes));
         return Eraser;
     }
@@ -436,8 +436,8 @@ IScan* CreateCondEraseScan(
         TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId,
         THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
 {
-    Y_VERIFY(ds);
-    Y_VERIFY(condition.Get());
+    Y_ABORT_UNLESS(ds);
+    Y_ABORT_UNLESS(condition.Get());
 
     if (!indexes) {
         return new TCondEraseScan(ds, replyTo, tableId, txId, std::move(condition), limits);
@@ -576,7 +576,7 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
 
         if (scan) {
             const ui32 localTableId = userTable->LocalTid;
-            Y_VERIFY(Executor()->Scheme().GetTableInfo(localTableId));
+            Y_ABORT_UNLESS(Executor()->Scheme().GetTableInfo(localTableId));
 
             auto* appData = AppData(ctx);
             const auto& taskName = appData->DataShardConfig.GetTtlTaskName();

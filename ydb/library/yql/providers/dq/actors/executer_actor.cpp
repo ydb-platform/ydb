@@ -132,8 +132,8 @@ private:
 
     void OnGraph(TEvGraphRequest::TPtr& ev, const NActors::TActorContext&) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
-        Y_VERIFY(!ControlId);
-        Y_VERIFY(!ResultId);
+        Y_ABORT_UNLESS(!ControlId);
+        Y_ABORT_UNLESS(!ResultId);
         YQL_CLOG(DEBUG, ProviderDq) << "TDqExecuter::OnGraph";
         TFailureInjector::Reach("dq_fail_on_graph", [&] {
             // YQL-15117, it's very likely that the status was INTERNAL_ERROR, originated from worker_actor::OnTaskRunnerCreated (with no issues attached)
@@ -280,7 +280,7 @@ private:
                 Issues.AddIssues(issues);
                 YQL_CLOG(DEBUG, ProviderDq) << "Issues: " << Issues.ToString();
             }
-            Y_VERIFY(ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
+            Y_ABORT_UNLESS(ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
             Finish(ev->Get()->Record.GetStatusCode());
         }
     }

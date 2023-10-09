@@ -210,7 +210,7 @@ namespace NTest {
         for (auto& bundle : part.GetBundles()) {
             Cerr << " | + bundle";
             for (auto& pageCollection : bundle.GetPageCollections()) {
-                Y_VERIFY(pageCollection.HasLargeGlobId(), "Found a page collection without a largeGlobId");
+                Y_ABORT_UNLESS(pageCollection.HasLargeGlobId(), "Found a page collection without a largeGlobId");
                 Cerr << " " << LogoBlobIDFromLogoBlobID(pageCollection.GetLargeGlobId().GetLead());
             }
             if (bundle.HasEpoch()) {

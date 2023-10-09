@@ -80,7 +80,7 @@ struct TFlatMKQLRequest : public TThrRefBase {
         auto lockTxId = Engine->GetLockTxId();
         if (lockTxId) {
             LockTxId = *lockTxId ? *lockTxId : txId;
-            Y_VERIFY(LockTxId);
+            Y_ABORT_UNLESS(LockTxId);
         }
 
         NeedDiagnostics = Engine->HasDiagnosticsRequest();
@@ -951,7 +951,7 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
 
     // Restore DbKeys
     auto &keyDescriptions = engine.GetDbKeys();
-    Y_VERIFY(keyDescriptions.size() == cacheRequest->ResultSet.size());
+    Y_ABORT_UNLESS(keyDescriptions.size() == cacheRequest->ResultSet.size());
     for (size_t index = 0; index < keyDescriptions.size(); ++index) {
         keyDescriptions[index] = std::move(cacheRequest->ResultSet[index].KeyDescription);
     }
@@ -1023,7 +1023,7 @@ void TDataReq::Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotRe
     // Update timestamp: snapshot creation should not be included in send time histogram
     WallClockAfterBuild = Now();
 
-    Y_VERIFY(FlatMKQLRequest);
+    Y_ABORT_UNLESS(FlatMKQLRequest);
     FlatMKQLRequest->Snapshot = TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
     ContinueFlatMKQLResolve(ctx);
 }
@@ -1043,7 +1043,7 @@ void TDataReq::ContinueFlatMKQLResolve(const TActorContext &ctx) {
     for (ui32 shx = 0, affectedShards = engine.GetAffectedShardCount(); shx != affectedShards; ++shx) {
         NMiniKQL::IEngineFlat::TShardData shardData;
         const auto shardDataRes = engine.GetAffectedShard(shx, shardData);
-        Y_VERIFY(shardDataRes == NMiniKQL::IEngineFlat::EResult::Ok);
+        Y_ABORT_UNLESS(shardDataRes == NMiniKQL::IEngineFlat::EResult::Ok);
 
         NKikimrTxDataShard::TDataTransaction dataTransaction;
         dataTransaction.SetMiniKQL(shardData.Program);
@@ -1087,7 +1087,7 @@ void TDataReq::ContinueFlatMKQLResolve(const TActorContext &ctx) {
         const auto affectedType = shardData.HasWrites ? TPerTablet::AffectedWrite : TPerTablet::AffectedRead;
 
         TPerTablet &perTablet = PerTablet[shardData.ShardId];
-        Y_VERIFY(perTablet.TabletStatus == TPerTablet::ETabletStatus::StatusUnknown);
+        Y_ABORT_UNLESS(perTablet.TabletStatus == TPerTablet::ETabletStatus::StatusUnknown);
         perTablet.TabletStatus = TPerTablet::ETabletStatus::StatusWait;
         perTablet.ProgramSize = transactionBuffer.size();
         ++TabletsLeft;
@@ -1280,7 +1280,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
 
     TEvTxProxyReq::TEvMakeRequest *msg = ev->Get();
     const NKikimrTxUserProxy::TEvProposeTransaction &record = msg->Ev->Get()->Record;
-    Y_VERIFY(record.HasTransaction());
+    Y_ABORT_UNLESS(record.HasTransaction());
 
     ProxyFlags = record.HasProxyFlags() ? record.GetProxyFlags() : 0;
     ExecTimeoutPeriod = record.HasExecTimeoutPeriod()
@@ -1475,7 +1475,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
         return Die(ctx);
     }
 
-    Y_VERIFY(ReadTableRequest);
+    Y_ABORT_UNLESS(ReadTableRequest);
     bool projection = !ReadTableRequest->Columns.empty();
     TMap<TString, size_t> colNames;
     for (size_t i = 0; i < ReadTableRequest->Columns.size(); ++i) {
@@ -1735,7 +1735,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
 void TDataReq::Handle(TEvPrivate::TEvReattachToShard::TPtr &ev, const TActorContext &ctx) {
     const ui64 tabletId = ev->Get()->TabletId;
     TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
-    Y_VERIFY(perTablet);
+    Y_ABORT_UNLESS(perTablet);
 
     LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_INFO,
         NKikimrServices::TX_PROXY, TxId,
@@ -1752,7 +1752,7 @@ void TDataReq::Handle(TEvPrivate::TEvReattachToShard::TPtr &ev, const TActorCont
 void TDataReq::HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
     TEvPipeCache::TEvDeliveryProblem *msg = ev->Get();
     TPerTablet *perTablet = PerTablet.FindPtr(msg->TabletId);
-    Y_VERIFY(perTablet);
+    Y_ABORT_UNLESS(perTablet);
 
     bool wasRestarting = std::exchange(perTablet->Restarting, false);
 
@@ -1838,7 +1838,7 @@ void TDataReq::HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const T
 void TDataReq::HandlePrepareErrors(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
     TEvPipeCache::TEvDeliveryProblem *msg = ev->Get();
     TPerTablet *perTablet = PerTablet.FindPtr(msg->TabletId);
-    Y_VERIFY(perTablet);
+    Y_ABORT_UNLESS(perTablet);
 
     if (perTablet->TabletStatus == TPerTablet::ETabletStatus::StatusWait) {
         LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR,
@@ -1856,7 +1856,7 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
 
     const ui64 tabletId = msg->GetOrigin();
     TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
-    Y_VERIFY(perTablet);
+    Y_ABORT_UNLESS(perTablet);
 
     LOG_LOG_S_SAMPLED_BY(ctx, (msg->GetStatus() != NKikimrTxDataShard::TEvProposeTransactionResult::ERROR ?
         NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
@@ -1899,7 +1899,7 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
             ui64 targetTabletId = rs.GetShardId();
             ui64 size = rs.GetSize();
             TPerTablet* targetTablet = PerTablet.FindPtr(targetTabletId);
-            Y_VERIFY(targetTablet);
+            Y_ABORT_UNLESS(targetTablet);
             targetTablet->IncomingReadSetsSize += size;
         }
 
@@ -2058,7 +2058,7 @@ void TDataReq::HandlePrepareErrors(TEvDataShard::TEvProposeTransactionResult::TP
 
     const ui64 tabletId = msg->GetOrigin();
     TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
-    Y_VERIFY(perTablet);
+    Y_ABORT_UNLESS(perTablet);
 
     LOG_LOG_S_SAMPLED_BY(ctx, (msg->GetStatus() != NKikimrTxDataShard::TEvProposeTransactionResult::ERROR ?
         NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
@@ -2163,7 +2163,7 @@ void TDataReq::Handle(TEvDataShard::TEvProposeTransactionRestart::TPtr &ev, cons
         << " may restart transaction in the next generation");
 
     TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
-    Y_VERIFY(perTablet);
+    Y_ABORT_UNLESS(perTablet);
 
     perTablet->Restarting = true;
 }
@@ -2173,7 +2173,7 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionAttachResult::TP
     const ui64 tabletId = record.GetTabletId();
 
     TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
-    Y_VERIFY(perTablet);
+    Y_ABORT_UNLESS(perTablet);
 
     if (ev->Cookie != perTablet->ReattachState.Cookie) {
         return;
@@ -2222,7 +2222,7 @@ void TDataReq::HandlePlan(TEvDataShard::TEvProposeTransactionAttachResult::TPtr 
     const ui64 tabletId = record.GetTabletId();
 
     TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
-    Y_VERIFY(perTablet);
+    Y_ABORT_UNLESS(perTablet);
 
     if (ev->Cookie != perTablet->ReattachState.Cookie) {
         return;
@@ -2477,7 +2477,7 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, cons
     auto &rec = ev->Get()->Record;
     ui64 shard = rec.GetShardId();
 
-    Y_VERIFY(ReadTableRequest);
+    Y_ABORT_UNLESS(ReadTableRequest);
 
     // Handle shard restart. For now temporary snapshots are used by scan transaction
     // and therefore any shard restart may cause inconsistent response.
@@ -2516,7 +2516,7 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, cons
 void TDataReq::Handle(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx)
 {
     Y_UNUSED(ev);
-    Y_VERIFY(ReadTableRequest);
+    Y_ABORT_UNLESS(ReadTableRequest);
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                 "Abort read table transaction because stream is dead txid: " << TxId);
@@ -2527,7 +2527,7 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorCo
 
 void TDataReq::HandleResolve(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
-    Y_VERIFY(ReadTableRequest);
+    Y_ABORT_UNLESS(ReadTableRequest);
     LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
         "Abort read table transaction because stream is dead txid: " << TxId);
 
@@ -2606,7 +2606,7 @@ void TDataReq::MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, 
         return FinishShardStream(ev, ctx);
     }
 
-    Y_VERIFY(FlatMKQLRequest);
+    Y_ABORT_UNLESS(FlatMKQLRequest);
     NCpuTime::TCpuTimer timer;
     NMiniKQL::IEngineFlat &engine = *FlatMKQLRequest->Engine;
 
@@ -2793,11 +2793,11 @@ NSchemeCache::TDomainInfo::TPtr FindDomainInfo(NSchemeCache::TSchemeCacheRequest
 }
 
 ui64 GetFirstTablet(NSchemeCache::TSchemeCacheRequest &cacheRequest) {
-    Y_VERIFY(!cacheRequest.ResultSet.empty());
+    Y_ABORT_UNLESS(!cacheRequest.ResultSet.empty());
 
     NSchemeCache::TSchemeCacheRequest::TEntry& firstEntry= *cacheRequest.ResultSet.begin();
     NKikimr::TKeyDesc& firstKey = *firstEntry.KeyDescription;
-    Y_VERIFY(!firstKey.GetPartitions().empty());
+    Y_ABORT_UNLESS(!firstKey.GetPartitions().empty());
     return firstKey.GetPartitions().begin()->ShardId;
 }
 
@@ -2806,7 +2806,7 @@ const TDomainsInfo::TDomain& TDataReq::SelectDomain(NSchemeCache::TSchemeCacheRe
 
     auto appdata = AppData(ctx);
     const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(firstTabletId);
-    Y_VERIFY(selfDomain != appdata->DomainsInfo->BadDomainId);
+    Y_ABORT_UNLESS(selfDomain != appdata->DomainsInfo->BadDomainId);
     return appdata->DomainsInfo->GetDomain(selfDomain);
 }
 
@@ -2845,7 +2845,7 @@ bool TDataReq::CheckDomainLocality(NSchemeCache::TSchemeCacheRequest &cacheReque
             continue;
         }
 
-        Y_VERIFY(entry.DomainInfo);
+        Y_ABORT_UNLESS(entry.DomainInfo);
 
         if (!domainInfo) {
             domainInfo = entry.DomainInfo;
@@ -2863,13 +2863,13 @@ bool TDataReq::CheckDomainLocality(NSchemeCache::TSchemeCacheRequest &cacheReque
 void TDataReq::RegisterPlan(const TActorContext &ctx) {
     WallClockPrepared = Now();
     TDomainsInfo *domainsInfo = AppData(ctx)->DomainsInfo.Get();
-    Y_VERIFY(domainsInfo);
+    Y_ABORT_UNLESS(domainsInfo);
 
     ui64 totalReadSize = 0;
     TSet<ui32> affectedDomains;
     for (const auto &xp : PerTablet) {
         const ui32 tabletDomain = domainsInfo->GetDomainUidByTabletId(xp.first);
-        Y_VERIFY(tabletDomain != Max<ui32>());
+        Y_ABORT_UNLESS(tabletDomain != Max<ui32>());
         affectedDomains.insert(tabletDomain);
         totalReadSize += xp.second.ReadSize;
     }
@@ -2909,7 +2909,7 @@ void TDataReq::RegisterPlan(const TActorContext &ctx) {
     if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyReportPrepared)
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyPrepared, NKikimrIssues::TStatusIds::TRANSIENT, false, ctx);
 
-    Y_VERIFY(SelectedCoordinator, "shouldn't be run with null SelectedCoordinator");
+    Y_ABORT_UNLESS(SelectedCoordinator, "shouldn't be run with null SelectedCoordinator");
     TAutoPtr<TEvTxProxy::TEvProposeTransaction> req(new TEvTxProxy::TEvProposeTransaction(SelectedCoordinator, TxId, 0,
         AggrMinStep, AggrMaxStep));
 
@@ -2985,7 +2985,7 @@ void TDataReq::SendStreamClearanceResponse(ui64 shard, bool cleared, const TActo
 
 void TDataReq::ProcessNextStreamClearance(bool cleared, const TActorContext &ctx)
 {
-    Y_VERIFY(ReadTableRequest);
+    Y_ABORT_UNLESS(ReadTableRequest);
     Y_VERIFY_DEBUG(!ReadTableRequest->KeySpace.IsShardsQueueEmpty());
 
     auto shard = ReadTableRequest->KeySpace.ShardsQueueFront();

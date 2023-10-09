@@ -20,7 +20,7 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOper
 }
 
 std::shared_ptr<IBlobsStorageOperator> IStoragesManager::InitializePortionOperator(const TPortionInfo& portionInfo) {
-    Y_VERIFY(!portionInfo.HasStorageOperator());
+    Y_ABORT_UNLESS(!portionInfo.HasStorageOperator());
     if (portionInfo.GetMeta().GetTierName()) {
         return GetOperator(portionInfo.GetMeta().GetTierName());
     } else {

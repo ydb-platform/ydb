@@ -37,7 +37,7 @@ namespace NYql::NDq {
             , CanAllocateExtraMemory(canAllocateExtraMemory)
             , ActorSystem(actorSystem) {
 
-            Y_VERIFY(MemoryLimits.MemoryQuotaManager->AllocateQuota(MkqlMemoryLimit));
+            Y_ABORT_UNLESS(MemoryLimits.MemoryQuotaManager->AllocateQuota(MkqlMemoryLimit));
             if (MkqlMemoryQuota) {
                 MkqlMemoryQuota->Add(MkqlMemoryLimit);
             }

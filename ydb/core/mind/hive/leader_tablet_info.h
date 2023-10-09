@@ -206,7 +206,7 @@ public:
     bool InitiateDeleteStorage(TSideEffects& sideEffects);
 
     void IncreaseGeneration() {
-        Y_VERIFY(KnownGeneration < Max<ui32>());
+        Y_ABORT_UNLESS(KnownGeneration < Max<ui32>());
         ++KnownGeneration;
     }
 
@@ -266,7 +266,7 @@ public:
 
     TFollowerGroup& GetFollowerGroup(TFollowerGroupId followerGroupId) {
         auto it = std::find(FollowerGroups.begin(), FollowerGroups.end(), followerGroupId);
-        Y_VERIFY(it != FollowerGroups.end(), "%s", (TStringBuilder()
+        Y_ABORT_UNLESS(it != FollowerGroups.end(), "%s", (TStringBuilder()
                     << "TabletId=" << Id
                     << " FollowerGroupId=" << followerGroupId
                     << " FollowerGroupSize=" << FollowerGroups.size()

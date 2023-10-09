@@ -36,7 +36,7 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        Y_VERIFY(Response);
+        Y_ABORT_UNLESS(Response);
 
         const auto ssId = context.SS->SelfTabletId();
 

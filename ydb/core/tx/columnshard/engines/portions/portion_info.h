@@ -41,7 +41,7 @@ public:
     static constexpr const ui32 BLOB_BYTES_LIMIT = 8 * 1024 * 1024;
 
     const std::shared_ptr<NOlap::IBlobsStorageOperator>& GetBlobsStorage() const {
-        Y_VERIFY(BlobsOperator);
+        Y_ABORT_UNLESS(BlobsOperator);
         return BlobsOperator;
     }
     std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
@@ -157,25 +157,25 @@ public:
     }
 
     void SetMinSnapshot(const TSnapshot& snap) {
-        Y_VERIFY(snap.Valid());
+        Y_ABORT_UNLESS(snap.Valid());
         MinSnapshot = snap;
     }
 
     void SetMinSnapshot(const ui64 planStep, const ui64 txId) {
         MinSnapshot = TSnapshot(planStep, txId);
-        Y_VERIFY(MinSnapshot.Valid());
+        Y_ABORT_UNLESS(MinSnapshot.Valid());
     }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
         const bool wasValid = RemoveSnapshot.Valid();
-        Y_VERIFY(!wasValid || snap.Valid());
+        Y_ABORT_UNLESS(!wasValid || snap.Valid());
         RemoveSnapshot = snap;
     }
 
     void SetRemoveSnapshot(const ui64 planStep, const ui64 txId) {
         const bool wasValid = RemoveSnapshot.Valid();
         RemoveSnapshot = TSnapshot(planStep, txId);
-        Y_VERIFY(!wasValid || RemoveSnapshot.Valid());
+        Y_ABORT_UNLESS(!wasValid || RemoveSnapshot.Valid());
     }
 
     std::pair<ui32, ui32> BlobsSizes() const {
@@ -229,22 +229,22 @@ public:
     std::shared_ptr<arrow::Scalar> MaxValue(ui32 columnId) const;
 
     const NArrow::TReplaceKey& IndexKeyStart() const {
-        Y_VERIFY(Meta.IndexKeyStart);
+        Y_ABORT_UNLESS(Meta.IndexKeyStart);
         return *Meta.IndexKeyStart;
     }
 
     const NArrow::TReplaceKey& IndexKeyEnd() const {
-        Y_VERIFY(Meta.IndexKeyEnd);
+        Y_ABORT_UNLESS(Meta.IndexKeyEnd);
         return *Meta.IndexKeyEnd;
     }
 
     const TSnapshot& RecordSnapshotMin() const {
-        Y_VERIFY(Meta.RecordSnapshotMin);
+        Y_ABORT_UNLESS(Meta.RecordSnapshotMin);
         return *Meta.RecordSnapshotMin;
     }
 
     const TSnapshot& RecordSnapshotMax() const {
-        Y_VERIFY(Meta.RecordSnapshotMax);
+        Y_ABORT_UNLESS(Meta.RecordSnapshotMax);
         return *Meta.RecordSnapshotMax;
     }
 
@@ -347,7 +347,7 @@ public:
 
         std::shared_ptr<arrow::RecordBatch> BuildRecordBatch(const TColumnLoader& loader) const {
             if (NullRowsCount) {
-                Y_VERIFY(!Data);
+                Y_ABORT_UNLESS(!Data);
                 return NArrow::MakeEmptyBatch(loader.GetExpectedSchema(), NullRowsCount);
             } else {
                 auto result = loader.Apply(Data);
@@ -381,8 +381,8 @@ public:
             : Loader(loader)
             , Blobs(std::move(blobs))
         {
-            Y_VERIFY(Loader);
-            Y_VERIFY(Loader->GetExpectedSchema()->num_fields() == 1);
+            Y_ABORT_UNLESS(Loader);
+            Y_ABORT_UNLESS(Loader->GetExpectedSchema()->num_fields() == 1);
         }
 
         std::shared_ptr<arrow::ChunkedArray> Assemble() const;
@@ -460,26 +460,26 @@ public:
 
         // Make chunked arrays for columns
         for (auto& [pos, orderedChunks] : columnChunks) {
-            Y_VERIFY(positionsMap.contains(pos));
+            Y_ABORT_UNLESS(positionsMap.contains(pos));
             size_t dataPos = positionsMap[pos];
             auto portionField = dataSchema.GetFieldByIndex(dataPos);
             auto resultField = resultSchema.GetFieldByIndex(pos);
 
-            Y_VERIFY(portionField->IsCompatibleWith(*resultField));
+            Y_ABORT_UNLESS(portionField->IsCompatibleWith(*resultField));
 
             std::vector<TAssembleBlobInfo> blobs;
             blobs.reserve(orderedChunks.size());
             ui32 expected = 0;
             for (auto& [chunk, blobRange] : orderedChunks) {
-                Y_VERIFY(chunk == expected);
+                Y_ABORT_UNLESS(chunk == expected);
                 ++expected;
 
                 auto it = blobsData.find(blobRange);
-                Y_VERIFY(it != blobsData.end());
+                Y_ABORT_UNLESS(it != blobsData.end());
                 blobs.emplace_back(it->second);
             }
 
-            Y_VERIFY(pos < columns.size());
+            Y_ABORT_UNLESS(pos < columns.size());
             columns[pos] = TPreparedColumn(std::move(blobs), dataSchema.GetColumnLoader(resultField->name()));
         }
 
@@ -490,7 +490,7 @@ public:
                                             const ISnapshotSchema& resultSchema,
                                             const THashMap<TBlobRange, TString>& data) const {
         auto batch = PrepareForAssemble(dataSchema, resultSchema, data).Assemble();
-        Y_VERIFY(batch->Validate().ok());
+        Y_ABORT_UNLESS(batch->Validate().ok());
         return batch;
     }
 

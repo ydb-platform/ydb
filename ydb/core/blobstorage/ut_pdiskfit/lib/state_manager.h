@@ -61,7 +61,7 @@ public:
 
         for (;;) {
             TAtomicBase expected = AtomicGet(State);
-            Y_VERIFY(expected & RunningFlag);
+            Y_ABORT_UNLESS(expected & RunningFlag);
 
             // clear 'running' flag in the state
             write = expected & ~RunningFlag;
@@ -80,6 +80,6 @@ public:
         }
 
         // ensure that there were not writes left
-        Y_VERIFY(AtomicGet(State) == 0);
+        Y_ABORT_UNLESS(AtomicGet(State) == 0);
     }
 };

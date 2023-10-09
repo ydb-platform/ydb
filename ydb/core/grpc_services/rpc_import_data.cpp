@@ -78,8 +78,8 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
     }
 
     static ui64 GetShardId(const TTableRange& range, const TKeyDesc* keyDesc) {
-        Y_VERIFY(range.Point);
-        Y_VERIFY(!keyDesc->GetPartitions().empty());
+        Y_ABORT_UNLESS(range.Point);
+        Y_ABORT_UNLESS(!keyDesc->GetPartitions().empty());
 
         TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
             keyDesc->GetPartitions().begin(), keyDesc->GetPartitions().end(), true,
@@ -94,7 +94,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
             }
         );
 
-        Y_VERIFY(it != keyDesc->GetPartitions().end());
+        Y_ABORT_UNLESS(it != keyDesc->GetPartitions().end());
         return it->ShardId;
     }
 
@@ -168,7 +168,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
         }
 
         for (const auto& [_, column] : entry.Columns) {
-            Y_VERIFY(Columns.emplace(column.Name, column).second);
+            Y_ABORT_UNLESS(Columns.emplace(column.Name, column).second);
         }
 
         KeyDesc = MakeKeyDesc(entry);
@@ -331,7 +331,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
                 return Nothing();
             }
 
-            Y_VERIFY(!keys.empty());
+            Y_ABORT_UNLESS(!keys.empty());
 
             // sorting constraint
             if (!CheckSorted(prevKey, keys)) {

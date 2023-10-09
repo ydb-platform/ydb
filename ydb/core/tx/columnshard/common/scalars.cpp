@@ -127,7 +127,7 @@ std::shared_ptr<arrow::Scalar> ConstantToScalar(const NKikimrSSA::TProgram_TCons
             } else if (value.HasInt64()) {
                 return std::make_shared<arrow::TimestampScalar>(value.GetInt64(), type);
             } else {
-                Y_VERIFY(false, "Unexpected timestamp");
+                Y_ABORT_UNLESS(false, "Unexpected timestamp");
             }
         case arrow::Type::TIME32:
             return std::make_shared<arrow::Time32Scalar>(value.GetInt32(), type);
@@ -209,14 +209,14 @@ std::shared_ptr<arrow::Scalar> DeserializeKeyScalar(const TString& key, const st
             using TCType = typename arrow::TypeTraits<T>::CType;
             static_assert(std::is_same_v<TCType, typename TScalar::ValueType>);
 
-            Y_VERIFY(key.size() == sizeof(TCType));
+            Y_ABORT_UNLESS(key.size() == sizeof(TCType));
             TCType value = ReadUnaligned<TCType>(key.data());
             out = std::make_shared<TScalar>(value, type);
         } else if constexpr (arrow::has_c_type<T>::value) {
             using TCType = typename arrow::TypeTraits<T>::CType;
             static_assert(std::is_same_v<TCType, typename TScalar::ValueType>);
 
-            Y_VERIFY(key.size() == sizeof(TCType));
+            Y_ABORT_UNLESS(key.size() == sizeof(TCType));
             TCType value = ReadUnaligned<TCType>(key.data());
             out = std::make_shared<TScalar>(value);
         } else {

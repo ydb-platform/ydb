@@ -48,7 +48,7 @@ public:
         , Data(data)
         , Record(columnChunk)
         , SchemaInfo(schema) {
-        Y_VERIFY(Data.size() == Record.BlobRange.Size || columnChunk.BlobRange.Size == 0);
+        Y_ABORT_UNLESS(Data.size() == Record.BlobRange.Size || columnChunk.BlobRange.Size == 0);
     }
 
     TChunkPreparation(const TString& data, const std::shared_ptr<arrow::Array>& column, const ui32 columnId, ISnapshotSchema::TPtr schema)
@@ -56,7 +56,7 @@ public:
         , Data(data)
         , Record(TChunkAddress(columnId, 0), column, schema->GetIndexInfo())
         , SchemaInfo(schema) {
-        Y_VERIFY(column->length());
+        Y_ABORT_UNLESS(column->length());
         First = NArrow::TStatusValidator::GetValid(column->GetScalar(0));
         Last = NArrow::TStatusValidator::GetValid(column->GetScalar(column->length() - 1));
         Record.BlobRange.Size = data.size();
@@ -114,7 +114,7 @@ public:
     }
 
     bool IsFullPortion() const {
-        Y_VERIFY(CurrentPortionRecords <= Context.GetPortionRowsCountLimit());
+        Y_ABORT_UNLESS(CurrentPortionRecords <= Context.GetPortionRowsCountLimit());
         return CurrentPortionRecords == Context.GetPortionRowsCountLimit();
     }
 
@@ -122,7 +122,7 @@ public:
 
     std::shared_ptr<arrow::Array> AppendBlob(const TString& data, const TColumnRecord& columnChunk);
     std::shared_ptr<arrow::Array> AppendSlice(const std::shared_ptr<arrow::RecordBatch>& data) {
-        Y_VERIFY(data->num_columns() == 1);
+        Y_ABORT_UNLESS(data->num_columns() == 1);
         return AppendSlice(data->column(0));
     }
     std::shared_ptr<arrow::Array> AppendSlice(const std::shared_ptr<arrow::Array>& a);

@@ -22,7 +22,7 @@ namespace NKikimr::NColumnShard {
     }
 
     void TWriteOperation::Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const TActorContext& ctx) {
-        Y_VERIFY(Status == EOperationStatus::Draft);
+        Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
         NEvWrite::TWriteMeta writeMeta((ui64)WriteId, tableId, source);
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(owner.TabletID(), ctx.SelfID,
@@ -33,7 +33,7 @@ namespace NKikimr::NColumnShard {
     }
 
     void TWriteOperation::Commit(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const {
-        Y_VERIFY(Status == EOperationStatus::Prepared);
+        Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
 
         TBlobGroupSelector dsGroupSelector(owner.Info());
         NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
@@ -54,7 +54,7 @@ namespace NKikimr::NColumnShard {
     }
 
     void TWriteOperation::OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const TVector<TWriteId>& globalWriteIds) {
-        Y_VERIFY(Status == EOperationStatus::Started);
+        Y_ABORT_UNLESS(Status == EOperationStatus::Started);
         Status = EOperationStatus::Prepared;
         GlobalWriteIds = globalWriteIds;
         NIceDb::TNiceDb db(txc.DB);
@@ -74,7 +74,7 @@ namespace NKikimr::NColumnShard {
     }
 
     void TWriteOperation::Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const {
-        Y_VERIFY(Status == EOperationStatus::Prepared);
+        Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
 
         TBlobGroupSelector dsGroupSelector(owner.Info());
         NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
@@ -97,13 +97,13 @@ namespace NKikimr::NColumnShard {
             const ui64 txId = rowset.GetValue<Schema::Operations::TxId>();
             const TString metadata = rowset.GetValue<Schema::Operations::Metadata>();
             NKikimrTxColumnShard::TInternalOperationData metaProto;
-            Y_VERIFY(metaProto.ParseFromString(metadata));
+            Y_ABORT_UNLESS(metaProto.ParseFromString(metadata));
             const EOperationStatus status = (EOperationStatus) rowset.GetValue<Schema::Operations::Status>();
 
             auto operation = std::make_shared<TWriteOperation>(writeId, txId, status, TInstant::Seconds(createdAtSec));
             operation->FromProto(metaProto);
 
-            Y_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
+            Y_ABORT_UNLESS(operation->GetStatus() != EOperationStatus::Draft);
 
             auto [_, isOk] = Operations.emplace(operation->GetWriteId(), operation);
             if (!isOk) {
@@ -184,7 +184,7 @@ namespace NKikimr::NColumnShard {
     TWriteOperation::TPtr TOperationsManager::RegisterOperation(const ui64 txId) {
         auto writeId = BuildNextWriteId();
         auto operation = std::make_shared<TWriteOperation>(writeId, txId, EOperationStatus::Draft, AppData()->TimeProvider->Now());
-        Y_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
+        Y_ABORT_UNLESS(Operations.emplace(operation->GetWriteId(), operation).second);
 
         Transactions[operation->GetTxId()].push_back(operation->GetWriteId());
         return operation;

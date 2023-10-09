@@ -47,7 +47,7 @@ public:
         }
         FetchingIntervals.clear();
         BorderPoints.clear();
-        Y_VERIFY(IsFinished());
+        Y_ABORT_UNLESS(IsFinished());
     }
 
     bool IsFinished() const {
@@ -55,12 +55,12 @@ public:
     }
 
     void AddSourceByIdx(const std::shared_ptr<IDataSource>& source) {
-        Y_VERIFY(source);
+        Y_ABORT_UNLESS(source);
         SourceByIdx.emplace(source->GetSourceIdx(), source);
     }
 
     void RemoveSourceByIdx(const std::shared_ptr<IDataSource>& source) {
-        Y_VERIFY(source);
+        Y_ABORT_UNLESS(source);
         SourceByIdx.erase(source->GetSourceIdx());
     }
 
@@ -69,7 +69,7 @@ public:
     void OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 intervalIdx);
     std::shared_ptr<IDataSource> GetSourceVerified(const ui32 idx) const {
         auto it = SourceByIdx.find(idx);
-        Y_VERIFY(it != SourceByIdx.end());
+        Y_ABORT_UNLESS(it != SourceByIdx.end());
         return it->second;
     }
 

@@ -23,7 +23,7 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
             : TTransactionBase(controller)
             , Queue(std::move(queue))
         {
-            Y_VERIFY(Queue);
+            Y_ABORT_UNLESS(Queue);
             auto& front = Queue.front();
             front->SetController(controller);
         }
@@ -163,7 +163,7 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
             TString currentCompatibilityInfo;
             auto componentId = NKikimrConfig::TCompatibilityRule::BlobStorageController;
             bool success = CompatibilityInfo.MakeStored(componentId).SerializeToString(&currentCompatibilityInfo);
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
             NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(true).Update<Schema::State::CompatibilityInfo>(currentCompatibilityInfo);
             return true;
         }
@@ -194,7 +194,7 @@ public:
             if (state.HaveValue<Schema::State::CompatibilityInfo>()) {
                 stored.emplace();
                 bool success = stored->ParseFromString(state.GetValue<Schema::State::CompatibilityInfo>());
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
             }
             if (!AppData()->FeatureFlags.GetSuppressCompatibilityCheck() && !CompatibilityInfo.CheckCompatibility(
                         stored ? &*stored : nullptr, 

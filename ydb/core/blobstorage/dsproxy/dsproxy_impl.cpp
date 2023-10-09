@@ -36,7 +36,7 @@ namespace NKikimr {
     IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
             TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters,
             const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch) {
-        Y_VERIFY(info);
+        Y_ABORT_UNLESS(info);
         return new TBlobStorageGroupProxy(std::move(info), forceWaitAllDrives, nodeMon, std::move(storagePoolCounters),
                 enablePutBatching, enableVPatch);
     }

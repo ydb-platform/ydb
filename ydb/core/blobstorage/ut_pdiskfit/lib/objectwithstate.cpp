@@ -33,17 +33,17 @@ TString TObjectWithState::SerializeCommonState() {
     }
     TString data;
     bool status = dict.SerializeToString(&data);
-    Y_VERIFY(status);
+    Y_ABORT_UNLESS(status);
     return data;
 }
 
 void TObjectWithState::DeserializeCommonState(const TString& data) {
     NPDiskFIT::TObjectWithStateDict dict;
     bool status = dict.ParseFromString(data);
-    Y_VERIFY(status);
+    Y_ABORT_UNLESS(status);
     for (const auto& item : dict.GetItems()) {
-        Y_VERIFY(item.HasKey());
-        Y_VERIFY(item.HasValue());
+        Y_ABORT_UNLESS(item.HasKey());
+        Y_ABORT_UNLESS(item.HasValue());
         States.emplace(item.GetKey(), item.GetValue());
     }
 }

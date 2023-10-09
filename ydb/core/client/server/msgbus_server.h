@@ -195,7 +195,7 @@ void CopyProtobufsByFieldName(TProtoTo& protoTo, const TProtoFrom& protoFrom) {
     for (const FieldDescriptor* fieldFrom : fields) {
         const auto& name = fieldFrom->name();
         const FieldDescriptor* fieldTo = descriptorTo.FindFieldByName(name);
-        Y_VERIFY(fieldTo != nullptr, "name=%s", name.c_str());
+        Y_ABORT_UNLESS(fieldTo != nullptr, "name=%s", name.c_str());
         if (fieldTo != nullptr) {
             FieldDescriptor::CppType type = fieldFrom->cpp_type();
             if (fieldFrom->is_repeated()) {

@@ -150,7 +150,7 @@ public:
             void Sub(const i64 value) {
                 Counter->Sub(value);
                 Value -= value;
-                Y_VERIFY(Value >= 0);
+                Y_ABORT_UNLESS(Value >= 0);
             }
         };
 
@@ -201,7 +201,7 @@ public:
             }
             predName = ::ToString(i);
         }
-        Y_VERIFY(predName);
+        Y_ABORT_UNLESS(predName);
         PlusInf = TBase::GetValue("(" + *predName + ",+Inf)");
     }
 
@@ -221,7 +221,7 @@ public:
             }
             predName = i.second;
         }
-        Y_VERIFY(predName);
+        Y_ABORT_UNLESS(predName);
         PlusInf = TBase::GetValue("(" + *predName + ",+Inf)");
     }
 
@@ -263,12 +263,12 @@ public:
         }
 
         void OnNewBlob(const NOlap::NPortion::EProduced produced, const ui64 size) const {
-            Y_VERIFY((ui32)produced < Guards.size());
+            Y_ABORT_UNLESS((ui32)produced < Guards.size());
             Guards[(ui32)produced]->Add(size, size);
         }
 
         void OnDropBlob(const NOlap::NPortion::EProduced produced, const ui64 size) const {
-            Y_VERIFY((ui32)produced < Guards.size());
+            Y_ABORT_UNLESS((ui32)produced < Guards.size());
             Guards[(ui32)produced]->Sub(size, size);
         }
 

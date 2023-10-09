@@ -83,7 +83,7 @@ TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrScheme::TEvDescribeSchemeResu
 
 TIntrusivePtr<TEventSerializedData> SerializeEvent(IEventBase* ev) {
     TAllocChunkSerializer serializer;
-    Y_VERIFY(ev->SerializeToArcadiaStream(&serializer));
+    Y_ABORT_UNLESS(ev->SerializeToArcadiaStream(&serializer));
     return serializer.Release(ev->CreateSerializationInfo());
 }
 

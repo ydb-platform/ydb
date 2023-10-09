@@ -49,7 +49,7 @@ TBlockStoreVolumeInfo::TPtr CreateBlockStoreVolumeInfo(const NKikimrSchemeOp::TB
 void ApplySharding(TTxId txId, TPathId pathId, TBlockStoreVolumeInfo::TPtr volume, TTxState& txState,
                    const TChannelsBindings& partitionChannels, const TChannelsBindings& volumeChannels,
                    TOperationContext& context) {
-    Y_VERIFY(volume->VolumeConfig.GetTabletVersion() <= 2);
+    Y_ABORT_UNLESS(volume->VolumeConfig.GetTabletVersion() <= 2);
     ui64 count = volume->DefaultPartitionCount;
     txState.Shards.reserve(count + 1);
 
@@ -133,11 +133,11 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
     context.SS->PersistUpdateNextPathId(db);
     context.SS->PersistUpdateNextShardIdx(db);
     for (auto shard : txState.Shards) {
-        Y_VERIFY(shard.Operation == TTxState::CreateParts);
+        Y_ABORT_UNLESS(shard.Operation == TTxState::CreateParts);
         context.SS->PersistChannelsBinding(db, shard.Idx, context.SS->ShardInfos[shard.Idx].BindedChannels);
         context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, pathId, operationId.GetTxId(), shard.TabletType);
     }
-    Y_VERIFY(txState.Shards.size() == shardsToCreate);
+    Y_ABORT_UNLESS(txState.Shards.size() == shardsToCreate);
 
     return txState;
 }
@@ -335,7 +335,7 @@ public:
         }
 
         auto domainDir = context.SS->PathsById.at(dstPath.GetPathIdForDomain());
-        Y_VERIFY(domainDir);
+        Y_ABORT_UNLESS(domainDir);
 
         auto volumeSpace = volume->GetVolumeSpace();
         if (!domainDir->CheckVolumeSpaceChange(volumeSpace, { }, errStr)) {
@@ -393,7 +393,7 @@ ISubOperation::TPtr CreateNewBSV(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr CreateNewBSV(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TCreateBlockStoreVolume>(id, state);
 }
 

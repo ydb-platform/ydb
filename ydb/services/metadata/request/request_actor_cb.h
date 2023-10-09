@@ -131,7 +131,7 @@ public:
         : TBase(uToken, externalController)
         , ProtoRequest(request)
         , SessionContext(sessionContext) {
-        Y_VERIFY(SessionContext);
+        Y_ABORT_UNLESS(SessionContext);
     }
 };
 

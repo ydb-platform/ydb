@@ -175,7 +175,7 @@ namespace NKikimr {
         , KindsMap()
     {
         bool result = google::protobuf::TextFormat::ParseFromString(prototext, &AllKindsConfig);
-        Y_VERIFY(result, "Failed to parse AllVDiskKinds config "
+        Y_ABORT_UNLESS(result, "Failed to parse AllVDiskKinds config "
                 "(error in protobuf format):\n%s\n", prototext.data());
         ParseConfig();
     }
@@ -186,14 +186,14 @@ namespace NKikimr {
         int levels = 0;
         while (k != NKikimrBlobStorage::TVDiskKind::Default) {
             const auto it = KindsMap.find(k);
-            Y_VERIFY(it != KindsMap.end(),
+            Y_ABORT_UNLESS(it != KindsMap.end(),
                     "Can't find kind='%s' in the config (probably config is incorrect)",
                     NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(k).data());
             merge.push_back(it->second);
             k = it->second->GetBaseKind();
 
             ++levels;
-            Y_VERIFY(levels < 32, "Nesting is too large (cycle in the graph?)");
+            Y_ABORT_UNLESS(levels < 32, "Nesting is too large (cycle in the graph?)");
         }
 
         TIntrusivePtr<TVDiskConfig> cfg(new TVDiskConfig(baseInfo));
@@ -215,11 +215,11 @@ namespace NKikimr {
         KindsMap.clear();
         for (const auto &x : AllKindsConfig.GetVDiskKinds()) {
             EKind kind = x.GetKind();
-            Y_VERIFY(kind != NKikimrBlobStorage::TVDiskKind::Default,
+            Y_ABORT_UNLESS(kind != NKikimrBlobStorage::TVDiskKind::Default,
                     "It is forbidden to redefine Default kind");
             const NKikimrBlobStorage::TVDiskKind *val = &x;
             result = KindsMap.emplace(kind, val).second;
-            Y_VERIFY(result, "Duplicate elements in the AllVDiskKinds config: kind='%s",
+            Y_ABORT_UNLESS(result, "Duplicate elements in the AllVDiskKinds config: kind='%s",
                     NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(kind).data());
         }
     }

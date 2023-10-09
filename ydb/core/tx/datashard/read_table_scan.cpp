@@ -102,7 +102,7 @@ Y_FORCE_INLINE void AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
     }
     case NUdf::TDataType<NUdf::TDyNumber>::Id: {
         const auto number = NDyNumber::DyNumberToString(TStringBuf(cell.Data(), cell.Size()));
-        Y_VERIFY(number.Defined(), "Invalid DyNumber binary representation");
+        Y_ABORT_UNLESS(number.Defined(), "Invalid DyNumber binary representation");
         val.set_text_value(*number);
         break;
     }
@@ -111,7 +111,7 @@ Y_FORCE_INLINE void AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
             TString(cell.Data(), cell.Size()),
             NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc())
         );
-        Y_VERIFY(!result.Error, "Failed to add cell to Ydb::Value: %s", (*result.Error).c_str());
+        Y_ABORT_UNLESS(!result.Error, "Failed to add cell to Ydb::Value: %s", (*result.Error).c_str());
         val.set_text_value(result.Str);
         break;
     }
@@ -381,7 +381,7 @@ private:
 
     void Handle(TEvTxProcessing::TEvStreamDataAck::TPtr &, const TActorContext &ctx)
     {
-        Y_VERIFY(PendingAcks);
+        Y_ABORT_UNLESS(PendingAcks);
         --PendingAcks;
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,

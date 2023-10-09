@@ -40,7 +40,7 @@ namespace NKikimr {
         void Pop(ui64 wId, ui64 lsn, bool logged) {
             Y_VERIFY_S(!Fifo.empty(), ErrorReport(wId, lsn));
             const auto it = Fifo.find(wId);
-            Y_VERIFY(it != Fifo.end());
+            Y_ABORT_UNLESS(it != Fifo.end());
             Y_VERIFY_S(!logged || it->second <= lsn, ErrorReport(wId, lsn));
             if (NodeCache.size() < NodeCacheMaxSize) {
                 NodeCache.push_back(Fifo.extract(it));
@@ -173,11 +173,11 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             // prepare write
             const ui8 partId = Item->LogoBlobId.PartId();
-            Y_VERIFY(partId != 0);
+            Y_ABORT_UNLESS(partId != 0);
 
             const ui32 storedBlobSize = Item->Data.GetSize();
             const ui32 writtenSize = AlignUpAppendBlockSize(storedBlobSize, HugeKeeperCtx->PDiskCtx->Dsk->AppendBlockSize);
-            Y_VERIFY(writtenSize <= HugeSlot.GetSize());
+            Y_ABORT_UNLESS(writtenSize <= HugeSlot.GetSize());
 
             NPDisk::TEvChunkWrite::TPartsPtr partsPtr(new NPDisk::TEvChunkWrite::TRopeAlignedParts(std::move(Item->Data), writtenSize));
             ui32 chunkId = HugeSlot.GetChunkId();
@@ -274,7 +274,7 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvChunkReserveResult::TPtr &ev, const TActorContext &ctx) {
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
-            Y_VERIFY(ev->Get()->ChunkIds.size() == 1);
+            Y_ABORT_UNLESS(ev->Get()->ChunkIds.size() == 1);
             ChunkId = ev->Get()->ChunkIds.front();
             Lsn = HugeKeeperCtx->LsnMngr->AllocLsnForLocalUse().Point();
 
@@ -305,13 +305,13 @@ namespace NKikimr {
 
             // commit changes to the persistent state at once
             const ui64 prevLsn = std::exchange(Pers->LogPos.ChunkAllocationLsn, Lsn);
-            Y_VERIFY(prevLsn < Lsn);
+            Y_ABORT_UNLESS(prevLsn < Lsn);
             Pers->Heap->AddChunk(ChunkId);
         }
 
         void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
-            Y_VERIFY(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == Lsn);
+            Y_ABORT_UNLESS(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == Lsn);
 
             LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "ChunkAllocator: committed:"
                 " chunkId# %" PRIu32 " LsnSeg# %" PRIu64, ChunkId, Lsn));
@@ -386,7 +386,7 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
-            Y_VERIFY(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == Lsn);
+            Y_ABORT_UNLESS(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == Lsn);
 
             LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "ChunkDestroyer: committed:"
                 " chunks# %s Lsn# %" PRIu64, FormatList(ChunksToFree).data(), Lsn));
@@ -448,7 +448,7 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
-            Y_VERIFY(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == EntryPointLsn);
+            Y_ABORT_UNLESS(ev->Get()->Results.size() == 1 && ev->Get()->Results.front().Lsn == EntryPointLsn);
 
             LOG_DEBUG(ctx, BS_HULLHUGE,
                       VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
@@ -646,7 +646,7 @@ namespace NKikimr {
                 }
 
                 const bool inserted = State.Pers->AllocatedSlots.insert(hugeSlot).second;
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
                 const ui64 wId = State.LogLsnFifo.Push(HugeKeeperCtx->LsnMngr->GetLsn());
                 auto aid = ctx.Register(new THullHugeBlobWriter(HugeKeeperCtx, ctx.SelfID, hugeSlot,
                     std::unique_ptr<TEvHullWriteHugeBlob>(ev.Release().Release()), wId, std::move(ev.TraceId)));
@@ -677,7 +677,7 @@ namespace NKikimr {
                 auto aid = ctx.Register(new THullHugeBlobChunkDestroyer(HugeKeeperCtx, ctx.SelfID, std::move(vec), lsn));
                 ActiveActors.Insert(aid);
                 const ui64 prevLsn = std::exchange(State.Pers->LogPos.ChunkFreeingLsn, lsn);
-                Y_VERIFY(prevLsn < lsn); // although it is useless :)
+                Y_ABORT_UNLESS(prevLsn < lsn); // although it is useless :)
             }
         }
 
@@ -756,7 +756,7 @@ namespace NKikimr {
         void Handle(TEvHullHugeChunkAllocated::TPtr &ev, const TActorContext &ctx) {
             LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "THullHugeKeeper:"
                 " TEvHullHugeChunkAllocated: %s", ev->Get()->ToString().data()));
-            Y_VERIFY(!AllocatingChunkPerSlotSize.empty());
+            Y_ABORT_UNLESS(!AllocatingChunkPerSlotSize.empty());
             // actually we don't care about exact slot size, we have this set being used only as a counter of distinct
             // slot sizes being currently requested
             AllocatingChunkPerSlotSize.erase(AllocatingChunkPerSlotSize.begin());
@@ -815,7 +815,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_HULLHUGE,
                 VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                         "THullHugeKeeper: TEvHullHugeCommitted: %s", ev->Get()->ToString().data()));
-            Y_VERIFY(State.Committing);
+            Y_ABORT_UNLESS(State.Committing);
             State.Committing = false;
             ActiveActors.Erase(ev->Sender);
             State.LastCommitTime = TAppData::TimeProvider->Now();
@@ -843,7 +843,7 @@ namespace NKikimr {
             const TDiskPart &hugeBlob = msg->HugeBlob;
             NHuge::THugeSlot hugeSlot(State.Pers->Heap->ConvertDiskPartToHugeSlot(hugeBlob));
             auto nErased = State.Pers->AllocatedSlots.erase(hugeSlot);
-            Y_VERIFY(nErased == 1);
+            Y_ABORT_UNLESS(nErased == 1);
             // depending on SlotIsUsed...
             if (msg->SlotIsUsed) {
                 Y_VERIFY_S(State.Pers->LogPos.HugeBlobLoggedLsn < msg->RecLsn,
@@ -957,7 +957,7 @@ namespace NKikimr {
             : HugeKeeperCtx(std::move(hugeKeeperCtx))
             , State(std::move(persState))
         {
-            Y_VERIFY(State.Pers->Recovered &&
+            Y_ABORT_UNLESS(State.Pers->Recovered &&
                      State.Pers->AllocatedSlots.empty());
         }
 

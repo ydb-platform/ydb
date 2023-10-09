@@ -5,9 +5,9 @@ namespace NKikimr::NOlap::NPlainReader {
 
 bool TCommittedAssembler::DoExecute() {
     ResultBatch = NArrow::DeserializeBatch(BlobData, ReadMetadata->GetBlobSchema(SchemaVersion));
-    Y_VERIFY(ResultBatch);
+    Y_ABORT_UNLESS(ResultBatch);
     ResultBatch = ReadMetadata->GetIndexInfo().AddSpecialColumns(ResultBatch, DataSnapshot);
-    Y_VERIFY(ResultBatch);
+    Y_ABORT_UNLESS(ResultBatch);
     ReadMetadata->GetPKRangesFilter().BuildFilter(ResultBatch).Apply(ResultBatch);
     EarlyFilter = ReadMetadata->GetProgram().BuildEarlyFilter(ResultBatch);
     return true;

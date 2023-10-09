@@ -244,7 +244,7 @@ protected:
     TActorId CreatePipe(ui64 tabletId, const TActorContext& ctx) {
         NTabletPipe::TClientConfig clientConfig;
         const TActorId pipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
-        Y_VERIFY(Pipes.emplace(tabletId, pipe).second);
+        Y_ABORT_UNLESS(Pipes.emplace(tabletId, pipe).second);
 
         return pipe;
     }
@@ -292,7 +292,7 @@ protected:
 
     // true returned from this function means that we called Die().
     [[nodiscard]] virtual bool OnPipeEvent(ui64 tabletId, typename TPipeEvent::TPtr& ev, const TActorContext& /*ctx*/) {
-        Y_VERIFY(!IsIn(PipeAnswers, tabletId) || !PipeAnswers.find(tabletId)->second);
+        Y_ABORT_UNLESS(!IsIn(PipeAnswers, tabletId) || !PipeAnswers.find(tabletId)->second);
         PipeAnswers[tabletId] = ev;
         return false;
     }
@@ -337,7 +337,7 @@ protected:
 
     void HandlePipeEvent(typename TPipeEvent::TPtr& ev, const TActorContext& ctx) {
         const ui64 tabletId = GetTabletId(ev->Get());
-        Y_VERIFY(tabletId != 0);
+        Y_ABORT_UNLESS(tabletId != 0);
         if (PipeAnswers.find(tabletId) != PipeAnswers.end())
             return;
 
@@ -354,7 +354,7 @@ protected:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         const ui64 tabletId = GetTabletId(msg);
-        Y_VERIFY(tabletId != 0);
+        Y_ABORT_UNLESS(tabletId != 0);
 
         if (msg->Status != NKikimrProto::OK) {
             // Create record for answer
@@ -374,7 +374,7 @@ protected:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
         // Create record for answer
         const ui64 tabletId = ev->Get()->TabletId;
-        Y_VERIFY(tabletId != 0);
+        Y_ABORT_UNLESS(tabletId != 0);
 
         PipeAnswers[tabletId];
         if (EventsAreReady()) {

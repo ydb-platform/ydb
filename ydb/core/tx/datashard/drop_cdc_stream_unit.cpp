@@ -19,7 +19,7 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_VERIFY(op->IsSchemeTx());
+        Y_ABORT_UNLESS(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
@@ -32,12 +32,12 @@ public:
         const auto& params = schemeTx.GetDropCdcStreamNotice();
 
         const auto pathId = PathIdFromPathId(params.GetPathId());
-        Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
+        Y_ABORT_UNLESS(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto streamPathId = PathIdFromPathId(params.GetStreamPathId());
 
         const auto version = params.GetTableSchemaVersion();
-        Y_VERIFY(version);
+        Y_ABORT_UNLESS(version);
 
         auto tableInfo = DataShard.AlterTableDropCdcStream(ctx, txc, pathId, version, streamPathId);
         DataShard.AddUserTable(pathId, tableInfo);
@@ -48,7 +48,7 @@ public:
 
         if (params.HasDropSnapshot()) {
             const auto& snapshot = params.GetDropSnapshot();
-            Y_VERIFY(snapshot.GetStep() != 0);
+            Y_ABORT_UNLESS(snapshot.GetStep() != 0);
 
             const TSnapshotKey key(pathId, snapshot.GetStep(), snapshot.GetTxId());
             DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);

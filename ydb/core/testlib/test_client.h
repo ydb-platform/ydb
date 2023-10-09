@@ -547,7 +547,7 @@ namespace Tests {
 
         ui32 NodeIdToIndex(TTestActorRuntime* runtime, ui32 id) {
             ui32 offset = runtime->GetNodeId(0);
-            Y_VERIFY(id >= offset, "NodeId# %" PRIu32 " offset# %" PRIu32, id, offset);
+            Y_ABORT_UNLESS(id >= offset, "NodeId# %" PRIu32 " offset# %" PRIu32, id, offset);
             return id - offset;
         }
 

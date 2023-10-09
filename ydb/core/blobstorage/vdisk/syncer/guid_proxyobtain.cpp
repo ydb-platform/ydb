@@ -19,7 +19,7 @@ namespace NKikimr {
         virtual void HandleReply(const TActorContext &ctx,
                                  const NKikimrBlobStorage::TEvVSyncGuidResult &record) override {
             // all checks are passed
-            Y_VERIFY(record.GetStatus() == NKikimrProto::OK);
+            Y_ABORT_UNLESS(record.GetStatus() == NKikimrProto::OK);
             TVDiskID fromVDisk = VDiskIDFromVDiskID(record.GetVDiskID());
             auto guidInfo = record.GetReadInfo();
             auto guid = guidInfo.GetGuid();

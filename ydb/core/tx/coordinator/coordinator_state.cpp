@@ -28,15 +28,15 @@ void TCoordinatorStateActor::ConfirmPersistent() {
 }
 
 void TCoordinatorStateActor::OnTabletDestroyed() {
-    Y_VERIFY(Owner, "Unexpected OnTabletDestroyed from detached tablet");
-    Y_VERIFY(Owner->CoordinatorStateActor == nullptr, "OnTabletDestroyed called with state actor still attached");
+    Y_ABORT_UNLESS(Owner, "Unexpected OnTabletDestroyed from detached tablet");
+    Y_ABORT_UNLESS(Owner->CoordinatorStateActor == nullptr, "OnTabletDestroyed called with state actor still attached");
     PreserveState();
     Owner = nullptr;
 }
 
 void TCoordinatorStateActor::OnTabletDead() {
-    Y_VERIFY(Owner, "Unexpected OnTabletDead from detached tablet");
-    Y_VERIFY(Owner->CoordinatorStateActor == nullptr, "OnTabletDead called with state actor still attached");
+    Y_ABORT_UNLESS(Owner, "Unexpected OnTabletDead from detached tablet");
+    Y_ABORT_UNLESS(Owner->CoordinatorStateActor == nullptr, "OnTabletDead called with state actor still attached");
     PreserveState();
     Owner = nullptr;
 
@@ -45,7 +45,7 @@ void TCoordinatorStateActor::OnTabletDead() {
 }
 
 void TCoordinatorStateActor::PreserveState() {
-    Y_VERIFY(Owner);
+    Y_ABORT_UNLESS(Owner);
     LastSentStep = Owner->VolatileState.LastSentStep;
     LastAcquiredStep = Owner->VolatileState.LastAcquired;
     LastConfirmedStep = Owner->VolatileState.LastConfirmedStep;
@@ -75,7 +75,7 @@ void TCoordinatorStateActor::PreserveState() {
             }
         }
         bool ok = state->SerializeToString(&SerializedState);
-        Y_VERIFY(ok);
+        Y_ABORT_UNLESS(ok);
     }
 
 }
@@ -161,7 +161,7 @@ void TTxCoordinator::ConfirmStateActorPersistent() {
 }
 
 void TTxCoordinator::DetachStateActor() {
-    Y_VERIFY(CoordinatorStateActor);
+    Y_ABORT_UNLESS(CoordinatorStateActor);
     CoordinatorStateActor = nullptr;
 }
 

@@ -50,7 +50,7 @@ public:
     virtual std::shared_ptr<arrow::RecordBatch> ExtractBatch() override;
     ui64 GetSchemaVersion() const override;
     ui64 GetSize() const override {
-        Y_VERIFY(OriginalDataSize);
+        Y_ABORT_UNLESS(OriginalDataSize);
         return *OriginalDataSize;
     }
 
@@ -72,7 +72,7 @@ public:
     virtual std::shared_ptr<arrow::RecordBatch> ExtractBatch() override;
     ui64 GetSchemaVersion() const override;
     ui64 GetSize() const override {
-        Y_VERIFY(OriginalDataSize);
+        Y_ABORT_UNLESS(OriginalDataSize);
         return *OriginalDataSize;
     }
 

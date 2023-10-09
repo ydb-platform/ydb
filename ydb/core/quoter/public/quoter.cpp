@@ -8,7 +8,7 @@ NActors::TActorId MakeQuoterServiceID() {
 }
 
 ui64 TEvQuota::TResourceLeaf::MakeTaggedRateRes(ui32 tag, ui32 rate) {
-    Y_VERIFY(rate <= 0x3FFFFFFF);
+    Y_ABORT_UNLESS(rate <= 0x3FFFFFFF);
     return (1ULL << 62) | (static_cast<ui64>(tag) << 30) | (static_cast<ui64>(rate) & 0x3FFFFFFF);
 }
 

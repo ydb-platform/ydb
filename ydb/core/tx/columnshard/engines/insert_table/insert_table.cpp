@@ -16,12 +16,12 @@ bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
 
 TInsertionSummary::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId,
                                              const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists) {
-    Y_VERIFY(!writeIds.empty());
+    Y_ABORT_UNLESS(!writeIds.empty());
 
     TInsertionSummary::TCounters counters;
     for (auto writeId : writeIds) {
         std::optional<TInsertedData> data = Summary.ExtractInserted(writeId);
-        Y_VERIFY(data, "Commit %" PRIu64 ":%" PRIu64 " : writeId %" PRIu64 " not found", planStep, txId, (ui64)writeId);
+        Y_ABORT_UNLESS(data, "Commit %" PRIu64 ":%" PRIu64 " : writeId %" PRIu64 " not found", planStep, txId, (ui64)writeId);
 
         counters.Rows += data->GetMeta().GetNumRows();
         counters.RawBytes += data->GetMeta().GetRawBytes();
@@ -47,7 +47,7 @@ TInsertionSummary::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 plan
 }
 
 void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds) {
-    Y_VERIFY(!writeIds.empty());
+    Y_ABORT_UNLESS(!writeIds.empty());
 
     for (auto writeId : writeIds) {
         // There could be inconsistency with txs and writes in case of bugs. So we could find no record for writeId.
@@ -99,7 +99,7 @@ void TInsertTable::EraseAborted(IDbWrapper& dbTable, const TInsertedData& data) 
 }
 
 bool TInsertTable::Load(IDbWrapper& dbTable, const TInstant loadTime) {
-    Y_VERIFY(!Loaded);
+    Y_ABORT_UNLESS(!Loaded);
     Loaded = true;
     return dbTable.Load(*this, loadTime);
 }

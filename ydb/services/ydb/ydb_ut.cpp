@@ -85,7 +85,7 @@ Ydb::Table::DescribeTableResult DescribeTable(std::shared_ptr<grpc::Channel> cha
     UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
 
     Ydb::Table::DescribeTableResult result;
-    Y_VERIFY(deferred.result().UnpackTo(&result));
+    Y_ABORT_UNLESS(deferred.result().UnpackTo(&result));
     return result;
 }
 
@@ -4856,7 +4856,7 @@ Ydb::Table::ExecuteQueryResult ExecYql(std::shared_ptr<grpc::Channel> channel, c
     UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
 
     Ydb::Table::ExecuteQueryResult result;
-    Y_VERIFY(deferred.result().UnpackTo(&result));
+    Y_ABORT_UNLESS(deferred.result().UnpackTo(&result));
     return result;
 }
 

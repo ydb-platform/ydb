@@ -42,8 +42,8 @@ void TFFColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBro
 
 void TCommittedColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     auto blobs = ExtractBlobsData();
-    Y_VERIFY(NullBlocks.size() == 0);
-    Y_VERIFY(blobs.size() == 1);
+    Y_ABORT_UNLESS(NullBlocks.size() == 0);
+    Y_ABORT_UNLESS(blobs.size() == 1);
     NConveyor::TScanServiceOperator::SendTaskToExecute(std::make_shared<TCommittedAssembler>(ScanActorId, blobs.begin()->second,
         ReadMetadata, SourceIdx, CommittedBlob));
 }

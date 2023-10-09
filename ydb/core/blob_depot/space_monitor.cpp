@@ -14,9 +14,9 @@ namespace NKikimr::NBlobDepot {
     void TSpaceMonitor::Handle(TEvBlobStorage::TEvStatusResult::TPtr ev) {
         const ui32 groupId = ev->Cookie;
         const auto it = Groups.find(groupId);
-        Y_VERIFY(it != Groups.end());
+        Y_ABORT_UNLESS(it != Groups.end());
         TGroupRecord& group = it->second;
-        Y_VERIFY(group.StatusRequestInFlight);
+        Y_ABORT_UNLESS(group.StatusRequestInFlight);
         group.StatusRequestInFlight = false;
         auto& msg = *ev->Get();
         if (msg.Status == NKikimrProto::OK) {
@@ -41,7 +41,7 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        Y_VERIFY(yellowMove || yellowStop);
+        Y_ABORT_UNLESS(yellowMove || yellowStop);
         STLOG(PRI_INFO, BLOB_DEPOT, BDT28, "asking to reassign channels", (Id, Self->GetLogId()),
             (YellowMove, FormatList(yellowMove)),
             (YellowStop, FormatList(yellowStop)));

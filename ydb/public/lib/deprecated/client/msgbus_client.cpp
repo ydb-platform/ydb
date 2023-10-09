@@ -129,7 +129,7 @@ void TMsgBusClient::Shutdown() {
 }
 
 NBus::EMessageStatus TMsgBusClient::SyncCall(TAutoPtr<NBus::TBusMessage> msg, TAutoPtr<NBus::TBusMessage> &reply) {
-    Y_VERIFY(!msg->Data);
+    Y_ABORT_UNLESS(!msg->Data);
     TAutoPtr<TSyncMessageCookie> cookie(new TSyncMessageCookie());
     msg->Data = cookie.Get();
 

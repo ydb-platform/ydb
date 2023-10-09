@@ -113,8 +113,8 @@ void TSessionPool::ReplySessionToUser(
     TKqpSessionCommon* session,
     std::unique_ptr<IGetSessionCtx> ctx)
 {
-    Y_VERIFY(session->GetState() == TKqpSessionCommon::S_IDLE);
-    Y_VERIFY(!session->GetTimeInterval());
+    Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);
+    Y_ABORT_UNLESS(!session->GetTimeInterval());
     session->MarkActive();
     session->SetNeedUpdateActiveCounter(true);
     ctx->ReplySessionToUser(session);
@@ -211,7 +211,7 @@ bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active) {
                 impl));
 
             if (active) {
-                Y_VERIFY(ActiveSessions_);
+                Y_ABORT_UNLESS(ActiveSessions_);
                 ActiveSessions_--;
                 impl->SetNeedUpdateActiveCounter(false);
             }
@@ -228,7 +228,7 @@ bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active) {
 
 void TSessionPool::DecrementActiveCounter() {
     std::lock_guard guard(Mtx_);
-    Y_VERIFY(ActiveSessions_);
+    Y_ABORT_UNLESS(ActiveSessions_);
     ActiveSessions_--;
     UpdateStats();
 }
@@ -298,14 +298,14 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakC
 
             for (auto& sessionImpl : sessionsToTouch) {
                 if (sessionImpl) {
-                    Y_VERIFY(sessionImpl->GetState() == TKqpSessionCommon::S_IDLE);
+                    Y_ABORT_UNLESS(sessionImpl->GetState() == TKqpSessionCommon::S_IDLE);
                     cmd(sessionImpl.release());
                 }
             }
 
             for (auto& sessionImpl : sessionsToDelete) {
                 if (sessionImpl) {
-                    Y_VERIFY(sessionImpl->GetState() == TKqpSessionCommon::S_IDLE);
+                    Y_ABORT_UNLESS(sessionImpl->GetState() == TKqpSessionCommon::S_IDLE);
                     CloseAndDeleteSession(std::move(sessionImpl), strongClient);
                 }
             }

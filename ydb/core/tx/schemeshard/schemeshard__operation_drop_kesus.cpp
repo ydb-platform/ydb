@@ -36,7 +36,7 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxDropKesus);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropKesus);
 
         TPathId pathId = txState->TargetPathId;
         auto path = context.SS->PathsById.at(pathId);
@@ -45,7 +45,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        Y_VERIFY(!path->Dropped());
+        Y_ABORT_UNLESS(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
@@ -89,8 +89,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropKesus);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropKesus);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -185,7 +185,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TKesusInfo::TPtr kesus = context.SS->KesusInfos.at(path.Base()->PathId);
-        Y_VERIFY(kesus);
+        Y_ABORT_UNLESS(kesus);
 
         {
             auto shardIdx = kesus->KesusShardIdx;
@@ -237,7 +237,7 @@ ISubOperation::TPtr CreateDropKesus(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr CreateDropKesus(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropKesus>(id, state);
 }
 

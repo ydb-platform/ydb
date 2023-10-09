@@ -20,7 +20,7 @@ namespace NKikimr::NTestShard {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             TString settings;
             const bool success = Cmd.SerializeToString(&settings);
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
 
             NIceDb::TNiceDb db(txc.DB);
             db.Table<Schema::State>().Key(Schema::State::Key::Default).Update(

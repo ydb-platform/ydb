@@ -500,7 +500,7 @@ private:
 void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     ui64 rpcBufferSize = f.GetAppConfig()->GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
     auto* req = dynamic_cast<TEvStreamExecuteScanQueryRequest*>(p.release());
-    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
     f.RegisterActor(new TStreamExecuteScanQueryRPC(req, rpcBufferSize));
 }
 

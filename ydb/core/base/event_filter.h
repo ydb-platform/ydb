@@ -30,12 +30,12 @@ namespace NKikimr {
         }
 
         ui64 GetPathItemId() const {
-            Y_VERIFY(GetSchemeshardId() != 0);
+            Y_ABORT_UNLESS(GetSchemeshardId() != 0);
             return ScopeId.second;
         }
 
         ui64 GetDomainId() const {
-            Y_VERIFY(GetSchemeshardId() == 0);
+            Y_ABORT_UNLESS(GetSchemeshardId() == 0);
             return ScopeId.second;
         }
 

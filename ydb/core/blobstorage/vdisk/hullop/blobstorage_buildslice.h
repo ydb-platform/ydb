@@ -136,9 +136,9 @@ namespace NKikimr {
             str << "}";
             return str.Str();
         };
-        Y_VERIFY(checkOrder(addIt), "addIt# %s", dump(addIt).data());
-        Y_VERIFY(checkOrder(delIt), "delIt# %s", dump(delIt).data());
-        Y_VERIFY(checkOrder(sliceIt), "sliceIt# %s", dump(sliceIt).data());
+        Y_ABORT_UNLESS(checkOrder(addIt), "addIt# %s", dump(addIt).data());
+        Y_ABORT_UNLESS(checkOrder(delIt), "delIt# %s", dump(delIt).data());
+        Y_ABORT_UNLESS(checkOrder(sliceIt), "sliceIt# %s", dump(sliceIt).data());
 
 #ifdef HULL_COMPACT_APPLY
         TStringStream debugOutput;
@@ -193,7 +193,7 @@ namespace NKikimr {
                 debugOutput << "  BOTH        sliceIt: " << sliceIt.Get().ToString() << " addIt: "
                             << addIt.Get().ToString() << "\n";
 #endif
-                Y_VERIFY(delIt.Valid() && sliceIt.Get().IsSameSst(delIt.Get()));
+                Y_ABORT_UNLESS(delIt.Valid() && sliceIt.Get().IsSameSst(delIt.Get()));
                 delIt.Next();
                 sliceIt.Next();
                 TLevelSstPtr item = addIt.Get();
@@ -231,9 +231,9 @@ namespace NKikimr {
             addIt.Next();
         }
 
-        Y_VERIFY(!sliceIt.Valid());
-        Y_VERIFY(!addIt.Valid());
-        Y_VERIFY(!delIt.Valid()); // ensure we didn't miss something
+        Y_ABORT_UNLESS(!sliceIt.Valid());
+        Y_ABORT_UNLESS(!addIt.Valid());
+        Y_ABORT_UNLESS(!delIt.Valid()); // ensure we didn't miss something
 
 #ifdef HULL_COMPACT_APPLY
         debugOutput << " RESULT\n" << res->ToString("  ");
@@ -244,7 +244,7 @@ namespace NKikimr {
 
         TSliceSstIterator resIt(res.Get(), res->Level0CurSstsNum());
         resIt.SeekToFirst();
-        Y_VERIFY(checkOrder(resIt), "resIt# %s", dump(resIt).data());
+        Y_ABORT_UNLESS(checkOrder(resIt), "resIt# %s", dump(resIt).data());
 
 
         // additional check
@@ -292,12 +292,12 @@ namespace NKikimr {
 
         auto addHugeBlob = [&hugeBlobs] (const TDiskPart &part) {
             bool inserted = hugeBlobs.insert(part).second;
-            Y_VERIFY(inserted);
+            Y_ABORT_UNLESS(inserted);
         };
 
         auto removeHugeBlob = [&hugeBlobs] (const TDiskPart &part) {
             auto num = hugeBlobs.erase(part);
-            Y_VERIFY(num == 1, "num=%u", unsigned(num));
+            Y_ABORT_UNLESS(num == 1, "num=%u", unsigned(num));
         };
 
 
@@ -351,7 +351,7 @@ namespace NKikimr {
         // remove huge blob from the set
         auto removeHugeBlob = [&hugeBlobs] (const TDiskPart &part) {
             auto num = hugeBlobs.erase(part);
-            Y_VERIFY(num == 1, "num=%u", unsigned(num));
+            Y_ABORT_UNLESS(num == 1, "num=%u", unsigned(num));
         };
 
         // leave only deleted huge blobs in hugeBlobs

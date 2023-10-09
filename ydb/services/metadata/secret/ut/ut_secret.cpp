@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(Secret) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
                 default:
-                    Y_VERIFY(false);
+                    Y_ABORT_UNLESS(false);
             }
         }
 
@@ -100,12 +100,12 @@ Y_UNIT_TEST_SUITE(Secret) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
-            Y_VERIFY(IsFound());
+            Y_ABORT_UNLESS(IsFound());
         }
 
         void CheckFound(NMetadata::NProvider::TEvRefreshSubscriberData* event) {
             auto snapshot = event->GetSnapshotAs<NMetadata::NSecret::TSnapshot>();
-            Y_VERIFY(!!snapshot);
+            Y_ABORT_UNLESS(!!snapshot);
             if (ExpectedSecretsCount) {
                 if (snapshot->GetSecrets().size() != ExpectedSecretsCount) {
                     Cerr << "snapshot->GetSecrets().size() incorrect: " << snapshot->SerializeToString() << Endl;
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(Secret) {
         void Bootstrap() {
             auto manager = std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
             Become(&TThis::StateInit);
-            Y_VERIFY(NMetadata::NProvider::TServiceOperator::IsEnabled());
+            Y_ABORT_UNLESS(NMetadata::NProvider::TServiceOperator::IsEnabled());
             Sender<NMetadata::NProvider::TEvSubscribeExternal>(manager).SendTo(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()));
             Start = Now();
         }
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(Secret) {
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
                     runtime.SimulateSleep(TDuration::Seconds(1));
                 }
-                Y_VERIFY(emulator->IsFound());
+                Y_ABORT_UNLESS(emulator->IsFound());
             }
 
             lHelper.StartSchemaRequest("ALTER OBJECT secret1 (TYPE SECRET) SET value = `abcde`");
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(Secret) {
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
                     runtime.SimulateSleep(TDuration::Seconds(1));
                 }
-                Y_VERIFY(emulator->IsFound());
+                Y_ABORT_UNLESS(emulator->IsFound());
             }
 
             lHelper.StartSchemaRequest("DROP OBJECT `secret1:test@test1` (TYPE SECRET_ACCESS)");
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(Secret) {
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
                     runtime.SimulateSleep(TDuration::Seconds(1));
                 }
-                Y_VERIFY(emulator->IsFound());
+                Y_ABORT_UNLESS(emulator->IsFound());
             }
         }
     }

@@ -27,7 +27,7 @@ public:
         {}
 
         bool operator ==(const TFieldProtoValue& value) const {
-            Y_VERIFY(Field == value.Field);
+            Y_ABORT_UNLESS(Field == value.Field);
             const Reflection& reflection = *Element.GetReflection();
             if (!reflection.HasField(Element, Field) || !reflection.HasField(value.Element, value.Field)) {
                 return false;
@@ -57,7 +57,7 @@ public:
         }
 
         bool operator <(const TFieldProtoValue& value) const {
-            Y_VERIFY(Field == value.Field);
+            Y_ABORT_UNLESS(Field == value.Field);
             const Reflection& reflection = *Element.GetReflection();
             if (!reflection.HasField(Element, Field) || !reflection.HasField(value.Element, value.Field)) {
                 return false;
@@ -87,7 +87,7 @@ public:
         }
 
         TFieldProtoValue& operator =(const TFieldProtoValue& value) {
-            Y_VERIFY(Field == value.Field);
+            Y_ABORT_UNLESS(Field == value.Field);
             const Reflection& reflection = *Element.GetReflection();
             switch(Field->cpp_type()) {
             case FieldDescriptor::CPPTYPE_INT32:
@@ -178,7 +178,7 @@ public:
         }
 
         bool operator ==(const TPartProtoKey& other) const {
-            Y_VERIFY(Fields == other.Fields);
+            Y_ABORT_UNLESS(Fields == other.Fields);
             for (const FieldDescriptor* field : Fields) {
                 if (TFieldProtoValue(Element, field) == TFieldProtoValue(other.Element, field)) {
                     continue;
@@ -189,7 +189,7 @@ public:
         }
 
         bool operator <(const TPartProtoKey& other) const {
-            Y_VERIFY(Fields == other.Fields);
+            Y_ABORT_UNLESS(Fields == other.Fields);
             for (const FieldDescriptor* field : Fields) {
                 if (TFieldProtoValue(Element, field) < TFieldProtoValue(other.Element, field)) {
                     return true;
@@ -203,7 +203,7 @@ public:
         }
 
         TPartProtoKey& operator =(const TPartProtoKey& other) {
-            Y_VERIFY(Fields == other.Fields);
+            Y_ABORT_UNLESS(Fields == other.Fields);
             for (const FieldDescriptor* field : Fields) {
                 TFieldProtoValue(Element, field) = TFieldProtoValue(other.Element, field);
             }
@@ -211,7 +211,7 @@ public:
         }
 
         TPartProtoKey& operator =(const TPartProtoKeyEnum& other) {
-            Y_VERIFY(Fields.size() == other.Fields.size());
+            Y_ABORT_UNLESS(Fields.size() == other.Fields.size());
             for (size_t i = 0; i < Fields.size(); ++i) {
                 TFieldProtoValue(Element, Fields[i]) = other.Values[i];
             }
@@ -292,7 +292,7 @@ public:
             }
         }
         // TODO: replace with error reporting
-        //Y_VERIFY(requestedFields.size() == foundFields.size());
+        //Y_ABORT_UNLESS(requestedFields.size() == foundFields.size());
         return foundFields;
     }
 };

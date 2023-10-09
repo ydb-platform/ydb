@@ -274,9 +274,9 @@ public:
         std::set<ui32> nodes = runtime.GetNodes();
         for (const auto& actorId : Info->GetDynamicInfo().ServiceIdForOrderNumber) {
             const ui32 num = nodes.erase(actorId.NodeId());
-            Y_VERIFY(num);
+            Y_ABORT_UNLESS(num);
         }
-        Y_VERIFY(nodes.size() == 1);
+        Y_ABORT_UNLESS(nodes.size() == 1);
         const ui32 targetNode = *nodes.begin();
 
         // pick random target pdisk
@@ -491,9 +491,9 @@ public:
 
         // discover previously written data
         if (auto ev = Query<TEvBlobStorage::TEvDiscover>(TabletId, 0, true, false, TInstant::Max(), 0, true)) {
-            Y_VERIFY(ev->Get()->Status == (Committed.empty() ? NKikimrProto::NODATA : NKikimrProto::OK));
+            Y_ABORT_UNLESS(ev->Get()->Status == (Committed.empty() ? NKikimrProto::NODATA : NKikimrProto::OK));
             if (ev->Get()->Status == NKikimrProto::OK) {
-                Y_VERIFY(ev->Get()->Buffer == Committed.rbegin()->second);
+                Y_ABORT_UNLESS(ev->Get()->Buffer == Committed.rbegin()->second);
             }
         }
 
@@ -502,7 +502,7 @@ public:
         const TLogoBlobID to(TabletId, generation - 1, Max<ui32>(), 0, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
         std::deque<TLogoBlobID> readQueue;
         if (auto ev = Query<TEvBlobStorage::TEvRange>(TabletId, from, to, true, TInstant::Max(), true)) {
-            Y_VERIFY(ev->Get()->Status == NKikimrProto::OK);
+            Y_ABORT_UNLESS(ev->Get()->Status == NKikimrProto::OK);
             for (const auto& response : ev->Get()->Responses) {
                 readQueue.push_back(response.Id);
             }
@@ -526,13 +526,13 @@ public:
             } else if (auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvGetResult>(&TActivityActorImpl::ProcessUnexpectedEvent,
                     nextSendTimestamp)) {
                 LOG_DEBUG_S(GetActorContext(), NActorsServices::TEST, Prefix << " received TEvGetResult# " << ev->Get()->Print(false));
-                Y_VERIFY(ev->Get()->Status == NKikimrProto::OK);
+                Y_ABORT_UNLESS(ev->Get()->Status == NKikimrProto::OK);
                 for (ui32 i = 0; i < ev->Get()->ResponseSz; ++i) {
                     const auto& response = ev->Get()->Responses[i];
-                    Y_VERIFY(response.Status == NKikimrProto::OK);
+                    Y_ABORT_UNLESS(response.Status == NKikimrProto::OK);
                     const auto it = Committed.find(response.Id);
-                    Y_VERIFY(it != Committed.end());
-                    Y_VERIFY(it->second == response.Buffer.ConvertToString());
+                    Y_ABORT_UNLESS(it != Committed.end());
+                    Y_ABORT_UNLESS(it->second == response.Buffer.ConvertToString());
                     Committed.erase(it);
                 }
                 --readsInFlight;
@@ -545,7 +545,7 @@ public:
         if (generation != 1) {
             if (auto ev = Query<TEvBlobStorage::TEvCollectGarbage>(TabletId, generation, 0, 0, true, generation - 1,
                     Max<ui32>(), nullptr, nullptr, TInstant::Max(), false)) {
-                Y_VERIFY(ev->Get()->Status == NKikimrProto::OK);
+                Y_ABORT_UNLESS(ev->Get()->Status == NKikimrProto::OK);
             }
         }
 
@@ -572,7 +572,7 @@ public:
                     << " writesInFlight.size# " << writesInFlight.size());
                 Y_VERIFY_S(ev->Get()->Status == NKikimrProto::OK, "TEvPutResult# " << ev->Get()->Print(false));
                 const auto it = writesInFlight.find(ev->Get()->Id);
-                Y_VERIFY(it != writesInFlight.end());
+                Y_ABORT_UNLESS(it != writesInFlight.end());
                 Committed.insert(writesInFlight.extract(it));
             }
         }

@@ -206,7 +206,7 @@ public:
         , HandleClassGen(std::make_shared<TPutHandleClassGenerator>(cls))
         , BadSteps(std::make_shared<TSet<ui32>>())
     {
-        Y_VERIFY(indexOnly);
+        Y_ABORT_UNLESS(indexOnly);
     }
 };
 
@@ -263,7 +263,7 @@ public:
         , HandleClassGen2(std::make_shared<TPutHandleClassGenerator>(cls))
         , BadSteps(std::make_shared<TSet<ui32>>())
     {
-        Y_VERIFY(indexOnly);
+        Y_ABORT_UNLESS(indexOnly);
     }
 };
 

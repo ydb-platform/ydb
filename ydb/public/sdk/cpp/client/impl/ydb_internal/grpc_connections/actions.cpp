@@ -39,7 +39,7 @@ TDeferredAction::TDeferredAction(const TStringType& operationId,
 }
 
 void TDeferredAction::OnAlarm() {
-    Y_VERIFY(Connection_);
+    Y_ABORT_UNLESS(Connection_);
 
     Ydb::Operations::GetOperationRequest getOperationRequest;
     getOperationRequest.set_id(OperationId_);
@@ -59,7 +59,7 @@ void TDeferredAction::OnAlarm() {
     }
 
 void TDeferredAction::OnError() {
-    Y_VERIFY(Connection_);
+    Y_ABORT_UNLESS(Connection_);
     NGrpc::TGrpcStatus status = {"Deferred timer interrupted", -1, true};
     DbDriverState_->StatCollector.IncDiscoveryFailDueTransportError();
 

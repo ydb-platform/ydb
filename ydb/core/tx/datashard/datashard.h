@@ -463,7 +463,7 @@ struct TEvDataShard {
             const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default)
             : TEvProposeTransaction(txKind, source, txId, txBody, flags)
         {
-            Y_VERIFY(txKind == NKikimrTxDataShard::TX_KIND_SCHEME);
+            Y_ABORT_UNLESS(txKind == NKikimrTxDataShard::TX_KIND_SCHEME);
             Record.SetSchemeShardId(ssId);
             Record.MutableProcessingParams()->CopyFrom(processingParams);
         }
@@ -1304,7 +1304,7 @@ struct TEvDataShard {
             : TxId(txId)
             , Info(info)
         {
-            Y_VERIFY(Info.DataETag);
+            Y_ABORT_UNLESS(Info.DataETag);
         }
 
         TString ToString() const override {
@@ -1351,7 +1351,7 @@ struct TEvDataShard {
             , Record(*RecordHolder)
             , Info(info)
         {
-            Y_VERIFY(Info.DataETag);
+            Y_ABORT_UNLESS(Info.DataETag);
         }
 
         TString ToString() const override {

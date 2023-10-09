@@ -126,7 +126,7 @@ void TThreadPoolExecutor::PostImpl(TFunction&& f) {
 TSerialExecutor::TSerialExecutor(IAsyncExecutor::TPtr executor)
     : Executor(executor)
 {
-    Y_VERIFY(executor);
+    Y_ABORT_UNLESS(executor);
 }
 
 void TSerialExecutor::PostImpl(TVector<TFunction>&& fs) {
@@ -146,7 +146,7 @@ void TSerialExecutor::PostImpl(TFunction&& f) {
 }
 
 void TSerialExecutor::PostNext() {
-    Y_VERIFY(!Busy);
+    Y_ABORT_UNLESS(!Busy);
 
     if (ExecutionQueue.empty()) {
         return;
@@ -187,7 +187,7 @@ TThreadPoolExecutor::TThreadPoolExecutor(std::shared_ptr<IThreadPool> threadPool
 TThreadPoolExecutor::TThreadPoolExecutor(size_t threadsCount)
     : TThreadPoolExecutor(CreateThreadPool(threadsCount))
 {
-    Y_VERIFY(threadsCount > 0);
+    Y_ABORT_UNLESS(threadsCount > 0);
     ThreadsCount = threadsCount;
 }
 

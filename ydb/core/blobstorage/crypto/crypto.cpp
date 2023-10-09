@@ -104,7 +104,7 @@ ui32 THashCalculator::GetKeySizeBytes() const {
 }
 
 void THashCalculator::SetKey(const ui8 *key, ui32 sizeBytes) {
-    Y_VERIFY(sizeBytes);
+    Y_ABORT_UNLESS(sizeBytes);
     ui32 offset = 0;
     while (offset < GetKeySizeBytes()) {
         ui32 size = Min(GetKeySizeBytes() - offset, sizeBytes);
@@ -193,7 +193,7 @@ void TStreamCypher::SetKey(const ui64 &key) {
 
 void TStreamCypher::SetKey(const ui8 *key, ui32 sizeBytes) {
 #if ENABLE_ENCRYPTION
-    Y_VERIFY(sizeBytes);
+    Y_ABORT_UNLESS(sizeBytes);
     ui8 *key8 = (ui8*)&Key;
     ui32 offset = 0;
     while (offset < sizeBytes) {

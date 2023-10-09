@@ -153,14 +153,14 @@ private:
 
 public:
     TRequestMonItem& GetItem(EHandleClass handleClass, ui32 requestBytes) {
-        Y_VERIFY((ui32)handleClass < (ui32)HcCount);
+        Y_ABORT_UNLESS((ui32)handleClass < (ui32)HcCount);
         ui32 sizeClassIdx = 0;
         if (IsReducedHandleClass(handleClass)) {
             sizeClassIdx = ReducedSizeClassFromSizeBytes(requestBytes);
-            Y_VERIFY(sizeClassIdx <= MaxReducedSizeClassBucketIdx);
+            Y_ABORT_UNLESS(sizeClassIdx <= MaxReducedSizeClassBucketIdx);
         } else {
             sizeClassIdx = SizeClassFromSizeBytes(requestBytes);
-            Y_VERIFY(sizeClassIdx <= MaxSizeClassBucketIdx);
+            Y_ABORT_UNLESS(sizeClassIdx <= MaxSizeClassBucketIdx);
         }
         return RequestMon[(ui32)handleClass][sizeClassIdx];
     }

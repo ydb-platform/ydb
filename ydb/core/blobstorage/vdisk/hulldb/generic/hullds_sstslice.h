@@ -84,7 +84,7 @@ namespace NKikimr {
 
         // NOTE: this is the obsolete way of discovering Last Compacted Lsn
         TOptLsn ObsoleteLastCompactedLsn() const {
-            Y_VERIFY(!Empty());
+            Y_ABORT_UNLESS(!Empty());
             return Segs->ObsoleteLastCompactedLsn();
         }
 
@@ -157,7 +157,7 @@ namespace NKikimr {
 
         // NOTE: this is the obsolete way of discovering Last Compacted Lsn
         TOptLsn ObsoleteLastCompactedLsn() const {
-            Y_VERIFY(!Empty());
+            Y_ABORT_UNLESS(!Empty());
             return Segs->ObsoleteLastCompactedLsn();
         }
 
@@ -223,7 +223,7 @@ namespace NKikimr {
             // deserialize chunks to delete
             ChunksToDelete.reserve(pb.DeletedChunksSize());
             for (const auto &x : pb.GetDeletedChunks()) {
-                Y_VERIFY(x);
+                Y_ABORT_UNLESS(x);
                 ChunksToDelete.push_back(x);
             }
 
@@ -242,7 +242,7 @@ namespace NKikimr {
             auto dc = pb.MutableDeletedChunks();
             dc->Reserve(ChunksToDelete.size());
             for (const auto &x : ChunksToDelete) {
-                Y_VERIFY(x);
+                Y_ABORT_UNLESS(x);
                 dc->Add(x);
             }
             // serialize level0
@@ -352,7 +352,7 @@ namespace NKikimr {
             // we include deleted chunks
             for (TChunkIdx chunkIdx : ChunksToDelete) {
                 const bool inserted = chunks.insert(chunkIdx).second;
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
             }
 
             // include bulk formed segments

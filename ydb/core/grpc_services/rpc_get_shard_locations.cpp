@@ -132,7 +132,7 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         const ui64 tabletId = msg->TabletId;
-        Y_VERIFY(tabletId != 0);
+        Y_ABORT_UNLESS(tabletId != 0);
         if (msg->Status != NKikimrProto::OK) {
             ShardNodes[tabletId] = -1;
         } else {
@@ -144,7 +144,7 @@ private:
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
         const ui64 tabletId = ev->Get()->TabletId;
-        Y_VERIFY(tabletId != 0);
+        Y_ABORT_UNLESS(tabletId != 0);
         ShardNodes[tabletId] = -1;
 
         return CheckFinished(ctx);
@@ -157,7 +157,7 @@ private:
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
         const TEvInterconnect::TEvNodesInfo* nodesInfo = ev->Get();
-        Y_VERIFY(!nodesInfo->Nodes.empty());
+        Y_ABORT_UNLESS(!nodesInfo->Nodes.empty());
         for (const auto& ni : nodesInfo->Nodes) {
             NodeInfos[ni.NodeId].Host = ni.Host;
             NodeInfos[ni.NodeId].Port = ni.Port;

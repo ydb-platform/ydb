@@ -18,7 +18,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
             Self->IncCounter(COUNTER_TX_PROGRESS_SHARD_INACTIVE);
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Progress tx at non-ready tablet " << Self->TabletID() << " state " << Self->State);
-            Y_VERIFY(!ActiveOp, "Unexpected ActiveOp at inactive shard %" PRIu64, Self->TabletID());
+            Y_ABORT_UNLESS(!ActiveOp, "Unexpected ActiveOp at inactive shard %" PRIu64, Self->TabletID());
             Self->PlanQueue.Reset(ctx);
             return true;
         }
@@ -58,7 +58,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
             ActiveOp->IncrementInProgress();
         }
 
-        Y_VERIFY(ActiveOp && ActiveOp->IsInProgress());
+        Y_ABORT_UNLESS(ActiveOp && ActiveOp->IsInProgress());
         auto status = Self->Pipeline.RunExecutionPlan(ActiveOp, CompleteList, txc, ctx);
 
         if (Self->Pipeline.CanRunAnotherOp())
@@ -114,7 +114,7 @@ void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
                 "TTxProgressTransaction::Complete at " << Self->TabletID());
 
     if (ActiveOp) {
-        Y_VERIFY(!ActiveOp->GetExecutionPlan().empty());
+        Y_ABORT_UNLESS(!ActiveOp->GetExecutionPlan().empty());
         if (!CompleteList.empty()) {
             auto commitTime = AppData()->TimeProvider->Now() - CommitStart;
             ActiveOp->SetCommitTime(CompleteList.front(), commitTime);

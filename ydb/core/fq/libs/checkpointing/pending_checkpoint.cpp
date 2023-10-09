@@ -48,7 +48,7 @@ size_t TPendingRestoreCheckpoint::NotYetAcknowledgedCount() const {
 
 void TPendingInitCoordinator::OnNewCheckpointCoordinatorAck() {
     ++NewCheckpointCoordinatorAcksGot;
-    Y_VERIFY(NewCheckpointCoordinatorAcksGot <= ActorsCount);
+    Y_ABORT_UNLESS(NewCheckpointCoordinatorAcksGot <= ActorsCount);
 }
 
 bool TPendingInitCoordinator::AllNewCheckpointCoordinatorAcksProcessed() const {

@@ -33,7 +33,7 @@ TString ParsePeer(TString peerName) {
     TString res(peerName);
     if (res.StartsWith("ipv4:[") || res.StartsWith("ipv6:[")) {
         size_t pos = res.find(']');
-        Y_VERIFY(pos != TString::npos);
+        Y_ABORT_UNLESS(pos != TString::npos);
         res = res.substr(6, pos - 6);
     } else if (res.StartsWith("ipv4:")) {
         size_t pos = res.rfind(':');

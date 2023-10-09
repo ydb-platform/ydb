@@ -122,7 +122,7 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
                          << " paths in candidate queue"
                          << ", at schemeshard: "<< Self->TabletID());
 
-        Y_VERIFY(Self->CleanDroppedPathsInFly);
+        Y_ABORT_UNLESS(Self->CleanDroppedPathsInFly);
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -149,7 +149,7 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_VERIFY(Self->CleanDroppedPathsInFly);
+        Y_ABORT_UNLESS(Self->CleanDroppedPathsInFly);
 
         if (RemovedCount || SkippedCount) {
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -180,7 +180,7 @@ void TSchemeShard::ScheduleCleanDroppedPaths() {
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr&, const TActorContext& ctx) {
-    Y_VERIFY(CleanDroppedPathsInFly);
+    Y_ABORT_UNLESS(CleanDroppedPathsInFly);
     Execute(CreateTxCleanDroppedPaths(), ctx);
 }
 
@@ -204,7 +204,7 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
                          << " paths in candidate queue"
                          << ", at schemeshard: "<< Self->TabletID());
 
-        Y_VERIFY(Self->CleanDroppedSubDomainsInFly);
+        Y_ABORT_UNLESS(Self->CleanDroppedSubDomainsInFly);
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -234,7 +234,7 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_VERIFY(Self->CleanDroppedSubDomainsInFly);
+        Y_ABORT_UNLESS(Self->CleanDroppedSubDomainsInFly);
 
         if (RemovedCount || SkippedCount) {
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -265,7 +265,7 @@ void TSchemeShard::ScheduleCleanDroppedSubDomains() {
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvCleanDroppedSubDomains::TPtr&, const TActorContext& ctx) {
-    Y_VERIFY(CleanDroppedSubDomainsInFly);
+    Y_ABORT_UNLESS(CleanDroppedSubDomainsInFly);
     Execute(CreateTxCleanDroppedSubDomains(), ctx);
 }
 

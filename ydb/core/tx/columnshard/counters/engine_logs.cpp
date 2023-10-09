@@ -20,7 +20,7 @@ TEngineLogsCounters::TEngineLogsCounters()
         BlobSizeDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>("EngineLogs", "BlobSizeDistribution", i.second, borders);
     }
     for (auto&& i : BlobSizeDistribution) {
-        Y_VERIFY(i);
+        Y_ABORT_UNLESS(i);
     }
     OverloadGranules = TBase::GetValue("Granules/Overload");
     CompactOverloadGranulesSelection = TBase::GetDeriviative("Granules/Selection/Overload/Count");

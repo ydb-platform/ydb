@@ -91,7 +91,7 @@ private:
     IActor::TReceiveFunc DerivedActorFunc;
 
     STFUNC(ProtocolDispatcher) {
-        Y_VERIFY(ev.Get() != nullptr);
+        Y_ABORT_UNLESS(ev.Get() != nullptr);
 
         auto funcIter = ProtocolFunctions.find(ev->Type);
 

@@ -89,7 +89,7 @@ void TDbLabeledCounters::FromProto(NKikimr::NSysView::TDbServiceCounters& counte
     for (auto& proto : *counters.Proto().MutableLabeledCounters()) {
         TVector<TString> groups;
         TVector<TString> groupNames = {"topic", "important", "consumer"};
-        Y_VERIFY(proto.GetAggregatedPerTablets().GetDelimiter() == "|");
+        Y_ABORT_UNLESS(proto.GetAggregatedPerTablets().GetDelimiter() == "|");
         StringSplitter(proto.GetAggregatedPerTablets().GetGroup()).Split('|').Collect(&groups);
         auto countersGroup = Group;
         // FIXME: a little hack here: we have consumer - important - topic group names in proto

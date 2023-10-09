@@ -114,8 +114,8 @@ namespace NKikimr {
         if (EnablePutBatching && partSize < MinREALHugeBlobInBytes && partSize <= MaxBatchedPutSize) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
-            Y_VERIFY((ui64)handleClass <= PutHandleClassCount);
-            Y_VERIFY(tactic <= PutTacticCount);
+            Y_ABORT_UNLESS((ui64)handleClass <= PutHandleClassCount);
+            Y_ABORT_UNLESS(tactic <= PutTacticCount);
 
             TBatchedQueue<TEvBlobStorage::TEvPut::TPtr> &batchedPuts = BatchedPuts[handleClass][tactic];
             if (batchedPuts.Queue.empty()) {
@@ -301,7 +301,7 @@ namespace NKikimr {
         StopPutBatchingEvent = ev;
         for (auto &bucket : PutBatchedBucketQueue) {
             auto &batchedPuts = BatchedPuts[bucket.HandleClass][bucket.Tactic];
-            Y_VERIFY(!batchedPuts.Queue.empty());
+            Y_ABORT_UNLESS(!batchedPuts.Queue.empty());
             *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size();
             ++*Mon->PutBatchesSent;
             ProcessBatchedPutRequests(batchedPuts, bucket.HandleClass, bucket.Tactic);

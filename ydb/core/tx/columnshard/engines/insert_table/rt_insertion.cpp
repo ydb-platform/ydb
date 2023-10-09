@@ -7,32 +7,32 @@ void TInsertionSummary::OnNewCommitted(const ui64 dataSize, const bool load) noe
     Counters.Committed.Add(dataSize, load);
     ++StatsCommitted.Rows;
     StatsCommitted.Bytes += dataSize;
-    Y_VERIFY(Counters.Committed.GetDataSize() == (i64)StatsCommitted.Bytes);
+    Y_ABORT_UNLESS(Counters.Committed.GetDataSize() == (i64)StatsCommitted.Bytes);
 }
 
 void TInsertionSummary::OnEraseCommitted(TPathInfo& /*pathInfo*/, const ui64 dataSize) noexcept {
     Counters.Committed.Erase(dataSize);
-    Y_VERIFY(--StatsCommitted.Rows >= 0);
-    Y_VERIFY(StatsCommitted.Bytes >= dataSize);
+    Y_ABORT_UNLESS(--StatsCommitted.Rows >= 0);
+    Y_ABORT_UNLESS(StatsCommitted.Bytes >= dataSize);
     StatsCommitted.Bytes -= dataSize;
-    Y_VERIFY(Counters.Committed.GetDataSize() == (i64)StatsCommitted.Bytes);
+    Y_ABORT_UNLESS(Counters.Committed.GetDataSize() == (i64)StatsCommitted.Bytes);
 }
 
 void TInsertionSummary::RemovePriority(const TPathInfo& pathInfo) noexcept {
     const auto priority = pathInfo.GetIndexationPriority();
     auto it = Priorities.find(priority);
     if (it == Priorities.end()) {
-        Y_VERIFY(!priority);
+        Y_ABORT_UNLESS(!priority);
         return;
     }
-    Y_VERIFY(it->second.erase(&pathInfo) || !priority);
+    Y_ABORT_UNLESS(it->second.erase(&pathInfo) || !priority);
     if (it->second.empty()) {
         Priorities.erase(it);
     }
 }
 
 void TInsertionSummary::AddPriority(const TPathInfo& pathInfo) noexcept {
-    Y_VERIFY(Priorities[pathInfo.GetIndexationPriority()].emplace(&pathInfo).second);
+    Y_ABORT_UNLESS(Priorities[pathInfo.GetIndexationPriority()].emplace(&pathInfo).second);
 }
 
 NKikimr::NOlap::TPathInfo& TInsertionSummary::GetPathInfo(const ui64 pathId) {
@@ -88,8 +88,8 @@ void TInsertionSummary::OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, 
 void TInsertionSummary::OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize) noexcept {
     Counters.Inserted.Erase(dataSize);
     pathInfo.AddInsertedSize(-1 * (i64)dataSize, TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
-    Y_VERIFY(--StatsPrepared.Rows >= 0);
-    Y_VERIFY(StatsPrepared.Bytes >= dataSize);
+    Y_ABORT_UNLESS(--StatsPrepared.Rows >= 0);
+    Y_ABORT_UNLESS(StatsPrepared.Bytes >= dataSize);
     StatsPrepared.Bytes -= dataSize;
     AFL_VERIFY(Counters.Inserted.GetDataSize() == (i64)StatsPrepared.Bytes);
 }
@@ -144,7 +144,7 @@ const NKikimr::NOlap::TInsertedData* TInsertionSummary::AddAborted(TInsertedData
     const TWriteId writeId((TWriteId)data.WriteTxId);
     Counters.Aborted.Add(data.BlobSize(), load);
     auto insertInfo = Aborted.emplace(writeId, std::move(data));
-    Y_VERIFY(insertInfo.second);
+    Y_ABORT_UNLESS(insertInfo.second);
     return &insertInfo.first->second;
 }
 

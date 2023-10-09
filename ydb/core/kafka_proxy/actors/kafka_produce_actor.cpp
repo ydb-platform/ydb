@@ -286,7 +286,7 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
 
         TString str;
         bool res = proto.SerializeToString(&str);
-        Y_VERIFY(res);
+        Y_ABORT_UNLESS(res);
 
         auto w = partitionRequest->AddCmdWrite();
 

@@ -94,10 +94,10 @@ namespace NTable {
             , MinRowVersion(params.MinRowVersion)
             , MaxRowVersion(params.MaxRowVersion)
         {
-            Y_VERIFY(Scheme->Groups.size() == GroupsCount,
+            Y_ABORT_UNLESS(Scheme->Groups.size() == GroupsCount,
                 "Part has scheme with %" PRISZT " groups, but %" PRISZT " indexes",
                 Scheme->Groups.size(), GroupsCount);
-            Y_VERIFY(!HistoricGroupsCount || HistoricGroupsCount == GroupsCount,
+            Y_ABORT_UNLESS(!HistoricGroupsCount || HistoricGroupsCount == GroupsCount,
                 "Part has %" PRISZT " indexes, but %" PRISZT " historic indexes",
                 GroupsCount, HistoricGroupsCount);
         }

@@ -50,7 +50,7 @@ namespace NKikimr {
         void Handle(TEvQueryReplToken::TPtr& ev) {
             const ui32 pdiskId = ev->Get()->PDiskId;
             const bool inserted = SenderToPDisk.emplace(ev->Sender, pdiskId).second;
-            Y_VERIFY(inserted, "duplicate request for the replication token");
+            Y_ABORT_UNLESS(inserted, "duplicate request for the replication token");
             auto& q = VDiskQ[pdiskId];
             q.push_back(ev->Sender);
             if (q.size() == 1) {
@@ -62,12 +62,12 @@ namespace NKikimr {
             // first, find the queue for the requested PDisk; it MUST exist as the ReleaseToken operation is only possible
             // after issuing the QueryToken message
             auto it = SenderToPDisk.find(ev->Sender);
-            Y_VERIFY(it != SenderToPDisk.end());
+            Y_ABORT_UNLESS(it != SenderToPDisk.end());
             const ui32 pdiskId = it->second;
             auto qIt = VDiskQ.find(pdiskId);
-            Y_VERIFY(qIt != VDiskQ.end());
+            Y_ABORT_UNLESS(qIt != VDiskQ.end());
             auto& q = qIt->second;
-            Y_VERIFY(q);
+            Y_ABORT_UNLESS(q);
             SenderToPDisk.erase(it);
 
             if (q.front() == ev->Sender) {
@@ -82,7 +82,7 @@ namespace NKikimr {
             } else {
                 // just remove pending request from the queue; it has not been granted yet
                 auto it = std::find(q.begin(), q.end(), ev->Sender);
-                Y_VERIFY(it != q.end());
+                Y_ABORT_UNLESS(it != q.end());
                 q.erase(it);
             }
         }
@@ -124,7 +124,7 @@ namespace NKikimr {
         void Handle(TEvUpdateReplMemToken::TPtr& ev) {
             TEvUpdateReplMemToken *msg = ev->Get();
             auto it = MemTokens.find(msg->Token);
-            Y_VERIFY(it != MemTokens.end());
+            Y_ABORT_UNLESS(it != MemTokens.end());
             TMemToken& token = it->second;
             MemFree += token.Bytes - msg->ActualBytes;
             token.Bytes = msg->ActualBytes;
@@ -133,7 +133,7 @@ namespace NKikimr {
 
         void Handle(TEvReleaseReplMemToken::TPtr& ev) {
             auto it = MemTokens.find(ev->Get()->Token);
-            Y_VERIFY(it != MemTokens.end());
+            Y_ABORT_UNLESS(it != MemTokens.end());
             MemFree += it->second.Bytes;
             MemTokens.erase(it);
             ProcessMemQueue();

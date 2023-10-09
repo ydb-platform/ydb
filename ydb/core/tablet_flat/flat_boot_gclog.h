@@ -59,7 +59,7 @@ namespace NBoot {
                 ++Skip, Queue.pop_front();
             }
 
-            Y_VERIFY(Queue || !Pending, "TGCLog boot actor has lost entries");
+            Y_ABORT_UNLESS(Queue || !Pending, "TGCLog boot actor has lost entries");
 
             if (!Queue) {
                 Env->Finish(this);

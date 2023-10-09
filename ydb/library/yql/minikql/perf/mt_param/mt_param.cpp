@@ -57,17 +57,17 @@ int main(int, char**) {
 
                 auto resVal = graph->GetValue();
                 auto val0 = resVal.GetElement(0);
-                Y_VERIFY(TStringBuf(val0.AsStringRef()) == prefix);
-                Y_VERIFY(val0.AsStringValue().RefCount() < 0);
+                Y_ABORT_UNLESS(TStringBuf(val0.AsStringRef()) == prefix);
+                Y_ABORT_UNLESS(val0.AsStringValue().RefCount() < 0);
                 auto val1 = resVal.GetElement(1);
-                Y_VERIFY(TStringBuf(val1.AsStringRef()) == prefix);
-                Y_VERIFY(val1.AsStringValue().RefCount() < 0);
+                Y_ABORT_UNLESS(TStringBuf(val1.AsStringRef()) == prefix);
+                Y_ABORT_UNLESS(val1.AsStringValue().RefCount() < 0);
                 auto val2 = resVal.GetElement(2);
-                Y_VERIFY(TStringBuf(val2.AsStringRef()) == prefix + s);
-                Y_VERIFY(val2.AsStringValue().RefCount() > 0);
+                Y_ABORT_UNLESS(TStringBuf(val2.AsStringRef()) == prefix + s);
+                Y_ABORT_UNLESS(val2.AsStringValue().RefCount() > 0);
                 auto val3 = resVal.GetElement(3);
-                Y_VERIFY(TStringBuf(val3.AsStringRef()) == prefix + s);
-                Y_VERIFY(val3.AsStringValue().RefCount() > 0);
+                Y_ABORT_UNLESS(TStringBuf(val3.AsStringRef()) == prefix + s);
+                Y_ABORT_UNLESS(val3.AsStringValue().RefCount() > 0);
             }
         }));
     }

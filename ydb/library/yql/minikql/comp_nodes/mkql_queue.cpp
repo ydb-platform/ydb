@@ -326,7 +326,7 @@ private:
             case EPreserveState::Yield:
                 break;
             default:
-                Y_VERIFY(Outpace > 0);
+                Y_ABORT_UNLESS(Outpace > 0);
                 Buffer.PopFront();
                 --Outpace;
         }

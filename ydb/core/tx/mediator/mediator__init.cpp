@@ -49,7 +49,7 @@ struct TTxMediator::TTxInit : public TTransactionBase<TTxMediator> {
 
     bool IsTabletInStaticDomain(const TAppData *appdata) {
         const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(Self->TabletID());
-        Y_VERIFY(selfDomain != appdata->DomainsInfo->BadDomainId);
+        Y_ABORT_UNLESS(selfDomain != appdata->DomainsInfo->BadDomainId);
         const auto& domain = appdata->DomainsInfo->GetDomain(selfDomain);
 
         for (auto domainMediatorId: domain.Mediators) {

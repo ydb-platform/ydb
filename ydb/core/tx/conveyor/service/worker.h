@@ -24,7 +24,7 @@ public:
     }
 
     TMonotonic GetStartInstant() const {
-        Y_VERIFY(!!StartInstant);
+        Y_ABORT_UNLESS(!!StartInstant);
         return *StartInstant;
     }
 
@@ -33,7 +33,7 @@ public:
         , OwnerId(ownerId)
         , TaskSignals(taskSignals)
     {
-        Y_VERIFY(task);
+        Y_ABORT_UNLESS(task);
     }
 
     bool operator<(const TWorkerTask& wTask) const {

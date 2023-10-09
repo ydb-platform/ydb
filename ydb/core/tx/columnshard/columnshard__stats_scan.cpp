@@ -36,7 +36,7 @@ std::shared_ptr<arrow::RecordBatch> TStatsIterator::FillStatsBatch() {
     while (!IndexStats.empty()) {
         auto it = Reverse ? std::prev(IndexStats.end()) : IndexStats.begin();
         const auto& stats = it->second;
-        Y_VERIFY(stats);
+        Y_ABORT_UNLESS(stats);
         AppendStats(builders, it->first, *stats);
         IndexStats.erase(it);
     }

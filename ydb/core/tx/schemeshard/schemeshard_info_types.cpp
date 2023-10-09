@@ -67,7 +67,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
     if (source) {
         for (const auto& col : source->Columns) {
-            Y_VERIFY(col.first == col.second.Id);
+            Y_ABORT_UNLESS(col.first == col.second.Id);
             // There could be columns with same name. Only one of them can be active.
             if (col.second.IsDropped())
                 continue;
@@ -343,7 +343,7 @@ void TTableInfo::ResetDescriptionCache() {
 }
 
 TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
-    Y_VERIFY(pathInfo && pathInfo->IsTable());
+    Y_ABORT_UNLESS(pathInfo && pathInfo->IsTable());
 
     TVector<ui32> keyColumnIds;
     for (auto& col : Columns) {
@@ -391,7 +391,7 @@ inline THashMap<ui32, size_t> DeduplicateRepeatedById(
     const TGetId& getId,
     const TPreferred& preferred)
 {
-    Y_VERIFY(items, "Unexpected nullptr items");
+    Y_ABORT_UNLESS(items, "Unexpected nullptr items");
 
     int size = items->size();
     THashMap<ui32, size_t> posById;
@@ -435,7 +435,7 @@ bool TOlapStoreInfo::ILayoutPolicy::Layout(const TColumnTablesLayout& currentLay
     if (!DoLayout(currentLayout, shardsCount, result, isNewGroup)) {
         return false;
     }
-    Y_VERIFY(result.size() == shardsCount);
+    Y_ABORT_UNLESS(result.size() == shardsCount);
     return true;
 }
 
@@ -1054,7 +1054,7 @@ bool TPartitionConfigMerger::VerifyAlterParams(
     }
 
     if (wasStorageConfig) {
-        Y_VERIFY(isStorageConfig); // by inherit logic
+        Y_ABORT_UNLESS(isStorageConfig); // by inherit logic
 
         auto& srcStorage = *wasStorageConfig;
         auto& cfgStorage = *isStorageConfig;
@@ -1119,7 +1119,7 @@ bool TPartitionConfigMerger::VerifyAlterParams(
         const auto* srcFamily = srcFamilies.Value(family.GetId(), nullptr);
 
         if (srcFamily && srcFamily->HasStorageConfig()) {
-            Y_VERIFY(family.HasStorageConfig()); // by inherit logic
+            Y_ABORT_UNLESS(family.HasStorageConfig()); // by inherit logic
 
             const auto& srcStorage = srcFamily->GetStorageConfig();
             const auto& dstStorage = family.GetStorageConfig();
@@ -1216,7 +1216,7 @@ bool TPartitionConfigMerger::VerifyCommandOnFrozenTable(const NKikimrSchemeOp::T
 }
 
 void TTableInfo::FinishAlter() {
-    Y_VERIFY(AlterData, "No alter data at Alter complete");
+    Y_ABORT_UNLESS(AlterData, "No alter data at Alter complete");
     AlterVersion = AlterData->AlterVersion;
     NextColumnId = AlterData->NextColumnId;
     for (const auto& col : AlterData->Columns) {
@@ -1318,20 +1318,20 @@ void TTableInfo::FinishAlter() {
 
 #if 1 // legacy
 TString TTableInfo::SerializeAlterExtraData() const {
-    Y_VERIFY(AlterData);
+    Y_ABORT_UNLESS(AlterData);
     NKikimrSchemeOp::TAlterExtraData alterExtraData;
     alterExtraData.MutablePartitionConfig()->CopyFrom(AlterData->PartitionConfigDiff());
     TString str;
     bool serializeRes = alterExtraData.SerializeToString(&str);
-    Y_VERIFY(serializeRes);
+    Y_ABORT_UNLESS(serializeRes);
     return str;
 }
 
 void TTableInfo::DeserializeAlterExtraData(const TString& str) {
-    Y_VERIFY(AlterData);
+    Y_ABORT_UNLESS(AlterData);
     NKikimrSchemeOp::TAlterExtraData alterExtraData;
     bool deserializeRes = ParseFromStringNoSizeLimit(alterExtraData, str);
-    Y_VERIFY(deserializeRes);
+    Y_ABORT_UNLESS(deserializeRes);
     AlterData->PartitionConfigDiff().Swap(alterExtraData.MutablePartitionConfig());
 }
 #endif
@@ -1378,7 +1378,7 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     }
 
     if (Partitions.empty()) {
-        Y_VERIFY(SplitOpsInFlight.empty());
+        Y_ABORT_UNLESS(SplitOpsInFlight.empty());
     }
 
     Stats.PartitionStats.swap(newPartitionStats);
@@ -1471,8 +1471,8 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {
-    Y_VERIFY(txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition);
-    Y_VERIFY(txState.SplitDescription);
+    Y_ABORT_UNLESS(txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition);
+    Y_ABORT_UNLESS(txState.SplitDescription);
 
     if (SplitOpsInFlight.empty()) {
         Y_VERIFY_S(Partitions.size() == ExpectedPartitionCount,
@@ -1488,7 +1488,7 @@ void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState
         ExpectedPartitionCount -= srcCount;
     }
 
-    Y_VERIFY(!SplitOpsInFlight.contains(opId));
+    Y_ABORT_UNLESS(!SplitOpsInFlight.contains(opId));
     SplitOpsInFlight.emplace(opId);
     ShardsInSplitMergeByOpId.emplace(opId, TVector<TShardIdx>());
 
@@ -1501,8 +1501,8 @@ void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState
 bool TTableInfo::IsShardInSplitMergeOp(TShardIdx idx) const {
     if (ShardsInSplitMergeByShards.contains(idx)) {
         TOperationId opId = ShardsInSplitMergeByShards.at(idx);
-        Y_VERIFY(ShardsInSplitMergeByOpId.contains(opId));
-        Y_VERIFY(SplitOpsInFlight.contains(opId));
+        Y_ABORT_UNLESS(ShardsInSplitMergeByOpId.contains(opId));
+        Y_ABORT_UNLESS(SplitOpsInFlight.contains(opId));
     }
 
     return ShardsInSplitMergeByShards.contains(idx);
@@ -1510,7 +1510,7 @@ bool TTableInfo::IsShardInSplitMergeOp(TShardIdx idx) const {
 
 
 void TTableInfo::AbortSplitMergeOp(TOperationId opId) {
-    Y_VERIFY(SplitOpsInFlight.contains(opId));
+    Y_ABORT_UNLESS(SplitOpsInFlight.contains(opId));
     for (const auto& shardIdx: ShardsInSplitMergeByOpId.at(opId)) {
         ShardsInSplitMergeByShards.erase(shardIdx);
     }
@@ -1773,7 +1773,7 @@ bool TExportInfo::AllItemsAreDropped() const {
 }
 
 void TExportInfo::AddNotifySubscriber(const TActorId &actorId) {
-    Y_VERIFY(!IsFinished());
+    Y_ABORT_UNLESS(!IsFinished());
     Subscribers.insert(actorId);
 }
 
@@ -1811,7 +1811,7 @@ bool TImportInfo::IsFinished() const {
 }
 
 void TImportInfo::AddNotifySubscriber(const TActorId &actorId) {
-    Y_VERIFY(!IsFinished());
+    Y_ABORT_UNLESS(!IsFinished());
     Subscribers.insert(actorId);
 }
 
@@ -1821,7 +1821,7 @@ TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString
 {}
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
-    Y_VERIFY(IsBuildIndex());
+    Y_ABORT_UNLESS(IsBuildIndex());
     result->SetTable(TPath::Init(TablePathId, ss).PathString());
 
     auto& index = *result->MutableIndex();
@@ -1838,7 +1838,7 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
 }
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
-    Y_VERIFY(IsBuildColumn());
+    Y_ABORT_UNLESS(IsBuildColumn());
     result->SetTable(TPath::Init(TablePathId, ss).PathString());
     for(const auto& column : BuildColumns) {
         column.SerializeToProto(result->add_column());
@@ -2035,8 +2035,8 @@ TBillingStats &TBillingStats::operator =(const TBillingStats &other) {
 }
 
 TBillingStats TBillingStats::operator -(const TBillingStats &other) const {
-    Y_VERIFY(Rows >= other.Rows);
-    Y_VERIFY(Bytes >= other.Bytes);
+    Y_ABORT_UNLESS(Rows >= other.Rows);
+    Y_ABORT_UNLESS(Bytes >= other.Bytes);
 
     return TBillingStats(Rows - other.Rows, Bytes - other.Bytes);
 }
@@ -2048,8 +2048,8 @@ TBillingStats &TBillingStats::operator -=(const TBillingStats &other) {
         return *this;
     }
 
-    Y_VERIFY(Rows >= other.Rows);
-    Y_VERIFY(Bytes >= other.Bytes);
+    Y_ABORT_UNLESS(Rows >= other.Rows);
+    Y_ABORT_UNLESS(Bytes >= other.Bytes);
 
     Rows -= other.Rows;
     Bytes -= other.Bytes;
@@ -2147,7 +2147,7 @@ void TOlapStoreInfo::ParseFromLocalDB(const NKikimrSchemeOp::TColumnStoreDescrip
 
     size_t schemaPresetIndex = 0;
     for (const auto& presetProto : descriptionProto.GetSchemaPresets()) {
-        Y_VERIFY(!SchemaPresets.contains(presetProto.GetId()));
+        Y_ABORT_UNLESS(!SchemaPresets.contains(presetProto.GetId()));
         auto& preset = SchemaPresets[presetProto.GetId()];
         preset.ParseFromLocalDB(presetProto);
         preset.SetProtoIndex(schemaPresetIndex++);

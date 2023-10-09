@@ -85,7 +85,7 @@ void TTestServer::CreateKesusesAndResources() {
     for (size_t i = 0; i < Opts.KesusCount; ++i) {
         auto [parent, name] = GetKesusPathAndName(i);
         const NMsgBusProxy::EResponseStatus status = Client->CreateKesus(parent, name);
-        Y_VERIFY(status == NMsgBusProxy::MSTATUS_OK);
+        Y_ABORT_UNLESS(status == NMsgBusProxy::MSTATUS_OK);
 
         // Create resources
         const ui64 tabletId = GetKesusTabletId(GetKesusPath(i));
@@ -98,11 +98,11 @@ void TTestServer::CreateKesusesAndResources() {
 
 ui64 TTestServer::GetKesusTabletId(const TString& path) {
     TAutoPtr<NMsgBusProxy::TBusResponse> resp = Client->Ls(path);
-    Y_VERIFY(resp->Record.GetStatusCode() == NKikimrIssues::TStatusIds::SUCCESS);
+    Y_ABORT_UNLESS(resp->Record.GetStatusCode() == NKikimrIssues::TStatusIds::SUCCESS);
     const auto& pathDesc = resp->Record.GetPathDescription();
-    Y_VERIFY(pathDesc.HasKesus());
+    Y_ABORT_UNLESS(pathDesc.HasKesus());
     const ui64 tabletId = pathDesc.GetKesus().GetKesusTabletId();
-    Y_VERIFY(tabletId);
+    Y_ABORT_UNLESS(tabletId);
     return tabletId;
 }
 
@@ -122,7 +122,7 @@ void TTestServer::CreateKesusResource(ui64 kesusTabletId, const TString& resourc
     TAutoPtr<IEventHandle> handle;
     runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvAddQuoterResourceResult>(handle);
     const NKikimrKesus::TEvAddQuoterResourceResult& record = handle->Get<NKesus::TEvKesus::TEvAddQuoterResourceResult>()->Record;
-    Y_VERIFY(record.GetError().GetStatus() == Ydb::StatusIds::SUCCESS);
+    Y_ABORT_UNLESS(record.GetError().GetStatus() == Ydb::StatusIds::SUCCESS);
 }
 
 void TTestServer::CreateKesusResource(const TString& kesusPath, const TString& resourcePath, TMaybe<double> maxUnitsPerSecond) {

@@ -1079,7 +1079,7 @@ public:
         auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
         Send(MakeTxProxyID(), ev.release());
         if (!isRollback) {
-            Y_VERIFY(!ExecuterId);
+            Y_ABORT_UNLESS(!ExecuterId);
         }
         ExecuterId = exId;
     }
@@ -1486,7 +1486,7 @@ public:
         }
 
         // Result for scan query is sent directly to target actor.
-        Y_VERIFY(response->GetArena());
+        Y_ABORT_UNLESS(response->GetArena());
         if (QueryState->PreparedQuery && !QueryState->IsStreamResult()) {
             bool useYdbResponseFormat = QueryState->GetUsePublicResponseDataFormat();
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();

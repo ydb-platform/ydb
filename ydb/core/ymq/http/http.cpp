@@ -794,7 +794,7 @@ void THttpRequest::SetupModifyPermissions(TModifyPermissionsRequest* const req) 
         SetupModifyPermissionsAction(QueryParams_, *req->MutableActions()->Add()->MutableSet());
     }
 
-    Y_VERIFY(it != ModifyPermissionsActions.end());
+    Y_ABORT_UNLESS(it != ModifyPermissionsActions.end());
 
     if (QueryParams_.Path) {
         req->SetResource(*QueryParams_.Path);

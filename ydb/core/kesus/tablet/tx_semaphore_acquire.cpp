@@ -96,7 +96,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
 
         if (!semaphore) {
             // Allocate a new semaphore
-            Y_VERIFY(Record.GetEphemeral());
+            Y_ABORT_UNLESS(Record.GetEphemeral());
 
             if (Self->Semaphores.size() >= MAX_SEMAPHORES_LIMIT) {
                 ReplyError(
@@ -106,8 +106,8 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
             }
 
             ui64 semaphoreId = Self->NextSemaphoreId++;
-            Y_VERIFY(semaphoreId > 0);
-            Y_VERIFY(!Self->Semaphores.contains(semaphoreId));
+            Y_ABORT_UNLESS(semaphoreId > 0);
+            Y_ABORT_UNLESS(!Self->Semaphores.contains(semaphoreId));
             Self->PersistSysParam(db, Schema::SysParam_NextSemaphoreId, ToString(Self->NextSemaphoreId));
             semaphore = &Self->Semaphores[semaphoreId];
             semaphore->Id = semaphoreId;
@@ -150,8 +150,8 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
                 semaphore->NotifyWatchers(Events, false, ownerChanged);
                 return true;
             }
-            Y_VERIFY(Record.GetCount() > 0);
-            Y_VERIFY(Record.GetCount() < owner->Count);
+            Y_ABORT_UNLESS(Record.GetCount() > 0);
+            Y_ABORT_UNLESS(Record.GetCount() < owner->Count);
             semaphore->Count -= owner->Count;
             owner->Count = Record.GetCount();
             semaphore->Count += owner->Count;
@@ -173,7 +173,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
         auto* waiter = session->WaitingSemaphores.FindPtr(semaphoreId);
         if (waiter) {
             // This session is already waiting for the semaphore
-            Y_VERIFY(semaphore->Waiters.contains(waiter->OrderId));
+            Y_ABORT_UNLESS(semaphore->Waiters.contains(waiter->OrderId));
             if (Record.GetCount() > waiter->Count) {
                 // Increasing count is not allowed
                 ReplyError(
@@ -181,8 +181,8 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
                     "Increasing count is not allowed");
                 return true;
             }
-            Y_VERIFY(Record.GetCount() > 0);
-            Y_VERIFY(Record.GetCount() <= waiter->Count);
+            Y_ABORT_UNLESS(Record.GetCount() > 0);
+            Y_ABORT_UNLESS(Record.GetCount() <= waiter->Count);
             session->ConsumeSemaphoreWaitCookie(semaphore, [&](ui64 cookie) {
                 Events.emplace_back(proxy->ActorID, cookie,
                     new TEvKesus::TEvAcquireSemaphoreResult(
@@ -221,7 +221,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
             }
             // Create a new waiter
             ui64 orderId = Self->NextSemaphoreOrderId++;
-            Y_VERIFY(orderId > 0);
+            Y_ABORT_UNLESS(orderId > 0);
             Self->PersistSysParam(db, Schema::SysParam_NextSemaphoreOrderId, ToString(Self->NextSemaphoreOrderId));
             waiter = &session->WaitingSemaphores[semaphoreId];
             waiter->OrderId = orderId;
@@ -251,7 +251,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
 
         // Notify sender if session is now waiting for the semaphore
         if (session->WaitingSemaphores.contains(semaphoreId)) {
-            Y_VERIFY(Self->ScheduleWaiterTimeout(semaphoreId, waiter, ctx));
+            Y_ABORT_UNLESS(Self->ScheduleWaiterTimeout(semaphoreId, waiter, ctx));
             ReplyPending();
         }
         return true;

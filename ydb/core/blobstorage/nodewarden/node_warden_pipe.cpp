@@ -8,7 +8,7 @@ void TNodeWarden::SendToController(std::unique_ptr<IEventBase> ev, ui64 cookie, 
 }
 
 void TNodeWarden::EstablishPipe() {
-    Y_VERIFY(AppData() && AppData()->DomainsInfo);
+    Y_ABORT_UNLESS(AppData() && AppData()->DomainsInfo);
 
     const ui64 stateStorageGroup = AppData()->DomainsInfo->GetDefaultStateStorageGroup(AvailDomainId);
     const ui64 controllerId = MakeBSControllerID(stateStorageGroup);

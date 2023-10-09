@@ -90,7 +90,7 @@ namespace NKikimr {
         bool ResurrectCur() {
             auto &self = HullCtx->VCtx->ShortSelfVDisk; // VDiskId we have
             const auto& topology = *HullCtx->VCtx->Top; // topology we have
-            Y_VERIFY(topology.BelongsToSubgroup(self, CurKey.Hash())); // check that blob belongs to subgroup
+            Y_ABORT_UNLESS(topology.BelongsToSubgroup(self, CurKey.Hash())); // check that blob belongs to subgroup
 
             //if (!Filter->Check(CurKey, CurIt.GetMemRec(), CurIt.GetMemRecsMerged(), HullCtx->AllowKeepFlags)) {
             //    // filter check returned false
@@ -189,7 +189,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvAnubisOsirisPutResult::TPtr& ev, const TActorContext& ctx) {
-            Y_VERIFY(ev->Get()->Status == NKikimrProto::OK, "Status# %d", ev->Get()->Status);
+            Y_ABORT_UNLESS(ev->Get()->Status == NKikimrProto::OK, "Status# %d", ev->Get()->Status);
             --InFly;
             // scan and send messages up to MaxInFly
             ScanAndSend(ctx);

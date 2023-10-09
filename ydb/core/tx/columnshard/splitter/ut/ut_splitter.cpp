@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         }
 
         virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
             return nullptr;
         }
 
@@ -110,35 +110,35 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     if (!columnRecordsCount) {
                         columnRecordsCount = i.second;
                     } else {
-                        Y_VERIFY(i.second == *columnRecordsCount);
+                        Y_ABORT_UNLESS(i.second == *columnRecordsCount);
                     }
                 }
                 Cerr << sb << Endl;
             }
             if (ExpectBlobsCount) {
-                Y_VERIFY(*ExpectBlobsCount == blobsCount);
+                Y_ABORT_UNLESS(*ExpectBlobsCount == blobsCount);
             }
             if (ExpectSlicesCount) {
-                Y_VERIFY(*ExpectSlicesCount == slicesCount);
+                Y_ABORT_UNLESS(*ExpectSlicesCount == slicesCount);
             }
-            Y_VERIFY(hasMultiSplit == HasMultiSplit);
+            Y_ABORT_UNLESS(hasMultiSplit == HasMultiSplit);
             for (auto&& i : blobsSize) {
-                Y_VERIFY(i < NKikimr::NOlap::TSplitSettings().GetMaxBlobSize());
-                Y_VERIFY(i + 10000 >= NKikimr::NOlap::TSplitSettings().GetMinBlobSize() || blobsSize.size() == 1);
+                Y_ABORT_UNLESS(i < NKikimr::NOlap::TSplitSettings().GetMaxBlobSize());
+                Y_ABORT_UNLESS(i + 10000 >= NKikimr::NOlap::TSplitSettings().GetMinBlobSize() || blobsSize.size() == 1);
             }
-            Y_VERIFY(restoredBatch.size() == (ui32)batch->num_columns());
+            Y_ABORT_UNLESS(restoredBatch.size() == (ui32)batch->num_columns());
             for (auto&& i : batch->schema()->fields()) {
                 auto it = restoredBatch.find(i->name());
-                Y_VERIFY(it != restoredBatch.end());
+                Y_ABORT_UNLESS(it != restoredBatch.end());
                 auto column = batch->GetColumnByName(i->name());
-                Y_VERIFY(column);
+                Y_ABORT_UNLESS(column);
                 ui64 recordsCount = 0;
                 for (auto&& c : it->second) {
-                    Y_VERIFY(c->num_columns() == 1);
-                    Y_VERIFY(c->column(0)->RangeEquals(column, 0, c->num_rows(), recordsCount, arrow::EqualOptions::Defaults()));
+                    Y_ABORT_UNLESS(c->num_columns() == 1);
+                    Y_ABORT_UNLESS(c->column(0)->RangeEquals(column, 0, c->num_rows(), recordsCount, arrow::EqualOptions::Defaults()));
                     recordsCount += c->num_rows();
                 }
-                Y_VERIFY(recordsCount == (ui32)batch->num_rows());
+                Y_ABORT_UNLESS(recordsCount == (ui32)batch->num_rows());
 
             }
         }

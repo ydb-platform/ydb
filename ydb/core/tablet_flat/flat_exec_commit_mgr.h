@@ -78,7 +78,7 @@ namespace NTabletFlatExecutor {
 
         void Start(IOps *ops, TActorId owner, ui32 *step0, TMonCo *monCo)
         {
-            Y_VERIFY(!std::exchange(Ops, ops), "Commit manager is already started");
+            Y_ABORT_UNLESS(!std::exchange(Ops, ops), "Commit manager is already started");
 
             Step0 = step0;
             Owner = owner;

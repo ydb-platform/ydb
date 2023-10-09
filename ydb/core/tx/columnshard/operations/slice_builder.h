@@ -27,7 +27,7 @@ public:
         , TabletId(tabletId)
         , ParentActorId(parentActorId)
     {
-        Y_VERIFY(Action);
+        Y_ABORT_UNLESS(Action);
     }
 };
 }

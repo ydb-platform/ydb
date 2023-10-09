@@ -100,8 +100,8 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
             }
 
             SessionId = Self->NextSessionId++;
-            Y_VERIFY(SessionId > 0);
-            Y_VERIFY(!Self->Sessions.contains(SessionId));
+            Y_ABORT_UNLESS(SessionId > 0);
+            Y_ABORT_UNLESS(!Self->Sessions.contains(SessionId));
             Self->PersistSysParam(db, Schema::SysParam_NextSessionId, ToString(Self->NextSessionId));
             session = &Self->Sessions[SessionId];
             session->Id = SessionId;
@@ -147,7 +147,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
             ctx.Send(PreviousOwner, new TEvKesus::TEvSessionStolen(PreviousGeneration, SessionId), 0, PreviousCookie);
         }
 
-        Y_VERIFY(Reply);
+        Y_ABORT_UNLESS(Reply);
         ctx.Send(Sender, std::move(Reply), 0, Cookie);
 
         Self->ScheduleSelfCheck(ctx);

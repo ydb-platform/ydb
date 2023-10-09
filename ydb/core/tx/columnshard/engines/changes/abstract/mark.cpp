@@ -5,26 +5,26 @@
 namespace NKikimr::NOlap {
 
 TString TMark::SerializeScalar(const NArrow::TReplaceKey& key, const std::shared_ptr<arrow::Schema>& schema) {
-    Y_VERIFY(key.Size() == 1);
+    Y_ABORT_UNLESS(key.Size() == 1);
     Y_VERIFY_S(key.Column(0).type()->Equals(schema->field(0)->type()),
         key.Column(0).type()->ToString() << ", expected " << schema->ToString());
     return SerializeKeyScalar(NArrow::TReplaceKey::ToScalar(key));
 }
 
 NArrow::TReplaceKey TMark::DeserializeScalar(const TString& key, const std::shared_ptr<arrow::Schema>& schema) {
-    Y_VERIFY(schema->num_fields() > 0);
+    Y_ABORT_UNLESS(schema->num_fields() > 0);
     return NArrow::TReplaceKey::FromScalar(DeserializeKeyScalar(key, schema->field(0)->type()));
 }
 
 TString TMark::SerializeComposite(const NArrow::TReplaceKey& key, const std::shared_ptr<arrow::Schema>& schema) {
     auto batch = key.ToBatch(schema);
-    Y_VERIFY(batch && batch->num_rows() == 1);
+    Y_ABORT_UNLESS(batch && batch->num_rows() == 1);
     return NArrow::SerializeBatchNoCompression(batch);
 }
 
 NArrow::TReplaceKey TMark::DeserializeComposite(const TString& key, const std::shared_ptr<arrow::Schema>& schema) {
     auto batch = NArrow::DeserializeBatch(key, schema);
-    Y_VERIFY(batch && batch->num_rows() == 1);
+    Y_ABORT_UNLESS(batch && batch->num_rows() == 1);
     return NArrow::TReplaceKey::FromBatch(batch, 0);
 }
 
@@ -79,12 +79,12 @@ NArrow::TReplaceKey TMark::ExtendBorder(const NArrow::TReplaceKey& key,
         const auto& field = schema->field(i);
         if (i < key.Size()) {
             columns.emplace_back(key.ColumnPtr(i));
-            Y_VERIFY(columns.back()->type()->Equals(field->type()));
+            Y_ABORT_UNLESS(columns.back()->type()->Equals(field->type()));
         } else {
             auto scalar = MinScalar(field->type());
-            Y_VERIFY(scalar);
+            Y_ABORT_UNLESS(scalar);
             auto res = arrow::MakeArrayFromScalar(*scalar, 1);
-            Y_VERIFY(res.ok());
+            Y_ABORT_UNLESS(res.ok());
             columns.emplace_back(*res);
         }
     }

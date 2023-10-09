@@ -64,7 +64,7 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
             BLOG_ERROR("Handle::TEvDiscoverResult, result status " << NKikimrProto::EReplyStatus_Name(msg->Status));
             return ReplyAndDie(msg->Status, msg->ErrorReason);
         default:
-            Y_VERIFY(false, "default case status %s", NKikimrProto::EReplyStatus_Name(msg->Status).c_str());
+            Y_ABORT_UNLESS(false, "default case status %s", NKikimrProto::EReplyStatus_Name(msg->Status).c_str());
 
             return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason);
         }
@@ -83,7 +83,7 @@ public:
         , ChannelInfo(Info->ChannelInfo(0))
         , CurrentHistoryIndex(ChannelInfo->History.size())
     {
-        Y_VERIFY(CurrentHistoryIndex > 0);
+        Y_ABORT_UNLESS(CurrentHistoryIndex > 0);
     }
 
     void Bootstrap() {

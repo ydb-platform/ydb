@@ -79,7 +79,7 @@ namespace NSequenceProxy {
 
     void TSequenceProxy::OnResolveError(const TString& database, const TString& path, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
         auto& info = Databases[database].SequenceByName[path];
-        Y_VERIFY(info.ResolveInProgress);
+        Y_ABORT_UNLESS(info.ResolveInProgress);
         info.ResolveInProgress = false;
 
         while (!info.PendingNextValResolve.empty()) {
@@ -93,15 +93,15 @@ namespace NSequenceProxy {
 
     void TSequenceProxy::OnResolveResult(const TString& database, const TString& path, TResolveResult&& result) {
         auto& info = Databases[database].SequenceByName[path];
-        Y_VERIFY(info.ResolveInProgress);
+        Y_ABORT_UNLESS(info.ResolveInProgress);
         info.ResolveInProgress = false;
 
         auto pathId = result.PathId;
-        Y_VERIFY(pathId);
+        Y_ABORT_UNLESS(pathId);
 
         info.PathId = pathId;
 
-        Y_VERIFY(result.SequenceInfo);
+        Y_ABORT_UNLESS(result.SequenceInfo);
 
         auto& infoById = Databases[database].SequenceByPathId[pathId];
         infoById.SequenceInfo = result.SequenceInfo;
@@ -113,7 +113,7 @@ namespace NSequenceProxy {
 
     void TSequenceProxy::OnResolveError(const TString& database, const TPathId& pathId, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
         auto& info = Databases[database].SequenceByPathId[pathId];
-        Y_VERIFY(info.ResolveInProgress);
+        Y_ABORT_UNLESS(info.ResolveInProgress);
         info.ResolveInProgress = false;
 
         while (!info.PendingNextValResolve.empty()) {
@@ -125,10 +125,10 @@ namespace NSequenceProxy {
 
     void TSequenceProxy::OnResolveResult(const TString& database, const TPathId& pathId, TResolveResult&& result) {
         auto& info = Databases[database].SequenceByPathId[pathId];
-        Y_VERIFY(info.ResolveInProgress);
+        Y_ABORT_UNLESS(info.ResolveInProgress);
         info.ResolveInProgress = false;
 
-        Y_VERIFY(result.SequenceInfo);
+        Y_ABORT_UNLESS(result.SequenceInfo);
         info.SequenceInfo = result.SequenceInfo;
         info.SecurityObject = result.SecurityObject;
         OnResolved(database, pathId, info, info.PendingNextValResolve);
@@ -152,13 +152,13 @@ namespace NSequenceProxy {
 
     void TSequenceProxy::Handle(TEvPrivate::TEvAllocateResult::TPtr& ev) {
         auto it = AllocateInFlight.find(ev->Cookie);
-        Y_VERIFY(it != AllocateInFlight.end());
+        Y_ABORT_UNLESS(it != AllocateInFlight.end());
         auto database = it->second.Database;
         auto pathId = it->second.PathId;
         AllocateInFlight.erase(it);
 
         auto& info = Databases[database].SequenceByPathId[pathId];
-        Y_VERIFY(info.AllocateInProgress);
+        Y_ABORT_UNLESS(info.AllocateInProgress);
         info.AllocateInProgress = false;
         ui64 cache = std::exchange(info.TotalAllocating, 0);
 
@@ -193,7 +193,7 @@ namespace NSequenceProxy {
         }
 
         if (info.TotalRequested > info.TotalAllocating && !info.AllocateInProgress) {
-            Y_VERIFY(info.TotalAllocating == 0);
+            Y_ABORT_UNLESS(info.TotalAllocating == 0);
             ui64 cache = Max(info.DefaultCacheSize, info.TotalRequested);
             StartAllocate(info.LastKnownTabletId, database, pathId, cache);
             info.AllocateInProgress = true;
@@ -222,10 +222,10 @@ namespace NSequenceProxy {
             return false;
         }
 
-        Y_VERIFY(info.TotalCached > 0);
-        Y_VERIFY(!info.CachedAllocations.empty());
+        Y_ABORT_UNLESS(info.TotalCached > 0);
+        Y_ABORT_UNLESS(!info.CachedAllocations.empty());
         auto& front = info.CachedAllocations.front();
-        Y_VERIFY(front.Count > 0);
+        Y_ABORT_UNLESS(front.Count > 0);
         Send(request.Sender, new TEvSequenceProxy::TEvNextValResult(pathId, front.Start), 0, request.Cookie);
         --info.TotalCached;
         if (--front.Count > 0) {

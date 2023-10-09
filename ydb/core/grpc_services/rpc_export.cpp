@@ -71,7 +71,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     }
 
     void ResolvePaths(const TVector<TString>& paths) {
-        Y_VERIFY(!paths.empty());
+        Y_ABORT_UNLESS(!paths.empty());
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = this->DatabaseName;

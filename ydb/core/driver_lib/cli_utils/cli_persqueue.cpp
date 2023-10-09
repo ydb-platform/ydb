@@ -27,7 +27,7 @@ int PersQueueRequest(TCommandConfig &cmdConf, int argc, char** argv) {
     TAutoPtr<NBus::TBusMessage> reply;
     NBus::EMessageStatus status = config.SyncCall(request, reply);
     Cerr << status << "\n";
-    Y_VERIFY(status == NBus::MESSAGE_OK);
+    Y_ABORT_UNLESS(status == NBus::MESSAGE_OK);
     const auto& result = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
     Cerr << result.DebugString() << "\n";
     return 0;

@@ -63,7 +63,7 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
 
 TAlter& TAlter::Merge(const TSchemeChanges &log)
 {
-    Y_VERIFY(&Log != &log, "Cannot merge changes onto itself");
+    Y_ABORT_UNLESS(&Log != &log, "Cannot merge changes onto itself");
 
     int added = log.DeltaSize();
     if (added > 0) {
@@ -99,7 +99,7 @@ TAlter& TAlter::DropTable(ui32 id)
 
 TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null)
 {
-    Y_VERIFY(type != (ui32)NScheme::NTypeIds::Pg, "No pg type data");
+    Y_ABORT_UNLESS(type != (ui32)NScheme::NTypeIds::Pg, "No pg type data");
     return AddPgColumn(table, name, id, type, 0, "", notNull, null);
 }
 
@@ -330,7 +330,7 @@ TAlter& TAlter::ApplyLastRecord()
 {
     if (Sink) {
         int deltasCount = Log.DeltaSize();
-        Y_VERIFY(deltasCount > 0);
+        Y_ABORT_UNLESS(deltasCount > 0);
 
         if (!Sink->ApplyAlterRecord(Log.GetDelta(deltasCount - 1))) {
             Log.MutableDelta()->RemoveLast();

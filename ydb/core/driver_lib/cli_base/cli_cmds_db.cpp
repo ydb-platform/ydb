@@ -872,7 +872,7 @@ public:
         }
 
         if (!res) {
-            Y_VERIFY(response.ready());
+            Y_ABORT_UNLESS(response.ready());
             if (response.status() == Ydb::StatusIds::SUCCESS) {
                 Ydb::Table::DescribeTableOptionsResult result;
                 response.result().UnpackTo(&result);
@@ -963,7 +963,7 @@ public:
             return -2;
         }
 
-        Y_VERIFY(SrcValues.size() == DstValues.size());
+        Y_ABORT_UNLESS(SrcValues.size() == DstValues.size());
         const ui32 itemCount = SrcValues.size();
 
         TVector<NYdb::NTable::TCopyItem> copyItems;

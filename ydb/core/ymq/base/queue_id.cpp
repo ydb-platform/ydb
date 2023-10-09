@@ -18,7 +18,7 @@ public:
         char* bufPtr = Buf;
 
         // first 15 bits
-        Y_VERIFY(serviceId <= 0x7FFF);
+        Y_ABORT_UNLESS(serviceId <= 0x7FFF);
         ConvertAndAppendLastNBits(serviceId, 15, bufPtr);
 
         // next 65 bits (1 bit is reserved and 64 are the place for the unique num)
@@ -29,7 +29,7 @@ public:
         const ui32 appendix = THash<TString>()(accountName) & 0x1FFF; // use last 13 bits only
         ConvertAndAppendLastNBits(appendix, 20, bufPtr);
 
-        Y_VERIFY(bufPtr == &Buf[20]);
+        Y_ABORT_UNLESS(bufPtr == &Buf[20]);
 
         *bufPtr = '\0';
     }
@@ -46,7 +46,7 @@ private:
 
 private:
     char SmallIntToBase32(const ui8 v) const {
-        Y_VERIFY(v < 32);
+        Y_ABORT_UNLESS(v < 32);
 
         if (v < 10) {
             return '0' + v;
@@ -56,7 +56,7 @@ private:
     }
 
     void ConvertAndAppendLastNBits(const ui64 num, const ui8 n, char*& output) const {
-        Y_VERIFY(n % Radix == 0);
+        Y_ABORT_UNLESS(n % Radix == 0);
 
         for (int i = n / Radix - 1; i >= 0; --i) {
             const ui8 shift = i * Radix;

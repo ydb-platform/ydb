@@ -25,8 +25,8 @@ TString GetDC(const TString& topic) {
     if (!CorrectName(topic))
         return "unknown";
     auto pos = topic.find("--");
-    Y_VERIFY(pos != TString::npos);
-    Y_VERIFY(pos > 4); //length of "rt3."
+    Y_ABORT_UNLESS(pos != TString::npos);
+    Y_ABORT_UNLESS(pos > 4); //length of "rt3."
     auto res = topic.substr(4, pos - 4);
     return res;
 }
@@ -35,8 +35,8 @@ TString GetRealTopic(const TString& topic) {
     if (!CorrectName(topic))
         return topic;
     auto pos = topic.find("--");
-    Y_VERIFY(pos != TString::npos);
-    Y_VERIFY(topic.size() > pos + 2);
+    Y_ABORT_UNLESS(pos != TString::npos);
+    Y_ABORT_UNLESS(topic.size() > pos + 2);
     return topic.substr(pos + 2);
 }
 

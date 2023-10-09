@@ -327,7 +327,7 @@ void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
     InitializeGRpcProxyDbCountersRegistry(ctx.ActorSystem());
 
     RootDatabase = DatabaseFromDomain();
-    Y_VERIFY(!RootDatabase.empty());
+    Y_ABORT_UNLESS(!RootDatabase.empty());
     Databases.try_emplace(RootDatabase);
     DoStartUpdate(RootDatabase);
 

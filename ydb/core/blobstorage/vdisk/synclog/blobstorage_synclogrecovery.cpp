@@ -64,7 +64,7 @@ namespace NKikimr {
                 const TLogoBlobID &id,
                 const TIngress &ingress)
         {
-            Y_VERIFY(GetLastLsnOfIndexRecord() < lsn,
+            Y_ABORT_UNLESS(GetLastLsnOfIndexRecord() < lsn,
                      "State# %s lsn# %" PRIu64, ToString().data(), lsn);
             ++LogoBlobs;
 
@@ -74,7 +74,7 @@ namespace NKikimr {
         }
 
         void TSyncLogRecovery::PutBlock(ui64 lsn, ui64 tabletId, ui32 gen) {
-            Y_VERIFY(GetLastLsnOfIndexRecord() < lsn,
+            Y_ABORT_UNLESS(GetLastLsnOfIndexRecord() < lsn,
                      "State# %s lsn# %" PRIu64, ToString().data(), lsn);
             ++Blocks;
 
@@ -89,7 +89,7 @@ namespace NKikimr {
                 const NKikimrBlobStorage::TEvVCollectGarbage &record,
                 const TBarrierIngress &ingress)
         {
-            Y_VERIFY(GetLastLsnOfIndexRecord() < lsn,
+            Y_ABORT_UNLESS(GetLastLsnOfIndexRecord() < lsn,
                      "State# %s lsn# %" PRIu64, ToString().data(), lsn);
             ++Gcs;
 
@@ -120,7 +120,7 @@ namespace NKikimr {
                 bool hard,
                 const TBarrierIngress &ingress)
         {
-            Y_VERIFY(GetLastLsnOfIndexRecord() < lsn,
+            Y_ABORT_UNLESS(GetLastLsnOfIndexRecord() < lsn,
                      "State# %s lsn# %" PRIu64, ToString().data(), lsn);
             ++Barriers;
 
@@ -134,7 +134,7 @@ namespace NKikimr {
 
         std::unique_ptr<TSyncLogRepaired> TSyncLogRecovery::ReleaseRepaired() {
             // after finishing recovery check that Dsk and Mem do not intersect
-            Y_VERIFY(Repaired->SyncLogPtr->CheckMemAndDiskRecLogsDoNotIntersect(),
+            Y_ABORT_UNLESS(Repaired->SyncLogPtr->CheckMemAndDiskRecLogsDoNotIntersect(),
                      "%s", Repaired->SyncLogPtr->BoundariesToString().data());
             return std::exchange(Repaired, nullptr);
         }
@@ -154,7 +154,7 @@ namespace NKikimr {
         void TSyncLogRecovery::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             for (TChunkIdx chunkIdx : Repaired->ChunksToDelete) {
                 const bool inserted = chunks.insert(chunkIdx).second;
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
             }
             Repaired->SyncLogPtr->GetOwnedChunks(chunks);
         }

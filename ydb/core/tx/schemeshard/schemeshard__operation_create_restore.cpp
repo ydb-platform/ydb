@@ -23,7 +23,7 @@ struct TRestore {
 
     static void ProposeTx(const TOperationId& opId, TTxState& txState, TOperationContext& context) {
         const auto& pathId = txState.TargetPathId;
-        Y_VERIFY(context.SS->Tables.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
 
         const auto seqNo = context.SS->StartRound(txState);
@@ -58,10 +58,10 @@ struct TRestore {
             return;
         }
 
-        Y_VERIFY(TAppData::TimeProvider.Get() != nullptr);
+        Y_ABORT_UNLESS(TAppData::TimeProvider.Get() != nullptr);
         const ui64 ts = TAppData::TimeProvider->Now().Seconds();
 
-        Y_VERIFY(context.SS->Tables.contains(txState.TargetPathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
         TTableInfo::TPtr table = context.SS->Tables[txState.TargetPathId];
 
         auto& restoreInfo = table->RestoreHistory[opId.GetTxId()];
@@ -82,7 +82,7 @@ struct TRestore {
     static void PersistTask(const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {
         const auto& restore = tx.GetRestore();
 
-        Y_VERIFY(context.SS->Tables.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         table->RestoreSettings = restore;
 
@@ -111,7 +111,7 @@ ISubOperation::TPtr CreateRestore(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr CreateRestore(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return new TBackupRestoreOperationBase<TRestore, TEvDataShard::TEvCancelRestore>(
         TTxState::TxRestore, TPathElement::EPathState::EPathStateRestore, id, state
     );

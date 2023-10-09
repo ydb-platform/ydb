@@ -15,7 +15,7 @@ namespace NKikimr::NKeyValue {
             TWeightManager(TVector<ui64> weights)
                 : Weights(std::move(weights))
             {
-                Y_VERIFY(0 < Weights.size() && Weights.size() <= 256);
+                Y_ABORT_UNLESS(0 < Weights.size() && Weights.size() <= 256);
             }
 
             int Pick(const std::bitset<256>& enabled) const {
@@ -35,7 +35,7 @@ namespace NKikimr::NKeyValue {
                 const auto begin = accum.begin();
                 const auto end = begin + Weights.size();
                 const auto iter = std::upper_bound(begin, end, r);
-                Y_VERIFY(iter != end);
+                Y_ABORT_UNLESS(iter != end);
                 return iter - begin;
             }
         };

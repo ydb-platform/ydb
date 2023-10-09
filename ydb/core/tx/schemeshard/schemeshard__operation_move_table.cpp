@@ -39,9 +39,9 @@ public:
         }
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxMoveTable);
-        Y_VERIFY(txState->MinStep); // we have to have right minstep
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveTable);
+        Y_ABORT_UNLESS(txState->MinStep); // we have to have right minstep
 
         return true;
     }
@@ -54,14 +54,14 @@ public:
                                << ", at tablet" << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxMoveTable);
-        Y_VERIFY(txState->SourcePathId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveTable);
+        Y_ABORT_UNLESS(txState->SourcePathId);
 
         TPath dstPath = TPath::Init(txState->TargetPathId, context.SS);
-        Y_VERIFY(dstPath.IsResolved());
+        Y_ABORT_UNLESS(dstPath.IsResolved());
         TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
-        Y_VERIFY(srcPath.IsResolved());
+        Y_ABORT_UNLESS(srcPath.IsResolved());
         TTableInfo::TPtr srcTable = context.SS->Tables.at(srcPath->PathId);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -80,7 +80,7 @@ public:
             }
             context.SS->PersistTxState(db, OperationId);
         }
-        Y_VERIFY(txState->Shards.size());
+        Y_ABORT_UNLESS(txState->Shards.size());
 
         TString txBody;
         {
@@ -99,14 +99,14 @@ public:
                 auto name = child.first;
 
                 TPath srcIndexPath = srcPath.Child(name);
-                Y_VERIFY(srcIndexPath.IsResolved());
+                Y_ABORT_UNLESS(srcIndexPath.IsResolved());
 
                 if (srcIndexPath.IsDeleted()) {
                     continue;
                 }
 
                 TPath dstIndexPath = dstPath.Child(name);
-                Y_VERIFY(dstIndexPath.IsResolved());
+                Y_ABORT_UNLESS(dstIndexPath.IsResolved());
 
                 auto remap = move->AddReMapIndexes();
                 PathIdFromPathId(srcIndexPath->PathId, remap->MutableSrcPathId());
@@ -194,8 +194,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxMoveTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveTable);
 
         auto srcPath = TPath::Init(txState->SourcePathId, context.SS);
         auto dstPath = TPath::Init(txState->TargetPathId, context.SS);
@@ -219,8 +219,8 @@ public:
             dstPath.Base()->IncShardsInside();
         }
 
-        Y_VERIFY(!context.SS->Tables.contains(dstPath.Base()->PathId));
-        Y_VERIFY(context.SS->Tables.contains(srcPath.Base()->PathId));
+        Y_ABORT_UNLESS(!context.SS->Tables.contains(dstPath.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(srcPath.Base()->PathId));
 
         TTableInfo::TPtr tableInfo = TTableInfo::DeepCopy(*context.SS->Tables.at(srcPath.Base()->PathId));
         tableInfo->ResetDescriptionCache();
@@ -252,10 +252,10 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxMoveTable);
-        Y_VERIFY(txState->SourcePathId);
-        Y_VERIFY(txState->MinStep);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveTable);
+        Y_ABORT_UNLESS(txState->SourcePathId);
+        Y_ABORT_UNLESS(txState->MinStep);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -308,7 +308,7 @@ public:
                                << ", msg: " << ev->Get()->ToString()
                                << ", at tablet" << ssId);
 
-        Y_VERIFY(ActivePathId == ev->Get()->PathId);
+        Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
@@ -320,7 +320,7 @@ public:
         context.OnComplete.RouteByTabletsFromOperation(OperationId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
@@ -340,9 +340,9 @@ public:
         }
 
         auto activePath = TPath::Resolve(srcPath.PathString(), context.SS);
-        Y_VERIFY(activePath.IsResolved());
+        Y_ABORT_UNLESS(activePath.IsResolved());
 
-        Y_VERIFY(activePath != srcPath);
+        Y_ABORT_UNLESS(activePath != srcPath);
 
         ActivePathId = activePath->PathId;
         context.OnComplete.PublishAndWaitPublication(OperationId, activePath->PathId);
@@ -391,16 +391,16 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         auto srcPath = TPath::Init(txState->SourcePathId, context.SS);
         auto dstPath = TPath::Init(txState->TargetPathId, context.SS);
 
-        Y_VERIFY(txState->PlanStep);
+        Y_ABORT_UNLESS(txState->PlanStep);
 
         MarkSrcDropped(db, context, OperationId, *txState, srcPath);
 
-        Y_VERIFY(context.SS->Tables.contains(dstPath.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(dstPath.Base()->PathId));
         auto tableInfo = context.SS->Tables.at(dstPath.Base()->PathId);
 
         if (tableInfo->IsTTLEnabled() && !context.SS->TTLEnabledTables.contains(dstPath.Base()->PathId)) {
@@ -425,7 +425,7 @@ public:
         context.OnComplete.RouteByTabletsFromOperation(OperationId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
@@ -477,8 +477,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxMoveTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveTable);
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
@@ -754,7 +754,7 @@ ISubOperation::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr CreateMoveTable(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TMoveTable>(id, state);
 }
 

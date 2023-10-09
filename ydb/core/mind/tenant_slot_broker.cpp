@@ -56,7 +56,7 @@ const TSlotDescription TTenantSlotBroker::TTenant::PinnedSlotDescription = {PIN_
 void TTenantSlotBroker::TTenant::AddSlotsAllocation(const TSlotDescription &descr,
                                                     ui64 count)
 {
-    Y_VERIFY(!Allocations.contains(descr));
+    Y_ABORT_UNLESS(!Allocations.contains(descr));
     TSlotsAllocation::TPtr allocation = new TSlotsAllocation(descr, Stats);
     Allocations[descr] = allocation;
     if (descr.CollocationGroup
@@ -93,8 +93,8 @@ void TTenantSlotBroker::TTenant::ClearEmptyAllocations()
         if (allocation->Group)
             allocation->Group->Allocations.erase(allocation);
 
-        Y_VERIFY(!allocation->MissingCount);
-        Y_VERIFY(!allocation->PendingCount);
+        Y_ABORT_UNLESS(!allocation->MissingCount);
+        Y_ABORT_UNLESS(!allocation->PendingCount);
         auto cur = it;
         ++it;
         Allocations.erase(cur);
@@ -163,7 +163,7 @@ void TTenantSlotBroker::TTenant::AddSlotLabels(ui64 count,
 void TTenantSlotBroker::TTenant::RemoveSlotLabels(ui64 count,
                                                   TTransactionContext &txc)
 {
-    Y_VERIFY(UnusedSlotLabels.size() >= count);
+    Y_ABORT_UNLESS(UnusedSlotLabels.size() >= count);
     NIceDb::TNiceDb db(txc.DB);
     auto first = UnusedSlotLabels.begin();
     std::advance(first, UnusedSlotLabels.size() - count);
@@ -187,20 +187,20 @@ TString TTenantSlotBroker::TTenant::MakePinnedSlotLabel()
 
 void TTenantSlotBroker::TTenant::AddPinnedSlotLabel(const TString &label)
 {
-    Y_VERIFY(!PinnedSlotLabels.contains(label));
+    Y_ABORT_UNLESS(!PinnedSlotLabels.contains(label));
     PinnedSlotLabels.insert(label);
 }
 
 void TTenantSlotBroker::TTenant::RemovePinnedSlotLabel(const TString &label)
 {
-    Y_VERIFY(PinnedSlotLabels.contains(label));
+    Y_ABORT_UNLESS(PinnedSlotLabels.contains(label));
     PinnedSlotLabels.erase(label);
 }
 
 void TTenantSlotBroker::TTenant::MarkSlotLabelAsUsed(const TString &label)
 {
-    Y_VERIFY(UnusedSlotLabels.contains(label));
-    Y_VERIFY(!UsedSlotLabels.contains(label));
+    Y_ABORT_UNLESS(UnusedSlotLabels.contains(label));
+    Y_ABORT_UNLESS(!UsedSlotLabels.contains(label));
 
     UnusedSlotLabels.erase(label);
     UsedSlotLabels.insert(label);
@@ -208,8 +208,8 @@ void TTenantSlotBroker::TTenant::MarkSlotLabelAsUsed(const TString &label)
 
 void TTenantSlotBroker::TTenant::MarkSlotLabelAsUnused(const TString &label)
 {
-    Y_VERIFY(!UnusedSlotLabels.contains(label));
-    Y_VERIFY(UsedSlotLabels.contains(label));
+    Y_ABORT_UNLESS(!UnusedSlotLabels.contains(label));
+    Y_ABORT_UNLESS(UsedSlotLabels.contains(label));
 
     UnusedSlotLabels.insert(label);
     UsedSlotLabels.erase(label);
@@ -217,7 +217,7 @@ void TTenantSlotBroker::TTenant::MarkSlotLabelAsUnused(const TString &label)
 
 TString TTenantSlotBroker::TTenant::GetFirstUnusedSlotLabel() const
 {
-    Y_VERIFY(!UnusedSlotLabels.empty(), "tenant %s has no unused slot labels", Name.data());
+    Y_ABORT_UNLESS(!UnusedSlotLabels.empty(), "tenant %s has no unused slot labels", Name.data());
     return *UnusedSlotLabels.begin();
 }
 
@@ -228,7 +228,7 @@ void TTenantSlotBroker::TTenant::AddUnusedSlotLabel(const TString &label)
 
 void TTenantSlotBroker::TTenant::AddPinnedSlot(TSlot::TPtr slot)
 {
-    Y_VERIFY(!slot->AssignedTenant);
+    Y_ABORT_UNLESS(!slot->AssignedTenant);
     auto allocation = GetOrCreateAllocation(PinnedSlotDescription);
     allocation->AddAssignedSlot(slot);
     allocation->IncPinned();
@@ -240,7 +240,7 @@ void TTenantSlotBroker::TTenant::AddPinnedSlot(TSlot::TPtr slot)
 
 void TTenantSlotBroker::TTenant::RemovePinnedSlot(TSlot::TPtr slot)
 {
-    Y_VERIFY(slot->AssignedTenant == this);
+    Y_ABORT_UNLESS(slot->AssignedTenant == this);
     auto allocation = Allocations.at(PinnedSlotDescription);
     allocation->RemoveAssignedSlot(slot);
     allocation->DecPinned();
@@ -301,9 +301,9 @@ void TTenantSlotBroker::TFreeSlotsIndex::Add(TSlot::TPtr slot)
 void TTenantSlotBroker::TFreeSlotsIndex::Remove(TSlot::TPtr slot)
 {
     auto it1 = FreeSlotsByType.find(slot->Type);
-    Y_VERIFY(it1 != FreeSlotsByType.end());
+    Y_ABORT_UNLESS(it1 != FreeSlotsByType.end());
     auto it2 = it1->second.find(slot->DataCenter);
-    Y_VERIFY(it2 != it1->second.end());
+    Y_ABORT_UNLESS(it2 != it1->second.end());
     it2->second.erase(slot);
     if (it2->second.empty()) {
         it1->second.erase(it2);
@@ -312,9 +312,9 @@ void TTenantSlotBroker::TFreeSlotsIndex::Remove(TSlot::TPtr slot)
     }
 
     auto it3 = FreeSlotsByDataCenter.find(slot->DataCenter);
-    Y_VERIFY(it3 != FreeSlotsByDataCenter.end());
+    Y_ABORT_UNLESS(it3 != FreeSlotsByDataCenter.end());
     auto it4 = it3->second.find(slot->Type);
-    Y_VERIFY(it4 != it3->second.end());
+    Y_ABORT_UNLESS(it4 != it3->second.end());
     it4->second.erase(slot);
     if (it4->second.empty()) {
         it3->second.erase(it4);
@@ -413,7 +413,7 @@ void TTenantSlotBroker::OnActivateExecutor(const TActorContext &ctx)
 
     auto domains = AppData(ctx)->DomainsInfo;
     DomainId = domains->GetDomainUidByTabletId(TabletID());
-    Y_VERIFY(DomainId != TDomainsInfo::BadDomainId);
+    Y_ABORT_UNLESS(DomainId != TDomainsInfo::BadDomainId);
     DomainName = domains->Domains.at(DomainId)->Name;
 
     auto tabletCounters = GetServiceCounters(AppData(ctx)->Counters, "tablets");
@@ -658,7 +658,7 @@ TTenantSlotBroker::TTenant::TPtr TTenantSlotBroker::GetTenant(const TString &nam
 
 TTenantSlotBroker::TTenant::TPtr TTenantSlotBroker::AddTenant(const TString &name)
 {
-    Y_VERIFY(!Tenants.contains(name));
+    Y_ABORT_UNLESS(!Tenants.contains(name));
     auto tenant = new TTenant(name, Counters);
     Tenants.emplace(name, tenant);
     *Counters->KnownTenants = Tenants.size();
@@ -755,7 +755,7 @@ void TTenantSlotBroker::AddSlot(TSlot::TPtr slot,
     LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
                 "Added new " << slot->IdString(true));
 
-    Y_VERIFY(!slot->AssignedTenant);
+    Y_ABORT_UNLESS(!slot->AssignedTenant);
 
     AddSlot(slot);
 
@@ -1004,7 +1004,7 @@ void TTenantSlotBroker::AttachSlotNoConfigureNoDb(TSlot::TPtr slot,
                                                   const TSlotDescription &usedAs,
                                                   const TString &label)
 {
-    Y_VERIFY(!slot->AssignedTenant);
+    Y_ABORT_UNLESS(!slot->AssignedTenant);
     Y_VERIFY_DEBUG(!UnhappyTenants.contains(tenant));
 
     if (slot->IsFree())
@@ -1075,8 +1075,8 @@ bool TTenantSlotBroker::MoveMisplacedSlots(TTenant::TPtr tenant,
                                            const TActorContext &ctx)
 {
     bool assigned = false;
-    Y_VERIFY(!allocation->Group);
-    Y_VERIFY(!allocation->Description.ForceLocation);
+    Y_ABORT_UNLESS(!allocation->Group);
+    Y_ABORT_UNLESS(!allocation->Description.ForceLocation);
     while (allocation->MisplacedCount) {
         TSlot::TPtr freeSlot = FreeSlots.Find(allocation->Description.SlotType,
                                               allocation->Description.DataCenter);
@@ -1159,7 +1159,7 @@ bool TTenantSlotBroker::AssignFreeSlots(TTenant::TPtr tenant,
         if (allocation->MissingCount) {
             if (prev == tenant->GetMissing().end()) {
                 prev = tenant->GetMissing().begin();
-                Y_VERIFY(*prev == allocation);
+                Y_ABORT_UNLESS(*prev == allocation);
             } else {
                 ++prev;
             }
@@ -1270,7 +1270,7 @@ TTenantSlotBroker::ComputeLayoutForGroup(TCollocationGroup::TPtr group,
                 if (allocation->Description.DataCenter != ANY_DATA_CENTER
                     && allocation->Description.DataCenter != slot->DataCenter)
                     ++layout->MisplacedCount;
-                Y_VERIFY(slot->DataCenter != dc);
+                Y_ABORT_UNLESS(slot->DataCenter != dc);
                 ++layout->SplitCount;
             } else {
                 break;
@@ -1330,7 +1330,7 @@ void TTenantSlotBroker::ApplyLayout(TTenant::TPtr tenant,
                 if (slot->AssignedTenant) {
                     auto label = slot->Label;
                     // Currently we are not expected to change slot's owner.
-                    Y_VERIFY(slot->AssignedTenant == tenant);
+                    Y_ABORT_UNLESS(slot->AssignedTenant == tenant);
                     DetachSlotNoConfigureNoDb(slot, false);
                     AttachSlotNoConfigure(slot, tenant, allocation->Description, label, txc);
                 } else {
@@ -1361,7 +1361,7 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
         currentMisplaced += allocation->MisplacedCount;
         currentSplit += allocation->SplitCount;
         if (allocation->Description.DataCenter != ANY_DATA_CENTER) {
-            Y_VERIFY(!allocation->Description.ForceLocation);
+            Y_ABORT_UNLESS(!allocation->Description.ForceLocation);
             preferredDCs.insert(allocation->Description.DataCenter);
         }
     }
@@ -1586,7 +1586,7 @@ void TTenantSlotBroker::ScheduleTxAssignFreeSlots(const TActorContext &ctx)
 void TTenantSlotBroker::ProcessTx(ITransaction *tx,
                                   const TActorContext &ctx)
 {
-    Y_VERIFY(tx);
+    Y_ABORT_UNLESS(tx);
     TxQueue.emplace_back(tx);
     ProcessNextTx(ctx);
 }
@@ -1594,7 +1594,7 @@ void TTenantSlotBroker::ProcessTx(ITransaction *tx,
 void TTenantSlotBroker::TxCompleted(ITransaction *tx,
                                     const TActorContext &ctx)
 {
-    Y_VERIFY(tx == ActiveTx);
+    Y_ABORT_UNLESS(tx == ActiveTx);
     ActiveTx = nullptr;
     ProcessNextTx(ctx);
 }
@@ -1607,7 +1607,7 @@ void TTenantSlotBroker::ProcessNextTx(const TActorContext &ctx)
     ActiveTx = TxQueue.front().Release();
     TxQueue.pop_front();
 
-    Y_VERIFY(ActiveTx);
+    Y_ABORT_UNLESS(ActiveTx);
     Execute(ActiveTx, ctx);
 }
 

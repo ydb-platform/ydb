@@ -26,7 +26,7 @@ namespace NWriter {
             , ExtraChannel(conf.ExtraChannel)
             , Banks(base, conf.Slots)
         {
-            Y_VERIFY(Groups.size() >= 1, "There must be at least one page collection group");
+            Y_ABORT_UNLESS(Groups.size() >= 1, "There must be at least one page collection group");
 
             const auto none = NTable::NPage::ECache::None;
 
@@ -42,7 +42,7 @@ namespace NWriter {
 
         ~TBundle()
         {
-            Y_VERIFY(!Blobs, "Bundle writer still has some blobs");
+            Y_ABORT_UNLESS(!Blobs, "Bundle writer still has some blobs");
         }
 
         TVector<NPageCollection::TGlob> GetBlobsToSave() noexcept
@@ -53,7 +53,7 @@ namespace NWriter {
         TVector<TResult> Results() noexcept
         {
             for (auto &blocks : Blocks) {
-                Y_VERIFY(!*blocks, "Bundle writer has unflushed data");
+                Y_ABORT_UNLESS(!*blocks, "Bundle writer has unflushed data");
             }
 
             return std::move(Results_);
@@ -102,10 +102,10 @@ namespace NWriter {
                     Y_FAIL("Finish produced an empty main page collection");
                 }
 
-                Y_VERIFY(!*Blocks[num], "Block writer has unexpected data");
+                Y_ABORT_UNLESS(!*Blocks[num], "Block writer has unexpected data");
             }
 
-            Y_VERIFY(result.PageCollections, "Finish produced no page collections");
+            Y_ABORT_UNLESS(result.PageCollections, "Finish produced no page collections");
 
             result.Growth = Growth->Unwrap();
             result.Overlay = overlay;
@@ -113,7 +113,7 @@ namespace NWriter {
 
         NPageCollection::TCookieAllocator& CookieRange(ui32 cookieRange) noexcept override
         {
-            Y_VERIFY(cookieRange == 0 || cookieRange == 1, "Invalid cookieRange requested");
+            Y_ABORT_UNLESS(cookieRange == 0 || cookieRange == 1, "Invalid cookieRange requested");
 
             return cookieRange == 0 ? Banks.Meta : Banks.Data;
         }
@@ -139,11 +139,11 @@ namespace NWriter {
                 offset += chunk;
                 left -= chunk;
 
-                Y_VERIFY(chunk && (chunk == block || left == 0));
+                Y_ABORT_UNLESS(chunk && (chunk == block || left == 0));
             }
 
-            Y_VERIFY(offset == body.size());
-            Y_VERIFY(left == 0);
+            Y_ABORT_UNLESS(offset == body.size());
+            Y_ABORT_UNLESS(left == 0);
             return largeGlobId;
         }
 

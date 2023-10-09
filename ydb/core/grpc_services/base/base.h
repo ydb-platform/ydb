@@ -1121,14 +1121,14 @@ public:
     template <typename T>
     static const TRequest* GetProtoRequest(const T& req) {
         auto request = dynamic_cast<const TRequest*>(req->GetRequest());
-        Y_VERIFY(request != nullptr, "Wrong using of TGRpcRequestWrapper");
+        Y_ABORT_UNLESS(request != nullptr, "Wrong using of TGRpcRequestWrapper");
         return request;
     }
 
     template <typename T>
     static TRequest* GetProtoRequestMut(const T& req) {
         auto request = dynamic_cast<TRequest*>(req->GetRequestMut());
-        Y_VERIFY(request != nullptr, "Wrong using of TGRpcRequestWrapper");
+        Y_ABORT_UNLESS(request != nullptr, "Wrong using of TGRpcRequestWrapper");
         return request;
     }
 

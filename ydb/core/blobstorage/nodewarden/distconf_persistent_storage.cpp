@@ -31,7 +31,7 @@ namespace NKikimr::NStorage {
         for (const TString& path : drives) {
             TString data;
             const bool success = record.SerializeToString(&data);
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
             switch (WritePDiskMetadata(path, cfg->CreatePDiskKey(), TRcBuf(std::move(data)))) {
                 case NPDisk::EPDiskMetadataOutcome::OK:
                     ev->StatusPerPath.emplace_back(path, true);
@@ -57,7 +57,7 @@ namespace NKikimr::NStorage {
 
         TString s;
         const bool success = config->SerializeToString(&s);
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
 
         auto digest = NOpenSsl::NSha1::Calc(s.data(), s.size());
         config->SetFingerprint(digest.data(), digest.size());
@@ -110,7 +110,7 @@ namespace NKikimr::NStorage {
             ++(status ? numOk : numError);
         }
 
-        Y_VERIFY(!PersistQ.empty());
+        Y_ABORT_UNLESS(!PersistQ.empty());
         auto& item = PersistQ.front();
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC36, "TEvStorageConfigStored", (NumOk, numOk), (NumError, numError),
@@ -206,7 +206,7 @@ namespace NKikimr::NStorage {
                 Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
             } else {
                 ApplyStorageConfig(InitialConfig);
-                Y_VERIFY(DirectBoundNodes.empty()); // ensure we don't have to spread this config
+                Y_ABORT_UNLESS(DirectBoundNodes.empty()); // ensure we don't have to spread this config
                 InitialConfig.Clear();
                 StorageConfigLoaded = true;
             }
@@ -266,7 +266,7 @@ namespace NKikimr {
 
             TString s;
             const bool success = it->GetMeta().SerializeToString(&s);
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
 
             WritePDiskMetadata(path, key, TRcBuf(std::move(s)));
         }
@@ -275,7 +275,7 @@ namespace NKikimr {
                 std::find(key.begin(), key.end(), it->GetKey()) != key.end()) {
             TString s;
             const bool success = it->GetMeta().SerializeToString(&s);
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
             metadata = TRcBuf(std::move(s));
             return NPDisk::EPDiskMetadataOutcome::OK;
         }
@@ -319,13 +319,13 @@ namespace NKikimr {
         it->SetTimestamp(info.Timestamp.GetValue());
         it->SetKey(key.back());
         bool success = it->MutableMeta()->ParseFromString(metadata.ExtractUnderlyingContainerOrCopy<TString>());
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
 
         TString buffer;
         google::protobuf::util::JsonPrintOptions opts;
         opts.add_whitespace = true;
         success = google::protobuf::util::MessageToJsonString(vault, &buffer, opts).ok();
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
 
         const TString tempPath = VaultPath + ".tmp";
         TFileHandle fh1(tempPath, OpenAlways);

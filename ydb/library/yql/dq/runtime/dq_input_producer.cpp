@@ -228,7 +228,7 @@ private:
         YQL_ENSURE(CurrentItemIndexes.size());
         std::pop_heap(CurrentItemIndexes.begin(), CurrentItemIndexes.end());
         auto& current = CurrentItemIndexes.back();
-        Y_VERIFY(!current.IsYield());
+        Y_ABORT_UNLESS(!current.IsYield());
         YQL_ENSURE(width == current.Width());
 
         NKikimr::NUdf::TUnboxedValue* res = current.GetValue();
@@ -252,7 +252,7 @@ private:
                 rhsColValue = rhs->GetElement(sortCol->Index);
             }
             auto it = SortColTypes.find(sortCol->Index);
-            Y_VERIFY(it != SortColTypes.end());
+            Y_ABORT_UNLESS(it != SortColTypes.end());
             compRes = NKikimr::NMiniKQL::CompareValues(it->second,
                 sortCol->Ascending, /* isOptional */ true, lhsColValue, rhsColValue);
         }

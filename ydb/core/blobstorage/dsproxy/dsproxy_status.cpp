@@ -21,9 +21,9 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor<TBlo
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev) {
         ProcessReplyFromQueue(ev);
         const NKikimrBlobStorage::TEvVStatusResult& record = ev->Get()->Record;
-        Y_VERIFY(record.HasStatus());
+        Y_ABORT_UNLESS(record.HasStatus());
         const NKikimrProto::EReplyStatus status = record.GetStatus();
-        Y_VERIFY(record.HasVDiskID());
+        Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
         A_LOG_LOG_S(false, PriorityForStatusInbound(status), "DSPS01", "Handle TEvVStatusResult"

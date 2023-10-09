@@ -35,7 +35,7 @@ public:
     TCompactionInfo(std::shared_ptr<TGranuleMeta> granule)
         : GranuleMeta(granule)
     {
-        Y_VERIFY(granule);
+        Y_ABORT_UNLESS(granule);
     }
 
     std::shared_ptr<TGranuleMeta> GetGranule() const {

@@ -34,14 +34,14 @@ struct TEvTxAllocator {
 
         TEvAllocateResult(NKikimrTx::TEvTxAllocateResult::EStatus status)
         {
-            Y_VERIFY(status != NKikimrTx::TEvTxAllocateResult::SUCCESS);
+            Y_ABORT_UNLESS(status != NKikimrTx::TEvTxAllocateResult::SUCCESS);
             Record.SetStatus(status);
         }
 
         TEvAllocateResult(ui64 begin, ui64 end)
         {
-            Y_VERIFY(ExtractPrivateMarker(begin) != 0, "privat marker hasn't found in allocation");
-            Y_VERIFY(ExtractPrivateMarker(begin) == ExtractPrivateMarker(end), "privat marker incorrect");
+            Y_ABORT_UNLESS(ExtractPrivateMarker(begin) != 0, "privat marker hasn't found in allocation");
+            Y_ABORT_UNLESS(ExtractPrivateMarker(begin) == ExtractPrivateMarker(end), "privat marker incorrect");
 
             Record.SetStatus(NKikimrTx::TEvTxAllocateResult::SUCCESS);
             Record.SetRangeBegin(begin);

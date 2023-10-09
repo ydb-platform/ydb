@@ -64,7 +64,7 @@ namespace NTest {
 
         const TRow& operator[](size_t on) const noexcept
         {
-            Y_VERIFY(on < Rows.size(), "Row index is out of hole scope");
+            Y_ABORT_UNLESS(on < Rows.size(), "Row index is out of hole scope");
 
             return Rows[on];
         }

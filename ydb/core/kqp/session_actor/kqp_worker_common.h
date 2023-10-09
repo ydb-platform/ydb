@@ -110,7 +110,7 @@ inline ETableReadType ExtractMostHeavyReadType(const TString& queryPlan) {
             }
 
             for (const auto& read : table["reads"].GetArray()) {
-                Y_VERIFY(read.Has("type"));
+                Y_ABORT_UNLESS(read.Has("type"));
                 const auto& type = read["type"].GetString();
 
                 if (type == "Scan") {

@@ -102,7 +102,7 @@ public:
     explicit TDbTestPlayerActor(const TVector<NFake::TFuncTx::TCall>& actions)
         : Actions(actions)
     {
-        Y_VERIFY(actions.size(), "Have to pass at least one action");
+        Y_ABORT_UNLESS(actions.size(), "Have to pass at least one action");
     }
 
     EDo Run() override
@@ -219,7 +219,7 @@ private:
     }
 
     ui64 RandomNumber(ui64 limit) {
-        Y_VERIFY(limit > 0, "Invalid limit specified [0,%" PRIu64 ")", limit);
+        Y_ABORT_UNLESS(limit > 0, "Invalid limit specified [0,%" PRIu64 ")", limit);
         return RandomProvider->GenRand64() % limit;
     }
 
@@ -334,8 +334,8 @@ private:
                 LastKey = it->GetValues().Columns[0].AsValue<ui32>();
             }
 
-            Y_VERIFY(LastKey + 1 == RowCount /* incomplete read */);
-            Y_VERIFY(Restarts == 1 /* exactly one precharge */);
+            Y_ABORT_UNLESS(LastKey + 1 == RowCount /* incomplete read */);
+            Y_ABORT_UNLESS(Restarts == 1 /* exactly one precharge */);
 
             return true;
         } catch (NTable::TIteratorNotReady&) {

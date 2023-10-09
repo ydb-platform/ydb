@@ -63,7 +63,7 @@ TString ProtoToString(const Ydb::TOperationId& proto) {
             res << "ydb://scriptexec";
             break;
         default:
-            Y_VERIFY(false, "unexpected kind");
+            Y_ABORT_UNLESS(false, "unexpected kind");
     }
     // According to protobuf documentation:
     // Fields (both normal fields and extension fields) will be listed ordered by field number,
@@ -94,7 +94,7 @@ TString ProtoToString(const Ydb::TOperationId& proto) {
                         res << reflection.GetEnumValue(proto, field);
                     break;
                     default:
-                        Y_VERIFY(false, "unexpected protobuf field type");
+                        Y_ABORT_UNLESS(false, "unexpected protobuf field type");
                     break;
                 }
             }

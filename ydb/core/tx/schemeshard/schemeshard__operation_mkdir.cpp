@@ -32,8 +32,8 @@ public:
                        << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxMkDir);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxMkDir);
 
         auto pathId = txState->TargetPathId;
         auto path = TPath::Init(pathId, context.SS);
@@ -62,8 +62,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxMkDir);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxMkDir);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -266,7 +266,7 @@ ISubOperation::TPtr CreateMkDir(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr CreateMkDir(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TMkDir>(id, state);
 }
 

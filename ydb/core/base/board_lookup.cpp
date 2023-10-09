@@ -274,7 +274,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         if (replica.State == EReplicaState::Unknown) {
             Stats.Replied++;
         } else {
-            Y_VERIFY(Stats.NotAvailable);
+            Y_ABORT_UNLESS(Stats.NotAvailable);
             Stats.NotAvailable--;
         }
 
@@ -325,10 +325,10 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
                 }
                 if (replica.State != EReplicaState::NotAvailable) {
                     if (replica.State == EReplicaState::Ready) {
-                        Y_VERIFY(Stats.HasInfo);
+                        Y_ABORT_UNLESS(Stats.HasInfo);
                         Stats.HasInfo--;
                     } else if (replica.State == EReplicaState::NoInfo) {
-                        Y_VERIFY(Stats.NoInfo);
+                        Y_ABORT_UNLESS(Stats.NoInfo);
                         Stats.NoInfo--;
                     }
                     if (replica.State != EReplicaState::Reconnect) {
@@ -363,10 +363,10 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         }
 
         if (replica.State == EReplicaState::Ready) {
-            Y_VERIFY(Stats.HasInfo);
+            Y_ABORT_UNLESS(Stats.HasInfo);
             --Stats.HasInfo;
         } else if (replica.State == EReplicaState::NoInfo) {
-            Y_VERIFY(Stats.NoInfo);
+            Y_ABORT_UNLESS(Stats.NoInfo);
             --Stats.NoInfo;
         }
 

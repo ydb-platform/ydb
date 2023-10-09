@@ -58,7 +58,7 @@ namespace NKikimr {
     {
         TLogoBlobsSnapshot::TIndexForwardIterator it(hullCtx, snapshot);
         for (const auto& item : extremeQueries) {
-            Y_VERIFY(item.HasId());
+            Y_ABORT_UNLESS(item.HasId());
             const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(item.GetId());
             const TLogoBlobID& full = id.FullID();
 

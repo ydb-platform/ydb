@@ -49,7 +49,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_VERIFY(Result);
+        Y_ABORT_UNLESS(Result);
         ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);
     }
 

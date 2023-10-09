@@ -80,7 +80,7 @@ namespace NKikimr {
                 }
 
                 void Finished() override {
-                    Y_VERIFY(!Invoked);
+                    Y_ABORT_UNLESS(!Invoked);
                     Invoked = true;
 
                     if (Status.ok()) {
@@ -152,7 +152,7 @@ namespace NKikimr {
                 void InvokeProcess() override {
                     auto guard = Guard(ReaderLock);
 
-                    Y_VERIFY(!Finished);
+                    Y_ABORT_UNLESS(!Finished);
                     Y_VERIFY_DEBUG(Reader);
 
                     if (Initialized)
@@ -162,7 +162,7 @@ namespace NKikimr {
                 }
 
                 void InvokeFinish() override {
-                    Y_VERIFY(!Finished);
+                    Y_ABORT_UNLESS(!Finished);
                     Finished = true;
 
                     if (Status.ok()) {

@@ -11,7 +11,7 @@ NTable::EReady TDataShardUserDb::SelectRow(
         const TMaybe<TRowVersion>& readVersion)
 {
     auto tid = Self.GetLocalTableId(tableId);
-    Y_VERIFY(tid != 0, "Unexpected SelectRow for an unknown table");
+    Y_ABORT_UNLESS(tid != 0, "Unexpected SelectRow for an unknown table");
 
     return Db.Select(tid, key, tags, row, stats, /* readFlags */ 0,
         readVersion.GetOrElse(ReadVersion),

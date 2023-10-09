@@ -203,7 +203,7 @@ public:
                 ->GetSubgroup("pdisk", Sprintf("%09" PRIu32, (ui32)cfg->PDiskId))
                 ->GetSubgroup("media", to_lower(cfg->PDiskCategory.TypeStrShort())))
     {
-        Y_VERIFY(!MainKey.empty());
+        Y_ABORT_UNLESS(!MainKey.empty());
     }
 
     ~TPDiskActor() {
@@ -315,7 +315,7 @@ public:
         } else {
             PDisk.Reset(new TPDisk(Cfg, PDiskCounters));
             PDisk->Initialize(TlsActivationContext->ActorSystem(), SelfId());
-            Y_VERIFY(PDisk->PDiskThread.Running());
+            Y_ABORT_UNLESS(PDisk->PDiskThread.Running());
 
             *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
             *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
@@ -457,7 +457,7 @@ public:
         } else {
             PDisk.Reset(new TPDisk(Cfg, PDiskCounters));
             PDisk->Initialize(TlsActivationContext->ActorSystem(), SelfId());
-            Y_VERIFY(PDisk->PDiskThread.Running());
+            Y_ABORT_UNLESS(PDisk->PDiskThread.Running());
 
             *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
             *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
@@ -720,7 +720,7 @@ public:
 
     void ErrorHandle(NPDisk::TEvYardControl::TPtr &ev) {
         const NPDisk::TEvYardControl &evControl = *ev->Get();
-        Y_VERIFY(PDisk);
+        Y_ABORT_UNLESS(PDisk);
 
         PDisk->Mon.YardControl.CountRequest();
 
@@ -728,7 +728,7 @@ public:
         case TEvYardControl::PDiskStart:
         {
             auto *mainKey = static_cast<const NPDisk::TMainKey*>(evControl.Cookie);
-            Y_VERIFY(mainKey);
+            Y_ABORT_UNLESS(mainKey);
             MainKey = *mainKey;
             StartPDiskThread();
             ControledStartResult = MakeHolder<IEventHandle>(ev->Sender, SelfId(),
@@ -851,7 +851,7 @@ public:
             Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
             break;
         case TEvYardControl::GetPDiskPointer:
-            Y_VERIFY(!evControl.Cookie);
+            Y_ABORT_UNLESS(!evControl.Cookie);
             Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::OK, PDisk.Get(), {}));
             break;
         case TEvYardControl::PDiskStart:

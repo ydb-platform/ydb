@@ -49,7 +49,7 @@ private:
             for (size_t i = 0; i < indexDesc.GetIndexColumns().size(); i++, j++) {
                 const auto& col = indexDesc.GetIndexColumns()[i];
                 auto it = indexedColumnsMap.find(col);
-                Y_VERIFY(it != indexedColumnsMap.end());
+                Y_ABORT_UNLESS(it != indexedColumnsMap.end());
                 settings.AppendColumns(col);
                 checkColumnsMap[j] = it->second;
                 indexColumns[col] = i;
@@ -58,7 +58,7 @@ private:
             for (size_t i = 0; i < indexDesc.GetDataColumns().size(); i++, j++) {
                 const auto& col = indexDesc.GetDataColumns()[i];
                 auto it = indexedColumnsMap.find(col);
-                Y_VERIFY(it != indexedColumnsMap.end());
+                Y_ABORT_UNLESS(it != indexedColumnsMap.end());
                 settings.AppendColumns(col);
                 checkColumnsMap[j] = it->second;
             }
@@ -217,7 +217,7 @@ private:
                     auto value = rsParser.GetValue(i);
                     key += NYdb::FormatValueYson(value);
                 }
-                Y_VERIFY(buf.insert(std::make_pair(key, values)).second);
+                Y_ABORT_UNLESS(buf.insert(std::make_pair(key, values)).second);
                 if (ProgressTracker_) {
                     ProgressTracker_->Update(rows++);
                 }

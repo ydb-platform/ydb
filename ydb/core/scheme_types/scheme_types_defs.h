@@ -212,7 +212,7 @@ public:
     }
 
     static TRawTypeValue ToRawTypeValue(const ::TString& value) {
-        Y_VERIFY(value.size() <= MaxSize);
+        Y_ABORT_UNLESS(value.size() <= MaxSize);
         return TRawTypeValue((const void*)value.data(), value.size(), TTypeInfo(TypeId));
     }
 };

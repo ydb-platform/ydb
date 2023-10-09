@@ -37,7 +37,7 @@ namespace NKikimr {
         void Handle(TEvAnubisVGet::TPtr &ev, const TActorContext &ctx) {
             using TEvVGet = TEvBlobStorage::TEvVGet;
 
-            Y_VERIFY(RequestFrom == TActorId());
+            Y_ABORT_UNLESS(RequestFrom == TActorId());
             const auto eclass = NKikimrBlobStorage::EGetHandleClass::AsyncRead;
             auto msg = TEvVGet::CreateExtremeIndexQuery(TargetVDiskId, TInstant::Max(), eclass);
             msg->Record.SetSuppressBarrierCheck(true);
@@ -50,7 +50,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY(RequestFrom != TActorId());
+            Y_ABORT_UNLESS(RequestFrom != TActorId());
 
             // check for RACE and update status if required
             NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;

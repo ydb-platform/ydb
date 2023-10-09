@@ -138,7 +138,7 @@ public:
 
         CreateSessionIfNotExists();
 
-        Y_VERIFY(!batch.IsWide(), "Wide batch is not supported");
+        Y_ABORT_UNLESS(!batch.IsWide(), "Wide batch is not supported");
         if (!batch.ForEachRow([&](const auto& value) {
             if (!value.IsBoxed()) {
                 Fail("Struct with single field was expected");
@@ -192,7 +192,7 @@ public:
     };
 
     void LoadState(const NDqProto::TSinkState& state) override {
-        Y_VERIFY(NextSeqNo == 1);
+        Y_ABORT_UNLESS(NextSeqNo == 1);
         const auto& data = state.GetData().GetStateData();
         if (data.GetVersion() == StateVersion) { // Current version
             NPq::NProto::TDqPqTopicSinkState stateProto;
@@ -355,10 +355,10 @@ private:
                 return std::nullopt;
             }
 
-            //Y_VERIFY(Self.ConfirmedSeqNo == 0 || ev.Acks.front().SeqNo == Self.ConfirmedSeqNo + 1);
+            //Y_ABORT_UNLESS(Self.ConfirmedSeqNo == 0 || ev.Acks.front().SeqNo == Self.ConfirmedSeqNo + 1);
 
             for (auto it = ev.Acks.begin(); it != ev.Acks.end(); ++it) {
-                //Y_VERIFY(it == ev.Acks.begin() || it->SeqNo == std::prev(it)->SeqNo + 1);
+                //Y_ABORT_UNLESS(it == ev.Acks.begin() || it->SeqNo == std::prev(it)->SeqNo + 1);
                 LOG_T(Self.LogPrefix << "Ack seq no " << it->SeqNo);
                 if (it->State == NYdb::NPersQueue::TWriteSessionEvent::TWriteAck::EEventState::EES_DISCARDED) {
                     TIssues issues;
@@ -382,7 +382,7 @@ private:
         }
 
         std::optional<TIssues> operator()(NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent& ev) {
-            //Y_VERIFY(!Self.ContinuationToken);
+            //Y_ABORT_UNLESS(!Self.ContinuationToken);
 
             if (!Self.Buffer.empty()) {
                 Self.WriteNextMessage(std::move(ev.ContinuationToken));

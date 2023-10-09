@@ -95,7 +95,7 @@ protected:
     using TBase = TAdapterActor<TDerived, TEvRequest, TEvResponse>;
 
     TCmsStatePtr GetCmsState() const {
-        Y_VERIFY(CmsState);
+        Y_ABORT_UNLESS(CmsState);
         return CmsState;
     }
 
@@ -380,7 +380,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         cmsRequest.SetSchedule(true);
 
         for (const auto& group : request.action_groups()) {
-            Y_VERIFY(group.actions().size() == 1);
+            Y_ABORT_UNLESS(group.actions().size() == 1);
             for (const auto& action : group.actions()) {
                 if (action.has_lock_action()) {
                     ConvertAction(action.lock_action(), *cmsRequest.AddActions());

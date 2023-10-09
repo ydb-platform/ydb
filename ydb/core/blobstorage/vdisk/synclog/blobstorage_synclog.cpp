@@ -105,7 +105,7 @@ namespace NKikimr {
             friend class TActorBootstrapped<TSyncLogActor>;
 
             ui64 GetDbBirthLsn() {
-                Y_VERIFY(DbBirthLsn.Defined());
+                Y_ABORT_UNLESS(DbBirthLsn.Defined());
                 return *DbBirthLsn;
             }
 
@@ -227,7 +227,7 @@ namespace NKikimr {
                     NeighborsPtr->UpdateSyncedLsn(vdisk, syncedLsn);
                     // get current min value
                     ui64 curMinLsn = NeighborsPtr->GlobalSyncedLsn();
-                    Y_VERIFY(prevMinLsn <= curMinLsn,
+                    Y_ABORT_UNLESS(prevMinLsn <= curMinLsn,
                              "TSyncLogActor::CutLog: currentSyncedLsn# %" PRIu64
                              " syncedLsn# %" PRIu64 " vdisk# %s prevMinLsn# %" PRIu64
                              " curMinLsn# %" PRIu64,
@@ -266,7 +266,7 @@ namespace NKikimr {
                 Y_UNUSED(ctx);
                 auto *msg = ev->Get();
                 GInfo = msg->NewInfo;
-                Y_VERIFY(msg->NewVDiskId == msg->NewInfo->GetVDiskId(SlCtx->VCtx->ShortSelfVDisk));
+                Y_ABORT_UNLESS(msg->NewVDiskId == msg->NewInfo->GetVDiskId(SlCtx->VCtx->ShortSelfVDisk));
                 SelfVDiskId = msg->NewVDiskId;
             }
 

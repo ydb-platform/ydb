@@ -464,7 +464,7 @@ public:
                 if (tablet) {
                     ui32 channelId = tabletChannelRowset.GetValue<Schema::TabletChannel::Channel>();
                     TString storagePool = tabletChannelRowset.GetValue<Schema::TabletChannel::StoragePool>();
-                    Y_VERIFY(tablet->BoundChannels.size() == channelId);
+                    Y_ABORT_UNLESS(tablet->BoundChannels.size() == channelId);
                     tablet->BoundChannels.emplace_back();
                     NKikimrStoragePool::TChannelBind& bind = tablet->BoundChannels.back();
                     if (tabletChannelRowset.HaveValue<Schema::TabletChannel::Binding>()) {

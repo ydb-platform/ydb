@@ -280,7 +280,7 @@ public:
         for (const TString& str : requestedFilters) {
             size_t opFirstPos = str.find_first_of("!><=");
             // TODO: replace with error reporting
-            //Y_VERIFY(opPos != TString::npos);
+            //Y_ABORT_UNLESS(opPos != TString::npos);
             THolder<IFieldProtoFilter> filter;
             TString field = str.substr(0, opFirstPos);
             size_t opEndPos = str.find_first_not_of("!><=", opFirstPos);
@@ -288,7 +288,7 @@ public:
                 TString op = str.substr(opFirstPos, opEndPos - opFirstPos);
                 TString value = str.substr(opEndPos);
                 // TODO: replace with error reporting
-                //Y_VERIFY(op == "=");
+                //Y_ABORT_UNLESS(op == "=");
                 const FieldDescriptor* fieldDescriptor = descriptor.FindFieldByName(field);
                 if (fieldDescriptor != nullptr) {
                     if (op == "=" || op == "==") {
@@ -534,12 +534,12 @@ public:
                     throw yexception() << "invalid filter specified";
                 }
                 // TODO: replace with error reporting
-                //Y_VERIFY(filter != nullptr);
+                //Y_ABORT_UNLESS(filter != nullptr);
                 foundFilters.emplace_back(std::move(filter));
             }
         }
         // TODO: replace with error reporting
-        //Y_VERIFY(requestedFilters.size() == foundFilters.size());
+        //Y_ABORT_UNLESS(requestedFilters.size() == foundFilters.size());
         return foundFilters;
     }
 };

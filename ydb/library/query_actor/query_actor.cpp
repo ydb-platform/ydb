@@ -162,7 +162,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvCreateSessionResult::TPtr& ev) {
         SessionId = ev->Get()->SessionId;
         DeleteSession = true;
         RunQuery();
-        Y_VERIFY(Finished || RunningQuery);
+        Y_ABORT_UNLESS(Finished || RunningQuery);
     } else {
         LOG_W("Failed to create session: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
         Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
@@ -177,7 +177,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDeleteSessionResult::TPtr& ev) {
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
-    Y_VERIFY(RunningQuery);
+    Y_ABORT_UNLESS(RunningQuery);
     RunningQuery = false;
     TxId = ev->Get()->Result.tx_meta().id();
     LOG_D("TQueryBase. TEvDataQueryResult " << ev->Get()->Status << ", Issues: \"" << ev->Get()->Issues.ToOneLineString() << "\", SessionId: " << SessionId << ", TxId: " << TxId);
@@ -192,7 +192,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
         } catch (const std::exception& ex) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, ex.what());
         }
-        Y_VERIFY(Finished || RunningQuery || RunningCommit);
+        Y_ABORT_UNLESS(Finished || RunningQuery || RunningCommit);
     } else {
         Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
     }
@@ -272,7 +272,7 @@ void TQueryBase::RunDeleteSession() {
 }
 
 void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, TTxControl txControl) {
-    Y_VERIFY(!RunningQuery);
+    Y_ABORT_UNLESS(!RunningQuery);
     RunningQuery = true;
     LOG_D("RunDataQuery: " << sql);
     using TEvExecuteDataQueryRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::ExecuteDataQueryRequest,
@@ -283,7 +283,7 @@ void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, 
     if (txControl.Begin) {
         txControlProto->mutable_begin_tx()->mutable_serializable_read_write();
     } else if (txControl.Continue) {
-        Y_VERIFY(TxId);
+        Y_ABORT_UNLESS(TxId);
         txControlProto->set_tx_id(TxId);
     }
     if (txControl.Commit) {
@@ -300,8 +300,8 @@ void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, 
 }
 
 void TQueryBase::RollbackTransaction() {
-    Y_VERIFY(SessionId);
-    Y_VERIFY(TxId);
+    Y_ABORT_UNLESS(SessionId);
+    Y_ABORT_UNLESS(TxId);
     LOG_D("Rollback transaction: " << TxId);
     using TEvRollbackTransactionRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::RollbackTransactionRequest,
         Ydb::Table::RollbackTransactionResponse>;
@@ -313,8 +313,8 @@ void TQueryBase::RollbackTransaction() {
 
 void TQueryBase::CommitTransaction() {
     RunningCommit = true;
-    Y_VERIFY(SessionId);
-    Y_VERIFY(TxId);
+    Y_ABORT_UNLESS(SessionId);
+    Y_ABORT_UNLESS(TxId);
     LOG_D("Commit transaction: " << TxId);
     using TEvCommitTransactionRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::CommitTransactionRequest,
         Ydb::Table::CommitTransactionResponse>;

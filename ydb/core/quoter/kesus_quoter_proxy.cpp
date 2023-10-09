@@ -127,7 +127,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
                 }
 
                 auto splittedPath = SplitPath(resource);
-                Y_VERIFY(!splittedPath.empty());
+                Y_ABORT_UNLESS(!splittedPath.empty());
                 ParentConsumed.reserve(splittedPath.size() - 1);
                 for (auto pathIter = splittedPath.begin() + 1; pathIter != splittedPath.end(); ++pathIter) {
                     const TString parentResourceName = NKesus::CanonizeQuoterResourcePath(TVector<TString>(splittedPath.begin(), pathIter));
@@ -189,7 +189,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             const double prevBucketMaxSize = ResourceBucketMaxSize;
             ResourceBucketMaxSize = Max(0.0, speed * prefetch);
             ResourceBucketMinSize = ResourceBucketMaxSize * watermark;
-            Y_VERIFY(ResourceBucketMinSize <= ResourceBucketMaxSize);
+            Y_ABORT_UNLESS(ResourceBucketMinSize <= ResourceBucketMaxSize);
 
             // Decrease available resource if speed or prefetch settings have been changed.
             if (prefetch > 0.0) { // RTMR-3774
@@ -314,15 +314,15 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
 
 private:
     ui64 NewCookieForRequest(TString resourcePath) {
-        Y_VERIFY(resourcePath);
+        Y_ABORT_UNLESS(resourcePath);
         std::vector<TString> paths = {std::move(resourcePath)};
         return NewCookieForRequest(std::move(paths));
     }
 
     ui64 NewCookieForRequest(std::vector<TString> resourcePaths) {
-        Y_VERIFY(!resourcePaths.empty());
+        Y_ABORT_UNLESS(!resourcePaths.empty());
         const ui64 cookie = NextCookie++;
-        Y_VERIFY(CookieToResourcePath.emplace(cookie, std::move(resourcePaths)).second);
+        Y_ABORT_UNLESS(CookieToResourcePath.emplace(cookie, std::move(resourcePaths)).second);
         return cookie;
     }
 
@@ -475,7 +475,7 @@ private:
     void Handle(TEvQuota::TEvProxyRequest::TPtr& ev) {
         TEvQuota::TEvProxyRequest* msg = ev->Get();
         KESUS_PROXY_LOG_INFO("ProxyRequest \"" << msg->Resource << "\"");
-        Y_VERIFY(ev->Sender == QuoterServiceId);
+        Y_ABORT_UNLESS(ev->Sender == QuoterServiceId);
 
         auto resourceIt = Resources.find(msg->Resource);
         if (resourceIt == Resources.end()) {
@@ -516,7 +516,7 @@ private:
     }
 
     void SubscribeToAllResources() {
-        Y_VERIFY(Connected);
+        Y_ABORT_UNLESS(Connected);
         if (Resources.empty()) {
             return;
         }
@@ -802,7 +802,7 @@ private:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-        Y_VERIFY(ev->Get()->TabletId == GetKesusTabletId(),
+        Y_ABORT_UNLESS(ev->Get()->TabletId == GetKesusTabletId(),
                  "Got EvClientDestroyed with tablet %" PRIu64 ", but kesus tablet is %" PRIu64, ev->Get()->TabletId, GetKesusTabletId());
         KESUS_PROXY_LOG_WARN("Disconnected from tablet");
         ConnectToKesus(true);
@@ -820,13 +820,13 @@ private:
             const auto& result = ev->Get()->Record;
             ServerVersion = result.GetProtocolVersion();
             KESUS_PROXY_LOG_TRACE("SubscribeOnResourceResult(" << result << ")");
-            Y_VERIFY(result.ResultsSize() == resourcePaths.size(), "Expected %" PRISZT " resources, but got %" PRISZT, resourcePaths.size(), result.ResultsSize());
+            Y_ABORT_UNLESS(result.ResultsSize() == resourcePaths.size(), "Expected %" PRISZT " resources, but got %" PRISZT, resourcePaths.size(), result.ResultsSize());
             for (size_t i = 0; i < resourcePaths.size(); ++i) {
                 const auto& resResult = result.GetResults(i);
                 auto resourceIt = Resources.find(resourcePaths[i]);
                 if (resourceIt != Resources.end()) {
                     auto* resState = resourceIt->second.Get();
-                    Y_VERIFY(resState != nullptr);
+                    Y_ABORT_UNLESS(resState != nullptr);
                     if (resResult.GetError().GetStatus() == Ydb::StatusIds::SUCCESS) {
                         KESUS_PROXY_LOG_INFO("Initialized new session with resource \"" << resourcePaths[i] << "\"");
                         if (resState->ResId != Max<ui64>() && resState->ResId != resResult.GetResourceId()) { // Kesus was disconnected and then resource was recreated.
@@ -1058,9 +1058,9 @@ public:
         , KesusInfo(navEntry.KesusInfo)
         , TabletPipeFactory(std::move(tabletPipeFactory))
     {
-        Y_VERIFY(KesusInfo);
-        Y_VERIFY(GetKesusTabletId());
-        Y_VERIFY(TabletPipeFactory);
+        Y_ABORT_UNLESS(KesusInfo);
+        Y_ABORT_UNLESS(GetKesusTabletId());
+        Y_ABORT_UNLESS(TabletPipeFactory);
         Y_UNUSED(QuoterId);
 
         QUOTER_SYSTEM_DEBUG(DebugInfo->KesusQuoterProxies.emplace(CanonizePath(Path), this));

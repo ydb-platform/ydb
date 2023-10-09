@@ -13,11 +13,11 @@ TDataShard::TTxPlanStep::TTxPlanStep(TDataShard *self, TEvTxProcessing::TEvPlanS
     , IsAccepted(false)
     , RequestStartTime(TAppData::TimeProvider->Now())
 {
-    Y_VERIFY(Ev);
+    Y_ABORT_UNLESS(Ev);
 }
 
 bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorContext &ctx) {
-    Y_VERIFY(Ev);
+    Y_ABORT_UNLESS(Ev);
 
     // TEvPlanStep are strictly ordered by mediator so this Tx must not be retried not to break this ordering!
     txc.DB.NoMoreReadsForTx();
@@ -31,8 +31,8 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
     TVector<ui64> txIds;
     txIds.reserve(Ev->Get()->Record.TransactionsSize());
     for (const auto& tx : Ev->Get()->Record.GetTransactions()) {
-        Y_VERIFY(tx.HasTxId());
-        Y_VERIFY(tx.HasAckTo());
+        Y_ABORT_UNLESS(tx.HasTxId());
+        Y_ABORT_UNLESS(tx.HasAckTo());
 
         txIds.push_back(tx.GetTxId());
 
@@ -69,7 +69,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
 }
 
 void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
-    Y_VERIFY(Ev);
+    Y_ABORT_UNLESS(Ev);
     ui64 step = Ev->Get()->Record.GetStep();
 
     for (auto& kv : TxByAck) {

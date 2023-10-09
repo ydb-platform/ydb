@@ -179,7 +179,7 @@ ui64 TPartition::MeteringDataSize(const TActorContext& ctx) const {
         }
         size -= key.Size;
     }
-    Y_VERIFY(size >= 0, "Metering data size must be positive");
+    Y_ABORT_UNLESS(size >= 0, "Metering data size must be positive");
     return size;
 }
 
@@ -239,7 +239,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     if (CurrentStateFunc() == &TThis::StateWrite) {//Write will handle all itself
         return;
     }
-    Y_VERIFY(CurrentStateFunc() == &TThis::StateIdle);
+    Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateIdle);
 
     if (ManageWriteTimestampEstimate)
         WriteTimestampEstimate = now;
@@ -343,7 +343,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
             hasDrop = true;
         }
 
-        Y_VERIFY(!DataKeysBody.empty());
+        Y_ABORT_UNLESS(!DataKeysBody.empty());
 
         endOffset = DataKeysBody.front().Key.GetOffset();
         if (DataKeysBody.front().Key.GetPartNo() > 0) {
@@ -474,7 +474,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     InitUserInfoForImportantClients(ctx);
 
     for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
-        Y_VERIFY(userInfoPair.second.Offset >= 0);
+        Y_ABORT_UNLESS(userInfoPair.second.Offset >= 0);
         ReadTimestampForOffset(userInfoPair.first, userInfoPair.second, ctx);
     }
     if (PartitionCountersLabeled) {
@@ -547,13 +547,13 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     result.SetGapCount(gapsCount);
     result.SetGapSize(headGapSize + GapSize);
 
-    Y_VERIFY(AvgWriteBytes.size() == 4);
+    Y_ABORT_UNLESS(AvgWriteBytes.size() == 4);
     result.SetAvgWriteSpeedPerSec(AvgWriteBytes[0].GetValue());
     result.SetAvgWriteSpeedPerMin(AvgWriteBytes[1].GetValue());
     result.SetAvgWriteSpeedPerHour(AvgWriteBytes[2].GetValue());
     result.SetAvgWriteSpeedPerDay(AvgWriteBytes[3].GetValue());
 
-    Y_VERIFY(AvgQuotaBytes.size() == 4);
+    Y_ABORT_UNLESS(AvgQuotaBytes.size() == 4);
     result.SetAvgQuotaSpeedPerSec(AvgQuotaBytes[0].GetValue());
     result.SetAvgQuotaSpeedPerMin(AvgQuotaBytes[1].GetValue());
     result.SetAvgQuotaSpeedPerHour(AvgQuotaBytes[2].GetValue());
@@ -570,7 +570,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
         auto& userInfo = userInfoPair.second;
         if (ev->Get()->ClientId.empty() || ev->Get()->ClientId == userInfo.User) {
-            Y_VERIFY(userInfo.AvgReadBytes.size() == 4);
+            Y_ABORT_UNLESS(userInfo.AvgReadBytes.size() == 4);
             for (ui32 i = 0; i < 4; ++i) {
                 resSpeed[i] += userInfo.AvgReadBytes[i].GetValue();
             }
@@ -725,18 +725,18 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
         return TInstant::Zero();
     const std::deque<TDataKey>& container =
         (offset < Head.Offset || offset == Head.Offset && Head.PartNo > 0) ? DataKeysBody : HeadKeys;
-    Y_VERIFY(!container.empty());
+    Y_ABORT_UNLESS(!container.empty());
     auto it = std::upper_bound(container.begin(), container.end(), offset,
                     [](const ui64 offset, const TDataKey& p) {
                         return offset < p.Key.GetOffset() ||
                                         offset == p.Key.GetOffset() && p.Key.GetPartNo() > 0;
                     });
     // Always greater
-    Y_VERIFY(it != container.begin(),
+    Y_ABORT_UNLESS(it != container.begin(),
              "Tablet %lu StartOffset %lu, HeadOffset %lu, offset %lu, containter size %lu, first-elem: %s",
              TabletID, StartOffset, Head.Offset, offset, container.size(),
              container.front().Key.ToString().c_str());
-    Y_VERIFY(it == container.end() ||
+    Y_ABORT_UNLESS(it == container.end() ||
              it->Key.GetOffset() > offset ||
              it->Key.GetOffset() == offset && it->Key.GetPartNo() > 0);
     --it;
@@ -760,8 +760,8 @@ void TPartition::Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorCo
 void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
     const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->Record;
-    Y_VERIFY(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
-    Y_VERIFY(event.HasData());
+    Y_ABORT_UNLESS(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
+    Y_ABORT_UNLESS(event.HasData());
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
 
     if (!txBody.GetImmediate()) {
@@ -853,8 +853,8 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
         }
 
         const auto& memInfo = it->second;
-        Y_VERIFY(memInfo.Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, memInfo.Offset);
-        Y_VERIFY(memInfo.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, memInfo.SeqNo);
+        Y_ABORT_UNLESS(memInfo.Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, memInfo.Offset);
+        Y_ABORT_UNLESS(memInfo.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, memInfo.SeqNo);
 
         protoInfo.SetSeqNo(memInfo.SeqNo);
         protoInfo.SetOffset(memInfo.Offset);
@@ -868,10 +868,10 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
 
 void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx) {
     const ui64 cookie = ev->Get()->GetCookie();
-    Y_VERIFY(ReadInfo.contains(cookie));
+    Y_ABORT_UNLESS(ReadInfo.contains(cookie));
 
     auto it = ReadInfo.find(cookie);
-    Y_VERIFY(it != ReadInfo.end());
+    Y_ABORT_UNLESS(it != ReadInfo.end());
     TReadInfo info = std::move(it->second);
     ReadInfo.erase(it);
 
@@ -907,8 +907,8 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
         ProcessTimestampRead(ctx);
         return;
     }
-    Y_VERIFY(userInfo->ReadScheduled);
-    Y_VERIFY(ReadingForUser != "");
+    Y_ABORT_UNLESS(userInfo->ReadScheduled);
+    Y_ABORT_UNLESS(ReadingForUser != "");
 
     LOG_ERROR_S(
             ctx, NKikimrServices::PERSQUEUE,
@@ -926,25 +926,25 @@ void TPartition::CheckHeadConsistency() const {
     for (ui32 j = 0; j < DataKeysHead.size(); ++j) {
         ui32 s = 0;
         for (ui32 k = 0; k < DataKeysHead[j].KeysCount(); ++k) {
-            Y_VERIFY(p < HeadKeys.size());
-            Y_VERIFY(DataKeysHead[j].GetKey(k) == HeadKeys[p].Key);
-            Y_VERIFY(DataKeysHead[j].GetSize(k) == HeadKeys[p].Size);
+            Y_ABORT_UNLESS(p < HeadKeys.size());
+            Y_ABORT_UNLESS(DataKeysHead[j].GetKey(k) == HeadKeys[p].Key);
+            Y_ABORT_UNLESS(DataKeysHead[j].GetSize(k) == HeadKeys[p].Size);
             s += DataKeysHead[j].GetSize(k);
-            Y_VERIFY(j + 1 == TotalLevels || DataKeysHead[j].GetSize(k) >= CompactLevelBorder[j + 1]);
+            Y_ABORT_UNLESS(j + 1 == TotalLevels || DataKeysHead[j].GetSize(k) >= CompactLevelBorder[j + 1]);
             ++p;
         }
-        Y_VERIFY(s < DataKeysHead[j].Border());
+        Y_ABORT_UNLESS(s < DataKeysHead[j].Border());
     }
-    Y_VERIFY(DataKeysBody.empty() ||
+    Y_ABORT_UNLESS(DataKeysBody.empty() ||
              Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
-    Y_VERIFY(p == HeadKeys.size());
+    Y_ABORT_UNLESS(p == HeadKeys.size());
     if (!HeadKeys.empty()) {
-        Y_VERIFY(HeadKeys.size() <= TotalMaxCount);
-        Y_VERIFY(HeadKeys.front().Key.GetOffset() == Head.Offset);
-        Y_VERIFY(HeadKeys.front().Key.GetPartNo() == Head.PartNo);
+        Y_ABORT_UNLESS(HeadKeys.size() <= TotalMaxCount);
+        Y_ABORT_UNLESS(HeadKeys.front().Key.GetOffset() == Head.Offset);
+        Y_ABORT_UNLESS(HeadKeys.front().Key.GetPartNo() == Head.PartNo);
         for (p = 1; p < HeadKeys.size(); ++p) {
-            Y_VERIFY(HeadKeys[p].Key.GetOffset() == HeadKeys[p-1].Key.GetOffset() + HeadKeys[p-1].Key.GetCount());
-            Y_VERIFY(HeadKeys[p].Key.ToString() > HeadKeys[p-1].Key.ToString());
+            Y_ABORT_UNLESS(HeadKeys[p].Key.GetOffset() == HeadKeys[p-1].Key.GetOffset() + HeadKeys[p-1].Key.GetCount());
+            Y_ABORT_UNLESS(HeadKeys[p].Key.ToString() > HeadKeys[p-1].Key.ToString());
         }
     }
 }
@@ -956,9 +956,9 @@ ui64 TPartition::GetSizeLag(i64 offset) {
                 [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
         if (it != DataKeysBody.begin())
             --it; //point to blob with this offset
-        Y_VERIFY(it != DataKeysBody.end());
+        Y_ABORT_UNLESS(it != DataKeysBody.end());
         sizeLag = it->Size + DataKeysBody.back().CumulativeSize - it->CumulativeSize;
-        Y_VERIFY(BodySize == DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - DataKeysBody.front().CumulativeSize);
+        Y_ABORT_UNLESS(BodySize == DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - DataKeysBody.front().CumulativeSize);
     }
     for (auto& b : HeadKeys) {
         if ((i64)b.Key.GetOffset() >= offset)
@@ -1074,7 +1074,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx) {
             }
             id += 2;
         }
-        Y_VERIFY(id == METRIC_MAX_READ_SPEED_4 + 1);
+        Y_ABORT_UNLESS(id == METRIC_MAX_READ_SPEED_4 + 1);
         if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Get()) {
             ui64 quotaUsage = ui64(userInfo.AvgReadBytes[1].GetValue()) * 1000000 / userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Get() / 60;
             if (quotaUsage != userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_USAGE].Get()) {
@@ -1131,7 +1131,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx) {
         }
         id += 2;
     }
-    Y_VERIFY(id == METRIC_MAX_WRITE_SPEED_4 + 1);
+    Y_ABORT_UNLESS(id == METRIC_MAX_WRITE_SPEED_4 + 1);
 
 
     id = METRIC_TOTAL_QUOTA_SPEED_1;
@@ -1144,7 +1144,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx) {
         }
         id += 2;
     }
-    Y_VERIFY(id == METRIC_MAX_QUOTA_SPEED_4 + 1);
+    Y_ABORT_UNLESS(id == METRIC_MAX_QUOTA_SPEED_4 + 1);
 
     if (WriteQuota->GetTotalSpeed()) {
         ui64 quotaUsage = ui64(AvgQuotaBytes[1].GetValue()) * 1000000 / WriteQuota->GetTotalSpeed() / 60;
@@ -1319,19 +1319,19 @@ void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)
 
 void TPartition::RemoveImmediateTx()
 {
-    Y_VERIFY(!ImmediateTxs.empty());
+    Y_ABORT_UNLESS(!ImmediateTxs.empty());
 
     ImmediateTxs.pop_front();
 }
 
 void TPartition::RemoveUserAct()
 {
-    Y_VERIFY(!UserActs.empty());
+    Y_ABORT_UNLESS(!UserActs.empty());
 
     auto p = UserActCount.find(UserActs.front()->ClientId);
-    Y_VERIFY(p != UserActCount.end());
+    Y_ABORT_UNLESS(p != UserActCount.end());
 
-    Y_VERIFY(p->second > 0);
+    Y_ABORT_UNLESS(p->second > 0);
     if (!--p->second) {
         UserActCount.erase(p);
     }
@@ -1354,9 +1354,9 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
         return;
     }
 
-    Y_VERIFY(PendingUsersInfo.empty());
-    Y_VERIFY(Replies.empty());
-    Y_VERIFY(AffectedUsers.empty());
+    Y_ABORT_UNLESS(PendingUsersInfo.empty());
+    Y_ABORT_UNLESS(Replies.empty());
+    Y_ABORT_UNLESS(AffectedUsers.empty());
 
     ContinueProcessTxsAndUserActs(ctx);
 }
@@ -1390,14 +1390,14 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
 
 void TPartition::RemoveDistrTx()
 {
-    Y_VERIFY(!DistrTxs.empty());
+    Y_ABORT_UNLESS(!DistrTxs.empty());
 
     DistrTxs.pop_front();
 }
 
 void TPartition::ProcessDistrTxs(const TActorContext& ctx)
 {
-    Y_VERIFY(!TxInProgress);
+    Y_ABORT_UNLESS(!TxInProgress);
 
     while (!TxInProgress && !DistrTxs.empty()) {
         ProcessDistrTx(ctx);
@@ -1488,19 +1488,19 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
         }
     }
 
-    Y_VERIFY(TxInProgress);
+    Y_ABORT_UNLESS(TxInProgress);
 
-    Y_VERIFY(!DistrTxs.empty());
+    Y_ABORT_UNLESS(!DistrTxs.empty());
     TTransaction& t = DistrTxs.front();
 
     if (t.Tx) {
-        Y_VERIFY(GetStepAndTxId(event) == GetStepAndTxId(*t.Tx));
-        Y_VERIFY(t.Predicate.Defined() && *t.Predicate);
+        Y_ABORT_UNLESS(GetStepAndTxId(event) == GetStepAndTxId(*t.Tx));
+        Y_ABORT_UNLESS(t.Predicate.Defined() && *t.Predicate);
 
         for (auto& operation : t.Tx->Operations) {
             TUserInfoBase& userInfo = GetOrCreatePendingUser(operation.GetConsumer());
 
-            Y_VERIFY(userInfo.Offset == (i64)operation.GetBegin());
+            Y_ABORT_UNLESS(userInfo.Offset == (i64)operation.GetBegin());
 
             userInfo.Offset = operation.GetEnd();
         }
@@ -1509,8 +1509,8 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
 
         ScheduleReplyCommitDone(t.Tx->Step, t.Tx->TxId);
     } else if (t.ProposeConfig) {
-        Y_VERIFY(GetStepAndTxId(event) == GetStepAndTxId(*t.ProposeConfig));
-        Y_VERIFY(t.Predicate.Defined() && *t.Predicate);
+        Y_ABORT_UNLESS(GetStepAndTxId(event) == GetStepAndTxId(*t.ProposeConfig));
+        Y_ABORT_UNLESS(t.Predicate.Defined() && *t.Predicate);
 
         BeginChangePartitionConfig(t.ProposeConfig->Config, ctx);
 
@@ -1518,7 +1518,7 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
 
         ScheduleReplyCommitDone(t.ProposeConfig->Step, t.ProposeConfig->TxId);
     } else {
-        Y_VERIFY(t.ChangeConfig);
+        Y_ABORT_UNLESS(t.ChangeConfig);
     }
 
     RemoveDistrTx();
@@ -1535,23 +1535,23 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxRollback& event,
         }
     }
 
-    Y_VERIFY(TxInProgress);
+    Y_ABORT_UNLESS(TxInProgress);
 
-    Y_VERIFY(!DistrTxs.empty());
+    Y_ABORT_UNLESS(!DistrTxs.empty());
     TTransaction& t = DistrTxs.front();
 
     if (t.Tx) {
-        Y_VERIFY(GetStepAndTxId(event) == GetStepAndTxId(*t.Tx));
-        Y_VERIFY(t.Predicate.Defined());
+        Y_ABORT_UNLESS(GetStepAndTxId(event) == GetStepAndTxId(*t.Tx));
+        Y_ABORT_UNLESS(t.Predicate.Defined());
 
         ChangePlanStepAndTxId(t.Tx->Step, t.Tx->TxId);
     } else if (t.ProposeConfig) {
-        Y_VERIFY(GetStepAndTxId(event) == GetStepAndTxId(*t.ProposeConfig));
-        Y_VERIFY(t.Predicate.Defined());
+        Y_ABORT_UNLESS(GetStepAndTxId(event) == GetStepAndTxId(*t.ProposeConfig));
+        Y_ABORT_UNLESS(t.Predicate.Defined());
 
         ChangePlanStepAndTxId(t.ProposeConfig->Step, t.ProposeConfig->TxId);
     } else {
-        Y_VERIFY(t.ChangeConfig);
+        Y_ABORT_UNLESS(t.ChangeConfig);
     }
 
 
@@ -1609,7 +1609,7 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
     Config = config;
     TopicConverter = topicConverter;
 
-    Y_VERIFY(Config.GetPartitionConfig().GetTotalPartitions() > 0);
+    Y_ABORT_UNLESS(Config.GetPartitionConfig().GetTotalPartitions() > 0);
 
     UsersInfoStorage->UpdateConfig(Config);
 
@@ -1658,9 +1658,9 @@ void TPartition::ResendPendingEvents(const TActorContext& ctx)
 
 void TPartition::ProcessDistrTx(const TActorContext& ctx)
 {
-    Y_VERIFY(!TxInProgress);
+    Y_ABORT_UNLESS(!TxInProgress);
 
-    Y_VERIFY(!DistrTxs.empty());
+    Y_ABORT_UNLESS(!DistrTxs.empty());
     TTransaction& t = DistrTxs.front();
 
     if (t.Tx) {
@@ -1683,7 +1683,7 @@ void TPartition::ProcessDistrTx(const TActorContext& ctx)
 
         TxInProgress = true;
     } else {
-        Y_VERIFY(!ChangeConfig);
+        Y_ABORT_UNLESS(!ChangeConfig);
 
         ChangeConfig = t.ChangeConfig;
         SendChangeConfigReply = t.SendReply;
@@ -1695,7 +1695,7 @@ void TPartition::ProcessDistrTx(const TActorContext& ctx)
 
 void TPartition::ProcessImmediateTxs(const TActorContext& ctx)
 {
-    Y_VERIFY(!UsersInfoWriteInProgress);
+    Y_ABORT_UNLESS(!UsersInfoWriteInProgress);
 
     while (!ImmediateTxs.empty() && (AffectedUsers.size() < MAX_USERS)) {
         ProcessImmediateTx(ImmediateTxs.front()->Record, ctx);
@@ -1709,14 +1709,14 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
 {
     Y_UNUSED(ctx);
 
-    Y_VERIFY(tx.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
-    Y_VERIFY(tx.HasData());
+    Y_ABORT_UNLESS(tx.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
+    Y_ABORT_UNLESS(tx.HasData());
 
     for (auto& operation : tx.GetData().GetOperations()) {
-        Y_VERIFY(operation.HasBegin() && operation.HasEnd() && operation.HasConsumer());
+        Y_ABORT_UNLESS(operation.HasBegin() && operation.HasEnd() && operation.HasConsumer());
 
-        Y_VERIFY(operation.GetBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetBegin());
-        Y_VERIFY(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
+        Y_ABORT_UNLESS(operation.GetBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetBegin());
+        Y_ABORT_UNLESS(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
 
         const TString& user = operation.GetConsumer();
 
@@ -1755,7 +1755,7 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
 
 void TPartition::ProcessUserActs(const TActorContext& ctx)
 {
-    Y_VERIFY(!UsersInfoWriteInProgress);
+    Y_ABORT_UNLESS(!UsersInfoWriteInProgress);
 
     while (!UserActs.empty() && (AffectedUsers.size() < MAX_USERS)) {
         ProcessUserAct(*UserActs.front(), ctx);
@@ -1767,7 +1767,7 @@ void TPartition::ProcessUserActs(const TActorContext& ctx)
 void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
                                 const TActorContext& ctx)
 {
-    Y_VERIFY(!UsersInfoWriteInProgress);
+    Y_ABORT_UNLESS(!UsersInfoWriteInProgress);
 
     const TString& user = act.ClientId;
     const bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.Strict);
@@ -1856,7 +1856,7 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
         );
     }
 
-    Y_VERIFY(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
+    Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
 
     if (offset > EndOffset) {
         if (strictCommitOffset) {
@@ -1951,7 +1951,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             userInfo.Step = 0;
         }
 
-        Y_VERIFY(offset <= (ui64)Max<i64>(), "Unexpected Offset: %" PRIu64, offset);
+        Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Unexpected Offset: %" PRIu64, offset);
         LOG_DEBUG_S(
                 ctx, NKikimrServices::PERSQUEUE,
                 "Topic '" << TopicName() << "' partition " << Partition << " user " << user
@@ -2121,7 +2121,7 @@ void TPartition::AddCmdWriteConfig(NKikimrClient::TKeyValueRequest& request)
     TString key = GetKeyConfig();
 
     TString data;
-    Y_VERIFY(ChangeConfig->Config.SerializeToString(&data));
+    Y_ABORT_UNLESS(ChangeConfig->Config.SerializeToString(&data));
 
     auto write = request.AddCmdWrite();
     write->SetKey(key.Data(), key.Size());
@@ -2195,7 +2195,7 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
     if (writeTimestamp)
         user->SetWriteTimestampMS(writeTimestamp.MilliSeconds());
     if (createTimestamp) {
-        Y_VERIFY(writeTimestamp);
+        Y_ABORT_UNLESS(writeTimestamp);
         user->SetCreateTimestampMS(createTimestamp.MilliSeconds());
     }
     user->SetEndOffset(EndOffset);
@@ -2286,7 +2286,7 @@ void TPartition::Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& c
     // Check
     if (Y_UNLIKELY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Success)) {
         // We set deadline == inf in quota request.
-        Y_VERIFY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline);
+        Y_ABORT_UNLESS(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline);
         LOG_ERROR_S(
                 ctx, NKikimrServices::PERSQUEUE,
                 "Got quota error." <<
@@ -2298,7 +2298,7 @@ void TPartition::Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& c
     }
 
     // Search for proper request
-    Y_VERIFY(TopicQuotaRequestCookie == cookie);
+    Y_ABORT_UNLESS(TopicQuotaRequestCookie == cookie);
     TopicQuotaRequestCookie = 0;
     Y_ASSERT(!WaitingForPreviousBlobQuota());
 

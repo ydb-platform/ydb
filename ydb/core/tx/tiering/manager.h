@@ -26,7 +26,7 @@ private:
     std::optional<NKikimrSchemeOp::TS3Settings> S3Settings;
 public:
     const NKikimrSchemeOp::TS3Settings& GetS3Settings() const {
-        Y_VERIFY(S3Settings);
+        Y_ABORT_UNLESS(S3Settings);
         return *S3Settings;
     }
 

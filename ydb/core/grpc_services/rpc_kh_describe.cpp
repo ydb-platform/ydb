@@ -65,8 +65,8 @@ public:
     }
 
     void Die(const NActors::TActorContext& ctx) override {
-        Y_VERIFY(Finished);
-        Y_VERIFY(!WaitingResolveReply);
+        Y_ABORT_UNLESS(Finished);
+        Y_ABORT_UNLESS(!WaitingResolveReply);
 
         if (TimeoutTimerActorId) {
             ctx.Send(TimeoutTimerActorId, new TEvents::TEvPoisonPill());
@@ -160,7 +160,7 @@ private:
     }
 
     void ProceedWithSchema(const TActorContext& ctx) {
-        Y_VERIFY(ResolveNamesResult->ResultSet.size() == 1);
+        Y_ABORT_UNLESS(ResolveNamesResult->ResultSet.size() == 1);
         const auto& entry = ResolveNamesResult->ResultSet.front();
 
         if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
@@ -292,7 +292,7 @@ private:
         }
 
         TEvTxProxySchemeCache::TEvResolveKeySetResult *msg = ev->Get();
-        Y_VERIFY(msg->Request->ResultSet.size() == 1);
+        Y_ABORT_UNLESS(msg->Request->ResultSet.size() == 1);
         KeyRange = std::move(msg->Request->ResultSet[0].KeyDescription);
 
         if (msg->Request->ErrorCount > 0) {

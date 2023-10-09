@@ -65,7 +65,7 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
                         << " to=" << rsKey.To << "origin=" << rsKey.Origin);
             InReadSets()[it->first].emplace_back(TRSData(readSet, rsKey.Origin));
             if (it->second->IsComplete()) {
-                Y_VERIFY(InputDataRef().RemainReadSets > 0, "RemainReadSets counter underflow");
+                Y_ABORT_UNLESS(InputDataRef().RemainReadSets > 0, "RemainReadSets counter underflow");
                 --InputDataRef().RemainReadSets;
             }
         }
@@ -77,7 +77,7 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
 }
 
 void TOperation::AddDependency(const TOperation::TPtr &op) {
-    Y_VERIFY(this != op.Get());
+    Y_ABORT_UNLESS(this != op.Get());
 
     if (Dependencies.insert(op).second) {
         op->Dependents.insert(this);
@@ -85,7 +85,7 @@ void TOperation::AddDependency(const TOperation::TPtr &op) {
 }
 
 void TOperation::AddSpecialDependency(const TOperation::TPtr &op) {
-    Y_VERIFY(this != op.Get());
+    Y_ABORT_UNLESS(this != op.Get());
 
     if (SpecialDependencies.insert(op).second) {
         op->SpecialDependents.insert(this);
@@ -93,7 +93,7 @@ void TOperation::AddSpecialDependency(const TOperation::TPtr &op) {
 }
 
 void TOperation::AddImmediateConflict(const TOperation::TPtr &op) {
-    Y_VERIFY(this != op.Get());
+    Y_ABORT_UNLESS(this != op.Get());
     Y_VERIFY_DEBUG(!IsImmediate());
     Y_VERIFY_DEBUG(op->IsImmediate());
 
@@ -243,7 +243,7 @@ void TOperation::AdvanceExecutionPlan()
     profile.WaitTime = now - ExecutionProfile.StartUnitAt - profile.ExecuteTime
         - profile.CommitTime - profile.CompleteTime - profile.DelayedCommitTime;
 
-    Y_VERIFY(!IsExecutionPlanFinished());
+    Y_ABORT_UNLESS(!IsExecutionPlanFinished());
     ++CurrentUnit;
 
     ExecutionProfile.StartUnitAt = now;

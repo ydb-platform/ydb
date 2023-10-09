@@ -28,7 +28,7 @@ public:
     }
 
     void RemoveInFlightRequest(ui64 cookie) {
-        Y_VERIFY(RequestsMeta.contains(cookie), "Unknown request cookie %" PRIu64, cookie);
+        Y_ABORT_UNLESS(RequestsMeta.contains(cookie), "Unknown request cookie %" PRIu64, cookie);
         const auto& readMetaList = RequestsMeta[cookie];
 
         for (const auto& readMetaBase : readMetaList) {
@@ -41,7 +41,7 @@ public:
             for (const auto& portion : readMeta->SelectInfo->PortionsOrderedPK) {
                 const ui64 portionId = portion->GetPortion();
                 auto it = PortionUseCount.find(portionId);
-                Y_VERIFY(it != PortionUseCount.end(), "Portion id %" PRIu64 " not found in request %" PRIu64, portionId, cookie);
+                Y_ABORT_UNLESS(it != PortionUseCount.end(), "Portion id %" PRIu64 " not found in request %" PRIu64, portionId, cookie);
                 if (it->second == 1) {
                     PortionUseCount.erase(it);
                 } else {
@@ -91,7 +91,7 @@ private:
         }
 
         auto selectInfo = readMeta->SelectInfo;
-        Y_VERIFY(selectInfo);
+        Y_ABORT_UNLESS(selectInfo);
         SelectStatsDelta += selectInfo->Stats();
 
         for (const auto& portion : readMeta->SelectInfo->PortionsOrderedPK) {

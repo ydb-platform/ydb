@@ -31,12 +31,12 @@ namespace NKikimr::NTestShard {
             STLOG(PRI_INFO, TEST_SHARD, TS09, "deleting data", (TabletId, TabletId), (Key, key));
 
             const auto it = Keys.find(key);
-            Y_VERIFY(it != Keys.end());
+            Y_ABORT_UNLESS(it != Keys.end());
             RegisterTransition(*it, ::NTestShard::TStateServer::CONFIRMED, ::NTestShard::TStateServer::DELETE_PENDING, std::move(ev));
 
             const auto [difIt, difInserted] = DeletesInFlight.try_emplace(cookie, std::move(key));
-            Y_VERIFY(difInserted);
-            Y_VERIFY(difIt->second.KeysInQuery.size() == 1);
+            Y_ABORT_UNLESS(difInserted);
+            Y_ABORT_UNLESS(difIt->second.KeysInQuery.size() == 1);
 
             BytesOfData -= it->second.Len;
             BytesProcessed += it->second.Len;
@@ -48,7 +48,7 @@ namespace NKikimr::NTestShard {
             const google::protobuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TDeleteRangeResult>& results) {
         if (const auto difIt = DeletesInFlight.find(cookie); difIt != DeletesInFlight.end()) {
             TDeleteInfo& info = difIt->second;
-            Y_VERIFY(info.KeysInQuery.size() == (size_t)results.size(), "%zu/%d", info.KeysInQuery.size(), results.size());
+            Y_ABORT_UNLESS(info.KeysInQuery.size() == (size_t)results.size(), "%zu/%d", info.KeysInQuery.size(), results.size());
             for (size_t i = 0; i < info.KeysInQuery.size(); ++i) {
                 // validate that delete was successful
                 const auto& res = results[i];
@@ -56,7 +56,7 @@ namespace NKikimr::NTestShard {
                     << NKikimrProto::EReplyStatus_Name(NKikimrProto::EReplyStatus(res.GetStatus())));
 
                 const auto it = Keys.find(info.KeysInQuery[i]);
-                Y_VERIFY(it != Keys.end());
+                Y_ABORT_UNLESS(it != Keys.end());
                 RegisterTransition(*it, ::NTestShard::TStateServer::DELETE_PENDING, ::NTestShard::TStateServer::DELETED);
             }
             DeletesInFlight.erase(difIt);

@@ -62,7 +62,7 @@ public:
         // Reflect group structure in the database (pass)
 
         TGroupInfo *group = Self->FindGroup(GroupId);
-        Y_VERIFY(group); // the existence of this group must have been checked during ReadStep
+        Y_ABORT_UNLESS(group); // the existence of this group must have been checked during ReadStep
         group->LifeCyclePhase = TBlobStorageGroupInfo::ELCP_IN_TRANSITION;
         group->MainKeyId = MainKeyId;
         group->EncryptedGroupKey = EncryptedGroupKey;
@@ -90,7 +90,7 @@ public:
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK08, "TTxProposeGroupKey Complete");
         if (Status == NKikimrProto::OK) {
             TGroupInfo *group = Self->FindGroup(GroupId);
-            Y_VERIFY(group);
+            Y_ABORT_UNLESS(group);
             if (group->LifeCyclePhase == TBlobStorageGroupInfo::ELCP_IN_TRANSITION) {
                 group->LifeCyclePhase = TBlobStorageGroupInfo::ELCP_IN_USE;
             } else {
@@ -111,7 +111,7 @@ public:
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev) {
     const NKikimrBlobStorage::TEvControllerProposeGroupKey& proto = ev->Get()->Record;
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXPGK11, "Handle TEvControllerProposeGroupKey", (Request, proto));
-    Y_VERIFY(AppData());
+    Y_ABORT_UNLESS(AppData());
     NodesAwaitingKeysForGroup[proto.GetGroupId()].insert(proto.GetNodeId());
     Execute(new TTxProposeGroupKey(proto, this));
 }

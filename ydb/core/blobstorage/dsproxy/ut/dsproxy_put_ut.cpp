@@ -49,8 +49,8 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     const ui32 hash = blobId.Hash();
     const ui32 totalvd = group.GetInfo()->Type.BlobSubgroupSize();
     const ui32 totalParts = group.GetInfo()->Type.TotalPartCount();
-    Y_VERIFY(blobId.BlobSize() == data.size());
-    Y_VERIFY(totalvd >= totalParts);
+    Y_ABORT_UNLESS(blobId.BlobSize() == data.size());
+    Y_ABORT_UNLESS(totalvd >= totalParts);
     TBlobStorageGroupInfo::TServiceIds vDisksSvc;
     TBlobStorageGroupInfo::TVDiskIds vDisksId;
     group.GetInfo()->PickSubgroup(hash, &vDisksId, &vDisksSvc);
@@ -185,11 +185,11 @@ struct TTestPutAllOk {
 
         const ui32 totalvd = Group.GetInfo()->Type.BlobSubgroupSize();
         const ui32 totalParts = Group.GetInfo()->Type.TotalPartCount();
-        Y_VERIFY(totalvd >= totalParts);
+        Y_ABORT_UNLESS(totalvd >= totalParts);
 
         for (ui64 blobIdx = 0; blobIdx < BlobCount; ++blobIdx) {
             TLogoBlobID blobId = BlobIds[blobIdx];
-            Y_VERIFY(blobId.BlobSize() == Data.size());
+            Y_ABORT_UNLESS(blobId.BlobSize() == Data.size());
             TBlobStorageGroupInfo::TServiceIds vDisksSvc;
             TBlobStorageGroupInfo::TVDiskIds vDisksId;
             const ui32 hash = blobId.Hash();
@@ -229,7 +229,7 @@ struct TTestPutAllOk {
                 UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
             }
             vMultiPutResults[vMultiPutIdx].reset(new TEvBlobStorage::TEvVMultiPutResult());
-            Y_VERIFY(vMultiPut.Record.ItemsSize() == statuses.size());
+            Y_ABORT_UNLESS(vMultiPut.Record.ItemsSize() == statuses.size());
             TEvBlobStorage::TEvVMultiPutResult &vMultiPutResult = *vMultiPutResults[vMultiPutIdx];
             vMultiPutResult.MakeError(NKikimrProto::OK, TString(), vMultiPut.Record);
             for (ui64 itemIdx = 0; itemIdx < statuses.size(); ++itemIdx) {
@@ -237,7 +237,7 @@ struct TTestPutAllOk {
                 NKikimrProto::EReplyStatus status = statuses[itemIdx];
                 item.SetStatus(status);
             }
-            Y_VERIFY(vMultiPutResult.Record.ItemsSize() == statuses.size());
+            Y_ABORT_UNLESS(vMultiPutResult.Record.ItemsSize() == statuses.size());
         }
     }
 
@@ -319,7 +319,7 @@ struct TTestPutAllOk {
                 }
 
                 vMultiPutResults[vMultiPutIdx].reset(new TEvBlobStorage::TEvVMultiPutResult());
-                Y_VERIFY(vMultiPut.Record.ItemsSize() == statuses.size());
+                Y_ABORT_UNLESS(vMultiPut.Record.ItemsSize() == statuses.size());
                 TEvBlobStorage::TEvVMultiPutResult &vMultiPutResult = *vMultiPutResults[vMultiPutIdx];
                 vMultiPutResult.MakeError(NKikimrProto::OK, TString(), vMultiPut.Record);
 

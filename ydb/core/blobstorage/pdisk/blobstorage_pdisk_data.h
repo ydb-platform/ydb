@@ -431,17 +431,17 @@ struct TChunkTrimInfo {
     {}
 
     void SetChunkTrimmed(ui8 idx) {
-        Y_VERIFY(idx < ChunksPerRecord);
+        Y_ABORT_UNLESS(idx < ChunksPerRecord);
         TrimMask |= (1 << idx);
     }
 
     void SetChunkUntrimmed(ui8 idx) {
-        Y_VERIFY(idx < ChunksPerRecord);
+        Y_ABORT_UNLESS(idx < ChunksPerRecord);
         TrimMask &= ~(1 << idx);
     }
 
     bool IsChunkTrimmed(ui8 idx) {
-        Y_VERIFY(idx < ChunksPerRecord);
+        Y_ABORT_UNLESS(idx < ChunksPerRecord);
         return TrimMask & (1 << idx);
     }
 };
@@ -719,7 +719,7 @@ struct TDiskFormat {
         // Set Hash
         {
             NPDisk::TPDiskHashCalculator hashCalculator(false);
-            Y_VERIFY(DiskFormatSize > sizeof(THash));
+            Y_ABORT_UNLESS(DiskFormatSize > sizeof(THash));
             ui64 size = DiskFormatSize - sizeof(THash);
             hashCalculator.Hash(this, size);
             Hash = hashCalculator.GetHashResult();
@@ -767,8 +767,8 @@ struct TDiskFormat {
             FormatFlagErasureEncodeNextChunkReference |
             FormatFlagEncryptFormat |
             FormatFlagEncryptData;
-        Y_VERIFY(format.Version <= Version);
-        Y_VERIFY(format.GetUsedSize() <= sizeof(TDiskFormat));
+        Y_ABORT_UNLESS(format.Version <= Version);
+        Y_ABORT_UNLESS(format.GetUsedSize() <= sizeof(TDiskFormat));
         memcpy(this, &format, format.GetUsedSize());
     }
 

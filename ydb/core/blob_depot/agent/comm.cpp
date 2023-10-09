@@ -25,7 +25,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::ConnectToBlobDepot() {
-        Y_VERIFY(!PipeId);
+        Y_ABORT_UNLESS(!PipeId);
         PipeId = Register(NTabletPipe::CreateClient(SelfId(), TabletId, NTabletPipe::TClientRetryPolicy::WithRetries()));
         NextTabletRequestId = 1;
         const ui64 id = NextTabletRequestId++;
@@ -109,11 +109,11 @@ namespace NKikimr::NBlobDepot {
             << " Msg# " << SingleLineProto(msg));
         auto& kind = it->second;
 
-        Y_VERIFY(kind.IdAllocInFlight);
+        Y_ABORT_UNLESS(kind.IdAllocInFlight);
         kind.IdAllocInFlight = false;
 
-        Y_VERIFY(msg.GetChannelKind() == allocateIdsContext.ChannelKind);
-        Y_VERIFY(msg.GetGeneration() == BlobDepotGeneration);
+        Y_ABORT_UNLESS(msg.GetChannelKind() == allocateIdsContext.ChannelKind);
+        Y_ABORT_UNLESS(msg.GetGeneration() == BlobDepotGeneration);
 
         if (msg.HasGivenIdRange()) {
             kind.IssueGivenIdRange(msg.GetGivenIdRange());
@@ -195,9 +195,9 @@ namespace NKikimr::NBlobDepot {
 
         for (const auto& item : msg.GetInvalidatedSteps()) {
             const ui8 channel = item.GetChannel();
-            Y_VERIFY(item.GetGeneration() == BlobDepotGeneration);
+            Y_ABORT_UNLESS(item.GetGeneration() == BlobDepotGeneration);
             const auto it = ChannelToKind.find(channel);
-            Y_VERIFY(it != ChannelToKind.end());
+            Y_ABORT_UNLESS(it != ChannelToKind.end());
             TChannelKind& kind = *it->second;
             const ui32 numAvailableItemsBefore = kind.GetNumAvailableItems();
             kind.Trim(channel, item.GetGeneration(), item.GetInvalidatedStep());

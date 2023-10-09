@@ -577,7 +577,7 @@ void TPartitionFixture::SendConfigResponse(const TConfigParams& config)
         read->SetStatus(NKikimrProto::OK);
 
         TString out;
-        Y_VERIFY(MakeConfig(config.Version,
+        Y_ABORT_UNLESS(MakeConfig(config.Version,
                             config.Consumers).SerializeToString(&out));
 
         read->SetValue(out);
@@ -706,7 +706,7 @@ void TPartitionFixture::WaitDataRangeRequest()
 
 void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end)
 {
-    Y_VERIFY(begin <= end);
+    Y_ABORT_UNLESS(begin <= end);
 
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);

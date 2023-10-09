@@ -29,7 +29,7 @@ namespace NBoot {
             , Deps(std::move(deps))
             , Snap(snap)
         {
-            Y_VERIFY(!(Deps && Snap), "Need either deps or raw snap");
+            Y_ABORT_UNLESS(!(Deps && Snap), "Need either deps or raw snap");
         }
 
     private: /* IStep, boot logic DSL actor interface   */
@@ -70,7 +70,7 @@ namespace NBoot {
         void Decode(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body) noexcept
         {
             bool ok = ParseFromStringNoSizeLimit(Proto, body);
-            Y_VERIFY(ok);
+            Y_ABORT_UNLESS(ok);
 
             bool huge = (body.size() > 10*1024*1024);
 
@@ -252,9 +252,9 @@ namespace NBoot {
                 const auto span = NPageCollection::TGroupBlobsByCookie(entry->References).Do();
                 const auto largeGlobId = NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, Logic->GetBSGroupFor(span[0]));
 
-                Y_VERIFY(span.size() == entry->References.size());
-                Y_VERIFY(TCookie(span[0].Cookie()).Type() == TCookie::EType::Log);
-                Y_VERIFY(largeGlobId, "Cannot make TLargeGlobId for snapshot");
+                Y_ABORT_UNLESS(span.size() == entry->References.size());
+                Y_ABORT_UNLESS(TCookie(span[0].Cookie()).Type() == TCookie::EType::Log);
+                Y_ABORT_UNLESS(largeGlobId, "Cannot make TLargeGlobId for snapshot");
 
                 if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
                     logl
@@ -273,12 +273,12 @@ namespace NBoot {
         {
             if (Deps) {
                 for (auto &entry : Deps->Entries) {
-                    Y_VERIFY(!entry.IsSnapshot);
+                    Y_ABORT_UNLESS(!entry.IsSnapshot);
 
                     TTxStamp stamp{ entry.Id.first, entry.Id.second };
 
                     if (entry.EmbeddedLogBody) {
-                        Y_VERIFY(entry.References.empty());
+                        Y_ABORT_UNLESS(entry.References.empty());
                         Back->RedoLog.emplace_back(stamp, entry.EmbeddedLogBody);
                     } else {
                         NPageCollection::TGroupBlobsByCookie chop(entry.References);
@@ -313,7 +313,7 @@ namespace NBoot {
 
         void SortLogoSpan(TTxStamp stamp, NPageCollection::TGroupBlobsByCookie::TArray span)
         {
-            Y_VERIFY(TCookie(span[0].Cookie()).Type() == TCookie::EType::Log);
+            Y_ABORT_UNLESS(TCookie(span[0].Cookie()).Type() == TCookie::EType::Log);
 
             const auto group = Logic->GetBSGroupFor(span[0]);
             const auto index = TCookie(span[0].Cookie()).Index();

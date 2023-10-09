@@ -105,7 +105,7 @@ namespace NKikimr {
             Y_UNUSED(ctx);
             Y_UNUSED(keepData);
             Counter++;
-            Y_VERIFY(dataMerger->Empty());
+            Y_ABORT_UNLESS(dataMerger->Empty());
             return TrRes.SetRaw(key, memRec, dataMerger);
         }
 
@@ -166,7 +166,7 @@ namespace NKikimr {
         NewMemRec = TMemRecLogoBlob(ingress);
         NewDataMerger.Swap(dataMerger);
         NewMemRec.SetType(NewDataMerger.GetType());
-        Y_VERIFY(NewDataMerger.HasSmallBlobs() ||
+        Y_ABORT_UNLESS(NewDataMerger.HasSmallBlobs() ||
                  (NewMemRec.GetType() == TBlobType::DiskBlob && !NewMemRec.HasData())); // i.e. we also work for empty blobs
 
         Key = key;

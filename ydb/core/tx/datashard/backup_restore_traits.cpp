@@ -29,7 +29,7 @@ bool TryCodecFromTask(const NKikimrSchemeOp::TBackupTask& task, ECompressionCode
 
 ECompressionCodec CodecFromTask(const NKikimrSchemeOp::TBackupTask& task) {
     ECompressionCodec codec;
-    Y_VERIFY(TryCodecFromTask(task, codec));
+    Y_ABORT_UNLESS(TryCodecFromTask(task, codec));
     return codec;
 }
 

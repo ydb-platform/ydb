@@ -45,13 +45,13 @@ namespace NFake {
         void Inbox(TEventHandlePtr &eh)
         {
             if (auto *ev = eh->CastAsLocal<NFake::TEvExecute>()) {
-                Y_VERIFY(State == EState::Work, "Cannot handle TX now");
+                Y_ABORT_UNLESS(State == EState::Work, "Cannot handle TX now");
 
                 for (auto& f : ev->Funcs) {
                     Execute(f.Release(), this->ActorContext());
                 }
             } else if (auto *ev = eh->CastAsLocal<NFake::TEvCompact>()) {
-                Y_VERIFY(State == EState::Work, "Cannot handle compaction now");
+                Y_ABORT_UNLESS(State == EState::Work, "Cannot handle compaction now");
 
                 if (ev->MemOnly) {
                     Executor()->CompactMemTable(ev->Table);

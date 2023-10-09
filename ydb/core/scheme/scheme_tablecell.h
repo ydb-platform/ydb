@@ -42,7 +42,7 @@ public:
     TCell(TArrayRef<const char> ref)
         : TCell(ref.begin(), ui32(ref.size()))
     {
-        Y_VERIFY(ref.size() < Max<ui32>(), " Too large blob size for TCell");
+        Y_ABORT_UNLESS(ref.size() < Max<ui32>(), " Too large blob size for TCell");
     }
 
     TCell(const char* ptr, ui32 size)
@@ -96,7 +96,7 @@ public:
     template<typename T, typename = TStdLayout<T>>
     T AsValue() const noexcept
     {
-        Y_VERIFY(sizeof(T) == Size(), "AsValue<T>() type doesn't match TCell");
+        Y_ABORT_UNLESS(sizeof(T) == Size(), "AsValue<T>() type doesn't match TCell");
 
         return ReadUnaligned<T>(Data());
     }
@@ -223,7 +223,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
     case NKikimr::NScheme::NTypeIds::Pg:
     {
         auto typeDesc = type.GetTypeDesc();
-        Y_VERIFY(typeDesc, "no pg type descriptor");
+        Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
         int result = NPg::PgNativeBinaryCompare(a.Data(), a.Size(), b.Data(), b.Size(), typeDesc);
         return type.IsDescending() ? -result : result;
     }
@@ -319,7 +319,7 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
 
     if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
         auto typeDesc = info.GetTypeDesc();
-        Y_VERIFY(typeDesc, "no pg type descriptor");
+        Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
         return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
     }
 
@@ -459,7 +459,7 @@ public:
         : Buf(other.Buf)
         , Cells(other.Cells)
     {
-        Y_VERIFY(Buf.data() == other.Buf.data(), "Buffer must be shared");
+        Y_ABORT_UNLESS(Buf.data() == other.Buf.data(), "Buffer must be shared");
     }
 
     TSerializedCellVec(TSerializedCellVec &&other)
@@ -484,7 +484,7 @@ public:
 
         const char* otherPtr = other.Buf.data();
         Buf = std::move(other.Buf);
-        Y_VERIFY(Buf.data() == otherPtr, "Buffer address must not change");
+        Y_ABORT_UNLESS(Buf.data() == otherPtr, "Buffer address must not change");
         Cells = std::move(other.Cells);
         return *this;
     }
@@ -494,7 +494,7 @@ public:
     }
 
     void Parse(const TString &buf) {
-        Y_VERIFY(DoTryParse(buf));
+        Y_ABORT_UNLESS(DoTryParse(buf));
     }
 
     TConstArrayRef<TCell> GetCells() const {

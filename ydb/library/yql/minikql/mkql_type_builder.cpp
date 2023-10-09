@@ -32,7 +32,7 @@ class TPgTypeIndex {
 public:
     TPgTypeIndex() {
         NYql::NPg::EnumTypes([&](ui32 typeId, const NYql::NPg::TTypeDesc& t) {
-            Y_VERIFY(typeId < Types.size());
+            Y_ABORT_UNLESS(typeId < Types.size());
             auto& e = Types[typeId];
             e.Name = t.Name;
             e.TypeId = t.TypeId;
@@ -223,8 +223,8 @@ public:
 
     NUdf::IDictTypeBuilder& Key(NUdf::TDataTypeId typeId) override {
         auto slot = NUdf::FindDataSlot(typeId);
-        Y_VERIFY(slot, "unknown type: %d", (int)typeId);
-        Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
+        Y_ABORT_UNLESS(slot, "unknown type: %d", (int)typeId);
+        Y_ABORT_UNLESS(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
         KeyType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
         return *this;
     }
@@ -271,8 +271,8 @@ private:
         auto t = AS_TYPE(NMiniKQL::TDataType, const_cast<NMiniKQL::TType*>(KeyType_));
         auto keySchemeType = t->GetSchemeType();
         auto slot = NUdf::FindDataSlot(keySchemeType);
-        Y_VERIFY(slot, "unknown type: %d", (int)keySchemeType);
-        Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
+        Y_ABORT_UNLESS(slot, "unknown type: %d", (int)keySchemeType);
+        Y_ABORT_UNLESS(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
     }
 
 private:
@@ -294,8 +294,8 @@ public:
 
     NUdf::ISetTypeBuilder& Key(NUdf::TDataTypeId typeId) override {
         auto slot = NUdf::FindDataSlot(typeId);
-        Y_VERIFY(slot, "unknown type: %d", (int)typeId);
-        Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
+        Y_ABORT_UNLESS(slot, "unknown type: %d", (int)typeId);
+        Y_ABORT_UNLESS(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
         KeyType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
         return *this;
     }
@@ -325,8 +325,8 @@ private:
         auto t = AS_TYPE(NMiniKQL::TDataType, const_cast<NMiniKQL::TType*>(KeyType_));
         auto keySchemeType = t->GetSchemeType();
         auto slot = NUdf::FindDataSlot(keySchemeType);
-        Y_VERIFY(slot, "unknown type: %d", (int)keySchemeType);
-        Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
+        Y_ABORT_UNLESS(slot, "unknown type: %d", (int)keySchemeType);
+        Y_ABORT_UNLESS(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
     }
 
 private:
@@ -566,7 +566,7 @@ public:
     }
 
     NUdf::TType* Build() const override {
-        Y_VERIFY(ReturnType_, "callable returns type is not configured");
+        Y_ABORT_UNLESS(ReturnType_, "callable returns type is not configured");
 
         NMiniKQL::TNode* payload = nullptr;
 

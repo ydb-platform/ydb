@@ -306,7 +306,7 @@ public:
     {}
 
     void Prepare(TAllocationStats* allocationStats) {
-        Y_VERIFY(!Prepared);
+        Y_ABORT_UNLESS(!Prepared);
 
         TAllocationStats allocations;
 
@@ -341,7 +341,7 @@ public:
     void Dump(IOutputStream& out, size_t stackCountLimit, size_t sampleCountLimit,
         bool isHeap, bool forLog)
     {
-        Y_VERIFY(Prepared);
+        Y_ABORT_UNLESS(Prepared);
 
         const char* marker = forLog ?
             (isHeap ? "HEAP" : "PROFILE") : "--------------------------------";

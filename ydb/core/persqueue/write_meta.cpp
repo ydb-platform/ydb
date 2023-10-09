@@ -31,13 +31,13 @@ TString GetSerializedData(const NYdb::NPersQueue::TReadSessionEvent::TDataReceiv
     proto.SetSeqNo(message.GetSeqNo(0));
     proto.SetCreateTime(message.GetCreateTime(0).MilliSeconds());
     auto codec = NPQ::FromV1Codec(message.GetCodec());
-    Y_VERIFY(codec);
+    Y_ABORT_UNLESS(codec);
     proto.SetCodec(codec.value());
     proto.SetData(message.GetData());
 
     TString str;
     bool res = proto.SerializeToString(&str);
-    Y_VERIFY(res);
+    Y_ABORT_UNLESS(res);
     return str;
 }
 
@@ -68,7 +68,7 @@ TString GetSerializedData(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEv
 
     TString str;
     bool res = proto.SerializeToString(&str);
-    Y_VERIFY(res);
+    Y_ABORT_UNLESS(res);
     return str;
 }
 

@@ -301,26 +301,26 @@ TIntrusivePtr<IDbCounters> TSysViewProcessor::CreateCountersForService(
     switch (service) {
     case NKikimrSysView::KQP: {
         auto group = InternalGroups["kqp_serverless"];
-        Y_VERIFY(group);
+        Y_ABORT_UNLESS(group);
         result = MakeIntrusive<NKqp::TKqpDbCounters>(ExternalGroup, group);
         break;
     }
     case NKikimrSysView::TABLETS: {
         auto group = InternalGroups["tablets_serverless"];
-        Y_VERIFY(group);
+        Y_ABORT_UNLESS(group);
         THolder<TTabletCountersBase> executorCounters(new NTabletFlatExecutor::TExecutorCounters);
         result = CreateTabletDbCounters(ExternalGroup, group, std::move(executorCounters));
         break;
     }
     case NKikimrSysView::GRPC: {
         auto group = InternalGroups["grpc_serverless"];
-        Y_VERIFY(group);
+        Y_ABORT_UNLESS(group);
         result = NGRpcService::CreateGRpcDbCounters(ExternalGroup, group);
         break;
     }
     case NKikimrSysView::GRPC_PROXY: {
         auto group = InternalGroups["grpc_serverless"];
-        Y_VERIFY(group);
+        Y_ABORT_UNLESS(group);
         result = NGRpcService::CreateGRpcProxyDbCounters(ExternalGroup, group);
         break;
     }

@@ -203,12 +203,12 @@ namespace NPage {
                 const void* base = raw->data();
                 auto data = NPage::TLabelWrapper().Read(*raw, EPage::DataPage);
 
-                Y_VERIFY(data.Version == 1, "Unknown EPage::DataPage version");
+                Y_ABORT_UNLESS(data.Version == 1, "Unknown EPage::DataPage version");
 
                 if (data.Codec != ECodec::Plain) {
                     /* Compressed, should convert to regular page */
 
-                    Y_VERIFY(data == ECodec::LZ4, "Only LZ4 encoding allowed");
+                    Y_ABORT_UNLESS(data == ECodec::LZ4, "Only LZ4 encoding allowed");
 
                     Codec = Codec ? Codec : NBlockCodecs::Codec("lz4fast");
                     auto size = Codec->DecompressedLength(data.Page);

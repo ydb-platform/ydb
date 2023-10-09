@@ -47,8 +47,8 @@ public:
             if (!engineCtx.Host->IsMyKey(Owner.TableId, keyTuple)) {
                 return;
             }
-            Y_VERIFY(engineCtx.ShardTableStats);
-            Y_VERIFY(engineCtx.TaskTableStats);
+            Y_ABORT_UNLESS(engineCtx.ShardTableStats);
+            Y_ABORT_UNLESS(engineCtx.TaskTableStats);
 
             ui64 nEraseRow = engineCtx.ShardTableStats->NEraseRow;
 

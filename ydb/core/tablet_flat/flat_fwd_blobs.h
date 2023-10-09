@@ -25,7 +25,7 @@ namespace NFwd {
         {
             Tags.resize(Frames->Stats().Tags.size(), 0);
 
-            Y_VERIFY(Edge.size() == Tags.size(), "Invalid edges vector");
+            Y_ABORT_UNLESS(Edge.size() == Tags.size(), "Invalid edges vector");
         }
 
         ~TBlobs()
@@ -35,7 +35,7 @@ namespace NFwd {
 
         TResult Handle(IPageLoadingQueue *head, ui32 ref, ui64 lower) noexcept override
         {
-            Y_VERIFY(ref >= Lower, "Cannot handle backward blob reads");
+            Y_ABORT_UNLESS(ref >= Lower, "Cannot handle backward blob reads");
 
             auto again = (std::exchange(Tags.at(FrameTo(ref)), 1) == 0);
 
@@ -101,7 +101,7 @@ namespace NFwd {
             } else {
                 auto it = std::lower_bound(Pages.begin(), end, ref);
 
-                Y_VERIFY(it != end && it->PageId == ref);
+                Y_ABORT_UNLESS(it != end && it->PageId == ref);
 
                 return *it;
             }
@@ -115,7 +115,7 @@ namespace NFwd {
                 return FrameTo(ref, Frames->Relation(ref));
             } else {
                 const auto &page = Lookup(ref);
-                Y_VERIFY(page.Size < Max<ui32>(), "Unexpected huge page");
+                Y_ABORT_UNLESS(page.Size < Max<ui32>(), "Unexpected huge page");
 
                 i16 refer = ref - page.Refer; /* back to relative refer */
 
@@ -138,7 +138,7 @@ namespace NFwd {
             while (Grow != Max<TPageId>() && (Grow < Upper || until())) {
                 const auto next = Propagate(Grow);
 
-                Y_VERIFY(Grow < next, "Unexpected frame upper boundary");
+                Y_ABORT_UNLESS(Grow < next, "Unexpected frame upper boundary");
 
                 Grow = (next < Max<TPageId>() ? Grow : next);
 
@@ -151,7 +151,7 @@ namespace NFwd {
                     } else if (page.Fetch == EFetch::None) {
                         auto size = head->AddToQueue(Grow, EPage::Opaque);
 
-                        Y_VERIFY(size == page.Size, "Inconsistent page sizez");
+                        Y_ABORT_UNLESS(size == page.Size, "Inconsistent page sizez");
 
                         page.Fetch = EFetch::Wait;
                         Stat.Fetch += page.Size;

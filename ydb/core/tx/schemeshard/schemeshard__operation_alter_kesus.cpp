@@ -28,9 +28,9 @@ void PrepareChanges(TOperationId operationId,
         TShardIdx shardIdx = kesus->KesusShardIdx;
         TTabletId tabletId = kesus->KesusTabletId;
 
-        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
         auto& shardInfo = context.SS->ShardInfos[shardIdx];
-        Y_VERIFY(shardInfo.TabletID == tabletId);
+        Y_ABORT_UNLESS(shardInfo.TabletID == tabletId);
         txState.Shards.emplace_back(shardIdx, ETabletType::Kesus, TTxState::ConfigureParts);
         shardInfo.CurrentTxId = operationId.GetTxId();
         context.SS->PersistShardTx(db, shardIdx, operationId.GetTxId());
@@ -84,9 +84,9 @@ public:
                        << " at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterKesus);
-        Y_VERIFY(txState->State == TTxState::ConfigureParts);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterKesus);
+        Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
 
         TShardIdx idx = context.SS->MustGetShardIdx(tabletId);
         txState->ShardsInProgress.erase(idx);
@@ -111,9 +111,9 @@ public:
                     << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterKesus);
-        Y_VERIFY(!txState->Shards.empty());
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterKesus);
+        Y_ABORT_UNLESS(!txState->Shards.empty());
 
         txState->ClearShardsInProgress();
 
@@ -121,13 +121,13 @@ public:
         Y_VERIFY_S(kesus, "kesus is null. PathId: " << txState->TargetPathId);
 
         TPath kesusPath = TPath::Init(txState->TargetPathId, context.SS);
-        Y_VERIFY(kesusPath.IsResolved());
+        Y_ABORT_UNLESS(kesusPath.IsResolved());
 
-        Y_VERIFY(txState->Shards.size() == 1);
+        Y_ABORT_UNLESS(txState->Shards.size() == 1);
         for (auto shard : txState->Shards) {
             auto shardIdx = shard.Idx;
             auto tabletId = context.SS->ShardInfos[shardIdx].TabletID;
-            Y_VERIFY(shard.TabletType == ETabletType::Kesus);
+            Y_ABORT_UNLESS(shard.TabletType == ETabletType::Kesus);
 
             auto event = MakeHolder<NKesus::TEvKesus::TEvSetConfig>(ui64(OperationId.GetTxId()), *kesus->AlterConfig, kesus->AlterVersion);
             event->Record.MutableConfig()->set_path(kesusPath.PathString()); // TODO: remove legacy field eventually
@@ -172,7 +172,7 @@ public:
         if (!txState) {
             return false;
         }
-        Y_VERIFY(txState->TxType == TTxState::TxAlterKesus);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterKesus);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -202,8 +202,8 @@ public:
                        << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterKesus);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterKesus);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -315,8 +315,8 @@ public:
         }
 
         TKesusInfo::TPtr kesus = context.SS->KesusInfos.at(path.Base()->PathId);
-        Y_VERIFY(kesus);
-        Y_VERIFY(path.Base()->IsCreateFinished()); // checks.NotUnderOperation checks that path not under creation
+        Y_ABORT_UNLESS(kesus);
+        Y_ABORT_UNLESS(path.Base()->IsCreateFinished()); // checks.NotUnderOperation checks that path not under creation
 
         if (kesus->AlterConfig) {
             result->SetError(
@@ -367,7 +367,7 @@ ISubOperation::TPtr CreateAlterKesus(TOperationId id, const TTxTransaction& tx) 
 }
 
 ISubOperation::TPtr CreateAlterKesus(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TAlterKesus>(id, state);
 }
 

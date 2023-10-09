@@ -27,7 +27,7 @@ public:
 
 private:
     static TLogoBlobID ExtractLabel(const TVector<NPageCollection::TLargeGlobId>& largeGlobIds) {
-        Y_VERIFY(!largeGlobIds.empty());
+        Y_ABORT_UNLESS(!largeGlobIds.empty());
         return largeGlobIds[0].Lead;
     }
 
@@ -75,20 +75,20 @@ public:
 
     ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId) const override
     {
-        Y_VERIFY(groupId.Index < PageCollections.size());
+        Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
         return PageCollections[groupId.Index]->PageCollection->Page(id).Size;
     }
 
     NPage::EPage GetPageType(NPage::TPageId id, NPage::TGroupId groupId) const override
     {
-        Y_VERIFY(groupId.Index < PageCollections.size());
+        Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
         return EPage(PageCollections[groupId.Index]->PageCollection->Page(id).Type);
     }
 
     ui8 GetPageChannel(NPage::TPageId id, NPage::TGroupId groupId) const override
     {
         Y_UNUSED(id);
-        Y_VERIFY(groupId.Index < PageCollections.size());
+        Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
         return PageCollections[groupId.Index]->Id.Channel();
     }
 
@@ -130,7 +130,7 @@ public:
 
     TAutoPtr<NPageCollection::TFetch> GetPages(ui32 room) const noexcept
     {
-        Y_VERIFY(room < PageCollections.size());
+        Y_ABORT_UNLESS(room < PageCollections.size());
 
         auto total = PageCollections[room]->PageCollection->Total();
 
@@ -160,7 +160,7 @@ public:
     {
         auto *part = partView.As<TPartStore>();
 
-        Y_VERIFY(!partView || part, "Got an unexpected type of TPart part");
+        Y_ABORT_UNLESS(!partView || part, "Got an unexpected type of TPart part");
 
         return part ? part->PageCollections : TArrayRef<const TIntrusivePtr<TCache>> { };
     }

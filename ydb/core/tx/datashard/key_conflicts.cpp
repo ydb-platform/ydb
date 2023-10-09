@@ -18,8 +18,8 @@ bool HasKeyConflict(const TKeyDesc& aKey,
 bool HasKeyConflict(const TValidatedKey& a,
                     const TValidatedKey& b)
 {
-    Y_VERIFY(a.Key && b.Key);
-    Y_VERIFY(a.IsWrite || b.IsWrite);
+    Y_ABORT_UNLESS(a.Key && b.Key);
+    Y_ABORT_UNLESS(a.IsWrite || b.IsWrite);
 
     const TKeyDesc& aKey = *a.Key;
     const TKeyDesc& bKey = *b.Key;
@@ -32,10 +32,10 @@ bool HasKeyConflict(const TValidatedKey& a,
         using TLocksTable = TSysTables::TLocksTable;
 
         ui64 aLockId, bLockId;
-        Y_VERIFY(aKey.Range.Point && bKey.Range.Point, "Unexpected non-point locks table key accesses");
+        Y_ABORT_UNLESS(aKey.Range.Point && bKey.Range.Point, "Unexpected non-point locks table key accesses");
         bool ok = TLocksTable::ExtractKey(aKey.Range.From, TLocksTable::EColumns::LockId, aLockId) &&
                 TLocksTable::ExtractKey(bKey.Range.From, TLocksTable::EColumns::LockId, bLockId);
-        Y_VERIFY(ok, "Cannot extract LockId from locks table key accesses");
+        Y_ABORT_UNLESS(ok, "Cannot extract LockId from locks table key accesses");
 
         // Only conflict on the same LockId
         return aLockId == bLockId;

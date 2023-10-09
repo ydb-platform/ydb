@@ -91,7 +91,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerSelectGroups::T
 void TBlobStorageController::ProcessSelectGroupsQueueItem(TList<TSelectGroupsQueueItem>::iterator it) {
     for (const TPDiskId& key : std::exchange(it->BlockedPDisks, {})) {
         const ui32 num = PDiskToQueue.erase(std::make_pair(key, it));
-        Y_VERIFY(num);
+        Y_ABORT_UNLESS(num);
     }
 
     bool missing = false;

@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
             ui32 offset = m.Offset;
             for (ui32 i = 0; i < m.PartsPtr->Size(); ++i) {
                 const auto& [ptr, size] = (*m.PartsPtr)[i];
-                Y_VERIFY(offset + size <= data.size());
+                Y_ABORT_UNLESS(offset + size <= data.size());
                 if (ptr) {
                     memcpy(data.Detach() + offset, ptr, size);
                 } else {
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
         };
         auto read = [&](const TDiskPart& p) {
             const auto it = chunks.find(p.ChunkIdx);
-            Y_VERIFY(it != chunks.end());
+            Y_ABORT_UNLESS(it != chunks.end());
             const TString& s = it->second;
             return s.substr(p.Offset, p.Size);
         };
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
 
                 case TReplSstStreamWriter::EState::PDISK_MESSAGE_PENDING: {
                     auto msg = writer.GetPendingPDiskMsg();
-                    Y_VERIFY(msg);
+                    Y_ABORT_UNLESS(msg);
                     if (auto *x = dynamic_cast<NPDisk::TEvChunkReserve*>(msg.get())) {
                         NPDisk::TEvChunkReserveResult res(NKikimrProto::OK, {});
                         for (ui32 i = 0; i < x->SizeChunks; ++i) {
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
                 }
 
                 case TReplSstStreamWriter::EState::NOT_READY: {
-                    Y_VERIFY(!writeMsgs.empty());
+                    Y_ABORT_UNLESS(!writeMsgs.empty());
                     const size_t index = RandomNumber(writeMsgs.size());
                     handleWrite(*writeMsgs[index]);
                     writeMsgs.erase(writeMsgs.begin() + index);

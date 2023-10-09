@@ -4,13 +4,13 @@ using namespace NKikimr;
 using namespace NStorage;
 
 void TNodeWarden::InvokeSyncOp(std::unique_ptr<IActor> actor) {
-    Y_VERIFY(!SyncActorId);
+    Y_ABORT_UNLESS(!SyncActorId);
     SyncActorId = Register(actor.release(), TMailboxType::Simple, AppData()->IOPoolId);
 }
 
 void TNodeWarden::Handle(TEvents::TEvInvokeResult::TPtr ev) {
     // reset actor
-    Y_VERIFY(SyncActorId == ev->Sender);
+    Y_ABORT_UNLESS(SyncActorId == ev->Sender);
     SyncActorId = {};
 
     // process message
@@ -163,7 +163,7 @@ TNodeWarden::TWrappedCacheOp TNodeWarden::UpdateServiceSet(const NKikimrBlobStor
             std::map<TVSlotId, const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk*> vdisks;
             for (const auto& x : newServices.GetVDisks()) {
                 const TVSlotId key(x.GetVDiskLocation());
-                Y_VERIFY(!pdisksToDestroy.count({key.NodeId, key.PDiskId}) || x.GetDoDestroy(), "inconsistent ServiceSet");
+                Y_ABORT_UNLESS(!pdisksToDestroy.count({key.NodeId, key.PDiskId}) || x.GetDoDestroy(), "inconsistent ServiceSet");
                 vdisks.emplace(key, pdisksToDestroy.count({key.NodeId, key.PDiskId}) ? nullptr : &x);
             }
             applyDiff(services->MutableVDisks(), vdisks);

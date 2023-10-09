@@ -303,12 +303,12 @@ namespace NKikimr {
         }
 
         ILoggedRec *Extract(intptr_t id) {
-            Y_VERIFY((id == Extracted + 1) && !Queue.Empty(), "id# %" PRIu64 " Extracted# %" PRIu64, id, Extracted);
+            Y_ABORT_UNLESS((id == Extracted + 1) && !Queue.Empty(), "id# %" PRIu64 " Extracted# %" PRIu64, id, Extracted);
             Extracted = id;
 
             TItem item = Queue.Top();
             Queue.Pop();
-            Y_VERIFY(item.first == id);
+            Y_ABORT_UNLESS(item.first == id);
             return item.second;
         }
 

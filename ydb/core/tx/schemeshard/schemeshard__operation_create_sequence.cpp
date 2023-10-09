@@ -58,9 +58,9 @@ public:
         }
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSequence);
-        Y_VERIFY(txState->State == TTxState::ConfigureParts);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSequence);
+        Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
 
         auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
@@ -93,22 +93,22 @@ public:
                     << " at tablet " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSequence);
-        Y_VERIFY(!txState->Shards.empty());
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSequence);
+        Y_ABORT_UNLESS(!txState->Shards.empty());
 
         txState->ClearShardsInProgress();
 
         TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(txState->TargetPathId);
-        Y_VERIFY(sequenceInfo);
+        Y_ABORT_UNLESS(sequenceInfo);
         TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
-        Y_VERIFY(alterData);
+        Y_ABORT_UNLESS(alterData);
 
-        Y_VERIFY(txState->Shards.size() == 1);
+        Y_ABORT_UNLESS(txState->Shards.size() == 1);
         for (auto shard : txState->Shards) {
             auto shardIdx = shard.Idx;
             auto tabletId = context.SS->ShardInfos.at(shardIdx).TabletID;
-            Y_VERIFY(shard.TabletType == ETabletType::SequenceShard);
+            Y_ABORT_UNLESS(shard.TabletType == ETabletType::SequenceShard);
 
             if (tabletId == InvalidTabletId) {
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -191,16 +191,16 @@ public:
         if (!txState) {
             return false;
         }
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSequence);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSequence);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_VERIFY_S(context.SS->Sequences.contains(pathId), "Sequence not found. PathId: " << pathId);
         TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-        Y_VERIFY(sequenceInfo);
+        Y_ABORT_UNLESS(sequenceInfo);
         TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
-        Y_VERIFY(alterData);
+        Y_ABORT_UNLESS(alterData);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -234,8 +234,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateSequence);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSequence);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;

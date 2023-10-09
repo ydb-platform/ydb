@@ -34,11 +34,11 @@ namespace NKikimr::NTestShard {
         STLOG(PRI_INFO, TEST_SHARD, TS12, "writing data", (TabletId, TabletId), (Key, key), (Size, value.size()));
 
         auto [wifIt, wifInserted] = WritesInFlight.try_emplace(r.GetCookie(), key);
-        Y_VERIFY(wifInserted);
-        Y_VERIFY(wifIt->second.KeysInQuery.size() == 1);
+        Y_ABORT_UNLESS(wifInserted);
+        Y_ABORT_UNLESS(wifIt->second.KeysInQuery.size() == 1);
 
         auto [it, inserted] = Keys.try_emplace(key, value.size());
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
         RegisterTransition(*it, ::NTestShard::TStateServer::ABSENT, ::NTestShard::TStateServer::WRITE_PENDING, std::move(ev));
 
         ++KeysWritten;
@@ -52,7 +52,7 @@ namespace NKikimr::NTestShard {
             STLOG(PRI_DEBUG, TEST_SHARD, TS29, "data written", (TabletId, TabletId), (Key, info.KeysInQuery),
                 (Latency, latency));
             WriteLatency.Add(TActivationContext::Monotonic(), latency);
-            Y_VERIFY(info.KeysInQuery.size() == (size_t)results.size(), "%zu/%d", info.KeysInQuery.size(), results.size());
+            Y_ABORT_UNLESS(info.KeysInQuery.size() == (size_t)results.size(), "%zu/%d", info.KeysInQuery.size(), results.size());
             for (size_t i = 0; i < info.KeysInQuery.size(); ++i) {
                 const auto& res = results[i];
                 Y_VERIFY_S(res.GetStatus() == NKikimrProto::OK, "TabletId# " << TabletId << " CmdWrite failed Status# "

@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             TVector<TScreen::THole> holes;
             TTestEnv env;
             TPartIndexIt index(&*Part0(), &env, { });
-            Y_VERIFY(index.Seek(0) == EReady::Data);
+            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
             while (index.IsValid()) {
                 auto from = index.GetRowId();
                 auto to = Max<TRowId>();
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             TVector<TScreen::THole> holes;
             TTestEnv env;
             TPartIndexIt index(&*Part0(), &env, { });
-            Y_VERIFY(index.Seek(0) == EReady::Data);
+            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
             while (index.IsValid()) {
                 auto from = index.GetRowId();
                 auto to = Max<TRowId>();
@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             TVector<TScreen::THole> holes;
             TTestEnv env;
             TPartIndexIt index(&*Part0(), &env, { });
-            Y_VERIFY(index.Seek(0) == EReady::Data);
+            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
             while (index.IsValid()) {
                 TRowId begin = index.GetRowId() + 1;
                 TRowId end;

@@ -88,7 +88,7 @@ public:
         TGuard(std::shared_ptr<TController> controller)
             : Controller(controller)
         {
-            Y_VERIFY(Controller);
+            Y_ABORT_UNLESS(Controller);
         }
 
         TController* operator->() {

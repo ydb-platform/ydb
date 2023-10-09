@@ -71,7 +71,7 @@ TOperationTracker::TOperationTracker()
 }
 
 TOperationTracker::~TOperationTracker() {
-    Y_VERIFY(!Thread_.Running());
+    Y_ABORT_UNLESS(!Thread_.Running());
 }
 
 void TOperationTracker::Stop() {

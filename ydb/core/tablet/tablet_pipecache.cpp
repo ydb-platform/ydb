@@ -137,7 +137,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             return;
 
         auto *clientState = byPeerIt->second;
-        Y_VERIFY(clientState, "Unexpected nullptr in tablet's ByPeer links");
+        Y_ABORT_UNLESS(clientState, "Unexpected nullptr in tablet's ByPeer links");
         clientState->Peers.erase(peer);
         tabletState->ByPeer.erase(byPeerIt);
 
@@ -180,7 +180,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             tabletState->ByPeer.erase(peer);
 
             auto byPeerIt = ByPeer.find(peer);
-            Y_VERIFY(byPeerIt != ByPeer.end());
+            Y_ABORT_UNLESS(byPeerIt != ByPeer.end());
             byPeerIt->second.ConnectedToTablet.erase(tablet);
             if (byPeerIt->second.ConnectedToTablet.empty()) {
                 ForgetPeer(byPeerIt);
@@ -222,7 +222,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             // Remove current client if it is idle
             if (tabletState->LastClient) {
                 clientState = tabletState->FindClient(tabletState->LastClient);
-                Y_VERIFY(clientState);
+                Y_ABORT_UNLESS(clientState);
                 if (clientState->Peers.empty()) {
                     if (Counters) {
                         if (clientState->Connected) {
@@ -246,7 +246,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             clientState->Client = tabletState->LastClient;
         } else {
             clientState = tabletState->FindClient(tabletState->LastClient);
-            Y_VERIFY(clientState, "Missing expected client state for active client");
+            Y_ABORT_UNLESS(clientState, "Missing expected client state for active client");
         }
         return clientState;
     }
@@ -324,7 +324,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
                     link->Peers.erase(peer);
                     if (link->Peers.empty()) {
                         auto oldClient = link->Client;
-                        Y_VERIFY(oldClient != tabletState->LastClient);
+                        Y_ABORT_UNLESS(oldClient != tabletState->LastClient);
                         if (Counters) {
                             if (link->Connected) {
                                 Counters.PipesInactive->Dec();
@@ -428,7 +428,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
                 clientState->MaxForwardedSeqNo = msg->MaxForwardedSeqNo;
             }
             if (tabletState->LastClient == msg->ClientId) {
-                Y_VERIFY(clientState, "Missing expected client state for active client");
+                Y_ABORT_UNLESS(clientState, "Missing expected client state for active client");
                 if (Counters && Y_LIKELY(clientState->Connected)) {
                     Counters.PipesInactive->Inc();
                     Counters.PipesActive->Dec();

@@ -255,7 +255,7 @@ namespace {
         explicit TAccessChecker(TContextPtr context)
             : Context(context)
         {
-            Y_VERIFY(!Context->WaitCounter);
+            Y_ABORT_UNLESS(!Context->WaitCounter);
         }
 
         void Bootstrap(const TActorContext&) {
@@ -772,7 +772,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             KeyColumnTypes.resize(tableDesc.KeyColumnIdsSize());
             for (ui32 i : xrange(tableDesc.KeyColumnIdsSize())) {
                 auto* column = Columns.FindPtr(tableDesc.GetKeyColumnIds(i));
-                Y_VERIFY(column != nullptr);
+                Y_ABORT_UNLESS(column != nullptr);
                 column->KeyOrder = i;
                 KeyColumnTypes[i] = column->PType;
             }
@@ -836,9 +836,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             KeyColumnTypes.resize(schemaDesc.KeyColumnNamesSize());
             for (ui32 i : xrange(schemaDesc.KeyColumnNamesSize())) {
                 auto* pcolid = nameToId.FindPtr(schemaDesc.GetKeyColumnNames(i));
-                Y_VERIFY(pcolid);
+                Y_ABORT_UNLESS(pcolid);
                 auto* column = Columns.FindPtr(*pcolid);
-                Y_VERIFY(column != nullptr);
+                Y_ABORT_UNLESS(column != nullptr);
                 column->KeyOrder = i;
                 KeyColumnTypes[i] = column->PType;
             }
@@ -903,8 +903,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> FillRangePartitioning(const TTableRange& range) const {
-            Y_VERIFY(Partitioning);
-            Y_VERIFY(!Partitioning->empty());
+            Y_ABORT_UNLESS(Partitioning);
+            Y_ABORT_UNLESS(!Partitioning->empty());
 
             if (range.IsFullRange(KeyColumnTypes.size())) {
                 return Partitioning;
@@ -932,7 +932,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
             );
 
-            Y_VERIFY(low != Partitioning->end(), "last key must be (inf)");
+            Y_ABORT_UNLESS(low != Partitioning->end(), "last key must be (inf)");
 
             do {
                 partitions->push_back(*low);
@@ -962,14 +962,14 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         void SetPathId(const TPathId pathId) {
             if (PathId) {
-                Y_VERIFY(PathId == pathId);
+                Y_ABORT_UNLESS(PathId == pathId);
             }
 
             PathId = pathId;
         }
 
         void SendSyncRequest() const {
-            Y_VERIFY(Subscriber, "it hangs if no subscriber");
+            Y_ABORT_UNLESS(Subscriber, "it hangs if no subscriber");
             Owner->Send(Subscriber.Subscriber, new TSchemeBoardEvents::TEvSyncRequest(), 0, ++Subscriber.SyncCookie);
         }
 
@@ -995,7 +995,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 auto& entry = context->Request->ResultSet[request.EntryIndex];
                 FillEntry(context.Get(), entry, props);
 
-                Y_VERIFY(context->WaitCounter > 0);
+                Y_ABORT_UNLESS(context->WaitCounter > 0);
                 --context->WaitCounter;
             }
 
@@ -1241,7 +1241,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         return false;
                     }
 
-                    Y_VERIFY(context->Get()->WaitCounter > 0);
+                    Y_ABORT_UNLESS(context->Get()->WaitCounter > 0);
                     --context->Get()->WaitCounter;
 
                     recipient.AddInFlight(*context, request.EntryIndex, request.IsSync);
@@ -1291,7 +1291,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     FillEntry(context, entry, response);
                 }
 
-                Y_VERIFY(context->WaitCounter > 0);
+                Y_ABORT_UNLESS(context->WaitCounter > 0);
                 --context->WaitCounter;
 
                 return true;
@@ -1355,7 +1355,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Clear();
             Filled = true;
 
-            Y_VERIFY(notify.PathId);
+            Y_ABORT_UNLESS(notify.PathId);
             SetPathId(notify.PathId);
 
             if (!notify.DescribeSchemeResult.HasStatus()) {
@@ -1367,16 +1367,16 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
             }
 
-            Y_VERIFY(notify.DescribeSchemeResult.HasPathDescription());
+            Y_ABORT_UNLESS(notify.DescribeSchemeResult.HasPathDescription());
             auto& pathDesc = *notify.DescribeSchemeResult.MutablePathDescription();
 
-            Y_VERIFY(notify.DescribeSchemeResult.HasPath());
+            Y_ABORT_UNLESS(notify.DescribeSchemeResult.HasPath());
             Path = notify.DescribeSchemeResult.GetPath();
 
             const auto& abandoned = pathDesc.GetAbandonedTenantsSchemeShards();
             AbandonedSchemeShardsIds = TSet<ui64>(abandoned.begin(), abandoned.end());
 
-            Y_VERIFY(pathDesc.HasSelf());
+            Y_ABORT_UNLESS(pathDesc.HasSelf());
             const auto& entryDesc = pathDesc.GetSelf();
             Self = new TNavigate::TDirEntryInfo();
             Self->Info.CopyFrom(entryDesc);
@@ -2176,7 +2176,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         return SetLookupError(context.Get(), entry);
                     }
 
-                    Y_VERIFY(dbItem->GetDomainInfo());
+                    Y_ABORT_UNLESS(dbItem->GetDomainInfo());
                     domainOwnerId = dbItem->GetDomainInfo()->ExtractSchemeShard();
                 }
 
@@ -2252,7 +2252,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return &Cache.Upsert(notifyPath, notifyPathId, TCacheItem(this, TSubscriber(), false));
         }
 
-        Y_VERIFY(byPath == byPathByPathId);
+        Y_ABORT_UNLESS(byPath == byPathByPathId);
 
         if (!byPath->IsFilled() || byPath->GetPathId().OwnerId == notifyPathId.OwnerId) {
             if (byPath->GetPathId() < notifyPathId) {
@@ -2287,8 +2287,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return nullptr;
         }
 
-        Y_VERIFY(byPath);
-        Y_VERIFY(byPathId != byPath);
+        Y_ABORT_UNLESS(byPath);
+        Y_ABORT_UNLESS(byPathId != byPath);
 
         if (!byPath->GetDomainId() && notifyDomainId) {
             return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
@@ -2404,7 +2404,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             << ", notify# " << notify.ToString());
 
         if (notify.Path && notify.PathId) {
-            Y_VERIFY(!response.IsSync);
+            Y_ABORT_UNLESS(!response.IsSync);
         }
 
         TCacheItem* cacheItem = ResolveCacheItemForNotify(notify);
@@ -2584,7 +2584,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         auto pathExtractor = [](const TResolve::TEntry& entry) {
             const TKeyDesc* keyDesc = entry.KeyDescription.Get();
-            Y_VERIFY(keyDesc != nullptr);
+            Y_ABORT_UNLESS(keyDesc != nullptr);
             return TPathId(keyDesc->TableId.PathId);
         };
 

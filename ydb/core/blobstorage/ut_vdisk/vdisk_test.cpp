@@ -640,7 +640,7 @@ Y_UNIT_TEST_SUITE(TBsDbStat) {
         UNIT_ASSERT(success1);
         // we have this tabletId in data
         ui64 tabletId = 30;
-        Y_VERIFY(tabletId < parallel);
+        Y_ABORT_UNLESS(tabletId < parallel);
         TDbStatTest stat(tabletId);
         bool success2 = Conf.Run<TDbStatTest>(&stat, TDuration::Seconds(10));
         UNIT_ASSERT(success2);

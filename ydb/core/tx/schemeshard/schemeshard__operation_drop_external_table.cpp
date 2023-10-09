@@ -26,8 +26,8 @@ public:
         LOG_I(DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropExternalTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropExternalTable);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -42,14 +42,14 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
         TPathId pathId = txState->TargetPathId;
         TPathId dataSourcePathId = txState->SourcePathId;
         auto path = context.SS->PathsById.at(pathId);
         auto dataSourcePath = context.SS->PathsById.at(dataSourcePathId);
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
 
-        Y_VERIFY(!path->Dropped());
+        Y_ABORT_UNLESS(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
@@ -57,7 +57,7 @@ public:
         parentDir->DecAliveChildren();
 
         TExternalDataSourceInfo::TPtr externalDataSourceInfo = context.SS->ExternalDataSources.Value(dataSourcePathId, nullptr);
-        Y_VERIFY(externalDataSourceInfo);
+        Y_ABORT_UNLESS(externalDataSourceInfo);
         EraseIf(*externalDataSourceInfo->ExternalTableReferences.MutableReferences(), [pathId](const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) { return PathIdFromPathId(reference.GetPathId()) == pathId; });
 
         context.SS->TabletCounters->Simple()[COUNTER_EXTERNAL_TABLE_COUNT].Sub(1);
@@ -197,7 +197,7 @@ public:
         context.DbChanges.PersistPath(path->ParentPathId);
         context.DbChanges.PersistPath(dataSourcePath->PathId);
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropExternalTable, path.Base()->PathId, dataSourcePath->PathId);
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);
@@ -236,7 +236,7 @@ ISubOperation::TPtr CreateDropExternalTable(TOperationId id, const TTxTransactio
 }
 
 ISubOperation::TPtr CreateDropExternalTable(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropExternalTable>(id, state);
 }
 

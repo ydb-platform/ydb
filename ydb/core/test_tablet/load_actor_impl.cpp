@@ -16,7 +16,7 @@ namespace NKikimr::NTestShard {
 
     void TLoadActor::ClearKeys() {
         for (auto& [key, info] : Keys) {
-            Y_VERIFY(info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
+            Y_ABORT_UNLESS(info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
                     ? info.ConfirmedKeyIndex < ConfirmedKeys.size() && ConfirmedKeys[info.ConfirmedKeyIndex] == key
                     : info.ConfirmedKeyIndex == Max<size_t>());
             info.ConfirmedKeyIndex = Max<size_t>();
@@ -87,7 +87,7 @@ namespace NKikimr::NTestShard {
                         NextWriteTimestamp = TMonotonic::Max();
                     }
                 } else if (!WriteOnTimeScheduled) {
-                    Y_VERIFY(NextWriteTimestamp != TMonotonic::Max());
+                    Y_ABORT_UNLESS(NextWriteTimestamp != TMonotonic::Max());
                     TActivationContext::Schedule(NextWriteTimestamp, new IEventHandle(EvWriteOnTime, 0, SelfId(), {}, nullptr, 0));
                     WriteOnTimeScheduled = true;
                 }
@@ -110,13 +110,13 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::HandleDoSomeAction() {
-        Y_VERIFY(DoSomeActionInFlight);
+        Y_ABORT_UNLESS(DoSomeActionInFlight);
         DoSomeActionInFlight = false;
         Action();
     }
 
     void TLoadActor::HandleWriteOnTime() {
-        Y_VERIFY(WriteOnTimeScheduled);
+        Y_ABORT_UNLESS(WriteOnTimeScheduled);
         WriteOnTimeScheduled = false;
         Action();
     }
@@ -131,7 +131,7 @@ namespace NKikimr::NTestShard {
     }
 
     TDuration TLoadActor::GenerateRandomInterval(const NKikimrClient::TTestShardControlRequest::TTimeInterval& interval) {
-        Y_VERIFY(interval.HasFrequency() && interval.HasMaxIntervalMs());
+        Y_ABORT_UNLESS(interval.HasFrequency() && interval.HasMaxIntervalMs());
         const double frequency = interval.GetFrequency();
         const double xMin = exp(-frequency * interval.GetMaxIntervalMs() * 1e-3);
         const double x = Max(xMin, RandomNumber<double>());
@@ -146,9 +146,9 @@ namespace NKikimr::NTestShard {
 
     size_t TLoadActor::GenerateRandomSize(const google::protobuf::RepeatedPtrField<NKikimrClient::TTestShardControlRequest::TSizeInterval>& intervals,
             bool *isInline) {
-        Y_VERIFY(!intervals.empty());
+        Y_ABORT_UNLESS(!intervals.empty());
         const auto& interval = intervals[PickInterval(intervals)];
-        Y_VERIFY(interval.HasMin() && interval.HasMax() && interval.GetMin() <= interval.GetMax());
+        Y_ABORT_UNLESS(interval.HasMin() && interval.HasMax() && interval.GetMin() <= interval.GetMax());
         *isInline = interval.GetInline();
         return interval.GetMin() + RandomNumber<size_t>(interval.GetMax() - interval.GetMin() + 1);
     }
@@ -163,7 +163,7 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::Handle(TEvKeyValue::TEvResponse::TPtr ev) {
-        Y_VERIFY(!ValidationActorId); // no requests during validation
+        Y_ABORT_UNLESS(!ValidationActorId); // no requests during validation
         auto& record = ev->Get()->Record;
         if (record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
             STLOG(PRI_ERROR, TEST_SHARD, TS26, "TEvKeyValue::TEvRequest failed", (TabletId, TabletId),
@@ -190,7 +190,7 @@ namespace NKikimr::NTestShard {
             if (const auto it = ReadsInFlight.find(record.GetCookie()); it != ReadsInFlight.end()) {
                 const auto& [key, timestamp, payloadInResponse, items] = it->second;
                 const auto jt = KeysBeingRead.find(key);
-                Y_VERIFY(jt != KeysBeingRead.end() && jt->second);
+                Y_ABORT_UNLESS(jt != KeysBeingRead.end() && jt->second);
                 if (!--jt->second) {
                     KeysBeingRead.erase(jt);
                 }

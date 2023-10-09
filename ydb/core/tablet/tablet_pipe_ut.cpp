@@ -847,7 +847,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
 
         TActorId proxy = runtime.GetInterconnectProxy(0, 1);
-        Y_VERIFY(proxy);
+        Y_ABORT_UNLESS(proxy);
         runtime.Send(new IEventHandle(proxy, sender1, new TEvInterconnect::TEvConnectNode), 0);
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);

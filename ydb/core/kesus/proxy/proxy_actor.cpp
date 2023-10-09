@@ -124,7 +124,7 @@ private:
 
     ui64 GetSessionRequest(TSessionData* data, ui64 seqNo) {
         ui64 *pCookie = data->CookieByRequest.FindPtr(seqNo);
-        Y_VERIFY(pCookie);
+        Y_ABORT_UNLESS(pCookie);
         return *pCookie;
     }
 
@@ -175,8 +175,8 @@ private:
             return false;
         }
 
-        Y_VERIFY(State == STATE_IDLE);
-        Y_VERIFY(!TabletPipe);
+        Y_ABORT_UNLESS(State == STATE_IDLE);
+        Y_ABORT_UNLESS(!TabletPipe);
         State = STATE_CONNECTING;
         KPROXY_LOG_DEBUG_S("Connecting to kesus");
 
@@ -200,7 +200,7 @@ private:
             return false;
         }
 
-        Y_VERIFY(State == STATE_CONNECTED);
+        Y_ABORT_UNLESS(State == STATE_CONNECTED);
         State = STATE_REGISTERING;
 
         ++ProxyGeneration;
@@ -242,7 +242,7 @@ private:
                 RemoveSession(data);
             } else {
                 // We don't know session id yet, wait and then destroy
-                Y_VERIFY(data->State == ESessionState::ATTACHING);
+                Y_ABORT_UNLESS(data->State == ESessionState::ATTACHING);
                 data->Destroy = true;
                 if (State < STATE_REGISTERED) {
                     // Attach request is not out yet, remove directly
@@ -305,8 +305,8 @@ private:
     void Handle(const TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         const auto* msg = ev->Get();
 
-        Y_VERIFY(msg->TabletId == TabletId);
-        Y_VERIFY(msg->ClientId == TabletPipe);
+        Y_ABORT_UNLESS(msg->TabletId == TabletId);
+        Y_ABORT_UNLESS(msg->ClientId == TabletPipe);
 
         if (msg->Status != NKikimrProto::OK) {
             // Tablet pipe failed, report link failure
@@ -319,7 +319,7 @@ private:
             return;
         }
 
-        Y_VERIFY(State == STATE_CONNECTING);
+        Y_ABORT_UNLESS(State == STATE_CONNECTING);
         State = STATE_CONNECTED;
         KPROXY_LOG_DEBUG_S("Pipe to kesus connected");
 
@@ -327,7 +327,7 @@ private:
         for (auto& kv : DirectRequests) {
             const ui64 seqNo = kv.first;
             auto& req = kv.second;
-            Y_VERIFY(req.Event);
+            Y_ABORT_UNLESS(req.Event);
             NTabletPipe::SendData(SelfId(), TabletPipe, req.Event.Release(), seqNo);
         }
 
@@ -339,8 +339,8 @@ private:
     void Handle(const TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         const auto* msg = ev->Get();
 
-        Y_VERIFY(msg->TabletId == TabletId);
-        Y_VERIFY(msg->ClientId == TabletPipe);
+        Y_ABORT_UNLESS(msg->TabletId == TabletId);
+        Y_ABORT_UNLESS(msg->ClientId == TabletPipe);
 
         KPROXY_LOG_DEBUG_S("Pipe to kesus disconnected");
         HandleLinkFailure();
@@ -363,7 +363,7 @@ private:
             Y_FAIL("Unexpected proxy registration error");
         }
 
-        Y_VERIFY(State == STATE_REGISTERING);
+        Y_ABORT_UNLESS(State == STATE_REGISTERING);
         State = STATE_REGISTERED;
         KPROXY_LOG_DEBUG_S("Registered with ProxyGeneration=" << ProxyGeneration);
 
@@ -384,7 +384,7 @@ private:
     }
 
     void SendAttachSession(TSessionData* data) {
-        Y_VERIFY(data->AttachEvent);
+        Y_ABORT_UNLESS(data->AttachEvent);
         data->AttachEvent->Record.SetProxyGeneration(ProxyGeneration);
         KPROXY_LOG_DEBUG_S("Sending attach request for session "
             << data->AttachEvent->Record.GetSessionId()
@@ -426,7 +426,7 @@ private:
 
     void HandleDirectRequest(const TActorId& sender, ui64 cookie, THolder<IEventBase> event) {
         KPROXY_LOG_TRACE_S("Received " << event->ToStringHeader() << " from " << sender);
-        Y_VERIFY(!DirectRequestBySender.contains(sender), "Only one outgoing request per sender is allowed");
+        Y_ABORT_UNLESS(!DirectRequestBySender.contains(sender), "Only one outgoing request per sender is allowed");
         const ui64 seqNo = ++SeqNo;
         auto& req = DirectRequests[seqNo];
         req.Sender = sender;
@@ -532,8 +532,8 @@ private:
 
     void Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
         KPROXY_LOG_TRACE_S("Received TEvAttachSession from " << ev->Sender);
-        Y_VERIFY(ev->Sender);
-        Y_VERIFY(!SessionByOwner.contains(ev->Sender), "Only one outgoing request per sender is allowed");
+        Y_ABORT_UNLESS(ev->Sender);
+        Y_ABORT_UNLESS(!SessionByOwner.contains(ev->Sender), "Only one outgoing request per sender is allowed");
 
         auto& record = ev->Get()->Record;
         const ui64 sessionId = record.GetSessionId();
@@ -615,7 +615,7 @@ private:
                 KPROXY_LOG_DEBUG_S("Attached to session " << data->SessionId
                     << " (cookie=" << data->SeqNo << ")");
             }
-            Y_VERIFY(data->SessionId == record.GetSessionId());
+            Y_ABORT_UNLESS(data->SessionId == record.GetSessionId());
 
             if (data->Owner) {
                 KPROXY_LOG_TRACE_S("Relaying TEvAttachSessionResult to " << data->Owner);
@@ -710,7 +710,7 @@ private:
 
     void Handle(const TEvKesus::TEvDestroySession::TPtr& ev) {
         KPROXY_LOG_TRACE_S("Received TEvDestroySession from " << ev->Sender);
-        Y_VERIFY(ev->Sender);
+        Y_ABORT_UNLESS(ev->Sender);
 
         if (auto* data = FindSessionByOwner(ev->Sender)) {
             if (data->State == ESessionState::ATTACHED) {
@@ -737,7 +737,7 @@ private:
         }
 
         if (auto* data = FindSession(ev->Cookie)) {
-            Y_VERIFY(data->State == ESessionState::DESTROYING);
+            Y_ABORT_UNLESS(data->State == ESessionState::DESTROYING);
 
             if (data->Owner) {
                 KPROXY_LOG_TRACE_S("Relaying TEvDestroySessionResult to " << data->Owner);
@@ -751,12 +751,12 @@ private:
     template<class TRequest>
     void HandleSessionRequest(const TActorId& sender, ui64 cookie, TAutoPtr<TRequest> event) {
         KPROXY_LOG_TRACE_S("Received " << event->ToStringHeader() << " from " << sender);
-        Y_VERIFY(sender);
+        Y_ABORT_UNLESS(sender);
         auto& record = event->Record;
 
         if (auto* data = FindSessionByOwner(sender)) {
             if (data->State == ESessionState::ATTACHED) {
-                Y_VERIFY(data->Owner == sender);
+                Y_ABORT_UNLESS(data->Owner == sender);
                 record.SetProxyGeneration(ProxyGeneration);
                 record.SetSessionId(data->SessionId);
                 ui64 seqNo = AddSessionRequest(data, cookie);
@@ -778,7 +778,7 @@ private:
     template<class TResponse>
     void HandleSessionResponse(ui64 seqNo, TAutoPtr<TResponse> event, bool finished = true) {
         if (auto* data = FindSessionByRequest(seqNo)) {
-            Y_VERIFY(data->Owner);
+            Y_ABORT_UNLESS(data->Owner);
             const ui64 replyCookie = finished ? RemoveSessionRequest(data, seqNo) : GetSessionRequest(data, seqNo);
             KPROXY_LOG_TRACE_S("Relaying " << event->ToStringHeader() << " to " << data->Owner
                 << " (session=" << data->SessionId << ", cookie=" << seqNo << ")");

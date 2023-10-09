@@ -423,7 +423,7 @@ private:
             Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             return;
         }
-        Y_VERIFY(res.size() == 2);
+        Y_ABORT_UNLESS(res.size() == 2);
 
         auto ptr = InflightBuffer.find(cookie);
         if (ptr == InflightBuffer.end()) {

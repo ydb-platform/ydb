@@ -42,10 +42,10 @@ namespace NKikimr {
                 TEvRegister *msg = ev->Get();
                 if (msg->FlowRecord) {
                     const bool inserted = Subscribers.emplace(msg->ActorId, std::move(msg->FlowRecord)).second;
-                    Y_VERIFY(inserted);
+                    Y_ABORT_UNLESS(inserted);
                 } else {
                     const ui32 numErased = Subscribers.erase(msg->ActorId);
-                    Y_VERIFY(numErased == 1);
+                    Y_ABORT_UNLESS(numErased == 1);
                 }
             }
 
@@ -125,7 +125,7 @@ namespace NKikimr {
             if (++node.value().NumSubscribers == MaxActorsPerSubscheduler) {
                 // this actor is now full one, so we have to move it to the full subschedulers set
                 auto res = FullSubschedulers.insert(std::move(node));
-                Y_VERIFY(res.inserted);
+                Y_ABORT_UNLESS(res.inserted);
                 it = res.position;
             } else {
                 // put this actor back
@@ -137,14 +137,14 @@ namespace NKikimr {
 
             // forward message to subscheduler actor
             const bool inserted = SubscriberToSubscheduler.emplace(actorId, subschedulerActorId).second;
-            Y_VERIFY(inserted);
+            Y_ABORT_UNLESS(inserted);
             ctx.Send(subschedulerActorId, msg.release());
         }
 
         void UnregisterSubscriber(const TActorId& actorId, std::unique_ptr<TEvRegister> msg, const TActorContext& ctx) {
             // find the subscheduler actor for this subscriber
             auto it = SubscriberToSubscheduler.find(actorId);
-            Y_VERIFY(it != SubscriberToSubscheduler.end());
+            Y_ABORT_UNLESS(it != SubscriberToSubscheduler.end());
 
             // erase it from the map, remembering its actor id
             const TActorId subschedulerActorId = it->second;
@@ -155,12 +155,12 @@ namespace NKikimr {
 
             // find this subscheduler and its matching ordered set position
             auto subsIt = SubschedulerToOrderedSetPosition.find(subschedulerActorId);
-            Y_VERIFY(subsIt != SubschedulerToOrderedSetPosition.end());
+            Y_ABORT_UNLESS(subsIt != SubschedulerToOrderedSetPosition.end());
 
             // determine the set to which this subscheduler belongs and extract its node from the set
             auto& set = subsIt->second->NumSubscribers != MaxActorsPerSubscheduler ? PartialSubschedulers : FullSubschedulers;
             auto node = set.extract(subsIt->second);
-            Y_VERIFY(node.value().ActorId == subschedulerActorId);
+            Y_ABORT_UNLESS(node.value().ActorId == subschedulerActorId);
 
             if (!--node.value().NumSubscribers) {
                 // this child actor has no more subscribers left -- kill the actor, forget it here
@@ -169,7 +169,7 @@ namespace NKikimr {
             } else {
                 // this child actor still has subscribers, but it is in PartialSubschedulers for sure now
                 auto res = PartialSubschedulers.insert(std::move(node));
-                Y_VERIFY(res.inserted);
+                Y_ABORT_UNLESS(res.inserted);
                 subsIt->second = res.position;
             }
         }

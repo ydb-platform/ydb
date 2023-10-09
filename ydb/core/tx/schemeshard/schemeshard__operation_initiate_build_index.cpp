@@ -49,13 +49,13 @@ public:
                                << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxInitializeBuildIndex);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxInitializeBuildIndex);
 
         TPathId pathId = txState->TargetPathId;
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        Y_VERIFY(context.SS->Tables.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
 
         NKikimrTxDataShard::TFlatSchemeTransaction txTemplate;
@@ -66,14 +66,14 @@ public:
 
         bool found = false;
         for (const auto& [childName, childPathId] : path->GetChildren()) {
-            Y_VERIFY(context.SS->PathsById.contains(childPathId));
+            Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
             auto childPath = context.SS->PathsById.at(childPathId);
 
             if (!childPath->IsTableIndex() || childPath->Dropped() || childPath->PlannedToDrop()) {
                 continue;
             }
 
-            Y_VERIFY(context.SS->Indexes.contains(childPathId));
+            Y_ABORT_UNLESS(context.SS->Indexes.contains(childPathId));
             auto index = context.SS->Indexes.at(childPathId);
 
             if (index->State != TTableIndexInfo::EState::EIndexStateInvalid) {
@@ -87,7 +87,7 @@ public:
                 << ", another# " << childPathId);
             found = true;
 
-            Y_VERIFY(index->AlterData);
+            Y_ABORT_UNLESS(index->AlterData);
             context.SS->DescribeTableIndex(childPathId, childName, index->AlterData, *initiate->MutableIndexDescription());
         }
 
@@ -165,7 +165,7 @@ public:
                                << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxInitializeBuildIndex);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxInitializeBuildIndex);
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->SnapshotsStepIds[OperationId.GetTxId()] = step;
@@ -191,8 +191,8 @@ public:
                                << " at tablet: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxInitializeBuildIndex);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxInitializeBuildIndex);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -227,7 +227,7 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
@@ -420,7 +420,7 @@ ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, const T
 }
 
 ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TInitializeBuildIndex>(id, state);
 }
 

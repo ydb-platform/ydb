@@ -300,7 +300,7 @@ protected:
     }
 
     virtual ui64 GetMkqlMemoryLimit() const {
-        Y_VERIFY(MemoryQuota);
+        Y_ABORT_UNLESS(MemoryQuota);
         return MemoryQuota->GetMkqlMemoryLimit();
     }
 
@@ -350,7 +350,7 @@ protected:
     }
 
     virtual bool DoHandleChannelsAfterFinishImpl() {
-        Y_VERIFY(Checkpoints);
+        Y_ABORT_UNLESS(Checkpoints);
 
         if (Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
             Checkpoints->DoCheckpoint();
@@ -679,8 +679,8 @@ public:
         }
 
         if (channelData.Proto.HasCheckpoint()) {
-            Y_VERIFY(inputChannel->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
-            Y_VERIFY(Checkpoints);
+            Y_ABORT_UNLESS(inputChannel->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
+            Y_ABORT_UNLESS(Checkpoints);
             const auto& checkpoint = channelData.Proto.GetCheckpoint();
             inputChannel->Pause(checkpoint);
             Checkpoints->RegisterCheckpoint(checkpoint, channelData.Proto.GetChannelId());
@@ -723,12 +723,12 @@ public:
     }
 
     void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
-        Y_VERIFY(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
+        Y_ABORT_UNLESS(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
         Checkpoints->OnSinkStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
     void OnTransformStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
-        Y_VERIFY(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
+        Y_ABORT_UNLESS(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
         Checkpoints->OnTransformStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
@@ -778,13 +778,13 @@ protected:
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
         CA_LOG_D("Commit state");
         for (auto& [inputIndex, source] : SourcesMap) {
-            Y_VERIFY(source.AsyncInput);
+            Y_ABORT_UNLESS(source.AsyncInput);
             source.AsyncInput->CommitState(checkpoint);
         }
     }
 
     void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) override {
-        Y_VERIFY(CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
+        Y_ABORT_UNLESS(CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
         for (const auto& [id, channelInfo] : OutputChannelsMap) {
             if (!channelInfo.IsTransformOutput) {
                 channelInfo.Channel->Push(NDqProto::TCheckpoint(checkpoint));
@@ -1062,7 +1062,7 @@ protected:
                     channelData.Proto.MutableCheckpoint()->Swap(&Checkpoint);
                 }
 
-                Y_VERIFY(HasData || HasWatermark || HasCheckpoint || Finished);
+                Y_ABORT_UNLESS(HasData || HasWatermark || HasCheckpoint || Finished);
                 return channelData;
             }
 
@@ -1089,7 +1089,7 @@ protected:
         std::vector<TDrainedChannelMessage> DrainChannel(const ui32 countLimit) {
             std::vector<TDrainedChannelMessage> result;
             if (Finished) {
-                Y_VERIFY(Channel->IsFinished());
+                Y_ABORT_UNLESS(Channel->IsFinished());
                 return result;
             }
             result.reserve(countLimit);
@@ -1307,7 +1307,7 @@ protected:
 
     void HandleExecuteBase(TEvDq::TEvAbortExecution::TPtr& ev) {
         if (ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::INTERNAL_ERROR) {
-            Y_VERIFY(ev->Get()->GetIssues().Size() == 1);
+            Y_ABORT_UNLESS(ev->Get()->GetIssues().Size() == 1);
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, *ev->Get()->GetIssues().begin());
             return;
         }
@@ -1371,7 +1371,7 @@ protected:
 
 private:
     virtual const TDqMemoryQuota::TProfileStats* GetProfileStats() const {
-        Y_VERIFY(MemoryQuota);
+        Y_ABORT_UNLESS(MemoryQuota);
         return MemoryQuota->GetProfileStats();
     }
 
@@ -1431,9 +1431,9 @@ private:
             return;
         }
 
-        Y_VERIFY(outputInfo.Buffer);
-        Y_VERIFY(outputInfo.AsyncOutput);
-        Y_VERIFY(outputInfo.Actor);
+        Y_ABORT_UNLESS(outputInfo.Buffer);
+        Y_ABORT_UNLESS(outputInfo.AsyncOutput);
+        Y_ABORT_UNLESS(outputInfo.Actor);
 
         const ui32 allowedOvercommit = AllowedChannelsOvercommit();
         const i64 sinkFreeSpaceBeforeSend = outputInfo.AsyncOutput->GetFreeSpace();
@@ -1567,14 +1567,14 @@ protected:
             }
         }
         for (auto& [inputIndex, source] : SourcesMap) {
-            if (TaskRunner) { source.Buffer = TaskRunner->GetSource(inputIndex); Y_VERIFY(source.Buffer);}
-            Y_VERIFY(AsyncIoFactory);
+            if (TaskRunner) { source.Buffer = TaskRunner->GetSource(inputIndex); Y_ABORT_UNLESS(source.Buffer);}
+            Y_ABORT_UNLESS(AsyncIoFactory);
             const auto& inputDesc = Task.GetInputs(inputIndex);
-            Y_VERIFY(inputDesc.HasSource());
+            Y_ABORT_UNLESS(inputDesc.HasSource());
             source.Type = inputDesc.GetSource().GetType();
             const ui64 i = inputIndex; // Crutch for clang
             const auto& settings = Task.GetSourceSettings();
-            Y_VERIFY(settings.empty() || inputIndex < settings.size());
+            Y_ABORT_UNLESS(settings.empty() || inputIndex < settings.size());
             CA_LOG_D("Create source for input " << i << " " << inputDesc);
             try {
                 std::tie(source.AsyncInput, source.Actor) = AsyncIoFactory->CreateDqSource(
@@ -1603,7 +1603,7 @@ protected:
             if (TaskRunner) {
                 transform.ProgramBuilder.ConstructInPlace(TaskRunner->GetTypeEnv(), *FunctionRegistry);
                 std::tie(transform.InputBuffer, transform.Buffer) = TaskRunner->GetInputTransform(inputIndex);
-                Y_VERIFY(AsyncIoFactory);
+                Y_ABORT_UNLESS(AsyncIoFactory);
                 const auto& inputDesc = Task.GetInputs(inputIndex);
                 const ui64 i = inputIndex; // Crutch for clang
                 CA_LOG_D("Create transform for input " << i << " " << inputDesc.ShortDebugString());
@@ -1638,7 +1638,7 @@ protected:
             if (TaskRunner) {
                 transform.ProgramBuilder.ConstructInPlace(TaskRunner->GetTypeEnv(), *FunctionRegistry);
                 std::tie(transform.Buffer, transform.OutputBuffer) = TaskRunner->GetOutputTransform(outputIndex);
-                Y_VERIFY(AsyncIoFactory);
+                Y_ABORT_UNLESS(AsyncIoFactory);
                 const auto& outputDesc = Task.GetOutputs(outputIndex);
                 const ui64 i = outputIndex; // Crutch for clang
                 CA_LOG_D("Create transform for output " << i << " " << outputDesc.ShortDebugString());
@@ -1664,9 +1664,9 @@ protected:
         }
         for (auto& [outputIndex, sink] : SinksMap) {
             if (TaskRunner) { sink.Buffer = TaskRunner->GetSink(outputIndex); }
-            Y_VERIFY(AsyncIoFactory);
+            Y_ABORT_UNLESS(AsyncIoFactory);
             const auto& outputDesc = Task.GetOutputs(outputIndex);
-            Y_VERIFY(outputDesc.HasSink());
+            Y_ABORT_UNLESS(outputDesc.HasSink());
             sink.Type = outputDesc.GetSink().GetType();
             const ui64 i = outputIndex; // Crutch for clang
             CA_LOG_D("Create sink for output " << i << " " << outputDesc);
@@ -1691,7 +1691,7 @@ protected:
     }
 
     void PollAsyncInput(TAsyncInputInfoBase& info, ui64 inputIndex) {
-        Y_VERIFY(!TaskRunner || info.Buffer);
+        Y_ABORT_UNLESS(!TaskRunner || info.Buffer);
 
         if (info.Finished) {
             CA_LOG_T("Skip polling async input[" << inputIndex << "]: finished");
@@ -1707,7 +1707,7 @@ protected:
         if (freeSpace > 0) {
             TMaybe<TInstant> watermark;
             NKikimr::NMiniKQL::TUnboxedValueBatch batch;
-            Y_VERIFY(info.AsyncInput);
+            Y_ABORT_UNLESS(info.AsyncInput);
             bool finished = false;
             const i64 space = info.AsyncInput->GetAsyncInputData(batch, watermark, finished, freeSpace);
             CA_LOG_T("Poll async input " << inputIndex
@@ -1761,7 +1761,7 @@ protected:
     }
 
     void OnNewAsyncInputDataArrived(const IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::TPtr& ev) {
-        Y_VERIFY(SourcesMap.FindPtr(ev->Get()->InputIndex) || InputTransformsMap.FindPtr(ev->Get()->InputIndex));
+        Y_ABORT_UNLESS(SourcesMap.FindPtr(ev->Get()->InputIndex) || InputTransformsMap.FindPtr(ev->Get()->InputIndex));
         auto cpuTimeDelta = TakeSourceCpuTimeDelta();
         if (SourceCpuTimeMs) {
             SourceCpuTimeMs->Add(cpuTimeDelta.MilliSeconds());
@@ -1849,7 +1849,7 @@ private:
     void InitializeTask() {
         for (ui32 i = 0; i < Task.InputsSize(); ++i) {
             const auto& inputDesc = Task.GetInputs(i);
-            Y_VERIFY(!inputDesc.HasSource() || inputDesc.ChannelsSize() == 0); // HasSource => no channels
+            Y_ABORT_UNLESS(!inputDesc.HasSource() || inputDesc.ChannelsSize() == 0); // HasSource => no channels
 
             if (inputDesc.HasTransform()) {
                 auto result = InputTransformsMap.emplace(
@@ -1882,7 +1882,7 @@ private:
 
         for (ui32 i = 0; i < Task.OutputsSize(); ++i) {
             const auto& outputDesc = Task.GetOutputs(i);
-            Y_VERIFY(!outputDesc.HasSink() || outputDesc.ChannelsSize() == 0); // HasSink => no channels
+            Y_ABORT_UNLESS(!outputDesc.HasSink() || outputDesc.ChannelsSize() == 0); // HasSink => no channels
 
             if (outputDesc.HasTransform()) {
                 auto result = OutputTransformsMap.emplace(std::piecewise_construct, std::make_tuple(i), std::make_tuple());
@@ -1989,7 +1989,7 @@ public:
         }
 
         if (Stat) { // for task_runner_actor
-            Y_VERIFY(!dst->HasExtra());
+            Y_ABORT_UNLESS(!dst->HasExtra());
             NDqProto::TExtraStats extraStats;
             for (const auto& [name, entry]: Stat->Get()) {
                 NDqProto::TDqStatsAggr metric;

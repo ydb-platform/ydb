@@ -52,7 +52,7 @@ namespace NKikimr {
                 auto callback = [this, chunks, baseSerNum](NKikimrProto::EReplyStatus status,
                         IEventBase* /*result*/, const TActorContext& ctx) {
                     ChunkReserveInFlight = false;
-                    Y_VERIFY(NumReservedUncommittedChunks >= chunks.size());
+                    Y_ABORT_UNLESS(NumReservedUncommittedChunks >= chunks.size());
                     NumReservedUncommittedChunks -= chunks.size();
                     if (status == NKikimrProto::OK) {
                         // copy just allocated and confirmed chunks to write intent queue and kick writer (it may be

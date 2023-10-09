@@ -69,7 +69,7 @@ public:
     static bool IsSpecialColumn(const arrow::Field& field);
     static bool IsSpecialColumn(const ui32 field);
     static ui32 GetSpecialColumnByteWidth(const ui32 field) {
-        Y_VERIFY(IsSpecialColumn(field));
+        Y_ABORT_UNLESS(IsSpecialColumn(field));
         return 8;
     }
     static bool IsSpecialColumn(const std::string& fieldName);
@@ -129,7 +129,7 @@ public:
 
     /// Returns id of the first column of the primary key.
     ui32 GetPKFirstColumnId() const {
-        Y_VERIFY(KeyColumns.size());
+        Y_ABORT_UNLESS(KeyColumns.size());
         return KeyColumns[0];
     }
 
@@ -145,8 +145,8 @@ public:
     void SetAllKeys();
 
     void CheckTtlColumn(const TString& ttlColumn) const {
-        Y_VERIFY(!ttlColumn.empty());
-        Y_VERIFY(MinMaxIdxColumnsIds.contains(GetColumnId(ttlColumn)));
+        Y_ABORT_UNLESS(!ttlColumn.empty());
+        Y_ABORT_UNLESS(MinMaxIdxColumnsIds.contains(GetColumnId(ttlColumn)));
     }
 
     std::vector<ui32> GetColumnIds(const std::vector<TString>& columnNames) const;

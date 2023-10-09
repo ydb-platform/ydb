@@ -305,7 +305,7 @@ bool TNodeInfo::BecomeConnected() {
         return true;
     }
     if (VolatileState == EVolatileState::Connecting) {
-        Y_VERIFY((bool)Local);
+        Y_ABORT_UNLESS((bool)Local);
         ChangeVolatileState(EVolatileState::Connected);
         StartTime = DEPRECATED_NOW;
         return true;
@@ -324,7 +324,7 @@ void TNodeInfo::DeregisterInDomains() {
 }
 
 void TNodeInfo::Ping() {
-    Y_VERIFY((bool)Local);
+    Y_ABORT_UNLESS((bool)Local);
     BLOG_D("Node(" << Id << ") Ping(" << Local << ")");
     Hive.SendPing(Local, Id);
 }

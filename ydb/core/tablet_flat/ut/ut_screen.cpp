@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
 
             auto cu0 = cook.Make(Mass0().Saved, 3, (7 + (len >> 1) - 3) >> 1);
             auto cu = cook.Make(Mass0().Saved, 7 + (len >> 1), 13 + len);
-            Y_VERIFY(cu0.End != cu.Begin);
+            Y_ABORT_UNLESS(cu0.End != cu.Begin);
 
             for (int joined = 0; joined < 2; ++joined) {
                 auto screen = joined ? TScreen::Join(cu0.Screen, cu.Screen) : cu.Screen;

@@ -106,7 +106,7 @@ ISubOperation::TPtr CreateAssignBSV(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr CreateAssignBSV(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
+    Y_ABORT_UNLESS(state == TTxState::Invalid || state == TTxState::Propose);
     return MakeSubOperation<TAssignBlockStoreVolume>(id);
 }
 

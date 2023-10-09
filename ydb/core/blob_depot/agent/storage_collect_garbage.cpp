@@ -67,7 +67,7 @@ namespace NKikimr::NBlobDepot {
 
                 Agent.Issue(std::move(record), this, nullptr);
 
-                Y_VERIFY(!QueryInFlight);
+                Y_ABORT_UNLESS(!QueryInFlight);
                 QueryInFlight = true;
             }
 
@@ -86,7 +86,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleCollectGarbageResult(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvCollectGarbageResult& msg) {
-                Y_VERIFY(QueryInFlight);
+                Y_ABORT_UNLESS(QueryInFlight);
                 QueryInFlight = false;
 
                 if (!msg.HasStatus()) {

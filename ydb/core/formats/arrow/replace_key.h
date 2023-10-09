@@ -25,7 +25,7 @@ public:
 
     void ShrinkToFit() {
         if (Columns->front()->length() == 1) {
-            Y_VERIFY(Position == 0);
+            Y_ABORT_UNLESS(Position == 0);
         } else {
             auto columnsNew = std::make_shared<TArrayVec>();
             for (auto&& i : *Columns) {
@@ -53,7 +53,7 @@ public:
         : Columns(columns)
         , Position(position)
     {
-        Y_VERIFY(Size() > 0 && Position < (ui64)Column(0).length());
+        Y_ABORT_UNLESS(Size() > 0 && Position < (ui64)Column(0).length());
     }
 
     template<typename T = TArrayVecPtr> requires IsOwning
@@ -61,7 +61,7 @@ public:
         : Columns(std::make_shared<TArrayVec>(std::move(columns)))
         , Position(position)
     {
-        Y_VERIFY(Size() > 0 && Position < (ui64)Column(0).length());
+        Y_ABORT_UNLESS(Size() > 0 && Position < (ui64)Column(0).length());
     }
 
     size_t Hash() const {
@@ -70,7 +70,7 @@ public:
 
     template<typename T>
     bool operator == (const TReplaceKeyTemplate<T>& key) const {
-        Y_VERIFY(Size() == key.Size());
+        Y_ABORT_UNLESS(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
             auto cmp = CompareColumnValue(i, key, i);
@@ -83,7 +83,7 @@ public:
 
     template<typename T>
     std::partial_ordering operator <=> (const TReplaceKeyTemplate<T>& key) const {
-        Y_VERIFY(Size() == key.Size());
+        Y_ABORT_UNLESS(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
             auto cmp = CompareColumnValue(i, key, i);
@@ -96,7 +96,7 @@ public:
 
     template<typename T>
     std::partial_ordering CompareNotNull(const TReplaceKeyTemplate<T>& key) const {
-        Y_VERIFY(Size() == key.Size());
+        Y_ABORT_UNLESS(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
             auto cmp = CompareColumnValueNotNull(i, key, i);
@@ -109,8 +109,8 @@ public:
 
     template<typename T>
     std::partial_ordering ComparePartNotNull(const TReplaceKeyTemplate<T>& key, int size) const {
-        Y_VERIFY(size <= key.Size());
-        Y_VERIFY(size <= Size());
+        Y_ABORT_UNLESS(size <= key.Size());
+        Y_ABORT_UNLESS(size <= Size());
 
         for (int i = 0; i < size; ++i) {
             auto cmp = CompareColumnValueNotNull(i, key, i);
@@ -175,22 +175,22 @@ public:
     template<typename T = TArrayVecPtr> requires IsOwning
     std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Schema>& schema) const {
         auto batch = RestoreBatch(schema);
-        Y_VERIFY(Position < (ui64)batch->num_rows());
+        Y_ABORT_UNLESS(Position < (ui64)batch->num_rows());
         return batch->Slice(Position, 1);
     }
 
     template<typename T = TArrayVecPtr> requires IsOwning
     static TReplaceKeyTemplate<TArrayVecPtr> FromBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                        const std::shared_ptr<arrow::Schema>& key, int row) {
-        Y_VERIFY(key->num_fields() <= batch->num_columns());
+        Y_ABORT_UNLESS(key->num_fields() <= batch->num_columns());
 
         TArrayVec columns;
         columns.reserve(key->num_fields());
         for (int i = 0; i < key->num_fields(); ++i) {
             auto& keyField = key->field(i);
             auto array = batch->GetColumnByName(keyField->name());
-            Y_VERIFY(array);
-            Y_VERIFY(keyField->type()->Equals(array->type()));
+            Y_ABORT_UNLESS(array);
+            Y_ABORT_UNLESS(keyField->type()->Equals(array->type()));
             columns.push_back(array);
         }
 
@@ -206,7 +206,7 @@ public:
     static TReplaceKeyTemplate<TArrayVecPtr> FromScalar(const std::shared_ptr<arrow::Scalar>& s) {
         Y_VERIFY_DEBUG(IsGoodScalar(s));
         auto res = MakeArrayFromScalar(*s, 1);
-        Y_VERIFY(res.status().ok(), "%s", res.status().ToString().c_str());
+        Y_ABORT_UNLESS(res.status().ok(), "%s", res.status().ToString().c_str());
         return TReplaceKeyTemplate<TArrayVecPtr>(std::make_shared<TArrayVec>(1, *res), 0);
     }
 
@@ -214,7 +214,7 @@ public:
         Y_VERIFY_DEBUG(colNumber < key.Size());
         auto& column = key.Column(colNumber);
         auto res = column.GetScalar(key.GetPosition());
-        Y_VERIFY(res.status().ok(), "%s", res.status().ToString().c_str());
+        Y_ABORT_UNLESS(res.status().ok(), "%s", res.status().ToString().c_str());
         Y_VERIFY_DEBUG(IsGoodScalar(*res));
         return *res;
     }

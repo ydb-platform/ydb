@@ -15,7 +15,7 @@ namespace NActors {
         // insert newly created actor into registered actors set and ensure it is not duplicate one
         const TActorId& newSubactorId = ev->Get()->NewSubactorId;
         const bool inserted = RegisteredActors.insert(newSubactorId).second;
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
 
         // check if we are not dying now; we can do this in non-atomic way, because this bit can be set only in
         // PoisonPill handler and this can'be done concurrently
@@ -34,12 +34,12 @@ namespace NActors {
 
     void TActorTracker::Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
         // ensure we haven't received PoisonPill yet, then remember the id of actor who requested the poison
-        Y_VERIFY(!KillerActorId);
+        Y_ABORT_UNLESS(!KillerActorId);
         KillerActorId = ev->Sender;
 
         // set StopBit in thread-safe manner
         TAtomicBase newValue = AtomicAdd(NumInFlightTracks, StopBit);
-        Y_VERIFY(newValue & StopBit);
+        Y_ABORT_UNLESS(newValue & StopBit);
 
         // propagate TEvPoisonPill to all currently registered actors; request delivery tracking as each actor may die
         // before processing TEvPosionPill message
@@ -60,7 +60,7 @@ namespace NActors {
     void TActorTracker::RemoveActorFromTrackList(const TActorId& subactorId, const TActorContext& ctx) {
         // erase subactor from set and check if we have finished processing PoisonPill (if we are processing it)
         const ui32 numErased = RegisteredActors.erase(subactorId);
-        Y_VERIFY(numErased == 1);
+        Y_ABORT_UNLESS(numErased == 1);
         if (KillerActorId) {
             CheckIfPoisonPillDone(ctx);
         }
@@ -68,11 +68,11 @@ namespace NActors {
 
     void TActorTracker::CheckIfPoisonPillDone(const TActorContext& ctx) {
         // ensure we have killing actor
-        Y_VERIFY(KillerActorId);
+        Y_ABORT_UNLESS(KillerActorId);
 
         // ensure we have stop bit set
         TAtomicBase currentValue = AtomicGet(NumInFlightTracks);
-        Y_VERIFY(currentValue & StopBit);
+        Y_ABORT_UNLESS(currentValue & StopBit);
 
         // check if we have no more registered actors left and no more TEvTrackActor queries in flight -- in this case
         // we have finished processing the query; send TEvPoisonTaken message and Die
@@ -141,14 +141,14 @@ namespace NActors {
         TActorId subactorId = ctx.RegisterWithSameMailbox(subactor.Release());
 
         // send TEvTrackActor message to tracker actor
-        Y_VERIFY(ActorId);
+        Y_ABORT_UNLESS(ActorId);
         ctx.Send(ActorId, new TEvTrackActor(subactorId));
 
         return subactorId;
     }
 
     void TActorTracker::SendUntrack(const TActorContext& ctx) {
-        Y_VERIFY(ActorId);
+        Y_ABORT_UNLESS(ActorId);
         ctx.Send(ActorId, new TEvUntrackActor);
     }
 
@@ -156,12 +156,12 @@ namespace NActors {
 
     TActorId TTrackedActorBase::RegisterSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx,
             TMailboxType::EType mailboxType, ui32 poolId) {
-        Y_VERIFY(Tracker);
+        Y_ABORT_UNLESS(Tracker);
         return Tracker->RegisterSubactor(std::move(subactor), ctx, mailboxType, poolId);
     }
 
     TActorId TTrackedActorBase::RegisterLocalSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx) {
-        Y_VERIFY(Tracker);
+        Y_ABORT_UNLESS(Tracker);
         return Tracker->RegisterLocalSubactor(std::move(subactor), ctx);
     }
 
@@ -186,13 +186,13 @@ namespace NActors {
 
     void TTrackedActorBase::InitialReceiveFunc(TAutoPtr<IEventHandle>& ev) {
         // the first event MUST be the TEvBootstrap one
-        Y_VERIFY(ev->GetTypeRewrite() == TEvents::TEvBootstrap::EventType);
+        Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvents::TEvBootstrap::EventType);
         // notify implementation
         AfterBootstrap(this->ActorContext());
     }
 
     void TTrackedActorBase::BindToTracker(TActorTracker *tracker) {
-        Y_VERIFY(!Tracker);
+        Y_ABORT_UNLESS(!Tracker);
         Tracker = tracker;
     }
 

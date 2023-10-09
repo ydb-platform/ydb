@@ -72,7 +72,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
 
     void SendPropose(TAutoPtr<TEvSchemeShardPropose> req, ui64 shardToRequest, const TActorContext &ctx) {
-        Y_VERIFY(!PipeClient);
+        Y_ABORT_UNLESS(!PipeClient);
 
         if (UserToken) {
             req->Record.SetUserToken(UserToken->SerializeAsString());
@@ -1003,7 +1003,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " HANDLE EvClientConnected");
-        Y_VERIFY(msg->ClientId == PipeClient);
+        Y_ABORT_UNLESS(msg->ClientId == PipeClient);
 
         if (msg->Status != NKikimrProto::OK) {
             ReportStatus(TEvTxUserProxy::TResultStatus::ProxyShardNotAvailable, ctx);
@@ -1015,7 +1015,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " HANDLE EvClientDestroyed");
         TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
-        Y_VERIFY(msg->ClientId == PipeClient);
+        Y_ABORT_UNLESS(msg->ClientId == PipeClient);
 
         ReportStatus(TEvTxUserProxy::TResultStatus::ProxyShardNotAvailable, ctx);
         return Die(ctx);
@@ -1055,15 +1055,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             << " HANDLE EvNavigateKeySetResult TFlatSchemeReq marker# P5"
             << " ErrorCount# " << navigate->ErrorCount);
 
-        Y_VERIFY(!navigate->ResultSet.empty());
+        Y_ABORT_UNLESS(!navigate->ResultSet.empty());
 
         if (navigate->ErrorCount > 0) {
             InterpretResolveError(navigate, ctx);
             return Die(ctx);
         }
 
-        Y_VERIFY(!navigate->ResultSet.empty());
-        Y_VERIFY(navigate->ResultSet.size() == ResolveForACL.size());
+        Y_ABORT_UNLESS(!navigate->ResultSet.empty());
+        Y_ABORT_UNLESS(navigate->ResultSet.size() == ResolveForACL.size());
 
         ui64 shardToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());
 
@@ -1155,8 +1155,8 @@ void TFlatSchemeReq::Bootstrap(const TActorContext &ctx) {
                           << " txid# " << TxId
                           << " Bootstrap EvSchemeRequest"
                           << " record: " << GetRequestProto().DebugString());
-    Y_VERIFY(GetRequestEv().HasModifyScheme());
-    Y_VERIFY(!GetRequestEv().HasTransactionalModification());
+    Y_ABORT_UNLESS(GetRequestEv().HasModifyScheme());
+    Y_ABORT_UNLESS(!GetRequestEv().HasTransactionalModification());
 
     WallClockStarted = ctx.Now();
 
@@ -1215,7 +1215,7 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
                 "Actor# " << ctx.SelfID.ToString()
                           << " txid# " << TxId
                           << " HANDLE EvNavigateKeySetResult TFlatSchemeReq marker# P6");
-    Y_VERIFY(NeedAdjustPathNames(GetModifyScheme()));
+    Y_ABORT_UNLESS(NeedAdjustPathNames(GetModifyScheme()));
 
     const auto& resultSet = ev->Get()->Request->ResultSet;
 
@@ -1290,8 +1290,8 @@ void TSchemeTransactionalReq::Bootstrap(const TActorContext &ctx) {
                           << " txid# " << TxId
                           << " Bootstrap EvSchemeRequest"
                           << " record: " << GetRequestProto().DebugString());
-    Y_VERIFY(!GetRequestEv().HasModifyScheme());
-    Y_VERIFY(GetRequestEv().HasTransactionalModification());
+    Y_ABORT_UNLESS(!GetRequestEv().HasModifyScheme());
+    Y_ABORT_UNLESS(GetRequestEv().HasTransactionalModification());
 
     WallClockStarted = ctx.Now();
 

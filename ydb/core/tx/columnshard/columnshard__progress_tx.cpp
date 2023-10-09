@@ -66,7 +66,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
-        Y_VERIFY(Self->ProgressTxInFlight);
+        Y_ABORT_UNLESS(Self->ProgressTxInFlight);
 
         size_t removedCount = Self->ProgressTxController->CleanExpiredTxs(txc);
         if (removedCount > 0) {
@@ -123,7 +123,7 @@ public:
                 }
                 case NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE: {
                     NOlap::TSnapshot snapshot(step, txId);
-                    Y_VERIFY(Self->OperationsManager->CommitTransaction(*Self, txId, txc, snapshot));
+                    Y_ABORT_UNLESS(Self->OperationsManager->CommitTransaction(*Self, txId, txc, snapshot));
                     Trigger = ETriggerActivities::POST_INSERT;
                     break;
                 }

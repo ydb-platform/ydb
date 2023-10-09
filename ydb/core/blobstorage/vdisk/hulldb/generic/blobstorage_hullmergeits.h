@@ -55,7 +55,7 @@ namespace NKikimr {
                 // initialize level iterator
                 first = false;
                 dbIt.Seek(subsIt.GetCurKey());
-                Y_VERIFY(dbIt.Valid(), "%s", crashReport(subsIt, dbIt).data());
+                Y_ABORT_UNLESS(dbIt.Valid(), "%s", crashReport(subsIt, dbIt).data());
                 dbIt.PutToMerger(&dbMerger);
                 dbMerger.Finish();
             }
@@ -70,13 +70,13 @@ namespace NKikimr {
                 } else {
                     dbIt.Seek(subsIt.GetCurKey());
                 }
-                Y_VERIFY(dbIt.Valid(), "%s", crashReport(subsIt, dbIt).data());
+                Y_ABORT_UNLESS(dbIt.Valid(), "%s", crashReport(subsIt, dbIt).data());
 
                 dbIt.PutToMerger(&dbMerger);
                 dbMerger.Finish();
             }
 
-            Y_VERIFY(subsIt.GetCurKey() == dbIt.GetCurKey(), "%s", crashReport(subsIt, dbIt).data());
+            Y_ABORT_UNLESS(subsIt.GetCurKey() == dbIt.GetCurKey(), "%s", crashReport(subsIt, dbIt).data());
 
             doMerge(subsIt, dbIt, subsMerger, dbMerger);
 

@@ -36,13 +36,13 @@ public:
                  << " message# " << ev->Get()->Record.ShortDebugString());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropPQGroup);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropPQGroup);
 
         auto& record = ev->Get()->Record;
 
-        Y_VERIFY(record.GetStatus() == NKikimrProto::OK);
-        Y_VERIFY(record.GetActualState() == NKikimrPQ::EDropped);
+        Y_ABORT_UNLESS(record.GetStatus() == NKikimrProto::OK);
+        Y_ABORT_UNLESS(record.GetActualState() == NKikimrPQ::EDropped);
 
         auto tabletId = TTabletId(record.GetTabletId());
         auto idx = context.SS->MustGetShardIdx(tabletId);
@@ -53,7 +53,7 @@ public:
             return false;
         }
 
-        Y_VERIFY(txState->State == TTxState::DropParts);
+        Y_ABORT_UNLESS(txState->State == TTxState::DropParts);
         txState->ShardsInProgress.erase(idx);
 
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);
@@ -77,8 +77,8 @@ public:
                     << " at tablet " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropPQGroup);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropPQGroup);
 
         txState->ClearShardsInProgress();
 
@@ -156,7 +156,7 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxDropPQGroup);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropPQGroup);
 
         TPathId pathId = txState->TargetPathId;
         auto path = context.SS->PathsById.at(pathId);
@@ -164,11 +164,11 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        Y_VERIFY(!path->Dropped());
+        Y_ABORT_UNLESS(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         TTopicInfo::TPtr pqGroup = context.SS->Topics.at(pathId);
-        Y_VERIFY(pqGroup);
+        Y_ABORT_UNLESS(pqGroup);
 
         // KIKIMR-13173
         // Repeat it here for a while, delete it from TDeleteParts after
@@ -179,9 +179,9 @@ public:
 
         auto tabletConfig = pqGroup->TabletConfig;
         NKikimrPQ::TPQTabletConfig config;
-        Y_VERIFY(!tabletConfig.empty());
+        Y_ABORT_UNLESS(!tabletConfig.empty());
         bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
-        Y_VERIFY(parseOk);
+        Y_ABORT_UNLESS(parseOk);
 
         const PQGroupReserve reserve(config, pqGroup->TotalPartitionCount);
 
@@ -235,8 +235,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropPQGroup);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropPQGroup);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -407,7 +407,7 @@ public:
         }
 
         TTopicInfo::TPtr pqGroup = context.SS->Topics.at(path.Base()->PathId);
-        Y_VERIFY(pqGroup);
+        Y_ABORT_UNLESS(pqGroup);
 
         if (pqGroup->AlterData) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Drop over Create/Alter");
@@ -466,7 +466,7 @@ ISubOperation::TPtr CreateDropPQ(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr CreateDropPQ(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropPQ>(id, state);
 }
 

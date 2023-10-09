@@ -205,7 +205,7 @@ void TPQTabletFixture::SendToPipe(const TActorId& sender,
                                            GetPipeConfigWithRetries());
     }
 
-    Y_VERIFY(Pipe != TActorId());
+    Y_ABORT_UNLESS(Pipe != TActorId());
 
     Ctx->Runtime->SendToPipe(Pipe,
                              sender,
@@ -348,7 +348,7 @@ void TPQTabletFixture::WaitReadSet(NHelpers::TPQTabletMock& tablet, const TReadS
         UNIT_ASSERT(tablet.ReadSet->HasReadSet());
 
         NKikimrTx::TReadSetData data;
-        Y_VERIFY(data.ParseFromString(tablet.ReadSet->GetReadSet()));
+        Y_ABORT_UNLESS(data.ParseFromString(tablet.ReadSet->GetReadSet()));
 
         UNIT_ASSERT_EQUAL(*matcher.Decision, data.GetDecision());
     }
@@ -364,7 +364,7 @@ void TPQTabletFixture::SendReadSet(const TReadSetParams& params)
     payload.SetDecision(params.Predicate ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT);
 
     TString body;
-    Y_VERIFY(payload.SerializeToString(&body));
+    Y_ABORT_UNLESS(payload.SerializeToString(&body));
 
     auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(params.Step,
                                                                params.TxId,

@@ -63,10 +63,10 @@ namespace NKikimr {
 
     void TBlobRecoveryActor::SendPendingQueries() {
         for (auto& [vdiskId, query] : std::exchange(Queries, {})) {
-            Y_VERIFY(query.VGet);
+            Y_ABORT_UNLESS(query.VGet);
             query.Pending.push_back(std::move(query.VGet));
             auto queueIt = Queues.find(vdiskId);
-            Y_VERIFY(queueIt != Queues.end());
+            Y_ABORT_UNLESS(queueIt != Queues.end());
             for (auto& vget : query.Pending) {
                 STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS34, VDISKP(LogPrefix, "sending TEvVGet"), (SelfId, SelfId()),
                     (Msg, vget->ToString()));

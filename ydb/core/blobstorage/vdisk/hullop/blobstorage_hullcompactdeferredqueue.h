@@ -43,25 +43,25 @@ namespace NKikimr {
 
         template<typename... TArgs>
         void Put(TArgs&&... args) {
-            Y_VERIFY(!Started);
+            Y_ABORT_UNLESS(!Started);
             ItemQueue.emplace(std::forward<TArgs>(args)...);
         }
 
         template<typename... TArgs>
         void Start(TArgs&&... args) {
-            Y_VERIFY(!Started);
+            Y_ABORT_UNLESS(!Started);
             Started = true;
             static_cast<TDerived&>(*this).StartImpl(std::forward<TArgs>(args)...);
             ProcessItemQueue();
         }
 
         void AddReadDiskBlob(ui64 id, TRope&& buffer, NMatrix::TVectorType expectedParts) {
-            Y_VERIFY(Started);
-            Y_VERIFY(ItemQueue);
+            Y_ABORT_UNLESS(Started);
+            Y_ABORT_UNLESS(ItemQueue);
             TItem& item = ItemQueue.front();
-            Y_VERIFY(item.Id == id);
+            Y_ABORT_UNLESS(item.Id == id);
             item.Merger.Add(TDiskBlob(&buffer, expectedParts, GType, item.BlobId));
-            Y_VERIFY(item.NumReads > 0);
+            Y_ABORT_UNLESS(item.NumReads > 0);
             if (!--item.NumReads) {
                 ProcessItemQueue();
             }
@@ -72,8 +72,8 @@ namespace NKikimr {
         }
 
         void Finish() {
-            Y_VERIFY(Started);
-            Y_VERIFY(ItemQueue.empty());
+            Y_ABORT_UNLESS(Started);
+            Y_ABORT_UNLESS(ItemQueue.empty());
             Started = false;
             static_cast<TDerived&>(*this).FinishImpl();
         }
@@ -88,7 +88,7 @@ namespace NKikimr {
 
         void ProcessItem(TItem& item) {
             // ensure that we have all the parts we must have
-            Y_VERIFY(item.Merger.GetDiskBlob().GetParts() == item.PartsToStore);
+            Y_ABORT_UNLESS(item.Merger.GetDiskBlob().GetParts() == item.PartsToStore);
 
             // get newly generated blob raw content and put it into writer queue
             static_cast<TDerived&>(*this).ProcessItemImpl(item.PreallocatedLocation, item.Merger.CreateDiskBlob(Arena));

@@ -82,8 +82,8 @@ public:
         , MaxLen(maxLen)
         , MaxBlockSizeInBytes(typeInfoHelper.GetMaxBlockBytes())
     {
-        Y_VERIFY(ArrowType);
-        Y_VERIFY(maxLen > 0);
+        Y_ABORT_UNLESS(ArrowType);
+        Y_ABORT_UNLESS(maxLen > 0);
     }
 
     TArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen)
@@ -136,9 +136,9 @@ public:
     }
 
     void AddMany(const arrow::ArrayData& array, size_t popCount, const ui8* sparseBitmap, size_t bitmapSize) final {
-        Y_VERIFY(size_t(array.length) == bitmapSize);
-        Y_VERIFY(popCount <= bitmapSize);
-        Y_VERIFY(CurrLen + popCount <= MaxLen);
+        Y_ABORT_UNLESS(size_t(array.length) == bitmapSize);
+        Y_ABORT_UNLESS(popCount <= bitmapSize);
+        Y_ABORT_UNLESS(CurrLen + popCount <= MaxLen);
 
         if (popCount) {
             DoAddMany(array, sparseBitmap, popCount);
@@ -148,17 +148,17 @@ public:
     }
 
     void AddMany(const TArrayDataItem* arrays, size_t arrayCount, ui64 beginIndex, size_t count) final {
-        Y_VERIFY(arrays);
-        Y_VERIFY(arrayCount > 0);
+        Y_ABORT_UNLESS(arrays);
+        Y_ABORT_UNLESS(arrayCount > 0);
         if (arrayCount == 1) {
-            Y_VERIFY(arrays->Data);
+            Y_ABORT_UNLESS(arrays->Data);
             DoAddMany(*arrays->Data, beginIndex, count);
         } else {
             ui64 idx = beginIndex;
             auto item = LookupArrayDataItem(arrays, arrayCount, idx);
             size_t avail = item->Data->length;
             size_t toAdd = count;
-            Y_VERIFY(idx <= avail);
+            Y_ABORT_UNLESS(idx <= avail);
             while (toAdd) {
                 size_t adding = std::min(avail, toAdd);
                 DoAddMany(*item->Data, idx, adding);
@@ -167,7 +167,7 @@ public:
 
                 if (!avail && toAdd) {
                     ++item;
-                    Y_VERIFY(item < arrays + arrayCount);
+                    Y_ABORT_UNLESS(item < arrays + arrayCount);
                     avail = item->Data->length;
                     idx = 0;
                 }
@@ -177,13 +177,13 @@ public:
     }
 
     void AddMany(const TArrayDataItem* arrays, size_t arrayCount, const ui64* indexes, size_t count) final {
-        Y_VERIFY(arrays);
-        Y_VERIFY(arrayCount > 0);
-        Y_VERIFY(indexes);
-        Y_VERIFY(CurrLen + count <= MaxLen);
+        Y_ABORT_UNLESS(arrays);
+        Y_ABORT_UNLESS(arrayCount > 0);
+        Y_ABORT_UNLESS(indexes);
+        Y_ABORT_UNLESS(CurrLen + count <= MaxLen);
 
         if (arrayCount == 1) {
-            Y_VERIFY(arrays->Data);
+            Y_ABORT_UNLESS(arrays->Data);
             DoAddMany(*arrays->Data, indexes, count);
             CurrLen += count;
         } else {
@@ -248,32 +248,32 @@ private:
         }
 
         if (!tree.Children.empty()) {
-            Y_VERIFY(tree.Payload.size() == 1);
+            Y_ABORT_UNLESS(tree.Payload.size() == 1);
             size_t result = std::numeric_limits<size_t>::max();
             for (auto& child : tree.Children) {
                 size_t childSize = CalcSliceSize(*child);
                 result = std::min(result, childSize);
             }
-            Y_VERIFY(result <= size_t(tree.Payload.front()->length));
+            Y_ABORT_UNLESS(result <= size_t(tree.Payload.front()->length));
             return result;
         }
 
         int64_t result = tree.Payload.front()->length;
-        Y_VERIFY(result > 0);
+        Y_ABORT_UNLESS(result > 0);
         return static_cast<size_t>(result);
     }
 
     static std::shared_ptr<arrow::ArrayData> Slice(TBlockArrayTree& tree, size_t size) {
-        Y_VERIFY(size > 0);
+        Y_ABORT_UNLESS(size > 0);
 
-        Y_VERIFY(!tree.Payload.empty());
+        Y_ABORT_UNLESS(!tree.Payload.empty());
         auto& main = tree.Payload.front();
         std::shared_ptr<arrow::ArrayData> sliced;
         if (size == size_t(main->length)) {
             sliced = main;
             tree.Payload.pop_front();
         } else {
-            Y_VERIFY(size < size_t(main->length));
+            Y_ABORT_UNLESS(size < size_t(main->length));
             sliced = Chop(main, size);
         }
 
@@ -297,7 +297,7 @@ protected:
     }
 
     void SetCurrLen(size_t len) {
-        Y_VERIFY(len <= MaxLen);
+        Y_ABORT_UNLESS(len <= MaxLen);
         CurrLen = len;
     }
 
@@ -388,7 +388,7 @@ public:
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
-        Y_VERIFY(array.buffers.size() > 1);
+        Y_ABORT_UNLESS(array.buffers.size() > 1);
         if constexpr (Nullable) {
             if (array.buffers.front()) {
                 ui8* dstBitmap = NullPtr + GetCurrLen();
@@ -405,7 +405,7 @@ public:
     }
 
     void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) final {
-        Y_VERIFY(array.buffers.size() > 1);
+        Y_ABORT_UNLESS(array.buffers.size() > 1);
         if constexpr (Nullable) {
             for (size_t i = beginIndex; i < beginIndex + count; ++i) {
                 NullPtr[GetCurrLen() + i - beginIndex] = !IsNull(array, i);
@@ -419,7 +419,7 @@ public:
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) final {
-        Y_VERIFY(array.buffers.size() > 1);
+        Y_ABORT_UNLESS(array.buffers.size() > 1);
         if constexpr (Nullable) {
             for (size_t i = 0; i < count; ++i) {
                 NullPtr[GetCurrLen() + i] = !IsNull(array, indexes[i]);
@@ -570,8 +570,8 @@ public:
 
     void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
         Y_UNUSED(popCount);
-        Y_VERIFY(array.buffers.size() > 2);
-        Y_VERIFY(!Nullable || NullBuilder->Length() == OffsetsBuilder->Length());
+        Y_ABORT_UNLESS(array.buffers.size() > 2);
+        Y_ABORT_UNLESS(!Nullable || NullBuilder->Length() == OffsetsBuilder->Length());
 
         const ui8* srcNulls = array.GetValues<ui8>(0, 0);
         const TOffset* srcOffset = array.GetValues<TOffset>(1);
@@ -623,7 +623,7 @@ public:
                         DataBuilder->UnsafeAppend(chunkStart, chunkEnd - chunkStart);
                         chunkStart = chunkEnd = srcData;
                     }
-                    Y_VERIFY(dataLen == DataBuilder->Length());
+                    Y_ABORT_UNLESS(dataLen == DataBuilder->Length());
                     OffsetsBuilder->UnsafeAdvance(countAdded);
                     if constexpr (Nullable) {
                         NullBuilder->UnsafeAdvance(countAdded);
@@ -645,7 +645,7 @@ public:
         if (chunkStart != chunkEnd) {
             DataBuilder->UnsafeAppend(chunkStart, chunkEnd - chunkStart);
         }
-        Y_VERIFY(dataLen == DataBuilder->Length());
+        Y_ABORT_UNLESS(dataLen == DataBuilder->Length());
         OffsetsBuilder->UnsafeAdvance(countAdded);
         if constexpr (Nullable) {
             NullBuilder->UnsafeAdvance(countAdded);
@@ -653,8 +653,8 @@ public:
     }
 
     void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) final {
-        Y_VERIFY(array.buffers.size() > 2);
-        Y_VERIFY(!Nullable || NullBuilder->Length() == OffsetsBuilder->Length());
+        Y_ABORT_UNLESS(array.buffers.size() > 2);
+        Y_ABORT_UNLESS(!Nullable || NullBuilder->Length() == OffsetsBuilder->Length());
 
         size_t dataLen = DataBuilder->Length();
 
@@ -697,8 +697,8 @@ public:
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) final {
-        Y_VERIFY(array.buffers.size() > 2);
-        Y_VERIFY(!Nullable || NullBuilder->Length() == OffsetsBuilder->Length());
+        Y_ABORT_UNLESS(array.buffers.size() > 2);
+        Y_ABORT_UNLESS(!Nullable || NullBuilder->Length() == OffsetsBuilder->Length());
 
         size_t dataLen = DataBuilder->Length();
 
@@ -758,7 +758,7 @@ private:
 
     void FlushChunk(bool finish) {
         const auto length = OffsetsBuilder->Length();
-        Y_VERIFY(length > 0);
+        Y_ABORT_UNLESS(length > 0);
 
         AppendCurrentOffset();
         std::shared_ptr<arrow::Buffer> nullBitmap;
@@ -861,8 +861,8 @@ public:
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
-        Y_VERIFY(!array.buffers.empty());
-        Y_VERIFY(array.child_data.size() == Children.size());
+        Y_ABORT_UNLESS(!array.buffers.empty());
+        Y_ABORT_UNLESS(array.child_data.size() == Children.size());
 
         if constexpr (Nullable) {
             if (array.buffers.front()) {
@@ -880,8 +880,8 @@ public:
     }
 
     void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) final {
-        Y_VERIFY(!array.buffers.empty());
-        Y_VERIFY(array.child_data.size() == Children.size());
+        Y_ABORT_UNLESS(!array.buffers.empty());
+        Y_ABORT_UNLESS(array.child_data.size() == Children.size());
 
         if constexpr (Nullable) {
             for (ui64 i = beginIndex; i < beginIndex + count; ++i) {
@@ -895,8 +895,8 @@ public:
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) final {
-        Y_VERIFY(!array.buffers.empty());
-        Y_VERIFY(array.child_data.size() == Children.size());
+        Y_ABORT_UNLESS(!array.buffers.empty());
+        Y_ABORT_UNLESS(array.child_data.size() == Children.size());
 
         if constexpr (Nullable) {
             for (size_t i = 0; i < count; ++i) {
@@ -920,7 +920,7 @@ public:
             nullBitmap = MakeDenseBitmap(nullBitmap->data(), length, Pool);
         }
 
-        Y_VERIFY(length);
+        Y_ABORT_UNLESS(length);
         result->Payload.push_back(arrow::ArrayData::Make(ArrowType, length, { nullBitmap }));
         result->Children.reserve(Children.size());
         for (ui32 i = 0; i < Children.size(); ++i) {
@@ -995,8 +995,8 @@ public:
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
-        Y_VERIFY(!array.buffers.empty());
-        Y_VERIFY(array.child_data.size() == 1);
+        Y_ABORT_UNLESS(!array.buffers.empty());
+        Y_ABORT_UNLESS(array.child_data.size() == 1);
 
         if (array.buffers.front()) {
             ui8* dstBitmap = NullBuilder->End();
@@ -1010,8 +1010,8 @@ public:
     }
 
     void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) final {
-        Y_VERIFY(!array.buffers.empty());
-        Y_VERIFY(array.child_data.size() == 1);
+        Y_ABORT_UNLESS(!array.buffers.empty());
+        Y_ABORT_UNLESS(array.child_data.size() == 1);
 
         for (ui64 i = beginIndex; i < beginIndex + count; ++i) {
             NullBuilder->UnsafeAppend(!IsNull(array, i));
@@ -1021,8 +1021,8 @@ public:
     }
 
     void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) final {
-        Y_VERIFY(!array.buffers.empty());
-        Y_VERIFY(array.child_data.size() == 1);
+        Y_ABORT_UNLESS(!array.buffers.empty());
+        Y_ABORT_UNLESS(array.child_data.size() == 1);
 
         for (size_t i = 0; i < count; ++i) {
             NullBuilder->UnsafeAppend(!IsNull(array, indexes[i]));
@@ -1040,7 +1040,7 @@ public:
         nullBitmap = NullBuilder->Finish();
         nullBitmap = MakeDenseBitmap(nullBitmap->data(), length, Pool);
 
-        Y_VERIFY(length);
+        Y_ABORT_UNLESS(length);
         result->Payload.push_back(arrow::ArrayData::Make(ArrowType, length, { nullBitmap }));
         result->Children.emplace_back(Inner->BuildTree(finish));
 

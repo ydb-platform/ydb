@@ -59,7 +59,7 @@ public:
     }
 
     std::optional<TOptimizationPriority> GetWeight() const {
-        Y_VERIFY(Counters->GetSmallCounts() == PortionsCount);
+        Y_ABORT_UNLESS(Counters->GetSmallCounts() == PortionsCount);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portions_opt_count", PortionsCount)("counter", (ui64)Counters->SmallPortionsByGranule.get());
         if (PortionsSize > SizeLimitToMerge || PortionsCount > CountLimitToMerge) {
             return TOptimizationPriority::Critical(PortionsCount);

@@ -52,7 +52,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
 
     TPathId tableId(DataShard.GetPathOwnerId(), createTableTx.GetId_Deprecated());
     if (createTableTx.HasPathId()) {
-        Y_VERIFY(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
+        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
         tableId.LocalPathId = createTableTx.GetPathId().GetLocalId();
     }
 

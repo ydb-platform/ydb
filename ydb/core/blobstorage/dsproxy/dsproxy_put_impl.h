@@ -143,12 +143,12 @@ public:
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
         , Tactic(tactic)
     {
-        Y_VERIFY(events.size(), "TEvPut vector is empty");
+        Y_ABORT_UNLESS(events.size(), "TEvPut vector is empty");
 
         for (auto &ev : events) {
             auto& msg = *ev->Get();
-            Y_VERIFY(msg.HandleClass == putHandleClass);
-            Y_VERIFY(msg.Tactic == tactic);
+            Y_ABORT_UNLESS(msg.HandleClass == putHandleClass);
+            Y_ABORT_UNLESS(msg.Tactic == tactic);
             Blobs.emplace_back(msg.Id, TRope(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
                 std::move(msg.Orbit), std::move(msg.ExtraBlockChecks), false, std::move(msg.ExecutionRelay));
             Deadline = Max(Deadline, msg.Deadline);
@@ -158,8 +158,8 @@ public:
                 NKikimrBlobStorage::EPutHandleClass_Name(GetPutHandleClass()));
         }
 
-        Y_VERIFY(Blobs.size());
-        Y_VERIFY(Blobs.size() <= MaxBatchedPutRequests);
+        Y_ABORT_UNLESS(Blobs.size());
+        Y_ABORT_UNLESS(Blobs.size() <= MaxBatchedPutRequests);
     }
 
     NKikimrBlobStorage::EPutHandleClass GetPutHandleClass() const {
@@ -191,9 +191,9 @@ public:
         TPutResultVec putResults;
         bool workDone = Step(logCtx, outVPuts, putResults);
         IsInitialized = true;
-        Y_VERIFY(!outVPuts.empty());
-        Y_VERIFY(putResults.empty());
-        Y_VERIFY(workDone);
+        Y_ABORT_UNLESS(!outVPuts.empty());
+        Y_ABORT_UNLESS(putResults.empty());
+        Y_ABORT_UNLESS(workDone);
     }
 
     template <typename TEvent>
@@ -252,9 +252,9 @@ public:
     bool ProcessOneVPutResult(TLogContext &logCtx, const TPutRecord &record, TVDiskID vDiskId, ui32 orderNumber,
             TArgs ...resultTypeArgs)
     {
-        Y_VERIFY(record.HasStatus());
-        Y_VERIFY(record.HasBlobID());
-        Y_VERIFY(record.HasCookie());
+        Y_ABORT_UNLESS(record.HasStatus());
+        Y_ABORT_UNLESS(record.HasBlobID());
+        Y_ABORT_UNLESS(record.HasCookie());
         NKikimrProto::EReplyStatus status = record.GetStatus();
         TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(record.GetBlobID());
         ui32 diskIdx = Info->GetTopology().GetIdxInSubgroup(vDiskId, blobId.Hash());
@@ -329,9 +329,9 @@ public:
         auto putType = isVPut ? "TEvVPut" : "TEvVMultiPut";
 
         auto &record = ev.Record;
-        Y_VERIFY(record.HasStatus());
+        Y_ABORT_UNLESS(record.HasStatus());
         NKikimrProto::EReplyStatus status = record.GetStatus();
-        Y_VERIFY(status != NKikimrProto::BLOCKED && status != NKikimrProto::RACE && status != NKikimrProto::DEADLINE);
+        Y_ABORT_UNLESS(status != NKikimrProto::BLOCKED && status != NKikimrProto::RACE && status != NKikimrProto::DEADLINE);
         if (record.HasStatusFlags()) {
             StatusFlags.Merge(record.GetStatusFlags());
         }
@@ -342,7 +342,7 @@ public:
             }
         }
 
-        Y_VERIFY(record.HasVDiskID());
+        Y_ABORT_UNLESS(record.HasVDiskID());
         TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         TVDiskIdShort shortId(vDiskId);
         ui32 orderNumber = Info->GetOrderNumber(shortId);
@@ -444,7 +444,7 @@ protected:
             PrepareVPuts(logCtx, outVPuts);
             return outVPuts.size() > numRequests;
         } else {
-            Y_VERIFY(outPutResults.size());
+            Y_ABORT_UNLESS(outPutResults.size());
             PrepareVPuts(logCtx, outVPuts);
             return false;
         }
@@ -505,7 +505,7 @@ protected:
                     ReceivedVPutResponses.push_back(false);
                 } else if constexpr (isVMultiPut) {
                     // this request MUST originate from the TEvPut, so the Span field must be filled in
-                    Y_VERIFY(put.Span);
+                    Y_ABORT_UNLESS(put.Span);
                     outVPutEvents.back()->AddVPut(put.Id, TRcBuf(TRope(put.Buffer)), &cookie, put.ExtraBlockChecks, put.Span->GetTraceId());
                 }
 

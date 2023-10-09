@@ -33,16 +33,16 @@ public:
                                << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterTableIndex);
-        Y_VERIFY(txState->State == TTxState::Propose);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterTableIndex);
+        Y_ABORT_UNLESS(txState->State == TTxState::Propose);
 
         NIceDb::TNiceDb db(context.GetDB());
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        Y_VERIFY(context.SS->Indexes.contains(path->PathId));
+        Y_ABORT_UNLESS(context.SS->Indexes.contains(path->PathId));
         TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(path->PathId);
         context.SS->PersistTableIndex(db, path->PathId);
         context.SS->Indexes[path->PathId] = indexData->AlterData;
@@ -66,8 +66,8 @@ public:
                                << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterTableIndex);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterTableIndex);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -192,10 +192,10 @@ public:
 
         TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(indexPath->PathId);
         TTableIndexInfo::TPtr newIndexData = indexData->CreateNextVersion();
-        Y_VERIFY(newIndexData);
+        Y_ABORT_UNLESS(newIndexData);
         newIndexData->State = tableIndexAlter.GetState();
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterTableIndex, indexPath->PathId);
         txState.State = TTxState::Propose;
 

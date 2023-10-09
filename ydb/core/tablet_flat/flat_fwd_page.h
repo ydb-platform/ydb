@@ -30,7 +30,7 @@ namespace NFwd {
 
         ~TPage()
         {
-            Y_VERIFY(!Data, "Forward cache page is still holds data");
+            Y_ABORT_UNLESS(!Data, "Forward cache page is still holds data");
         }
 
         explicit operator bool() const

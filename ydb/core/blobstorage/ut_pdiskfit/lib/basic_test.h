@@ -81,10 +81,10 @@ public:
     }
 
     void CreatePDiskActor(const TActorContext& ctx) {
-        Y_VERIFY(Counters);
-        Y_VERIFY(ctx.ExecutorThread.ActorSystem);
-        Y_VERIFY(PDiskConfig);
-        Y_VERIFY(AppData(ctx));
+        Y_ABORT_UNLESS(Counters);
+        Y_ABORT_UNLESS(ctx.ExecutorThread.ActorSystem);
+        Y_ABORT_UNLESS(PDiskConfig);
+        Y_ABORT_UNLESS(AppData(ctx));
         std::unique_ptr<IActor> pdiskActor(CreatePDisk(PDiskConfig, {1}, Counters->GetSubgroup("subsystem", "pdisk")));
         const TActorId actorId = ctx.ExecutorThread.ActorSystem->Register(pdiskActor.release(), TMailboxType::Simple,
                 AppData(ctx)->SystemPoolId);
@@ -95,7 +95,7 @@ public:
     void Finish(const TActorContext& ctx) {
         LOG_NOTICE(ctx, NActorsServices::TEST, "TBasicTest::Finish called");
         Die(ctx);
-        Y_VERIFY(StopEvent);
+        Y_ABORT_UNLESS(StopEvent);
         StopEvent->Signal();
     }
 

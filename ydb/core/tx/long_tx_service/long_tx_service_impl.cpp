@@ -113,7 +113,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvBeginTx::TPtr& ev) {
             auto now = TActivationContext::Now();
             txId.UniqueId = IdGenerator.Next(now);
             txId.NodeId = SelfId().NodeId();
-            Y_VERIFY(!Transactions.contains(txId.UniqueId));
+            Y_ABORT_UNLESS(!Transactions.contains(txId.UniqueId));
             auto& tx = Transactions[txId.UniqueId];
             tx.TxId = txId;
             tx.DatabaseName = databaseName;
@@ -167,8 +167,8 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvCommitTx::TPtr& ev) {
         return;
     }
 
-    Y_VERIFY(tx.State == ETxState::Active);
-    Y_VERIFY(!tx.CommitActor);
+    Y_ABORT_UNLESS(tx.State == ETxState::Active);
+    Y_ABORT_UNLESS(!tx.CommitActor);
     StartCommitActor(tx);
 }
 
@@ -194,7 +194,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvCommitFinished::TPtr& ev) {
     const auto* msg = ev->Get();
 
     auto it = Transactions.find(msg->TxId.UniqueId);
-    Y_VERIFY(it != Transactions.end());
+    Y_ABORT_UNLESS(it != Transactions.end());
     auto& tx = it->second;
     Y_VERIFY_DEBUG(tx.TxId == msg->TxId);
 
@@ -323,8 +323,8 @@ const TString& TLongTxServiceActor::GetDatabaseNameOrLegacyDefault(const TString
 
     if (DefaultDatabaseName.empty()) {
         auto* appData = AppData();
-        Y_VERIFY(appData);
-        Y_VERIFY(appData->DomainsInfo);
+        Y_ABORT_UNLESS(appData);
+        Y_ABORT_UNLESS(appData->DomainsInfo);
         // Usually there's exactly one domain
         if (appData->EnableMvccSnapshotWithLegacyDomainRoot && Y_LIKELY(appData->DomainsInfo->Domains.size() == 1)) {
             DefaultDatabaseName = appData->DomainsInfo->Domains.begin()->second->Name;
@@ -361,7 +361,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
 }
 
 void TLongTxServiceActor::ScheduleAcquireSnapshot(const TString& databaseName, TDatabaseSnapshotState& state) {
-    Y_VERIFY(state.PendingUserRequests || state.PendingBeginTxRequests);
+    Y_ABORT_UNLESS(state.PendingUserRequests || state.PendingBeginTxRequests);
 
     if (state.FlushPending || state.ActiveRequests.size() >= MaxAcquireSnapshotInFlight) {
         return;
@@ -377,8 +377,8 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFlush::TPtr& ev) 
     TXLOG_DEBUG("Received TEvAcquireSnapshotFlush for database " << msg->DatabaseName);
 
     auto& state = DatabaseSnapshots[msg->DatabaseName];
-    Y_VERIFY(state.FlushPending);
-    Y_VERIFY(state.PendingUserRequests || state.PendingBeginTxRequests);
+    Y_ABORT_UNLESS(state.FlushPending);
+    Y_ABORT_UNLESS(state.PendingUserRequests || state.PendingBeginTxRequests);
     state.FlushPending = false;
 
     StartAcquireSnapshotActor(msg->DatabaseName, state);
@@ -389,11 +389,11 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
     TXLOG_DEBUG("Received TEvAcquireSnapshotFinished, cookie = " << ev->Cookie);
 
     auto* req = AcquireSnapshotInFlight.FindPtr(ev->Cookie);
-    Y_VERIFY(req, "Unexpected reply for request that is not inflight");
+    Y_ABORT_UNLESS(req, "Unexpected reply for request that is not inflight");
     TString databaseName = req->DatabaseName;
 
     auto* state = DatabaseSnapshots.FindPtr(databaseName);
-    Y_VERIFY(state && state->ActiveRequests.contains(ev->Cookie), "Unexpected database snapshot state");
+    Y_ABORT_UNLESS(state && state->ActiveRequests.contains(ev->Cookie), "Unexpected database snapshot state");
 
     if (msg->Status == Ydb::StatusIds::SUCCESS) {
         for (auto& userReq : req->UserRequests) {
@@ -404,7 +404,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
             auto txId = beginReq.TxId;
             txId.Snapshot = msg->Snapshot;
             if (txId.IsWritable()) {
-                Y_VERIFY(!Transactions.contains(txId.UniqueId));
+                Y_ABORT_UNLESS(!Transactions.contains(txId.UniqueId));
                 auto& tx = Transactions[txId.UniqueId];
                 tx.TxId = txId;
                 tx.DatabaseName = databaseName;
@@ -451,7 +451,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvRegisterLock::TPtr& ev) {
     ui64 lockId = msg->LockId;
     TXLOG_DEBUG("Received TEvRegisterLock for LockId# " << lockId);
 
-    Y_VERIFY(lockId, "Unexpected registration of a zero LockId");
+    Y_ABORT_UNLESS(lockId, "Unexpected registration of a zero LockId");
 
     auto& lock = Locks[lockId];
     ++lock.RefCount;
@@ -468,7 +468,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev) 
     }
 
     auto& lock = it->second;
-    Y_VERIFY(lock.RefCount > 0);
+    Y_ABORT_UNLESS(lock.RefCount > 0);
     if (0 == --lock.RefCount) {
         for (auto& pr : lock.LocalSubscribers) {
             Send(pr.first,
@@ -797,7 +797,7 @@ void TLongTxServiceActor::SendProxyRequest(ui32 nodeId, ERequestType type, THold
         auto event = ev->ReleaseBase();
         pendingEv.Reset(new IEventHandle(target, SelfId(), event.Release(), flags, cookie));
     }
-    Y_VERIFY(pendingEv->Recipient.NodeId() == nodeId);
+    Y_ABORT_UNLESS(pendingEv->Recipient.NodeId() == nodeId);
 
     if (node.State == EProxyState::Connecting) {
         auto& pending = node.Pending.emplace_back();

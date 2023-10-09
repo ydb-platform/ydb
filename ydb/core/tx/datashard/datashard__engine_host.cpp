@@ -76,7 +76,7 @@ struct TRowResultInfo {
             ui32 colId = literal->AsValue().Get<ui32>();
 
             const TSysTables::TTableColumnInfo * colInfo = columns.FindPtr(colId);
-            Y_VERIFY(colInfo && (colInfo->Id == colId), "No column info for column");
+            Y_ABORT_UNLESS(colInfo && (colInfo->Id == colId), "No column info for column");
             ItemInfos.emplace_back(ItemInfo(colId, colInfo->PType, optType));
         }
     }
@@ -86,7 +86,7 @@ struct TRowResultInfo {
             return NUdf::TUnboxedValuePod();
         }
 
-        Y_VERIFY(inRow.size() >= ItemInfos.size());
+        Y_ABORT_UNLESS(inRow.size() >= ItemInfos.size());
 
         // reorder columns
         TVector<TCell> outRow(Reserve(ItemInfos.size()));
@@ -130,12 +130,12 @@ public:
         TRowResultInfo result(columnIds, Columns, returnType);
 
         auto lock = Self->SysLocksTable().GetLock(row);
-        Y_VERIFY(!lock.IsError());
+        Y_ABORT_UNLESS(!lock.IsError());
 
         if (TableId.PathId.LocalPathId == TSysTables::SysTableLocks2) {
             return result.CreateResult(lock.MakeRow(true), holderFactory);
         }
-        Y_VERIFY(TableId.PathId.LocalPathId == TSysTables::SysTableLocks);
+        Y_ABORT_UNLESS(TableId.PathId.LocalPathId == TSysTables::SysTableLocks);
         return result.CreateResult(lock.MakeRow(false), holderFactory);
     }
 
@@ -249,7 +249,7 @@ public:
 
     TRowVersion GetWriteVersion(const TTableId& tableId) const override {
         Y_UNUSED(tableId);
-        Y_VERIFY(!WriteVersion.IsMax(), "Cannot perform writes without WriteVersion set");
+        Y_ABORT_UNLESS(!WriteVersion.IsMax(), "Cannot perform writes without WriteVersion set");
         return WriteVersion;
     }
 
@@ -259,7 +259,7 @@ public:
 
     TRowVersion GetReadVersion(const TTableId& tableId) const override {
         Y_UNUSED(tableId);
-        Y_VERIFY(!ReadVersion.IsMin(), "Cannot perform reads without ReadVersion set");
+        Y_ABORT_UNLESS(!ReadVersion.IsMin(), "Cannot perform reads without ReadVersion set");
         return ReadVersion;
     }
 
@@ -450,7 +450,7 @@ public:
         const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
         std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) override
     {
-        Y_VERIFY(!TSysTables::IsSystemTable(tableId), "SelectRange no system table is not supported");
+        Y_ABORT_UNLESS(!TSysTables::IsSystemTable(tableId), "SelectRange no system table is not supported");
 
         if (LockTxId) {
             Self->SysLocksTable().SetLock(tableId, range);
@@ -599,7 +599,7 @@ public:
             return 0;
 
         if (VolatileTxId) {
-            Y_VERIFY(!LockTxId);
+            Y_ABORT_UNLESS(!LockTxId);
             if (VolatileCommitTxIds.insert(VolatileTxId).second) {
                 // Update TxMap to include the new commit
                 auto it = TxMaps.find(tableId.PathId);
@@ -740,7 +740,7 @@ public:
     };
 
     void AddReadConflict(ui64 txId) const {
-        Y_VERIFY(LockTxId);
+        Y_ABORT_UNLESS(LockTxId);
 
         // We have detected uncommitted changes in txId that could affect
         // our read result. We arrange a conflict that breaks our lock
@@ -749,7 +749,7 @@ public:
     }
 
     void CheckReadConflict(const TRowVersion& rowVersion) const {
-        Y_VERIFY(LockTxId);
+        Y_ABORT_UNLESS(LockTxId);
 
         if (rowVersion > ReadVersion) {
             // We are reading from snapshot at ReadVersion and should not normally
@@ -815,7 +815,7 @@ public:
         }
 
         const auto localTid = LocalTableId(tableId);
-        Y_VERIFY(localTid);
+        Y_ABORT_UNLESS(localTid);
 
         ui64 skipCount = 0;
 
@@ -1140,7 +1140,7 @@ void TEngineBay::AddWriteRange(const TTableId& tableId, const TTableRange& range
 }
 
 TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
-    Y_VERIFY(EngineHost);
+    Y_ABORT_UNLESS(EngineHost);
 
     TSizes outSizes;
     TVector<const TKeyDesc*> readKeys;
@@ -1172,52 +1172,52 @@ TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
 }
 
 void TEngineBay::SetWriteVersion(TRowVersion writeVersion) {
-    Y_VERIFY(EngineHost);
+    Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     host->SetWriteVersion(writeVersion);
 }
 
 void TEngineBay::SetReadVersion(TRowVersion readVersion) {
-    Y_VERIFY(EngineHost);
+    Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     host->SetReadVersion(readVersion);
 
-    Y_VERIFY(ComputeCtx);
+    Y_ABORT_UNLESS(ComputeCtx);
     ComputeCtx->SetReadVersion(readVersion);
 }
 
 void TEngineBay::SetVolatileTxId(ui64 txId) {
-    Y_VERIFY(EngineHost);
+    Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     host->SetVolatileTxId(txId);
 }
 
 void TEngineBay::SetIsImmediateTx() {
-    Y_VERIFY(EngineHost);
+    Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     host->SetIsImmediateTx();
 }
 
 void TEngineBay::SetIsRepeatableSnapshot() {
-    Y_VERIFY(EngineHost);
+    Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     host->SetIsRepeatableSnapshot();
 }
 
 void TEngineBay::CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
-    Y_VERIFY(EngineHost);
+    Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     host->CommitChanges(tableId, lockId, writeVersion);
 }
 
 TVector<IDataShardChangeCollector::TChange> TEngineBay::GetCollectedChanges() const {
-    Y_VERIFY(EngineHost);
+    Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     return host->GetCollectedChanges();
@@ -1229,28 +1229,28 @@ void TEngineBay::ResetCollectedChanges() {
 }
 
 TVector<ui64> TEngineBay::GetVolatileCommitTxIds() const {
-    Y_VERIFY(EngineHost);
+    Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     return host->GetVolatileCommitTxIds();
 }
 
 const absl::flat_hash_set<ui64>& TEngineBay::GetVolatileDependencies() const {
-    Y_VERIFY(EngineHost);
+    Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     return host->GetVolatileDependencies();
 }
 
 std::optional<ui64> TEngineBay::GetVolatileChangeGroup() const {
-    Y_VERIFY(EngineHost);
+    Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     return host->GetVolatileChangeGroup();
 }
 
 bool TEngineBay::GetVolatileCommitOrdered() const {
-    Y_VERIFY(EngineHost);
+    Y_ABORT_UNLESS(EngineHost);
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     return host->GetVolatileCommitOrdered();
@@ -1298,7 +1298,7 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(NKikimrTxDataShard::TKqpTra
 }
 
 TKqpDatashardComputeContext& TEngineBay::GetKqpComputeCtx() {
-    Y_VERIFY(ComputeCtx);
+    Y_ABORT_UNLESS(ComputeCtx);
     return *ComputeCtx;
 }
 

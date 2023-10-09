@@ -94,7 +94,7 @@ struct TManyPutRangeGet {
         , MsgSize(msgSize)
         , HandleClass(cls)
     {
-        Y_VERIFY(indexOnly);
+        Y_ABORT_UNLESS(indexOnly);
     }
 
     void operator ()(TConfiguration *conf);
@@ -116,7 +116,7 @@ struct TManyPutRangeGet2Channels {
         , MsgSize(msgSize)
         , HandleClass(cls)
     {
-        Y_VERIFY(indexOnly);
+        Y_ABORT_UNLESS(indexOnly);
     }
 
     void operator ()(TConfiguration *conf);

@@ -15,8 +15,8 @@ protected:
     TSpecialKeys() = default;
     TSpecialKeys(std::shared_ptr<arrow::RecordBatch> data)
         : Data(data) {
-        Y_VERIFY(Data);
-        Y_VERIFY(Data->num_rows());
+        Y_ABORT_UNLESS(Data);
+        Y_ABORT_UNLESS(Data->num_rows());
     }
 
 public:
@@ -24,12 +24,12 @@ public:
 
     TSpecialKeys(const TString& data, const std::shared_ptr<arrow::Schema>& schema) {
         Data = NArrow::DeserializeBatch(data, schema);
-        Y_VERIFY(Data);
+        Y_ABORT_UNLESS(Data);
         Y_VERIFY_DEBUG(Data->ValidateFull().ok());
     }
 
     TSpecialKeys(const TString& data) {
-        Y_VERIFY(DeserializeFromString(data));
+        Y_ABORT_UNLESS(DeserializeFromString(data));
     }
 
     TString SerializeToString() const;
@@ -56,7 +56,7 @@ public:
     explicit TFirstLastSpecialKeys(const TString& data, const std::shared_ptr<arrow::Schema>& schema)
         : TBase(data, schema)
     {
-        Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);
+        Y_ABORT_UNLESS(Data->num_rows() == 1 || Data->num_rows() == 2);
     }
     explicit TFirstLastSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::vector<TString>& columnNames = {});
 };
@@ -85,7 +85,7 @@ public:
     explicit TMinMaxSpecialKeys(const TString& data);
     explicit TMinMaxSpecialKeys(const TString& data, const std::shared_ptr<arrow::Schema>& schema)
         : TBase(data, schema) {
-        Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);
+        Y_ABORT_UNLESS(Data->num_rows() == 1 || Data->num_rows() == 2);
     }
 
     explicit TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& schema);

@@ -260,7 +260,7 @@ public:
     }
 
     void SetMetricRegistry(TMetricRegistry* sensorsRegistry) {
-        Y_VERIFY(sensorsRegistry, "TMetricRegistry is null in stats collector.");
+        Y_ABORT_UNLESS(sensorsRegistry, "TMetricRegistry is null in stats collector.");
         MetricRegistryPtr_.Set(sensorsRegistry);
         DiscoveryDuePessimization_.Set(sensorsRegistry->Rate({ DatabaseLabel_,      {"sensor", "Discovery/TooManyBadEndpoints"} }));
         DiscoveryDueExpiration_.Set(sensorsRegistry->Rate({ DatabaseLabel_,         {"sensor", "Discovery/Regular"} }));

@@ -33,7 +33,7 @@ TNextToken(const TString& streamArn, ui32 alreadyRead, ui32 maxResults, ui64 cre
 TString Serialize() const {
     TString data;
     bool result = Proto.SerializeToString(&data);
-    Y_VERIFY(result);
+    Y_ABORT_UNLESS(result);
     TString encoded;
     Base64Encode(data, encoded);
     return encoded;

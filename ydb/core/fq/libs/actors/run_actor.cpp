@@ -813,7 +813,7 @@ private:
                 break;
             }
             default: {
-                Y_VERIFY(false);
+                Y_ABORT_UNLESS(false);
             }
         }
     }
@@ -919,7 +919,7 @@ private:
 
     void Handle(TEvCheckpointCoordinator::TEvZeroCheckpointDone::TPtr&) {
         LOG_D("Coordinator saved zero checkpoint");
-        Y_VERIFY(ControlId);
+        Y_ABORT_UNLESS(ControlId);
         SetLoadFromCheckpointMode();
     }
 
@@ -1829,7 +1829,7 @@ private:
     void FillDqGraphParams() {
         for (const auto& s : Params.DqGraphs) {
             NFq::NProto::TGraphParams dqGraphParams;
-            Y_VERIFY(dqGraphParams.ParseFromString(s));
+            Y_ABORT_UNLESS(dqGraphParams.ParseFromString(s));
             DqGraphParams.emplace_back(std::move(dqGraphParams));
         }
     }

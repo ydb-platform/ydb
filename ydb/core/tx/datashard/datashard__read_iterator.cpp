@@ -1044,7 +1044,7 @@ private:
     };
 
     void AddReadConflict(ui64 txId) {
-        Y_VERIFY(State.LockId);
+        Y_ABORT_UNLESS(State.LockId);
         // We have skipped uncommitted changes in txId, which would affect
         // the read result when it commits. Add a conflict edge that breaks
         // our lock when txId is committed.
@@ -1126,8 +1126,8 @@ public:
 
     void BuildExecutionPlan(bool loaded) override
     {
-        Y_VERIFY(GetExecutionPlan().empty());
-        Y_VERIFY(!loaded);
+        Y_ABORT_UNLESS(GetExecutionPlan().empty());
+        Y_ABORT_UNLESS(!loaded);
 
         TVector<EExecutionUnitKind> plan;
         plan.push_back(EExecutionUnitKind::CheckRead);
@@ -1149,7 +1149,7 @@ public:
             // iterator has been aborted
             return EExecutionStatus::DelayComplete;
         }
-        Y_VERIFY(it->second);
+        Y_ABORT_UNLESS(it->second);
         auto& state = *it->second;
 
         if (Result->Record.HasStatus()) {
@@ -1157,7 +1157,7 @@ public:
             return EExecutionStatus::DelayComplete;
         }
 
-        Y_VERIFY(state.State == TReadIteratorState::EState::Executing);
+        Y_ABORT_UNLESS(state.State == TReadIteratorState::EState::Executing);
 
         ++ExecuteCount;
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Execute read# " << ExecuteCount
@@ -1308,7 +1308,7 @@ public:
             for (ui64 txId : Reader->GetVolatileReadDependencies()) {
                 AddVolatileDependency(txId);
                 bool ok = Self->GetVolatileTxManager().AttachBlockedOperation(txId, GetTxId());
-                Y_VERIFY(ok, "Unexpected failure to attach a blocked operation");
+                Y_ABORT_UNLESS(ok, "Unexpected failure to attach a blocked operation");
             }
             Reader.reset();
             Result = MakeEvReadResult(ctx.SelfID.NodeId());
@@ -1402,9 +1402,9 @@ public:
             // iterator has been aborted
             return;
         }
-        Y_VERIFY(it->second);
+        Y_ABORT_UNLESS(it->second);
         auto& state = *it->second;
-        Y_VERIFY(state.State == TReadIteratorState::EState::Init);
+        Y_ABORT_UNLESS(state.State == TReadIteratorState::EState::Init);
 
         Result = MakeEvReadResult(ctx.SelfID.NodeId());
 
@@ -1433,17 +1433,17 @@ public:
         // Note: some checks already performed in TTxReadViaPipeline::Execute
         if (state.PathId.OwnerId != Self->TabletID()) {
             // owner is schemeshard, read user table
-            Y_VERIFY(state.PathId.OwnerId == Self->GetPathOwnerId());
+            Y_ABORT_UNLESS(state.PathId.OwnerId == Self->GetPathOwnerId());
 
             const auto tableId = state.PathId.LocalPathId;
             auto it = Self->TableInfos.find(tableId);
-            Y_VERIFY(it != Self->TableInfos.end());
+            Y_ABORT_UNLESS(it != Self->TableInfos.end());
 
             auto& userTableInfo = it->second;
             TableInfo = TShortTableInfo(userTableInfo);
 
-            Y_VERIFY(!userTableInfo->IsBackup);
-            Y_VERIFY(Self->IsMvccEnabled());
+            Y_ABORT_UNLESS(!userTableInfo->IsBackup);
+            Y_ABORT_UNLESS(Self->IsMvccEnabled());
 
             state.SchemaVersion = userTableInfo->GetTableSchemaVersion();
             if (record.GetTableId().HasSchemaVersion()) {
@@ -1545,7 +1545,7 @@ public:
             return;
         }
 
-        Y_VERIFY(it->second);
+        Y_ABORT_UNLESS(it->second);
         auto& state = *it->second;
 
         if (!Result) {
@@ -1620,7 +1620,7 @@ public:
             return;
         }
 
-        Y_VERIFY(it->second);
+        Y_ABORT_UNLESS(it->second);
 
         // note that we save the state only when there're unread queries
         if (Reader->HasUnreadQueries()) {
@@ -1931,13 +1931,13 @@ public:
 
             if (Ev) {
                 // We must perform some initialization in transaction (e.g. after a follower sync), but before the operation is built
-                Y_VERIFY(readIt != Self->ReadIterators.end());
-                Y_VERIFY(readIt->second);
+                Y_ABORT_UNLESS(readIt != Self->ReadIterators.end());
+                Y_ABORT_UNLESS(readIt->second);
                 auto& state = *readIt->second;
                 auto* request = Ev->Get();
                 const auto& record = request->Record;
 
-                Y_VERIFY(state.State == TReadIteratorState::EState::Init);
+                Y_ABORT_UNLESS(state.State == TReadIteratorState::EState::Init);
 
                 bool setUsingSnapshotFlag = false;
 
@@ -2115,7 +2115,7 @@ public:
                 Op->IncrementInProgress();
             }
 
-            Y_VERIFY(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
+            Y_ABORT_UNLESS(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
             auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
 
@@ -2179,10 +2179,10 @@ public:
             << ": at tablet# " << Self->TabletID());
 
         if (Reply) {
-            Y_VERIFY(!Op);
+            Y_ABORT_UNLESS(!Op);
             auto it = Self->ReadIterators.find(ReadId);
             if (it != Self->ReadIterators.end()) {
-                Y_VERIFY(it->second);
+                Y_ABORT_UNLESS(it->second);
                 auto& state = *it->second;
                 SendViaSession(state.SessionId, ReadId.Sender, Self->SelfId(), Reply.release());
                 Self->DeleteReadIterator(it);
@@ -2193,7 +2193,7 @@ public:
         if (!Op)
             return;
 
-        Y_VERIFY(!Op->GetExecutionPlan().empty());
+        Y_ABORT_UNLESS(!Op->GetExecutionPlan().empty());
         if (!CompleteList.empty()) {
             Self->Pipeline.RunCompleteList(Op, CompleteList, ctx);
         }
@@ -2385,8 +2385,8 @@ public:
         const auto* request = Ev->Get();
         TReadIteratorId readId(request->Reader, request->ReadId);
         auto it = Self->ReadIterators.find(readId);
-        Y_VERIFY(it != Self->ReadIterators.end());
-        Y_VERIFY(it->second);
+        Y_ABORT_UNLESS(it != Self->ReadIterators.end());
+        Y_ABORT_UNLESS(it->second);
         auto& state = *it->second;
 
         if (!Result) {
@@ -2407,7 +2407,7 @@ public:
             if (!isBroken && (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult())) {
                 sysLocks.BreakLock(state.Lock->GetLockId());
                 sysLocks.ApplyLocks();
-                Y_VERIFY(state.Lock->IsBroken());
+                Y_ABORT_UNLESS(state.Lock->IsBroken());
                 isBroken = true;
             }
 
@@ -2433,7 +2433,7 @@ public:
             } else {
                 // Lock valid, apply conflict changes
                 auto locks = sysLocks.ApplyLocks();
-                Y_VERIFY(locks.empty(), "ApplyLocks acquired unexpected locks");
+                Y_ABORT_UNLESS(locks.empty(), "ApplyLocks acquired unexpected locks");
             }
         }
     }
@@ -2442,8 +2442,8 @@ public:
         const auto* request = Ev->Get();
         TReadIteratorId readId(request->Reader, request->ReadId);
         auto it = Self->ReadIterators.find(readId);
-        Y_VERIFY(it != Self->ReadIterators.end());
-        Y_VERIFY(it->second);
+        Y_ABORT_UNLESS(it != Self->ReadIterators.end());
+        Y_ABORT_UNLESS(it->second);
         auto& state = *it->second;
 
         if (!Result) {
@@ -2750,7 +2750,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorConte
 
     TReadIteratorId readId(ev->Sender, record.GetReadId());
     if (Pipeline.CancelWaitingReadIterator(readId)) {
-        Y_VERIFY(!ReadIterators.contains(readId));
+        Y_ABORT_UNLESS(!ReadIterators.contains(readId));
         return;
     }
 

@@ -44,7 +44,7 @@ public:
             }
             result = &ver.second;
         }
-        Y_VERIFY(!!result);
+        Y_ABORT_UNLESS(!!result);
         return *result;
     }
 
@@ -79,7 +79,7 @@ public:
         if (!IsStandaloneTable()) {
             Name = rowset.template GetValue<Schema::SchemaPresetInfo::Name>();
         }
-        Y_VERIFY(!Id || Name == "default", "Unsupported preset at load time");
+        Y_ABORT_UNLESS(!Id || Name == "default", "Unsupported preset at load time");
 
         if (rowset.template HaveValue<Schema::SchemaPresetInfo::DropStep>() &&
             rowset.template HaveValue<Schema::SchemaPresetInfo::DropTxId>())
@@ -176,12 +176,12 @@ public:
     }
 
     NOlap::IColumnEngine& MutablePrimaryIndex() {
-        Y_VERIFY(!!PrimaryIndex);
+        Y_ABORT_UNLESS(!!PrimaryIndex);
         return *PrimaryIndex;
     }
 
     const NOlap::TIndexInfo& GetIndexInfo(const NOlap::TSnapshot& version) const {
-        Y_VERIFY(!!PrimaryIndex);
+        Y_ABORT_UNLESS(!!PrimaryIndex);
         return PrimaryIndex->GetVersionedIndex().GetSchema(version)->GetIndexInfo();
     }
 
@@ -190,7 +190,7 @@ public:
     }
 
     const NOlap::IColumnEngine& GetPrimaryIndexSafe() const {
-        Y_VERIFY(!!PrimaryIndex);
+        Y_ABORT_UNLESS(!!PrimaryIndex);
         return *PrimaryIndex;
     }
 

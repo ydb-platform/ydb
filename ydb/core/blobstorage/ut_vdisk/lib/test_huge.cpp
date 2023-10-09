@@ -74,7 +74,7 @@ public:
     }
 
     void Handle(TEvHullLogHugeBlob::TPtr &ev, const TActorContext &ctx) override {
-        Y_VERIFY(State == 1);
+        Y_ABORT_UNLESS(State == 1);
         // FIXME: log
 
         const auto *msg = ev->Get();
@@ -182,14 +182,14 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
     void Handle(NPDisk::TEvYardInitResult::TPtr &ev, const TActorContext &ctx) {
         const auto &m = ev->Get();
         NKikimrProto::EReplyStatus status = m->Status;
-        Y_VERIFY(status == NKikimrProto::OK, "Status# %s ErrorReason# %s",
+        Y_ABORT_UNLESS(status == NKikimrProto::OK, "Status# %s ErrorReason# %s",
                 NKikimrProto::EReplyStatus_Name(status).c_str(), m->ErrorReason.c_str());
         HmCtx->PDiskCtx = std::make_shared<TPDiskCtx>(m->PDiskParams, HmCtx->Config->BaseInfo.PDiskActorID, TString());
 
         // prepare starting points
         const TStartingPoints &startingPoints = ev->Get()->StartingPoints;
         bool result = InitHugeBlobKeeper(ctx, startingPoints);
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
 
         // start reading log
         ctx.Send(HmCtx->PDiskCtx->PDiskId,
@@ -199,11 +199,11 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
     void Handle(NPDisk::TEvReadLogResult::TPtr &ev, const TActorContext &ctx) {
         const auto &m = ev->Get();
         NKikimrProto::EReplyStatus status = m->Status;
-        Y_VERIFY(status == NKikimrProto::OK, "Status# %s ErrorReason# %s",
+        Y_ABORT_UNLESS(status == NKikimrProto::OK, "Status# %s ErrorReason# %s",
                 NKikimrProto::EReplyStatus_Name(status).c_str(), m->ErrorReason.c_str());
         if (m->Results) {
             const ui64 lsn = m->Results.back().Lsn;
-            Y_VERIFY(lsn > Lsn);
+            Y_ABORT_UNLESS(lsn > Lsn);
             Lsn = lsn;
         }
 

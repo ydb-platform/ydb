@@ -48,7 +48,7 @@ public:
     public:
         template <typename T>
         TRow& Column(size_t index, const T& data) {
-            Y_VERIFY(index < Columns.size());
+            Y_ABORT_UNLESS(index < Columns.size());
 
             TString lines = TStringBuilder() << data;
 

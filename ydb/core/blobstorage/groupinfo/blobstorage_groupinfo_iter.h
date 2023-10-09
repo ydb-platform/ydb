@@ -108,24 +108,24 @@ namespace NKikimr {
         {}
 
         TRootIteratorBase& operator ++() {
-            Y_VERIFY(!AtEnd);
+            Y_ABORT_UNLESS(!AtEnd);
             AtEnd = true;
             return *this;
         }
 
         TRootIteratorBase& operator --() {
-            Y_VERIFY(AtEnd);
+            Y_ABORT_UNLESS(AtEnd);
             AtEnd = false;
             return *this;
         }
 
         auto NestedBegin() const {
-            Y_VERIFY(!AtEnd && Topology);
+            Y_ABORT_UNLESS(!AtEnd && Topology);
             return Topology->FailRealms.begin();
         }
 
         auto NestedEnd() const {
-            Y_VERIFY(!AtEnd && Topology);
+            Y_ABORT_UNLESS(!AtEnd && Topology);
             return Topology->FailRealms.end();
         }
 
@@ -237,7 +237,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     inline TBlobStorageGroupInfo::TVDiskIterator TBlobStorageGroupInfo::FindVDisk(const TVDiskID& vdisk) const {
-        Y_VERIFY(vdisk.GroupID == GroupID && vdisk.GroupGeneration == GroupGeneration);
+        Y_ABORT_UNLESS(vdisk.GroupID == GroupID && vdisk.GroupGeneration == GroupGeneration);
         const auto realmIt = Topology->FailRealms.begin() + vdisk.FailRealm;
         const auto domainIt = realmIt->FailDomains.begin() + vdisk.FailDomain;
         const auto vdiskIt = domainIt->VDisks.begin() + vdisk.VDisk;

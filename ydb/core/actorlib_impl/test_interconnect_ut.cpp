@@ -714,8 +714,8 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
             } else if (nodeNum == 1) {
                 current = node1.get();
             }
-            Y_VERIFY(current);
-            Y_VERIFY(CompatibilityInfo.MakeStored(NKikimrConfig::TCompatibilityRule::Interconnect, current)
+            Y_ABORT_UNLESS(current);
+            Y_ABORT_UNLESS(CompatibilityInfo.MakeStored(NKikimrConfig::TCompatibilityRule::Interconnect, current)
                     .SerializeToString(&*common->CompatibilityInfo));
 
             common->ValidateCompatibilityInfo =

@@ -76,7 +76,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
             ctx.Send(writeMeta.GetSource(), result.release());
         } else {
             auto operation = OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
-            Y_VERIFY(operation);
+            Y_ABORT_UNLESS(operation);
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(operation->GetTxId(), NKikimrDataEvents::TEvWriteResult::ERROR, "put data fails");
             ctx.Send(writeMeta.GetSource(), result.release());
         }
@@ -111,7 +111,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
 
     NEvWrite::TWriteMeta writeMeta(writeId, tableId, source);
     writeMeta.SetDedupId(dedupId);
-    Y_VERIFY(record.HasLongTxId());
+    Y_ABORT_UNLESS(record.HasLongTxId());
     writeMeta.SetLongTxId(NLongTxService::TLongTxId::FromProto(record.GetLongTxId()));
     writeMeta.SetWritePartId(record.GetWritePartId());
 
@@ -217,7 +217,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     auto wg = WritesMonitor.RegisterWrite(arrowData->GetSize());
     auto operation = OperationsManager->RegisterOperation(txId);
-    Y_VERIFY(operation);
+    Y_ABORT_UNLESS(operation);
     operation->Start(*this, tableId, arrowData, source, ctx);
 }
 

@@ -32,7 +32,7 @@ namespace NTest{
 
         TLayoutCook& Key(std::initializer_list<NTable::TTag> keys)
         {
-            Y_VERIFY(!Scheme, "Keys are already assigned for layout cook");
+            Y_ABORT_UNLESS(!Scheme, "Keys are already assigned for layout cook");
 
             TPos keyOrder = 0;
 

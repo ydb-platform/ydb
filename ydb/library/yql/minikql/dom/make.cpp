@@ -147,9 +147,9 @@ TUnboxedValuePod MakeDom(const ITypeInfoHelper* typeHelper, const TType* shape, 
         case ETypeKind::Dict: {
             const auto dictTypeInspector = TDictTypeInspector(*typeHelper, shape);
             const auto keyType = dictTypeInspector.GetKeyType();
-            Y_VERIFY(ETypeKind::Data == typeHelper->GetTypeKind(keyType), "Unsupported dict key type kind.");
+            Y_ABORT_UNLESS(ETypeKind::Data == typeHelper->GetTypeKind(keyType), "Unsupported dict key type kind.");
             const auto keyId = TDataTypeInspector(*typeHelper, keyType).GetTypeId();
-            Y_VERIFY(keyId == TDataType<char*>::Id || keyId == TDataType<TUtf8>::Id, "Unsupported dict key data type.");
+            Y_ABORT_UNLESS(keyId == TDataType<char*>::Id || keyId == TDataType<TUtf8>::Id, "Unsupported dict key data type.");
             return MakeDict(typeHelper, dictTypeInspector.GetValueType(), value, valueBuilder);
         }
         case ETypeKind::Tuple:

@@ -538,7 +538,7 @@ Y_UNIT_TEST_SUITE(TBTreeTest) {
                     if (it.IsValid()) {
                         ui64 key = it.GetKey();
                         ui64 value = it.GetValue();
-                        Y_VERIFY(key >= needle && value == ~key,
+                        Y_ABORT_UNLESS(key >= needle && value == ~key,
                             "Found unexpected key %" PRIu64 " and value %" PRIu64 " while seeking to %" PRIu64,
                             key, value, needle);
                     }

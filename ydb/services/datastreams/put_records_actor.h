@@ -35,7 +35,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         TString str;
         bool res = proto.SerializeToString(&str);
-        Y_VERIFY(res);
+        Y_ABORT_UNLESS(res);
         return str;
     }
 
@@ -128,7 +128,7 @@ namespace NKikimr::NDataStreams::V1 {
                 return;
             }
 
-            Y_VERIFY(ev->Get()->Record.HasPartitionResponse());
+            Y_ABORT_UNLESS(ev->Get()->Record.HasPartitionResponse());
             Y_ENSURE(ev->Get()->Record.GetPartitionResponse().GetCmdWriteResult().size() > 0, "Wrong number of cmd write commands");
             auto offset = ev->Get()->Record.GetPartitionResponse().GetCmdWriteResult(0).GetOffset();
             ReplySuccessAndDie(ctx, offset);
@@ -344,7 +344,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         if (IsQuotaRequired()) {
             const auto ru = 1 + CalcRuConsumption(GetPayloadSize());
-            Y_VERIFY(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, this->ActorContext()));
+            Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, this->ActorContext()));
         } else {
             Write(this->ActorContext());
         }

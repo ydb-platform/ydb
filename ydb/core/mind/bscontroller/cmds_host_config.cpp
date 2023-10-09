@@ -10,7 +10,7 @@ namespace NKikimr::NBsController {
         if (cmd.HasDefaultHostPDiskConfig()) {
             TString config;
             const bool success = cmd.GetDefaultHostPDiskConfig().SerializeToString(&config);
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
             defaultPDiskConfig = config;
         }
 
@@ -27,7 +27,7 @@ namespace NKikimr::NBsController {
             if (drive.HasPDiskConfig()) {
                 TString config;
                 const bool success = drive.GetPDiskConfig().SerializeToString(&config);
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
                 driveInfo.PDiskConfig = config;
             } else {
                 driveInfo.PDiskConfig = defaultPDiskConfig;

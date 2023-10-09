@@ -6,8 +6,8 @@
 namespace NKikimr::NOlap::NPlainReader {
 
 void TScanHead::OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 intervalIdx) {
-    Y_VERIFY(FetchingIntervals.size());
-    Y_VERIFY(FetchingIntervals.front().GetIntervalIdx() == intervalIdx);
+    Y_ABORT_UNLESS(FetchingIntervals.size());
+    Y_ABORT_UNLESS(FetchingIntervals.front().GetIntervalIdx() == intervalIdx);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "interval_result")("interval", FetchingIntervals.front().GetIntervalIdx())("count", batch ? batch->num_rows() : 0);
     FetchingIntervals.pop_front();
     Reader.OnIntervalResult(batch);
@@ -51,7 +51,7 @@ bool TScanHead::BuildNextInterval() {
         CurrentStart = BorderPoints.begin()->first;
         BorderPoints.erase(BorderPoints.begin());
         if (CurrentSegments.size()) {
-            Y_VERIFY(BorderPoints.size());
+            Y_ABORT_UNLESS(BorderPoints.size());
             const bool includeFinish = BorderPoints.begin()->second.GetFinishSources().size() == CurrentSegments.size() && !BorderPoints.begin()->second.GetStartSources().size();
             FetchingIntervals.emplace_back(
                 *CurrentStart, BorderPoints.begin()->first, SegmentIdxCounter++, CurrentSegments,

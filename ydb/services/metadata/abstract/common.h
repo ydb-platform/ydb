@@ -36,7 +36,7 @@ public:
     template <class TSnapshot>
     std::shared_ptr<TSnapshot> GetValidatedSnapshotAs() const {
         auto result = dynamic_pointer_cast<TSnapshot>(Snapshot);
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
         return result;
     }
 };

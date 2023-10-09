@@ -148,7 +148,7 @@ namespace NQuery {
 
 void DoFetchScriptResults(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     auto* req = dynamic_cast<TEvFetchScriptResultsRequest*>(p.release());
-    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
     f.RegisterActor(new TFetchScriptResultsRPC(req));
 }
 

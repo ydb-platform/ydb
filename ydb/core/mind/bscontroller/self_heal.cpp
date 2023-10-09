@@ -127,7 +127,7 @@ namespace NKikimr::NBsController {
 
         void Handle(TEvents::TEvUndelivered::TPtr& ev) {
             auto it = ActorToDiskMap.find(ev->Sender);
-            Y_VERIFY(it != ActorToDiskMap.end());
+            Y_ABORT_UNLESS(it != ActorToDiskMap.end());
             STLOG(PRI_DEBUG, BS_SELFHEAL, BSSH05, "Reassigner TEvUndelivered", (GroupId, GroupId),
                 (Sender, ev->Sender), (VDiskId, it->second));
             ProcessVDiskReply(it->second, false);
@@ -334,7 +334,7 @@ namespace NKikimr::NBsController {
                         GroupsWithFaultyDisks.Remove(&g);
                     }
 
-                    Y_VERIFY(numFailRealms && numFailDomainsPerFailRealm && numVDisksPerFailDomain);
+                    Y_ABORT_UNLESS(numFailRealms && numFailDomainsPerFailRealm && numVDisksPerFailDomain);
                     TTopologyDescr descr(g.Content.Type.GetErasure(), numFailRealms, numFailDomainsPerFailRealm,
                         numVDisksPerFailDomain);
                     auto& topology = Topologies[descr];
@@ -350,7 +350,7 @@ namespace NKikimr::NBsController {
                     if (it == Groups.end()) {
                         continue; // TODO(alexvru): this should not happen
                     }
-                    Y_VERIFY(it != Groups.end());
+                    Y_ABORT_UNLESS(it != Groups.end());
                     TGroupRecord& group = it->second;
 
                     // kill reassigner, if it is working
@@ -440,7 +440,7 @@ namespace NKikimr::NBsController {
                         continue;
                     }
 
-                    Y_VERIFY(!group.LayoutValid);
+                    Y_ABORT_UNLESS(!group.LayoutValid);
                     if (group.ReassignerActorId || now < group.NextRetryTimestamp) {
                         // nothing to do
                     } else {
@@ -457,8 +457,8 @@ namespace NKikimr::NBsController {
 
         void UpdateGroupLayoutInformation(TGroupRecord& group) {
             NLayoutChecker::TDomainMapper domainMapper;
-            Y_VERIFY(group.Content.Geometry);
-            Y_VERIFY(HostRecords);
+            Y_ABORT_UNLESS(group.Content.Geometry);
+            Y_ABORT_UNLESS(HostRecords);
             auto groupDef = MakeGroupDefinition(group.Content.VDisks, *group.Content.Geometry);
 
             std::unordered_map<TPDiskId, NLayoutChecker::TPDiskLayoutPosition> pdisks;
@@ -524,7 +524,7 @@ namespace NKikimr::NBsController {
                 }
 
                 auto it = tracker.find(vdiskId);
-                Y_VERIFY(it != tracker.end());
+                Y_ABORT_UNLESS(it != tracker.end());
                 if (it->second.GetStatus(now) != NKikimrBlobStorage::EVDiskStatus::READY) {
                     failedByReadiness |= {topology, vdiskId};
                 }
@@ -868,7 +868,7 @@ namespace NKikimr::NBsController {
     };
 
     IActor *TBlobStorageController::CreateSelfHealActor() {
-        Y_VERIFY(HostRecords);
+        Y_ABORT_UNLESS(HostRecords);
         return new TSelfHealActor(TabletID(), SelfHealUnreassignableGroups, HostRecords);
     }
 
@@ -891,7 +891,7 @@ namespace NKikimr::NBsController {
             }
 
             const TGroupInfo *p = state ? state->Groups.Find(groupId) : FindGroup(groupId);
-            Y_VERIFY(p);
+            Y_ABORT_UNLESS(p);
 
             group->Generation = p->Generation;
             group->Type = TBlobStorageGroupType(p->ErasureSpecies);
@@ -903,7 +903,7 @@ namespace NKikimr::NBsController {
                     ? state->StoragePools.Get()
                     : StoragePools;
                 const auto spIt = storagePools.find(p->StoragePoolId);
-                Y_VERIFY(spIt != storagePools.end());
+                Y_ABORT_UNLESS(spIt != storagePools.end());
                 group->Geometry = std::make_unique<TGroupGeometryInfo>(group->Type, spIt->second.GetGroupGeometry());
                 geomCache.emplace(p->StoragePoolId, group->Geometry);
             }

@@ -19,7 +19,7 @@ TScanMemoryCounter::TScanMemoryCounter(const TString& limitName, const ui64 memo
 
 void TScanMemoryLimiter::Free(const ui64 size) {
     const i64 newVal = AvailableMemory.Add(size);
-    Y_VERIFY(newVal <= AvailableMemoryLimit);
+    Y_ABORT_UNLESS(newVal <= AvailableMemoryLimit);
     Counters.Free(size);
     if (newVal > 0 && newVal <= (i64)size) {
         std::vector<std::shared_ptr<IMemoryAccessor>> accessors;
@@ -83,7 +83,7 @@ void TScanMemoryLimiter::TGuard::Free(const ui64 size) {
     if (MemoryAccessor) {
         MemoryAccessor->Free(size);
     }
-    Y_VERIFY(Value.Sub(size) >= 0);
+    Y_ABORT_UNLESS(Value.Sub(size) >= 0);
     if (MemorySignals) {
         MemorySignals->RemoveBytes(size);
     }

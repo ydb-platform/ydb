@@ -81,7 +81,7 @@ Y_CPU_BENCHMARK(JsonPath, iface) {
         TIssues issues;
         const auto jsonPath = ParseJsonPath("$.'_id'.issueId", issues, MAX_PARSE_ERRORS);
         const auto result = ExecuteJsonPath(jsonPath, TValue(dom), TVariablesMap(), &ValueBuilder);
-        Y_VERIFY(!result.IsError());
+        Y_ABORT_UNLESS(!result.IsError());
     }
 }
 
@@ -95,7 +95,7 @@ Y_CPU_BENCHMARK(JsonPathLikeRegexWithCompile, iface) {
         TIssues issues;
         const auto jsonPath = ParseJsonPath("$[*] like_regex \"[0-9]+\"", issues, MAX_PARSE_ERRORS);
         const auto result = ExecuteJsonPath(jsonPath, TValue(dom), TVariablesMap(), &ValueBuilder);
-        Y_VERIFY(!result.IsError());
+        Y_ABORT_UNLESS(!result.IsError());
     }
 }
 
@@ -109,6 +109,6 @@ Y_CPU_BENCHMARK(JsonPathLikeRegex, iface) {
     const auto jsonPath = ParseJsonPath("$[*] like_regex \"[0-9]+\"", issues, MAX_PARSE_ERRORS);
     for (size_t i = 0; i < iface.Iterations(); i++) {
         const auto result = ExecuteJsonPath(jsonPath, TValue(dom), TVariablesMap(), &ValueBuilder);
-        Y_VERIFY(!result.IsError());
+        Y_ABORT_UNLESS(!result.IsError());
     }
 }

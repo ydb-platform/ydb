@@ -39,10 +39,10 @@ public:
     }
 
     void BuildLastKey(const std::shared_ptr<arrow::Schema>& schema) {
-        Y_VERIFY(!LastReadKey);
+        Y_ABORT_UNLESS(!LastReadKey);
         if (ResultBatch && ResultBatch->num_rows()) {
             auto keyColumns = NArrow::ExtractColumns(ResultBatch, schema);
-            Y_VERIFY(keyColumns);
+            Y_ABORT_UNLESS(keyColumns);
             LastReadKey = keyColumns->Slice(keyColumns->num_rows() - 1);
         }
     }
@@ -88,7 +88,7 @@ public:
         if (!program.HasProgram()) {
             return;
         }
-        Y_VERIFY(!MemoryGuardInternal);
+        Y_ABORT_UNLESS(!MemoryGuardInternal);
         auto status = program.ApplyProgram(ResultBatch);
         if (!status.ok()) {
             ErrorString = status.message();
@@ -99,12 +99,12 @@ public:
     }
 
     const std::shared_ptr<arrow::RecordBatch>& GetResultBatchPtrVerified() const {
-        Y_VERIFY(ResultBatch);
+        Y_ABORT_UNLESS(ResultBatch);
         return ResultBatch;
     }
 
     const arrow::RecordBatch& GetResultBatch() const {
-        Y_VERIFY(ResultBatch);
+        Y_ABORT_UNLESS(ResultBatch);
         return *ResultBatch;
     }
 
@@ -120,7 +120,7 @@ public:
         : MemoryGuardExternal(memGuard)
         , ResultBatch(batch)
     {
-        Y_VERIFY(ResultBatch);
+        Y_ABORT_UNLESS(ResultBatch);
     }
 
     explicit TPartialReadResult(
@@ -130,7 +130,7 @@ public:
         , ResultBatch(batch)
         , LastReadKey(lastKey)
     {
-        Y_VERIFY(ResultBatch);
+        Y_ABORT_UNLESS(ResultBatch);
     }
 };
 }

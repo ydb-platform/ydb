@@ -32,7 +32,7 @@ namespace NKikimr {
 
         TDeltaToDiskRecLog &TDeltaToDiskRecLog::Append(ui32 chunkIdx,
                                                        const TVector<TSyncLogPageSnap> &pages) {
-            Y_VERIFY(AllAppends.empty() || AllAppends.back().ChunkIdx != chunkIdx);
+            Y_ABORT_UNLESS(AllAppends.empty() || AllAppends.back().ChunkIdx != chunkIdx);
             AllAppends.emplace_back(chunkIdx, pages);
             return *this;
         }
@@ -128,7 +128,7 @@ namespace NKikimr {
         ui32 TOneChunkIndex::Serialize(IOutputStream &s,
                                        const TDeltaToDiskRecLog::TOneAppend &append,
                                        ui32 indexBulk) const {
-            Y_VERIFY(!Index.empty());
+            Y_ABORT_UNLESS(!Index.empty());
 
             // we implement Serialize with Delta via deep copy
             TOneChunkIndex idx(*this);
@@ -289,7 +289,7 @@ namespace NKikimr {
         }
 
         ui32 TDiskRecLogSnapshot::LastChunkIdx() const {
-            Y_VERIFY(!ManyIdxChunks.empty());
+            Y_ABORT_UNLESS(!ManyIdxChunks.empty());
             return ManyIdxChunks.back()->GetChunkIdx();
         }
 
@@ -372,7 +372,7 @@ namespace NKikimr {
             auto m = Guard(Lock);
             const ui32 curChunks = ManyIdxChunks.size();
             const ui32 numChunksToDelete = Min(nchunks, curChunks);
-            Y_VERIFY(nchunks && curChunks, "nchunks# %" PRIu32 " curChunks# %" PRIu32, nchunks, curChunks);
+            Y_ABORT_UNLESS(nchunks && curChunks, "nchunks# %" PRIu32 " curChunks# %" PRIu32, nchunks, curChunks);
             ui64 newLogStartLsn = 0;
             for (ui32 i = 0; i < numChunksToDelete; i++) {
                 TIndexedChunkPtr chunkPtr = ManyIdxChunks.front();
@@ -494,7 +494,7 @@ namespace NKikimr {
                 ManyIdxChunks.push_back(c.first);
                 pos = c.second;
             }
-            Y_VERIFY(ManyIdxChunks.size() == chunksNum);
+            Y_ABORT_UNLESS(ManyIdxChunks.size() == chunksNum);
         }
 
         ui32 TDiskRecLog::PrivateLastChunkIdx() const {

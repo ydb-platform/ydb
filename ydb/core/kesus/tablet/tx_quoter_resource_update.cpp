@@ -74,7 +74,7 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
             "[" << Self->TabletID() << "] TTxQuoterResourceUpdate::Complete (sender=" << Sender
                     << ", cookie=" << Cookie << ")");
 
-        Y_VERIFY(Reply);
+        Y_ABORT_UNLESS(Reply);
         ctx.Send(Sender, std::move(Reply), 0, Cookie);
     }
 };

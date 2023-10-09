@@ -22,8 +22,8 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext&, const TActorContext& ctx) override {
-        Y_VERIFY(op->IsDistributedEraseTx());
-        Y_VERIFY(!op->IsAborted());
+        Y_ABORT_UNLESS(op->IsDistributedEraseTx());
+        Y_ABORT_UNLESS(!op->IsAborted());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
@@ -70,7 +70,7 @@ public:
         }
 
         // checked at CheckedExecute stage
-        Y_VERIFY(DataShard.GetUserTables().contains(request.GetTableId()));
+        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(request.GetTableId()));
         const TUserTable& tableInfo = *DataShard.GetUserTables().at(request.GetTableId());
 
         for (const auto columnId : eraseTx->GetIndexColumnIds()) {

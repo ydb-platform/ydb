@@ -79,7 +79,7 @@ public:
 
     bool Reply(const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const TString& errorMessage = TString())
     {
-        Y_VERIFY(Response);
+        Y_ABORT_UNLESS(Response);
         auto& record = Response->Record;
         record.SetStatus(status);
         if (errorMessage) {

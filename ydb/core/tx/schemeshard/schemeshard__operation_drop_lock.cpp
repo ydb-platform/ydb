@@ -30,8 +30,8 @@ public:
         LOG_I(DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropLock);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropLock);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -189,7 +189,7 @@ public:
         context.DbChanges.PersistUnLock(pathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropLock, pathId);
         txState.State = ProposeToCoordinator ? TTxState::Propose : TTxState::Done;
 
@@ -206,7 +206,7 @@ public:
         }
 
         auto lockedBy = context.SS->LockedPaths[pathId];
-        Y_VERIFY(lockedBy == lockOwner);
+        Y_ABORT_UNLESS(lockedBy == lockOwner);
         context.SS->LockedPaths.erase(pathId);
         context.SS->TabletCounters->Simple()[COUNTER_LOCKS_COUNT].Sub(1);
 
@@ -237,7 +237,7 @@ ISubOperation::TPtr DropLock(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr DropLock(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropLock>(id, state);
 }
 

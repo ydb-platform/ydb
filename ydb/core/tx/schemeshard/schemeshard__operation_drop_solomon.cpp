@@ -47,7 +47,7 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxDropSolomonVolume);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropSolomonVolume);
 
 
         TPathId pathId = txState->TargetPathId;
@@ -56,7 +56,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         auto paths = context.SS->ListSubTree(pathId, context.Ctx);
-        Y_VERIFY(paths.size() == 1);
+        Y_ABORT_UNLESS(paths.size() == 1);
         context.SS->DropPaths(paths, step, OperationId.GetTxId(), db, context.Ctx);
 
         if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
@@ -86,8 +86,8 @@ public:
                                << ",  at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropSolomonVolume);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropSolomonVolume);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -234,7 +234,7 @@ ISubOperation::TPtr CreateDropSolomon(TOperationId id, const TTxTransaction& tx)
 }
 
 ISubOperation::TPtr CreateDropSolomon(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropSolomon>(id, state);
 }
 

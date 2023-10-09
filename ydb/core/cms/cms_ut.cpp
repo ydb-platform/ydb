@@ -863,7 +863,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     void TestAvailabilityMode(EAvailabilityMode mode, bool disconnectNodes)
     {
-        Y_VERIFY(mode == MODE_KEEP_AVAILABLE
+        Y_ABORT_UNLESS(mode == MODE_KEEP_AVAILABLE
                  || mode == MODE_FORCE_RESTART);
 
         TCmsTestEnv env(8);
@@ -929,7 +929,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     void TestAvailabilityModeScheduled(EAvailabilityMode mode,  bool disconnectNodes)
     {
-        Y_VERIFY(mode == MODE_KEEP_AVAILABLE
+        Y_ABORT_UNLESS(mode == MODE_KEEP_AVAILABLE
                  || mode == MODE_FORCE_RESTART);
 
         TCmsTestEnv env(8);

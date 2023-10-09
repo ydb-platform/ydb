@@ -55,8 +55,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropTableIndexAtMainTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropTableIndexAtMainTable);
 
         //fill txShards
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
@@ -70,13 +70,13 @@ public:
         TString txBody;
         {
             TPathId pathId = txState->TargetPathId;
-            Y_VERIFY(context.SS->PathsById.contains(pathId));
+            Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
             TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-            Y_VERIFY(path);
+            Y_ABORT_UNLESS(path);
 
-            Y_VERIFY(context.SS->Tables.contains(pathId));
+            Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
             TTableInfo::TPtr table = context.SS->Tables.at(pathId);
-            Y_VERIFY(table);
+            Y_ABORT_UNLESS(table);
 
             auto seqNo = context.SS->StartRound(*txState);
 
@@ -89,7 +89,7 @@ public:
 
             bool found = false;
             for (const auto& [_, childPathId] : path->GetChildren()) {
-                Y_VERIFY(context.SS->PathsById.contains(childPathId));
+                Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
                 auto childPath = context.SS->PathsById.at(childPathId);
 
                 if (!childPath->IsTableIndex() || !childPath->PlannedToDrop()) {
@@ -107,7 +107,7 @@ public:
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
         }
 
-        Y_VERIFY(txState->Shards.size());
+        Y_ABORT_UNLESS(txState->Shards.size());
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
@@ -160,13 +160,13 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxDropTableIndexAtMainTable);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropTableIndexAtMainTable);
 
         TPathId pathId = txState->TargetPathId;
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        Y_VERIFY(context.SS->Tables.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -189,13 +189,13 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropTableIndexAtMainTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropTableIndexAtMainTable);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
             TShardIdx idx = shard.Idx;
-            Y_VERIFY(context.SS->ShardInfos.contains(idx));
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(idx));
             TTabletId tablet = context.SS->ShardInfos.at(idx).TabletID;
             shardSet.insert(tablet);
         }
@@ -323,19 +323,19 @@ public:
             }
         }
 
-        Y_VERIFY(context.SS->Tables.contains(tablePath.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
 
-        Y_VERIFY(table->AlterVersion != 0);
-        Y_VERIFY(!table->AlterData);
+        Y_ABORT_UNLESS(table->AlterVersion != 0);
+        Y_ABORT_UNLESS(!table->AlterData);
 
-        Y_VERIFY(context.SS->Indexes.contains(indexPath.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->Indexes.contains(indexPath.Base()->PathId));
         TTableIndexInfo::TPtr index = context.SS->Indexes.at(indexPath.Base()->PathId);
 
-        Y_VERIFY(index->AlterVersion != 0);
-        Y_VERIFY(!index->AlterData);
+        Y_ABORT_UNLESS(index->AlterVersion != 0);
+        Y_ABORT_UNLESS(!index->AlterData);
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
 
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);
@@ -392,7 +392,7 @@ ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, const TTxTr
 }
 
 TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
-    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex);
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex);
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CreateDropIndex"
@@ -474,14 +474,14 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
     }
 
     for (const auto& items: indexPath.Base()->GetChildren()) {
-        Y_VERIFY(context.SS->PathsById.contains(items.second));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(items.second));
         auto implPath = context.SS->PathsById.at(items.second);
         if (implPath->Dropped()) {
             continue;
         }
 
         auto implTable = context.SS->PathsById.at(items.second);
-        Y_VERIFY(implTable->IsTable());
+        Y_ABORT_UNLESS(implTable->IsTable());
 
         auto implTableDropping = TransactionTemplate(indexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
         auto operation = implTableDropping.MutableDrop();

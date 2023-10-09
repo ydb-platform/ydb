@@ -66,8 +66,8 @@ public:
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
         TOlapStoreInfo::TPtr pendingInfo = context.SS->OlapStores[txState->TargetPathId];
-        Y_VERIFY(pendingInfo);
-        Y_VERIFY(pendingInfo->AlterData);
+        Y_ABORT_UNLESS(pendingInfo);
+        Y_ABORT_UNLESS(pendingInfo->AlterData);
         TOlapStoreInfo::TPtr storeInfo = pendingInfo->AlterData;
 
         txState->ClearShardsInProgress();
@@ -78,7 +78,7 @@ public:
             context.SS->FillSeqNo(tx, seqNo);
 
             NSchemeShard::TPath path = NSchemeShard::TPath::Init(txState->TargetPathId, context.SS);
-            Y_VERIFY(path.IsResolved());
+            Y_ABORT_UNLESS(path.IsResolved());
 
             // TODO: we may need to specify a more complex data channel mapping
             auto* init = tx.MutableInitShard();
@@ -156,9 +156,9 @@ public:
         context.SS->PersistCreateStep(db, pathId, step);
 
         TOlapStoreInfo::TPtr pending = context.SS->OlapStores[pathId];
-        Y_VERIFY(pending);
+        Y_ABORT_UNLESS(pending);
         TOlapStoreInfo::TPtr store = pending->AlterData;
-        Y_VERIFY(store);
+        Y_ABORT_UNLESS(store);
         context.SS->OlapStores[pathId] = store;
 
         context.SS->PersistOlapStoreAlterRemove(db, pathId);
@@ -227,7 +227,7 @@ public:
 
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
-        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
         txState->ShardsInProgress.erase(shardIdx);
         return txState->ShardsInProgress.empty();
@@ -448,7 +448,7 @@ public:
         context.SS->IncrementPathDbRefCount(pathId);
 
         for (auto shard : txState.Shards) {
-            Y_VERIFY(shard.Operation == TTxState::CreateParts);
+            Y_ABORT_UNLESS(shard.Operation == TTxState::CreateParts);
             context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, pathId, OperationId.GetTxId(), shard.TabletType);
             switch (shard.TabletType) {
                 case ETabletType::ColumnShard: {
@@ -460,7 +460,7 @@ public:
                 }
             }
         }
-        Y_VERIFY(txState.Shards.size() == shardsToCreate);
+        Y_ABORT_UNLESS(txState.Shards.size() == shardsToCreate);
 
         dstPath.Base()->CreateTxId = OperationId.GetTxId();
         dstPath.Base()->LastTxId = OperationId.GetTxId();
@@ -527,7 +527,7 @@ ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx
 }
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TCreateOlapStore>(id, state);
 }
 

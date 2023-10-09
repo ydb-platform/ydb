@@ -664,7 +664,7 @@ private:
 
         batch->Finished = record.GetLastBatch();
         if (!batch->Finished) {
-            Y_VERIFY(record.HasNext());
+            Y_ABORT_UNLESS(record.HasNext());
             From = record.GetNext();
             FromInclusive = true;
         }

@@ -942,7 +942,7 @@ TExprBase DqBuildLMapOverMuxStageStub(TExprBase node, TExprContext& ctx, NYql::I
             .Build()
         .Done().Ptr();
     auto lmapLambda = ctx.DeepCopyLambda(lmap.Lambda().Ref());
-    Y_VERIFY(lmapLambda->Child(0)->ChildrenSize() == 1, "unexpected number of arguments in lmap lambda");
+    Y_ABORT_UNLESS(lmapLambda->Child(0)->ChildrenSize() == 1, "unexpected number of arguments in lmap lambda");
     auto newBody = ctx.ReplaceNodes(lmapLambda->Child(1), {{lmapLambda->Child(0)->Child(0), newMux}});
     auto lmapStage = Build<TDqStage>(ctx, lmap.Pos())
         .Inputs()

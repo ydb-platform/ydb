@@ -40,12 +40,12 @@ std::optional<NKikimr::NOlap::TColumnFeatures> TColumnFeatures::BuildFromProto(c
     TColumnFeatures result(columnId);
     if (columnInfo.HasCompression()) {
         auto settings = NArrow::TCompression::BuildFromProto(columnInfo.GetCompression());
-        Y_VERIFY(settings.IsSuccess());
+        Y_ABORT_UNLESS(settings.IsSuccess());
         result.Compression = *settings;
     }
     if (columnInfo.HasDictionaryEncoding()) {
         auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnInfo.GetDictionaryEncoding());
-        Y_VERIFY(settings.IsSuccess());
+        Y_ABORT_UNLESS(settings.IsSuccess());
         result.DictionaryEncoding = *settings;
     }
     return result;

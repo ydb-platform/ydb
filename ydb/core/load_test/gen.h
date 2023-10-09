@@ -20,7 +20,7 @@ namespace NKikimr {
         template<typename T>
         TGenerator(const google::protobuf::RepeatedPtrField<T>& setting) {
             for (const auto& item : setting) {
-                Y_VERIFY(item.HasWeight());
+                Y_ABORT_UNLESS(item.HasWeight());
                 AccumWeight += item.GetWeight();
                 Items.emplace(AccumWeight, item);
             }

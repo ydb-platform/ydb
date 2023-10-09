@@ -142,7 +142,7 @@ void DoWithRetry(std::function<bool(void)> action, i32 retryCount = 2) {
 void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
         const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
         const NKikimrClient::TKeyValueRequest::EPriority priority, TTestContext &tc) {
-    Y_VERIFY(keys.size() == values.size());
+    Y_ABORT_UNLESS(keys.size() == values.size());
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
@@ -186,8 +186,8 @@ void CmdWrite(const TString &key, const TString &value,
 void CmdRead(const TDeque<TString> &keys,
         const NKikimrClient::TKeyValueRequest::EPriority priority,
         const TDeque<TString> &expectedValues, const TDeque<bool> expectedNodatas, TTestContext &tc) {
-    Y_VERIFY(keys.size() == expectedValues.size());
-    Y_VERIFY(expectedNodatas.size() == 0 || expectedNodatas.size() == keys.size());
+    Y_ABORT_UNLESS(keys.size() == expectedValues.size());
+    Y_ABORT_UNLESS(expectedNodatas.size() == 0 || expectedNodatas.size() == keys.size());
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
@@ -223,7 +223,7 @@ void CmdRead(const TDeque<TString> &keys,
 
 void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, TTestContext &tc,
         bool expectOk = true) {
-    Y_VERIFY(oldKeys.size() == newKeys.size());
+    Y_ABORT_UNLESS(oldKeys.size() == newKeys.size());
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
@@ -424,7 +424,7 @@ void AddCmdReadRange(const TString &from, const bool includeFrom, const TString 
         const TDeque<TString> &expectedKeys, const TDeque<TString> &expectedValues,
         const NKikimrProto::EReplyStatus expectedStatus, TTestContext &tc, TDesiredPair<TEvKeyValue::TEvRequest> &dp) {
     Y_UNUSED(tc);
-    Y_VERIFY(!includeData || expectedKeys.size() == expectedValues.size());
+    Y_ABORT_UNLESS(!includeData || expectedKeys.size() == expectedValues.size());
 
     {
         auto cmd = dp.Request.AddCmdReadRange();
@@ -1727,7 +1727,7 @@ Y_UNIT_TEST(TestWriteReadRangeLimitThenLimitWorks) {
             }
             expectedKeys.push_back(keys[itemIdx]);
         }
-        Y_VERIFY(expectedKeys.size());
+        Y_ABORT_UNLESS(expectedKeys.size());
 
         {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
@@ -1781,7 +1781,7 @@ Y_UNIT_TEST(TestWriteReadRangeLimitThenLimitWorksNewApi) {
             }
             expectedPairs.push_back({pairs[itemIdx].Key, ""});
         }
-        Y_VERIFY(expectedPairs.size());
+        Y_ABORT_UNLESS(expectedPairs.size());
 
         ExecuteReadRange(tc, "", EBorderKind::Without,
                 expectedPairs[expectedPairs.size() - 1].Key, EBorderKind::Include,
@@ -1822,7 +1822,7 @@ Y_UNIT_TEST(TestWriteReadRangeDataLimitThenLimitWorks) {
             expectedKeys.push_back(keys[itemIdx]);
             expectedValues.push_back(values[itemIdx]);
         }
-        Y_VERIFY(expectedKeys.size());
+        Y_ABORT_UNLESS(expectedKeys.size());
 
         {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
@@ -1910,7 +1910,7 @@ Y_UNIT_TEST(TestInlineWriteReadRangeLimitThenLimitWorks) {
             expectedKeys.push_back(keys[itemIdx]);
             expectedValues.push_back(values[itemIdx]);
         }
-        Y_VERIFY(expectedKeys.size());
+        Y_ABORT_UNLESS(expectedKeys.size());
 
         {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;

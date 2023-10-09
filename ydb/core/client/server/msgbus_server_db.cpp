@@ -234,7 +234,7 @@ protected:
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
-        Y_VERIFY(request.ResultSet.size() == 1);
+        Y_ABORT_UNLESS(request.ResultSet.size() == 1);
         if (request.ResultSet.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             return ReplyWithError(MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::ResolveError, ToString(request.ResultSet.front().Status), ctx);
         }
@@ -387,7 +387,7 @@ public:
         TVector<NScheme::TTypeInfo> keyTypes;
         keyTypes.reserve(keys.size());
         for (const NTxProxy::TTableColumnInfo* key : keys) {
-            Y_VERIFY(key != nullptr);
+            Y_ABORT_UNLESS(key != nullptr);
             keyTypes.push_back(key->PType);
         }
         NJson::TJsonValue jsonWhere;
@@ -396,7 +396,7 @@ public:
             for (const NTxProxy::TTableColumnInfo* key : keys) {
                 NJson::TJsonValue jsonKey;
                 // TODO: support pg types
-                Y_VERIFY(key->PType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+                Y_ABORT_UNLESS(key->PType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
                 if (jsonWhere.GetValue(key->Name, &jsonKey)) {
                     keyColumns.emplace_back(NewDataLiteral(pgmBuilder, jsonKey, key->PType.GetTypeId()));
                 } else {
@@ -454,7 +454,7 @@ public:
                 TVector<NMiniKQL::TRuntimeNode> keyFromColumns = keyColumns;
                 for (size_t i = keyColumns.size(); i < keyTypes.size(); ++i) {
                     // TODO: support pg types
-                    Y_VERIFY(keyTypes[i].GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+                    Y_ABORT_UNLESS(keyTypes[i].GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
                     keyFromColumns.emplace_back(pgmBuilder.NewEmptyOptionalDataLiteral(keyTypes[i].GetTypeId()));
                 }
                 tableRangeOptions.ToColumns = keyColumns;
@@ -472,7 +472,7 @@ public:
                 if (itCol != columnByName.end()) {
                     auto update = pgmBuilder.GetUpdateRowBuilder();
                     // TODO: support pg types
-                    Y_VERIFY(itCol->second->PType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+                    Y_ABORT_UNLESS(itCol->second->PType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
                     update.SetColumn(itCol->second->Id, itCol->second->PType, pgmBuilder.NewOptional(NewDataLiteral(pgmBuilder, itVal->second, itCol->second->PType.GetTypeId())));
                     pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.UpdateRow(tableInfo.TableId, keyTypes, keyColumns, update));
                 } else {

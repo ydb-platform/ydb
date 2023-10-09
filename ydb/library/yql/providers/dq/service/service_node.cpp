@@ -102,7 +102,7 @@ namespace NYql {
     }
 
     NActors::TActorSystem* TServiceNode::StartActorSystem(void* appData) {
-        Y_VERIFY(!ActorSystem);
+        Y_ABORT_UNLESS(!ActorSystem);
 
         ActorSystem = MakeHolder<NActors::TActorSystem>(Setup, appData, LogSettings);
         ActorSystem->Start();

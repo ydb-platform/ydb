@@ -20,7 +20,7 @@ protected:
             for (auto&& i : GetDeclaredBlobs()) {
                 dbBlobs.AddTierBlobToDelete(GetStorageId(), i);
                 if (GCInfo->IsBlobInUsage(i)) {
-                    Y_VERIFY(GCInfo->MutableBlobsToDeleteInFuture().emplace(i).second);
+                    Y_ABORT_UNLESS(GCInfo->MutableBlobsToDeleteInFuture().emplace(i).second);
                 } else {
                     GCInfo->MutableBlobsToDelete().emplace_back(i);
                 }

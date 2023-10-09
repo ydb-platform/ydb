@@ -80,7 +80,7 @@ public:
     }
 
     TResult GetResult() override {
-        Y_VERIFY(Result.Defined());
+        Y_ABORT_UNLESS(Result.Defined());
         TResult result = std::move(*Result);
         Result = Nothing();
         return result;
@@ -107,7 +107,7 @@ public:
             return OnPreparedExplainTransformerOk();
         }
 
-        Y_VERIFY(Result.Defined());
+        Y_ABORT_UNLESS(Result.Defined());
         return NThreading::MakeFuture<bool>(true);
     }
 
@@ -145,10 +145,10 @@ private:
     NThreading::TFuture<bool> ContinueOptimization() { // true if transformation is finished
         NThreading::TFuture<IGraphTransformer::TStatus> transformResultFuture =
             AsyncTransform(*CurrentTransformer, *CurrentTransformRoot, ExprCtx, ApplyAsyncChanges);
-        Y_VERIFY(!transformResultFuture.HasException()); // AsyncTransform catches exceptions
+        Y_ABORT_UNLESS(!transformResultFuture.HasException()); // AsyncTransform catches exceptions
         if (transformResultFuture.HasValue()) {
             IGraphTransformer::TStatus status = transformResultFuture.ExtractValue();
-            Y_VERIFY(status.Level != IGraphTransformer::TStatus::Repeat);
+            Y_ABORT_UNLESS(status.Level != IGraphTransformer::TStatus::Repeat);
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return SetResult(ResultFromErrors<TResult>(ExprCtx.IssueManager.GetIssues()));
             }

@@ -20,7 +20,7 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxUpdateConfigSubscription Execute");
 
         auto &rec = Event->Get()->Record;
-        Y_VERIFY(rec.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
+        Y_ABORT_UNLESS(rec.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
 
         SubscriptionId = rec.GetSubscriptionId();
         Self->DbUpdateConfigSubscription(SubscriptionId, txc);

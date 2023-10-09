@@ -42,7 +42,7 @@ class TS3UploaderBase: public TActorBootstrapped<TDerived>
 
 protected:
     void Restart() {
-        Y_VERIFY(ProxyResolved);
+        Y_ABORT_UNLESS(ProxyResolved);
 
         MultiPart = false;
         Last = false;
@@ -70,7 +70,7 @@ protected:
     }
 
     void UploadScheme() {
-        Y_VERIFY(!SchemeUploaded);
+        Y_ABORT_UNLESS(!SchemeUploaded);
 
         if (!Scheme) {
             return Finish(false, "Cannot infer scheme");
@@ -87,7 +87,7 @@ protected:
     }
 
     void UploadMetadata() {
-        Y_VERIFY(!MetadataUploaded);
+        Y_ABORT_UNLESS(!MetadataUploaded);
 
         Buffer = std::move(Metadata);
 
@@ -334,7 +334,7 @@ protected:
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
-            Y_VERIFY(Error);
+            Y_ABORT_UNLESS(Error);
             Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
                 << error.GetMessage();
             PassAway();

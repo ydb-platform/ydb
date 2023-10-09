@@ -130,7 +130,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
     }
 
     void Modify(TPathId pathId) {
-        Y_VERIFY(Descriptions.contains(pathId));
+        Y_ABORT_UNLESS(Descriptions.contains(pathId));
 
         TDescription& description = Descriptions.at(pathId).Record;
         auto& self = *description.MutablePathDescription()->MutableSelf();
@@ -144,10 +144,10 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
     }
 
     void Delete(TPathId pathId) {
-        Y_VERIFY(Descriptions.contains(pathId));
+        Y_ABORT_UNLESS(Descriptions.contains(pathId));
 
         TDescription& description = Descriptions.at(pathId).Record;
-        Y_VERIFY(!IsDir(description));
+        Y_ABORT_UNLESS(!IsDir(description));
 
         description.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
 
@@ -198,7 +198,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
         ));
 
         TPathId pathId(Owner, NextPathId - 1);
-        Y_VERIFY(Descriptions.contains(pathId));
+        Y_ABORT_UNLESS(Descriptions.contains(pathId));
         const TString& topPath = Descriptions.at(pathId).Record.GetPath();
 
         // subscriber will help us to know when sync is completed
@@ -230,8 +230,8 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
     void Handle(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
         const auto* msg = ev->Get();
 
-        Y_VERIFY(ev->Sender == Subscriber);
-        Y_VERIFY(msg->PathId.LocalPathId == NextPathId - 1);
+        Y_ABORT_UNLESS(ev->Sender == Subscriber);
+        Y_ABORT_UNLESS(msg->PathId.LocalPathId == NextPathId - 1);
 
         Send(Subscriber, new TEvents::TEvPoisonPill());
         Subscriber = TActorId();

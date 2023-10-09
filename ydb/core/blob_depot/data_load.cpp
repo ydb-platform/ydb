@@ -72,7 +72,7 @@ namespace NKikimr::NBlobDepot {
             Loaded = true;
             return true;
         });
-        Y_VERIFY(Loaded);
+        Y_ABORT_UNLESS(Loaded);
         Self->OnDataLoadComplete();
         for (auto& [key, record] : RecordsPerChannelGroup) {
             record.CollectIfPossible(this);

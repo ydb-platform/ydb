@@ -31,7 +31,7 @@ void TPartitionKeyRange::Serialize(NKikimrPQ::TPartitionKeyRange& proto) const {
 
 void TPartitionKeyRange::ParseBound(const TString& data, TMaybe<TSerializedCellVec>& bound) {
     TSerializedCellVec cells;
-    Y_VERIFY(TSerializedCellVec::TryParse(data, cells));
+    Y_ABORT_UNLESS(TSerializedCellVec::TryParse(data, cells));
     bound.ConstructInPlace(std::move(cells));
 }
 

@@ -143,7 +143,7 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
 {
     switch (inputDesc.GetTypeCase()) {
         case NYql::NDqProto::TTaskInput::kSource:
-            Y_VERIFY(inputs.size() == 1);
+            Y_ABORT_UNLESS(inputs.size() == 1);
             [[fallthrough]];
         case NYql::NDqProto::TTaskInput::kUnionAll:
             return CreateInputUnionValue(std::move(inputs), holderFactory, stats);
@@ -171,7 +171,7 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
     auto guard = typeEnv.BindAllocator();
     switch (outputDesc.GetTypeCase()) {
         case NDqProto::TTaskOutput::kSink:
-            Y_VERIFY(outputDesc.ChannelsSize() == 0);
+            Y_ABORT_UNLESS(outputDesc.ChannelsSize() == 0);
             [[fallthrough]];
         case NDqProto::TTaskOutput::kMap: {
             YQL_ENSURE(outputs.size() == 1);
@@ -269,7 +269,7 @@ public:
     }
 
     ui64 GetTaskId() const override {
-        Y_VERIFY(TaskId, "Not prepared yet");
+        Y_ABORT_UNLESS(TaskId, "Not prepared yet");
         return TaskId;
     }
 
@@ -515,8 +515,8 @@ public:
             if (inputDesc.HasTransform()) {
                 const auto& transformDesc = inputDesc.GetTransform();
                 transform = &AllocatedHolder->InputTransforms[i];
-                Y_VERIFY(!transform->TransformInput);
-                Y_VERIFY(!transform->TransformOutput);
+                Y_ABORT_UNLESS(!transform->TransformInput);
+                Y_ABORT_UNLESS(!transform->TransformOutput);
 
                 auto inputTypeNode = NMiniKQL::DeserializeNode(TStringBuf{transformDesc.GetInputType()}, typeEnv);
                 YQL_ENSURE(inputTypeNode, "Failed to deserialize transform input type");
@@ -549,7 +549,7 @@ public:
                 auto source = CreateDqAsyncInputBuffer(i, *inputType,
                     memoryLimits.ChannelBufferSize, Settings.CollectProfileStats);
                 auto [_, inserted] = AllocatedHolder->Sources.emplace(i, source);
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
                 inputs.emplace_back(source);
             } else {
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
@@ -592,8 +592,8 @@ public:
             if (outputDesc.HasTransform()) {
                 const auto& transformDesc = outputDesc.GetTransform();
                 transform = &AllocatedHolder->OutputTransforms[i];
-                Y_VERIFY(!transform->TransformInput);
-                Y_VERIFY(!transform->TransformOutput);
+                Y_ABORT_UNLESS(!transform->TransformInput);
+                Y_ABORT_UNLESS(!transform->TransformOutput);
 
                 auto outputTypeNode = NMiniKQL::DeserializeNode(TStringBuf{transformDesc.GetOutputType()}, typeEnv);
                 YQL_ENSURE(outputTypeNode, "Failed to deserialize transform output type");
@@ -617,7 +617,7 @@ public:
                 auto sink = CreateDqAsyncOutputBuffer(i, *taskOutputType, memoryLimits.ChannelBufferSize,
                     Settings.CollectProfileStats);
                 auto [_, inserted] = AllocatedHolder->Sinks.emplace(i, sink);
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
                 outputs.emplace_back(sink);
             } else {
                 for (auto& outputChannelDesc : outputDesc.GetChannels()) {
@@ -846,7 +846,7 @@ public:
     }
 
     void Load(TStringBuf in) override {
-        Y_VERIFY(!AllocatedHolder->ResultStream);
+        Y_ABORT_UNLESS(!AllocatedHolder->ResultStream);
         AllocatedHolder->ProgramParsed.CompGraph->LoadGraphState(in);
     }
 

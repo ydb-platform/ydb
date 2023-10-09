@@ -432,7 +432,7 @@ public:
     [[nodiscard]]
     bool ExtractPgConstsForAutoParam(List* rawValuesLists, TVector<TPgConst>& pgConsts) {
         YQL_LOG_CTX_SCOPE(TStringBuf("PgSql Autoparametrize"), __FUNCTION__);
-        Y_VERIFY(rawValuesLists);
+        Y_ABORT_UNLESS(rawValuesLists);
         size_t rows = ListLength(rawValuesLists);
 
         if (rows == 0 || !Settings.AutoParametrizeEnabled) {
@@ -462,7 +462,7 @@ public:
     }
     
     TMaybe<TVector<TPgConst::Type>> InferColumnTypesForValuesStmt(const TVector<TPgConst>& values, size_t cols) {
-        Y_VERIFY((values.size() % cols == 0), "wrong amount of columns for auto param values vector");
+        Y_ABORT_UNLESS((values.size() % cols == 0), "wrong amount of columns for auto param values vector");
         TVector<TMaybe<TPgConst::Type>> maybeColumnTypes(cols);
 
         for (size_t i = 0; i < values.size(); ++i) {
@@ -2811,7 +2811,7 @@ public:
         if (valueNType.value) {
             value->set_text_value(std::move(valueNType.value.GetRef()));
         } else {
-            Y_VERIFY(valueNType.type == TPgConst::Type::unknown, "NULL is allowed to only be of unknown type");
+            Y_ABORT_UNLESS(valueNType.type == TPgConst::Type::unknown, "NULL is allowed to only be of unknown type");
             value->set_null_flag_value(NProtoBuf::NULL_VALUE);
         }
 
@@ -4014,7 +4014,7 @@ public:
 
     template <typename... TNodes>
     TAstNode* E(TAstNode* list, TNodes... nodes)  {
-        Y_VERIFY(list->IsList());
+        Y_ABORT_UNLESS(list->IsList());
         TVector<TAstNode*> nodes_vec;
         nodes_vec.reserve(list->GetChildrenCount() + sizeof...(nodes));
 

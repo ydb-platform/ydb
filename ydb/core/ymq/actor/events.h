@@ -251,7 +251,7 @@ struct TSqsEvents {
             , Shard(shard)
             , QueryIdx(idx)
         {
-            Y_VERIFY(QueryIdx < EQueryId::QUERY_VECTOR_SIZE);
+            Y_ABORT_UNLESS(QueryIdx < EQueryId::QUERY_VECTOR_SIZE);
         }
     };
 

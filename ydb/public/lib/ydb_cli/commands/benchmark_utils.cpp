@@ -26,7 +26,7 @@ TTestInfo::TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDurati
         return;
     }
 
-    Y_VERIFY(ClientTimings.size() == ServerTimings.size());
+    Y_ABORT_UNLESS(ClientTimings.size() == ServerTimings.size());
 
     ColdTime = ServerTimings[0];
 

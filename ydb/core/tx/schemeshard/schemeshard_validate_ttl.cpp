@@ -15,7 +15,7 @@ namespace {
 
     inline
     ui32 GetType(const TOlapSchema::TColumn& col) {
-        Y_VERIFY(col.GetType().GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+        Y_ABORT_UNLESS(col.GetType().GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
         return col.GetType().GetTypeId();
     }
 
@@ -26,7 +26,7 @@ namespace {
 
     inline
     ui32 GetType(const TTableInfo::TColumn& col) {
-        Y_VERIFY(col.PType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
+        Y_ABORT_UNLESS(col.PType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
         return col.PType.GetTypeId();
     }
 }
@@ -83,7 +83,7 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
         } else if (sourceColumns.contains(colId)) {
             column = &sourceColumns.at(colId);
         } else {
-            Y_VERIFY("Unknown column");
+            Y_ABORT_UNLESS("Unknown column");
         }
 
         if (IsDropped(*column)) {
@@ -138,7 +138,7 @@ static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::
     } else if (sourceColumns.contains(colId)) {
         column = &sourceColumns.at(colId);
     } else {
-        Y_VERIFY("Unknown column");
+        Y_ABORT_UNLESS("Unknown column");
     }
 
     if (IsDropped(*column)) {

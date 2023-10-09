@@ -189,7 +189,7 @@ namespace NKikimr::NStorage {
             auto& nodeInfo = Ctx.NodeInfo[nodeId];
             for (ui32 groupId : nodeInfo.StartedGroupIds) {
                 const size_t num = Ctx.StartedGroupIdToNodes.erase(std::make_pair(groupId, nodeId));
-                Y_VERIFY(num);
+                Y_ABORT_UNLESS(num);
             }
             nodeInfo.StartedGroupIds.clear();
 
@@ -199,7 +199,7 @@ namespace NKikimr::NStorage {
             bool trustworthy = false;
             for (ui32 groupId : nodeInfo.StartedGroupIds) {
                 const bool inserted = Ctx.StartedGroupIdToNodes.emplace(groupId, nodeId).second;
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
                 trustworthy |= groupId == GroupId; // the group we are looking for
             }
 

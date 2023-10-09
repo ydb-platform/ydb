@@ -63,7 +63,7 @@ namespace {
         TModel()
             : Tool(*Mass.Model->Scheme)
         {
-            Y_VERIFY(NTest::IndexTools::CountMainPages(*Eggs.Lone()) > 120);
+            Y_ABORT_UNLESS(NTest::IndexTools::CountMainPages(*Eggs.Lone()) > 120);
         }
 
         static NTest::TPartEggs MakeEggs() noexcept

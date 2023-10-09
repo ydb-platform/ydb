@@ -186,7 +186,7 @@ namespace NTest {
 
                 auto got = PageLoadingLogic->Handle(this, page, lower);
 
-                Y_VERIFY((Grow = got.Grow) || Fetch || got.Page);
+                Y_ABORT_UNLESS((Grow = got.Grow) || Fetch || got.Page);
 
                 return { got.Need, got.Page };
             }
@@ -253,7 +253,7 @@ namespace NTest {
         {
             auto* partStore = CheckedCast<const TPartStore*>(part);
 
-            Y_VERIFY(groupId.Index < partStore->Store->GetGroupCount());
+            Y_ABORT_UNLESS(groupId.Index < partStore->Store->GetGroupCount());
 
             if (part->GetPageType(pageId, groupId) == EPage::Index) {
                 return partStore->Store->GetPage(groupId.Index, pageId);
@@ -291,7 +291,7 @@ namespace NTest {
                 }
             }
 
-            Y_VERIFY(room < slots.size());
+            Y_ABORT_UNLESS(room < slots.size());
 
             return Queues.at(slots[room]);
         }
@@ -310,7 +310,7 @@ namespace NTest {
         NFwd::IPageLoadingLogic* MakeExtern(const TPartStore *part) const noexcept
         {
             if (auto &large = part->Large) {
-                Y_VERIFY(part->Blobs, "Part has frames but not blobs");
+                Y_ABORT_UNLESS(part->Blobs, "Part has frames but not blobs");
 
                 TVector<ui32> edges(large->Stats().Tags.size(), Edge);
 

@@ -116,15 +116,15 @@ public:
     }
 
     void Attach() {
-        Y_VERIFY(!Prev);
+        Y_ABORT_UNLESS(!Prev);
         Prev = TlsAllocState->CurrentPAllocList;
-        Y_VERIFY(Prev);
+        Y_ABORT_UNLESS(Prev);
         TlsAllocState->CurrentPAllocList = &PAllocList;
     }
 
     void Detach() {
         if (Prev) {
-           Y_VERIFY(TlsAllocState->CurrentPAllocList == &PAllocList);
+           Y_ABORT_UNLESS(TlsAllocState->CurrentPAllocList == &PAllocList);
            TlsAllocState->CurrentPAllocList = Prev;
            Prev = nullptr;
         }

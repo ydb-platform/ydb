@@ -28,15 +28,15 @@ void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
     THelpers::TGenerationStep inflightGenStep(Max<ui32>(), Max<ui32>());
     if (InFlightForStep) {
         const auto& [step, _] = *InFlightForStep.begin();
-        Y_VERIFY(step);
+        Y_ABORT_UNLESS(step);
         inflightGenStep = THelpers::TGenerationStep(ExecutorGeneration, step - 1);
     }
     const auto storedGenStep = THelpers::TGenerationStep(StoredState.GetCollectGeneration(), StoredState.GetCollectStep());
     const auto requiredGenStep = Max(storedGenStep, THelpers::GenerationStep(maxTrashId));
     const auto collectGenStep = Min(inflightGenStep, requiredGenStep);
-    Y_VERIFY(THelpers::TGenerationStep(ExecutorGeneration, 0) <= collectGenStep ||
+    Y_ABORT_UNLESS(THelpers::TGenerationStep(ExecutorGeneration, 0) <= collectGenStep ||
         collectGenStep == THelpers::TGenerationStep(ExecutorGeneration - 1, Max<ui32>()));
-    Y_VERIFY(storedGenStep <= collectGenStep);
+    Y_ABORT_UNLESS(storedGenStep <= collectGenStep);
 
     // check if it is useful to start any collection
     if (collectGenStep < THelpers::GenerationStep(minTrashId)) {
@@ -61,7 +61,7 @@ bool TKeyValueState::RemoveCollectedTrash(ISimpleDb &db, const TActorContext &ct
             const TLogoBlobID& id = trash.back();
             THelpers::DbEraseTrash(id, db, ctx);
             ui32 num = Trash.erase(id);
-            Y_VERIFY(num == 1);
+            Y_ABORT_UNLESS(num == 1);
             TotalTrashSize -= id.BlobSize();
             CountTrashDeleted(id);
             ++collected;
@@ -104,7 +104,7 @@ void TKeyValueState::CompleteGCComplete(const TActorContext &ctx, const TTabletS
         RepeatGCTX = false;
         return;
     }
-    Y_VERIFY(CollectOperation);
+    Y_ABORT_UNLESS(CollectOperation);
     CollectOperation.Reset();
     IsCollectEventSent = false;
     STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC22, "CompleteGC Complete",
@@ -117,17 +117,17 @@ void TKeyValueState::CompleteGCComplete(const TActorContext &ctx, const TTabletS
 void TKeyValueState::StartGC(const TActorContext &ctx, TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep,
         TVector<TLogoBlobID>& trashGoingToCollect) {
     // ensure we haven't filled these fields yet
-    Y_VERIFY(CollectOperation);
-    Y_VERIFY(!CollectOperation->Keep);
-    Y_VERIFY(!CollectOperation->DoNotKeep);
-    Y_VERIFY(!CollectOperation->TrashGoingToCollect);
+    Y_ABORT_UNLESS(CollectOperation);
+    Y_ABORT_UNLESS(!CollectOperation->Keep);
+    Y_ABORT_UNLESS(!CollectOperation->DoNotKeep);
+    Y_ABORT_UNLESS(!CollectOperation->TrashGoingToCollect);
     // fill in correct values
     CollectOperation->Keep = std::move(keep);
     CollectOperation->DoNotKeep = std::move(doNotKeep);
     CollectOperation->TrashGoingToCollect = std::move(trashGoingToCollect);
     // issue command to collector
     ctx.Send(KeyValueActorId, new TEvKeyValue::TEvCollect());
-    Y_VERIFY(!IsCollectEventSent);
+    Y_ABORT_UNLESS(!IsCollectEventSent);
     IsCollectEventSent = true;
 }
 
@@ -136,7 +136,7 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
             << " IsCollectEventSent# " << IsCollectEventSent << " Marker# KV64");
 
     // there is nothing to collect yet, or the event was already sent
-    Y_VERIFY(CollectOperation && !IsCollectEventSent);
+    Y_ABORT_UNLESS(CollectOperation && !IsCollectEventSent);
 
     // create generation:step barrier tuple for proposed garbage collection command
     const auto &header = CollectOperation->Header;
@@ -145,14 +145,14 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
     // if we have some in flight writes, check if they do not overlap with the new barrier
     if (InFlightForStep) {
         const auto& [step, _] = *InFlightForStep.begin();
-        Y_VERIFY(collectGenStep < THelpers::TGenerationStep(ExecutorGeneration, step));
+        Y_ABORT_UNLESS(collectGenStep < THelpers::TGenerationStep(ExecutorGeneration, step));
     }
 
     // create stored (previously issued) generation:step barrier as a tuple
     auto storedGenStep = THelpers::TGenerationStep(StoredState.GetCollectGeneration(), StoredState.GetCollectStep());
 
     // ensure that barrier advances in correct direction
-    Y_VERIFY(collectGenStep >= storedGenStep);
+    Y_ABORT_UNLESS(collectGenStep >= storedGenStep);
 
     // create list of blobs that must have Keep flag
     TVector<TLogoBlobID> keep;
@@ -179,13 +179,13 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
         if (genStep <= storedGenStep) {
             doNotKeep.push_back(id);
         }
-        Y_VERIFY(genStep <= collectGenStep);
+        Y_ABORT_UNLESS(genStep <= collectGenStep);
         trashGoingToCollect.push_back(id);
     }
     doNotKeep.shrink_to_fit();
     trashGoingToCollect.shrink_to_fit();
 
-    Y_VERIFY(trashGoingToCollect);
+    Y_ABORT_UNLESS(trashGoingToCollect);
 
     LOG_TRACE_S(ctx, NKikimrServices::KEYVALUE, "StartCollectingIfPossible KeyValue# " << TabletId
             << "Flags Keep.Size# " << keep.size() << " DoNotKeep.Size# " << doNotKeep.size() << " Marker# KV65");
@@ -194,7 +194,7 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
 }
 
 bool TKeyValueState::OnEvCollect(const TActorContext &ctx) {
-    Y_VERIFY(CollectOperation.Get());
+    Y_ABORT_UNLESS(CollectOperation.Get());
     LastCollectStartedAt = ctx.Now();
     return !CollectOperation->AdvanceBarrier || PerGenerationCounter != Max<ui32>();
 }
@@ -206,7 +206,7 @@ void TKeyValueState::OnEvCollectDone(const TActorContext& /*ctx*/) {
 void TKeyValueState::OnEvCompleteGC(bool repeat) {
     if (!repeat) {
         CountLatencyBsCollect();
-        Y_VERIFY(CollectOperation);
+        Y_ABORT_UNLESS(CollectOperation);
         for (const auto& id : CollectOperation->TrashGoingToCollect) {
             CountTrashCollected(id);
         }

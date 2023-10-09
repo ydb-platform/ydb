@@ -58,7 +58,7 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
     /// So '1:foo' would be omitted in blob records for the column in new snapshots. And '2:foo' - in old ones.
     /// It's not possible for blobs with several columns. There should be a special logic for them.
     {
-        Y_VERIFY(!ResultColumnsIds.empty(), "Empty column list");
+        Y_ABORT_UNLESS(!ResultColumnsIds.empty(), "Empty column list");
         THashSet<TString> requiredColumns = indexInfo.GetRequiredColumns();
 
         // Snapshot columns
@@ -134,7 +134,7 @@ std::set<ui32> TReadMetadata::GetPKColumnIds() const {
     std::set<ui32> result;
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
     for (auto&& i : indexInfo.GetPrimaryKey()) {
-        Y_VERIFY(result.emplace(indexInfo.GetColumnId(i.first)).second);
+        Y_ABORT_UNLESS(result.emplace(indexInfo.GetColumnId(i.first)).second);
     }
     return result;
 }

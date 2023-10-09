@@ -26,7 +26,7 @@ class TTenantResolver: public TActorBootstrapped<TTenantResolver> {
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto* response = ev->Get()->Request.Get();
 
-        Y_VERIFY(response->ResultSet.size() == 1);
+        Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
         LOG_T("Handle " << ev->Get()->ToString()

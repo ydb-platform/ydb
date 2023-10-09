@@ -121,7 +121,7 @@ private:
 
     void DoAction() override {
         Become(&TThis::StateFunc);
-        Y_VERIFY(QueueAttributes_.Defined());
+        Y_ABORT_UNLESS(QueueAttributes_.Defined());
 
         InitParams();
 

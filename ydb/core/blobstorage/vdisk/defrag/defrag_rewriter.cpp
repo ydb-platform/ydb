@@ -128,18 +128,18 @@ namespace NKikimr {
 
             const auto &gtype = DCtx->VCtx->Top->GType;
             ui8 partId = rec.LogoBlobId.PartId();
-            Y_VERIFY(partId);
+            Y_ABORT_UNLESS(partId);
 
             TRcBuf data = msg->Data.ToString();
-            Y_VERIFY(data.size() == TDiskBlob::HeaderSize + gtype.PartSize(rec.LogoBlobId));
+            Y_ABORT_UNLESS(data.size() == TDiskBlob::HeaderSize + gtype.PartSize(rec.LogoBlobId));
             const char *header = data.data();
 
             ui32 fullDataSize;
             memcpy(&fullDataSize, header, sizeof(fullDataSize));
             header += sizeof(fullDataSize);
-            Y_VERIFY(fullDataSize == rec.LogoBlobId.BlobSize());
+            Y_ABORT_UNLESS(fullDataSize == rec.LogoBlobId.BlobSize());
 
-            Y_VERIFY(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw() == static_cast<ui8>(*header));
+            Y_ABORT_UNLESS(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw() == static_cast<ui8>(*header));
 
             TRope rope(std::move(data));
             rope.EraseFront(TDiskBlob::HeaderSize);

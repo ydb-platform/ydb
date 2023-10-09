@@ -48,7 +48,7 @@ struct TKesusTablet::TTxSessionDetach : public TTxBase {
             return true;
         }
 
-        Y_VERIFY(Self->ScheduleSessionTimeout(session, ctx));
+        Y_ABORT_UNLESS(Self->ScheduleSessionTimeout(session, ctx));
         Reply.Reset(new TEvKesus::TEvDetachSessionResult(Record.GetProxyGeneration()));
         return true;
     }
@@ -59,7 +59,7 @@ struct TKesusTablet::TTxSessionDetach : public TTxBase {
                 << ", cookie=" << Cookie << ")");
         Self->RemoveSessionTx(Record.GetSessionId());
 
-        Y_VERIFY(Reply);
+        Y_ABORT_UNLESS(Reply);
 
         ctx.Send(Sender, Reply.Release(), 0, Cookie);
     }
@@ -99,7 +99,7 @@ void TKesusTablet::Handle(TEvKesus::TEvDetachSession::TPtr& ev) {
             "[" << TabletID() << "] Fast-path detach session=" << sessionId
                 << " from sender=" << ev->Sender << ", cookie=" << ev->Cookie);
 
-        Y_VERIFY(ScheduleSessionTimeout(session, TActivationContext::AsActorContext()));
+        Y_ABORT_UNLESS(ScheduleSessionTimeout(session, TActivationContext::AsActorContext()));
         Send(ev->Sender,
             new TEvKesus::TEvDetachSessionResult(record.GetProxyGeneration()),
             0, ev->Cookie);

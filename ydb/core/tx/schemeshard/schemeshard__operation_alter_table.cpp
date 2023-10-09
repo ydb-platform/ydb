@@ -261,8 +261,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterTable);
 
         txState->ClearShardsInProgress();
 
@@ -326,8 +326,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterTable);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -381,8 +381,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterTable);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -514,7 +514,7 @@ public:
             return result;
         }
 
-        Y_VERIFY(context.SS->Tables.contains(path.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
 
         if (table->AlterVersion == 0) {
@@ -523,7 +523,7 @@ public:
         }
         if (table->AlterData) {
             auto lastOpId = TOperationId(path.Base()->LastTxId, 0);
-            Y_VERIFY(context.SS->TxInFlight.contains(lastOpId), "AlterData without Alter tx");
+            Y_ABORT_UNLESS(context.SS->TxInFlight.contains(lastOpId), "AlterData without Alter tx");
             result->SetError(NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight");
             return result;
         }
@@ -531,7 +531,7 @@ public:
         bool isReplicated = false;
         if (path.Base()->GetAliveChildren()) {
             for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
-                Y_VERIFY(context.SS->PathsById.contains(childPathId));
+                Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
                 auto childPath = context.SS->PathsById.at(childPathId);
 
                 if (!childPath->IsCdcStream() || childPath->Dropped()) {
@@ -551,7 +551,7 @@ public:
             return result;
         }
 
-        Y_VERIFY(alterData->AlterVersion == table->AlterVersion + 1);
+        Y_ABORT_UNLESS(alterData->AlterVersion == table->AlterVersion + 1);
 
         if (!CheckDroppingColumns(context.SS, alter, path, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
@@ -611,7 +611,7 @@ ISubOperation::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx) 
 }
 
 ISubOperation::TPtr CreateAlterTable(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TAlterTable>(id, state);
 }
 
@@ -622,14 +622,14 @@ ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTx
 }
 
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     auto obj = MakeHolder<TAlterTable>(id, state);
     obj->SetAllowShadowDataForBuildIndex();
     return obj.Release();
 }
 
 TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
-    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
 
     auto alter = tx.GetAlterTable();
 

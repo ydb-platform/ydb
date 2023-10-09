@@ -161,12 +161,12 @@ namespace NKikimr {
 
     bool ErasureSplit(TErasureType::ECrcMode crcMode, TErasureType erasure, const TRope& whole, std::span<TRope> parts,
             TErasureSplitContext *context) {
-        Y_VERIFY(parts.size() == erasure.TotalPartCount());
+        Y_ABORT_UNLESS(parts.size() == erasure.TotalPartCount());
 
         if (erasure.GetErasure() == TErasureType::Erasure4Plus2Block && crcMode == TErasureType::CrcModeNone) {
             ErasureSplitBlock42Prepare(whole, parts);
             if (context) {
-                Y_VERIFY(context->MaxSizeAtOnce % 32 == 0);
+                Y_ABORT_UNLESS(context->MaxSizeAtOnce % 32 == 0);
                 context->Offset += ErasureSplitBlock42(parts, context->Offset, context->MaxSizeAtOnce);
                 return context->Offset == parts[0].size();
             } else {
@@ -179,7 +179,7 @@ namespace NKikimr {
         TRope copy(whole);
         copy.Compact();
         erasure.SplitData(crcMode, copy, p);
-        Y_VERIFY(p.Parts.size() == parts.size());
+        Y_ABORT_UNLESS(p.Parts.size() == parts.size());
         for (ui32 i = 0; i < parts.size(); ++i) {
             parts[i] = std::move(p.Parts[i].OwnedString);
         }

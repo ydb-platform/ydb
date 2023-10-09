@@ -239,11 +239,11 @@ public:
 
         ++TopicsAnswered;
         auto it = TopicInfo.find(name);
-        Y_VERIFY(it != TopicInfo.end(), "topic '%s'", name.c_str());
+        Y_ABORT_UNLESS(it != TopicInfo.end(), "topic '%s'", name.c_str());
         it->second.Config = pqDescr.GetPQTabletConfig();
         it->second.Config.SetVersion(pqDescr.GetAlterVersion());
         it->second.NumParts = pqDescr.PartitionsSize();
-        Y_VERIFY(it->second.BalancerTabletId);
+        Y_ABORT_UNLESS(it->second.BalancerTabletId);
 
         for (ui32 i = 0; i < pqDescr.PartitionsSize(); ++i) {
             ui32 part = pqDescr.GetPartitions(i).GetPartitionId();
@@ -252,7 +252,7 @@ public:
                 continue;
             }
             bool res = it->second.PartitionToTablet.insert({part, tabletId}).second;
-            Y_VERIFY(res);
+            Y_ABORT_UNLESS(res);
             if (TabletInfo.find(tabletId) == TabletInfo.end()) {
                 auto& tabletInfo = TabletInfo[tabletId];
                 tabletInfo.Topic = name;
@@ -283,7 +283,7 @@ public:
             auto reason = TStringBuilder() << "no one of requested partitions in topic " << name << ", Marker# PQ12";
             return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::BAD_REQUEST, reason), ctx);
         }
-        Y_VERIFY(!TabletInfo.empty()); // if TabletInfo is empty - topic is empty
+        Y_ABORT_UNLESS(!TabletInfo.empty()); // if TabletInfo is empty - topic is empty
     }
 
     bool HandlePipeError(const ui64 tabletId, const TActorContext& ctx)
@@ -354,7 +354,7 @@ public:
             CreateOkResponse();
             return SendReplyAndDie(std::move(Response), ctx);
         }
-        Y_VERIFY(FetchRequestReadsDone < Settings.Partitions.size());
+        Y_ABORT_UNLESS(FetchRequestReadsDone < Settings.Partitions.size());
         const auto& req = Settings.Partitions[FetchRequestReadsDone];
         const auto& topic = req.Topic;
         const auto& offset = req.Offset;
@@ -362,16 +362,16 @@ public:
         const auto& maxBytes = req.MaxBytes;
         const auto& readTimestampMs = req.ReadTimestampMs;
         auto it = TopicInfo.find(CanonizePath(topic));
-        Y_VERIFY(it != TopicInfo.end());
+        Y_ABORT_UNLESS(it != TopicInfo.end());
         if (it->second.PartitionToTablet.find(part) == it->second.PartitionToTablet.end()) {
             return;
         }
         ui64 tabletId = it->second.PartitionToTablet[part];
-        Y_VERIFY(tabletId);
+        Y_ABORT_UNLESS(tabletId);
         FetchRequestCurrentReadTablet = tabletId;
         ++CurrentCookie;
         auto jt = TabletInfo.find(tabletId);
-        Y_VERIFY(jt != TabletInfo.end());
+        Y_ABORT_UNLESS(jt != TabletInfo.end());
         if (jt->second.BrokenPipe || FetchRequestBytesLeft == 0) { //answer right now
             ctx.Send(ctx.SelfID, FormEmptyCurrentRead(CurrentCookie).Release());
             return;
@@ -399,7 +399,7 @@ public:
 
     void ProcessFetchRequestResult(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
-        Y_VERIFY(record.HasPartitionResponse());
+        Y_ABORT_UNLESS(record.HasPartitionResponse());
         if (record.GetPartitionResponse().GetCookie() != CurrentCookie || FetchRequestCurrentReadTablet == 0) {
             LOG_ERROR_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "proxy fetch error: got response from tablet " << record.GetPartitionResponse().GetCookie()
                                 << " while waiting from " << CurrentCookie << " and requested tablet is " << FetchRequestCurrentReadTablet);
@@ -416,7 +416,7 @@ public:
         }
 
         auto res = Response->Response.AddPartResult();
-        Y_VERIFY(FetchRequestReadsDone < Settings.Partitions.size());
+        Y_ABORT_UNLESS(FetchRequestReadsDone < Settings.Partitions.size());
         const auto& req = Settings.Partitions[FetchRequestReadsDone];
         const auto& topic = req.Topic;
         const auto& part = req.Partition;

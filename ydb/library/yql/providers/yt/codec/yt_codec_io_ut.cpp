@@ -59,7 +59,7 @@ public:
 
 protected:
     void Prepare(size_t fromRowIndex = 0) {
-        Y_VERIFY(fromRowIndex < Records.size());
+        Y_ABORT_UNLESS(fromRowIndex < Records.size());
         AtStart = true;
         Data.Buffer().Clear();
         Data.Rewind();

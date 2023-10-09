@@ -53,8 +53,8 @@ class TMaintenanceRPC: public TRpcRequestActor<TMaintenanceRPC<TEvRequest, TEvCm
             }
         }
 
-        Y_VERIFY(AppData()->DomainsInfo);
-        Y_VERIFY(AppData()->DomainsInfo->Domains);
+        Y_ABORT_UNLESS(AppData()->DomainsInfo);
+        Y_ABORT_UNLESS(AppData()->DomainsInfo->Domains);
         const auto group = AppData()->DomainsInfo->Domains.begin()->second->DefaultStateStorageGroup;
 
         NTabletPipe::TClientConfig pipeConfig;

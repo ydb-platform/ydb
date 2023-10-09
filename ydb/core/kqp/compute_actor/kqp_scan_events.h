@@ -49,12 +49,12 @@ struct TEvScanExchange {
                 case NKikimrTxDataShard::EScanDataFormat::CELLVEC:
                 case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
                     Rows = std::move(msg.Rows);
-                    Y_VERIFY(Rows.size());
+                    Y_ABORT_UNLESS(Rows.size());
                     break;
                 case NKikimrTxDataShard::EScanDataFormat::ARROW:
                     ArrowBatch = msg.ArrowBatch;
-                    Y_VERIFY(ArrowBatch);
-                    Y_VERIFY(ArrowBatch->num_rows());
+                    Y_ABORT_UNLESS(ArrowBatch);
+                    Y_ABORT_UNLESS(ArrowBatch->num_rows());
                     break;
             }
 
@@ -63,13 +63,13 @@ struct TEvScanExchange {
         TEvSendData(std::shared_ptr<arrow::RecordBatch> arrowBatch, const ui64 tabletId)
             : ArrowBatch(arrowBatch)
             , TabletId(tabletId) {
-            Y_VERIFY(ArrowBatch->num_rows());
+            Y_ABORT_UNLESS(ArrowBatch->num_rows());
         }
 
         TEvSendData(TVector<TOwnedCellVec>&& rows, const ui64 tabletId)
             : Rows(std::move(rows))
             , TabletId(tabletId) {
-            Y_VERIFY(Rows.size());
+            Y_ABORT_UNLESS(Rows.size());
         }
     };
 

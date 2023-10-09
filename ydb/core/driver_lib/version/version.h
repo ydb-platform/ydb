@@ -79,7 +79,7 @@ public:
 
             NKikimrConfig::TCurrentCompatibilityInfo ToPB() {
                 NKikimrConfig::TCurrentCompatibilityInfo res;
-                Y_VERIFY(Application);
+                Y_ABORT_UNLESS(Application);
                 res.SetApplication(Application->data());
                 if (Version) {
                     res.MutableVersion()->CopyFrom(Version->ToPB());
@@ -106,7 +106,7 @@ public:
 
             NKikimrConfig::TStoredCompatibilityInfo ToPB() {
                 NKikimrConfig::TStoredCompatibilityInfo res;
-                Y_VERIFY(Application);
+                Y_ABORT_UNLESS(Application);
 
                 res.SetApplication(Application->data());
                 if (Version) {

@@ -107,7 +107,7 @@ public:
     void Undo() {
         TVector<TString> tokens;
         size_t numTokens = Split(DedupId, ":", tokens);
-        Y_VERIFY(numTokens == 2);
+        Y_ABORT_UNLESS(numTokens == 2);
 
         PlanStep = FromString<ui64>(tokens[0]);
         WriteTxId = FromString<ui64>(tokens[1]);
@@ -131,12 +131,12 @@ private:
     YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, Last);
 public:
     const NArrow::TReplaceKey& GetFirstVerified() const {
-        Y_VERIFY(First);
+        Y_ABORT_UNLESS(First);
         return *First;
     }
 
     const NArrow::TReplaceKey& GetLastVerified() const {
-        Y_VERIFY(Last);
+        Y_ABORT_UNLESS(Last);
         return *Last;
     }
 

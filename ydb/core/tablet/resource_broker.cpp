@@ -119,7 +119,7 @@ TDurationStat::TDurationStat(TDuration def,
                              size_t history)
     : Current(0)
 {
-    Y_VERIFY(history > 0);
+    Y_ABORT_UNLESS(history > 0);
     Values.resize(history, def);
     Total = def * history;
 }
@@ -178,7 +178,7 @@ bool TTaskQueue::Empty() const
 
 void TTaskQueue::InsertTask(TTaskPtr task, TInstant now)
 {
-    Y_VERIFY(!task->Queue, "TTaskQueue::InsertTask: task is already in resource queue");
+    Y_ABORT_UNLESS(!task->Queue, "TTaskQueue::InsertTask: task is already in resource queue");
 
     if (task->InFly) {
         // Update resource consumption.
@@ -204,8 +204,8 @@ void TTaskQueue::InsertTask(TTaskPtr task, TInstant now)
 
 void TTaskQueue::EraseTask(TTaskPtr task, bool finished, TInstant now)
 {
-    Y_VERIFY(task->Queue.Get() == this);
-    Y_VERIFY(task->InFly || !finished);
+    Y_ABORT_UNLESS(task->Queue.Get() == this);
+    Y_ABORT_UNLESS(task->InFly || !finished);
 
     if (task->InFly) {
         // Update resources consumption.
@@ -241,13 +241,13 @@ void TTaskQueue::EraseTask(TTaskPtr task, bool finished, TInstant now)
 
 TTaskPtr TTaskQueue::FrontTask()
 {
-    Y_VERIFY(!Tasks.empty());
+    Y_ABORT_UNLESS(!Tasks.empty());
     return *Tasks.begin();
 }
 
 void TTaskQueue::PopTask()
 {
-    Y_VERIFY(!Tasks.empty());
+    Y_ABORT_UNLESS(!Tasks.empty());
     EraseTask(*Tasks.begin(), false, TInstant());
 }
 
@@ -746,7 +746,7 @@ void TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSyst
                                              ResourceLimit, TotalCounters);
         Queues.emplace(queue->Name, queue);
     }
-    Y_VERIFY(Queues.contains(NLocalDb::DefaultQueueName), "default queue '%s' wasn't found in config", NLocalDb::DefaultQueueName.data());
+    Y_ABORT_UNLESS(Queues.contains(NLocalDb::DefaultQueueName), "default queue '%s' wasn't found in config", NLocalDb::DefaultQueueName.data());
 
     // Read new tasks config.
     TaskConfigs.clear();
@@ -755,12 +755,12 @@ void TScheduler::Configure(const TResourceBrokerConfig &config, const TActorSyst
         TTaskConfig taskConfig(task.GetName(),
                                TDuration::MicroSeconds(task.GetDefaultDuration()),
                                counters);
-        Y_VERIFY(Queues.contains(task.GetQueueName()), " queue '%s' wasn't found in config", task.GetQueueName().data());
+        Y_ABORT_UNLESS(Queues.contains(task.GetQueueName()), " queue '%s' wasn't found in config", task.GetQueueName().data());
         taskConfig.Queue = Queues.at(task.GetQueueName());
 
         TaskConfigs.emplace(taskConfig.Name, taskConfig);
     }
-    Y_VERIFY(TaskConfigs.contains(NLocalDb::UnknownTaskName), "task '%s' wasn't found in config", NLocalDb::UnknownTaskName.data());
+    Y_ABORT_UNLESS(TaskConfigs.contains(NLocalDb::UnknownTaskName), "task '%s' wasn't found in config", NLocalDb::UnknownTaskName.data());
 
     // Move all tasks to queues.
     for (auto &entry : Tasks)

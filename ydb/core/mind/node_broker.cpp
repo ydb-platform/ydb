@@ -57,7 +57,7 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     const auto *appData = AppData(ctx);
 
     DomainId = appData->DomainsInfo->GetDomainUidByTabletId(TabletID());
-    Y_VERIFY(DomainId < DOMAINS_COUNT);
+    Y_ABORT_UNLESS(DomainId < DOMAINS_COUNT);
     SingleDomain = appData->DomainsInfo->Domains.size() == 1;
     SingleDomainAlloc = SingleDomain && appData->FeatureFlags.GetEnableNodeBrokerSingleDomainMode();
 
@@ -244,7 +244,7 @@ bool TNodeBroker::IsBannedId(ui32 id) const
 void TNodeBroker::AddDelayedListNodesRequest(ui64 epoch,
                                              TEvNodeBroker::TEvListNodes::TPtr &ev)
 {
-    Y_VERIFY(epoch > Epoch.Id);
+    Y_ABORT_UNLESS(epoch > Epoch.Id);
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                 "Delaying list nodes request for epoch #" << epoch);
 
@@ -329,7 +329,7 @@ void TNodeBroker::ApplyStateDiff(const TStateDiff &diff)
 {
     for (auto id : diff.NodesToExpire) {
         auto it = Nodes.find(id);
-        Y_VERIFY(it != Nodes.end());
+        Y_ABORT_UNLESS(it != Nodes.end());
 
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                     "Node " << it->second.IdString() << " has expired");
@@ -341,7 +341,7 @@ void TNodeBroker::ApplyStateDiff(const TStateDiff &diff)
 
     for (auto id : diff.NodesToRemove) {
         auto it = ExpiredNodes.find(id);
-        Y_VERIFY(it != ExpiredNodes.end());
+        Y_ABORT_UNLESS(it != ExpiredNodes.end());
 
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                     "Remove node " << it->second.IdString());
@@ -544,10 +544,10 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
     }
 
     if (currentEpochIdRow.IsValid()) {
-        Y_VERIFY(currentEpochVersionRow.IsValid());
-        Y_VERIFY(currentEpochStartRow.IsValid());
-        Y_VERIFY(currentEpochEndRow.IsValid());
-        Y_VERIFY(nextEpochEndRow.IsValid());
+        Y_ABORT_UNLESS(currentEpochVersionRow.IsValid());
+        Y_ABORT_UNLESS(currentEpochStartRow.IsValid());
+        Y_ABORT_UNLESS(currentEpochEndRow.IsValid());
+        Y_ABORT_UNLESS(nextEpochEndRow.IsValid());
         TString val;
 
         Epoch.Id = currentEpochIdRow.GetValue<Schema::Params::Value>();
@@ -601,7 +601,7 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
             TNodeLocation location;
 
             // only modern value found in database
-            Y_VERIFY(modernLocation);
+            Y_ABORT_UNLESS(modernLocation);
             location = std::move(*modernLocation);
 
             TNodeInfo info{id,
@@ -832,7 +832,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
             const auto& navigate = ev->Get()->Request;
             auto& rset = navigate->ResultSet;
-            Y_VERIFY(rset.size() == 1);
+            Y_ABORT_UNLESS(rset.size() == 1);
             auto& response = rset.front();
 
             LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"

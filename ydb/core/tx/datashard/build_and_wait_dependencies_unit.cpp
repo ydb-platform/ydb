@@ -116,7 +116,7 @@ EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
         }
     } else if (BuildVolatileDependencies(op)) {
         // We acquired new volatile dependencies, wait for them too
-        Y_VERIFY(!IsReadyToExecute(op));
+        Y_ABORT_UNLESS(!IsReadyToExecute(op));
         return EExecutionStatus::Continue;
     }
 
@@ -190,7 +190,7 @@ bool TBuildAndWaitDependenciesUnit::BuildVolatileDependencies(const TOperation::
             op->AddVolatileDependency(info->TxId);
             bool added = DataShard.GetVolatileTxManager()
                 .AttachWaitingRemovalOperation(info->TxId, op->GetTxId());
-            Y_VERIFY(added);
+            Y_ABORT_UNLESS(added);
         }
     }
 

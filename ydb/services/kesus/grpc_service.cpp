@@ -124,7 +124,7 @@ private:
             return PassAway();
         }
 
-        Y_VERIFY(!StartRequest);
+        Y_ABORT_UNLESS(!StartRequest);
         StartRequest.Reset(ev->Release());
         if (StartRequest->Record.request_case() != TRequest::kSessionStart) {
             Context->Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
@@ -176,7 +176,7 @@ private:
     }
 
     void HandleResolve(const TEvKesusProxy::TEvAttachProxyActor::TPtr& ev) {
-        Y_VERIFY(!ProxyActor);
+        Y_ABORT_UNLESS(!ProxyActor);
         ProxyActor = ev->Get()->ProxyActor;
         SecurityObject = ev->Get()->SecurityObject;
 
@@ -190,8 +190,8 @@ private:
                 "User has no access to the coordination node");
         }
 
-        Y_VERIFY(StartRequest);
-        Y_VERIFY(!AttachSessionSent);
+        Y_ABORT_UNLESS(StartRequest);
+        Y_ABORT_UNLESS(!AttachSessionSent);
         const auto& source = StartRequest->Record.session_start();
         Send(ProxyActor,
             new TEvKesus::TEvAttachSession(
@@ -221,7 +221,7 @@ private:
 
 private:
     void HandleAttach(const TEvKesus::TEvAttachSessionResult::TPtr& ev) {
-        Y_VERIFY(AttachSessionSent);
+        Y_ABORT_UNLESS(AttachSessionSent);
         const auto& record = ev->Get()->Record;
         if (record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS) {
             return ReplyError(record.GetError());
@@ -530,7 +530,7 @@ private:
     }
 
     void SendPing() {
-        Y_VERIFY(CurrentPingData == 0);
+        Y_ABORT_UNLESS(CurrentPingData == 0);
         while (CurrentPingData == 0) {
             CurrentPingData = RandomNumber<ui64>();
         }

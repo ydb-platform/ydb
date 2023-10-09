@@ -73,11 +73,11 @@ namespace NKikimr {
             void Handle(THullSegLoaded::TPtr& ev, const TActorContext& ctx) {
                 ActiveActors.Erase(ev->Sender);
                 auto i = BulkSegmentLoadInFlight.find(ev->Sender);
-                Y_VERIFY(i != BulkSegmentLoadInFlight.end());
+                Y_ABORT_UNLESS(i != BulkSegmentLoadInFlight.end());
                 TBulkSegmentLoadQueueItem& item = i->second;
 
                 // check that we have loaded correct segment :)
-                Y_VERIFY(ev->Get()->LevelSegment == item.Segment.Get());
+                Y_ABORT_UNLESS(ev->Get()->LevelSegment == item.Segment.Get());
 
                 // fill in loaded segment's LSN range
                 TLevelSegment& seg = *item.Segment;
@@ -120,12 +120,12 @@ namespace NKikimr {
 
     void TBulkFormedSstInfoSet::RemoveSstFromIndex(const TDiskPart& entryPoint) {
         TBulkFormedSstInfo& bulk = FindIntactBulkFormedSst(entryPoint);
-        Y_VERIFY(!bulk.RemovedFromIndex && bulk.ChunkIds.empty());
+        Y_ABORT_UNLESS(!bulk.RemovedFromIndex && bulk.ChunkIds.empty());
         bulk.RemovedFromIndex = true;
     }
 
     void TBulkFormedSstInfoSet::ApplyCompactionResult(TBulkFormedSstInfoSet& output, TVector<TChunkIdx>& deleteChunks) {
-        Y_VERIFY(output.BulkFormedSsts.empty());
+        Y_ABORT_UNLESS(output.BulkFormedSsts.empty());
         for (TBulkFormedSstInfo& seg : std::exchange(BulkFormedSsts, {})) {
             if (!seg.RemovedFromIndex) {
                 output.BulkFormedSsts.push_back(std::move(seg));
@@ -136,7 +136,7 @@ namespace NKikimr {
     }
 
     void TBulkFormedSstInfoSet::AddBulkFormedSst(ui64 firstLsn, ui64 lastLsn, const TDiskPart& entryPoint) {
-        Y_VERIFY(firstLsn && lastLsn && !entryPoint.Empty(),
+        Y_ABORT_UNLESS(firstLsn && lastLsn && !entryPoint.Empty(),
             "firstLsn# %" PRIu64 " lastLsn# %" PRIu64 " entryPoint# %s",
             firstLsn, lastLsn, entryPoint.ToString().data());
         // keep sorted order while inserting new item

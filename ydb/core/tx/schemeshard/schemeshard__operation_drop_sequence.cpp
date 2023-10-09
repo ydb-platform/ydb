@@ -56,9 +56,9 @@ public:
         }
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropSequence);
-        Y_VERIFY(txState->State == TTxState::DropParts);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropSequence);
+        Y_ABORT_UNLESS(txState->State == TTxState::DropParts);
 
         auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
@@ -90,8 +90,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropSequence);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropSequence);
 
         TPathId pathId = txState->TargetPathId;
 
@@ -101,7 +101,7 @@ public:
             auto shardIdx = shard.Idx;
             auto tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
 
-            Y_VERIFY(shard.TabletType == ETabletType::SequenceShard);
+            Y_ABORT_UNLESS(shard.TabletType == ETabletType::SequenceShard);
 
             auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvDropSequence>(pathId);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
@@ -119,7 +119,7 @@ public:
                                     << " pathId# " << pathId);
         }
 
-        Y_VERIFY(!txState->ShardsInProgress.empty());
+        Y_ABORT_UNLESS(!txState->ShardsInProgress.empty());
         return false;
     }
 };
@@ -154,10 +154,10 @@ public:
                                << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxDropSequence);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropSequence);
 
         TPathId pathId = txState->TargetPathId;
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
         Y_VERIFY_S(context.SS->PathsById.contains(path->ParentPathId),
                    "no parent with id: " <<  path->ParentPathId << " for node with id: " << path->PathId);
@@ -165,7 +165,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        Y_VERIFY(!path->Dropped());
+        Y_ABORT_UNLESS(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
 
@@ -200,8 +200,8 @@ public:
                                << " at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropSequence);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropSequence);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -313,9 +313,9 @@ public:
             }
         }
 
-        Y_VERIFY(context.SS->Sequences.contains(path->PathId));
+        Y_ABORT_UNLESS(context.SS->Sequences.contains(path->PathId));
         TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(path->PathId);
-        Y_VERIFY(!sequenceInfo->AlterData);
+        Y_ABORT_UNLESS(!sequenceInfo->AlterData);
 
         if (parent->IsTable() && !parent.IsUnderDeleting()) {
             // TODO: we probably want some kind of usage refcount
@@ -387,12 +387,12 @@ public:
                          << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         TPathId pathId = txState->TargetPathId;
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-        Y_VERIFY(path);
+        Y_ABORT_UNLESS(path);
 
         if (path->Dropped()) {
             // We don't really need to do anything

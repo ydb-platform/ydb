@@ -16,8 +16,8 @@ namespace NKikimr {
                 {
                     // Get the 'Tenant group key'
                     const TCypherKey &tenantGroupKey = *info.GetCypherKey();
-                    Y_VERIFY(tenantGroupKey.GetIsKeySet());
-                    Y_VERIFY(tenantGroupKey.GetKeySizeBytes() == 32);
+                    Y_ABORT_UNLESS(tenantGroupKey.GetIsKeySet());
+                    Y_ABORT_UNLESS(tenantGroupKey.GetKeySizeBytes() == 32);
 
                     // Obtain Hash_key(Tablet,Generation)
                     THashCalculator keyHash;
@@ -36,7 +36,7 @@ namespace NKikimr {
                     ui8 *blobKeyData = nullptr;
                     ui32 blobKeySizeBytes = 0;
                     blobKey.MutableKeyBytes(&blobKeyData, &blobKeySizeBytes);
-                    Y_VERIFY(blobKeySizeBytes == 32);
+                    Y_ABORT_UNLESS(blobKeySizeBytes == 32);
                     ui64 *p = (ui64*)blobKeyData;
                     *p ^= hash1;
                     p++;
@@ -53,7 +53,7 @@ namespace NKikimr {
                 }
                 return;
         }
-        Y_VERIFY(false, "Unexpected Encryption Mode# %" PRIu64, (ui64)info.GetEncryptionMode());
+        Y_ABORT_UNLESS(false, "Unexpected Encryption Mode# %" PRIu64, (ui64)info.GetEncryptionMode());
     }
 
     void EncryptInplace(TRope& rope, ui32 offset, ui32 size, const TLogoBlobID& id, const TBlobStorageGroupInfo& info) {
@@ -61,7 +61,7 @@ namespace NKikimr {
             return;
         }
         auto span = rope.GetContiguousSpanMut();
-        Y_VERIFY(offset < span.size() && size <= span.size() - offset);
+        Y_ABORT_UNLESS(offset < span.size() && size <= span.size() - offset);
         Encrypt(span.data() + offset, span.data() + offset, offset, size, id, info);
     }
 
@@ -75,7 +75,7 @@ namespace NKikimr {
             return;
         }
         auto span = rope.GetContiguousSpanMut();
-        Y_VERIFY(offset < span.size() && size <= span.size() - offset);
+        Y_ABORT_UNLESS(offset < span.size() && size <= span.size() - offset);
         Decrypt(span.data() + offset, span.data() + offset, shift, size, id, info);
     }
 

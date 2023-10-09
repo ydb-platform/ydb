@@ -99,12 +99,12 @@ namespace NKikimr {
                     while (Index < Self->Entries.size() && Self->Entries[Index].Page == InvalidPageId) {
                         ++Index;
                     }
-                    Y_VERIFY(Index <= Self->Entries.size());
+                    Y_ABORT_UNLESS(Index <= Self->Entries.size());
                 } else {
                     while (Index < Self->Pages.size() && !Self->Pages[Index]) {
                         ++Index;
                     }
-                    Y_VERIFY(Index <= Self->Pages.size());
+                    Y_ABORT_UNLESS(Index <= Self->Pages.size());
                 }
             }
 
@@ -194,7 +194,7 @@ namespace NKikimr {
                 return;
             }
 
-            Y_VERIFY(MaxPages < max_pages,
+            Y_ABORT_UNLESS(MaxPages < max_pages,
                 "Decreasing virtual size from %" PRISZT " to %" PRISZT " not supported",
                 MaxPages, max_pages);
 
@@ -420,7 +420,7 @@ namespace NKikimr {
             for (auto& entry : entries) {
                 if (entry.Page != InvalidPageId) {
                     Y_VERIFY_DEBUG(Used < min_entries);
-                    Y_VERIFY(EmplacePage(entry.Page, std::move(entry.Value)));
+                    Y_ABORT_UNLESS(EmplacePage(entry.Page, std::move(entry.Value)));
                     ++Used;
                 }
             }
@@ -434,7 +434,7 @@ namespace NKikimr {
             for (auto& value : pages) {
                 if (value) {
                     Y_VERIFY_DEBUG(Used < min_entries);
-                    Y_VERIFY(EmplacePage(page, std::move(value)));
+                    Y_ABORT_UNLESS(EmplacePage(page, std::move(value)));
                     ++Used;
                 }
                 ++page;

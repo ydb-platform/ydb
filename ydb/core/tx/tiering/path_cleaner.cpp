@@ -35,7 +35,7 @@ void TPathCleaner::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& 
         Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
         Secrets = secrets;
     } else {
-        Y_VERIFY(false);
+        Y_ABORT_UNLESS(false);
     }
 
     if (Configs && Secrets) {

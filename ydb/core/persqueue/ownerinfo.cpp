@@ -10,7 +10,7 @@ namespace NPQ {
         TStringBuilder s;
         s << owner << "|" << CreateGuidAsString() << "_" << OwnerGeneration;
         ++OwnerGeneration;
-        Y_VERIFY(OwnerCookie != s);
+        Y_ABORT_UNLESS(OwnerCookie != s);
         OwnerCookie = s;
         NextMessageNo = 0;
         NeedResetOwner = false;

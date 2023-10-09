@@ -8,12 +8,12 @@ namespace NKikimr::NTestShard {
             (To, to));
 
         // some sanity checks
-        Y_VERIFY(key.second.ConfirmedState == key.second.PendingState);
-        Y_VERIFY(key.second.ConfirmedState == from);
-        Y_VERIFY(!key.second.Request);
-        Y_VERIFY(from != to);
-        Y_VERIFY(from != ::NTestShard::TStateServer::DELETED);
-        Y_VERIFY(to != ::NTestShard::TStateServer::ABSENT);
+        Y_ABORT_UNLESS(key.second.ConfirmedState == key.second.PendingState);
+        Y_ABORT_UNLESS(key.second.ConfirmedState == from);
+        Y_ABORT_UNLESS(!key.second.Request);
+        Y_ABORT_UNLESS(from != to);
+        Y_ABORT_UNLESS(from != ::NTestShard::TStateServer::DELETED);
+        Y_ABORT_UNLESS(to != ::NTestShard::TStateServer::ABSENT);
 
         if (!Settings.HasStorageServerHost()) {
             if (from == ::NTestShard::TStateServer::WRITE_PENDING && to == ::NTestShard::TStateServer::CONFIRMED) {
@@ -28,7 +28,7 @@ namespace NKikimr::NTestShard {
                 Keys.erase(key.first);
             } else {
                 key.second.ConfirmedState = key.second.PendingState = to;
-                Y_VERIFY(key.second.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
+                Y_ABORT_UNLESS(key.second.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
                     ? key.second.ConfirmedKeyIndex < ConfirmedKeys.size() && ConfirmedKeys[key.second.ConfirmedKeyIndex] == key.first
                     : key.second.ConfirmedKeyIndex == Max<size_t>());
             }
@@ -81,12 +81,12 @@ namespace NKikimr::NTestShard {
         }
 
         // obtain current key
-        Y_VERIFY(!TransitionInFlight.empty());
+        Y_ABORT_UNLESS(!TransitionInFlight.empty());
         auto& key = *TransitionInFlight.front();
         TransitionInFlight.pop_front();
 
         // account data bytes if confirming written key
-        Y_VERIFY(key.second.ConfirmedState != key.second.PendingState);
+        Y_ABORT_UNLESS(key.second.ConfirmedState != key.second.PendingState);
         if (key.second.ConfirmedState == ::NTestShard::TStateServer::WRITE_PENDING &&
                 key.second.PendingState == ::NTestShard::TStateServer::CONFIRMED) {
             BytesOfData += key.second.Len;
@@ -106,10 +106,10 @@ namespace NKikimr::NTestShard {
             Send(TabletActorId, r.release());
         }
         if (key.second.ConfirmedState == ::NTestShard::TStateServer::DELETED) {
-            Y_VERIFY(key.second.ConfirmedKeyIndex == Max<size_t>());
+            Y_ABORT_UNLESS(key.second.ConfirmedKeyIndex == Max<size_t>());
             Keys.erase(key.first);
         } else {
-            Y_VERIFY(key.second.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
+            Y_ABORT_UNLESS(key.second.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
                 ? key.second.ConfirmedKeyIndex < ConfirmedKeys.size() && ConfirmedKeys[key.second.ConfirmedKeyIndex] == key.first
                 : key.second.ConfirmedKeyIndex == Max<size_t>());
         }
@@ -119,21 +119,21 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::MakeConfirmed(TKey& key) {
-        Y_VERIFY(key.second.ConfirmedKeyIndex == Max<size_t>());
+        Y_ABORT_UNLESS(key.second.ConfirmedKeyIndex == Max<size_t>());
         key.second.ConfirmedKeyIndex = ConfirmedKeys.size();
         ConfirmedKeys.push_back(key.first);
     }
 
     void TLoadActor::MakeUnconfirmed(TKey& key) {
-        Y_VERIFY(key.second.ConfirmedKeyIndex < ConfirmedKeys.size());
-        Y_VERIFY(ConfirmedKeys[key.second.ConfirmedKeyIndex] == key.first);
+        Y_ABORT_UNLESS(key.second.ConfirmedKeyIndex < ConfirmedKeys.size());
+        Y_ABORT_UNLESS(ConfirmedKeys[key.second.ConfirmedKeyIndex] == key.first);
         if (key.second.ConfirmedKeyIndex + 1 != ConfirmedKeys.size()) {
             auto& cell = ConfirmedKeys[key.second.ConfirmedKeyIndex];
             std::swap(cell, ConfirmedKeys.back());
             const auto it = Keys.find(cell);
-            Y_VERIFY(it != Keys.end());
+            Y_ABORT_UNLESS(it != Keys.end());
             auto& otherKey = it->second;
-            Y_VERIFY(otherKey.ConfirmedKeyIndex + 1 == ConfirmedKeys.size());
+            Y_ABORT_UNLESS(otherKey.ConfirmedKeyIndex + 1 == ConfirmedKeys.size());
             otherKey.ConfirmedKeyIndex = key.second.ConfirmedKeyIndex;
         }
         ConfirmedKeys.pop_back();

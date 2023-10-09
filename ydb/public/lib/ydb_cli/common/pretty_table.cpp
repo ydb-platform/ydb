@@ -16,7 +16,7 @@ TPrettyTable::TRow::TRow(size_t nColumns)
 }
 
 size_t TPrettyTable::TRow::ColumnWidth(size_t columnIndex) const {
-    Y_VERIFY(columnIndex < Columns.size());
+    Y_ABORT_UNLESS(columnIndex < Columns.size());
 
     size_t width = 0;
     for (const auto& line : Columns.at(columnIndex)) {
@@ -70,7 +70,7 @@ bool TPrettyTable::TRow::HasFreeText() const {
 }
 
 void TPrettyTable::TRow::PrintFreeText(IOutputStream& o, size_t width) const {
-    Y_VERIFY(HasFreeText());
+    Y_ABORT_UNLESS(HasFreeText());
 
     for (auto& line : StringSplitter(Text).Split('\n')) {
         TStringBuf token = line.Token();

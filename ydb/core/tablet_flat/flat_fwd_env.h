@@ -88,8 +88,8 @@ namespace NFwd {
             , MemTable(new TMemTableHandler(Keys, Conf.Edge,
                                         Conf.Trace ? &subset.Frozen : nullptr))
         {
-            Y_VERIFY(Conf.AheadHi >= Conf.AheadLo);
-            Y_VERIFY(std::is_sorted(Keys.begin(), Keys.end()));
+            Y_ABORT_UNLESS(Conf.AheadHi >= Conf.AheadLo);
+            Y_ABORT_UNLESS(std::is_sorted(Keys.begin(), Keys.end()));
 
             for (auto &one: Subset.Flatten)
                 AddPartView(one);
@@ -98,7 +98,7 @@ namespace NFwd {
         void AddCold(const TPartView& partView) noexcept
         {
             auto r = ColdParts.insert(partView.Part.Get());
-            Y_VERIFY(r.second, "Cannot add a duplicate cold part");
+            Y_ABORT_UNLESS(r.second, "Cannot add a duplicate cold part");
 
             AddPartView(partView);
         }
@@ -143,18 +143,18 @@ namespace NFwd {
                 return; // ignore pages requested before Reset
             }
 
-            Y_VERIFY(epoch == Epoch,
+            Y_ABORT_UNLESS(epoch == Epoch,
                     "Got an invalid part cookie on pages absorption");
 
             const ui32 part = cookie >> 32;
 
-            Y_VERIFY(part < Queues.size(),
+            Y_ABORT_UNLESS(part < Queues.size(),
                     "Got save request for unknown TPart cookie index");
 
-            Y_VERIFY(Queues.at(part).PageCollection->Label() == pageCollection->Label(),
+            Y_ABORT_UNLESS(Queues.at(part).PageCollection->Label() == pageCollection->Label(),
                     "TPart head storage doesn't match with fetch result");
 
-            Y_VERIFY(pages.size() <= Pending,
+            Y_ABORT_UNLESS(pages.size() <= Pending,
                     "Page fwd cache got more pages than was requested");
 
             Pending -= pages.size();
@@ -178,7 +178,7 @@ namespace NFwd {
                 parts and cannot handle backward jumps. This call is temporary
                 workaround for clients that wants to go back. */
 
-            Y_VERIFY(!Conf.Trace, "Cannot reset NFwd in blobs tracing state");
+            Y_ABORT_UNLESS(!Conf.Trace, "Cannot reset NFwd in blobs tracing state");
 
             // Ignore all pages fetched before Reset
             Pending = 0;
@@ -213,7 +213,7 @@ namespace NFwd {
                     (*q)->Forward(q, Max(ui64(1), Conf.AheadHi));
 
                 if (auto req = std::move(q->Fetch)) {
-                    Y_VERIFY(req->Pages, "Shouldn't sent an empty requests");
+                    Y_ABORT_UNLESS(req->Pages, "Shouldn't sent an empty requests");
 
                     Pending += req->Pages.size();
 
@@ -242,7 +242,7 @@ namespace NFwd {
                     auto &q = GetQueue(part, part->GroupsCount + 1);
                     auto &line = dynamic_cast<TBlobs&>(*q.PageLoadingLogic);
 
-                    Y_VERIFY(q.Slot < (sieves.size() - 1));
+                    Y_ABORT_UNLESS(q.Slot < (sieves.size() - 1));
                     sieves.at(q.Slot) = {
                         blobs,
                         line.GetFrames(),
@@ -294,7 +294,7 @@ namespace NFwd {
             const auto *part = partView.Part.Get();
 
             auto it = Parts.find(part);
-            Y_VERIFY(it == Parts.end(), "Cannot handle multiple part references in the same subset");
+            Y_ABORT_UNLESS(it == Parts.end(), "Cannot handle multiple part references in the same subset");
 
             ui32 partSlot = Parts.size();
 
@@ -310,20 +310,20 @@ namespace NFwd {
                 slots.push_back(Settle(MakeCache(part, NPage::TGroupId(group, true), nullptr), partSlot));
             }
 
-            Y_VERIFY(Queues.at(slots[0]).PageCollection->Label() == part->Label,
+            Y_ABORT_UNLESS(Queues.at(slots[0]).PageCollection->Label() == part->Label,
                 "Cannot handle multiple parts on the same page collection");
         }
 
         TSlot GetQueueSlot(const TPart *part, ui16 room) noexcept
         {
             auto it = Parts.find(part);
-            Y_VERIFY(it != Parts.end(),
+            Y_ABORT_UNLESS(it != Parts.end(),
                 "NFwd cache tyring to access part outside of subset");
-            Y_VERIFY(room < it->second.size(),
+            Y_ABORT_UNLESS(room < it->second.size(),
                 "NFwd cache trying to access room out of bounds");
-            Y_VERIFY(it->second[room] != Max<ui16>(),
+            Y_ABORT_UNLESS(it->second[room] != Max<ui16>(),
                 "NFwd cache trying to access room that is not assigned");
-            Y_VERIFY(Queues.at(it->second[0]).PageCollection->Label() == part->Label,
+            Y_ABORT_UNLESS(Queues.at(it->second[0]).PageCollection->Label() == part->Label,
                 "Cannot handle multiple parts on the same page collection");
 
             return it->second[room];
@@ -352,7 +352,7 @@ namespace NFwd {
         {
             auto *partStore = dynamic_cast<const TPartStore*>(part);
 
-            Y_VERIFY(groupId.Index < partStore->PageCollections.size(), "Got part without enough page collections");
+            Y_ABORT_UNLESS(groupId.Index < partStore->PageCollections.size(), "Got part without enough page collections");
 
             auto& cache = partStore->PageCollections[groupId.Index];
             

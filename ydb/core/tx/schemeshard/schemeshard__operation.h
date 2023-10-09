@@ -117,16 +117,16 @@ struct TOperation: TSimpleRefCount<TOperation> {
 
     void RegisterBarrier(TSubTxId partId, const TString& name) {
         Barriers[name].insert(partId);
-        Y_VERIFY(Barriers.size() == 1);
+        Y_ABORT_UNLESS(Barriers.size() == 1);
     }
 
     bool HasBarrier() const {
-        Y_VERIFY(Barriers.size() <= 1);
+        Y_ABORT_UNLESS(Barriers.size() <= 1);
         return Barriers.size() == 1;
     }
 
     bool IsDoneBarrier() const {
-        Y_VERIFY(Barriers.size() <= 1);
+        Y_ABORT_UNLESS(Barriers.size() <= 1);
 
         for (const auto& [_, subTxIds] : Barriers) {
             for (const auto blocked : subTxIds) {
@@ -139,8 +139,8 @@ struct TOperation: TSimpleRefCount<TOperation> {
     }
 
     void DropBarrier(const TString& name) {
-        Y_VERIFY(IsDoneBarrier());
-        Y_VERIFY(Barriers.begin()->first == name);
+        Y_ABORT_UNLESS(IsDoneBarrier());
+        Y_ABORT_UNLESS(Barriers.begin()->first == name);
         Barriers.erase(name);
     }
 

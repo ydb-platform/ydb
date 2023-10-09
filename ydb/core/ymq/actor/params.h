@@ -25,7 +25,7 @@ public:
     }
 
     TExecutorBuilder& ParentBuilder() {
-        Y_VERIFY(Parent);
+        Y_ABORT_UNLESS(Parent);
         return *Parent;
     }
 
@@ -97,7 +97,7 @@ public:
         } else if (typeId == NScheme::NTypeIds::Uint64) {
             Params_->MutableValue()->AddStruct()->SetUint64(value);
         } else {
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
         }
         return *this;
     }

@@ -104,7 +104,7 @@ bool SwitchTypeWithNull(arrow::Type::type typeId, TFunc&& f) {
 template <typename TFunc>
 bool SwitchArrayType(const arrow::Datum& column, TFunc&& f) {
     auto type = column.type();
-    Y_VERIFY(type);
+    Y_ABORT_UNLESS(type);
     return SwitchType(type->id(), std::forward<TFunc>(f));
 }
 
@@ -258,7 +258,7 @@ bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSiz
                 return true;
             }
         }
-        Y_VERIFY(false, "unpredictable variant");
+        Y_ABORT_UNLESS(false, "unpredictable variant");
         return false;
     });
 }

@@ -71,8 +71,8 @@ public:
             return TStatus::Ok;
         }
 
-        Y_VERIFY(Clients_, "Clients_ was destroyed");
-        Y_VERIFY(PendingTables_, "PendingTables_ was destroyed");
+        Y_ABORT_UNLESS(Clients_, "Clients_ was destroyed");
+        Y_ABORT_UNLESS(PendingTables_, "PendingTables_ was destroyed");
 
         std::unordered_map<TString, std::unordered_set<TString>> tablesFromCluster;
 
@@ -204,8 +204,8 @@ public:
         YQL_ENSURE(AsyncFuture_.HasValue());
         output = input;
 
-        Y_VERIFY(Clients_, "Clients_ was destroyed");
-        Y_VERIFY(PendingTables_, "PendingTables_ was destroyed");
+        Y_ABORT_UNLESS(Clients_, "Clients_ was destroyed");
+        Y_ABORT_UNLESS(PendingTables_, "PendingTables_ was destroyed");
 
         bool failed = false;
         std::unordered_map<std::string_view, TSnapshotHandle> snapshots(Clients_->size());

@@ -152,9 +152,9 @@ NUdf::TUnboxedValue GetUnboxedValue<arrow::Decimal128Type>(std::shared_ptr<arrow
     // We check that Decimal(22,9) but it may not be true
     // TODO Support other decimal precisions.
     const auto& type = arrow::internal::checked_cast<const arrow::Decimal128Type&>(*array->type());
-    Y_VERIFY(type.precision() == NScheme::DECIMAL_PRECISION, "Unsupported Decimal precision.");
-    Y_VERIFY(type.scale() == NScheme::DECIMAL_SCALE, "Unsupported Decimal scale.");
-    Y_VERIFY(data.size() == sizeof(NYql::NDecimal::TInt128), "Wrong data size");
+    Y_ABORT_UNLESS(type.precision() == NScheme::DECIMAL_PRECISION, "Unsupported Decimal precision.");
+    Y_ABORT_UNLESS(type.scale() == NScheme::DECIMAL_SCALE, "Unsupported Decimal scale.");
+    Y_ABORT_UNLESS(data.size() == sizeof(NYql::NDecimal::TInt128), "Wrong data size");
     NYql::NDecimal::TInt128 val;
     std::memcpy(reinterpret_cast<char*>(&val), data.data(), data.size());
     return NUdf::TUnboxedValuePod(val);
@@ -542,7 +542,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
                 AppendDataValue<TType>(builder, value);
                 return true;
             });
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
             break;
         }
 
@@ -905,20 +905,20 @@ std::string SerializeArray(const std::shared_ptr<arrow::Array>& array) {
     writeOptions.use_threads = false;
     // TODO Decide which compression level will be default. Will it depend on the length of array?
     auto codecResult = arrow::util::Codec::Create(arrow::Compression::LZ4_FRAME);
-    Y_VERIFY(codecResult.ok());
+    Y_ABORT_UNLESS(codecResult.ok());
     writeOptions.codec = std::move(codecResult.ValueOrDie());
     int64_t size;
     auto status = GetRecordBatchSize(*batch, writeOptions, &size);
-    Y_VERIFY(status.ok());
+    Y_ABORT_UNLESS(status.ok());
 
     std::string str;
     str.resize(size);
 
     auto writer = arrow::Buffer::GetWriter(arrow::MutableBuffer::Wrap(&str[0], size));
-    Y_VERIFY(writer.status().ok());
+    Y_ABORT_UNLESS(writer.status().ok());
 
     status = SerializeRecordBatch(*batch, writeOptions, (*writer).get());
-    Y_VERIFY(status.ok());
+    Y_ABORT_UNLESS(status.ok());
     return str;
 }
 

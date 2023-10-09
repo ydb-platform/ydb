@@ -25,7 +25,7 @@ TModules* GetModules() {
 }
 
 void AddLibrary(ui32 id, TCompiler compiler, TDeserializer deserializer) {
-    Y_VERIFY(id > 0);
+    Y_ABORT_UNLESS(id > 0);
     if (GetModules()->size() < id) {
         GetModules()->resize(id);
     }

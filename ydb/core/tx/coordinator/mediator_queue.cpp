@@ -172,7 +172,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
             Queue.splice(Queue.end(), msg->Steps, it);
 
             // Index by TxId/ShardId pairs while waiting for acks
-            Y_VERIFY(it->References == 0);
+            Y_ABORT_UNLESS(it->References == 0);
             for (auto& tx : it->Transactions) {
                 for (ui64 shardId : tx.PushToAffected) {
                     auto res = WaitingAcks.insert(
@@ -232,7 +232,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
         for (const auto txid : record.GetTxId()) {
             auto it = WaitingAcks.find(std::make_pair(txid, tabletId));
             if (it != WaitingAcks.end()) {
-                Y_VERIFY(it->second->References > 0);
+                Y_ABORT_UNLESS(it->second->References > 0);
 
                 if (!Confirmations)
                     Confirmations.reset(new TMediatorConfirmations(Mediator));
@@ -241,7 +241,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
                 if (0 == --it->second->References) {
                     ++ConfirmedSteps;
-                    Y_VERIFY(!Queue.empty());
+                    Y_ABORT_UNLESS(!Queue.empty());
                     if (it->second == Queue.begin()) {
                         firstConfirmed = true;
                     }

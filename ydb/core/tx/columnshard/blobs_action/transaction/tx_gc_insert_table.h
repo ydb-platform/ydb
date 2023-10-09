@@ -11,7 +11,7 @@ public:
     TTxInsertTableCleanup(TColumnShard* self, THashSet<TWriteId>&& writeIdsToAbort)
         : TBase(self)
         , WriteIdsToAbort(std::move(writeIdsToAbort)) {
-        Y_VERIFY(WriteIdsToAbort.size() || self->InsertTable->GetAborted().size());
+        Y_ABORT_UNLESS(WriteIdsToAbort.size() || self->InsertTable->GetAborted().size());
     }
 
     ~TTxInsertTableCleanup() {

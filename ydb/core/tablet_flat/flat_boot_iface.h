@@ -65,7 +65,7 @@ namespace NBoot {
             , Logic(owner->Logic)
             , Back(owner->Back)
         {
-            Y_VERIFY(Owner != this, "Boot IStep Cannot be on its own");
+            Y_ABORT_UNLESS(Owner != this, "Boot IStep Cannot be on its own");
         }
 
         virtual ~IStep() = default;

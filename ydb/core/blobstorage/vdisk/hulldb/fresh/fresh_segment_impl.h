@@ -217,7 +217,7 @@ namespace NKikimr {
         }
 
         // get the last extent and put the rope to its end
-        Y_VERIFY(RopeExtents);
+        Y_ABORT_UNLESS(RopeExtents);
         auto& extent = RopeExtents.back();
         TRope& rope = extent[LastRopeExtentSize++];
         rope = std::move(blob);
@@ -225,9 +225,9 @@ namespace NKikimr {
         // calculate buffer id from the rope address; the address is immutable during fresh segment lifetime, so we can
         // use it directly
         uintptr_t bufferId = reinterpret_cast<uintptr_t>(&rope);
-        Y_VERIFY((bufferId & 0x7) == 0);
+        Y_ABORT_UNLESS((bufferId & 0x7) == 0);
         bufferId >>= 3;
-        Y_VERIFY(bufferId < (ui64(1) << 62));
+        Y_ABORT_UNLESS(bufferId < (ui64(1) << 62));
         memRec.SetMemBlob(bufferId, blobSize);
 
         Put(lsn, key, memRec);
@@ -236,7 +236,7 @@ namespace NKikimr {
     template <>
     inline const TRope& TFreshIndexAndData<TKeyLogoBlob, TMemRecLogoBlob>::GetLogoBlobData(const TMemPart& memPart) const {
         const TRope& rope = *reinterpret_cast<const TRope*>(memPart.BufferId << 3);
-        Y_VERIFY(rope.GetSize() == memPart.Size);
+        Y_ABORT_UNLESS(rope.GetSize() == memPart.Size);
         return rope;
     }
 
@@ -251,14 +251,14 @@ namespace NKikimr {
         auto dataSize = memRec.DataSize();
         switch (type) {
             case TBlobType::MemBlob:
-                Y_VERIFY(dataSize);
+                Y_ABORT_UNLESS(dataSize);
                 MemDataSize += AlignUp(dataSize, 8u);
                 break;
             case TBlobType::DiskBlob:
-                Y_VERIFY(!memRec.HasData());
+                Y_ABORT_UNLESS(!memRec.HasData());
                 break;
             case TBlobType::HugeBlob:
-                Y_VERIFY(memRec.HasData());
+                Y_ABORT_UNLESS(memRec.HasData());
                 HugeDataSize += memRec.DataSize();
                 break;
             default:
@@ -278,7 +278,7 @@ namespace NKikimr {
                 TDiskDataExtractor extr;
                 const TDiskPart& part = memRec.GetDiskData(&extr, nullptr)->SwearOne();
                 if (part.Size) {
-                    Y_VERIFY(part.ChunkIdx);
+                    Y_ABORT_UNLESS(part.ChunkIdx);
                     chunks.insert(part.ChunkIdx);
                 }
             }
@@ -297,7 +297,7 @@ namespace NKikimr {
                 TDiskDataExtractor extr;
                 const TDiskPart& part = memRec.GetDiskData(&extr, nullptr)->SwearOne();
                 bool inserted = hugeBlobs.insert(part).second;
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
             }
             it.Next();
         }

@@ -28,13 +28,13 @@ TTransactionSupport::TTransactionSupport(const NYdb::TDriver& driver,
 
 void TTransactionSupport::BeginTx()
 {
-    Y_VERIFY(!Transaction);
+    Y_ABORT_UNLESS(!Transaction);
 
     if (!Session) {
         CreateSession();
     }
 
-    Y_VERIFY(Session);
+    Y_ABORT_UNLESS(Session);
 
     auto settings = NYdb::NTable::TTxSettings::SerializableRW();
     auto result = Session->BeginTransaction(settings).GetValueSync();
@@ -45,7 +45,7 @@ void TTransactionSupport::BeginTx()
 
 auto TTransactionSupport::CommitTx(bool useTableSelect, bool useTableUpsert) -> TExecutionTimes
 {
-    Y_VERIFY(Transaction);
+    Y_ABORT_UNLESS(Transaction);
 
     TExecutionTimes result;
 
@@ -70,7 +70,7 @@ void TTransactionSupport::AppendRow(const TString& m)
 
 void TTransactionSupport::CreateSession()
 {
-    Y_VERIFY(!Session);
+    Y_ABORT_UNLESS(!Session);
 
     auto result = TableClient.GetSession(NYdb::NTable::TCreateSessionSettings()).GetValueSync();
     EnsureSuccess(result, "GetSession");
@@ -80,7 +80,7 @@ void TTransactionSupport::CreateSession()
 
 TDuration TTransactionSupport::SelectFromTable()
 {
-    Y_VERIFY(Transaction);
+    Y_ABORT_UNLESS(Transaction);
 
     ui64 left = RandomNumber<ui64>();
     ui64 right = RandomNumber<ui64>();
@@ -124,7 +124,7 @@ TDuration TTransactionSupport::SelectFromTable()
 
 TDuration TTransactionSupport::UpsertIntoTable()
 {
-    Y_VERIFY(Transaction);
+    Y_ABORT_UNLESS(Transaction);
 
     TString query = "                                                                     \
         DECLARE $rows AS List<Struct<                                                     \
@@ -173,7 +173,7 @@ TDuration TTransactionSupport::UpsertIntoTable()
 
 TDuration TTransactionSupport::Commit()
 {
-    Y_VERIFY(Transaction);
+    Y_ABORT_UNLESS(Transaction);
 
     auto settings = NYdb::NTable::TCommitTxSettings();
     auto beginTime = TInstant::Now();

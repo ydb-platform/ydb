@@ -493,7 +493,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
                 break;
         }
     }
-    Y_VERIFY(currentRingState != TStateStorageRingInfo::Unknown);
+    Y_ABORT_UNLESS(currentRingState != TStateStorageRingInfo::Unknown);
 
     // Add current ring to restart rings
     ++restartRings;
@@ -826,7 +826,7 @@ void TCms::ScheduleNotificationsCleanup(const TActorContext &ctx)
         TInstant start = TInstant::MicroSeconds(entry.second.Notification.GetTime());
         for (const auto &action : entry.second.Notification.GetActions()) {
             TDuration duration = TDuration::MicroSeconds(action.GetDuration());
-            Y_VERIFY(duration);
+            Y_ABORT_UNLESS(duration);
             earliest = Min(earliest, start + duration);
         }
     }

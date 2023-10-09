@@ -26,7 +26,7 @@ TBuffer::TBuffer(ui8* buffer, ui32 bufferSize, TBufferPool *pool)
 {}
 
 TBuffer::~TBuffer() {
-    Y_VERIFY(!Pool);
+    Y_ABORT_UNLESS(!Pool);
 }
 
 void TBuffer::Exec(TActorSystem*) {
@@ -140,7 +140,7 @@ TBufferPoolCommon::TBufferPoolCommon(ui32 bufferSize, ui32 bufferCount, TBufferP
     TBufferPool::UseHugePages = false;
     RawBuffer.Reset(new ui8[AlignUp((size_t)bufferSize, Alignment) * bufferCount + Alignment - 1]);
     ui8 *alignedData = (ui8*)AlignUp(RawBuffer.Get(), Alignment);
-    Y_VERIFY((ui64)alignedData % Alignment == 0);
+    Y_ABORT_UNLESS((ui64)alignedData % Alignment == 0);
     MarkUpPool(alignedData);
 }
 

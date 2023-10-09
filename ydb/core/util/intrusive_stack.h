@@ -29,8 +29,8 @@ public:
     }
 
     void Push(T *value) {
-        Y_VERIFY(value);
-        Y_VERIFY(value->*P == nullptr);
+        Y_ABORT_UNLESS(value);
+        Y_ABORT_UNLESS(value->*P == nullptr);
         value->*P = Root;
         Root = value;
         Count++;

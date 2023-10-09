@@ -32,7 +32,7 @@ struct TGenCompactionStrategy::TPartAggregator {
     ui64 PartEpochCount = 0;
 
     TPartAggregator& Add(const TPartInfo& part) noexcept {
-        Y_VERIFY(part.Epoch != TEpoch::Max(),
+        Y_ABORT_UNLESS(part.Epoch != TEpoch::Max(),
             "Unexpected part with an infinite epoch found");
         Stats += part.Stats;
         StatsPerTablet[part.Label.TabletID()] += part.Stats;
@@ -90,7 +90,7 @@ struct TGenCompactionStrategy::TExtraState {
 };
 
 TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushFront(TPartView partView) noexcept {
-    Y_VERIFY(TakenHeadParts == 0,
+    Y_ABORT_UNLESS(TakenHeadParts == 0,
         "Attempting to prepend part to generation that has taken head parts");
 
     if (Parts.empty() || Parts.front().Epoch != partView->Epoch) {
@@ -105,7 +105,7 @@ TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushFron
 }
 
 TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushBack(TPartView partView) noexcept {
-    Y_VERIFY(CompactingTailParts == 0,
+    Y_ABORT_UNLESS(CompactingTailParts == 0,
         "Attempting to append part to generation that has compacting tail parts");
 
     if (Parts.empty() || Parts.back().Epoch != partView->Epoch) {
@@ -113,7 +113,7 @@ TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushBack
         ++PartEpochCount;
     } else if (Parts.size() == TakenHeadParts) {
         // The end of taken head is no longer an epoch edge
-        Y_VERIFY(TakenHeadPartEpochCount > 0);
+        Y_ABORT_UNLESS(TakenHeadPartEpochCount > 0);
         --TakenHeadPartEpochCount;
     }
 
@@ -124,7 +124,7 @@ TGenCompactionStrategy::TPartInfo& TGenCompactionStrategy::TGeneration::PushBack
 }
 
 void TGenCompactionStrategy::TGeneration::PopFront() noexcept {
-    Y_VERIFY(Parts.size() > CompactingTailParts,
+    Y_ABORT_UNLESS(Parts.size() > CompactingTailParts,
         "Attempting to remove part crossing compacting tail parts");
 
     bool wasTaken = TakenHeadParts > 0;
@@ -134,7 +134,7 @@ void TGenCompactionStrategy::TGeneration::PopFront() noexcept {
     Stats -= front.Stats;
     StatsPerTablet[front.Label.TabletID()] -= front.Stats;
     if (wasTaken) {
-        Y_VERIFY(TakenHeadBackingSize >= front.Stats.BackingSize);
+        Y_ABORT_UNLESS(TakenHeadBackingSize >= front.Stats.BackingSize);
         TakenHeadBackingSize -= front.Stats.BackingSize;
         --TakenHeadParts;
     }
@@ -143,16 +143,16 @@ void TGenCompactionStrategy::TGeneration::PopFront() noexcept {
     if (Parts.empty() || Parts.front().Epoch != epoch) {
         // We just removed an epoch edge
         if (wasTaken) {
-            Y_VERIFY(TakenHeadPartEpochCount > 0);
+            Y_ABORT_UNLESS(TakenHeadPartEpochCount > 0);
             --TakenHeadPartEpochCount;
         }
-        Y_VERIFY(PartEpochCount > 0);
+        Y_ABORT_UNLESS(PartEpochCount > 0);
         --PartEpochCount;
     }
 }
 
 void TGenCompactionStrategy::TGeneration::PopBack() noexcept {
-    Y_VERIFY(Parts.size() > TakenHeadParts,
+    Y_ABORT_UNLESS(Parts.size() > TakenHeadParts,
         "Attempting to remove part crossing taken head parts");
 
     bool wasCompacting = CompactingTailParts > 0;
@@ -168,7 +168,7 @@ void TGenCompactionStrategy::TGeneration::PopBack() noexcept {
 
     if (Parts.empty() || Parts.front().Epoch != epoch) {
         // We just removed an epoch edge
-        Y_VERIFY(PartEpochCount > 0);
+        Y_ABORT_UNLESS(PartEpochCount > 0);
         --PartEpochCount;
     } else if (Parts.size() == TakenHeadParts) {
         // The end of taken head is now an epoch edge
@@ -195,7 +195,7 @@ TGenCompactionStrategy::~TGenCompactionStrategy()
 }
 
 void TGenCompactionStrategy::Start(TCompactionState state) {
-    Y_VERIFY(!Policy, "Strategy has already been started");
+    Y_ABORT_UNLESS(!Policy, "Strategy has already been started");
 
     const auto* scheme = Backend->TableScheme(Table);
 
@@ -205,7 +205,7 @@ void TGenCompactionStrategy::Start(TCompactionState state) {
     for (auto& partView : Backend->TableParts(Table)) {
         auto label = partView->Label;
         ui32 level = state.PartLevels.Value(partView->Label, 255);
-        Y_VERIFY(level > 0 && level <= Generations.size() || level == 255);
+        Y_ABORT_UNLESS(level > 0 && level <= Generations.size() || level == 255);
         auto& parts = level == 255 ? FinalParts : Generations.at(level - 1).Parts;
         parts.emplace_back(std::move(partView));
         KnownParts[label] = level;
@@ -214,7 +214,7 @@ void TGenCompactionStrategy::Start(TCompactionState state) {
     for (auto& part : Backend->TableColdParts(Table)) {
         auto label = part->Label;
         ui32 level = state.PartLevels.Value(part->Label, 255);
-        Y_VERIFY(level > 0 && level <= Generations.size() || level == 255);
+        Y_ABORT_UNLESS(level > 0 && level <= Generations.size() || level == 255);
         ColdParts.emplace_back(std::move(part));
         KnownParts[label] = level;
     }
@@ -226,7 +226,7 @@ void TGenCompactionStrategy::Start(TCompactionState state) {
             gen.Parts.sort();
 
             // Verify epoch is decreasing from level to level
-            Y_VERIFY(gen.Parts.front().Epoch <= lastEpoch);
+            Y_ABORT_UNLESS(gen.Parts.front().Epoch <= lastEpoch);
             lastEpoch = gen.Parts.back().Epoch;
 
             agg.Add(gen.Parts);
@@ -263,13 +263,13 @@ void TGenCompactionStrategy::Stop() {
             case EState::Pending:
             case EState::PendingBackground: {
                 // The task is scheduled, make sure to cancel it
-                Y_VERIFY(gen.Task.TaskId != 0);
+                Y_ABORT_UNLESS(gen.Task.TaskId != 0);
                 Broker->CancelTask(gen.Task.TaskId);
                 break;
             }
             case EState::Compacting: {
                 // Compaction is running, cancel it
-                Y_VERIFY(gen.Task.CompactionId != 0);
+                Y_ABORT_UNLESS(gen.Task.CompactionId != 0);
                 Backend->CancelCompaction(gen.Task.CompactionId);
                 break;
             }
@@ -286,12 +286,12 @@ void TGenCompactionStrategy::Stop() {
         case EState::Pending:
         case EState::PendingBackground:
             // The task is scheduled, make sure to cancel it
-            Y_VERIFY(FinalState.Task.TaskId != 0);
+            Y_ABORT_UNLESS(FinalState.Task.TaskId != 0);
             Broker->CancelTask(FinalState.Task.TaskId);
             break;
         case EState::Compacting:
             // Compaction is running, cancel it
-            Y_VERIFY(FinalState.Task.CompactionId != 0);
+            Y_ABORT_UNLESS(FinalState.Task.CompactionId != 0);
             Backend->CancelCompaction(FinalState.Task.CompactionId);
             break;
     }
@@ -323,10 +323,10 @@ void TGenCompactionStrategy::ReflectSchema() {
 
     TString err;
     bool ok = NLocalDb::ValidateCompactionPolicyChange(*Policy, *scheme->CompactionPolicy, err);
-    Y_VERIFY(ok, "table %s id %u: %s", scheme->Name.data(), scheme->Id, err.data());
+    Y_ABORT_UNLESS(ok, "table %s id %u: %s", scheme->Name.data(), scheme->Id, err.data());
 
     Policy = scheme->CompactionPolicy;
-    Y_VERIFY(Generations.size() <= Policy->Generations.size(), "Cannot currently shrink the number of generations");
+    Y_ABORT_UNLESS(Generations.size() <= Policy->Generations.size(), "Cannot currently shrink the number of generations");
     Generations.resize(Policy->Generations.size());
 
     // Recheck all generations
@@ -384,7 +384,7 @@ void TGenCompactionStrategy::UpdateCompactions() {
 }
 
 ui64 TGenCompactionStrategy::BeginMemCompaction(TTaskId taskId, TSnapEdge edge, ui64 forcedCompactionId) {
-    Y_VERIFY(MemCompactionId == 0, "Unexpected concurrent mem compaction requests");
+    Y_ABORT_UNLESS(MemCompactionId == 0, "Unexpected concurrent mem compaction requests");
 
     TExtraState extra;
     if (forcedCompactionId == 0 && !Policy->Generations.empty() && ForcedState == EForcedState::None && edge.Head == TEpoch::Max()) {
@@ -396,7 +396,7 @@ ui64 TGenCompactionStrategy::BeginMemCompaction(TTaskId taskId, TSnapEdge edge, 
         edge,
         /* generation */ 0,
         extra);
-    Y_VERIFY(MemCompactionId != 0);
+    Y_ABORT_UNLESS(MemCompactionId != 0);
 
     if (forcedCompactionId != 0) {
         // We remember the last forced mem compaction we have started
@@ -415,7 +415,7 @@ bool TGenCompactionStrategy::ScheduleBorrowedCompaction() {
     for (const auto& pr : KnownParts) {
         if (pr.first.TabletID() != ownerTabletId) {
             haveBorrowed = true;
-            Y_VERIFY(pr.second == 255,
+            Y_ABORT_UNLESS(pr.second == 255,
                 "Borrowed part %s not in final parts", pr.first.ToString().c_str());
         }
     }
@@ -436,23 +436,23 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
 {
     auto* params = CheckedCast<TGenCompactionParams*>(rawParams.Get());
     ui32 generation = params->Generation;
-    Y_VERIFY(generation <= Generations.size() || generation == 255, "Unexpected CompactionFinished generation");
+    Y_ABORT_UNLESS(generation <= Generations.size() || generation == 255, "Unexpected CompactionFinished generation");
 
     if (generation == 0) {
-        Y_VERIFY(compactionId == MemCompactionId,
+        Y_ABORT_UNLESS(compactionId == MemCompactionId,
             "Unexpected CompactionFinished for gen 0");
         MemCompactionId = 0;
     } else if (generation == 255) {
-        Y_VERIFY(FinalState.State == EState::Compacting);
-        Y_VERIFY(compactionId == FinalState.Task.CompactionId,
+        Y_ABORT_UNLESS(FinalState.State == EState::Compacting);
+        Y_ABORT_UNLESS(compactionId == FinalState.Task.CompactionId,
             "Unexpected CompactionFinished for gen %" PRIu32, generation);
         FinalState.State = EState::Free;
         FinalState.Task.TaskId = 0;
         FinalState.Task.CompactionId = 0;
     } else {
         auto& gen = Generations[generation - 1];
-        Y_VERIFY(gen.State == EState::Compacting);
-        Y_VERIFY(compactionId == gen.Task.CompactionId,
+        Y_ABORT_UNLESS(gen.State == EState::Compacting);
+        Y_ABORT_UNLESS(compactionId == gen.Task.CompactionId,
             "Unexpected CompactionFinished for gen %" PRIu32, generation);
         gen.State = EState::Free;
         gen.Task.TaskId = 0;
@@ -467,24 +467,24 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
 
     if (compactionId == FinalCompactionId || generation == 255) {
         // All taken cold parts must match our list of cold parts
-        Y_VERIFY(params->ColdParts.size() <= FinalCompactionTaken);
+        Y_ABORT_UNLESS(params->ColdParts.size() <= FinalCompactionTaken);
         for (auto& part : params->ColdParts) {
-            Y_VERIFY(!ColdParts.empty());
+            Y_ABORT_UNLESS(!ColdParts.empty());
             auto& front = ColdParts.front();
-            Y_VERIFY(front->Label == part->Label);
+            Y_ABORT_UNLESS(front->Label == part->Label);
             KnownParts.erase(front->Label);
             ColdParts.pop_front();
             --FinalCompactionTaken;
         }
         params->ColdParts.clear();
         // All taken final parts must be at the tail of our source parts
-        Y_VERIFY(sourceParts.size() >= FinalCompactionTaken);
+        Y_ABORT_UNLESS(sourceParts.size() >= FinalCompactionTaken);
         auto partStart = sourceParts.end() - FinalCompactionTaken;
         auto partEnd = sourceParts.end();
         for (auto partIt = partStart; partIt != partEnd; ++partIt) {
-            Y_VERIFY(!FinalParts.empty());
+            Y_ABORT_UNLESS(!FinalParts.empty());
             auto& front = FinalParts.front();
-            Y_VERIFY(front.Label == (*partIt)->Label);
+            Y_ABORT_UNLESS(front.Label == (*partIt)->Label);
             KnownParts.erase(front.Label);
             FinalParts.pop_front();
             --FinalCompactionTaken;
@@ -502,19 +502,19 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         if (nextGen.TakenHeadParts != 0) {
             // This compaction has taken parts from the head of the next generation
             // These parts are expected to be at the tail of our source parts
-            Y_VERIFY(sourceParts.size() >= nextGen.TakenHeadParts);
+            Y_ABORT_UNLESS(sourceParts.size() >= nextGen.TakenHeadParts);
             auto partStart = sourceParts.end() - nextGen.TakenHeadParts;
             auto partEnd = sourceParts.end();
             for (auto partIt = partStart; partIt != partEnd; ++partIt) {
-                Y_VERIFY(!nextGen.Parts.empty());
+                Y_ABORT_UNLESS(!nextGen.Parts.empty());
                 auto& front = nextGen.Parts.front();
-                Y_VERIFY(front.Label == (*partIt)->Label);
+                Y_ABORT_UNLESS(front.Label == (*partIt)->Label);
                 KnownParts.erase(front.Label);
                 nextGen.PopFront();
             }
-            Y_VERIFY(nextGen.TakenHeadParts == 0);
-            Y_VERIFY(nextGen.TakenHeadBackingSize == 0);
-            Y_VERIFY(nextGen.TakenHeadPartEpochCount == 0);
+            Y_ABORT_UNLESS(nextGen.TakenHeadParts == 0);
+            Y_ABORT_UNLESS(nextGen.TakenHeadBackingSize == 0);
+            Y_ABORT_UNLESS(nextGen.TakenHeadPartEpochCount == 0);
             sourceParts.erase(partStart, partEnd);
             checkNeeded[generation] = true;
         }
@@ -524,7 +524,7 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
 
     if (generation == 0) {
         // This was a memtable compaction, we don't expect anything else
-        Y_VERIFY(sourceParts.empty());
+        Y_ABORT_UNLESS(sourceParts.empty());
 
         // Check if we just finished the last forced mem compaction
         if (ForcedMemCompactionId && compactionId == ForcedMemCompactionId) {
@@ -538,10 +538,10 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         }
     } else if (generation == 255) {
         // This was a final parts compaction, we don't expect anything else
-        Y_VERIFY(sourceParts.empty());
+        Y_ABORT_UNLESS(sourceParts.empty());
     } else {
         ui32 sourceIndex = generation - 1;
-        Y_VERIFY(sourceIndex < Generations.size());
+        Y_ABORT_UNLESS(sourceIndex < Generations.size());
 
         if (ForcedState == EForcedState::Compacting && ForcedGeneration == generation) {
             ForcedState = EForcedState::None;
@@ -551,19 +551,19 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         while (sourceParts) {
             auto& sourcePart = sourceParts.back();
             auto& sourceGen = Generations[sourceIndex];
-            Y_VERIFY(sourceGen.Parts);
+            Y_ABORT_UNLESS(sourceGen.Parts);
             auto& part = sourceGen.Parts.back();
-            Y_VERIFY(part.Label == sourcePart->Label,
+            Y_ABORT_UNLESS(part.Label == sourcePart->Label,
                 "Failed at gen=%u, sourceIndex=%u, headTaken=%lu",
                 generation, sourceIndex, sourceGen.TakenHeadParts);
-            Y_VERIFY(sourceGen.CompactingTailParts > 0);
+            Y_ABORT_UNLESS(sourceGen.CompactingTailParts > 0);
             KnownParts.erase(part.Label);
             sourceGen.PopBack();
             sourceParts.pop_back();
             checkNeeded[sourceIndex] = true;
         }
 
-        Y_VERIFY(sourceParts.empty());
+        Y_ABORT_UNLESS(sourceParts.empty());
 
         // Recheck compacted generation, it's free and may need a new compaction
         checkNeeded[generation - 1] = true;
@@ -654,13 +654,13 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         } else {
             auto& newGen = Generations[target];
             if (target < generation) {
-                Y_VERIFY(!newGen.Parts || result->Epoch <= newGen.Parts.back().Epoch);
+                Y_ABORT_UNLESS(!newGen.Parts || result->Epoch <= newGen.Parts.back().Epoch);
                 for (auto it = newParts.begin(); it != newParts.end(); ++it) {
                     auto& partView = *it;
                     newGen.PushBack(std::move(partView));
                 }
             } else {
-                Y_VERIFY(!newGen.Parts || result->Epoch >= newGen.Parts.front().Epoch);
+                Y_ABORT_UNLESS(!newGen.Parts || result->Epoch >= newGen.Parts.front().Epoch);
                 for (auto it = newParts.rbegin(); it != newParts.rend(); ++it) {
                     auto& partView = *it;
                     newGen.PushFront(std::move(partView));
@@ -675,7 +675,7 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
     UpdateStats();
 
     if (forcedCompactionContinue) {
-        Y_VERIFY(target < Generations.size());
+        Y_ABORT_UNLESS(target < Generations.size());
         ForcedState = EForcedState::Pending;
         ForcedGeneration = target + 1;
         checkNeeded[target] = true;
@@ -724,20 +724,20 @@ void TGenCompactionStrategy::OnForcedGenCompactionDone() {
 }
 
 void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
-    Y_VERIFY(level == 255, "Unexpected level of the merged part");
+    Y_ABORT_UNLESS(level == 255, "Unexpected level of the merged part");
 
     const auto label = partView->Label;
 
     // Remove the old part data from our model (since it may have been changed)
     if (KnownParts.contains(label)) {
-        Y_VERIFY(KnownParts[label] == level, "Borrowed part cannot be moved between levels");
-        Y_VERIFY(FinalCompactionId == 0 || FinalCompactionTaken == 0,
+        Y_ABORT_UNLESS(KnownParts[label] == level, "Borrowed part cannot be moved between levels");
+        Y_ABORT_UNLESS(FinalCompactionId == 0 || FinalCompactionTaken == 0,
             "Borrowed part attaching while final compaction is in progress");
 
         // Inefficient, but this case shouldn't happen in practice, since we
         // don't allow a diamond shaped split/merge sequence in datashards.
         for (auto it = ColdParts.begin(); it != ColdParts.end(); ++it) {
-            Y_VERIFY((*it)->Label != label,
+            Y_ABORT_UNLESS((*it)->Label != label,
                 "Cannot attach borrowed part, another cold part with the same label exists");
         }
         for (auto it = FinalParts.begin(); it != FinalParts.end(); ++it) {
@@ -767,10 +767,10 @@ void TGenCompactionStrategy::PartMerged(TPartView partView, ui32 level) {
 }
 
 void TGenCompactionStrategy::PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) {
-    Y_VERIFY(level == 255, "Unexpected level of the merged part");
+    Y_ABORT_UNLESS(level == 255, "Unexpected level of the merged part");
 
     const auto label = part->Label;
-    Y_VERIFY(!KnownParts.contains(label),
+    Y_ABORT_UNLESS(!KnownParts.contains(label),
         "Borrowed part attaching when another part with the same label exists");
 
     ColdParts.emplace_back(std::move(part));
@@ -881,8 +881,8 @@ void TGenCompactionStrategy::OutputHtml(IOutputStream& out) {
 void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation) {
     // Special mode for final parts compaction
     if (generation == 255) {
-        Y_VERIFY(FinalState.State == EState::Pending);
-        Y_VERIFY(FinalState.Task.TaskId == taskId);
+        Y_ABORT_UNLESS(FinalState.State == EState::Pending);
+        Y_ABORT_UNLESS(FinalState.Task.TaskId == taskId);
 
         auto cancelFinal = [&]() {
             Broker->FinishTask(taskId, EResourceStatus::Cancelled);
@@ -927,12 +927,12 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
         return;
     }
 
-    Y_VERIFY(generation > 0);
-    Y_VERIFY(generation <= Generations.size());
+    Y_ABORT_UNLESS(generation > 0);
+    Y_ABORT_UNLESS(generation <= Generations.size());
 
     auto& gen = Generations[generation - 1];
-    Y_VERIFY(gen.State == EState::Pending || gen.State == EState::PendingBackground);
-    Y_VERIFY(gen.Task.TaskId == taskId);
+    Y_ABORT_UNLESS(gen.State == EState::Pending || gen.State == EState::PendingBackground);
+    Y_ABORT_UNLESS(gen.Task.TaskId == taskId);
 
     const bool forced = NeedToForceCompact(generation);
 
@@ -942,7 +942,7 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
 
         gen.State = EState::Free;
 
-        Y_VERIFY(!forced, "Unexpected cancellation of a forced compaction");
+        Y_ABORT_UNLESS(!forced, "Unexpected cancellation of a forced compaction");
     };
 
     if (DesiredMode(generation) == EDesiredMode::None) {
@@ -971,14 +971,14 @@ void TGenCompactionStrategy::BeginGenCompaction(TTaskId taskId, ui32 generation)
     if (forced) {
         // We have just started a forced compaction
         ForcedState = EForcedState::Compacting;
-        Y_VERIFY(ForcedGeneration == generation);
+        Y_ABORT_UNLESS(ForcedGeneration == generation);
     }
 }
 
 void TGenCompactionStrategy::SubmitTask(
         TGenCompactionStrategy::TCompactionTask& task, TString type, ui32 priority, ui32 generation)
 {
-    Y_VERIFY(task.TaskId == 0, "Task is already submitted");
+    Y_ABORT_UNLESS(task.TaskId == 0, "Task is already submitted");
     task.SubmissionTimestamp = Time->Now();
     task.Priority = priority;
 
@@ -1000,7 +1000,7 @@ void TGenCompactionStrategy::SubmitTask(
 void TGenCompactionStrategy::UpdateTask(
         TGenCompactionStrategy::TCompactionTask& task, TString type, ui32 priority)
 {
-    Y_VERIFY(task.TaskId != 0, "Task was not submitted");
+    Y_ABORT_UNLESS(task.TaskId != 0, "Task was not submitted");
     task.Priority = priority;
 
     Broker->UpdateTask(
@@ -1015,8 +1015,8 @@ ui32 TGenCompactionStrategy::ComputeBackgroundPriority(
         const TCompactionPolicy::TGenerationPolicy& policy,
         TInstant now) const
 {
-    Y_VERIFY(generation > 0);
-    Y_VERIFY(generation <= Generations.size());
+    Y_ABORT_UNLESS(generation > 0);
+    Y_ABORT_UNLESS(generation <= Generations.size());
 
     if (NeedToForceCompact(generation)) {
         // This background compaction will be used for the forced compaction
@@ -1083,7 +1083,7 @@ void TGenCompactionStrategy::CheckOverload(ui32 generation) {
 }
 
 void TGenCompactionStrategy::CheckGeneration(ui32 generation) {
-    Y_VERIFY(generation > 0);
+    Y_ABORT_UNLESS(generation > 0);
 
     CheckOverload(generation);
 
@@ -1137,8 +1137,8 @@ void TGenCompactionStrategy::CheckGeneration(ui32 generation) {
 }
 
 TGenCompactionStrategy::EDesiredMode TGenCompactionStrategy::DesiredMode(ui32 generation) const {
-    Y_VERIFY(generation > 0);
-    Y_VERIFY(generation <= Generations.size());
+    Y_ABORT_UNLESS(generation > 0);
+    Y_ABORT_UNLESS(generation <= Generations.size());
 
     auto& gen = Generations[generation - 1];
     ui64 genSize = gen.Stats.BackingSize - gen.TakenHeadBackingSize;
@@ -1170,8 +1170,8 @@ TGenCompactionStrategy::EDesiredMode TGenCompactionStrategy::DesiredMode(ui32 ge
 // This is a simple heuristic that triggers compaction of borrowed parts (they all are at final level) on split dst
 // tablet after some updates happen after split.
 bool TGenCompactionStrategy::NeedToCompactAfterSplit(ui32 generation) const {
-    Y_VERIFY(generation > 0);
-    Y_VERIFY(generation <= Generations.size());
+    Y_ABORT_UNLESS(generation > 0);
+    Y_ABORT_UNLESS(generation <= Generations.size());
 
     // Last generation?
     if (generation != Generations.size())
@@ -1200,7 +1200,7 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
         ui32 generation,
         TExtraState& extra)
 {
-    Y_VERIFY(generation <= Generations.size() || generation == 255);
+    Y_ABORT_UNLESS(generation <= Generations.size() || generation == 255);
 
     auto params = MakeHolder<TGenCompactionParams>();
     params->Table = Table;
@@ -1217,8 +1217,8 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
         for (ui32 index : xrange(generation - 1, generation)) {
             auto& gen = Generations.at(index);
             size_t skip = first ? gen.TakenHeadParts : 0;
-            Y_VERIFY(gen.TakenHeadParts == skip);
-            Y_VERIFY(gen.CompactingTailParts == 0);
+            Y_ABORT_UNLESS(gen.TakenHeadParts == skip);
+            Y_ABORT_UNLESS(gen.CompactingTailParts == 0);
             for (auto& part : gen.Parts) {
                 if (skip > 0) {
                     --skip;
@@ -1235,20 +1235,20 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
     // Extend with some parts from the next generation
     if (generation < Generations.size()) {
         auto& nextGen = Generations.at(generation);
-        Y_VERIFY(nextGen.TakenHeadParts == 0);
-        Y_VERIFY(nextGen.TakenHeadBackingSize == 0);
-        Y_VERIFY(nextGen.TakenHeadPartEpochCount == 0);
+        Y_ABORT_UNLESS(nextGen.TakenHeadParts == 0);
+        Y_ABORT_UNLESS(nextGen.TakenHeadBackingSize == 0);
+        Y_ABORT_UNLESS(nextGen.TakenHeadPartEpochCount == 0);
         if (extra.ExtrasAllowed() && !NeedToForceCompact(generation + 1)) {
-            Y_VERIFY(nextGen.Parts.size() >= nextGen.CompactingTailParts);
+            Y_ABORT_UNLESS(nextGen.Parts.size() >= nextGen.CompactingTailParts);
             size_t available = nextGen.Parts.size() - nextGen.CompactingTailParts;
             TEpoch lastEpoch = TEpoch::Max();
             for (auto& part : nextGen.Parts) {
-                Y_VERIFY(part.Epoch != TEpoch::Max(),
+                Y_ABORT_UNLESS(part.Epoch != TEpoch::Max(),
                     "Unexpected part with an infinite epoch found");
 
                 if (std::exchange(lastEpoch, part.Epoch) == part.Epoch) {
                     // The last part we grabbed wasn't an epoch edge
-                    Y_VERIFY(nextGen.TakenHeadPartEpochCount > 0);
+                    Y_ABORT_UNLESS(nextGen.TakenHeadPartEpochCount > 0);
                     --nextGen.TakenHeadPartEpochCount;
                 }
 
@@ -1268,7 +1268,7 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
             }
         }
     } else {
-        Y_VERIFY(generation == Generations.size() || generation == 255);
+        Y_ABORT_UNLESS(generation == Generations.size() || generation == 255);
         for (auto& part : FinalParts) {
             params->Parts.emplace_back(part.PartView);
             extra.Add(part.Stats.BackingSize);
@@ -1301,7 +1301,7 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
     ui64 compactionId = Backend->BeginCompaction(std::move(params));
 
     if (generation == Generations.size() || generation == 255) {
-        Y_VERIFY(FinalCompactionId == 0, "Multiple final compactions not allowed");
+        Y_ABORT_UNLESS(FinalCompactionId == 0, "Multiple final compactions not allowed");
         if (generation != 255) {
             FinalCompactionId = compactionId;
 
@@ -1313,12 +1313,12 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
                     case EState::Pending:
                     case EState::PendingBackground:
                         // The task is scheduled, make sure to cancel it
-                        Y_VERIFY(FinalState.Task.TaskId != 0);
+                        Y_ABORT_UNLESS(FinalState.Task.TaskId != 0);
                         Broker->CancelTask(FinalState.Task.TaskId);
                         break;
                     case EState::Compacting:
                         // Compaction is running, cancel it
-                        Y_VERIFY(FinalState.Task.CompactionId != 0);
+                        Y_ABORT_UNLESS(FinalState.Task.CompactionId != 0);
                         Backend->CancelCompaction(FinalState.Task.CompactionId);
                         break;
                 }

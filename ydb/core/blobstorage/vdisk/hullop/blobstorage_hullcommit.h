@@ -36,7 +36,7 @@ namespace NKikimr {
             , HugeKeeperId(hugeKeeperId)
             , SkeletonId(skeletonId)
         {
-            Y_VERIFY(PDiskCtx && HullCtx && LsnMngr && LoggerId && HugeKeeperId && SkeletonId);
+            Y_ABORT_UNLESS(PDiskCtx && HullCtx && LsnMngr && LoggerId && HugeKeeperId && SkeletonId);
         }
     };
 
@@ -187,9 +187,9 @@ namespace NKikimr {
             std::sort(commitRecord.DeleteChunks.begin(), commitRecord.DeleteChunks.end());
 
             // verify that chunk ids do not repeat in both of arrays
-            Y_VERIFY(std::adjacent_find(commitRecord.CommitChunks.begin(), commitRecord.CommitChunks.end()) ==
+            Y_ABORT_UNLESS(std::adjacent_find(commitRecord.CommitChunks.begin(), commitRecord.CommitChunks.end()) ==
                     commitRecord.CommitChunks.end());
-            Y_VERIFY(std::adjacent_find(commitRecord.DeleteChunks.begin(), commitRecord.DeleteChunks.end()) ==
+            Y_ABORT_UNLESS(std::adjacent_find(commitRecord.DeleteChunks.begin(), commitRecord.DeleteChunks.end()) ==
                     commitRecord.DeleteChunks.end());
 
             // ensure that there are no intersections between chunks being committed and deleted
@@ -197,7 +197,7 @@ namespace NKikimr {
             std::set_intersection(commitRecord.CommitChunks.begin(), commitRecord.CommitChunks.end(),
                     commitRecord.DeleteChunks.begin(), commitRecord.DeleteChunks.end(),
                     std::back_inserter(isect));
-            Y_VERIFY(isect.empty());
+            Y_ABORT_UNLESS(isect.empty());
         }
 
         void VerifyRemovedHugeBlobs(TDiskPartVec& v) {
@@ -241,7 +241,7 @@ namespace NKikimr {
                 // for replicated SST -- generate LSN range; do it now, because in serialization we need actual data
                 // generate range of LSN's covering newly generated blobs
                 const ui64 lsnAdvance = Metadata.NumRecoveredBlobs;
-                Y_VERIFY(lsnAdvance > 0);
+                Y_ABORT_UNLESS(lsnAdvance > 0);
                 LsnSeg = Ctx->LsnMngr->AllocLsnForHull(lsnAdvance);
                 // store first/last LSN into level segment
                 Metadata.ReplSst->Info.FirstLsn = LsnSeg.First;

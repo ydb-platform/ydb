@@ -175,7 +175,7 @@ namespace NKikimr {
             AddBasic(memRec, key);
             if (memRec.HasData()) {
                 if (data) {
-                    Y_VERIFY(memRec.GetType() == TBlobType::MemBlob || memRec.GetType() == TBlobType::DiskBlob);
+                    Y_ABORT_UNLESS(memRec.GetType() == TBlobType::MemBlob || memRec.GetType() == TBlobType::DiskBlob);
                     if (NeedToLoadData == ELoadData::LoadData) {
                         DataMerger.AddBlob(TDiskBlob(data, memRec.GetLocalParts(GType), GType, key.LogoBlobID()));
                         ProducingSmallBlob = true;
@@ -183,7 +183,7 @@ namespace NKikimr {
                         // intentionally do nothing: don't add any data to DataMerger, because we don't need it
                     }
                 } else {
-                    Y_VERIFY(memRec.GetType() == TBlobType::HugeBlob);
+                    Y_ABORT_UNLESS(memRec.GetType() == TBlobType::HugeBlob);
                     TDiskDataExtractor extr;
                     memRec.GetDiskData(&extr, nullptr);
                     const NMatrix::TVectorType v = memRec.GetLocalParts(GType);
@@ -201,20 +201,20 @@ namespace NKikimr {
                 if (const auto m = memRec.GetType(); m == TBlobType::HugeBlob || m == TBlobType::ManyHugeBlobs) {
                     TDiskDataExtractor extr;
                     memRec.GetDiskData(&extr, outbound);
-                    Y_VERIFY(extr.End - extr.Begin == memRec.GetIngress().LocalParts(GType).CountBits());
+                    Y_ABORT_UNLESS(extr.End - extr.Begin == memRec.GetIngress().LocalParts(GType).CountBits());
                 }
                 switch (memRec.GetType()) {
                     case TBlobType::DiskBlob:
-                        Y_VERIFY(!memRec.HasData() || DataMerger.GetHugeBlobMerger().Empty());
+                        Y_ABORT_UNLESS(!memRec.HasData() || DataMerger.GetHugeBlobMerger().Empty());
                         break;
 
                     case TBlobType::HugeBlob:
                     case TBlobType::ManyHugeBlobs:
-                        Y_VERIFY(memRec.HasData() && DataMerger.GetDiskBlobMerger().Empty());
+                        Y_ABORT_UNLESS(memRec.HasData() && DataMerger.GetDiskBlobMerger().Empty());
                         break;
 
                     case TBlobType::MemBlob:
-                        Y_VERIFY(memRec.HasData() && DataMerger.GetHugeBlobMerger().Empty());
+                        Y_ABORT_UNLESS(memRec.HasData() && DataMerger.GetHugeBlobMerger().Empty());
                         break;
                 }
                 VerifyConsistency();
@@ -282,7 +282,7 @@ namespace NKikimr {
 
         void Finish() {
             if (NeedToLoadData == ELoadData::DontLoadData) {
-                Y_VERIFY(!DataMerger.HasSmallBlobs()); // we didn't put any small blob to the data merger
+                Y_ABORT_UNLESS(!DataMerger.HasSmallBlobs()); // we didn't put any small blob to the data merger
                 // if we have huge blobs for the record, than we set TBlobType::HugeBlob or
                 // TBlobType::ManyHugeBlobs a few lines below
                 MemRec.SetNoBlob();
@@ -328,35 +328,35 @@ namespace NKikimr {
 
         // add read small blob content; they should come in order as returned from GetSmallBlobDiskParts by index merger
         void AddReadSmallBlob(TString data) {
-            Y_VERIFY(ProducingSmallBlob);
+            Y_ABORT_UNLESS(ProducingSmallBlob);
             ReadSmallBlobs.push_back(std::move(data));
         }
 
         void Finish() {
             // ensure we are producing small blobs; otherwise this merger should never be created
-            Y_VERIFY(ProducingSmallBlob);
+            Y_ABORT_UNLESS(ProducingSmallBlob);
 
             // add all read small blobs into blob merger
             const size_t count = ReadSmallBlobs.size();
-            Y_VERIFY(count == +MemRecs, "count# %zu +MemRecs# %zu", count, +MemRecs);
+            Y_ABORT_UNLESS(count == +MemRecs, "count# %zu +MemRecs# %zu", count, +MemRecs);
             for (size_t i = 0; i < count; ++i) {
                 const TMemRec& memRec = MemRecs[i]->GetMemRec();
                 const TString& buffer = ReadSmallBlobs[i];
-                Y_VERIFY(buffer.size() == memRec.DataSize());
+                Y_ABORT_UNLESS(buffer.size() == memRec.DataSize());
                 DataMerger.AddBlob(TDiskBlob(buffer.data(), buffer.size(), memRec.GetLocalParts(GType)));
             }
 
 
             // ensure that data merger has small blob
-            Y_VERIFY(DataMerger.HasSmallBlobs());
+            Y_ABORT_UNLESS(DataMerger.HasSmallBlobs());
 
             // finalize base class logic; it also generates blob record
             TBase::Finish();
 
             // ensure that we have generated correct DiskBlob with full set of declared parts
             const TDiskBlob& blob = DataMerger.GetDiskBlobMerger().GetDiskBlob();
-            Y_VERIFY(blob.GetParts() == MemRec.GetLocalParts(GType));
-            Y_VERIFY(MemRec.GetType() == TBlobType::DiskBlob);
+            Y_ABORT_UNLESS(blob.GetParts() == MemRec.GetLocalParts(GType));
+            Y_ABORT_UNLESS(MemRec.GetType() == TBlobType::DiskBlob);
         }
 
     private:
@@ -406,7 +406,7 @@ namespace NKikimr {
                             (*Callback)(data, v);
                         }
                     } else if (memRec.GetType() == TBlobType::HugeBlob) {
-                        Y_VERIFY(v.CountBits() == 1u);
+                        Y_ABORT_UNLESS(v.CountBits() == 1u);
                         // deduplicate huge blob
                         LastWriteWinsMerger.Add(extr.SwearOne(), v, circaLsn);
                     } else {
@@ -417,7 +417,7 @@ namespace NKikimr {
                 }
                 default: {
                     // many blobs
-                    Y_VERIFY(memRec.GetType() == TBlobType::ManyHugeBlobs);
+                    Y_ABORT_UNLESS(memRec.GetType() == TBlobType::ManyHugeBlobs);
                     const TDiskPart *dataPtr = extr.Begin;
                     ui8 i = v.FirstPosition();
                     while (i != v.GetSize() && dataPtr != extr.End) {
@@ -438,13 +438,13 @@ namespace NKikimr {
             if (memRec.HasData()) {
                 const NMatrix::TVectorType v = memRec.GetLocalParts(GType);
                 if (data) {
-                    Y_VERIFY(memRec.GetType() == TBlobType::MemBlob);
+                    Y_ABORT_UNLESS(memRec.GetType() == TBlobType::MemBlob);
                     // we have in-memory data in a rope, it always wins among other data,
                     // so we call Callback immediately and remove any data for this local part
                     // from LastWriteWinsMerger
                     (*Callback)(TDiskBlob(data, v, GType, key.LogoBlobID()));
                 } else {
-                    Y_VERIFY(memRec.GetType() == TBlobType::HugeBlob && v.CountBits() == 1u);
+                    Y_ABORT_UNLESS(memRec.GetType() == TBlobType::HugeBlob && v.CountBits() == 1u);
                     TDiskDataExtractor extr;
                     memRec.GetDiskData(&extr, nullptr);
                     // deduplicate huge blob

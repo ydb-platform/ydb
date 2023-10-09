@@ -3,7 +3,7 @@
 namespace NKikimr::NDataShard {
 
 std::tuple<TRowVersion, bool, ui64> TDataShard::CalculateFollowerReadEdge() const {
-    Y_VERIFY(!IsFollower());
+    Y_ABORT_UNLESS(!IsFollower());
     Y_VERIFY_DEBUG(IsMvccEnabled());
 
     for (auto order : TransQueue.GetPlan()) {
@@ -37,7 +37,7 @@ std::tuple<TRowVersion, bool, ui64> TDataShard::CalculateFollowerReadEdge() cons
 }
 
 bool TDataShard::PromoteFollowerReadEdge(TTransactionContext& txc) {
-    Y_VERIFY(!IsFollower());
+    Y_ABORT_UNLESS(!IsFollower());
 
     if (IsMvccEnabled()) {
         auto [version, repeatable, waitStep] = CalculateFollowerReadEdge();
@@ -63,7 +63,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_UPDATE_FOLLOWER_READ_EDGE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        Y_VERIFY(Self->UpdateFollowerReadEdgePending);
+        Y_ABORT_UNLESS(Self->UpdateFollowerReadEdgePending);
         Self->UpdateFollowerReadEdgePending = false;
         Self->PromoteFollowerReadEdge(txc);
         return true;
@@ -75,7 +75,7 @@ public:
 };
 
 bool TDataShard::PromoteFollowerReadEdge() {
-    Y_VERIFY(!IsFollower());
+    Y_ABORT_UNLESS(!IsFollower());
 
     if (IsMvccEnabled()) {
         auto [currentEdge, currentRepeatable] = SnapshotManager.GetFollowerReadEdge();

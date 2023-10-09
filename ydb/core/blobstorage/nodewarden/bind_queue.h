@@ -28,7 +28,7 @@ namespace NKikimr::NStorage {
     public:
         void Disable(ui32 nodeId) {
 #ifndef NDEBUG
-            Y_VERIFY(Enabled.contains(nodeId));
+            Y_ABORT_UNLESS(Enabled.contains(nodeId));
             Enabled.erase(nodeId);
             Disabled.insert(nodeId);
 #endif
@@ -38,7 +38,7 @@ namespace NKikimr::NStorage {
             size_t index = it->second;
 
             // ensure item is not yet disabled
-            Y_VERIFY(index < ProcessedEnd);
+            Y_ABORT_UNLESS(index < ProcessedEnd);
 
             // if item is active, move it to processed as a transit stage
             if (index < ActiveEnd) {
@@ -52,17 +52,17 @@ namespace NKikimr::NStorage {
 
         void Enable(ui32 nodeId) {
 #ifndef NDEBUG
-            Y_VERIFY(Disabled.contains(nodeId));
+            Y_ABORT_UNLESS(Disabled.contains(nodeId));
             Disabled.erase(nodeId);
             Enabled.insert(nodeId);
 #endif
 
             const auto it = NodeIdToBindQueue.find(nodeId);
-            Y_VERIFY(it != NodeIdToBindQueue.end());
+            Y_ABORT_UNLESS(it != NodeIdToBindQueue.end());
             size_t index = it->second;
 
             // ensure item is disabled
-            Y_VERIFY(ProcessedEnd <= index);
+            Y_ABORT_UNLESS(ProcessedEnd <= index);
 
             // move it back to processed and then to active
             Swap(index, ProcessedEnd++);

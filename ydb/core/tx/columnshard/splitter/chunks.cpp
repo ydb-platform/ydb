@@ -7,17 +7,17 @@ std::vector<NKikimr::NOlap::IPortionColumnChunk::TPtr> IPortionColumnChunk::Inte
     for (auto&& i : splitSizes) {
         sumSize += i;
     }
-    Y_VERIFY(sumSize <= GetPackedSize());
+    Y_ABORT_UNLESS(sumSize <= GetPackedSize());
     if (sumSize < GetPackedSize()) {
-        Y_VERIFY(GetRecordsCount() >= splitSizes.size() + 1);
+        Y_ABORT_UNLESS(GetRecordsCount() >= splitSizes.size() + 1);
     } else {
-        Y_VERIFY(GetRecordsCount() >= splitSizes.size());
+        Y_ABORT_UNLESS(GetRecordsCount() >= splitSizes.size());
     }
     auto result = DoInternalSplit(saver, counters, splitSizes);
     if (sumSize == GetPackedSize()) {
-        Y_VERIFY(result.size() == splitSizes.size());
+        Y_ABORT_UNLESS(result.size() == splitSizes.size());
     } else {
-        Y_VERIFY(result.size() == splitSizes.size() + 1);
+        Y_ABORT_UNLESS(result.size() == splitSizes.size() + 1);
     }
     return result;
 }

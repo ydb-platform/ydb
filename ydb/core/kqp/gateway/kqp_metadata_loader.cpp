@@ -665,7 +665,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     using EKind = NSchemeCache::TSchemeCacheNavigate::EKind;
 
     const auto externalEntryItem = CreateNavigateExternalEntry(id, settings.WithExternalDatasources_);
-    Y_VERIFY(!settings.WithExternalDatasources_ || externalEntryItem, "External data source must be resolved using path only");
+    Y_ABORT_UNLESS(!settings.WithExternalDatasources_ || externalEntryItem, "External data source must be resolved using path only");
     auto resNavigate = settings.WithExternalDatasources_ ? *externalEntryItem : CreateNavigateEntry(cluster,
         id, settings, TempTablesState);
     const auto entry = resNavigate.Entry;

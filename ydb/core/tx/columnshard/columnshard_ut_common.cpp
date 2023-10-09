@@ -111,7 +111,7 @@ bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shar
     const TString dedupId = ToString(writeId);
 
     auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, tableId, dedupId, data, writeId);
-    Y_VERIFY(schema);
+    Y_ABORT_UNLESS(schema);
     write->SetArrowSchema(NArrow::SerializeSchema(*schema));
     ForwardToTablet(runtime, shardId, sender, write.release());
 

@@ -22,12 +22,12 @@ TIntrusivePtr<TTabletStorageInfo> TabletStorageInfoFromProto(const NKikimrTablet
         if (channelInfo.HasChannelType()) {
             auto erasure = (TBlobStorageGroupType::EErasureSpecies)channelInfo.GetChannelType();
             x.Type = TBlobStorageGroupType(erasure);
-            Y_VERIFY(!channelInfo.HasChannelErasureName());
+            Y_ABORT_UNLESS(!channelInfo.HasChannelErasureName());
         } else {
             auto erasure = TBlobStorageGroupType::ErasureSpeciesByName(channelInfo.GetChannelErasureName());
             x.Type = TBlobStorageGroupType(erasure);
         }
-        Y_VERIFY((ui32)x.Type.GetErasure() < x.Type.ErasureSpeciesCount);
+        Y_ABORT_UNLESS((ui32)x.Type.GetErasure() < x.Type.ErasureSpeciesCount);
 
         x.StoragePool = channelInfo.GetStoragePool();
 

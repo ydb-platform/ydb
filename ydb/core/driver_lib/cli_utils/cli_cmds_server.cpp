@@ -283,7 +283,7 @@ protected:
 
         if (optname && config.ParseResult->Has(optname)) {
             const bool success = ParsePBFromFile(config.ParseResult->Get(optname), res = (AppConfig.*mutableConfig)());
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
         } else if ((BaseConfig.*hasConfig)()) {
             res = (AppConfig.*mutableConfig)();
             res->CopyFrom((BaseConfig.*getConfig)());
@@ -300,7 +300,7 @@ protected:
         if (config.ParseResult->Has(optname)) {
             TProto cfg;
             bool success = ParsePBFromFile(config.ParseResult->Get(optname), &cfg);
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
             res = (AppConfig.*mutableConfig)();
             res->MergeFrom(cfg);
         }
@@ -874,7 +874,7 @@ protected:
         for (const TString& path : config.ParseResult->GetFreeArgs()) {
             NKikimrConfig::TAppConfig parsedConfig;
             const bool result = ParsePBFromFile(path, &parsedConfig);
-            Y_VERIFY(result);
+            Y_ABORT_UNLESS(result);
             BaseConfig.MergeFrom(parsedConfig);
             res = true;
         }
@@ -1054,7 +1054,7 @@ protected:
                 addrs.push_back(addr);
             }
         } else {
-            Y_VERIFY(NodeBrokerPort);
+            Y_ABORT_UNLESS(NodeBrokerPort);
             for (auto &node : RunConfig.AppConfig.MutableNameserviceConfig()->GetNode()) {
                 addrs.emplace_back(TStringBuilder() << (NodeBrokerUseTls ? "grpcs://" : "") << node.GetHost() << ':' << NodeBrokerPort);
             }
@@ -1211,7 +1211,7 @@ protected:
             if (!result || !result->IsSuccess())
                 Sleep(TDuration::Seconds(1));
         }
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
 
         if (!result->IsSuccess())
             ythrow yexception() << "Cannot register dynamic node: " << result->GetErrorMessage();
@@ -1440,11 +1440,11 @@ public:
     }
 
     virtual int Run(TConfig& config) override {
-        Y_VERIFY(config.ParseResult->Has("dump-config-to"));
+        Y_ABORT_UNLESS(config.ParseResult->Has("dump-config-to"));
 
         TString proto;
         const bool status = google::protobuf::TextFormat::PrintToString(AppConfig, &proto);
-        Y_VERIFY(status);
+        Y_ABORT_UNLESS(status);
         TString path = config.ParseResult->Get("dump-config-to");
         TFileOutput file(path);
         file << proto;
@@ -1461,7 +1461,7 @@ public:
     {}
 
     virtual int Run(TConfig &/*config*/) override {
-        Y_VERIFY(RunConfig.NodeId);
+        Y_ABORT_UNLESS(RunConfig.NodeId);
         return MainRun(RunConfig, Factories);
     }
 

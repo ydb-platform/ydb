@@ -32,7 +32,7 @@ namespace NKikimr {
                 const TIntrusivePtr<TVDiskConfig> &cfg) {
             auto pdiskCtx = std::make_shared<TPDiskCtx>(pDiskParams, cfg->BaseInfo.PDiskActorID,
                 TStringBuilder() << TlsActivationContext->ExecutorThread.ActorSystem->NodeId << ":" << cfg->BaseInfo.PDiskId);
-            Y_VERIFY(cfg->MaxLogoBlobDataSize < pdiskCtx->Dsk->ChunkSize + 1024u,
+            Y_ABORT_UNLESS(cfg->MaxLogoBlobDataSize < pdiskCtx->Dsk->ChunkSize + 1024u,
                     "Chunk size is too small, check your VDisk settings; "
                     "MaxLogoBlobDataSize=%" PRIu32 " chunkSize=%" PRIu64,
                     cfg->MaxLogoBlobDataSize, pdiskCtx->Dsk->ChunkSize);

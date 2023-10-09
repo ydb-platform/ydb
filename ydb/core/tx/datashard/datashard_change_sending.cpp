@@ -356,10 +356,10 @@ public:
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxChangeExchangeSplitAck Execute"
             << ", at tablet# " << Self->TabletID());
 
-        Y_VERIFY(!Self->ChangesQueue);
+        Y_ABORT_UNLESS(!Self->ChangesQueue);
 
         Self->ChangeExchangeSplitter.Ack();
-        Y_VERIFY(Self->ChangeExchangeSplitter.Done());
+        Y_ABORT_UNLESS(Self->ChangeExchangeSplitter.Done());
 
         for (const auto dstTabletId : Self->ChangeSenderActivator.GetDstSet()) {
             if (Self->SplitSrcSnapshotSender.Acked(dstTabletId)) {

@@ -93,7 +93,7 @@ class TUnifiedBlobId {
 
         TS3BlobId(const TUnifiedBlobId& dsBlob, const ui64 pathId)
         {
-            Y_VERIFY(dsBlob.IsDsBlob());
+            Y_ABORT_UNLESS(dsBlob.IsDsBlob());
             DsBlobId = std::get<TDsBlobId>(dsBlob.Id);
             Key = DsIdToS3Key(dsBlob, pathId);
         }
@@ -144,7 +144,7 @@ public:
     TUnifiedBlobId(const TUnifiedBlobId& blob, EBlobType type, const ui64 pathId)
         : Id(TS3BlobId(blob, pathId))
     {
-        Y_VERIFY(type == S3_BLOB);
+        Y_ABORT_UNLESS(type == S3_BLOB);
     }
 
     TUnifiedBlobId(const TUnifiedBlobId& other) = default;
@@ -153,7 +153,7 @@ public:
     TUnifiedBlobId& operator = (TUnifiedBlobId&& logoBlobId) = default;
 
     TUnifiedBlobId MakeS3BlobId(ui64 pathId) const {
-        Y_VERIFY(IsDsBlob());
+        Y_ABORT_UNLESS(IsDsBlob());
         return TUnifiedBlobId(*this, TUnifiedBlobId::S3_BLOB, pathId);
     }
 
@@ -199,17 +199,17 @@ public:
     }
 
     TLogoBlobID GetLogoBlobId() const {
-        Y_VERIFY(IsDsBlob());
+        Y_ABORT_UNLESS(IsDsBlob());
         return std::get<TDsBlobId>(Id).BlobId;
     }
 
     ui32 GetDsGroup() const {
-        Y_VERIFY(IsDsBlob());
+        Y_ABORT_UNLESS(IsDsBlob());
         return std::get<TDsBlobId>(Id).DsGroup;
     }
 
     TString GetS3Key() const {
-        Y_VERIFY(IsS3Blob());
+        Y_ABORT_UNLESS(IsS3Blob());
         return std::get<TS3BlobId>(Id).Key;
     }
 
@@ -244,7 +244,7 @@ public:
     // This is only implemented for DS for backward compatibility with persisted data.
     // All new functionality should rahter use string blob id representation
     TString SerializeBinary() const {
-        Y_VERIFY(IsDsBlob());
+        Y_ABORT_UNLESS(IsDsBlob());
         return TString((const char*)GetLogoBlobId().GetRaw(), sizeof(TLogoBlobID));
     }
 
@@ -302,8 +302,8 @@ struct TBlobRange {
         , Size(size)
     {
         if (Size > 0) {
-            Y_VERIFY(Offset < BlobId.BlobSize());
-            Y_VERIFY(Offset + Size <= BlobId.BlobSize());
+            Y_ABORT_UNLESS(Offset < BlobId.BlobSize());
+            Y_ABORT_UNLESS(Offset + Size <= BlobId.BlobSize());
         }
     }
 
@@ -396,7 +396,7 @@ struct TEvictedBlob {
 
     bool IsExternal() const {
         if (State == EEvictState::EXTERN) {
-            Y_VERIFY(ExternBlob.IsValid());
+            Y_ABORT_UNLESS(ExternBlob.IsValid());
             return true;
         }
         return false;

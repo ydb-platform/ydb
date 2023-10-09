@@ -9,13 +9,13 @@ namespace NKikimr::NGRpcProxy::V1 {
 TAclWrapper::TAclWrapper(THolder<NACLib::TSecurityObject> acl)
     : AclOldSchemeCache(std::move(acl))
 {
-    Y_VERIFY(AclOldSchemeCache);
+    Y_ABORT_UNLESS(AclOldSchemeCache);
 }
 
 TAclWrapper::TAclWrapper(TIntrusivePtr<TSecurityObject> acl)
     : AclNewSchemeCache(std::move(acl))
 {
-    Y_VERIFY(AclNewSchemeCache);
+    Y_ABORT_UNLESS(AclNewSchemeCache);
 }
 
 bool TAclWrapper::CheckAccess(NACLib::EAccessRights rights, const NACLib::TUserToken& userToken) {

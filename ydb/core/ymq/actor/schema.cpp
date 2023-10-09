@@ -168,12 +168,12 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
         SetCompactionPolicyForSmallTable(*desc->MutablePartitionConfig());
     }
     if (table.OnePartitionPerShard) {
-        Y_VERIFY(queueShardsCount > 0);
+        Y_ABORT_UNLESS(queueShardsCount > 0);
         SetOnePartitionPerShardSettings(*desc, queueShardsCount);
     }
     if (table.EnableAutosplit) {
         auto* partitioningPolicy = desc->MutablePartitionConfig()->MutablePartitioningPolicy();
-        Y_VERIFY(table.SizeToSplit > 0);
+        Y_ABORT_UNLESS(table.SizeToSplit > 0);
         partitioningPolicy->SetSizeToSplit(table.SizeToSplit);
         partitioningPolicy->SetMinPartitionsCount(1);
         partitioningPolicy->SetMaxPartitionsCount(MAX_PARTITIONS_COUNT);

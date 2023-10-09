@@ -36,11 +36,11 @@ public:
         Raw.N.TypeExt = 0;
         if (type == NPDisk::DEVICE_TYPE_NVME) {
             Raw.N.TypeExt = type;
-            Y_VERIFY(Raw.N.TypeExt == type, "type# %" PRIu64 " is out of range!", (ui64)type);
+            Y_ABORT_UNLESS(Raw.N.TypeExt == type, "type# %" PRIu64 " is out of range!", (ui64)type);
         }
         Raw.N.IsSolidState = (type == NPDisk::DEVICE_TYPE_SSD || type == NPDisk::DEVICE_TYPE_NVME);
         Raw.N.Kind = kind;
-        Y_VERIFY(Raw.N.Kind == kind, "kind# %" PRIu64 " is out of range!", (ui64)kind);
+        Y_ABORT_UNLESS(Raw.N.Kind == kind, "kind# %" PRIu64 " is out of range!", (ui64)kind);
     }
 
     ui64 GetRaw() const {

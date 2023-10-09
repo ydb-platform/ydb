@@ -138,7 +138,7 @@ namespace NKikimr::NStorage {
             , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)
             , EnableVPatch(Cfg->FeatureFlags.GetEnableVPatch(), false, true)
         {
-            Y_VERIFY(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
+            Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;
             for (const auto& domain : Cfg->BlobStorageConfig.GetServiceSet().GetAvailabilityDomains()) {
                 AvailDomainId = domain;

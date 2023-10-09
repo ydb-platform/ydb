@@ -177,7 +177,7 @@ void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages,
             }
             {
                 const i64 newMessagesCount = val["newMessagesCount"];
-                Y_VERIFY(newMessagesCount >= 0);
+                Y_ABORT_UNLESS(newMessagesCount >= 0);
                 auto notification = MakeHolder<TSqsEvents::TEvQueuePurgedNotification>();
                 notification->Shard = shardId;
                 notification->NewMessagesCount = static_cast<ui64>(newMessagesCount);

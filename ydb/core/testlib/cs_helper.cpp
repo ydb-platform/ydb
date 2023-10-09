@@ -136,14 +136,14 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     for (size_t i = 0; i < rowCount; ++i) {
         std::string uid("uid_" + std::to_string(tsBegin + i));
         std::string message("some prefix " + std::string(1024 + i % 200, 'x'));
-        Y_VERIFY(b1.Append(tsBegin + i * tsStepUs).ok());
-        Y_VERIFY(b2.Append(std::to_string(pathIdBegin + i)).ok());
-        Y_VERIFY(b3.Append(uid).ok());
-        Y_VERIFY(b4.Append(i % 5).ok());
-        Y_VERIFY(b5.Append(message).ok());
+        Y_ABORT_UNLESS(b1.Append(tsBegin + i * tsStepUs).ok());
+        Y_ABORT_UNLESS(b2.Append(std::to_string(pathIdBegin + i)).ok());
+        Y_ABORT_UNLESS(b3.Append(uid).ok());
+        Y_ABORT_UNLESS(b4.Append(i % 5).ok());
+        Y_ABORT_UNLESS(b5.Append(message).ok());
         jsonInfo["a"]["b"] = i;
         auto jsonStringBase = jsonInfo.GetStringRobust();
-        Y_VERIFY(b6.Append(jsonStringBase.data(), jsonStringBase.size()).ok());
+        Y_ABORT_UNLESS(b6.Append(jsonStringBase.data(), jsonStringBase.size()).ok());
     }
 
     std::shared_ptr<arrow::TimestampArray> a1;
@@ -153,12 +153,12 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     std::shared_ptr<arrow::StringArray> a5;
     std::shared_ptr<arrow::StringArray> a6;
 
-    Y_VERIFY(b1.Finish(&a1).ok());
-    Y_VERIFY(b2.Finish(&a2).ok());
-    Y_VERIFY(b3.Finish(&a3).ok());
-    Y_VERIFY(b4.Finish(&a4).ok());
-    Y_VERIFY(b5.Finish(&a5).ok());
-    Y_VERIFY(b6.Finish(&a6).ok());
+    Y_ABORT_UNLESS(b1.Finish(&a1).ok());
+    Y_ABORT_UNLESS(b2.Finish(&a2).ok());
+    Y_ABORT_UNLESS(b3.Finish(&a3).ok());
+    Y_ABORT_UNLESS(b4.Finish(&a4).ok());
+    Y_ABORT_UNLESS(b5.Finish(&a5).ok());
+    Y_ABORT_UNLESS(b6.Finish(&a6).ok());
 
     if (GetWithJsonDocument()) {
         return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a6 });
@@ -410,23 +410,23 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
     arrow::BinaryBuilder bJsonDoc;
 
     for (size_t i = 1; i <= rowCount / 2; ++i) {
-        Y_VERIFY(bId.Append(i).ok());
-        Y_VERIFY(bResourceId.AppendNull().ok());
-        Y_VERIFY(bLevel.Append(i).ok());
-        Y_VERIFY(bBinaryStr.AppendNull().ok());
-        Y_VERIFY(bJsonVal.Append(std::string(R"({"col1": "val1", "obj": {"obj_col2_int": 16}})")).ok());
-        Y_VERIFY(bJsonDoc.AppendNull().ok());
+        Y_ABORT_UNLESS(bId.Append(i).ok());
+        Y_ABORT_UNLESS(bResourceId.AppendNull().ok());
+        Y_ABORT_UNLESS(bLevel.Append(i).ok());
+        Y_ABORT_UNLESS(bBinaryStr.AppendNull().ok());
+        Y_ABORT_UNLESS(bJsonVal.Append(std::string(R"({"col1": "val1", "obj": {"obj_col2_int": 16}})")).ok());
+        Y_ABORT_UNLESS(bJsonDoc.AppendNull().ok());
     }
 
     auto maybeJsonDoc = NBinaryJson::SerializeToBinaryJson(R"({"col1": "val1", "obj": {"obj_col2_int": 16}})");
-    Y_VERIFY(maybeJsonDoc.Defined());
+    Y_ABORT_UNLESS(maybeJsonDoc.Defined());
     for (size_t i = rowCount / 2 + 1; i <= rowCount; ++i) {
-        Y_VERIFY(bId.Append(i).ok());
-        Y_VERIFY(bResourceId.Append(std::to_string(i)).ok());
-        Y_VERIFY(bLevel.AppendNull().ok());
-        Y_VERIFY(bBinaryStr.Append(std::to_string(i)).ok());
-        Y_VERIFY(bJsonVal.AppendNull().ok());
-        Y_VERIFY(bJsonDoc.Append(maybeJsonDoc->Data(), maybeJsonDoc->Size()).ok());
+        Y_ABORT_UNLESS(bId.Append(i).ok());
+        Y_ABORT_UNLESS(bResourceId.Append(std::to_string(i)).ok());
+        Y_ABORT_UNLESS(bLevel.AppendNull().ok());
+        Y_ABORT_UNLESS(bBinaryStr.Append(std::to_string(i)).ok());
+        Y_ABORT_UNLESS(bJsonVal.AppendNull().ok());
+        Y_ABORT_UNLESS(bJsonDoc.Append(maybeJsonDoc->Data(), maybeJsonDoc->Size()).ok());
     }
 
     std::shared_ptr<arrow::Int32Array> aId;
@@ -436,12 +436,12 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
     std::shared_ptr<arrow::StringArray> aJsonVal;
     std::shared_ptr<arrow::BinaryArray> aJsonDoc;
 
-    Y_VERIFY(bId.Finish(&aId).ok());
-    Y_VERIFY(bResourceId.Finish(&aResourceId).ok());
-    Y_VERIFY(bLevel.Finish(&aLevel).ok());
-    Y_VERIFY(bBinaryStr.Finish(&aBinaryStr).ok());
-    Y_VERIFY(bJsonVal.Finish(&aJsonVal).ok());
-    Y_VERIFY(bJsonDoc.Finish(&aJsonDoc).ok());
+    Y_ABORT_UNLESS(bId.Finish(&aId).ok());
+    Y_ABORT_UNLESS(bResourceId.Finish(&aResourceId).ok());
+    Y_ABORT_UNLESS(bLevel.Finish(&aLevel).ok());
+    Y_ABORT_UNLESS(bBinaryStr.Finish(&aBinaryStr).ok());
+    Y_ABORT_UNLESS(bJsonVal.Finish(&aJsonVal).ok());
+    Y_ABORT_UNLESS(bJsonDoc.Finish(&aJsonDoc).ok());
 
     return arrow::RecordBatch::Make(schema, rowCount, { aId, aResourceId, aLevel, aBinaryStr, aJsonVal, aJsonDoc });
 }

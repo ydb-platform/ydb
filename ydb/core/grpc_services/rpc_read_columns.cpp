@@ -110,8 +110,8 @@ public:
     }
 
     void Die(const NActors::TActorContext& ctx) override {
-        Y_VERIFY(Finished);
-        Y_VERIFY(!WaitingResolveReply);
+        Y_ABORT_UNLESS(Finished);
+        Y_ABORT_UNLESS(!WaitingResolveReply);
         ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
         if (TimeoutTimerActorId) {
             ctx.Send(TimeoutTimerActorId, new TEvents::TEvPoisonPill());
@@ -204,7 +204,7 @@ private:
     }
 
     void ProceedWithSchema(const TActorContext& ctx) {
-        Y_VERIFY(ResolveNamesResult->ResultSet.size() == 1);
+        Y_ABORT_UNLESS(ResolveNamesResult->ResultSet.size() == 1);
         const auto& entry = ResolveNamesResult->ResultSet.front();
         if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, ToString(entry.Status), ctx);
@@ -336,7 +336,7 @@ private:
     }
 
     void ScanLocalDbTable(const NActors::TActorContext& ctx) {
-        Y_VERIFY(ResolveNamesResult);
+        Y_ABORT_UNLESS(ResolveNamesResult);
 
         ui64 tabletId = -1;
         TString tabletIdStr = ResolveNamesResult->ResultSet.front().Path[2];
@@ -493,7 +493,7 @@ private:
             columnByName[ci.second.Name] = ci.second.Id;
             i32 keyOrder = ci.second.KeyOrder;
             if (keyOrder != -1) {
-                Y_VERIFY(keyOrder >= 0);
+                Y_ABORT_UNLESS(keyOrder >= 0);
                 KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), keyOrder + 1));
                 KeyColumnTypes[keyOrder] = ci.second.PType;
                 keyColumnIds.resize(Max<size_t>(keyColumnIds.size(), keyOrder + 1));
@@ -601,7 +601,7 @@ private:
         }
 
         TEvTxProxySchemeCache::TEvResolveKeySetResult *msg = ev->Get();
-        Y_VERIFY(msg->Request->ResultSet.size() == 1);
+        Y_ABORT_UNLESS(msg->Request->ResultSet.size() == 1);
         KeyRange = std::move(msg->Request->ResultSet[0].KeyDescription);
 
         if (msg->Request->ErrorCount > 0) {
@@ -625,7 +625,7 @@ private:
     }
 
     void MakeShardRequests(const NActors::TActorContext& ctx) {
-        Y_VERIFY(!KeyRange->GetPartitions().empty());
+        Y_ABORT_UNLESS(!KeyRange->GetPartitions().empty());
         auto proto = GetProtoRequest();
 
         // Send request to the first shard

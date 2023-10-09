@@ -112,7 +112,7 @@ private:
     template <class TEvPtr>
     bool OnComputeActorEventReceived(TEvPtr& ev) {
         const auto actorIt = AllActors.find(ev->Sender);
-        Y_VERIFY(actorIt != AllActors.end());
+        Y_ABORT_UNLESS(actorIt != AllActors.end());
         return actorIt->second->EventsQueue.OnEventReceived(ev);
     }
 

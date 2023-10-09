@@ -5172,7 +5172,7 @@ TMaybe<TIssue> NormalizeName(TPosition position, TString& name) {
     }
 
     name.resize(outPos);
-    Y_VERIFY(inputLength - outPos == totalSkipped);
+    Y_ABORT_UNLESS(inputLength - outPos == totalSkipped);
 
     return Nothing();
 }

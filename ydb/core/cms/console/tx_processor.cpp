@@ -15,7 +15,7 @@ TTxProcessor::TTxProcessor(ITxExecutor &executor,
     , ActiveTx(nullptr)
     , Parent(parent.Get())
 {
-    Y_VERIFY(!Temporary || Parent);
+    Y_ABORT_UNLESS(!Temporary || Parent);
     if (!Parent || Parent->State == EState::LOCKED_BY_CHILDREN)
         State = EState::ACTIVE;
     LogPrefix = Sprintf("TTxProcessor(%s) ", Name.data());
@@ -59,7 +59,7 @@ void TTxProcessor::TxCompleted(ITransaction *tx,
 {
     LOG_TRACE_S(ctx, Service, LogPrefix << "completed tx");
 
-    Y_VERIFY(tx == ActiveTx);
+    Y_ABORT_UNLESS(tx == ActiveTx);
     ActiveTx = nullptr;
 
     if (CheckTemporary(ctx))
@@ -68,7 +68,7 @@ void TTxProcessor::TxCompleted(ITransaction *tx,
     if (State == EState::LOCKING)
         CheckLocks(ctx);
     else {
-        Y_VERIFY(State == EState::ACTIVE);
+        Y_ABORT_UNLESS(State == EState::ACTIVE);
         ProcessNextTx(ctx);
     }
 }
@@ -78,7 +78,7 @@ void TTxProcessor::RemoveSubProcessor(TTxProcessor::TPtr sub,
 {
     LOG_TRACE_S(ctx, Service, LogPrefix << "removing sub-processor " << sub->Name);
 
-    Y_VERIFY(SubProcessors.contains(sub->Name));
+    Y_ABORT_UNLESS(SubProcessors.contains(sub->Name));
     SubProcessors.erase(sub->Name);
 
     if (CheckTemporary(ctx))
@@ -107,7 +107,7 @@ void TTxProcessor::Activate(const TActorContext &ctx)
 
 void TTxProcessor::ActivateChildren(const TActorContext &ctx)
 {
-    Y_VERIFY(State == EState::ACTIVE);
+    Y_ABORT_UNLESS(State == EState::ACTIVE);
     if (SubProcessors.empty())
         return;
 
@@ -151,7 +151,7 @@ bool TTxProcessor::Lock(const TActorContext &ctx)
 
 void TTxProcessor::TryToLockChildren(const TActorContext &ctx)
 {
-    Y_VERIFY(State == EState::LOCKED_BY_CHILDREN);
+    Y_ABORT_UNLESS(State == EState::LOCKED_BY_CHILDREN);
     LOG_TRACE_S(ctx, Service, LogPrefix << "trying to lock children");
 
     bool res = true;
@@ -167,7 +167,7 @@ void TTxProcessor::Start(const TActorContext &ctx)
     if (State == EState::LOCKED_BY_PARENT)
         Activate(ctx);
     else {
-        Y_VERIFY(State == EState::LOCKED_BY_CHILDREN);
+        Y_ABORT_UNLESS(State == EState::LOCKED_BY_CHILDREN);
         CheckActivation(ctx);
     }
 }
@@ -244,7 +244,7 @@ void TTxProcessor::ProcessNextTx(const TActorContext &ctx)
 
     LOG_TRACE_S(ctx, Service, LogPrefix << "starts new tx");
 
-    Y_VERIFY(ActiveTx);
+    Y_ABORT_UNLESS(ActiveTx);
     Executor.Execute(ActiveTx, ctx);
 }
 

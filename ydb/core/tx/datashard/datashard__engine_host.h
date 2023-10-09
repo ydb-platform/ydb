@@ -58,13 +58,13 @@ public:
     EResult Validate() {
         if (Info.Loaded)
             return EResult::Ok;
-        Y_VERIFY(Engine);
+        Y_ABORT_UNLESS(Engine);
         return Engine->Validate(Info);
     }
 
     EResult ReValidateKeys() {
-        Y_VERIFY(Info.Loaded);
-        Y_VERIFY(Engine);
+        Y_ABORT_UNLESS(Info.Loaded);
+        Y_ABORT_UNLESS(Engine);
         return Engine->ValidateKeys(Info);
     }
 

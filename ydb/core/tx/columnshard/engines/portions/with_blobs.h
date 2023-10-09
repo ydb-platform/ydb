@@ -104,7 +104,7 @@ public:
                 return it->second->GetData();
             }
         }
-        Y_VERIFY(false);
+        Y_ABORT_UNLESS(false);
     }
 
     ui64 GetBlobFullSizeVerified(const ui32 columnId, const ui32 chunkId) const {
@@ -116,7 +116,7 @@ public:
                 return b.GetSize();
             }
         }
-        Y_VERIFY(false);
+        Y_ABORT_UNLESS(false);
     }
 
     std::vector<TBlobInfo>& GetBlobs() {

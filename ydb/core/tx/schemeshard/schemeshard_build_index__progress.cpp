@@ -192,7 +192,7 @@ public:
     {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_VERIFY(Self->IndexBuilds.contains(BuildId));
+        Y_ABORT_UNLESS(Self->IndexBuilds.contains(BuildId));
         TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(BuildId);
 
         LOG_I("TTxBuildProgress: Resume"
@@ -293,13 +293,13 @@ public:
             }
 
             if (!buildInfo->SnapshotTxId || !buildInfo->SnapshotStep) {
-                Y_VERIFY(Self->TablesWithSnapshots.contains(buildInfo->TablePathId));
-                Y_VERIFY(Self->TablesWithSnapshots.at(buildInfo->TablePathId) == buildInfo->InitiateTxId);
+                Y_ABORT_UNLESS(Self->TablesWithSnapshots.contains(buildInfo->TablePathId));
+                Y_ABORT_UNLESS(Self->TablesWithSnapshots.at(buildInfo->TablePathId) == buildInfo->InitiateTxId);
 
                 buildInfo->SnapshotTxId = buildInfo->InitiateTxId;
-                Y_VERIFY(buildInfo->SnapshotTxId);
+                Y_ABORT_UNLESS(buildInfo->SnapshotTxId);
                 buildInfo->SnapshotStep = Self->SnapshotsStepIds.at(buildInfo->SnapshotTxId);
-                Y_VERIFY(buildInfo->SnapshotStep);
+                Y_ABORT_UNLESS(buildInfo->SnapshotStep);
             }
 
             if (buildInfo->ImplTablePath.Empty() && buildInfo->IsBuildIndex()) {
@@ -372,7 +372,7 @@ public:
             if (buildInfo->InProgressShards.empty() && buildInfo->ToUploadShards.empty()
                 && buildInfo->DoneShards.size() == buildInfo->Shards.size()) {
                 // all done
-                Y_VERIFY(0 == Self->IndexBuildPipes.CloseAll(BuildId, ctx));
+                Y_ABORT_UNLESS(0 == Self->IndexBuildPipes.CloseAll(BuildId, ctx));
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::Applying);
                 Progress(BuildId);
@@ -488,7 +488,7 @@ public:
         const TSerializedTableRange infiniteRange = InfiniteRange(tableColumns.Keys.size());
 
         for (const auto& x: table->GetPartitions()) {
-            Y_VERIFY(Self->ShardInfos.contains(x.ShardIdx));
+            Y_ABORT_UNLESS(Self->ShardInfos.contains(x.ShardIdx));
 
             buildInfo->Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus(infiniteRange, ""));
             Self->PersistBuildIndexUploadInitiate(db, buildInfo, x.ShardIdx);
@@ -715,7 +715,7 @@ public:
                       << ", TIndexBuildInfo: " << *buildInfo
                       << ", actual seqNo for the shard " << shardId << " (" << shardIdx << ") is: "  << Self->Generation() << ":" <<  shardStatus.SeqNoRound
                       << ", record: " << record.ShortDebugString());
-                Y_VERIFY(actualSeqNo > recordSeqNo);
+                Y_ABORT_UNLESS(actualSeqNo > recordSeqNo);
                 return true;
             }
 
@@ -847,7 +847,7 @@ public:
         }
 
         const auto buildId = Self->TxIdToIndexBuilds.at(txId);
-        Y_VERIFY(Self->IndexBuilds.contains(buildId));
+        Y_ABORT_UNLESS(Self->IndexBuilds.contains(buildId));
 
         TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(buildId);
         LOG_I("TTxReply : TEvNotifyTxCompletionResult"
@@ -863,7 +863,7 @@ public:
 
         case TIndexBuildInfo::EState::AlterMainTable:
         {
-            Y_VERIFY(txId == buildInfo->AlterMainTableTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->AlterMainTableTxId);
 
             buildInfo->AlterMainTableTxDone = true;
             NIceDb::TNiceDb db(txc.DB);
@@ -873,7 +873,7 @@ public:
 
         case TIndexBuildInfo::EState::Locking:
         {
-            Y_VERIFY(txId == buildInfo->LockTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->LockTxId);
 
             buildInfo->LockTxDone = true;
             NIceDb::TNiceDb db(txc.DB);
@@ -886,7 +886,7 @@ public:
 
         case TIndexBuildInfo::EState::Initiating:
         {
-            Y_VERIFY(txId == buildInfo->InitiateTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->InitiateTxId);
 
             buildInfo->InitiateTxDone = true;
             NIceDb::TNiceDb db(txc.DB);
@@ -898,7 +898,7 @@ public:
             Y_FAIL("Unreachable");
         case TIndexBuildInfo::EState::Applying:
         {
-            Y_VERIFY(txId == buildInfo->ApplyTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->ApplyTxId);
 
             buildInfo->ApplyTxDone = true;
             NIceDb::TNiceDb db(txc.DB);
@@ -908,7 +908,7 @@ public:
         }
         case TIndexBuildInfo::EState::Unlocking:
         {
-            Y_VERIFY(txId == buildInfo->UnlockTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->UnlockTxId);
 
             buildInfo->UnlockTxDone = true;
             NIceDb::TNiceDb db(txc.DB);
@@ -920,7 +920,7 @@ public:
             Y_FAIL("Unreachable");
         case TIndexBuildInfo::EState::Cancellation_Applying:
         {
-            Y_VERIFY(txId == buildInfo->ApplyTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->ApplyTxId);
 
             buildInfo->ApplyTxDone = true;
             NIceDb::TNiceDb db(txc.DB);
@@ -930,7 +930,7 @@ public:
         }
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         {
-            Y_VERIFY(txId == buildInfo->UnlockTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->UnlockTxId);
 
             buildInfo->UnlockTxDone = true;
             NIceDb::TNiceDb db(txc.DB);
@@ -943,7 +943,7 @@ public:
 
         case TIndexBuildInfo::EState::Rejection_Applying:
         {
-            Y_VERIFY(txId == buildInfo->ApplyTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->ApplyTxId);
 
             buildInfo->ApplyTxDone = true;
             NIceDb::TNiceDb db(txc.DB);
@@ -953,7 +953,7 @@ public:
         }
         case TIndexBuildInfo::EState::Rejection_Unlocking:
         {
-            Y_VERIFY(txId == buildInfo->UnlockTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->UnlockTxId);
 
             buildInfo->UnlockTxDone = true;
             NIceDb::TNiceDb db(txc.DB);
@@ -1008,7 +1008,7 @@ public:
         }
 
         const auto buildId = Self->TxIdToIndexBuilds.at(txId);
-        Y_VERIFY(Self->IndexBuilds.contains(buildId));
+        Y_ABORT_UNLESS(Self->IndexBuilds.contains(buildId));
 
         LOG_I("TTxReply : TEvModifySchemeTransactionResult"
               << ", BuildIndexId: " << buildId
@@ -1027,7 +1027,7 @@ public:
 
         case TIndexBuildInfo::EState::AlterMainTable:
         {
-            Y_VERIFY(txId == buildInfo->AlterMainTableTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->AlterMainTableTxId);
 
             buildInfo->AlterMainTableTxStatus = record.GetStatus();
             NIceDb::TNiceDb db(txc.DB);
@@ -1052,7 +1052,7 @@ public:
 
         case TIndexBuildInfo::EState::Locking:
         {
-            Y_VERIFY(txId == buildInfo->LockTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->LockTxId);
 
             buildInfo->LockTxStatus = record.GetStatus();
             NIceDb::TNiceDb db(txc.DB);
@@ -1082,7 +1082,7 @@ public:
 
         case TIndexBuildInfo::EState::Initiating:
         {
-            Y_VERIFY(txId == buildInfo->InitiateTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->InitiateTxId);
 
             buildInfo->InitiateTxStatus = record.GetStatus();
             NIceDb::TNiceDb db(txc.DB);
@@ -1109,7 +1109,7 @@ public:
 
         case TIndexBuildInfo::EState::Applying:
         {
-            Y_VERIFY(txId == buildInfo->ApplyTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->ApplyTxId);
 
             buildInfo->ApplyTxStatus = record.GetStatus();
             NIceDb::TNiceDb db(txc.DB);
@@ -1133,7 +1133,7 @@ public:
         }
         case TIndexBuildInfo::EState::Unlocking:
         {
-            Y_VERIFY(txId == buildInfo->UnlockTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->UnlockTxId);
 
             buildInfo->UnlockTxStatus = record.GetStatus();
             NIceDb::TNiceDb db(txc.DB);
@@ -1159,7 +1159,7 @@ public:
 
         case TIndexBuildInfo::EState::Cancellation_Applying:
         {
-            Y_VERIFY(txId == buildInfo->ApplyTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->ApplyTxId);
 
             buildInfo->ApplyTxStatus = record.GetStatus();
             NIceDb::TNiceDb db(txc.DB);
@@ -1183,7 +1183,7 @@ public:
         }
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         {
-            Y_VERIFY(txId == buildInfo->UnlockTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->UnlockTxId);
 
             buildInfo->UnlockTxStatus = record.GetStatus();
             NIceDb::TNiceDb db(txc.DB);
@@ -1209,7 +1209,7 @@ public:
 
         case TIndexBuildInfo::EState::Rejection_Applying:
         {
-            Y_VERIFY(txId == buildInfo->ApplyTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->ApplyTxId);
 
             buildInfo->ApplyTxStatus = record.GetStatus();
             NIceDb::TNiceDb db(txc.DB);
@@ -1233,7 +1233,7 @@ public:
         }
         case TIndexBuildInfo::EState::Rejection_Unlocking:
         {
-            Y_VERIFY(txId == buildInfo->UnlockTxId);
+            Y_ABORT_UNLESS(txId == buildInfo->UnlockTxId);
 
             buildInfo->UnlockTxStatus = record.GetStatus();
             NIceDb::TNiceDb db(txc.DB);
@@ -1271,7 +1271,7 @@ public:
               << ", BuildIndexId: " << buildId
               << ", txId# " << txId);
 
-        Y_VERIFY(Self->IndexBuilds.contains(buildId));
+        Y_ABORT_UNLESS(Self->IndexBuilds.contains(buildId));
         TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(buildId);
 
         LOG_D("TTxReply : TEvAllocateResult"

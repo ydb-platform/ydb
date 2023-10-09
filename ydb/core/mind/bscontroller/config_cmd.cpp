@@ -165,7 +165,7 @@ namespace NKikimr::NBsController {
                         LogCommand(txc, TDuration::Seconds(timer.Passed()));
                         return true;
                     }
-                    Y_VERIFY(Success);
+                    Y_ABORT_UNLESS(Success);
                     Response->MutableStatus()->RemoveLast();
                 }
 

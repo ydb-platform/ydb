@@ -168,7 +168,7 @@ ISubOperation::TPtr CreateAlterLogin(TOperationId id, const TTxTransaction& tx) 
 }
 
 ISubOperation::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
+    Y_ABORT_UNLESS(state == TTxState::Invalid || state == TTxState::Propose);
     return MakeSubOperation<TAlterLogin>(id);
 }
 

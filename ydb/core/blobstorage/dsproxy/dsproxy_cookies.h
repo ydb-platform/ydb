@@ -17,8 +17,8 @@ struct TVGetCookie {
     TVGetCookie(ui64 queryBeginIdx, ui64 queryEndIdx)
         : Raw(queryBeginIdx | (queryEndIdx << 28))
     {
-        Y_VERIFY(queryBeginIdx < (1LL << 28));
-        Y_VERIFY(queryEndIdx < (1LL << 28));
+        Y_ABORT_UNLESS(queryBeginIdx < (1LL << 28));
+        Y_ABORT_UNLESS(queryEndIdx < (1LL << 28));
     }
 
     ui64 GetQueryBeginIdx() const {
@@ -62,10 +62,10 @@ struct TBlobCookie {
     TBlobCookie(ui64 vDiskOrderNumber, ui64 blobIdx, ui64 partId, ui64 requestIdx)
         : Raw(vDiskOrderNumber | (partId << 8) | (blobIdx << 16) | (requestIdx << 32))
     {
-        Y_VERIFY(vDiskOrderNumber < 256);
-        Y_VERIFY(blobIdx < (1LL << 16));
-        Y_VERIFY(partId < 256);
-        Y_VERIFY(requestIdx < (1LL << 24));
+        Y_ABORT_UNLESS(vDiskOrderNumber < 256);
+        Y_ABORT_UNLESS(blobIdx < (1LL << 16));
+        Y_ABORT_UNLESS(partId < 256);
+        Y_ABORT_UNLESS(requestIdx < (1LL << 24));
     }
 
     ui64 GetVDiskOrderNumber() const {
@@ -117,9 +117,9 @@ struct TVMultiPutCookie {
     TVMultiPutCookie(ui64 vDiskOrderNumber, ui64 itemCount, ui64 requestIdx)
         : Raw(vDiskOrderNumber | (itemCount << 8) | (requestIdx << 32))
     {
-        Y_VERIFY(vDiskOrderNumber < 256);
-        Y_VERIFY(itemCount < 256);
-        Y_VERIFY(requestIdx < (1LL << 24));
+        Y_ABORT_UNLESS(vDiskOrderNumber < 256);
+        Y_ABORT_UNLESS(itemCount < 256);
+        Y_ABORT_UNLESS(requestIdx < (1LL << 24));
     }
 
     ui64 GetVDiskOrderNumber() const {

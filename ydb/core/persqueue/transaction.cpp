@@ -34,7 +34,7 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
             tx.GetAggrPredicate() ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT;
     }
 
-    Y_VERIFY(tx.HasSourceActor());
+    Y_ABORT_UNLESS(tx.HasSourceActor());
     SourceActor = ActorIdFromProto(tx.GetSourceActor());
 }
 
@@ -87,8 +87,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTr
                                                    ui64 minStep,
                                                    ui64 extractTabletId)
 {
-    Y_VERIFY(event.GetTxBodyCase() != NKikimrPQ::TEvProposeTransaction::TXBODY_NOT_SET);
-    Y_VERIFY(TxId == Max<ui64>());
+    Y_ABORT_UNLESS(event.GetTxBodyCase() != NKikimrPQ::TEvProposeTransaction::TXBODY_NOT_SET);
+    Y_ABORT_UNLESS(TxId == Max<ui64>());
 
     TxId = event.GetTxId();
 
@@ -96,12 +96,12 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTr
 
     switch (event.GetTxBodyCase()) {
     case NKikimrPQ::TEvProposeTransaction::kData:
-        Y_VERIFY(event.HasData());
+        Y_ABORT_UNLESS(event.HasData());
         MaxStep = MinStep + TDuration::Seconds(30).MilliSeconds();
         OnProposeTransaction(event.GetData(), extractTabletId);
         break;
     case NKikimrPQ::TEvProposeTransaction::kConfig:
-        Y_VERIFY(event.HasConfig());
+        Y_ABORT_UNLESS(event.HasConfig());
         MaxStep = Max<ui64>();
         OnProposeTransaction(event.GetConfig());
         break;
@@ -109,7 +109,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTr
         Y_FAIL_S("unknown TxBody case");
     }
 
-    Y_VERIFY(event.HasSourceActor());
+    Y_ABORT_UNLESS(event.HasSourceActor());
     SourceActor = ActorIdFromProto(event.GetSourceActor());
 }
 
@@ -157,8 +157,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
 
 void TDistributedTransaction::OnPlanStep(ui64 step)
 {
-    Y_VERIFY(Step == Max<ui64>());
-    Y_VERIFY(TxId != Max<ui64>());
+    Y_ABORT_UNLESS(Step == Max<ui64>());
+    Y_ABORT_UNLESS(TxId != Max<ui64>());
 
     Step = step;
 }
@@ -178,10 +178,10 @@ void TDistributedTransaction::OnProposePartitionConfigResult(const TEvPQ::TEvPro
 template<class E>
 void TDistributedTransaction::OnPartitionResult(const E& event, EDecision decision)
 {
-    Y_VERIFY(Step == event.Step);
-    Y_VERIFY(TxId == event.TxId);
+    Y_ABORT_UNLESS(Step == event.Step);
+    Y_ABORT_UNLESS(TxId == event.TxId);
 
-    Y_VERIFY(Partitions.contains(event.Partition));
+    Y_ABORT_UNLESS(Partitions.contains(event.Partition));
 
     SetDecision(SelfDecision, decision);
 
@@ -192,12 +192,12 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
                                         const TActorId& sender,
                                         std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack)
 {
-    Y_VERIFY((Step == Max<ui64>()) || (event.HasStep() && (Step == event.GetStep())));
-    Y_VERIFY(event.HasTxId() && (TxId == event.GetTxId()));
+    Y_ABORT_UNLESS((Step == Max<ui64>()) || (event.HasStep() && (Step == event.GetStep())));
+    Y_ABORT_UNLESS(event.HasTxId() && (TxId == event.GetTxId()));
 
     if (Senders.contains(event.GetTabletProducer())) {
         NKikimrTx::TReadSetData data;
-        Y_VERIFY(event.HasReadSet() && data.ParseFromString(event.GetReadSet()));
+        Y_ABORT_UNLESS(event.HasReadSet() && data.ParseFromString(event.GetReadSet()));
 
         SetDecision(ParticipantsDecision, data.GetDecision());
         ReadSetAcks[sender] = std::move(ack);
@@ -210,18 +210,18 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
 
 void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event)
 {
-    Y_VERIFY(event.HasStep() && (Step == event.GetStep()));
-    Y_VERIFY(event.HasTxId() && (TxId == event.GetTxId()));
+    Y_ABORT_UNLESS(event.HasStep() && (Step == event.GetStep()));
+    Y_ABORT_UNLESS(event.HasTxId() && (TxId == event.GetTxId()));
 
     Receivers.erase(event.GetTabletConsumer());
 }
 
 void TDistributedTransaction::OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event)
 {
-    Y_VERIFY(Step == event.Step);
-    Y_VERIFY(TxId == event.TxId);
+    Y_ABORT_UNLESS(Step == event.Step);
+    Y_ABORT_UNLESS(TxId == event.TxId);
 
-    Y_VERIFY(Partitions.contains(event.Partition));
+    Y_ABORT_UNLESS(Partitions.contains(event.Partition));
 
     ++PartitionRepliesCount;
 }
@@ -282,11 +282,11 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
         Y_FAIL_S("unknown transaction type");
     }
 
-    Y_VERIFY(SourceActor != TActorId());
+    Y_ABORT_UNLESS(SourceActor != TActorId());
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
 
     TString value;
-    Y_VERIFY(tx.SerializeToString(&value));
+    Y_ABORT_UNLESS(tx.SerializeToString(&value));
 
     auto command = request.AddCmdWrite();
     command->SetKey(GetKey());
@@ -340,10 +340,10 @@ TString TDistributedTransaction::GetKey() const
  
 void TDistributedTransaction::BindMsgToPipe(ui64 tabletId, const IEventBase& event)
 {
-    Y_VERIFY(event.IsSerializable());
+    Y_ABORT_UNLESS(event.IsSerializable());
 
     TAllocChunkSerializer serializer;
-    Y_VERIFY(event.SerializeToArcadiaStream(&serializer));
+    Y_ABORT_UNLESS(event.SerializeToArcadiaStream(&serializer));
     auto data = serializer.Release(event.CreateSerializationInfo());
     OutputMsgs[tabletId].emplace_back(event.Type(), std::move(data));
 }

@@ -18,8 +18,8 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext&, const TActorContext& ctx) override {
-        Y_VERIFY(op->IsCommitWritesTx());
-        Y_VERIFY(!op->IsAborted());
+        Y_ABORT_UNLESS(op->IsCommitWritesTx());
+        Y_ABORT_UNLESS(!op->IsAborted());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());

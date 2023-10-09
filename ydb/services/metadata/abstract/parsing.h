@@ -28,7 +28,7 @@ public:
         {}
 
     TFeaturesExtractor& GetFeaturesExtractor() const {
-        Y_VERIFY(!!FeaturesExtractor);
+        Y_ABORT_UNLESS(!!FeaturesExtractor);
         return *FeaturesExtractor;
     }
 

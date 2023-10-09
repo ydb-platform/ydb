@@ -21,13 +21,13 @@ void IBlobsGCAction::OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, 
 }
 
 void IBlobsGCAction::Abort() {
-    Y_VERIFY(IsInProgress());
+    Y_ABORT_UNLESS(IsInProgress());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "gc_aborted")("action_guid", GetActionGuid());
     AbortedFlag = true;
 }
 
 void IBlobsGCAction::OnFinished() {
-    Y_VERIFY(IsInProgress());
+    Y_ABORT_UNLESS(IsInProgress());
     FinishedFlag = true;
 }
 

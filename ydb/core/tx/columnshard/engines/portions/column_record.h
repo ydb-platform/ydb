@@ -152,7 +152,7 @@ protected:
         return ColumnRecord.GetMeta().GetNumRowsVerified();
     }
     virtual std::vector<IPortionColumnChunk::TPtr> DoInternalSplit(const TColumnSaver& /*saver*/, std::shared_ptr<NColumnShard::TSplitterCounters> /*counters*/, const std::vector<ui64>& /*splitSizes*/) const override {
-        Y_VERIFY(false);
+        Y_ABORT_UNLESS(false);
         return {};
     }
     virtual TSimpleChunkMeta DoBuildSimpleChunkMeta() const override {

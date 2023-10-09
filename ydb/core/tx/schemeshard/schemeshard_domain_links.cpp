@@ -14,10 +14,10 @@ TParentDomainLink::TParentDomainLink(NKikimr::NSchemeShard::TSchemeShard *self)
 }
 
 THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg() const {
-    Y_VERIFY(Self->SubDomains.contains(Self->RootPathId()));
+    Y_ABORT_UNLESS(Self->SubDomains.contains(Self->RootPathId()));
     auto& rootPath = Self->PathsById.at(Self->RootPathId());
 
-    Y_VERIFY(Self->PathsById.contains(Self->RootPathId()));
+    Y_ABORT_UNLESS(Self->PathsById.contains(Self->RootPathId()));
     auto& rootSubdomain = Self->SubDomains.at(Self->RootPathId());
 
     return MakeHolder<TEvSchemeShard::TEvSyncTenantSchemeShard>(Self->ParentDomainId,
@@ -71,7 +71,7 @@ void TParentDomainLink::Shutdown(const NActors::TActorContext &ctx) {
 }
 
 bool TSubDomainsLinks::Sync(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr &ev, const TActorContext &ctx) {
-    Y_VERIFY(Self->IsDomainSchemeShard);
+    Y_ABORT_UNLESS(Self->IsDomainSchemeShard);
 
     const auto& record = ev->Get()->Record;
     const TActorId actorId = ev->Sender;
@@ -79,7 +79,7 @@ bool TSubDomainsLinks::Sync(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr &ev, 
     const TPathId pathId = Self->MakeLocalId(record.GetDomainPathId());
     const ui64 generation = record.GetGeneration();
 
-    Y_VERIFY(record.GetDomainSchemeShard() == Self->TabletID());
+    Y_ABORT_UNLESS(record.GetDomainSchemeShard() == Self->TabletID());
 
     if (ActiveLink.contains(pathId)) {
         TLink& link = ActiveLink.at(pathId);

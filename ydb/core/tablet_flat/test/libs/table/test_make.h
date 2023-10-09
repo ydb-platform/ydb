@@ -126,7 +126,7 @@ namespace NTest {
                 if (auto *mem = dynamic_cast<TMem*>(one.Get())) {
                     auto table = mem->Cooker.Unwrap();
 
-                    Y_VERIFY(table->GetRowCount(), "Got empty IBand");
+                    Y_ABORT_UNLESS(table->GetRowCount(), "Got empty IBand");
 
                     subset->Frozen.emplace_back(std::move(table), table->Immediate());
                 } else if (auto *part_ = dynamic_cast<TPart*>(one.Get())) {

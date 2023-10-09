@@ -42,7 +42,7 @@ bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TA
             return false;
 
         while (!dataRowset.EndOfSet()) { //found out topic info
-            Y_VERIFY(!Self->Inited);
+            Y_ABORT_UNLESS(!Self->Inited);
             Self->PathId  = dataRowset.GetValue<Schema::Data::PathId>();
             Self->Topic   = dataRowset.GetValue<Schema::Data::Topic>();
             Self->Path    = dataRowset.GetValue<Schema::Data::Path>();
@@ -59,7 +59,7 @@ bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TA
             TString config = dataRowset.GetValueOrDefault<Schema::Data::Config>("");
             if (!config.empty()) {
                 bool res = Self->TabletConfig.ParseFromString(config);
-                Y_VERIFY(res);
+                Y_ABORT_UNLESS(res);
                 Self->Consumers.clear();
                 for (const auto& rr : Self->TabletConfig.GetReadRules()) {
                     Self->Consumers[rr];
@@ -85,9 +85,9 @@ bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TA
         while (!groupsRowset.EndOfSet()) { //found out tablets for partitions
             ui32 groupId = groupsRowset.GetValue<Schema::Groups::GroupId>();
             ui32 partition = groupsRowset.GetValue<Schema::Groups::Partition>();
-            Y_VERIFY(groupId > 0);
+            Y_ABORT_UNLESS(groupId > 0);
             auto jt = Self->PartitionsInfo.find(partition);
-            Y_VERIFY(jt != Self->PartitionsInfo.end());
+            Y_ABORT_UNLESS(jt != Self->PartitionsInfo.end());
             jt->second.GroupId = groupId;
 
             Self->NoGroupsInBase = false;
@@ -96,7 +96,7 @@ bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TA
                 return false;
         }
 
-        Y_VERIFY(Self->ClientsInfo.empty());
+        Y_ABORT_UNLESS(Self->ClientsInfo.empty());
 
         for (auto& p : Self->PartitionsInfo) {
             ui32 groupId = p.second.GroupId;
@@ -137,7 +137,7 @@ bool TPersQueueReadBalancer::TTxWrite::Execute(TTransactionContext& txc, const T
     NIceDb::TNiceDb db(txc.DB);
     TString config;
     bool res = Self->TabletConfig.SerializeToString(&config);
-    Y_VERIFY(res);
+    Y_ABORT_UNLESS(res);
     db.Table<Schema::Data>().Key(1).Update(
         NIceDb::TUpdate<Schema::Data::PathId>(Self->PathId),
         NIceDb::TUpdate<Schema::Data::Topic>(Self->Topic),
@@ -301,7 +301,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
                                         TABLED() { str << pp.second.TabletId;}
                                         TABLED() { str << (ui32)pp.second.State;}
                                         auto* session = ci.second.FindSession(pp.second.Session);
-                                        Y_VERIFY((session == nullptr) == (pp.second.State == EPS_FREE));
+                                        Y_ABORT_UNLESS((session == nullptr) == (pp.second.State == EPS_FREE));
                                         TABLED() { str << (pp.second.State != EPS_FREE ? session->Session : "");}
                                     }
                                 }
@@ -561,15 +561,15 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     for (auto& p : record.GetPartitions()) {
         auto it = PartitionsInfo.find(p.GetPartition());
         ui32 group = p.HasGroup() ? p.GetGroup() : p.GetPartition() + 1;
-        Y_VERIFY(group > 0);
+        Y_ABORT_UNLESS(group > 0);
 
         if (NoGroupsInBase) {
-            Y_VERIFY(group <= TotalGroups || TotalGroups == 0);
+            Y_ABORT_UNLESS(group <= TotalGroups || TotalGroups == 0);
             newGroups.push_back(std::make_pair(group, p.GetPartition()));
         }
         if (it == PartitionsInfo.end()) {
-            Y_VERIFY(group <= TotalGroups && group > prevGroups || TotalGroups == 0);
-            Y_VERIFY(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
+            Y_ABORT_UNLESS(group <= TotalGroups && group > prevGroups || TotalGroups == 0);
+            Y_ABORT_UNLESS(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
             partitionsInfo[p.GetPartition()] = {p.GetTabletId(), EPS_FREE, TActorId(), group};
             newPartitions.push_back(std::make_pair(p.GetPartition(), TPartInfo{p.GetTabletId(), group}));
             if (!NoGroupsInBase)
@@ -577,7 +577,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             GroupsInfo[group].push_back(p.GetPartition());
             ++NumActiveParts;
         } else { //group is already defined
-            Y_VERIFY(it->second.GroupId == group);
+            Y_ABORT_UNLESS(it->second.GroupId == group);
             partitionsInfo[p.GetPartition()] = it->second;
         }
     }
@@ -586,7 +586,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         NextPartitionId = TotalGroups = GroupsInfo.size();
     }
 
-    Y_VERIFY(GroupsInfo.size() == TotalGroups);
+    Y_ABORT_UNLESS(GroupsInfo.size() == TotalGroups);
 
     for (auto& p : PartitionsInfo) {
         if (partitionsInfo.find(p.first) == partitionsInfo.end()) {
@@ -602,7 +602,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             ui32 group = part.second.Group;
             auto it = p.second.SessionsWithGroup ? p.second.ClientGroupsInfo.find(group) : mainGroup;
             if (it == p.second.ClientGroupsInfo.end()) {
-                Y_VERIFY(p.second.SessionsWithGroup);
+                Y_ABORT_UNLESS(p.second.SessionsWithGroup);
                 p.second.AddGroup(group);
                 it = p.second.ClientGroupsInfo.find(group);
             }
@@ -709,7 +709,7 @@ TActorId TPersQueueReadBalancer::GetPipeClient(const ui64 tabletId, const TActor
         pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
         TabletPipes[tabletId].PipeActor = pipeClient;
         auto res = PipesRequested.insert(tabletId);
-        Y_VERIFY(res.second);
+        Y_ABORT_UNLESS(res.second);
     } else {
         pipeClient = it->second.PipeActor;
     }
@@ -783,7 +783,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TAc
 }
 
 void TPersQueueReadBalancer::TAggregatedStats::AggrStats(ui32 partition, ui64 dataSize, ui64 usedReserveSize) {
-    Y_VERIFY(dataSize >= usedReserveSize);
+    Y_ABORT_UNLESS(dataSize >= usedReserveSize);
 
     auto& oldValue = Stats[partition];
 
@@ -794,7 +794,7 @@ void TPersQueueReadBalancer::TAggregatedStats::AggrStats(ui32 partition, ui64 da
     TotalDataSize += (newValue.DataSize - oldValue.DataSize);
     TotalUsedReserveSize += (newValue.UsedReserveSize - oldValue.UsedReserveSize);
 
-    Y_VERIFY(TotalDataSize >= TotalUsedReserveSize);
+    Y_ABORT_UNLESS(TotalDataSize >= TotalUsedReserveSize);
 
     oldValue = newValue;
 }
@@ -1069,7 +1069,7 @@ void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 group, const THa
 
     TActorId pipe = ActorIdFromProto(record.GetPipeClient());
 
-    Y_VERIFY(pipe);
+    Y_ABORT_UNLESS(pipe);
 
     if (ClientGroupsInfo.find(group) == ClientGroupsInfo.end()) {
         FillEmptyGroup(group, partitionsInfo);
@@ -1101,10 +1101,10 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     TActorId pipe = ActorIdFromProto(record.GetPipeClient());
     LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, "client " << record.GetClientId() << " register session for pipe " << pipe << " session " << record.GetSession());
 
-    Y_VERIFY(!record.GetSession().empty());
-    Y_VERIFY(!record.GetClientId().empty());
+    Y_ABORT_UNLESS(!record.GetSession().empty());
+    Y_ABORT_UNLESS(!record.GetClientId().empty());
 
-    Y_VERIFY(pipe);
+    Y_ABORT_UNLESS(pipe);
 
     //TODO: check here that pipe with clientPipe=sender is still connected
 
@@ -1133,7 +1133,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
     auto it = ClientsInfo.find(record.GetClientId());
     if (it == ClientsInfo.end()) {
         auto p = ClientsInfo.insert({record.GetClientId(), TClientInfo{}});
-        Y_VERIFY(p.second);
+        Y_ABORT_UNLESS(p.second);
         it = p.first;
         it->second.ClientId = record.GetClientId();
         it->second.Topic = Topic;
@@ -1168,7 +1168,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
         }
     } else {
         it->second.AddSession(0, PartitionsInfo, ev->Sender, record);
-        Y_VERIFY(it->second.ClientGroupsInfo.size() == 1);
+        Y_ABORT_UNLESS(it->second.ClientGroupsInfo.size() == 1);
     }
     RegisterSession(pipe, ctx);
 }
@@ -1195,7 +1195,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
                 pi->SetPartition(p.first);
                 if (p.second.State == EPS_ACTIVE) {
                     auto* session = c.second.FindSession(p.second.Session);
-                    Y_VERIFY(session != nullptr);
+                    Y_ABORT_UNLESS(session != nullptr);
                     pi->SetClientNode(session->ClientNode);
                     pi->SetProxyNodeId(session->ProxyNodeId);
                     pi->SetSession(session->Session);
@@ -1223,7 +1223,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
 
 void TPersQueueReadBalancer::TClientInfo::KillSessionsWithoutGroup(const TActorContext& ctx) {
     auto it = ClientGroupsInfo.find(MAIN_GROUP);
-    Y_VERIFY(it != ClientGroupsInfo.end());
+    Y_ABORT_UNLESS(it != ClientGroupsInfo.end());
     for (auto& s : it->second.SessionsInfo) {
         THolder<TEvPersQueue::TEvError> response(new TEvPersQueue::TEvError);
         response->Record.SetCode(NPersQueue::NErrorCode::ERROR);
@@ -1235,7 +1235,7 @@ void TPersQueueReadBalancer::TClientInfo::KillSessionsWithoutGroup(const TActorC
 }
 
 void TPersQueueReadBalancer::TClientInfo::MergeGroups(const TActorContext& ctx) {
-    Y_VERIFY(ClientGroupsInfo.find(0) == ClientGroupsInfo.end());
+    Y_ABORT_UNLESS(ClientGroupsInfo.find(0) == ClientGroupsInfo.end());
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << ClientId << " merge groups");
 
@@ -1252,7 +1252,7 @@ void TPersQueueReadBalancer::TClientInfo::MergeGroups(const TActorContext& ctx) 
         ++numGroups;
         for (auto& pi : jt->second.PartitionsInfo) {
             bool res = clientInfo.PartitionsInfo.insert(pi).second;
-            Y_VERIFY(res);
+            Y_ABORT_UNLESS(res);
         }
         for (auto& si : jt->second.SessionsInfo) {
             auto key = si.first;
@@ -1271,8 +1271,8 @@ void TPersQueueReadBalancer::TClientInfo::MergeGroups(const TActorContext& ctx) 
         }
         ClientGroupsInfo.erase(jt);
     }
-    Y_VERIFY(clientInfo.SessionsInfo.size() * numGroups == numSessions);
-    Y_VERIFY(ClientGroupsInfo.size() == 1);
+    Y_ABORT_UNLESS(clientInfo.SessionsInfo.size() * numGroups == numSessions);
+    Y_ABORT_UNLESS(ClientGroupsInfo.size() == 1);
     clientInfo.ScheduleBalance(ctx);
 
 }
@@ -1290,7 +1290,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
     }
 
     ui32 group = pit->second.GroupId;
-    Y_VERIFY(group > 0);
+    Y_ABORT_UNLESS(group > 0);
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "client " << record.GetClientId() << " released partition from pipe " << sender
                                                 << " session " << record.GetSession() << " partition " << record.GetPartition() << " group " << group);
@@ -1317,7 +1317,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
     if (session == nullptr) { //already dead session
         return;
     }
-    Y_VERIFY(jt != cit->second.PartitionsInfo.end());
+    Y_ABORT_UNLESS(jt != cit->second.PartitionsInfo.end());
     jt->second.Session = TActorId();
     jt->second.State = EPS_FREE;
     cit->second.FreePartitions.push_back(jt->first);
@@ -1390,9 +1390,9 @@ void TPersQueueReadBalancer::RegisterSession(const TActorId& pipe, const TActorC
 {
     //TODO : change structs for only this session, not all client
     auto it = PipesInfo.find(pipe);
-    Y_VERIFY(it != PipesInfo.end());
+    Y_ABORT_UNLESS(it != PipesInfo.end());
     auto jt = ClientsInfo.find(it->second.ClientId);
-    Y_VERIFY(jt != ClientsInfo.end());
+    Y_ABORT_UNLESS(jt != ClientsInfo.end());
     for (auto& c : jt->second.ClientGroupsInfo) {
         c.second.ScheduleBalance(ctx);
     }
@@ -1402,10 +1402,10 @@ void TPersQueueReadBalancer::UnregisterSession(const TActorId& pipe, const TActo
 {
     //TODO : change structs for only this session
     auto it = PipesInfo.find(pipe);
-    Y_VERIFY(it != PipesInfo.end());
+    Y_ABORT_UNLESS(it != PipesInfo.end());
     const TString& clientId = it->second.ClientId;
     auto jt = ClientsInfo.find(clientId);
-    Y_VERIFY(jt != ClientsInfo.end());
+    Y_ABORT_UNLESS(jt != ClientsInfo.end());
     TClientInfo& clientInfo = jt->second;
     for (auto& [groupKey, groupInfo] : clientInfo.ClientGroupsInfo) {
         for (auto& [partitionNumber, partitionInfo] : groupInfo.PartitionsInfo) { //TODO: reverse map
@@ -1498,15 +1498,15 @@ void TPersQueueReadBalancer::TClientGroupInfo::Balance(const TActorContext& ctx)
             if (FreePartitions.empty())
                 return;
         }
-        Y_VERIFY(sessionInfo.NumActive >= desired && sessionInfo.NumActive <= desired + 1);
+        Y_ABORT_UNLESS(sessionInfo.NumActive >= desired && sessionInfo.NumActive <= desired + 1);
     }
-    Y_VERIFY(FreePartitions.empty());
+    Y_ABORT_UNLESS(FreePartitions.empty());
 }
 
 
 void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe, TSessionInfo& sessionInfo, ui32 partition, const TActorContext& ctx) {
     auto it = PartitionsInfo.find(partition);
-    Y_VERIFY(it != PartitionsInfo.end());
+    Y_ABORT_UNLESS(it != PartitionsInfo.end());
     it->second.Session = pipe;
     it->second.State = EPS_ACTIVE;
     ++sessionInfo.NumActive;

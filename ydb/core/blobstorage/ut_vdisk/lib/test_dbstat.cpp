@@ -54,7 +54,7 @@ class TDbStatTestActor : public NActors::TActorBootstrapped<TDbStatTestActor> {
     }
 
     void Handle(TEvBlobStorage::TEvVDbStatResult::TPtr &ev, const TActorContext &ctx) {
-        Y_VERIFY(ev->Get()->Record.GetStatus() == NKikimrProto::OK);
+        Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK);
 
         switch (StatAction) {
             case NKikimrBlobStorage::DumpDb:

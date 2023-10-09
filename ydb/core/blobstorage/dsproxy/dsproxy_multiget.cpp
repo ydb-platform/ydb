@@ -51,11 +51,11 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
             return;
         }
 
-        Y_VERIFY(ev->Cookie < RequestInfos.size());
+        Y_ABORT_UNLESS(ev->Cookie < RequestInfos.size());
         TRequestInfo &info = RequestInfos[ev->Cookie];
-        Y_VERIFY(!info.IsReplied);
+        Y_ABORT_UNLESS(!info.IsReplied);
         info.IsReplied = true;
-        Y_VERIFY(res.ResponseSz == info.EndIdx - info.BeginIdx);
+        Y_ABORT_UNLESS(res.ResponseSz == info.EndIdx - info.BeginIdx);
 
         for (ui64 offset = 0; offset < res.ResponseSz; ++offset) {
             Y_VERIFY_DEBUG(!PhantomCheck || res.Responses[offset].LooksLikePhantom.has_value());
@@ -68,7 +68,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
     friend class TBlobStorageGroupRequestActor<TBlobStorageGroupMultiGetRequest>;
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
         std::unique_ptr<TEvBlobStorage::TEvGetResult> ev(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID));
-        Y_VERIFY(status != NKikimrProto::NODATA);
+        Y_ABORT_UNLESS(status != NKikimrProto::NODATA);
         for (ui32 i = 0, e = QuerySize; i != e; ++i) {
             const TEvBlobStorage::TEvGet::TQuery &query = Queries[i];
             TEvBlobStorage::TEvGetResult::TResponse &x = ev->Responses[i];
@@ -78,7 +78,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
         }
         ev->ErrorReason = ErrorReason;
         Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(), TActivationContext::Now() - StartTime);
-        Y_VERIFY(status != NKikimrProto::OK);
+        Y_ABORT_UNLESS(status != NKikimrProto::OK);
         SendResponseAndDie(std::move(ev));
     }
 
@@ -117,7 +117,7 @@ public:
     {}
 
     void PrepareRequest(ui32 beginIdx, ui32 endIdx) {
-        Y_VERIFY(endIdx > beginIdx);
+        Y_ABORT_UNLESS(endIdx > beginIdx);
         ui64 cookie = RequestInfos.size();
         RequestInfos.push_back({beginIdx, endIdx, false});
         TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[endIdx - beginIdx]);
@@ -169,7 +169,7 @@ public:
             << " Query# " << dumpQuery()
             << " Deadline# " << Deadline);
 
-        Y_VERIFY(QuerySize != 0); // reply with error?
+        Y_ABORT_UNLESS(QuerySize != 0); // reply with error?
         ui32 beginIdx = 0;
         TLogoBlobID lastBlobId;
         TQueryResultSizeTracker resultSize;

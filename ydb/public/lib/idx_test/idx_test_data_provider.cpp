@@ -64,7 +64,7 @@ NYdb::TValue CreateOptionalValue(const TColumn& column, const TRandomValueProvid
             }
             break;
         default:
-                Y_VERIFY(false, "unimplemented");
+                Y_ABORT_UNLESS(false, "unimplemented");
     }
     return value.Build();
 }
@@ -122,7 +122,7 @@ NYdb::TValue CreateValue(const TColumn& column, const TRandomValueProvider& rvp)
             }
             break;
         default:
-                Y_VERIFY(false, "unimplemented");
+                Y_ABORT_UNLESS(false, "unimplemented");
     }
     return value.Build();
 }
@@ -182,7 +182,7 @@ NYdb::TValue CreateRow(const TVector<TColumn>& columns, const TRandomValueProvid
             break;
 
             default:
-                Y_VERIFY(false, "unimplemented");
+                Y_ABORT_UNLESS(false, "unimplemented");
         }
     }
     value.EndStruct();

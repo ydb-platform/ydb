@@ -58,7 +58,7 @@ public:
 
     void OnCreatePartitionStream(TReadSessionEvent::TStartPartitionSessionEvent& event) {
         with_lock (Lock) {
-            Y_VERIFY(PartitionStreamToUncommittedOffsets[event.GetPartitionSession()->GetPartitionSessionId()].Empty());
+            Y_ABORT_UNLESS(PartitionStreamToUncommittedOffsets[event.GetPartitionSession()->GetPartitionSessionId()].Empty());
         }
         event.Confirm();
     }
@@ -66,7 +66,7 @@ public:
     void OnDestroyPartitionStream(TReadSessionEvent::TStopPartitionSessionEvent& event) {
         with_lock (Lock) {
             const ui64 partitionStreamId = event.GetPartitionSession()->GetPartitionSessionId();
-            Y_VERIFY(UnconfirmedDestroys.find(partitionStreamId) == UnconfirmedDestroys.end());
+            Y_ABORT_UNLESS(UnconfirmedDestroys.find(partitionStreamId) == UnconfirmedDestroys.end());
             if (PartitionStreamToUncommittedOffsets[partitionStreamId].Empty()) {
                 PartitionStreamToUncommittedOffsets.erase(partitionStreamId);
                 event.Confirm();

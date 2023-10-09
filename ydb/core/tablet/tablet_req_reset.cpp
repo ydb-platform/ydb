@@ -120,8 +120,8 @@ public:
         , TabletStorageInfo(tabletStorageInfo)
         , Generation(knownGeneration)
     {
-        Y_VERIFY(!TabletStorageInfo->Channels.empty());
-        Y_VERIFY(TabletStorageInfo->Channels[0].LatestEntry() != nullptr);
+        Y_ABORT_UNLESS(!TabletStorageInfo->Channels.empty());
+        Y_ABORT_UNLESS(TabletStorageInfo->Channels[0].LatestEntry() != nullptr);
     }
 
     void Bootstrap(const TActorContext& ctx) {

@@ -121,7 +121,7 @@ void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, c
         return;
     } else {
 
-        Y_VERIFY(TopicsHandler != nullptr);
+        Y_ABORT_UNLESS(TopicsHandler != nullptr);
         const ui64 cookie = NextCookie();
 
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new session created cookie " << cookie);

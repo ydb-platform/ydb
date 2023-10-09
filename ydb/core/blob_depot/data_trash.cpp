@@ -25,11 +25,11 @@ namespace NKikimr::NBlobDepot {
         const ui32 generation = Self->Executor()->Generation();
         THashMap<ui32, std::unique_ptr<TEvBlobDepot::TEvPushNotify>> outbox;
 
-        Y_VERIFY(!record.CollectGarbageRequestInFlight);
-        Y_VERIFY(!record.Trash.empty());
-        Y_VERIFY(Loaded); // we must have correct Trash and Used values
+        Y_ABORT_UNLESS(!record.CollectGarbageRequestInFlight);
+        Y_ABORT_UNLESS(!record.Trash.empty());
+        Y_ABORT_UNLESS(Loaded); // we must have correct Trash and Used values
 
-        Y_VERIFY(record.Channel < Self->Channels.size());
+        Y_ABORT_UNLESS(record.Channel < Self->Channels.size());
         auto& channel = Self->Channels[record.Channel];
 
         TGenStep nextGenStep = Max(record.IssuedGenStep, TGenStep(*--record.Trash.end()));
@@ -42,7 +42,7 @@ namespace NKikimr::NBlobDepot {
         if (TGenStep(leastExpectedBlobId) <= nextGenStep) {
             // remove invalidated step from allocations
             auto blobSeqId = TBlobSeqId::FromSequentalNumber(record.Channel, generation, channel.NextBlobSeqId);
-            Y_VERIFY(record.LastConfirmedGenStep < TGenStep(blobSeqId));
+            Y_ABORT_UNLESS(record.LastConfirmedGenStep < TGenStep(blobSeqId));
             if (blobSeqId.Step <= invalidatedStep) {
                 blobSeqId.Step = invalidatedStep + 1;
                 blobSeqId.Index = 0;
@@ -83,7 +83,7 @@ namespace NKikimr::NBlobDepot {
                     : TGenStep());
         }
 
-        Y_VERIFY(nextGenStep < TGenStep(leastExpectedBlobId));
+        Y_ABORT_UNLESS(nextGenStep < TGenStep(leastExpectedBlobId));
 
         TVector<TLogoBlobID> keep;
         TVector<TLogoBlobID> doNotKeep;
@@ -100,7 +100,7 @@ namespace NKikimr::NBlobDepot {
             record.LastConfirmedGenStep.Step(), record.Channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie,
             TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode);
         for (auto it = record.Used.upper_bound(keepFrom); it != record.Used.end() && TGenStep(*it) <= nextGenStep; ++it) {
-            Y_VERIFY(record.LastConfirmedGenStep < TGenStep(*it));
+            Y_ABORT_UNLESS(record.LastConfirmedGenStep < TGenStep(*it));
             keep.push_back(*it);
         }
 
@@ -108,10 +108,10 @@ namespace NKikimr::NBlobDepot {
         std::vector<TLogoBlobID> trashInFlight(record.Trash.begin(), trashEndIter);
 
         const bool collect = nextGenStep > record.LastConfirmedGenStep;
-        Y_VERIFY(nextGenStep >= record.IssuedGenStep);
+        Y_ABORT_UNLESS(nextGenStep >= record.IssuedGenStep);
 
         if (trashInFlight.empty()) {
-            Y_VERIFY(keep.empty()); // nothing to do here
+            Y_ABORT_UNLESS(keep.empty()); // nothing to do here
         } else {
             auto keep_ = keep ? std::make_unique<TVector<TLogoBlobID>>(std::move(keep)) : nullptr;
             auto doNotKeep_ = doNotKeep ? std::make_unique<TVector<TLogoBlobID>>(std::move(doNotKeep)) : nullptr;
@@ -140,14 +140,14 @@ namespace NKikimr::NBlobDepot {
             if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                 if (ev->Keep) {
                     for (const TLogoBlobID& blobId : *ev->Keep) {
-                        Y_VERIFY(blobId.Channel() == record.Channel);
+                        Y_ABORT_UNLESS(blobId.Channel() == record.Channel);
                         BDEV(BDEV00, "TrashManager_issueKeep", (BDT, Self->TabletID()), (GroupId, record.GroupId),
                             (Channel, int(record.Channel)), (Q, queryId), (Cookie, id), (BlobId, blobId));
                     }
                 }
                 if (ev->DoNotKeep) {
                     for (const TLogoBlobID& blobId : *ev->DoNotKeep) {
-                        Y_VERIFY(blobId.Channel() == record.Channel);
+                        Y_ABORT_UNLESS(blobId.Channel() == record.Channel);
                         BDEV(BDEV01, "TrashManager_issueDoNotKeep", (BDT, Self->TabletID()), (GroupId, record.GroupId),
                             (Channel, int(record.Channel)), (Q, queryId), (Cookie, id), (BlobId, blobId));
                     }
@@ -171,7 +171,7 @@ namespace NKikimr::NBlobDepot {
                 request[item.GetChannel()] = item.GetInvalidatedStep();
             }
 
-            Y_VERIFY(agent.Connection);
+            Y_ABORT_UNLESS(agent.Connection);
             agent.PushCallbacks.emplace(id, std::bind(&TData::OnPushNotifyResult, this, std::placeholders::_1));
             TActivationContext::Send(new IEventHandle(agent.Connection->AgentId, agent.Connection->PipeServerId, ev.release(), 0, id));
         }
@@ -179,7 +179,7 @@ namespace NKikimr::NBlobDepot {
 
     void TData::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
         auto cmd = CollectCmds.extract(ev->Cookie);
-        Y_VERIFY(cmd);
+        Y_ABORT_UNLESS(cmd);
         const TCollectCmd& info = cmd.mapped();
         const ui32 groupId = info.GroupId;
 
@@ -191,7 +191,7 @@ namespace NKikimr::NBlobDepot {
 
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(ev->Get()->Channel, groupId);
         if (ev->Get()->Status == NKikimrProto::OK) {
-            Y_VERIFY(record.CollectGarbageRequestInFlight);
+            Y_ABORT_UNLESS(record.CollectGarbageRequestInFlight);
             record.OnSuccessfulCollect(this);
             ExecuteConfirmGC(record.Channel, record.GroupId, std::exchange(record.TrashInFlight, {}),
                 record.LastConfirmedGenStep);

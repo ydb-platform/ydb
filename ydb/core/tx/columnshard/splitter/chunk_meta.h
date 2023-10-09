@@ -40,12 +40,12 @@ public:
     }
 
     ui32 GetNumRowsVerified() const {
-        Y_VERIFY(NumRows);
+        Y_ABORT_UNLESS(NumRows);
         return *NumRows;
     }
 
     ui32 GetRawBytesVerified() const {
-        Y_VERIFY(RawBytes);
+        Y_ABORT_UNLESS(RawBytes);
         return *RawBytes;
     }
 

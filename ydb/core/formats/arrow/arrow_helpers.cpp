@@ -23,7 +23,7 @@
 #include <library/cpp/actors/core/log.h>
 #include <memory>
 
-#define Y_VERIFY_OK(status) Y_VERIFY(status.ok(), "%s", status.ToString().c_str())
+#define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
 
 namespace NKikimr::NArrow {
 
@@ -134,7 +134,7 @@ std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::
         auto result = arrow::MakeArrayOfNull(field->type(), rowsCount);
         Y_VERIFY_OK(result.status());
         columns.emplace_back(*result);
-        Y_VERIFY(columns.back());
+        Y_ABORT_UNLESS(columns.back());
     }
     return arrow::RecordBatch::Make(schema, 0, columns);
 }
@@ -183,8 +183,8 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                                    const std::shared_ptr<arrow::Schema>& dstSchema,
                                                    bool addNotExisted) {
-    Y_VERIFY(srcBatch);
-    Y_VERIFY(dstSchema);
+    Y_ABORT_UNLESS(srcBatch);
+    Y_ABORT_UNLESS(dstSchema);
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(dstSchema->num_fields());
 
@@ -204,7 +204,7 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
             }
         } else {
             auto srcField = srcBatch->schema()->GetFieldByName(field->name());
-            Y_VERIFY(srcField);
+            Y_ABORT_UNLESS(srcField);
             if (!field->Equals(srcField)) {
                 AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse_incoming_batch")("reason", "invalid_column_type")("column", field->name())
                                 ("column_type", field->ToString(true))("incoming_type", srcField->ToString(true));
@@ -212,7 +212,7 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
             }
         }
 
-        Y_VERIFY(columns.back());
+        Y_ABORT_UNLESS(columns.back());
         if (!columns.back()->type()->Equals(field->type())) {
             AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse_incoming_batch")("reason", "invalid_column_type")("column", field->name())
                                 ("column_type", field->type()->ToString())("incoming_type", columns.back()->type()->ToString());
@@ -266,11 +266,11 @@ std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared
 }
 
 std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& table) {
-    Y_VERIFY(table);
+    Y_ABORT_UNLESS(table);
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(table->num_columns());
     for (auto& col : table->columns()) {
-        Y_VERIFY(col->num_chunks() == 1);
+        Y_ABORT_UNLESS(col->num_chunks() == 1);
         columns.push_back(col->chunk(0));
     }
     return arrow::RecordBatch::Make(table->schema(), table->num_rows(), columns);
@@ -285,14 +285,14 @@ std::shared_ptr<arrow::RecordBatch> CombineSortedBatches(const std::vector<std::
 
     auto mergeStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, Max<ui64>());
     std::shared_ptr<arrow::RecordBatch> batch = mergeStream->Read();
-    Y_VERIFY(!mergeStream->Read());
+    Y_ABORT_UNLESS(!mergeStream->Read());
     return batch;
 }
 
 std::vector<std::shared_ptr<arrow::RecordBatch>> MergeSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
                                                                     const std::shared_ptr<TSortDescription>& description,
                                                                     size_t maxBatchRows) {
-    Y_VERIFY(maxBatchRows);
+    Y_ABORT_UNLESS(maxBatchRows);
     ui64 numRows = 0;
     std::vector<NArrow::IInputStream::TPtr> streams;
     streams.reserve(batches.size());
@@ -308,7 +308,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> MergeSortedBatches(const std::v
 
     auto mergeStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, maxBatchRows);
     while (std::shared_ptr<arrow::RecordBatch> batch = mergeStream->Read()) {
-        Y_VERIFY(batch->num_rows());
+        Y_ABORT_UNLESS(batch->num_rows());
         out.push_back(batch);
     }
     return out;
@@ -317,7 +317,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> MergeSortedBatches(const std::v
 std::vector<std::shared_ptr<arrow::RecordBatch>> SliceSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
                                                                     const std::shared_ptr<TSortDescription>& description,
                                                                     size_t maxBatchRows) {
-    Y_VERIFY(!description->Reverse);
+    Y_ABORT_UNLESS(!description->Reverse);
 
     std::vector<NArrow::IInputStream::TPtr> streams;
     streams.reserve(batches.size());
@@ -332,7 +332,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceSortedBatches(const std::v
 
     auto dedupStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, maxBatchRows, true);
     while (std::shared_ptr<arrow::RecordBatch> batch = dedupStream->Read()) {
-        Y_VERIFY(batch->num_rows());
+        Y_ABORT_UNLESS(batch->num_rows());
         out.push_back(batch);
     }
     return out;
@@ -350,21 +350,21 @@ bool IsNoOp(const arrow::UInt64Array& permutation) {
 
 std::shared_ptr<arrow::RecordBatch> Reorder(const std::shared_ptr<arrow::RecordBatch>& batch,
                                             const std::shared_ptr<arrow::UInt64Array>& permutation, const bool canRemove) {
-    Y_VERIFY(permutation->length() == batch->num_rows() || canRemove);
+    Y_ABORT_UNLESS(permutation->length() == batch->num_rows() || canRemove);
 
     auto res = IsNoOp(*permutation) ? batch : arrow::compute::Take(batch, permutation);
-    Y_VERIFY(res.ok());
+    Y_ABORT_UNLESS(res.ok());
     return (*res).record_batch();
 }
 
 std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch,
                                                                const std::vector<ui32>& sharding, ui32 numShards) {
-    Y_VERIFY((size_t)batch->num_rows() == sharding.size());
+    Y_ABORT_UNLESS((size_t)batch->num_rows() == sharding.size());
 
     std::vector<std::vector<ui32>> shardRows(numShards);
     for (size_t row = 0; row < sharding.size(); ++row) {
         ui32 shardNo = sharding[row];
-        Y_VERIFY(shardNo < numShards);
+        Y_ABORT_UNLESS(shardNo < numShards);
         shardRows[shardNo].push_back(row);
     }
 
@@ -394,7 +394,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared
         }
     }
 
-    Y_VERIFY(offset == batch->num_rows());
+    Y_ABORT_UNLESS(offset == batch->num_rows());
     return out;
 }
 
@@ -548,7 +548,7 @@ std::vector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema) {
 
 std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size) {
     auto res = arrow::MakeArrayFromScalar(arrow::UInt64Scalar(value), size);
-    Y_VERIFY(res.ok());
+    Y_ABORT_UNLESS(res.ok());
     return std::static_pointer_cast<arrow::UInt64Array>(*res);
 }
 
@@ -607,13 +607,13 @@ std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>&
         }
         return true;
     });
-    Y_VERIFY(out);
+    Y_ABORT_UNLESS(out);
     return out;
 }
 
 std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& array, int position) {
     auto res = array->GetScalar(position);
-    Y_VERIFY(res.ok());
+    Y_ABORT_UNLESS(res.ok());
     return *res;
 }
 
@@ -639,8 +639,8 @@ bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x) {
 }
 
 bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
-    Y_VERIFY(x);
-    Y_VERIFY(y);
+    Y_ABORT_UNLESS(x);
+    Y_ABORT_UNLESS(y);
     return ScalarLess(*x, *y);
 }
 
@@ -659,8 +659,8 @@ int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
         if constexpr (arrow::has_string_view<typename TWrap::T>()) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;
-            Y_VERIFY(xval);
-            Y_VERIFY(yval);
+            Y_ABORT_UNLESS(xval);
+            Y_ABORT_UNLESS(yval);
             TStringBuf xBuf(reinterpret_cast<const char*>(xval->data()), xval->size());
             TStringBuf yBuf(reinterpret_cast<const char*>(yval->data()), yval->size());
             if (xBuf < yBuf) {
@@ -682,14 +682,14 @@ int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
                 return 0;
             }
         }
-        Y_VERIFY(false); // TODO: non primitive types
+        Y_ABORT_UNLESS(false); // TODO: non primitive types
         return 0;
     });
 }
 
 int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
-    Y_VERIFY(x);
-    Y_VERIFY(y);
+    Y_ABORT_UNLESS(x);
+    Y_ABORT_UNLESS(y);
     return ScalarCompare(*x, *y);
 }
 
@@ -703,9 +703,9 @@ std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec) {
     std::shared_ptr<arrow::Array> out;
     arrow::BooleanBuilder builder;
     for (const auto val : vec) {
-        Y_VERIFY(builder.Append(val).ok());
+        Y_ABORT_UNLESS(builder.Append(val).ok());
     }
-    Y_VERIFY(builder.Finish(&out).ok());
+    Y_ABORT_UNLESS(builder.Finish(&out).ok());
     return out;
 }
 
@@ -749,7 +749,7 @@ bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& b
     std::vector<std::shared_ptr<arrow::Array>> columns;
     std::map<std::string, ui32> fieldNames;
     for (auto&& i : batches) {
-        Y_VERIFY(i);
+        Y_ABORT_UNLESS(i);
         for (auto&& f : i->schema()->fields()) {
             if (!fieldNames.emplace(f->name(), fields.size()).second) {
                 return false;
@@ -764,7 +764,7 @@ bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& b
         }
     }
 
-    Y_VERIFY(fields.size() == columns.size());
+    Y_ABORT_UNLESS(fields.size() == columns.size());
     if (columnsOrder.empty()) {
         result = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), batches.front()->num_rows(), columns);
     } else {
@@ -773,7 +773,7 @@ bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& b
         for (auto&& i : columnsOrder) {
             auto it = fieldNames.find(i);
             if (orderFieldsAreNecessary) {
-                Y_VERIFY(it != fieldNames.end());
+                Y_ABORT_UNLESS(it != fieldNames.end());
             } else if (it == fieldNames.end()) {
                 continue;
             }
@@ -803,7 +803,7 @@ TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position) {
     if (!array) {
         return "_NO_DATA";
     }
-    Y_VERIFY(position < array->length());
+    Y_ABORT_UNLESS(position < array->length());
     TStringBuilder result;
     SwitchType(array->type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
@@ -826,7 +826,7 @@ NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 posi
     if (!array) {
         return NJson::JSON_NULL;
     }
-    Y_VERIFY(position < array->length());
+    Y_ABORT_UNLESS(position < array->length());
     NJson::TJsonValue result = NJson::JSON_MAP;
     SwitchType(array->type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
@@ -914,7 +914,7 @@ std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_p
             if (!recordsCount) {
                 recordsCount = column->length();
             } else {
-                Y_VERIFY(*recordsCount == column->length());
+                Y_ABORT_UNLESS(*recordsCount == column->length());
             }
         }
         for (auto&& field : batch->schema()->fields()) {

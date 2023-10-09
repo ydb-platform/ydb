@@ -57,7 +57,7 @@ private:
         if (Cfg().HasCloudNetData()) {
             CloudNetworksClassifier = NAddressClassifier::BuildLabeledAddressClassifierFromNetData(Cfg().GetCloudNetData());
 
-            Y_VERIFY(CloudNetworksClassifier); // the config is expected to be correct if specified
+            Y_ABORT_UNLESS(CloudNetworksClassifier); // the config is expected to be correct if specified
         }
     }
 
@@ -246,7 +246,7 @@ private:
     // Monitoring features
 
     void StartPeriodicalMonitoring() {
-        Y_VERIFY(Cfg().GetTimedCountersUpdateIntervalSeconds());
+        Y_ABORT_UNLESS(Cfg().GetTimedCountersUpdateIntervalSeconds());
 
         Send(Ctx().SelfID, new TEvents::TEvWakeup);
     }

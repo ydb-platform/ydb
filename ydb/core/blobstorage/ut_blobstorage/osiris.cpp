@@ -24,7 +24,7 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
     env.CreateBoxAndPool(1, 1);
 
     const auto& groups = env.GetGroups();
-    Y_VERIFY(groups.size() == 1);
+    Y_ABORT_UNLESS(groups.size() == 1);
     const auto& info = env.GetGroupInfo(groups.front());
 
     TBlobStorageGroupInfo::TOrderNums orderNums;
@@ -48,7 +48,7 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
             info->GetVDiskId(orderNum), false, nullptr, TInstant::Max(), NKikimrBlobStorage::TabletLog)),
             sender.NodeId());
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(sender);
-        Y_VERIFY(res->Get()->Record.GetStatus() == NKikimrProto::OK);
+        Y_ABORT_UNLESS(res->Get()->Record.GetStatus() == NKikimrProto::OK);
     }
 
     // sync
@@ -58,7 +58,7 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
     NKikimrBlobStorage::TConfigRequest request;
     request.AddCommand()->MutableQueryBaseConfig();
     NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
-    Y_VERIFY(response.GetSuccess());
+    Y_ABORT_UNLESS(response.GetSuccess());
     for (const auto& vslot : response.GetStatus(0).GetBaseConfig().GetVSlot()) {
         const TVDiskID vdiskId(vslot.GetGroupId(), vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
             vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
@@ -69,7 +69,7 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
         slotId->CopyFrom(vslot.GetVSlotId());
         env.Runtime->SendToPipe(env.TabletId, sender, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
         auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerGroupReconfigureWipeResult>(sender);
-        Y_VERIFY(response->Get()->Record.GetStatus() == NKikimrProto::OK);
+        Y_ABORT_UNLESS(response->Get()->Record.GetStatus() == NKikimrProto::OK);
 
         env.Sim(TDuration::Seconds(30));
     }
@@ -86,7 +86,7 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
         env.Runtime->Send(new IEventHandle(queueId, sender, query.release()), sender.NodeId());
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(sender);
         const auto& record = res->Get()->Record;
-        Y_VERIFY(record.GetStatus() == NKikimrProto::OK);
+        Y_ABORT_UNLESS(record.GetStatus() == NKikimrProto::OK);
         const TVDiskID& vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         for (const auto& blob : record.GetResult()) {
             const auto& id = LogoBlobIDFromLogoBlobID(blob.GetBlobID());

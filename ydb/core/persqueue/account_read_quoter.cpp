@@ -125,7 +125,7 @@ void TAccountReadQuoter::HandleReadQuotaConsumed(NAccountReadQuoterEvents::TEvCo
         << ", consumed in credit " << ConsumedBytesInCredit << "/" << ReadCreditBytes
     );
     auto it = InProcessReadRequestCookies.find(ev->Get()->ReadRequestCookie);
-    Y_VERIFY(it != InProcessReadRequestCookies.end());
+    Y_ABORT_UNLESS(it != InProcessReadRequestCookies.end());
     InProcessReadRequestCookies.erase(it);
 
     if (!QuotaRequestInFlight) {
@@ -154,14 +154,14 @@ void TAccountReadQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, const
         LimiterDescription() << "Got read quota:" << ev->Get()->Result << ". Cookie: " << cookie
     );
 
-    Y_VERIFY(CurrentQuotaRequestCookie == cookie);
+    Y_ABORT_UNLESS(CurrentQuotaRequestCookie == cookie);
     if (!Queue.empty()) {
         ApproveRead(std::move(Queue.front().Event), Queue.front().StartWait, ctx);
         Queue.pop_front();
     }
 
     if (Y_UNLIKELY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Success)) {
-        Y_VERIFY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request.
+        Y_ABORT_UNLESS(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request.
         if (ctx.Now() - LastReportedErrorTime > TDuration::Minutes(1)) {
             LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_SPEED_LIMITER, LimiterDescription() << "Got read quota error: " << ev->Get()->Result);
             LastReportedErrorTime = ctx.Now();

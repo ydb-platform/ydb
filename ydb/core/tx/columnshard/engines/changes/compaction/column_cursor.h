@@ -41,8 +41,8 @@ public:
         , ColumnChunks(records)
         , ColumnLoader(loader)
     {
-        Y_VERIFY(BlobChunks.size());
-        Y_VERIFY(ColumnChunks.size() == BlobChunks.size());
+        Y_ABORT_UNLESS(BlobChunks.size());
+        Y_ABORT_UNLESS(ColumnChunks.size() == BlobChunks.size());
         CurrentBlobChunk = BlobChunks.front();
         CurrentColumnChunk = ColumnChunks.front();
     }

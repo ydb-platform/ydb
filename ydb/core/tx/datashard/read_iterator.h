@@ -114,7 +114,7 @@ public:
             return;
 
         size_t ackedIndex = ackSeqNo - LastAckSeqNo - 1;
-        Y_VERIFY(ackedIndex < UnackedReads.size());
+        Y_ABORT_UNLESS(ackedIndex < UnackedReads.size());
 
         ui64 consumedRows = 0;
         ui64 consumedBytes = 0;

@@ -126,25 +126,25 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         const NKikimrBlobStorage::TEvVPutResult &record = ev->Get()->Record;
         const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(record.GetBlobID());
         const TLogoBlobID origBlobId = TLogoBlobID(blob, 0);
-        Y_VERIFY(record.HasCookie());
+        Y_ABORT_UNLESS(record.HasCookie());
         TBlobCookie cookie(record.GetCookie());
         const ui64 idx = cookie.GetBlobIdx();
         const ui64 vdisk = cookie.GetVDiskOrderNumber();
         const NKikimrProto::EReplyStatus status = record.GetStatus();
 
-        Y_VERIFY(vdisk < WaitingVDiskResponseCount.size(), "blobIdx# %" PRIu64 " vdisk# %" PRIu64, idx, vdisk);
+        Y_ABORT_UNLESS(vdisk < WaitingVDiskResponseCount.size(), "blobIdx# %" PRIu64 " vdisk# %" PRIu64, idx, vdisk);
         if (WaitingVDiskResponseCount[vdisk] == 1) {
             WaitingVDiskCount--;
         }
         WaitingVDiskResponseCount[vdisk]--;
 
-        Y_VERIFY(idx < PutImpl.Blobs.size());
-        Y_VERIFY(origBlobId == PutImpl.Blobs[idx].BlobId);
+        Y_ABORT_UNLESS(idx < PutImpl.Blobs.size());
+        Y_ABORT_UNLESS(origBlobId == PutImpl.Blobs[idx].BlobId);
         if (TimeStatsEnabled && record.GetMsgQoS().HasExecTimeStats()) {
             TimeStats.ApplyPut(PutImpl.Blobs[idx].BufferSize, record.GetMsgQoS().GetExecTimeStats());
         }
 
-        Y_VERIFY(record.HasVDiskID());
+        Y_ABORT_UNLESS(record.HasVDiskID());
         TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vDiskId);
 
@@ -172,7 +172,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         if (ReplyAndDieWithLastResponse(putResults)) {
             return;
         }
-        Y_VERIFY(RequestsSent > ResponsesReceived, "RequestsSent# %" PRIu64 " ResponsesReceived# %" PRIu64,
+        Y_ABORT_UNLESS(RequestsSent > ResponsesReceived, "RequestsSent# %" PRIu64 " ResponsesReceived# %" PRIu64,
                 ui64(RequestsSent), ui64(ResponsesReceived));
 
         if (!IsAccelerateScheduled && !IsAccelerated) {
@@ -205,11 +205,11 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
             TimeStats.ApplyPut(RequestBytes, record.GetMsgQoS().GetExecTimeStats());
         }
 
-        Y_VERIFY(record.HasVDiskID());
+        Y_ABORT_UNLESS(record.HasVDiskID());
         TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vDiskId);
 
-        Y_VERIFY(record.HasCookie());
+        Y_ABORT_UNLESS(record.HasCookie());
         TVMultiPutCookie cookie(record.GetCookie());
         const ui64 vdisk = cookie.GetVDiskOrderNumber();
         const NKikimrProto::EReplyStatus status = record.GetStatus();
@@ -226,7 +226,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         A_LOG_LOG_S(false, prio, "BPP02", "received " << ev->Get()->ToString()
                 << " from# " << VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID()));
 
-        Y_VERIFY(vdisk < WaitingVDiskResponseCount.size(), " vdisk# %" PRIu64, vdisk);
+        Y_ABORT_UNLESS(vdisk < WaitingVDiskResponseCount.size(), " vdisk# %" PRIu64, vdisk);
         if (WaitingVDiskResponseCount[vdisk] == 1) {
             WaitingVDiskCount--;
         }
@@ -258,13 +258,13 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
                     GetVDiskTimeMs(record.GetTimestamps()));
             }
 
-            Y_VERIFY(item.HasStatus());
-            Y_VERIFY(item.HasBlobID());
-            Y_VERIFY(item.HasCookie());
+            Y_ABORT_UNLESS(item.HasStatus());
+            Y_ABORT_UNLESS(item.HasBlobID());
+            Y_ABORT_UNLESS(item.HasCookie());
             ui64 blobIdx = TBlobCookie(item.GetCookie()).GetBlobIdx();
             NKikimrProto::EReplyStatus itemStatus = item.GetStatus();
             TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
-            Y_VERIFY(itemStatus != NKikimrProto::RACE); // we should get RACE for the whole request and handle it in CheckForTermErrors
+            Y_ABORT_UNLESS(itemStatus != NKikimrProto::RACE); // we should get RACE for the whole request and handle it in CheckForTermErrors
             if (itemStatus == NKikimrProto::BLOCKED || itemStatus == NKikimrProto::DEADLINE) {
                 TStringStream errorReason;
                 errorReason << "Got VMultiPutResult itemStatus# " << itemStatus << " from VDiskId# " << vDiskId;
@@ -286,7 +286,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         if (ReplyAndDieWithLastResponse(putResults)) {
             return;
         }
-        Y_VERIFY(RequestsSent > ResponsesReceived, "RequestsSent# %" PRIu64 " ResponsesReceived# %" PRIu64
+        Y_ABORT_UNLESS(RequestsSent > ResponsesReceived, "RequestsSent# %" PRIu64 " ResponsesReceived# %" PRIu64
                 " ResponsesSent# %" PRIu64 " BlobsCount# %" PRIu64 " TPutImpl# %s", ui64(RequestsSent), ui64(ResponsesReceived),
                 (ui64)ResponsesSent, (ui64)PutImpl.Blobs.size(), PutImpl.DumpFullState().data());
 
@@ -312,12 +312,12 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
         TPutImpl::TPutResultVec putResults;
         PutImpl.PrepareReply(status, LogCtx, ErrorReason, putResults);
-        Y_VERIFY(ReplyAndDieWithLastResponse(putResults));
+        Y_ABORT_UNLESS(ReplyAndDieWithLastResponse(putResults));
     }
 
     bool ReplyAndDieWithLastResponse(TPutImpl::TPutResultVec &putResults) {
         for (auto& [blobIdx, result] : putResults) {
-            Y_VERIFY(ResponsesSent != PutImpl.Blobs.size());
+            Y_ABORT_UNLESS(ResponsesSent != PutImpl.Blobs.size());
             SendReply(result, blobIdx);
         }
         if (ResponsesSent == PutImpl.Blobs.size()) {
@@ -338,7 +338,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         TLogoBlobID origBlobId = TLogoBlobID(blobId, 0);
         Mon->CountPutPesponseTime(Info->GetDeviceType(), HandleClass, PutImpl.Blobs[blobIdx].BufferSize, duration);
         *Mon->ActivePutCapacity -= ReportedBytes;
-        Y_VERIFY(PutImpl.GetHandoffPartsSent() <= Info->Type.TotalPartCount() * MaxHandoffNodes * PutImpl.Blobs.size());
+        Y_ABORT_UNLESS(PutImpl.GetHandoffPartsSent() <= Info->Type.TotalPartCount() * MaxHandoffNodes * PutImpl.Blobs.size());
         ++*Mon->HandoffPartsSent[Min(Mon->HandoffPartsSent.size() - 1, (size_t)PutImpl.GetHandoffPartsSent())];
         ReportedBytes = 0;
         const bool success = (status == NKikimrProto::OK);
@@ -348,7 +348,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
                 blobId.TabletID(), Info->GroupID, blobId.Channel(),
                 NKikimrBlobStorage::EPutHandleClass_Name(HandleClass), success);
         ResponsesSent++;
-        Y_VERIFY(ResponsesSent <= PutImpl.Blobs.size());
+        Y_ABORT_UNLESS(ResponsesSent <= PutImpl.Blobs.size());
         RootCauseTrack.RenderTrack(PutImpl.Blobs[blobIdx].Orbit);
         LWTRACK(DSProxyPutReply, PutImpl.Blobs[blobIdx].Orbit);
         putResult->Orbit = std::move(PutImpl.Blobs[blobIdx].Orbit);
@@ -591,14 +591,14 @@ public:
     template <typename TPutEvent, typename TCookie>
     void UpdatePengingVDiskResponseCount(const TDeque<std::unique_ptr<TPutEvent>> &putEvents) {
         for (auto &event : putEvents) {
-            Y_VERIFY(event->Record.HasCookie());
+            Y_ABORT_UNLESS(event->Record.HasCookie());
             TCookie cookie(event->Record.GetCookie());
             if (RootCauseTrack.IsOn) {
                 cookie.SetCauseIdx(RootCauseTrack.RegisterCause());
                 event->Record.SetCookie(cookie);
             }
             ui64 vdisk = cookie.GetVDiskOrderNumber();
-            Y_VERIFY(vdisk < WaitingVDiskResponseCount.size());
+            Y_ABORT_UNLESS(vdisk < WaitingVDiskResponseCount.size());
             if (!WaitingVDiskResponseCount[vdisk]) {
                 WaitingVDiskCount++;
             }

@@ -76,7 +76,7 @@ struct TOptions {
     }
 
     void CheckOptions() {
-        Y_VERIFY(RequestRate > 0, "Zero request rate");
+        Y_ABORT_UNLESS(RequestRate > 0, "Zero request rate");
     }
 
     void PrintOpts() const {

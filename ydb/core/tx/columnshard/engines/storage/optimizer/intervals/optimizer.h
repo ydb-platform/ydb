@@ -97,7 +97,7 @@ public:
         if (PortionsCount == 0 || PortionsWeight == 0) {
             return Max<double>();
         }
-        Y_VERIFY(PortionsWeight);
+        Y_ABORT_UNLESS(PortionsWeight);
         return 1.0 * GetUsefulMetric() / PortionsWeight;
     }
 
@@ -116,18 +116,18 @@ public:
 
     void Remove(const std::shared_ptr<TPortionInfo>& info) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_from_summary")("portion_id", info->GetPortion())("count", GetPortionsCount())("this", (ui64)this);
-        Y_VERIFY(--PortionsCount >= 0);
+        Y_ABORT_UNLESS(--PortionsCount >= 0);
         const i64 portionBytes = info->BlobsBytes();
         PortionsWeight -= portionBytes;
-        Y_VERIFY(PortionsWeight >= 0);
+        Y_ABORT_UNLESS(PortionsWeight >= 0);
         PortionsRawWeight -= info->RawBytesSum();
-        Y_VERIFY(PortionsRawWeight >= 0);
+        Y_ABORT_UNLESS(PortionsRawWeight >= 0);
         RecordsCount -= info->NumRows();
-        Y_VERIFY(RecordsCount >= 0);
+        Y_ABORT_UNLESS(RecordsCount >= 0);
         if ((i64)portionBytes < TSplitSettings().GetMinBlobSize()) {
-            Y_VERIFY(--SmallPortionsCount >= 0);
+            Y_ABORT_UNLESS(--SmallPortionsCount >= 0);
             SmallPortionsWeight -= portionBytes;
-            Y_VERIFY(SmallPortionsWeight >= 0);
+            Y_ABORT_UNLESS(SmallPortionsWeight >= 0);
         }
     }
 
@@ -207,17 +207,17 @@ private:
         }
 
         void AddStart(const std::shared_ptr<TPortionInfo>& info) {
-            Y_VERIFY(Positions.emplace(TPortionIntervalPoint(info->GetPortion(), true), TSegmentPosition::Start(info)).second);
+            Y_ABORT_UNLESS(Positions.emplace(TPortionIntervalPoint(info->GetPortion(), true), TSegmentPosition::Start(info)).second);
         }
         void AddFinish(const std::shared_ptr<TPortionInfo>& info) {
-            Y_VERIFY(Positions.emplace(TPortionIntervalPoint(info->GetPortion(), false), TSegmentPosition::Finish(info)).second);
+            Y_ABORT_UNLESS(Positions.emplace(TPortionIntervalPoint(info->GetPortion(), false), TSegmentPosition::Finish(info)).second);
         }
         bool RemoveStart(const std::shared_ptr<TPortionInfo>& info) {
-            Y_VERIFY(Positions.erase(TPortionIntervalPoint(info->GetPortion(), true)));
+            Y_ABORT_UNLESS(Positions.erase(TPortionIntervalPoint(info->GetPortion(), true)));
             return Positions.empty();
         }
         bool RemoveFinish(const std::shared_ptr<TPortionInfo>& info) {
-            Y_VERIFY(Positions.erase(TPortionIntervalPoint(info->GetPortion(), false)));
+            Y_ABORT_UNLESS(Positions.erase(TPortionIntervalPoint(info->GetPortion(), false)));
             return Positions.empty();
         }
         void AddSummary(const std::shared_ptr<TPortionInfo>& info);

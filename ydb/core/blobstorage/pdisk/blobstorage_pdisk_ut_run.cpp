@@ -74,7 +74,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
                         runCfg.IsErasureEncodeUserLog, runCfg.TestContext->SectorMap);
             }
         } else {
-            Y_VERIFY(!runCfg.IsBad);
+            Y_ABORT_UNLESS(!runCfg.IsBad);
         }
 
         pDiskId = MakeBlobStoragePDiskID(1, 1);

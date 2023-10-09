@@ -186,7 +186,7 @@ protected:
             NUdf::TUnboxedValue* items = nullptr;
             const auto keys = KeyTuple.NewArray(ctx, LeftKeyColumns.size(), items);
             if (!LeftKeyColumns.empty()) {
-                Y_VERIFY(items);
+                Y_ABORT_UNLESS(items);
                 for (auto i = 0U; i < LeftKeyColumns.size(); ++i) {
                     const auto value = fields[LeftKeyColumns[i]];
                     const auto converter = LeftKeyConverters[i].Function;
@@ -676,7 +676,7 @@ protected:
         if (renames.empty()) {
             return;
         }
-        Y_VERIFY(items);
+        Y_ABORT_UNLESS(items);
         if (const auto ptr = structObj.GetElements()) {
             for (auto i = 0U; i < renames.size();) {
                 const auto prevIndex = renames[i++];
@@ -705,7 +705,7 @@ protected:
             NUdf::TUnboxedValue* items = nullptr;
             const auto keys = KeyTuple.NewArray(ctx, LeftKeyColumns.size(), items);
             if (!LeftKeyColumns.empty()) {
-                Y_VERIFY(items);
+                Y_ABORT_UNLESS(items);
                 const auto ptr = structObj.GetElements();
                 for (auto i = 0U; i < LeftKeyColumns.size(); ++i) {
                     auto value = ptr ? ptr[LeftKeyColumns[i]] : structObj.GetElement(LeftKeyColumns[i]);

@@ -194,7 +194,7 @@ namespace NKikimr {
 
         void* Protect(const std::atomic<void*>& ptr) noexcept {
             if (!Pointer) {
-                Y_VERIFY(Domain, "Uninitialized hazard pointer");
+                Y_ABORT_UNLESS(Domain, "Uninitialized hazard pointer");
                 Pointer = Domain->Acquire();
             }
             return Pointer->Protect(ptr);

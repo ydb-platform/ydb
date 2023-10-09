@@ -31,16 +31,16 @@ public:
         LOG_I(DebugHint() << "ProgressState");
 
         auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropReplication);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropReplication);
         const auto& pathId = txState->TargetPathId;
 
         txState->ClearShardsInProgress();
 
         for (const auto& shard : txState->Shards) {
-            Y_VERIFY(shard.TabletType == ETabletType::ReplicationController);
+            Y_ABORT_UNLESS(shard.TabletType == ETabletType::ReplicationController);
 
-            Y_VERIFY(context.SS->ShardInfos.contains(shard.Idx));
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
             const auto tabletId = context.SS->ShardInfos.at(shard.Idx).TabletID;
 
             auto ev = MakeHolder<NReplication::TEvController::TEvDropReplication>();
@@ -77,9 +77,9 @@ public:
         }
 
         auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropReplication);
-        Y_VERIFY(txState->State == TTxState::DropParts);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropReplication);
+        Y_ABORT_UNLESS(txState->State == TTxState::DropParts);
 
         const auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
@@ -136,8 +136,8 @@ public:
         LOG_I(DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropReplication);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropReplication);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -150,19 +150,19 @@ public:
             << ": step# " << step);
 
         const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropReplication);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropReplication);
         const auto& pathId = txState->TargetPathId;
 
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         auto path = context.SS->PathsById.at(pathId);
 
-        Y_VERIFY(context.SS->PathsById.contains(path->ParentPathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(path->ParentPathId));
         auto parentPath = context.SS->PathsById.at(path->ParentPathId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        Y_VERIFY(!path->Dropped());
+        Y_ABORT_UNLESS(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         context.SS->PersistReplicationRemove(db, pathId);
@@ -291,11 +291,11 @@ public:
             return result;
         }
 
-        Y_VERIFY(context.SS->Replications.contains(path->PathId));
+        Y_ABORT_UNLESS(context.SS->Replications.contains(path->PathId));
         auto replication = context.SS->Replications.at(path->PathId);
-        Y_VERIFY(!replication->AlterData);
+        Y_ABORT_UNLESS(!replication->AlterData);
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxDropReplication, path->PathId);
         txState.State = TTxState::DropParts;
         txState.MinStep = TStepId(1);

@@ -4503,10 +4503,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         size_t rowsCount = 10;
         auto builders = NArrow::MakeBuilders(schema, rowsCount);
         for (size_t i = 0; i < rowsCount; ++i) {
-            Y_VERIFY(NArrow::Append<arrow::UInt8Type>(*builders[0], i));
-            Y_VERIFY(NArrow::Append<arrow::Int8Type>(*builders[1], i));
-            Y_VERIFY(NArrow::Append<arrow::UInt16Type>(*builders[2], i));
-            Y_VERIFY(NArrow::Append<arrow::Int16Type>(*builders[3], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::UInt8Type>(*builders[0], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::Int8Type>(*builders[1], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::UInt16Type>(*builders[2], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::Int16Type>(*builders[3], i));
         }
         auto batch = arrow::RecordBatch::Make(schema, rowsCount, NArrow::Finish(std::move(builders)));
 

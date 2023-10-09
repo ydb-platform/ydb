@@ -53,13 +53,13 @@ struct TDataEvents {
 
         void AddReplaceOp(const ui64 tableId, const IDataConstructor::TPtr& data) {
             Record.MutableTableId()->SetTableId(tableId);
-            Y_VERIFY(data);
+            Y_ABORT_UNLESS(data);
             Record.MutableTableId()->SetSchemaVersion(data->GetSchemaVersion());
             data->Serialize(*Record.MutableReplace());
         }
 
         ui64 GetTxId() const {
-            Y_VERIFY(Record.HasTxId());
+            Y_ABORT_UNLESS(Record.HasTxId());
             return Record.GetTxId();
         }
     };

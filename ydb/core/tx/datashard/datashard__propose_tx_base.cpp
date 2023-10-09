@@ -81,7 +81,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         }
 
         if (Ev) {
-            Y_VERIFY(!Op);
+            Y_ABORT_UNLESS(!Op);
 
             if (Self->CheckDataTxRejectAndReply(Ev->Get(), ctx)) {
                 Ev = nullptr;
@@ -93,7 +93,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
             // Unsuccessful operation parse.
             if (op->IsAborted()) {
                 LWTRACK(ProposeTransactionParsed, op->Orbit, false);
-                Y_VERIFY(op->Result());
+                Y_ABORT_UNLESS(op->Result());
 
                 if (ProposeTransactionSpan) {
                     ProposeTransactionSpan.EndError("Unsuccessful operation parse");
@@ -113,7 +113,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
             Op->IncrementInProgress();
         }
 
-        Y_VERIFY(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
+        Y_ABORT_UNLESS(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
 
@@ -182,7 +182,7 @@ void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
     }
 
     if (Op) {
-        Y_VERIFY(!Op->GetExecutionPlan().empty());
+        Y_ABORT_UNLESS(!Op->GetExecutionPlan().empty());
         if (!CompleteList.empty()) {
             auto commitTime = AppData()->TimeProvider->Now() - CommitStart;
             Op->SetCommitTime(CompleteList.front(), commitTime);

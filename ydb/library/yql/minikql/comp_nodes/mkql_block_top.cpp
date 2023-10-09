@@ -40,7 +40,7 @@ public:
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        Y_VERIFY(output[Columns_.size()]);
+        Y_ABORT_UNLESS(output[Columns_.size()]);
 
         auto& s = GetState(state, ctx);
         if (s.IsFinished_) {
@@ -237,7 +237,7 @@ private:
         }
 
         ui64 GetStorageLength() const {
-            Y_VERIFY(PreparedCountAndDirections_);
+            Y_ABORT_UNLESS(PreparedCountAndDirections_);
             return 2 * Count_;
         }
 
@@ -264,7 +264,7 @@ private:
         }
 
         void CompressBuilders(bool sort, const TVector<TBlockType*>& columns, const TVector<ui32>& keyIndicies, TComputationContext&) {
-            Y_VERIFY(ScalarsFilled_);
+            Y_ABORT_UNLESS(ScalarsFilled_);
             TVector<TChunkedArrayIndex> arrayIndicies(columns.size());
             TVector<arrow::Datum> tmpDatums(columns.size());
             for (ui32 i = 0; i < columns.size(); ++i) {

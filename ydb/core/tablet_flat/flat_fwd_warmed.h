@@ -37,8 +37,8 @@ namespace NFwd {
         {
             const auto &glob = memTable->GetBlobs()->Get(ref);
 
-            Y_VERIFY(glob.Data, "External blob in TMemTable with no data");
-            Y_VERIFY(!Blobs || ref >= Offset, "Unexpected ELargeObj reference");
+            Y_ABORT_UNLESS(glob.Data, "External blob in TMemTable with no data");
+            Y_ABORT_UNLESS(!Blobs || ref >= Offset, "Unexpected ELargeObj reference");
 
             bool omit = glob.Bytes() >= Edge && !TRowScheme::HasTag(Tags, tag);
 

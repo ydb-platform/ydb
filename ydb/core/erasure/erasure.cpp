@@ -128,7 +128,7 @@ bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TContiguousSpan& buf
         if (buf.size() == 0) {
                 return true;
         } else {
-            Y_VERIFY(buf.size() > sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
+            Y_ABORT_UNLESS(buf.size() > sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
                     " is less then crcSize# %" PRIu64, (ui64)buf.size(), (ui64)sizeof(ui32));
             ui32 crc = Crc32c(buf.data(), buf.size() - sizeof(ui32));
             ui32 expectedCrc = ReadUnaligned<ui32>(buf.data() + buf.size() - sizeof(ui32));
@@ -146,7 +146,7 @@ bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TRope& rope) {
             if (rope.IsEmpty()) {
                 return true;
             } else {
-                Y_VERIFY(rope.size() > sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
+                Y_ABORT_UNLESS(rope.size() > sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
                         " is less then crcSize# %" PRIu64, (ui64)rope.size(), (ui64)sizeof(ui32));
 
                 size_t bytesRemain = rope.size() - sizeof(ui32);
@@ -585,7 +585,7 @@ public:
         bool hasTail = TailSize;
 
         if (isFromDataParts) {
-            Y_VERIFY(outPartSet.Parts[0].Offset % ColumnSize == 0);
+            Y_ABORT_UNLESS(outPartSet.Parts[0].Offset % ColumnSize == 0);
             readPosition = outPartSet.Parts[0].Offset;
             lastBlock = Min(WholeBlocks - readPosition / ColumnSize, outPartSet.Parts[0].Size / ColumnSize);
             hasTail = TailSize && (outPartSet.Parts[0].Size + readPosition > WholeBlocks * ColumnSize);
@@ -771,7 +771,7 @@ public:
                 << " p1 Size# " << partSet.Parts[1].Size
                 << " p2 Size# " << partSet.Parts[2].Size << Endl);
         ui32 presentPartIdx = (missingDataPartIdx == 0 ? 1 : 0);
-        Y_VERIFY(partSet.Parts[presentPartIdx].Offset % ColumnSize == 0);
+        Y_ABORT_UNLESS(partSet.Parts[presentPartIdx].Offset % ColumnSize == 0);
         ui64 readPosition = partSet.Parts[presentPartIdx].Offset;
         ui64 wholeBlocks = Min(WholeBlocks - readPosition / ColumnSize, partSet.Parts[presentPartIdx].Size / ColumnSize);
 
@@ -1219,7 +1219,7 @@ public:
         ui32 presentPartIdx = (missingDataPartIdxA == 0 ?
                 (missingDataPartIdxB == 1 ? 2 : 1) : \
                 (missingDataPartIdxB == 0 ? 1 : 0));
-        Y_VERIFY(partSet.Parts[presentPartIdx].Offset % ColumnSize == 0);
+        Y_ABORT_UNLESS(partSet.Parts[presentPartIdx].Offset % ColumnSize == 0);
         ui64 readPosition = partSet.Parts[presentPartIdx].Offset;
         ui64 wholeBlocks = Min(WholeBlocks - readPosition / ColumnSize, partSet.Parts[presentPartIdx].Size / ColumnSize);
 
@@ -1339,7 +1339,7 @@ public:
         TRACE("XorRestorePart partSet p0 Size# " << partSet.Parts[0].Size
                 << " p1 Size# " << partSet.Parts[1].Size << Endl);
         ui32 presentPartIdx = (missingDataPartIdx == 0 ? 1 : 0);
-        Y_VERIFY(partSet.Parts[presentPartIdx].Offset % ColumnSize == 0);
+        Y_ABORT_UNLESS(partSet.Parts[presentPartIdx].Offset % ColumnSize == 0);
         ui64 readPosition = partSet.Parts[presentPartIdx].Offset;
         ui64 beginBlockIdx = readPosition / ColumnSize;
         ui64 wholeBlocks = Min(WholeBlocks - readPosition / ColumnSize, partSet.Parts[presentPartIdx].Size / ColumnSize);
@@ -1485,7 +1485,7 @@ template <bool isStripe, bool restoreParts, bool restoreFullData, bool restorePa
 void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDataPartSet& partSet) {
     TRope &outBuffer = partSet.FullDataFragment.OwnedString;
     ui32 totalParts = type.TotalPartCount();
-    Y_VERIFY(partSet.Parts.size() >= totalParts);
+    Y_ABORT_UNLESS(partSet.Parts.size() >= totalParts);
 
     ui32 missingDataPartIdxA = totalParts;
     ui32 missingDataPartIdxB = totalParts;
@@ -1498,7 +1498,7 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
             ++missingDataPartCount;
             break;
         } else {
-            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
+            Y_ABORT_UNLESS(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
                 " expectedPartSize: %" PRIu64 " erasure: %s partSet.FullDataSize: %" PRIu64,
                 (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(),
                 (ui64)partSet.FullDataSize);
@@ -1510,13 +1510,13 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
             missingDataPartIdxB = i;
             ++missingDataPartCount;
         } else {
-            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
+            Y_ABORT_UNLESS(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
                 " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64,
                 (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(),
                 (ui64)partSet.FullDataSize);
         }
     }
-    Y_VERIFY(missingDataPartCount <= 2);
+    Y_ABORT_UNLESS(missingDataPartCount <= 2);
 
     ui64 dataSize = partSet.FullDataSize;
     if (restoreParts) {
@@ -1670,7 +1670,7 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
     //    the main case :(
     TRACE("case# g" << Endl);
     VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
-    Y_VERIFY(missingDataPartIdxA < p.DataParts && missingDataPartIdxB < p.DataParts);
+    Y_ABORT_UNLESS(missingDataPartIdxA < p.DataParts && missingDataPartIdxB < p.DataParts);
     p.EoMainRestoreParts<isStripe, restoreParts, restoreFullData, false, restoreParityParts>(partSet, missingDataPartIdxA,
             missingDataPartIdxB);
     if (restoreParts) {
@@ -1685,7 +1685,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
     TRope &outBuffer = partSet.FullDataFragment.OwnedString;
 
     ui32 totalParts = type.TotalPartCount();
-    Y_VERIFY(partSet.Parts.size() == totalParts);
+    Y_ABORT_UNLESS(partSet.Parts.size() == totalParts);
 
     ui32 missingDataPartIdxA = totalParts;
     ui32 missingDataPartIdxB = totalParts;
@@ -1699,7 +1699,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
             ++missingDataPartCount;
             break;
         } else {
-            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
+            Y_ABORT_UNLESS(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
                 " expectedPartSize: %" PRIu64 " erasure: %s partSet.FullDataSize: %" PRIu64,
                 (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(),
                 (ui64)partSet.FullDataSize);
@@ -1712,7 +1712,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
             ++missingDataPartCount;
             break;
         } else {
-            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
+            Y_ABORT_UNLESS(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
                 " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64,
                 (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(),
                 (ui64)partSet.FullDataSize);
@@ -1725,13 +1725,13 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
             ++missingDataPartCount;
             break;
         } else {
-            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
+            Y_ABORT_UNLESS(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
                 " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64,
                 (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(),
                 (ui64)partSet.FullDataSize);
         }
     }
-    Y_VERIFY(missingDataPartCount <= 3);
+    Y_ABORT_UNLESS(missingDataPartCount <= 3);
 
     if (restoreParts) {
         if (missingDataPartIdxA != totalParts) {
@@ -1878,7 +1878,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
     }
 
     VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
-    Y_VERIFY(missingDataPartIdxA < p.DataParts && missingDataPartIdxB < p.DataParts
+    Y_ABORT_UNLESS(missingDataPartIdxA < p.DataParts && missingDataPartIdxB < p.DataParts
                     && missingDataPartIdxC < p.DataParts);
     // Two possible cases:
     //     - Symmetric
@@ -1914,7 +1914,7 @@ template <bool isStripe, bool restoreParts, bool restoreFullData, bool restorePa
 void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDataPartSet &partSet) {
     TRope &outBuffer = partSet.FullDataFragment.OwnedString;
     ui32 totalParts = type.TotalPartCount();
-    Y_VERIFY(partSet.Parts.size() == totalParts,
+    Y_ABORT_UNLESS(partSet.Parts.size() == totalParts,
         "partSet.Parts.size(): %" PRIu64 " totalParts: %" PRIu32 " erasure: %s",
         (ui64)partSet.Parts.size(), (ui32)totalParts, type.ErasureName[type.GetErasure()].data());
 
@@ -1926,13 +1926,13 @@ void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, T
             missingDataPartIdx = i;
             ++missingDataPartCount;
         } else {
-            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
+            Y_ABORT_UNLESS(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
                 " expectedPartSize: %" PRIu64 " erasure: %s partSet.FullDataSize: %" PRIu64,
                 (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(),
                 (ui64)partSet.FullDataSize);
         }
     }
-    Y_VERIFY(missingDataPartCount <= 1);
+    Y_ABORT_UNLESS(missingDataPartCount <= 1);
 
     ui64 dataSize = partSet.FullDataSize;
     if (restoreParts && missingDataPartIdx != totalParts) {
@@ -2292,7 +2292,7 @@ void TErasureType::AlignPartialDataRequest(ui64 shift, ui64 size, ui64 fullDataS
 
 void TErasureType::BlockSplitRange(ECrcMode crcMode, ui64 blobSize, ui64 wholeBegin, ui64 wholeEnd,
         TBlockSplitRange *outRange) const {
-    Y_VERIFY(wholeBegin <= wholeEnd && outRange, "wholeBegin# %" PRIu64 " wholeEnd# %" PRIu64 " outRange# %" PRIu64,
+    Y_ABORT_UNLESS(wholeBegin <= wholeEnd && outRange, "wholeBegin# %" PRIu64 " wholeEnd# %" PRIu64 " outRange# %" PRIu64,
             wholeBegin, wholeEnd, (ui64)(intptr_t)outRange);
     Y_UNUSED(crcMode);
     const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
@@ -2554,7 +2554,7 @@ void MirrorSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, TRope
             part.GrowBack(partSize - buffer.GetSize());
             char *dst = part.GetContiguousSpanMut().data();
             if (buffer.size() || part.size()) {
-                Y_VERIFY(part.size() >= buffer.size() + sizeof(ui32), "Part size too small, buffer size# %" PRIu64
+                Y_ABORT_UNLESS(part.size() >= buffer.size() + sizeof(ui32), "Part size too small, buffer size# %" PRIu64
                         " partSize# %" PRIu64, (ui64)buffer.size(), (ui64)partSize);
                 PadAndCrcAtTheEnd(dst, buffer.size(), part.size());
             }
@@ -2592,7 +2592,7 @@ void MirrorRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDa
                         outBuffer.GetContiguousSpanMut(); // Detach
                         if(outBuffer.size() != partSet.FullDataSize) {
                             TRcBuf newOutBuffer(outBuffer);
-                            Y_VERIFY(outBuffer.size() >= partSet.FullDataSize, "Unexpected outBuffer.size# %" PRIu64
+                            Y_ABORT_UNLESS(outBuffer.size() >= partSet.FullDataSize, "Unexpected outBuffer.size# %" PRIu64
                                     " fullDataSize# %" PRIu64, (ui64)outBuffer.size(), (ui64)partSet.FullDataSize);
                             newOutBuffer.TrimBack(partSet.FullDataSize); // To pad with zeroes!
                             outBuffer = TRope(newOutBuffer);
@@ -2612,7 +2612,7 @@ void MirrorRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDa
 static void VerifyPartSizes(TDataPartSet& partSet, size_t definedPartEndIdx) {
     size_t partSize = partSet.Parts[0].size();
     for (size_t idx = 0; idx < partSet.Parts.size(); ++idx) {
-        Y_VERIFY(partSet.Parts[idx].size() == partSize);
+        Y_ABORT_UNLESS(partSet.Parts[idx].size() == partSize);
         if (partSize && idx < definedPartEndIdx) {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(partSet.Parts[idx].GetDataAt(partSet.Parts[idx].Offset),
                     partSet.Parts[idx].Size);
@@ -2716,7 +2716,7 @@ void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, 
                 ui32 diffShift = partOffset - diff.Offset;
 
                 ui32 bufferSize = diffEndForThisPart - partOffset;
-                Y_VERIFY(bufferSize);
+                Y_ABORT_UNLESS(bufferSize);
                 Y_VERIFY_S(diffShift + bufferSize <= diff.Buffer.size(), "diffShift# " << diffShift
                         << " bufferSize# " << bufferSize << " diff.GetDiffLength()# " << diff.GetDiffLength());
                 TRcBuf newBuffer(diff.Buffer);
@@ -2740,7 +2740,7 @@ void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, 
                     buffer = diff.Buffer;
                     bufferSize = diff.Buffer.size();
                 }
-                Y_VERIFY(bufferSize);
+                Y_ABORT_UNLESS(bufferSize);
                 part.Diffs.emplace_back(buffer, diff.Offset - partOffset, false, true);
                 diffIdx++;
             } else if (diff.Offset < nextOffset) {
@@ -2748,7 +2748,7 @@ void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, 
                 TRcBuf newBuffer = diff.Buffer;
                 newBuffer.GrowFront(lineOffset); // FIXME(innokentii) should the [0..lineOffset) be zeroed?
                 newBuffer.TrimBack(bufferSize);
-                Y_VERIFY(bufferSize);
+                Y_ABORT_UNLESS(bufferSize);
                 part.Diffs.emplace_back(newBuffer, diff.Offset - partOffset, false, true);
                 break;
             } else {
@@ -2761,7 +2761,7 @@ void EoBlockSplitDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, 
 }
 
 void TErasureType::SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) const {
-    Y_VERIFY(crcMode == CrcModeNone, "crc's not implemented");
+    Y_ABORT_UNLESS(crcMode == CrcModeNone, "crc's not implemented");
     const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
 
     // change crc part only in during of applying diffs
@@ -2773,7 +2773,7 @@ void TErasureType::SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDi
             Y_FAIL("Not implemented");
             break;
         case TErasureType::ErasureParityBlock:
-            Y_VERIFY(erasure.ParityParts == 2, "Other is not implemented");
+            Y_ABORT_UNLESS(erasure.ParityParts == 2, "Other is not implemented");
             EoBlockSplitDiff(crcMode, *this, dataSize, diffs, outDiffSet);
             break;
     }
@@ -2789,7 +2789,7 @@ void XorCpy(Bucket *dest, const Bucket *orig, const Bucket *diff, ui32 count) {
 void MakeEoBlockXorDiff(TErasureType::ECrcMode crcMode, const TErasureType &type, ui32 dataSize,
         const ui8 *src, const TVector<TDiff> &inDiffs, TVector<TDiff> *outDiffs)
 {
-    Y_VERIFY(crcMode == TErasureType::CrcModeNone, "crc's not implemented");
+    Y_ABORT_UNLESS(crcMode == TErasureType::CrcModeNone, "crc's not implemented");
     TBlockParams p(crcMode, type, dataSize);
 
     for (const TDiff &diff : inDiffs) {
@@ -2805,7 +2805,7 @@ void MakeEoBlockXorDiff(TErasureType::ECrcMode crcMode, const TErasureType &type
         ui32 upperEndPos = lowerEndPos + (endLineOffset ? sizeof(ui64) : 0);
 
         ui32 bufferSize = upperEndPos - lowerStartPos;
-        Y_VERIFY(bufferSize);
+        Y_ABORT_UNLESS(bufferSize);
         TRcBuf xorDiffBuffer = TRcBuf::Uninitialized(bufferSize); // FIXME(innokentii) candidate
         ui8 *xorDiffBufferBytes = reinterpret_cast<ui8*>(const_cast<char*>(xorDiffBuffer.data()));
 
@@ -2847,7 +2847,7 @@ void MakeEoBlockXorDiff(TErasureType::ECrcMode crcMode, const TErasureType &type
 void TErasureType::MakeXorDiff(ECrcMode crcMode, ui32 dataSize, const ui8 *src,
         const TVector<TDiff> &inDiffs, TVector<TDiff> *outDiffs) const
 {
-    Y_VERIFY(crcMode == CrcModeNone, "crc's not implemented");
+    Y_ABORT_UNLESS(crcMode == CrcModeNone, "crc's not implemented");
     const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:
@@ -2857,14 +2857,14 @@ void TErasureType::MakeXorDiff(ECrcMode crcMode, ui32 dataSize, const ui8 *src,
             Y_FAIL("Not implemented");
             break;
         case TErasureType::ErasureParityBlock:
-            Y_VERIFY(erasure.ParityParts == 2, "Other is not implemented");
+            Y_ABORT_UNLESS(erasure.ParityParts == 2, "Other is not implemented");
             MakeEoBlockXorDiff(crcMode, *this, dataSize, src, inDiffs, outDiffs);
             break;
     }
 }
 
 void TErasureType::ApplyDiff(ECrcMode crcMode, ui8 *dst, const TVector<TDiff> &diffs) const {
-    Y_VERIFY(crcMode == CrcModeNone, "crc's not implemented");
+    Y_ABORT_UNLESS(crcMode == CrcModeNone, "crc's not implemented");
     for (auto &diff : diffs) {
         memcpy(dst + diff.Offset, diff.GetDataBegin(), diff.GetDiffLength());
     }
@@ -2877,7 +2877,7 @@ void ApllyXorDiffForEoBlock(const TBlockParams &p, ui64 *buffer, const ui64 *dif
     ui32 blockBegin = begin / p.LineCount;
     ui32 blockEnd = (end + p.LineCount - 1) / p.LineCount;
 
-    Y_VERIFY(!forSecondParity || (blockBegin == 0 && blockEnd == 1));
+    Y_ABORT_UNLESS(!forSecondParity || (blockBegin == 0 && blockEnd == 1));
 
     if (forSecondParity && adj) {
         for (ui32 idx = 0; idx < p.LineCount; ++idx) {
@@ -2885,7 +2885,7 @@ void ApllyXorDiffForEoBlock(const TBlockParams &p, ui64 *buffer, const ui64 *dif
         }
     }
 
-    Y_VERIFY(begin < end);
+    Y_ABORT_UNLESS(begin < end);
     if constexpr (forSecondParity) {
         ui32 lineBorder = p.LineCount - fromPart;
 
@@ -2913,18 +2913,18 @@ void ApllyXorDiffForEoBlock(const TBlockParams &p, ui64 *buffer, const ui64 *dif
 void ApplyEoBlockXorDiffForFirstParityPart(TErasureType::ECrcMode crcMode, const TErasureType &type, ui32 dataSize,
         ui64 *dst, const TVector<TDiff> &xorDiffs)
 {
-    Y_VERIFY(crcMode == TErasureType::CrcModeNone, "crc's not implemented");
+    Y_ABORT_UNLESS(crcMode == TErasureType::CrcModeNone, "crc's not implemented");
     TBlockParams p(crcMode, type, dataSize);
 
     for (const TDiff &diff : xorDiffs) {
-        Y_VERIFY(diff.Buffer.size() % sizeof(ui64) == 0);
-        Y_VERIFY(diff.IsXor && diff.IsAligned);
+        Y_ABORT_UNLESS(diff.Buffer.size() % sizeof(ui64) == 0);
+        Y_ABORT_UNLESS(diff.IsXor && diff.IsAligned);
         const ui64 *diffBuffer = reinterpret_cast<const ui64*>(diff.GetBufferBegin());
         ui32 diffOffset = diff.Offset / sizeof(ui64);
         ui32 offset = diff.Offset / sizeof(ui64);
         ui32 lineCount = diff.Buffer.size() / sizeof(ui64);
-        Y_VERIFY(diff.Offset < type.PartSize(crcMode, dataSize));
-        Y_VERIFY(diff.Offset + diff.GetDiffLength() <= type.PartSize(crcMode, dataSize));
+        Y_ABORT_UNLESS(diff.Offset < type.PartSize(crcMode, dataSize));
+        Y_ABORT_UNLESS(diff.Offset + diff.GetDiffLength() <= type.PartSize(crcMode, dataSize));
         ApllyXorDiffForEoBlock<false>(p, dst, diffBuffer, 0, offset, offset + lineCount, diffOffset);
     }
 }
@@ -2950,14 +2950,14 @@ void ApplyXorForSecondParityPart(const TBlockParams &p, ui64 *startBufferBlock, 
 void ApplyEoBlockXorDiffForSecondParityPart(TErasureType::ECrcMode crcMode, const TErasureType &type, ui32 dataSize,
         ui8 fromPart, ui64 *dst, const TVector<TDiff> &xorDiffs)
 {
-    Y_VERIFY(crcMode == TErasureType::CrcModeNone, "crc's not implemented");
+    Y_ABORT_UNLESS(crcMode == TErasureType::CrcModeNone, "crc's not implemented");
     TBlockParams p(crcMode, type, dataSize);
 
     ui64 bytesInBlock = p.LineCount * sizeof(ui64);
 
     for (const TDiff &diff : xorDiffs) {
-        Y_VERIFY(diff.Buffer.size() % sizeof(ui64) == 0);
-        Y_VERIFY(diff.IsXor && diff.IsAligned);
+        Y_ABORT_UNLESS(diff.Buffer.size() % sizeof(ui64) == 0);
+        Y_ABORT_UNLESS(diff.IsXor && diff.IsAligned);
 
         const ui64 *diffBuffer = reinterpret_cast<const ui64*>(diff.GetBufferBegin());
 
@@ -2983,7 +2983,7 @@ void ApplyEoBlockXorDiffForSecondParityPart(TErasureType::ECrcMode crcMode, cons
 void TErasureType::ApplyXorDiff(ECrcMode crcMode, ui32 dataSize, ui8 *dst,
         const TVector<TDiff> &diffs, ui8 fromPart, ui8 toPart) const
 {
-    Y_VERIFY(crcMode == CrcModeNone, "crc's not implemented");
+    Y_ABORT_UNLESS(crcMode == CrcModeNone, "crc's not implemented");
     const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:
@@ -2993,7 +2993,7 @@ void TErasureType::ApplyXorDiff(ECrcMode crcMode, ui32 dataSize, ui8 *dst,
             Y_FAIL("Not implemented");
             break;
         case TErasureType::ErasureParityBlock:
-            Y_VERIFY(erasure.ParityParts == 2, "Other is not implemented");
+            Y_ABORT_UNLESS(erasure.ParityParts == 2, "Other is not implemented");
             ui64 *lineDst = reinterpret_cast<ui64*>(dst);
             if (toPart + 1 != TotalPartCount()) {
                 ApplyEoBlockXorDiffForFirstParityPart(crcMode, *this, dataSize, lineDst, diffs);
@@ -3037,7 +3037,7 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
                 MirrorRestore<false, true>(crcMode, *this, partSet);
             }
             if (restoreFullData) {
-                Y_VERIFY(partSet.FullDataSize == partSet.FullDataFragment.PartSize,
+                Y_ABORT_UNLESS(partSet.FullDataSize == partSet.FullDataFragment.PartSize,
                         "Incorrect data part size = %" PRIu64 ", expected size = %" PRIu64,
                         (ui64)partSet.FullDataFragment.PartSize, (ui64)partSet.FullDataSize);
             }

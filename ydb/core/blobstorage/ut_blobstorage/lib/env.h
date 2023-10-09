@@ -476,17 +476,17 @@ struct TEnvironmentSetup {
                 ui32 numVDisksPerFailDomain = 0;
                 for (const auto& l : group.GetVSlotId()) {
                     const auto it = vslotToDiskMap.find(MakeBlobStorageVDiskID(l.GetNodeId(), l.GetPDiskId(), l.GetVSlotId()));
-                    Y_VERIFY(it != vslotToDiskMap.end());
+                    Y_ABORT_UNLESS(it != vslotToDiskMap.end());
                     const TVDiskID& vdiskId = it->second;
-                    Y_VERIFY(vdiskId.GroupID == groupId);
-                    Y_VERIFY(vdiskId.GroupGeneration == group.GetGroupGeneration());
+                    Y_ABORT_UNLESS(vdiskId.GroupID == groupId);
+                    Y_ABORT_UNLESS(vdiskId.GroupGeneration == group.GetGroupGeneration());
                     const bool inserted = vdisks.emplace(it->second, it->first).second;
-                    Y_VERIFY(inserted);
+                    Y_ABORT_UNLESS(inserted);
                     numFailRealms = Max<ui32>(numFailRealms, vdiskId.FailRealm + 1);
                     numFailDomainsPerFailRealm = Max<ui32>(numFailDomainsPerFailRealm, vdiskId.FailDomain + 1);
                     numVDisksPerFailDomain = Max<ui32>(numVDisksPerFailDomain, vdiskId.VDisk + 1);
                 }
-                Y_VERIFY(numFailRealms * numFailDomainsPerFailRealm * numVDisksPerFailDomain == vdisks.size());
+                Y_ABORT_UNLESS(numFailRealms * numFailDomainsPerFailRealm * numVDisksPerFailDomain == vdisks.size());
                 TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType(
                     TBlobStorageGroupType::ErasureSpeciesByName(group.GetErasureSpecies())),
                     numFailRealms, numFailDomainsPerFailRealm, numVDisksPerFailDomain);
@@ -546,7 +546,7 @@ struct TEnvironmentSetup {
             if (res->GetTypeRewrite() == TEvents::TSystem::Undelivered) {
                 Sim(TDuration::Seconds(5));
             } else {
-                Y_VERIFY(res->GetTypeRewrite() == TEvBlobStorage::EvCompactVDiskResult);
+                Y_ABORT_UNLESS(res->GetTypeRewrite() == TEvBlobStorage::EvCompactVDiskResult);
                 Runtime->DestroyActor(edge);
                 return;
             }
@@ -772,7 +772,7 @@ struct TEnvironmentSetup {
                     break;
                 }
             } else if (auto *msg = res->CastAsLocal<TEvents::TEvUndelivered>()) {
-                Y_VERIFY(msg->SourceType == TEvBlobStorage::EvVStatus);
+                Y_ABORT_UNLESS(msg->SourceType == TEvBlobStorage::EvVStatus);
             } else {
                 Y_FAIL();
             }

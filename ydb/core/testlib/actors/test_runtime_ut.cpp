@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(StateFunc)
             {
-                Y_VERIFY(SyncMutex);
+                Y_ABORT_UNLESS(SyncMutex);
 
                 auto sender = ev->Sender;
                 auto selfID = SelfId();

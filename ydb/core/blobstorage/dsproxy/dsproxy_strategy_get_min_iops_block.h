@@ -13,7 +13,7 @@ public:
             TBlockSplitRange r;
             info.Type.BlockSplitRange((TErasureType::ECrcMode)state.Id.CrcMode(), state.Id.BlobSize(), wbegin, wend, &r);
             for (ui32 i = r.BeginPartIdx; i < r.EndPartIdx; ++i) {
-                Y_VERIFY(i < info.Type.DataParts());
+                Y_ABORT_UNLESS(i < info.Type.DataParts());
                 TPartOffsetRange& pr = r.PartRanges[i];
                 if (pr.Begin == pr.End) {
                     continue; // this part has no data
@@ -84,7 +84,7 @@ public:
                 const TIntervalSet<i32> alignedInterval(alignedBegin, alignedEnd);
                 TStackVec<TRope, TypicalPartsInBlob> parts(totalPartCount);
                 for (auto i = iter; i != heap.end(); ++i) {
-                    Y_VERIFY(alignedInterval.IsSubsetOf(state.Parts[i->PartIdx].Here()));
+                    Y_ABORT_UNLESS(alignedInterval.IsSubsetOf(state.Parts[i->PartIdx].Here()));
                     parts[i->PartIdx] = state.Parts[i->PartIdx].Data.Read(alignedBegin, alignedEnd - alignedBegin);
                     restoreMask &= ~(1 << i->PartIdx); // don't restore part we already have
                 }
@@ -243,7 +243,7 @@ public:
         FillIntervalsToRestoreRequestedFullData(state, info, toRestore);
 
         ui32 partsMissing = CountPartsMissing(state, info, considerSlowAsError);
-        Y_VERIFY(partsMissing > 0);
+        Y_ABORT_UNLESS(partsMissing > 0);
         const ui32 totalPartCount = info.Type.TotalPartCount();
         const ui32 dataParts = info.Type.DataParts();
         //(idx < partsMissing);

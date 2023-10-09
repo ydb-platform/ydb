@@ -110,7 +110,7 @@ private:
     template <class TEvent>
     void ExecuteImpl(TEvent& ev) const {
         ev->Get()->MutableRequest().WithBucket(Bucket);
-        Y_VERIFY(SecretKey == Singleton<TFakeExternalStorage>()->GetSecretKey());
+        Y_ABORT_UNLESS(SecretKey == Singleton<TFakeExternalStorage>()->GetSecretKey());
         Singleton<TFakeExternalStorage>()->Execute(ev, ReplyAdapter);
     }
 

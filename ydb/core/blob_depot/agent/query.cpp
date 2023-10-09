@@ -19,12 +19,12 @@ namespace NKikimr::NBlobDepot {
             case TEvBlobStorage::EvGet:
                 doForward = ev->Get<TEvBlobStorage::TEvGet>()->Decommission
                     || ev->Get<TEvBlobStorage::TEvGet>()->PhantomCheck;
-                Y_VERIFY(!doForward || !ev->Get<TEvBlobStorage::TEvGet>()->MustRestoreFirst);
+                Y_ABORT_UNLESS(!doForward || !ev->Get<TEvBlobStorage::TEvGet>()->MustRestoreFirst);
                 break;
 
             case TEvBlobStorage::EvRange:
                 doForward = ev->Get<TEvBlobStorage::TEvRange>()->Decommission;
-                Y_VERIFY(!doForward || !ev->Get<TEvBlobStorage::TEvRange>()->MustRestoreFirst);
+                Y_ABORT_UNLESS(!doForward || !ev->Get<TEvBlobStorage::TEvRange>()->MustRestoreFirst);
                 break;
         }
 
@@ -70,7 +70,7 @@ namespace NKikimr::NBlobDepot {
         for (THPTimer timer; !PendingEventQ.empty(); ) {
             TPendingEvent& item = PendingEventQ.front();
             ProcessStorageEvent(std::move(item.Event));
-            Y_VERIFY(PendingEventBytes >= item.Size);
+            Y_ABORT_UNLESS(PendingEventBytes >= item.Size);
             PendingEventBytes -= item.Size;
             PendingEventQ.pop_front();
             if (!PendingEventQ.empty() && TDuration::Seconds(timer.Passed()) >= TDuration::MilliSeconds(1)) {
@@ -84,14 +84,14 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::HandleProcessPendingEvent() {
-        Y_VERIFY(ProcessPendingEventInFlight);
+        Y_ABORT_UNLESS(ProcessPendingEventInFlight);
         ProcessPendingEventInFlight = false;
         HandlePendingEvent();
     }
 
     void TBlobDepotAgent::ClearPendingEventQueue(const TString& reason) {
         for (auto& item : std::exchange(PendingEventQ, {})) {
-            Y_VERIFY(PendingEventBytes >= item.Size);
+            Y_ABORT_UNLESS(PendingEventBytes >= item.Size);
             PendingEventBytes -= item.Size;
             CreateQuery<0>(std::move(item.Event))->EndWithError(NKikimrProto::ERROR, reason);
         }
@@ -185,7 +185,7 @@ namespace NKikimr::NBlobDepot {
             ENUMERATE_INCOMING_EVENTS(XX)
 #undef XX
         }
-        Y_VERIFY(response);
+        Y_ABORT_UNLESS(response);
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
         OnDestroy(false);
         DoDestroy();
@@ -210,7 +210,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::DoDestroy() {
-        Y_VERIFY(!Destroyed);
+        Y_ABORT_UNLESS(!Destroyed);
         Destroyed = true;
         TIntrusiveListItem<TQuery, TExecutingQueries>::Unlink();
         TIntrusiveListItem<TQuery, TPendingBlockChecks>::Unlink();

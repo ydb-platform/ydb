@@ -39,7 +39,7 @@ void TReadDataProtocolImpl::TryAgain(const TActorContext& ctx) noexcept {
         recvResult = Socket->Recv(Data, Len);
 
         if (recvResult > 0) {
-            Y_VERIFY(Len >= (size_t)recvResult);
+            Y_ABORT_UNLESS(Len >= (size_t)recvResult);
             Data += recvResult;
             Len -= recvResult;
             Filled += recvResult;

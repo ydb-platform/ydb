@@ -34,18 +34,18 @@ public:
             if (ForwardIterator) {
                 return ++(*ForwardIterator);
             } else {
-                Y_VERIFY(ReverseIterator);
+                Y_ABORT_UNLESS(ReverseIterator);
                 return ++(*ReverseIterator);
             }
         }
 
         bool operator==(const TIterator& item) const {
             if (ForwardIterator) {
-                Y_VERIFY(item.ForwardIterator);
+                Y_ABORT_UNLESS(item.ForwardIterator);
                 return *ForwardIterator == *item.ForwardIterator;
             } else {
-                Y_VERIFY(ReverseIterator);
-                Y_VERIFY(item.ReverseIterator);
+                Y_ABORT_UNLESS(ReverseIterator);
+                Y_ABORT_UNLESS(item.ReverseIterator);
                 return *ReverseIterator == *item.ReverseIterator;
             }
         }
@@ -54,7 +54,7 @@ public:
             if (ForwardIterator) {
                 return **ForwardIterator;
             } else {
-                Y_VERIFY(ReverseIterator);
+                Y_ABORT_UNLESS(ReverseIterator);
                 return **ReverseIterator;
             }
         }

@@ -610,7 +610,7 @@ Y_UNIT_TEST(TestWaitInOwners) {
             result = nullptr;
         }
 
-        Y_VERIFY(!result); //no answer yet
+        Y_ABORT_UNLESS(!result); //no answer yet
 
         CmdSetOwner(0, tc);
         CmdSetOwner(0, tc, "owner2"); //just to be dropped by next command
@@ -647,7 +647,7 @@ Y_UNIT_TEST(TestWaitInOwners) {
             result = nullptr;
         }
 
-        Y_VERIFY(!result); //no answer yet, waiting of dying of old ownership session
+        Y_ABORT_UNLESS(!result); //no answer yet, waiting of dying of old ownership session
 
         tc.Runtime->Send(new IEventHandle(newPipe, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and old session
 
@@ -816,7 +816,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             parts.push_back(s.substr(pos, size - diff));
             pos += size - diff;
         }
-        Y_VERIFY(parts.size() > 5);
+        Y_ABORT_UNLESS(parts.size() > 5);
 
         CmdWrite(0, "sourceid4", data, tc);
         {

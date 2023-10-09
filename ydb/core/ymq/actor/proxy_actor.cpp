@@ -56,7 +56,7 @@ TString SecurityPrint(const NKikimrClient::TSqsResponse& resp) {
             return TStringBuilder() << "unsupported to print response with case=" << static_cast<ui64>(resp.GetResponseCase()) << "request=" << resp.GetRequestId();
         }
     }
-    Y_VERIFY(false);
+    Y_ABORT_UNLESS(false);
 }
 
 std::tuple<TString, TString, TString> ParseCloudSecurityToken(const TString& token) {
@@ -157,7 +157,7 @@ void TProxyActor::SendErrorAndDie(const TErrorClass& error, const TString& messa
     MakeError(response.Y_CAT(Mutable, action)(), error, message);   \
     response.Y_CAT(Mutable, action)()->SetRequestId(RequestId_);
 
-    SQS_SWITCH_REQUEST(Request_, Y_VERIFY(false));
+    SQS_SWITCH_REQUEST(Request_, Y_ABORT_UNLESS(false));
 
 #undef SQS_REQUEST_CASE
 

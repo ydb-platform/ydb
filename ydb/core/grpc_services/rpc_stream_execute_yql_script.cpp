@@ -90,7 +90,7 @@ public:
         CancelAfter_ = TDuration();
 
         auto call = dynamic_cast<TEvStreamExecuteYqlScriptRequest*>(request);
-        Y_VERIFY(call);
+        Y_ABORT_UNLESS(call);
         call->SetCustomFinishWrapper(GetFinishWrapper(CancelationFlag));
     }
 

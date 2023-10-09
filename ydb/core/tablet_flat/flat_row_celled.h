@@ -15,7 +15,7 @@ namespace NTable {
             , Storage(Size)
             , Cells(Storage.data())
         {
-            Y_VERIFY(key.size() <= keyDefaults->size(), "Key is too large");
+            Y_ABORT_UNLESS(key.size() <= keyDefaults->size(), "Key is too large");
 
             for (ui32 it = 0; it < Size; it++) {
                 if (it >= key.size()) {
@@ -35,7 +35,7 @@ namespace NTable {
             , Storage(Size)
             , Cells(Storage.data())
         {
-            Y_VERIFY(key.size() <= keyDefaults->size(), "Key is too large");
+            Y_ABORT_UNLESS(key.size() <= keyDefaults->size(), "Key is too large");
 
             for (ui32 it = 0; it < Size; it++) {
                 if (it >= key.size()) {

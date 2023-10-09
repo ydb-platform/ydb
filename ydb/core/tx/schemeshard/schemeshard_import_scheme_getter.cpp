@@ -25,7 +25,7 @@ using namespace Aws;
 
 class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     static TString SchemeKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx) {
-        Y_VERIFY(itemIdx < (ui32)settings.items_size());
+        Y_ABORT_UNLESS(itemIdx < (ui32)settings.items_size());
         return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/scheme.pb";
     }
 
@@ -71,7 +71,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
             return;
         }
 
-        Y_VERIFY(ItemIdx < ImportInfo->Items.size());
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
         LOG_T("Trying to parse"

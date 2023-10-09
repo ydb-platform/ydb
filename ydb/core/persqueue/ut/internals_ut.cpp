@@ -192,7 +192,7 @@ Y_UNIT_TEST(TestBatchPacking) {
     auto header = ExtractHeader(str.c_str(), str.size());
     TBatch batch2(header, str.c_str() + header.ByteSize() + sizeof(ui16));
     batch2.Unpack();
-    Y_VERIFY(batch2.Blobs.size() == 100);
+    Y_ABORT_UNLESS(batch2.Blobs.size() == 100);
 
     TBatch batch3;
     batch3.AddBlob(TClientBlob(
@@ -202,7 +202,7 @@ Y_UNIT_TEST(TestBatchPacking) {
     batch3.Pack();
     UNIT_ASSERT(batch3.Header.GetFormat() == NKikimrPQ::TBatchHeader::EUncompressed);
     batch3.Unpack();
-    Y_VERIFY(batch3.Blobs.size() == 1);
+    Y_ABORT_UNLESS(batch3.Blobs.size() == 1);
 }
 
 const TString ToHex(const TString& value) {

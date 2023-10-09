@@ -61,7 +61,7 @@ TAutoPtr<IEventHandle> EjectDataPropose(TServer::TPtr server, ui64 dataShard)
     server->GetRuntime()->DispatchEvents(options);
     runtime.SetObserverFunc(prevObserver);
 
-    Y_VERIFY(proposeEvent);
+    Y_ABORT_UNLESS(proposeEvent);
     return proposeEvent;
 }
 

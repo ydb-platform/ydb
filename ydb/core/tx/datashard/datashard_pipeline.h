@@ -181,7 +181,7 @@ public:
     }
 
     void SetSchemaOp(TSchemaOperation * op) {
-        Y_VERIFY(!SchemaTx || SchemaTx->TxId == op->TxId);
+        Y_ABORT_UNLESS(!SchemaTx || SchemaTx->TxId == op->TxId);
         SchemaTx = op;
     }
 

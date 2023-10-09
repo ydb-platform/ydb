@@ -28,7 +28,7 @@ namespace NFake {
             , Edge(head) /* Live until this runlevel exists */
             , Stopped(stopped)
         {
-             Y_VERIFY(Edge < Levels.size(), "Out of runlevels slots");
+             Y_ABORT_UNLESS(Edge < Levels.size(), "Out of runlevels slots");
         }
 
     private:
@@ -100,7 +100,7 @@ namespace NFake {
                 auto actor = Register(cmd.Actor.release(), cmd.MailboxType, 0);
                 auto result = Childs.emplace(actor, level);
 
-                Y_VERIFY(result.second, "Cannot register same actor twice");
+                Y_ABORT_UNLESS(result.second, "Cannot register same actor twice");
 
                 Levels[level].Left += 1, Total += 1, Head = Max(Head, level);
 

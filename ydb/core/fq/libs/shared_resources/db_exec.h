@@ -257,7 +257,7 @@ public:
         NActors::TActorId actorId
         , TCallback handlerCallback
     ) {
-        Y_VERIFY(HandlerActorId == NActors::TActorId{}, "Handler must be empty");
+        Y_ABORT_UNLESS(HandlerActorId == NActors::TActorId{}, "Handler must be empty");
         ActorSystem = NActors::TActivationContext::ActorSystem();
         HandlerActorId = actorId;
         HandlerCallback = handlerCallback;

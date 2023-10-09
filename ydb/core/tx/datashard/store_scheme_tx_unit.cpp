@@ -41,8 +41,8 @@ EExecutionStatus TStoreSchemeTxUnit::Execute(TOperation::TPtr op,
                                              TTransactionContext &txc,
                                              const TActorContext &ctx)
 {
-    Y_VERIFY(op->IsSchemeTx());
-    Y_VERIFY(!op->IsAborted() && !op->IsInterrupted());
+    Y_ABORT_UNLESS(op->IsSchemeTx());
+    Y_ABORT_UNLESS(!op->IsAborted() && !op->IsInterrupted());
 
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
@@ -51,7 +51,7 @@ EExecutionStatus TStoreSchemeTxUnit::Execute(TOperation::TPtr op,
     if (DataShard.GetCurrentSchemeShardId() == INVALID_TABLET_ID) {
         DataShard.PersistCurrentSchemeShardId(ssTabletId, txc);
     } else {
-        Y_VERIFY(DataShard.GetCurrentSchemeShardId() == ssTabletId,
+        Y_ABORT_UNLESS(DataShard.GetCurrentSchemeShardId() == ssTabletId,
                  "Got scheme transaction from unknown SchemeShard %" PRIu64, ssTabletId);
     }
 

@@ -58,7 +58,7 @@ namespace NKikimr {
         }
 
         static TLogoBlobID PrevFull(const TLogoBlobID& id, ui32 size) {
-            Y_VERIFY(!id.PartId());
+            Y_ABORT_UNLESS(!id.PartId());
             ui64 tablet = id.TabletID();
             ui32 channel = id.Channel();
             ui32 generation = id.Generation();
@@ -68,7 +68,7 @@ namespace NKikimr {
             const bool overflow = ((--cookie &= MaxCookie) == MaxCookie) && (--step == Max<ui32>()) &&
                 (--generation == Max<ui32>()) && ((--channel &= MaxChannel) == MaxChannel) &&
                 (--tablet == Max<ui64>());
-            Y_VERIFY(!overflow);
+            Y_ABORT_UNLESS(!overflow);
             return TLogoBlobID(tablet, generation, step, channel, size, cookie);
         }
 
@@ -122,7 +122,7 @@ namespace NKikimr {
         }
 
         static TLogoBlobID FromBinary(TStringBuf data) {
-            Y_VERIFY(data.size() == BinarySize);
+            Y_ABORT_UNLESS(data.size() == BinarySize);
             return FromBinary(data.data());
         }
 
@@ -236,10 +236,10 @@ namespace NKikimr {
         void Set(ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, ui32 partId,
                 ui32 crcMode) {
             Y_VERIFY_DEBUG(channel <= MaxChannel);
-            Y_VERIFY(blobSize <= MaxBlobSize);
+            Y_ABORT_UNLESS(blobSize <= MaxBlobSize);
             Y_VERIFY_DEBUG(cookie <= MaxCookie);
             Y_VERIFY_DEBUG(partId <= MaxPartId);
-            Y_VERIFY(crcMode <= MaxCrcMode);
+            Y_ABORT_UNLESS(crcMode <= MaxCrcMode);
 
             Raw.N.TabletID = tabletId;
             Raw.N.Generation = generation;

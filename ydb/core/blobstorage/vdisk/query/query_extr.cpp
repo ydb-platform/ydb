@@ -56,7 +56,7 @@ namespace NKikimr {
         }
 
         void Prepare() {
-            Y_VERIFY(Record.ExtremeQueriesSize() > 0);
+            Y_ABORT_UNLESS(Record.ExtremeQueriesSize() > 0);
             // initialize ForwardIt with a delay to avoid work in constructor
             ForwardIt = std::make_unique<TLogoBlobsSnapshot::TForwardIterator>(QueryCtx->HullCtx, &LogoBlobsSnapshot);
             Queries.reserve(Record.ExtremeQueriesSize());
@@ -106,7 +106,7 @@ namespace NKikimr {
         void MainCycle(const TActorContext &ctx) {
             TQuery *query = nullptr;
             while ((query = FetchNextQuery()) && !ResultSize.IsOverflow()) {
-                Y_VERIFY(query->PartId == 0); // only full blobs (w/o specifying a part) are allowed
+                Y_ABORT_UNLESS(query->PartId == 0); // only full blobs (w/o specifying a part) are allowed
                 const ui64 *cookiePtr = query->HasCookie ? &query->CookieVal : nullptr;
                 ResultSize.AddLogoBlobIndex();
                 if (!BlobInIndex) {
@@ -217,12 +217,12 @@ namespace NKikimr {
                         break;
                     case NReadBatcher::TDataItem::ET_ERROR:
                         // put ERROR
-                        Y_VERIFY(it->Id.PartId() > 0);
+                        Y_ABORT_UNLESS(it->Id.PartId() > 0);
                         Result->AddResult(NKikimrProto::ERROR, it->Id, cookiePtr, pingr);
                         break;
                     case NReadBatcher::TDataItem::ET_NOT_YET:
                         // put NOT_YET
-                        Y_VERIFY(it->Id.PartId() > 0);
+                        Y_ABORT_UNLESS(it->Id.PartId() > 0);
                         Result->AddResult(NKikimrProto::NOT_YET, it->Id, query->Shift, static_cast<ui32>(query->Size),
                             cookiePtr, pingr, keep, doNotKeep);
                         break;
@@ -230,7 +230,7 @@ namespace NKikimr {
                     case NReadBatcher::TDataItem::ET_SETMEM:
                     {
                         // GOOD
-                        Y_VERIFY(it->Id.PartId() > 0);
+                        Y_ABORT_UNLESS(it->Id.PartId() > 0);
                         struct TProcessor {
                             std::unique_ptr<TEvBlobStorage::TEvVGetResult>& Result;
                             TLogoBlobID Id;
@@ -291,7 +291,7 @@ namespace NKikimr {
                 if (res.GetStatus() == NKikimrProto::CORRUPTED) {
                     const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(res.GetBlobID());
                     const auto it = map.find(id.FullID());
-                    Y_VERIFY(it != map.end());
+                    Y_ABORT_UNLESS(it != map.end());
                     if (it->second->Status == NKikimrProto::OK) {
                         const TRope& buffer = it->second->GetPartData(id);
                         const ui32 shift = res.GetShift();

@@ -47,7 +47,7 @@ void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bo
     TVector<NPersQueue::TDiscoveryConverterPtr> topics;
     for (const auto& topic : Topics) {
         topics.push_back(topic.second.DiscoveryConverter);
-        Y_VERIFY(topic.second.DiscoveryConverter->IsValid());
+        Y_ABORT_UNLESS(topic.second.DiscoveryConverter->IsValid());
     }
 
     //LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " describe topics: " << JoinSeq(", ", topicNames));
@@ -92,7 +92,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, THashMap<TString, TTopicHolder>::iterator topicsIter,
         const TActorContext& ctx
 ) {
-    Y_VERIFY(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
+    Y_ABORT_UNLESS(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
     auto& pqDescr = entry.PQGroupInfo->Description;
     topicsIter->second.TabletID = pqDescr.GetBalancerTabletID();
     topicsIter->second.CloudId = pqDescr.GetPQTabletConfig().GetYcCloudId();
@@ -118,7 +118,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         AppData(ctx)->PQConfig.GetTestDatabaseRoot(),
         topicsIter->second.CdcStreamPath
     );
-    Y_VERIFY(topicsIter->second.FullConverter->IsValid());
+    Y_ABORT_UNLESS(topicsIter->second.FullConverter->IsValid());
     return CheckTopicACL(entry, topicsIter->first, ctx);
 }
 
@@ -132,10 +132,10 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
     for (const auto& entry : ev->Get()->Result->ResultSet) {
         const auto& path = topicsRequested[i++]->GetOriginalPath();
         auto it = Topics.find(path);
-        Y_VERIFY(it != Topics.end());
+        Y_ABORT_UNLESS(it != Topics.end());
 
         if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-            Y_VERIFY(entry.ListNodeEntry->Children.size() == 1);
+            Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
             const auto& topic = entry.ListNodeEntry->Children.at(0);
 
             // primary path used to re-describe
@@ -229,7 +229,7 @@ void TReadInitAndAuthActor::HandleClientSchemeCacheResponse(
     TEvTxProxySchemeCache::TEvNavigateKeySetResult* msg = ev->Get();
     const NSchemeCache::TSchemeCacheNavigate* navigate = msg->Request.Get();
 
-    Y_VERIFY(navigate->ResultSet.size() == 1);
+    Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
     auto& entry = navigate->ResultSet.front();
     auto path = "/" + JoinPath(entry.Path); // ToDo [migration] - through converter ?
     if (navigate->ErrorCount > 0) {

@@ -157,7 +157,7 @@ public:
             const TString domainName = domain.HasName() ? domain.GetName() : Sprintf("domain-%" PRIu32, domainId);
             TDomainsInfo::TDomain::TStoragePoolKinds poolTypes;
             for (auto &type : domain.GetStoragePoolTypes()) {
-                Y_VERIFY(!poolTypes.contains(type.GetKind()), "duplicated slot type");
+                Y_ABORT_UNLESS(!poolTypes.contains(type.GetKind()), "duplicated slot type");
                 poolTypes[type.GetKind()] = type.GetPoolConfig();
             }
 
@@ -165,8 +165,8 @@ public:
 
             const ui32 defaultSSId = domainId;
             const ui32 schemeBoardSSId = (domain.HasSchemeBoardSSId() && domain.GetSchemeBoardSSId()) ? domain.GetSchemeBoardSSId() : defaultSSId;
-            Y_VERIFY(Find(domain.GetSSId(), defaultSSId) != domain.GetSSId().end());
-            Y_VERIFY(Find(domain.GetSSId(), schemeBoardSSId) != domain.GetSSId().end());
+            Y_ABORT_UNLESS(Find(domain.GetSSId(), defaultSSId) != domain.GetSSId().end());
+            Y_ABORT_UNLESS(Find(domain.GetSSId(), schemeBoardSSId) != domain.GetSSId().end());
 
             TDomainsInfo::TDomain::TPtr domainPtr = nullptr;
             if (isExplicitTabletIds) {
@@ -241,21 +241,21 @@ public:
         // setup channel profiles
         appData->ChannelProfiles = new TChannelProfiles();
         ui32 idx = 0;
-        Y_VERIFY(Config.GetChannelProfileConfig().ProfileSize() > 0);
+        Y_ABORT_UNLESS(Config.GetChannelProfileConfig().ProfileSize() > 0);
         for (const NKikimrConfig::TChannelProfileConfig::TProfile &profile : Config.GetChannelProfileConfig().GetProfile()) {
             const ui32 profileId = profile.GetProfileId();
-            Y_VERIFY(profileId == idx, "Duplicate, missing or out of order profileId %" PRIu32 " (expected %" PRIu32 ")",
+            Y_ABORT_UNLESS(profileId == idx, "Duplicate, missing or out of order profileId %" PRIu32 " (expected %" PRIu32 ")",
                 profileId, idx);
             ++idx;
             const ui32 channels = profile.ChannelSize();
-            Y_VERIFY(channels >= 2);
+            Y_ABORT_UNLESS(channels >= 2);
 
             appData->ChannelProfiles->Profiles.emplace_back();
             TChannelProfiles::TProfile &outProfile = appData->ChannelProfiles->Profiles.back();
             ui32 channelIdx = 0;
             for (const NKikimrConfig::TChannelProfileConfig::TProfile::TChannel &channel : profile.GetChannel()) {
-                Y_VERIFY(channel.HasErasureSpecies());
-                Y_VERIFY(channel.HasPDiskCategory());
+                Y_ABORT_UNLESS(channel.HasErasureSpecies());
+                Y_ABORT_UNLESS(channel.HasPDiskCategory());
                 TString name = channel.GetErasureSpecies();
                 TBlobStorageGroupType::EErasureSpecies erasure = TBlobStorageGroupType::ErasureSpeciesByName(name);
                 if (erasure == TBlobStorageGroupType::ErasureSpeciesCount) {
@@ -635,14 +635,14 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         // Enable RL for all services if enabled list is empty
         if (rlServicesEnabled.empty()) {
             for (auto& [name, cfg] : names) {
-                Y_VERIFY(cfg);
+                Y_ABORT_UNLESS(cfg);
                 cfg->SetRlAllowed(true);
             }
         } else {
             for (const auto& name : rlServicesEnabled) {
                 auto itName = names.find(name);
                 if (itName != names.end()) {
-                    Y_VERIFY(itName->second);
+                    Y_ABORT_UNLESS(itName->second);
                     itName->second->SetRlAllowed(true);
                 } else if (!ModuleFactories || !ModuleFactories->GrpcServiceFactory.Has(name)) {
                     Cerr << "Unknown grpc service \"" << name << "\" rl was not enabled" << Endl;
@@ -653,7 +653,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         for (const auto& name : rlServicesDisabled) {
             auto itName = names.find(name);
             if (itName != names.end()) {
-                Y_VERIFY(itName->second);
+                Y_ABORT_UNLESS(itName->second);
                 itName->second->SetRlAllowed(false);
             } else if (!ModuleFactories || !ModuleFactories->GrpcServiceFactory.Has(name)) {
                 Cerr << "Unknown grpc service \"" << name << "\" rl was not disabled" << Endl;
@@ -889,9 +889,9 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             const auto& pathToCertificateFile = GET_PATH_TO_FILE(grpcConfig, PathToCertificateFile, Cert);
             const auto& pathToPrivateKeyFile = GET_PATH_TO_FILE(grpcConfig, PathToPrivateKeyFile, Key);
 
-            Y_VERIFY(!pathToCaFile.Empty(), "CA not set");
-            Y_VERIFY(!pathToCertificateFile.Empty(), "Cert not set");
-            Y_VERIFY(!pathToPrivateKeyFile.Empty(), "Key not set");
+            Y_ABORT_UNLESS(!pathToCaFile.Empty(), "CA not set");
+            Y_ABORT_UNLESS(!pathToCertificateFile.Empty(), "Cert not set");
+            Y_ABORT_UNLESS(!pathToPrivateKeyFile.Empty(), "Key not set");
             sslOpts.SetPort(grpcConfig.GetSslPort());
             NGrpc::TSslData sslData;
             sslData.Root = ReadFile(pathToCaFile);
@@ -951,9 +951,9 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
                 xopts.SetSslData(sslData);
 
-                Y_VERIFY(xopts.SslData->Root, "CA not set");
-                Y_VERIFY(xopts.SslData->Cert, "Cert not set");
-                Y_VERIFY(xopts.SslData->Key, "Key not set");
+                Y_ABORT_UNLESS(xopts.SslData->Root, "CA not set");
+                Y_ABORT_UNLESS(xopts.SslData->Cert, "Cert not set");
+                Y_ABORT_UNLESS(xopts.SslData->Key, "Key not set");
 
                 GRpcServers.push_back({ "grpcs", new NGrpc::TGRpcServer(xopts) });
                 fillFn(ex, *GRpcServers.back().second, xopts);
@@ -1183,24 +1183,24 @@ void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)
                 continue;
             }
 
-            Y_VERIFY(component != NLog::InvalidComponent, "Invalid component name in log configuration file: \"%s\"",
+            Y_ABORT_UNLESS(component != NLog::InvalidComponent, "Invalid component name in log configuration file: \"%s\"",
                 componentName.data());
         }
 
         TString explanation;
         if (entry.HasLevel()) {
             auto prio = (NLog::EPriority)entry.GetLevel();
-            Y_VERIFY(LogSettings->SetLevel(prio, component, explanation) == 0);
+            Y_ABORT_UNLESS(LogSettings->SetLevel(prio, component, explanation) == 0);
 
             if (component == NKikimrServices::GRPC_LIBRARY) {
                 NConsole::SetGRpcLibraryLogVerbosity(prio);
             }
         }
         if (entry.HasSamplingLevel()) {
-            Y_VERIFY(LogSettings->SetSamplingLevel((NLog::EPriority)entry.GetSamplingLevel(), component, explanation) == 0);
+            Y_ABORT_UNLESS(LogSettings->SetSamplingLevel((NLog::EPriority)entry.GetSamplingLevel(), component, explanation) == 0);
         }
         if (entry.HasSamplingRate()) {
-            Y_VERIFY(LogSettings->SetSamplingRate(entry.GetSamplingRate(), component, explanation) == 0);
+            Y_ABORT_UNLESS(LogSettings->SetSamplingRate(entry.GetSamplingRate(), component, explanation) == 0);
         }
     }
 }

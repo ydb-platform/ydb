@@ -17,7 +17,7 @@ namespace NKikimr::NBlobDepot {
         for (const auto& [_, givenIdRanges] : GivenIdRangePerChannel) {
             count += givenIdRanges.GetNumAvailableItems();
         }
-        Y_VERIFY(count == NumAvailableItems);
+        Y_ABORT_UNLESS(count == NumAvailableItems);
 #endif
         return NumAvailableItems;
     }

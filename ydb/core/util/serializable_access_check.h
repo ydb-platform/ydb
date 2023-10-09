@@ -22,12 +22,12 @@ struct TSerializableAccessChecker {
     {}
 
     void Acquire() {
-        Y_VERIFY(AtomicGet(Locked) == 0);
+        Y_ABORT_UNLESS(AtomicGet(Locked) == 0);
         AtomicSet(Locked, 1);
     }
 
     void Release() {
-        Y_VERIFY(AtomicGet(Locked) == 1);
+        Y_ABORT_UNLESS(AtomicGet(Locked) == 1);
         AtomicSet(Locked, 0);
     }
 private:

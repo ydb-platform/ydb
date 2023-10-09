@@ -200,7 +200,7 @@ namespace NKikimr {
             };
 
             const auto it = names.find(ptr->SubRequestId);
-            Y_VERIFY(it != names.end());
+            Y_ABORT_UNLESS(it != names.end());
             this->*it->second = ptr->Answer;
             --Counter;
             if (Counter == 0) {

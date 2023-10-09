@@ -81,7 +81,7 @@ void GetCounters(TTestEnv& env, const TString& databaseName, const TString& data
         for (ui32 nodeId = 0; nodeId < env.GetServer().GetRuntime()->GetNodeCount(); ++nodeId) {
             auto counters = env.GetServer().GetRuntime()->GetAppData(nodeId).Counters;
             auto labeledGroup = GetServiceCounters(counters, "labeled_serverless", false);
-            Y_VERIFY(labeledGroup);
+            Y_ABORT_UNLESS(labeledGroup);
 
             auto databaseGroup = labeledGroup->FindSubgroup("database", databasePath);
             if (databaseGroup) {

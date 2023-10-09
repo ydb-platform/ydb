@@ -83,7 +83,7 @@ void TBlobBatch::SendWriteRequest(const TActorContext& ctx, ui32 groupId, const 
 }
 
 void TBlobBatch::SendWriteBlobRequest(const TString& blobData, const TUnifiedBlobId& blobId, TInstant deadline, const TActorContext& ctx) {
-    Y_VERIFY(blobData.size() <= TLimits::GetBlobSizeLimit(), "Blob %" PRISZT" size exceeds the limit %" PRIu64, blobData.size(), TLimits::GetBlobSizeLimit());
+    Y_ABORT_UNLESS(blobData.size() <= TLimits::GetBlobSizeLimit(), "Blob %" PRISZT" size exceeds the limit %" PRIu64, blobData.size(), TLimits::GetBlobSizeLimit());
 
     const ui32 groupId = blobId.GetDsGroup();
     SendWriteRequest(ctx, groupId, blobId.GetLogoBlobId(), blobData, 0, deadline);
@@ -91,18 +91,18 @@ void TBlobBatch::SendWriteBlobRequest(const TString& blobData, const TUnifiedBlo
 
 void TBlobBatch::OnBlobWriteResult(const TLogoBlobID& blobId, const NKikimrProto::EReplyStatus status) {
     BatchInfo->Counters.OnPutResult(blobId.BlobSize());
-    Y_VERIFY(status == NKikimrProto::OK, "The caller must handle unsuccessful status");
-    Y_VERIFY(BatchInfo);
-    Y_VERIFY(blobId.Cookie() < BatchInfo->InFlight.size());
-    Y_VERIFY(BatchInfo->InFlight[blobId.Cookie()], "Blob %s is already acked!", blobId.ToString().c_str());
+    Y_ABORT_UNLESS(status == NKikimrProto::OK, "The caller must handle unsuccessful status");
+    Y_ABORT_UNLESS(BatchInfo);
+    Y_ABORT_UNLESS(blobId.Cookie() < BatchInfo->InFlight.size());
+    Y_ABORT_UNLESS(BatchInfo->InFlight[blobId.Cookie()], "Blob %s is already acked!", blobId.ToString().c_str());
 
     BatchInfo->InFlight[blobId.Cookie()] = false;
     --BatchInfo->InFlightCount;
-    Y_VERIFY(BatchInfo->InFlightCount >= 0);
+    Y_ABORT_UNLESS(BatchInfo->InFlightCount >= 0);
 }
 
 bool TBlobBatch::AllBlobWritesCompleted() const {
-    Y_VERIFY(BatchInfo);
+    Y_ABORT_UNLESS(BatchInfo);
     return BatchInfo->InFlightCount == 0;
 }
 
@@ -165,11 +165,11 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
     // Build the list of steps that cannot be garbage collected before Keep flag is set on the blobs
     THashSet<TGenStep> genStepsWithBlobsToKeep;
     for (const auto& unifiedBlobId : blobsToKeep) {
-        Y_VERIFY(unifiedBlobId.IsDsBlob(), "Not a DS blob id in Keep table: %s", unifiedBlobId.ToStringNew().c_str());
+        Y_ABORT_UNLESS(unifiedBlobId.IsDsBlob(), "Not a DS blob id in Keep table: %s", unifiedBlobId.ToStringNew().c_str());
 
         TLogoBlobID blobId = unifiedBlobId.GetLogoBlobId();
         TGenStep genStep{blobId.Generation(), blobId.Step()};
-        Y_VERIFY(genStep > LastCollectedGenStep);
+        Y_ABORT_UNLESS(genStep > LastCollectedGenStep);
 
         BlobsToKeep.insert(blobId);
         BlobsManagerCounters.OnKeepMarker(blobId.BlobSize());
@@ -207,7 +207,7 @@ TGenStep TBlobManager::FindNewGCBarrier() {
 
         ++numFinished;
         newCollectGenStep = allocated->GenStep;
-        Y_VERIFY(newCollectGenStep > CollectGenStepInFlight);
+        Y_ABORT_UNLESS(newCollectGenStep > CollectGenStepInFlight);
     }
     if (numFinished) {
         AllocatedGenSteps.erase(AllocatedGenSteps.begin(), AllocatedGenSteps.begin() + numFinished);
@@ -226,7 +226,7 @@ std::shared_ptr<NOlap::NBlobOperations::NBlobStorage::TGCTask> TBlobManager::Bui
     }
 
     TGenStep newCollectGenStep = FindNewGCBarrier();
-    Y_VERIFY(newCollectGenStep >= LastCollectedGenStep);
+    Y_ABORT_UNLESS(newCollectGenStep >= LastCollectedGenStep);
 
     PreviousGCTime = AppData()->TimeProvider->Now();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "PreparePerGroupGCRequests")("gen", std::get<0>(newCollectGenStep))("step", std::get<1>(newCollectGenStep));
@@ -309,7 +309,7 @@ std::shared_ptr<NOlap::NBlobOperations::NBlobStorage::TGCTask> TBlobManager::Bui
 
 TBlobBatch TBlobManager::StartBlobBatch(ui32 channel) {
     ++CountersUpdate.BatchesStarted;
-    Y_VERIFY(channel == BLOB_CHANNEL, "Support for mutiple blob channels is not implemented yet");
+    Y_ABORT_UNLESS(channel == BLOB_CHANNEL, "Support for mutiple blob channels is not implemented yet");
     ++CurrentStep;
     TAllocatedGenStepConstPtr genStepRef = new TAllocatedGenStep({CurrentGen, CurrentStep});
     AllocatedGenSteps.push_back(genStepRef);
@@ -318,7 +318,7 @@ TBlobBatch TBlobManager::StartBlobBatch(ui32 channel) {
 }
 
 void TBlobManager::DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) {
-    Y_VERIFY(blobBatch.BatchInfo);
+    Y_ABORT_UNLESS(blobBatch.BatchInfo);
     ++CountersUpdate.BatchesCommitted;
     CountersUpdate.BlobsWritten += blobBatch.GetBlobCount();
 

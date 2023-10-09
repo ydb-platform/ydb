@@ -419,12 +419,12 @@ namespace NKikimr {
 
         public:
             size_t Size() const {
-                Y_VERIFY(Tree, "Uninitialized iterator");
+                Y_ABORT_UNLESS(Tree, "Uninitialized iterator");
                 return Size_;
             }
 
             size_t Height() const {
-                Y_VERIFY(Tree, "Uninitialized iterator");
+                Y_ABORT_UNLESS(Tree, "Uninitialized iterator");
                 return Root ? InnerHeight_ + 1 : 0;
             }
 
@@ -433,7 +433,7 @@ namespace NKikimr {
             }
 
             bool SeekFirst() {
-                Y_VERIFY(Tree, "Uninitialized iterator");
+                Y_ABORT_UNLESS(Tree, "Uninitialized iterator");
 
                 if (!Root) {
                     CurrentPage = nullptr;
@@ -454,7 +454,7 @@ namespace NKikimr {
             }
 
             bool SeekLast() {
-                Y_VERIFY(Tree, "Uninitialized iterator");
+                Y_ABORT_UNLESS(Tree, "Uninitialized iterator");
 
                 if (!Root) {
                     CurrentPage = nullptr;
@@ -481,7 +481,7 @@ namespace NKikimr {
              */
             template<class TKeyArg>
             bool SeekLowerBound(TKeyArg&& key, bool backwards = false) {
-                Y_VERIFY(Tree, "Uninitialized iterator");
+                Y_ABORT_UNLESS(Tree, "Uninitialized iterator");
 
                 if (!Root) {
                     CurrentPage = nullptr;
@@ -526,7 +526,7 @@ namespace NKikimr {
              */
             template<class TKeyArg>
             bool SeekUpperBound(TKeyArg&& key, bool backwards = false) {
-                Y_VERIFY(Tree, "Uninitialized iterator");
+                Y_ABORT_UNLESS(Tree, "Uninitialized iterator");
 
                 if (!Root) {
                     CurrentPage = nullptr;
@@ -784,22 +784,22 @@ namespace NKikimr {
             TSnapshot() = default;
 
             size_t Size() const {
-                Y_VERIFY(Tree, "Uninitialized snapshot");
+                Y_ABORT_UNLESS(Tree, "Uninitialized snapshot");
                 return Size_;
             }
 
             size_t Height() const {
-                Y_VERIFY(Tree, "Uninitialized snapshot");
+                Y_ABORT_UNLESS(Tree, "Uninitialized snapshot");
                 return Root ? InnerHeight_ + 1 : 0;
             }
 
             TIterator Iterator() const & {
-                Y_VERIFY(Tree, "Uninitialized snapshot");
+                Y_ABORT_UNLESS(Tree, "Uninitialized snapshot");
                 return TIterator(Tree, Root, Size_, InnerHeight_);
             }
 
             TIterator Iterator() && {
-                Y_VERIFY(Tree, "Uninitialized snapshot");
+                Y_ABORT_UNLESS(Tree, "Uninitialized snapshot");
                 return TIterator(std::move(Tree), Root, Size_, InnerHeight_);
             }
 
@@ -895,7 +895,7 @@ namespace NKikimr {
         TSnapshot Snapshot() {
             CollectGarbage();
 
-            Y_VERIFY(CurrentEpoch < PageEpochMax, "Epoch overflow: too many snapshots");
+            Y_ABORT_UNLESS(CurrentEpoch < PageEpochMax, "Epoch overflow: too many snapshots");
 
             TSnapshotContext* context = new TSnapshotContext(CurrentEpoch++);
             TTreeHandle handle(this, context, GCList);
@@ -925,10 +925,10 @@ namespace NKikimr {
             CollectGarbage();
 
             TSnapshotContext* context = snapshot.Tree.Context;
-            Y_VERIFY(context, "Cannot rollback to an invalid or an empty snapshot");
-            Y_VERIFY(context->RollbackSupported, "Cannot rollback to a newer snapshot");
+            Y_ABORT_UNLESS(context, "Cannot rollback to an invalid or an empty snapshot");
+            Y_ABORT_UNLESS(context->RollbackSupported, "Cannot rollback to a newer snapshot");
 
-            Y_VERIFY(snapshot.Tree.Tree == this, "Cannot rollback to snapshot from a different tree");
+            Y_ABORT_UNLESS(snapshot.Tree.Tree == this, "Cannot rollback to snapshot from a different tree");
 
             TPage* prevRoot = Root;
             ui64 epoch = context->Epoch;
@@ -1062,9 +1062,9 @@ namespace NKikimr {
             Y_VERIFY_DEBUG(PagesToDrop.empty());
             Y_VERIFY_DEBUG(KeysToDrop.empty());
 
-            Y_VERIFY(!InsertPath.empty() && InsertPath.back().Page->GetTag() == ETag::Leaf);
+            Y_ABORT_UNLESS(!InsertPath.empty() && InsertPath.back().Page->GetTag() == ETag::Leaf);
             TLeafPage* const leaf = TLeafPage::From(InsertPath.back().Page);
-            Y_VERIFY(InsertPath.back().Index > 0);
+            Y_ABORT_UNLESS(InsertPath.back().Index > 0);
             const size_t leafIndex = InsertPath.back().Index - 1;
             InsertPath.pop_back();
 
@@ -1106,7 +1106,7 @@ namespace NKikimr {
                 return newRoot->Values();
             }
 
-            Y_VERIFY(!InsertPath.empty() && InsertPath.back().Page->GetTag() == ETag::Leaf);
+            Y_ABORT_UNLESS(!InsertPath.empty() && InsertPath.back().Page->GetTag() == ETag::Leaf);
             TLeafPage* const leaf = TLeafPage::From(InsertPath.back().Page);
             const size_t leafIndex = InsertPath.back().Index;
             InsertPath.pop_back();

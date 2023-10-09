@@ -47,7 +47,7 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxDropSubDomain);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropSubDomain);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -55,7 +55,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         auto paths = context.SS->ListSubTree(pathId, context.Ctx);
-        Y_VERIFY(paths.size() == 1);
+        Y_ABORT_UNLESS(paths.size() == 1);
         context.SS->DropPaths(paths, step, OperationId.GetTxId(), db, context.Ctx);
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -79,8 +79,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropSubDomain);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropSubDomain);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -180,7 +180,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        Y_VERIFY(context.SS->SubDomains.contains(path.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->SubDomains.contains(path.Base()->PathId));
         auto subDomain = context.SS->SubDomains.at(path.Base()->PathId);
         for (auto& shardIdx : subDomain->GetPrivateShards()) {
             txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos.at(shardIdx).TabletType, txState.State);
@@ -227,7 +227,7 @@ ISubOperation::TPtr CreateDropSubdomain(TOperationId id, const TTxTransaction& t
 }
 
 ISubOperation::TPtr CreateDropSubdomain(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropSubdomain>(id, state);
 }
 

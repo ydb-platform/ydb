@@ -82,7 +82,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 
         auto codec = delta.HasCodec() ? ECodec(delta.GetCodec()) :family.Codec;
 
-        Y_VERIFY(ui32(codec) <= 1, "Invalid page encoding code value");
+        Y_ABORT_UNLESS(ui32(codec) <= 1, "Invalid page encoding code value");
 
         // FIXME: for now these changes will affect old parts on boot only (see RequestInMemPagesForPartStore)
         bool ever = delta.HasInMemory() && delta.GetInMemory();
@@ -92,7 +92,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         ui32 small = delta.HasSmall() ? delta.GetSmall() : family.Small;
         ui32 large = delta.HasLarge() ? delta.GetLarge() : family.Large;
 
-        Y_VERIFY(ui32(cache) <= 2, "Invalid pages cache policy value");
+        Y_ABORT_UNLESS(ui32(cache) <= 2, "Invalid pages cache policy value");
         changes |= ChangeTableSetting(table, family.Cache, cache);
         changes |= ChangeTableSetting(table, family.Codec, codec);
         changes |= ChangeTableSetting(table, family.Small, small);
@@ -171,7 +171,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 bool TSchemeModifier::AddColumnToFamily(ui32 tid, ui32 cid, ui32 family)
 {
     auto* column = Scheme.GetColumnInfo(Table(tid), cid);
-    Y_VERIFY(column);
+    Y_ABORT_UNLESS(column);
 
     if (column->Family != family) {
         PreserveTable(tid);
@@ -201,7 +201,7 @@ bool TSchemeModifier::AddTable(const TString &name, ui32 id)
         };
         Y_VERIFY_S(itName->second == id, describeFailure());
         // Sanity check that this table really exists
-        Y_VERIFY(it != Scheme.Tables.end() && it->second.Name == name);
+        Y_ABORT_UNLESS(it != Scheme.Tables.end() && it->second.Name == name);
         return false;
     }
 
@@ -217,7 +217,7 @@ bool TSchemeModifier::AddTable(const TString &name, ui32 id)
 
     // Creating a new table
     auto pr = Scheme.Tables.emplace(id, TTable(name, id));
-    Y_VERIFY(pr.second);
+    Y_ABORT_UNLESS(pr.second);
     it = pr.first;
     Scheme.TableNames.emplace(name, id);
 
@@ -243,7 +243,7 @@ bool TSchemeModifier::DropTable(ui32 id)
 
 bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, TCell null)
 {
-    Y_VERIFY(type != (ui32)NScheme::NTypeIds::Pg, "No pg type data");
+    Y_ABORT_UNLESS(type != (ui32)NScheme::NTypeIds::Pg, "No pg type data");
     return AddPgColumn(tid, name, id, type, 0, "", notNull, null);
 }
 
@@ -256,9 +256,9 @@ bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 t
 
     NScheme::TTypeInfo typeInfo;
     if (pgType != 0) {
-        Y_VERIFY((NScheme::TTypeId)type == NScheme::NTypeIds::Pg);
+        Y_ABORT_UNLESS((NScheme::TTypeId)type == NScheme::NTypeIds::Pg);
         auto* typeDesc = NPg::TypeDescFromPgTypeId(pgType);
-        Y_VERIFY(typeDesc);
+        Y_ABORT_UNLESS(typeDesc);
         typeInfo = NScheme::TTypeInfo(type, typeDesc);
     } else {
         typeInfo = NScheme::TTypeInfo(type);
@@ -278,7 +278,7 @@ bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 t
         };
         Y_VERIFY_S(itName->second == id, describeFailure());
         // Sanity check that this column exists and types match
-        Y_VERIFY(it != table->Columns.end() && it->second.Name == name);
+        Y_ABORT_UNLESS(it != table->Columns.end() && it->second.Name == name);
         Y_VERIFY_S(it->second.PType == typeInfo && it->second.PTypeMod == pgTypeMod,
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << name
             << "' expected type " << NScheme::TypeName(typeInfo, pgTypeMod)
@@ -301,7 +301,7 @@ bool TSchemeModifier::AddPgColumn(ui32 tid, const TString &name, ui32 id, ui32 t
     }
 
     auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, pgTypeMod, notNull));
-    Y_VERIFY(pr.second);
+    Y_ABORT_UNLESS(pr.second);
     it = pr.first;
     table->ColumnNames.emplace(name, id);
 
@@ -327,7 +327,7 @@ bool TSchemeModifier::AddColumnToKey(ui32 tid, ui32 columnId)
 {
     auto *table = Table(tid);
     auto* column = Scheme.GetColumnInfo(table, columnId);
-    Y_VERIFY(column);
+    Y_ABORT_UNLESS(column);
 
     auto keyPos = std::find(table->KeyColumns.begin(), table->KeyColumns.end(), column->Id);
     if (keyPos == table->KeyColumns.end()) {

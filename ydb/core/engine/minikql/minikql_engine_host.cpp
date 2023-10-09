@@ -136,7 +136,7 @@ void TEngineHost::DoCalculateReadSize(const TKeyDesc& key, NTable::TSizeEnv& env
     if (key.RowOperation != TKeyDesc::ERowOperation::Read)
         return;
     ui64 localTid = LocalTableId(key.TableId);
-    Y_VERIFY(localTid, "table not exist");
+    Y_ABORT_UNLESS(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
     TSmallVec<TRawTypeValue> keyFrom;
     TSmallVec<TRawTypeValue> keyTo;
@@ -164,7 +164,7 @@ ui64 TEngineHost::CalculateResultSize(const TKeyDesc& key) const {
         return 0;
 
     ui64 localTid = LocalTableId(key.TableId);
-    Y_VERIFY(localTid, "table not exist");
+    Y_ABORT_UNLESS(localTid, "table not exist");
     if (key.Range.Point) {
         return Db.EstimateRowSize(localTid);
     } else {
@@ -229,7 +229,7 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
         }
 
         ui64 localTid = LocalTableId(key.TableId);
-        Y_VERIFY(localTid, "table not exist");
+        Y_ABORT_UNLESS(localTid, "table not exist");
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
 
         Y_VERIFY_DEBUG(!key.Range.IsAmbiguous(tableInfo->KeyColumns.size()),
@@ -277,7 +277,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     Y_UNUSED(readTarget);
 
     ui64 localTid = LocalTableId(tableId);
-    Y_VERIFY(localTid, "table not exist");
+    Y_ABORT_UNLESS(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
     TSmallVec<TRawTypeValue> key;
     ConvertKeys(tableInfo, row, key);
@@ -512,7 +512,7 @@ public:
                     += std::exchange(Iter->Stats.InvisibleRowSkips, 0);
 
                 // Skip null keys
-                Y_VERIFY(List.SkipNullKeys.size() <= tuple.ColumnCount);
+                Y_ABORT_UNLESS(List.SkipNullKeys.size() <= tuple.ColumnCount);
                 bool skipRow = false;
                 for (ui32 i = 0; i < List.SkipNullKeys.size(); ++i) {
                     if (List.SkipNullKeys[i] && tuple.Columns[i].IsNull()) {
@@ -822,10 +822,10 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
     Y_UNUSED(readTarget);
 
     // TODO[serxa]: support for Point in SelectRange()
-    Y_VERIFY(!range.Point, "point request in TEngineHost::SelectRange");
+    Y_ABORT_UNLESS(!range.Point, "point request in TEngineHost::SelectRange");
 
     ui64 localTid = LocalTableId(tableId);
-    Y_VERIFY(localTid, "table not exist");
+    Y_ABORT_UNLESS(localTid, "table not exist");
 
     // Analyze resultType
     TStructType* outerStructType = AS_TYPE(TStructType, returnType);
@@ -872,7 +872,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
 // Updates the single row. Column in commands must be unique.
 void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) {
     ui64 localTid = LocalTableId(tableId);
-    Y_VERIFY(localTid, "table not exist");
+    Y_ABORT_UNLESS(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
     TSmallVec<TRawTypeValue> key;
     ui64 keyBytes = 0;
@@ -882,7 +882,7 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
     TSmallVec<NTable::TUpdateOp> ops;
     for (size_t i = 0; i < commands.size(); i++) {
         const TUpdateCommand& upd = commands[i];
-        Y_VERIFY(upd.Operation == TKeyDesc::EColumnOperation::Set); // TODO[serxa]: support inplace update in update row
+        Y_ABORT_UNLESS(upd.Operation == TKeyDesc::EColumnOperation::Set); // TODO[serxa]: support inplace update in update row
         auto vtypeinfo = Scheme.GetColumnInfo(tableInfo, upd.Column)->PType;
         ops.emplace_back(upd.Column, NTable::ECellOp::Set,
             upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtypeinfo));
@@ -913,7 +913,7 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
 // Erases the single row.
 void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) {
     ui64 localTid = LocalTableId(tableId);
-    Y_VERIFY(localTid, "table not exist");
+    Y_ABORT_UNLESS(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
     TSmallVec<TRawTypeValue> key;
     ui64 keyBytes = 0;
@@ -942,7 +942,7 @@ void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>
 
 void TEngineHost::CommitWriteTxId(const TTableId& tableId, ui64 writeTxId) {
     ui64 localTid = LocalTableId(tableId);
-    Y_VERIFY(localTid, "table does not exist");
+    Y_ABORT_UNLESS(localTid, "table does not exist");
 
     Db.CommitTx(localTid, writeTxId);
 }

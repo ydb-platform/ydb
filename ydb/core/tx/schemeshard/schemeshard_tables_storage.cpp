@@ -41,7 +41,7 @@ const std::set<NKikimr::TPathId>& TTablesStorage::GetTablesWithTiering(const TSt
 
 TColumnTableInfo::TPtr TTablesStorage::ExtractPtr(const TPathId& id) {
     auto it = Tables.find(id);
-    Y_VERIFY(it != Tables.end());
+    Y_ABORT_UNLESS(it != Tables.end());
     auto result = it->second;
     Tables.erase(it);
     return result;
@@ -57,19 +57,19 @@ TTablesStorage::TTableExtractedGuard TTablesStorage::TakeAlterVerified(const TPa
 
 TTablesStorage::TTableReadGuard TTablesStorage::GetVerified(const TPathId& id) const {
     auto it = Tables.find(id);
-    Y_VERIFY(it != Tables.end());
+    Y_ABORT_UNLESS(it != Tables.end());
     return TTableReadGuard(it->second);
 }
 
 TTablesStorage::TTableCreatedGuard TTablesStorage::BuildNew(const TPathId& id, TColumnTableInfo::TPtr object) {
     auto it = Tables.find(id);
-    Y_VERIFY(it == Tables.end());
+    Y_ABORT_UNLESS(it == Tables.end());
     return TTableCreatedGuard(*this, id, object);
 }
 
 TTablesStorage::TTableCreatedGuard TTablesStorage::BuildNew(const TPathId& id) {
     auto it = Tables.find(id);
-    Y_VERIFY(it == Tables.end());
+    Y_ABORT_UNLESS(it == Tables.end());
     return TTableCreatedGuard(*this, id);
 }
 
@@ -95,7 +95,7 @@ NKikimr::NSchemeShard::TColumnTablesLayout TTablesStorage::GetTablesLayout(const
     }
     THashMap<TColumnTablesLayout::TTableIdsGroup, TColumnTablesLayout::TShardIdsGroup> shardsByTables;
     for (auto&& i : tablesByShard) {
-        Y_VERIFY(shardsByTables[i.second].AddId(i.first));
+        Y_ABORT_UNLESS(shardsByTables[i.second].AddId(i.first));
     }
     std::vector<TColumnTablesLayout::TTablesGroup> groups;
     groups.reserve(shardsByTables.size());
@@ -106,9 +106,9 @@ NKikimr::NSchemeShard::TColumnTablesLayout TTablesStorage::GetTablesLayout(const
 }
 
 void TTablesStorage::TTableExtractedGuard::UseAlterDataVerified() {
-    Y_VERIFY(Object);
+    Y_ABORT_UNLESS(Object);
     TColumnTableInfo::TPtr alterInfo = Object->AlterData;
-    Y_VERIFY(alterInfo);
+    Y_ABORT_UNLESS(alterInfo);
     alterInfo->AlterBody.Clear();
     Object = alterInfo;
 }
@@ -117,7 +117,7 @@ std::vector<ui64> TColumnTablesLayout::ShardIdxToTabletId(const std::vector<TSha
     std::vector<ui64> result;
     for (const auto& shardIdx : shards) {
         auto* shardInfo = ss.ShardInfos.FindPtr(shardIdx);
-        Y_VERIFY(shardInfo, "ColumnShard not found");
+        Y_ABORT_UNLESS(shardInfo, "ColumnShard not found");
         result.emplace_back(shardInfo->TabletID.GetValue());
     }
     return result;

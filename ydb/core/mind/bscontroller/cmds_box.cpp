@@ -169,8 +169,8 @@ namespace NKikimr::NBsController {
 
                 // update storage pool id mapping in group itself
                 TGroupInfo *group = Groups.FindForUpdate(node.mapped());
-                Y_VERIFY(group);
-                Y_VERIFY(group->StoragePoolId == origin);
+                Y_ABORT_UNLESS(group);
+                Y_ABORT_UNLESS(group->StoragePoolId == origin);
                 group->StoragePoolId = target;
 
                 // update the key and insert item back into map
@@ -188,7 +188,7 @@ namespace NKikimr::NBsController {
         PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
             if (pdiskInfo.BoxId == cmd.GetOriginBoxId()) {
                 TPDiskInfo *mut = PDisks.FindForUpdate(pdiskId);
-                Y_VERIFY(mut);
+                Y_ABORT_UNLESS(mut);
                 mut->BoxId = cmd.GetTargetBoxId();
             }
         });

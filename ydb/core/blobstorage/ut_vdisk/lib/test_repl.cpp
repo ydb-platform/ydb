@@ -26,9 +26,9 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
 
         bool AddReply(const TLogoBlobID& id) {
             const ui8 partId = id.PartId();
-            Y_VERIFY(partId > 0);
+            Y_ABORT_UNLESS(partId > 0);
             const ui32 mask = 1 << (partId - 1);
-            Y_VERIFY(!(PartMask & mask));
+            Y_ABORT_UNLESS(!(PartMask & mask));
             PartMask |= mask;
             return PartMask == 7;
         }
@@ -72,7 +72,7 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
         ui64 blobsSize = 0;
 
         TAutoPtr<IDataSet::TIterator> it = DataSet->First();
-        Y_VERIFY(it->IsValid());
+        Y_ABORT_UNLESS(it->IsValid());
         while (it->IsValid()) {
             ReadSet.insert(std::pair<TLogoBlobID, TVal>(it->Get()->Id, TVal(it->Get()->Data)));
             PendingReads.insert(it->Get()->Id);

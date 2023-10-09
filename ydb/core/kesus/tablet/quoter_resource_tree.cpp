@@ -290,7 +290,7 @@ private:
 };
 
 THolder<TQuoterResourceTree> CreateResource(ui64 resourceId, ui64 parentId, NActors::TActorId kesus, const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props) {
-    Y_VERIFY(resourceId != parentId);
+    Y_ABORT_UNLESS(resourceId != parentId);
     return MakeHolder<THierarchicalDRRQuoterResourceTree>(resourceId, parentId, kesus, billSink, props);
 }
 
@@ -331,7 +331,7 @@ public:
     }
 
     void Activate(TTickProcessorQueue& queue, TInstant now) {
-        Y_VERIFY(!Active);
+        Y_ABORT_UNLESS(!Active);
         LWPROBE(SessionActivate,
                 GetResource()->GetQuoterPath(),
                 GetResource()->GetPath(),
@@ -345,7 +345,7 @@ public:
     }
 
     void Deactivate() {
-        Y_VERIFY(Active);
+        Y_ABORT_UNLESS(Active);
         LWPROBE(SessionDeactivate,
                 GetResource()->GetQuoterPath(),
                 GetResource()->GetPath(),
@@ -549,15 +549,15 @@ TQuoterResourceTree::TQuoterResourceTree(ui64 resourceId, ui64 parentId, NActors
 }
 
 void TQuoterResourceTree::AddChild(TQuoterResourceTree* child) {
-    Y_VERIFY(child->Parent == nullptr);
+    Y_ABORT_UNLESS(child->Parent == nullptr);
     Children.insert(child);
     child->Parent = this;
 }
 
 void TQuoterResourceTree::RemoveChild(TQuoterResourceTree* child) {
-    Y_VERIFY(child->Parent == this);
+    Y_ABORT_UNLESS(child->Parent == this);
     const auto childIt = Children.find(child);
-    Y_VERIFY(childIt != Children.end());
+    Y_ABORT_UNLESS(childIt != Children.end());
     Children.erase(childIt);
     child->Parent = nullptr;
 }
@@ -1092,9 +1092,9 @@ bool TQuoterResources::Exists(ui64 resourceId) const {
 
 TQuoterResourceTree* TQuoterResources::LoadResource(ui64 resourceId, ui64 parentId, const NKikimrKesus::TStreamingQuoterResource& props) {
     auto resource = CreateResource(resourceId, parentId, Kesus, BillSink, props);
-    Y_VERIFY(!Exists(resource->GetResourceId()),
+    Y_ABORT_UNLESS(!Exists(resource->GetResourceId()),
          "Resource \"%s\" has duplicated id: %" PRIu64, resource->GetPath().c_str(), resourceId);
-    Y_VERIFY(!props.GetResourcePath().empty(),
+    Y_ABORT_UNLESS(!props.GetResourcePath().empty(),
          "Resource %" PRIu64 " has empty path", resourceId);
     TQuoterResourceTree* res = resource.Get();
     ResourcesByPath.emplace(props.GetResourcePath(), resource.Get());
@@ -1175,7 +1175,7 @@ bool TQuoterResources::DeleteResource(TQuoterResourceTree* resource, TString& er
     for (const auto& [clientId, _] : sessions) {
         const auto sessionId = TQuoterSessionId{clientId, resource->GetResourceId()};
         const auto sessionIt = Sessions.find(sessionId);
-        Y_VERIFY(sessionIt != Sessions.end());
+        Y_ABORT_UNLESS(sessionIt != Sessions.end());
         TQuoterSession* session = sessionIt->second.Get();
         session->CloseSession(Ydb::StatusIds::NOT_FOUND, closeReason);
         const NActors::TActorId pipeServerId = session->SetPipeServerId({});
@@ -1184,13 +1184,13 @@ bool TQuoterResources::DeleteResource(TQuoterResourceTree* resource, TString& er
     }
 
     const auto resByPathIt = ResourcesByPath.find(resource->GetPath());
-    Y_VERIFY(resByPathIt != ResourcesByPath.end());
-    Y_VERIFY(resByPathIt->second == resource);
+    Y_ABORT_UNLESS(resByPathIt != ResourcesByPath.end());
+    Y_ABORT_UNLESS(resByPathIt->second == resource);
     ResourcesByPath.erase(resByPathIt);
 
     const auto resByIdIt = ResourcesById.find(resource->GetResourceId());
-    Y_VERIFY(resByIdIt != ResourcesById.end());
-    Y_VERIFY(resByIdIt->second.Get() == resource);
+    Y_ABORT_UNLESS(resByIdIt != ResourcesById.end());
+    Y_ABORT_UNLESS(resByIdIt->second.Get() == resource);
     ResourcesById.erase(resByIdIt);
     return true;
 }
@@ -1206,7 +1206,7 @@ void TQuoterResources::ConstructTrees() {
     for (auto&& [id, resource] : ResourcesById) {
         if (resource->GetParentId()) {
             const auto parent = ResourcesById.find(resource->GetParentId());
-            Y_VERIFY(parent != ResourcesById.end(),
+            Y_ABORT_UNLESS(parent != ResourcesById.end(),
                  "Parent %" PRIu64 " was not found for resource %" PRIu64 " (\"%s\")",
                      resource->GetParentId(), resource->GetResourceId(), resource->GetPath().c_str());
             parent->second->AddChild(resource.Get());
@@ -1281,7 +1281,7 @@ void TQuoterResources::OnUpdateResourceProps(TQuoterResourceTree* rootResource) 
     const ui64 resId = rootResource->GetResourceId();
     for (const auto& [sessionActor, _] : rootResource->GetSessions()) {
         TQuoterSession* session = FindSession(sessionActor, resId);
-        Y_VERIFY(session);
+        Y_ABORT_UNLESS(session);
         session->OnPropsChanged();
     }
     for (TQuoterResourceTree* child : rootResource->GetChildren()) {
@@ -1362,7 +1362,7 @@ void TQuoterResources::DisconnectSession(const NActors::TActorId& pipeServerId) 
 
         {
             const auto sessionIter = Sessions.find(sessionId);
-            Y_VERIFY(sessionIter != Sessions.end());
+            Y_ABORT_UNLESS(sessionIter != Sessions.end());
             TQuoterSession* session = sessionIter->second.Get();
             session->GetResource()->OnSessionDisconnected(sessionClientId);
             session->CloseSession(Ydb::StatusIds::SESSION_EXPIRED, "Disconected.");

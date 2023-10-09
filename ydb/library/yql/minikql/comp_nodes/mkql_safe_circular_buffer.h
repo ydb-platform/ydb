@@ -18,7 +18,7 @@ public:
         , Count(initSize)
     {
         if (!Unbounded) {
-            Y_VERIFY(initSize <= *size);
+            Y_ABORT_UNLESS(initSize <= *size);
         }
     }
 
@@ -28,7 +28,7 @@ public:
 
     void PushBack(T&& data) {
         if (Unbounded) {
-            Y_VERIFY(Head + Count == Size());
+            Y_ABORT_UNLESS(Head + Count == Size());
             Buffer.emplace_back(std::move(data));
         } else {
             YQL_ENSURE(!IsFull());
@@ -93,7 +93,7 @@ private:
 
     size_t RealIndex(size_t index) const {
         auto size = Size();
-        Y_VERIFY(size);
+        Y_ABORT_UNLESS(size);
         return index % size;
     }
 

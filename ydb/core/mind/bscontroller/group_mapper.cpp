@@ -364,8 +364,8 @@ namespace NKikimr::NBsController {
                     }
                 }
 
-                Y_VERIFY(domainOrderNumber == Topology.GetTotalFailDomainsNum());
-                Y_VERIFY(orderNumber == Topology.GetTotalVDisksNum());
+                Y_ABORT_UNLESS(domainOrderNumber == Topology.GetTotalFailDomainsNum());
+                Y_ABORT_UNLESS(orderNumber == Topology.GetTotalVDisksNum());
 
                 return true;
             }
@@ -411,7 +411,7 @@ namespace NKikimr::NBsController {
                     TDynBitMap& forbiddenEntities) {
                 // number of enclosed child entities within this one
                 const ui32 entityCount = (Topology.*T::GetEntityCount)();
-                Y_VERIFY(entityCount);
+                Y_ABORT_UNLESS(entityCount);
                 parentEntityIndex *= entityCount;
                 // remember current undo stack size
                 const size_t undoPosition = undo.GetPosition();
@@ -456,7 +456,7 @@ namespace NKikimr::NBsController {
             TAllocateResult AllocateWholeEntity(TAllocateDisk, TGroup& group, TUndoLog& undo, ui32 index, TDiskRange range,
                     TDynBitMap& forbiddenEntities) {
                 TPDiskInfo *pdisk = group[index];
-                Y_VERIFY(!pdisk);
+                Y_ABORT_UNLESS(!pdisk);
                 auto process = [this, &pdisk](TPDiskInfo *candidate) {
                     if (!pdisk || DiskIsBetter(*candidate, *pdisk)) {
                         pdisk = candidate;
@@ -846,16 +846,16 @@ namespace NKikimr::NBsController {
 
         void UnregisterPDisk(TPDiskId pdiskId) {
             const auto it = PDisks.find(pdiskId);
-            Y_VERIFY(it != PDisks.end());
+            Y_ABORT_UNLESS(it != PDisks.end());
             auto x = std::remove(PDiskByPosition.begin(), PDiskByPosition.end(), std::make_pair(it->second.Position, &it->second));
-            Y_VERIFY(x + 1 == PDiskByPosition.end());
+            Y_ABORT_UNLESS(x + 1 == PDiskByPosition.end());
             PDiskByPosition.pop_back();
             PDisks.erase(it);
         }
 
         void AdjustSpaceAvailable(TPDiskId pdiskId, i64 increment) {
             const auto it = PDisks.find(pdiskId);
-            Y_VERIFY(it != PDisks.end());
+            Y_ABORT_UNLESS(it != PDisks.end());
             it->second.SpaceAvailable += increment;
         }
 
@@ -971,7 +971,7 @@ namespace NKikimr::NBsController {
             if (result) {
                 for (const auto& [vdiskId, pdiskId] : replacedDisks) {
                     const auto it = PDisks.find(pdiskId);
-                    Y_VERIFY(it != PDisks.end());
+                    Y_ABORT_UNLESS(it != PDisks.end());
                     TPDiskInfo& pdisk = it->second;
                     --pdisk.NumSlots;
                     pdisk.EraseGroup(groupId);
@@ -985,7 +985,7 @@ namespace NKikimr::NBsController {
                         pdisk->InsertGroup(groupId);
                     }
                 }
-                Y_VERIFY(numZero == allocator.Topology.GetTotalVDisksNum() || numZero == replacedDisks.size());
+                Y_ABORT_UNLESS(numZero == allocator.Topology.GetTotalVDisksNum() || numZero == replacedDisks.size());
                 allocator.Decompose(*result, groupDefinition);
                 return true;
             } else {
@@ -1076,14 +1076,14 @@ namespace NKikimr::NBsController {
                 if (group[orderNum]) {
                     TPDiskId pdiskId = group[orderNum]->PDiskId;
                     const auto it = PDisks.find(pdiskId);
-                    Y_VERIFY(it != PDisks.end());
+                    Y_ABORT_UNLESS(it != PDisks.end());
                     TPDiskInfo& pdisk = it->second;
                     --pdisk.NumSlots;
                     pdisk.EraseGroup(groupId);
                 }
                 {
                     const auto it = PDisks.find(*result);
-                    Y_VERIFY(it != PDisks.end());
+                    Y_ABORT_UNLESS(it != PDisks.end());
                     TPDiskInfo& pdisk = it->second;
                     ++pdisk.NumSlots;
                     pdisk.InsertGroup(groupId);

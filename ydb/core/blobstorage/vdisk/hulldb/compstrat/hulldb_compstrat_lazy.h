@@ -92,7 +92,7 @@ namespace NKikimr {
             TTask *Task;
 
             double CompactionScoreBasedOnFreeLevels(ui32 freeLevels, ui32 totalLevels) {
-                Y_VERIFY(freeLevels <= totalLevels);
+                Y_ABORT_UNLESS(freeLevels <= totalLevels);
                 if (freeLevels == 0) {
                     return 1000000.0;
                 } else {
@@ -136,7 +136,7 @@ namespace NKikimr {
                     }
                 }
 
-                Y_VERIFY(sortedLevelsNum + 1 < layer1Levels);
+                Y_ABORT_UNLESS(sortedLevelsNum + 1 < layer1Levels);
                 return sortedLevelsNum + 1;
             }
 
@@ -153,7 +153,7 @@ namespace NKikimr {
                     added++;
                     it.Next();
                 }
-                Y_VERIFY(added > 0);
+                Y_ABORT_UNLESS(added > 0);
                 return added;
             }
 
@@ -244,7 +244,7 @@ namespace NKikimr {
             // Calculate free levels
             ui32 FreeLevels(ui32 layer1Levels, ui32 layer2Levels) {
                 ui32 sortedLevelsNum = LevelSnap.SliceSnap.GetLevelXNumber();
-                Y_VERIFY(layer1Levels + layer2Levels >= sortedLevelsNum);
+                Y_ABORT_UNLESS(layer1Levels + layer2Levels >= sortedLevelsNum);
 
                 if (sortedLevelsNum > layer1Levels) {
                     ui32 freeLevels = 0;

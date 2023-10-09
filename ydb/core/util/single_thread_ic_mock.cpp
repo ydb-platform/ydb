@@ -76,8 +76,8 @@ public:
 
     TSessionActor *GetSession() {
         if (!SessionActor && Working && Peer && Peer->Working) {
-            Y_VERIFY(PendingEvents.empty());
-            Y_VERIFY(Peer->PendingEvents.empty());
+            Y_ABORT_UNLESS(PendingEvents.empty());
+            Y_ABORT_UNLESS(Peer->PendingEvents.empty());
             CreateSession();
             Peer->CreateSession();
         }
@@ -212,8 +212,8 @@ public:
                 (Cookie, ev->Cookie));
 
             const TInstant now = TActivationContext::Now();
-            Y_VERIFY(now == NextSendTimestamp);
-            Y_VERIFY(Proxy->Peer && Proxy->Peer->SessionActor);
+            Y_ABORT_UNLESS(now == NextSendTimestamp);
+            Y_ABORT_UNLESS(Proxy->Peer && Proxy->Peer->SessionActor);
             const_cast<TScopeId&>(ev->OriginScopeId) = Proxy->Common->LocalScopeId;
             Proxy->Peer->SessionActor->PutToInbox(ev);
 
@@ -259,7 +259,7 @@ public:
     void HandleReceive(TAutoPtr<IEventHandle> ev) {
         while (ev) {
             const TInstant now = TActivationContext::Now();
-            Y_VERIFY(now == NextReceiveTimestamp);
+            Y_ABORT_UNLESS(now == NextReceiveTimestamp);
 
             auto fw = std::make_unique<IEventHandle>(
                 SelfId(),
@@ -337,8 +337,8 @@ public:
 
 TMock::TProxyActor::~TProxyActor() {
     const auto it = Mock->Proxies.find({Node->NodeId, PeerNodeId});
-    Y_VERIFY(it != Mock->Proxies.end());
-    Y_VERIFY(it->second == this);
+    Y_ABORT_UNLESS(it != Mock->Proxies.end());
+    Y_ABORT_UNLESS(it->second == this);
     Mock->Proxies.erase(it);
 
     if (Peer) {
@@ -349,9 +349,9 @@ TMock::TProxyActor::~TProxyActor() {
 }
 
 void TMock::TProxyActor::CreateSession() {
-    Y_VERIFY(SelfId());
-    Y_VERIFY(Working);
-    Y_VERIFY(!SessionActor);
+    Y_ABORT_UNLESS(SelfId());
+    Y_ABORT_UNLESS(Working);
+    Y_ABORT_UNLESS(!SessionActor);
     SessionActor = new TSessionActor(this);
     const TActorId self = SelfId();
     Mock->TestActorSystem->Register(SessionActor, self, self.PoolID(), self.Hint(), Node->NodeId);
@@ -403,13 +403,13 @@ void TMock::TProxyActor::HandleDropPendingEvents(TAutoPtr<IEventHandle> ev) {
 void TMock::TProxyActor::ProcessPendingEvents() {
     for (auto& ev : std::exchange(PendingEvents, {})) {
         TSessionActor *session = GetSession();
-        Y_VERIFY(session);
+        Y_ABORT_UNLESS(session);
         Mock->TestActorSystem->Send(ev.release(), Node->NodeId);
     }
 }
 
 void TMock::TProxyActor::ShutdownConnection() {
-    Y_VERIFY(Peer && ((SessionActor && Peer->SessionActor) || (!SessionActor && !Peer->SessionActor)));
+    Y_ABORT_UNLESS(Peer && ((SessionActor && Peer->SessionActor) || (!SessionActor && !Peer->SessionActor)));
     DetachSessionActor();
     Peer->DetachSessionActor();
 }
@@ -432,10 +432,10 @@ TMock::~TSingleThreadInterconnectMock()
 
 std::unique_ptr<IActor> TMock::CreateProxyActor(ui32 nodeId, ui32 peerNodeId,
         TIntrusivePtr<TInterconnectProxyCommon> common) {
-    Y_VERIFY(nodeId != peerNodeId);
+    Y_ABORT_UNLESS(nodeId != peerNodeId);
 
     auto& ptr = Proxies[{nodeId, peerNodeId}];
-    Y_VERIFY(!ptr); // no multiple proxies for the same direction are allowed
+    Y_ABORT_UNLESS(!ptr); // no multiple proxies for the same direction are allowed
 
     auto& node = Nodes[nodeId];
     if (!node) {

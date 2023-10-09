@@ -75,7 +75,7 @@ namespace NTabletFlatExecutor {
 
         ~TOpsCompact()
         {
-            // Y_VERIFY(!Driver, "TOpsCompact is still running under scan");
+            // Y_ABORT_UNLESS(!Driver, "TOpsCompact is still running under scan");
         }
 
         void Describe(IOutputStream &out) const noexcept override
@@ -114,7 +114,7 @@ namespace NTabletFlatExecutor {
         EScan Seek(TLead &lead, ui64 seq) noexcept override
         {
             if (seq == 0) /* on first Seek() init compaction */ {
-                Y_VERIFY(!Writer, "Initial IScan::Seek(...) called twice");
+                Y_ABORT_UNLESS(!Writer, "Initial IScan::Seek(...) called twice");
 
                 const auto tags = Scheme->Tags();
 
@@ -130,7 +130,7 @@ namespace NTabletFlatExecutor {
                 if (!Finished) {
                     WriteStats = Writer->Finish();
                     Results = Bundle->Results();
-                    Y_VERIFY(WriteStats.Parts == Results.size());
+                    Y_ABORT_UNLESS(WriteStats.Parts == Results.size());
                     WriteTxStatus();
                     Finished = true;
                 }
@@ -202,7 +202,7 @@ namespace NTabletFlatExecutor {
 
                 for (ui64 txId : DeltasOrder) {
                     auto it = Deltas.find(txId);
-                    Y_VERIFY(it != Deltas.end(), "Unexpected failure to find txId %" PRIu64, txId);
+                    Y_ABORT_UNLESS(it != Deltas.end(), "Unexpected failure to find txId %" PRIu64, txId);
                     Writer->AddKeyDelta(it->second, txId);
                 }
 
@@ -307,7 +307,7 @@ namespace NTabletFlatExecutor {
                     std::move(YellowMoveChannels), std::move(YellowStopChannels));
 
             for (auto &result : Results) {
-                Y_VERIFY(result.PageCollections, "Compaction produced a part without page collections");
+                Y_ABORT_UNLESS(result.PageCollections, "Compaction produced a part without page collections");
 
                 NTable::TLoader loader(
                     std::move(result.PageCollections),
@@ -316,12 +316,12 @@ namespace NTabletFlatExecutor {
 
                 auto fetch = loader.Run();
 
-                Y_VERIFY(!fetch, "Just compacted part needs to load some pages");
+                Y_ABORT_UNLESS(!fetch, "Just compacted part needs to load some pages");
 
                 auto& res = prod->Results.emplace_back();
                 res.Part = loader.Result();
                 res.Growth = std::move(result.Growth);
-                Y_VERIFY(res.Part, "Unexpected result without a part after compaction");
+                Y_ABORT_UNLESS(res.Part, "Unexpected result without a part after compaction");
             }
 
             prod->TxStatus = std::move(TxStatus);
@@ -473,7 +473,7 @@ namespace NTabletFlatExecutor {
 
         void FlushToBs(NPageCollection::TGlob&& glob) noexcept
         {
-            Y_VERIFY(glob.GId.Logo.BlobSize() == glob.Data.size(),
+            Y_ABORT_UNLESS(glob.GId.Logo.BlobSize() == glob.Data.size(),
                 "Written LogoBlob size doesn't match id");
 
             Flushing += glob.GId.Logo.BlobSize();

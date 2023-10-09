@@ -13,10 +13,10 @@ virtual void Scenario(const TActorContext &ctx) {
     // check compaction result
     auto check = [] (TEvBlobStorage::TEvVDefragResult::TPtr &ev) {
         const auto &rec = ev->Get()->Record;
-        Y_VERIFY(rec.GetEof());
-        Y_VERIFY(rec.GetFoundChunksToDefrag() == 0);
-        Y_VERIFY(rec.GetRewrittenRecs() == 0);
-        Y_VERIFY(rec.GetRewrittenBytes() == 0);
+        Y_ABORT_UNLESS(rec.GetEof());
+        Y_ABORT_UNLESS(rec.GetFoundChunksToDefrag() == 0);
+        Y_ABORT_UNLESS(rec.GetRewrittenRecs() == 0);
+        Y_ABORT_UNLESS(rec.GetRewrittenBytes() == 0);
     };
 
     TAutoPtr<IActor> defragCmd(CreateDefrag(SyncRunner->NotifyID(), Conf, true, check));

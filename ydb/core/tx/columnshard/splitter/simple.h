@@ -28,9 +28,9 @@ public:
         : SlicedBatch(batch)
         , SerializedChunk(std::move(serializedChunk))
     {
-        Y_VERIFY(SlicedBatch);
-        Y_VERIFY(SlicedBatch->num_columns() == 1);
-        Y_VERIFY(SlicedBatch->num_rows());
+        Y_ABORT_UNLESS(SlicedBatch);
+        Y_ABORT_UNLESS(SlicedBatch->num_columns() == 1);
+        Y_ABORT_UNLESS(SlicedBatch->num_rows());
 
     }
 
@@ -63,9 +63,9 @@ public:
         , PackSize(packSize)
         , ObjectsCount(objectsCount)
     {
-        Y_VERIFY(objectsCount >= packsCount);
-        Y_VERIFY(PackSize);
-        Y_VERIFY(PacksCount);
+        Y_ABORT_UNLESS(objectsCount >= packsCount);
+        Y_ABORT_UNLESS(PackSize);
+        Y_ABORT_UNLESS(PacksCount);
     }
 
     class TIterator {
@@ -88,13 +88,13 @@ public:
             if (Position < Owner.GetObjectsCount() && PackIdx < Owner.GetPacksCount()) {
                 return true;
             } else {
-                Y_VERIFY(Position == Owner.GetObjectsCount() && PackIdx == Owner.GetPacksCount());
+                Y_ABORT_UNLESS(Position == Owner.GetObjectsCount() && PackIdx == Owner.GetPacksCount());
                 return false;
             }
         }
 
         bool Next() {
-            Y_VERIFY(IsValid());
+            Y_ABORT_UNLESS(IsValid());
             Position += CurrentPackSize;
             ++PackIdx;
             InitPack();

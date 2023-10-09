@@ -128,8 +128,8 @@ inline void* TSystemMmap::Mmap(size_t size)
 
 inline int TSystemMmap::Munmap(void* addr, size_t size)
 {
-    Y_VERIFY(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
-    Y_VERIFY(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
+    Y_ABORT_UNLESS(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
+    Y_ABORT_UNLESS(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
     return !::VirtualFree(addr, size, MEM_DECOMMIT);
 }
 #else
@@ -490,7 +490,7 @@ void TAlignedPagePoolImpl<T>::Free(void* ptr, size_t size) noexcept {
         Y_VERIFY_DEBUG(level >= 1 && level <= MidLevels);
         TGlobalPools<T>::Instance().Get(level).PushPage(ptr);
     } else {
-        Y_VERIFY(!T::Munmap(ptr, size));
+        Y_ABORT_UNLESS(!T::Munmap(ptr, size));
     }
 
     Y_VERIFY_DEBUG(TotalAllocated >= size);

@@ -197,7 +197,7 @@ void TMessageBusServerRequest::Handle(TMiniKQLCompileServiceEvents::TEvCompileSt
     const bool need2CompileProgram = (bool)TextProgramForCompilation;
     const bool need2CompileParams = mkqlTx->HasParams() && mkqlTx->GetParams().HasText();
     const TString& pgm = ev->Get()->Program;
-    Y_VERIFY((need2CompileProgram && TextProgramForCompilation == pgm) // TODO: do not check texts, trust cookies
+    Y_ABORT_UNLESS((need2CompileProgram && TextProgramForCompilation == pgm) // TODO: do not check texts, trust cookies
         || (need2CompileParams && mkqlTx->GetParams().GetText() == pgm));
 
     if (need2CompileProgram && TextProgramForCompilation == pgm) {

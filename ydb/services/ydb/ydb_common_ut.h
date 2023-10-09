@@ -276,21 +276,21 @@ struct TTestOlap {
 
                 std::string ts = std::string("1970-01-01T00:00:00.") + std::string(us.data(), us.size());
 
-                Y_VERIFY(NArrow::Append<arrow::BinaryType>(*builders[0], ts));
-                Y_VERIFY(NArrow::Append<arrow::BinaryType>(*builders[7], ts));
-                Y_VERIFY(NArrow::Append<arrow::BinaryType>(*builders[8], ts));
+                Y_ABORT_UNLESS(NArrow::Append<arrow::BinaryType>(*builders[0], ts));
+                Y_ABORT_UNLESS(NArrow::Append<arrow::BinaryType>(*builders[7], ts));
+                Y_ABORT_UNLESS(NArrow::Append<arrow::BinaryType>(*builders[8], ts));
             } else {
-                Y_VERIFY(NArrow::Append<arrow::TimestampType>(*builders[0], i));
-                Y_VERIFY(NArrow::Append<arrow::TimestampType>(*builders[7], i));
-                Y_VERIFY(NArrow::Append<arrow::TimestampType>(*builders[8], i));
+                Y_ABORT_UNLESS(NArrow::Append<arrow::TimestampType>(*builders[0], i));
+                Y_ABORT_UNLESS(NArrow::Append<arrow::TimestampType>(*builders[7], i));
+                Y_ABORT_UNLESS(NArrow::Append<arrow::TimestampType>(*builders[8], i));
             }
-            Y_VERIFY(NArrow::Append<arrow::StringType>(*builders[1], s));
-            Y_VERIFY(NArrow::Append<arrow::StringType>(*builders[2], s));
-            Y_VERIFY(NArrow::Append<arrow::StringType>(*builders[3], s));
-            Y_VERIFY(NArrow::Append<arrow::Int32Type>(*builders[4], i));
-            Y_VERIFY(NArrow::Append<arrow::StringType>(*builders[5], s + "str"));
-            Y_VERIFY(NArrow::Append<arrow::BinaryType>(*builders[6], "{ \"value\": " + s + " }"));
-            Y_VERIFY(NArrow::Append<arrow::StringType>(*builders[9], s + "str"));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[1], s));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[2], s));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[3], s));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::Int32Type>(*builders[4], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[5], s + "str"));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::BinaryType>(*builders[6], "{ \"value\": " + s + " }"));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[9], s + "str"));
         }
 
         return arrow::RecordBatch::Make(schema, rowsCount, NArrow::Finish(std::move(builders)));
@@ -298,17 +298,17 @@ struct TTestOlap {
 
     static TString ToCSV(const std::shared_ptr<arrow::RecordBatch>& batch, bool withHeader = false) {
         auto res1 = arrow::io::BufferOutputStream::Create();
-        Y_VERIFY(res1.ok());
+        Y_ABORT_UNLESS(res1.ok());
         std::shared_ptr<arrow::io::BufferOutputStream> outStream = *res1;
 
         arrow::csv::WriteOptions options = arrow::csv::WriteOptions::Defaults();
         options.include_header = withHeader;
 
         auto status = arrow::csv::WriteCSV(*batch, options, outStream.get());
-        Y_VERIFY(status.ok(), "%s", status.ToString().c_str());
+        Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str());
 
         auto res2 = outStream->Finish();
-        Y_VERIFY(res2.ok());
+        Y_ABORT_UNLESS(res2.ok());
 
         std::shared_ptr<arrow::Buffer> buffer = *res2;
         TString out((const char*)buffer->data(), buffer->size());

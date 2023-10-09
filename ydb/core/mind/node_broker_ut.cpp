@@ -1122,7 +1122,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
 
             void WaitCacheRequests() {
                 while (!HasCacheRequests()) {
-                    Y_VERIFY(Installed);
+                    Y_ABORT_UNLESS(Installed);
                     TDispatchOptions options;
                     options.CustomFinalCondition = [this]() {
                         return HasCacheRequests();

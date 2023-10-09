@@ -34,7 +34,7 @@ public:
     template <class TObject>
     static bool DeserializeFromRecord(TObject& object, const TTableRecord& tr) {
         auto rs = tr.BuildRecordSet();
-        Y_VERIFY(rs.rows().size() == 1);
+        Y_ABORT_UNLESS(rs.rows().size() == 1);
         typename TObject::TDecoder decoder(rs);
         return object.DeserializeFromRecord(decoder, rs.rows()[0]);
     }

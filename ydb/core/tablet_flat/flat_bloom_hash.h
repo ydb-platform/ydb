@@ -31,7 +31,7 @@ namespace NBloom {
 
         inline TStringBuf Get(ui32 len) const noexcept
         {
-            Y_VERIFY(len > 0 && len <= Offsets.size());
+            Y_ABORT_UNLESS(len > 0 && len <= Offsets.size());
 
             return { Buffer.data(), Buffer.data() + Offsets[len - 1] };
         }

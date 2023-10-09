@@ -151,7 +151,7 @@ namespace NKikimr {
                 NRepl::TRecoveryMachine::TRecoveredBlobsQueue rbq;
                 NMatrix::TVectorType parts;
                 const bool success = m.Recover(p, rbq, parts);
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
 
                 ui8 partIndex;
                 for (partIndex = 0; partIndex < groupInfo->Type.BlobSubgroupSize(); ++partIndex) {

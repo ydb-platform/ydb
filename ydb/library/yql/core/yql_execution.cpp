@@ -135,7 +135,7 @@ public:
             YQL_ENSURE(asyncIt != AsyncNodes.end());
             TExprNode::TPtr callableOutput;
             auto status = item.DataProvider->GetCallableExecutionTransformer().ApplyAsyncChanges(item.Node, callableOutput, ctx);
-            Y_VERIFY(callableOutput);
+            Y_ABORT_UNLESS(callableOutput);
             YQL_ENSURE(status != TStatus::Async);
             combinedStatus = combinedStatus.Combine(status);
             if (status.Level == TStatus::Error) {

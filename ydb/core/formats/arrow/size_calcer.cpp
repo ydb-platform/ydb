@@ -50,7 +50,7 @@ TSplitBlobResult SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batc
 }
 
 ui32 TRowSizeCalculator::GetRowBitWidth(const ui32 row) const {
-    Y_VERIFY(Prepared);
+    Y_ABORT_UNLESS(Prepared);
     ui32 result = CommonSize;
     for (auto&& c : BinaryColumns) {
         result += GetBitWidthAligned(c->GetView(row).size() * 8);

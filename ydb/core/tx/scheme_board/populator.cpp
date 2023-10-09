@@ -344,7 +344,7 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
                         info = update.AddVersions();
                     }
 
-                    Y_VERIFY(info);
+                    Y_ABORT_UNLESS(info);
                     info->SetVersion(version);
                     info->AddTxIds(txId);
                     prevVersion = version;
@@ -507,14 +507,14 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
     void Update(const TPathId pathId, const bool isDeletion, const ui64 cookie) {
         auto it = Descriptions.find(pathId);
-        Y_VERIFY(it != Descriptions.end());
+        Y_ABORT_UNLESS(it != Descriptions.end());
 
         const auto& record = it->second.Record;
 
         TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, record.GetPath());
         for (const auto& replica : replicas) {
             const TActorId* replicaPopulator = ReplicaToReplicaPopulator.FindPtr(replica);
-            Y_VERIFY(replicaPopulator != nullptr);
+            Y_ABORT_UNLESS(replicaPopulator != nullptr);
 
             auto update = MakeHolder<TSchemeBoardEvents::TEvUpdateBuilder>(Owner, Generation, record, isDeletion);
             if (!isDeletion) {

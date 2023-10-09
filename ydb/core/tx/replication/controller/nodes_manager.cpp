@@ -10,7 +10,7 @@ bool TNodesManager::HasTenant(const TString& tenant) const {
 }
 
 const THashSet<ui32>& TNodesManager::GetNodes(const TString& tenant) const {
-    Y_VERIFY(HasTenant(tenant));
+    Y_ABORT_UNLESS(HasTenant(tenant));
     return TenantNodes.at(tenant);
 }
 
@@ -22,9 +22,9 @@ void TNodesManager::DiscoverNodes(const TString& tenant, const TActorId& cache, 
 }
 
 void TNodesManager::ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
-    Y_VERIFY(ev->Get()->CachedMessageData);
-    Y_VERIFY(!ev->Get()->CachedMessageData->InfoEntries.empty());
-    Y_VERIFY(ev->Get()->CachedMessageData->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+    Y_ABORT_UNLESS(ev->Get()->CachedMessageData);
+    Y_ABORT_UNLESS(!ev->Get()->CachedMessageData->InfoEntries.empty());
+    Y_ABORT_UNLESS(ev->Get()->CachedMessageData->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
 
     auto it = NodeDiscoverers.find(ev->Sender);
     if (it == NodeDiscoverers.end()) {

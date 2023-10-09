@@ -10,11 +10,11 @@ namespace NSchemeCache {
 TSchemeCacheConfig::TSchemeCacheConfig(const TAppData* appData, ::NMonitoring::TDynamicCounterPtr counters)
     : Counters(counters)
 {
-    Y_VERIFY(appData);
-    Y_VERIFY(appData->DomainsInfo);
+    Y_ABORT_UNLESS(appData);
+    Y_ABORT_UNLESS(appData->DomainsInfo);
 
     for (const auto& [_, domain] : appData->DomainsInfo->Domains) {
-        Y_VERIFY(domain);
+        Y_ABORT_UNLESS(domain);
 
         if (!domain->SchemeRoot) {
             continue;

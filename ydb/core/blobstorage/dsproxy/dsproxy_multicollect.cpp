@@ -51,9 +51,9 @@ class TBlobStorageGroupMultiCollectRequest
             return;
         }
 
-        Y_VERIFY(ev->Cookie < RequestInfos.size());
+        Y_ABORT_UNLESS(ev->Cookie < RequestInfos.size());
         TRequestInfo &info = RequestInfos[ev->Cookie];
-        Y_VERIFY(!info.IsReplied);
+        Y_ABORT_UNLESS(!info.IsReplied);
         info.IsReplied = true;
 
         if (FlagRequestsInFlight) {
@@ -67,7 +67,7 @@ class TBlobStorageGroupMultiCollectRequest
             }
         } else {
             CollectRequestsInFlight--;
-            Y_VERIFY(CollectRequestsInFlight == 0);
+            Y_ABORT_UNLESS(CollectRequestsInFlight == 0);
             ReplyAndDie(NKikimrProto::OK);
         }
     }
@@ -117,7 +117,7 @@ public:
         , CollectRequestsInFlight(0)
         , StartTime(now)
     {
-        Y_VERIFY(Iterations > 1);
+        Y_ABORT_UNLESS(Iterations > 1);
     }
 
     void SendRequest(ui64 idx, bool withCollect) {
@@ -166,10 +166,10 @@ public:
             << " ev# " << ev->ToString());
         SendToProxy(std::move(ev), cookie, Span.GetTraceId());
 
-        Y_VERIFY(idx < Iterations - 1 ? !isCollect : isCollect || !Collect);
+        Y_ABORT_UNLESS(idx < Iterations - 1 ? !isCollect : isCollect || !Collect);
 
         if (isCollect) {
-            Y_VERIFY(!FlagRequestsInFlight);
+            Y_ABORT_UNLESS(!FlagRequestsInFlight);
             CollectRequestsInFlight++;
         } else {
             FlagRequestsInFlight++;

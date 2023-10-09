@@ -160,8 +160,8 @@ void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg, const
 }
 
 void TMirrorer::AfterSuccesWrite(const TActorContext& ctx) {
-    Y_VERIFY(WriteInFlight.empty());
-    Y_VERIFY(WriteRequestInFlight);
+    Y_ABORT_UNLESS(WriteInFlight.empty());
+    Y_ABORT_UNLESS(WriteRequestInFlight);
     LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
         << " written " <<  WriteRequestInFlight.value().CmdWriteSize()
         << " messages with first offset=" << WriteRequestInFlight.value().GetCmdWriteOffset()
@@ -203,7 +203,7 @@ void TMirrorer::ProcessWriteResponse(
             MirrorerTimeLags->IncFor(lag.MilliSeconds(), 1);
         }
         ui64 offset = writtenMessageInfo.GetOffset();
-        Y_VERIFY((ui64)result.GetOffset() == offset);
+        Y_ABORT_UNLESS((ui64)result.GetOffset() == offset);
         Y_VERIFY_S(EndOffset <= offset, MirrorerDescription()
             << "end offset more the written " << EndOffset << ">" << offset);
         EndOffset = offset + 1;
@@ -383,7 +383,7 @@ void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, c
     CredentialsProvider = nullptr;
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
-    Y_VERIFY(factory);
+    Y_ABORT_UNLESS(factory);
     auto future = factory->GetCredentialsProvider(Config.GetCredentials());
     future.Subscribe(
         [
@@ -423,7 +423,7 @@ void TMirrorer::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev,
 }
 
 void TMirrorer::RetryWrite(const TActorContext& ctx) {
-    Y_VERIFY(WriteRequestInFlight);
+    Y_ABORT_UNLESS(WriteRequestInFlight);
 
     THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
     auto req = request->Record.MutablePartitionRequest();
@@ -450,7 +450,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
         OffsetToRead = Queue.front().GetOffset();
         while (!Queue.empty()) {
             ui64 dataSize = Queue.back().GetData().size();
-            Y_VERIFY(BytesInFlight >= dataSize);
+            Y_ABORT_UNLESS(BytesInFlight >= dataSize);
             BytesInFlight -= dataSize;
             Queue.pop_back();
         }
@@ -462,7 +462,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     PartitionStream.Reset();
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
-    Y_VERIFY(factory);
+    Y_ABORT_UNLESS(factory);
 
     TLog log(MakeHolder<TDeferredActorLogBackend>(
         factory->GetSharedActorSystem(),
@@ -519,7 +519,7 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
 void TMirrorer::AddMessagesToQueue(TVector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
-        Y_VERIFY(OffsetToRead <= offset);
+        Y_ABORT_UNLESS(OffsetToRead <= offset);
         ui64 messageSize = msg.GetData().size();
 
         Counters.Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Increment(messageSize);

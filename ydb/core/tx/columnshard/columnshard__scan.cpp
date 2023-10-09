@@ -97,7 +97,7 @@ public:
         ScanActorId = ctx.SelfID;
         Schedule(Deadline, new TEvents::TEvWakeup);
 
-        Y_VERIFY(!ScanIterator);
+        Y_ABORT_UNLESS(!ScanIterator);
         MemoryAccessor = std::make_shared<NOlap::TActorBasedMemoryAccesor>(SelfId(), "CSScan/Result");
         NOlap::TReadContext context(StoragesManager, ScanCountersPool, MemoryAccessor, false);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
@@ -159,13 +159,13 @@ private:
 
     void HandleScan(TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
         auto g = Stats.MakeGuard("ack");
-        Y_VERIFY(!AckReceivedInstant);
+        Y_ABORT_UNLESS(!AckReceivedInstant);
         AckReceivedInstant = TMonotonic::Now();
 
-        Y_VERIFY(ev->Get()->Generation == ScanGen);
+        Y_ABORT_UNLESS(ev->Get()->Generation == ScanGen);
 
         ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
-        Y_VERIFY(ev->Get()->MaxChunksCount == 1);
+        Y_ABORT_UNLESS(ev->Get()->MaxChunksCount == 1);
         ACFL_DEBUG("event", "TEvScanDataAck")("info", ChunksLimiter.DebugString());
         if (ScanIterator) {
             if (!!ScanIterator->GetAvailableResultsCount() && !*ScanIterator->GetAvailableResultsCount()) {
@@ -183,8 +183,8 @@ private:
         TLogContextGuard gLogging(NActors::TLogContextBuilder::Build()("method", "produce result"));
 
         ACFL_DEBUG("stage", "start")("iterator", ScanIterator->DebugString());
-        Y_VERIFY(!Finished);
-        Y_VERIFY(ScanIterator);
+        Y_ABORT_UNLESS(!Finished);
+        Y_ABORT_UNLESS(ScanIterator);
 
         if (!ChunksLimiter.HasMore()) {
             ACFL_DEBUG("stage", "bytes limit exhausted")("limit", ChunksLimiter.DebugString());
@@ -233,7 +233,7 @@ private:
                 NArrow::TArrowToYdbConverter batchConverter(ResultYqlSchema, *this);
                 TString errStr;
                 bool ok = batchConverter.Process(*batch, errStr);
-                Y_VERIFY(ok, "%s", errStr.c_str());
+                Y_ABORT_UNLESS(ok, "%s", errStr.c_str());
                 break;
             }
             case NKikimrTxDataShard::EScanDataFormat::ARROW: {
@@ -248,7 +248,7 @@ private:
         if (result.GetLastReadKey()) {
             Result->LastKey = ConvertLastKey(result.GetLastReadKey());
         } else {
-            Y_VERIFY(numRows == 0, "Got non-empty result batch without last key");
+            Y_ABORT_UNLESS(numRows == 0, "Got non-empty result batch without last key");
         }
         SendResult(false, false);
         ACFL_DEBUG("stage", "finished")("iterator", ScanIterator->DebugString());
@@ -351,7 +351,7 @@ private:
         if (!Finished && !Result) {
             Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, ScanGen);
             if (reserveRows) {
-                Y_VERIFY(DataFormat != NKikimrTxDataShard::EScanDataFormat::ARROW);
+                Y_ABORT_UNLESS(DataFormat != NKikimrTxDataShard::EScanDataFormat::ARROW);
                 Result->Rows.reserve(reserveRows);
             }
         }
@@ -382,13 +382,13 @@ private:
     }
 
     TOwnedCellVec ConvertLastKey(const std::shared_ptr<arrow::RecordBatch>& lastReadKey) {
-        Y_VERIFY(lastReadKey, "last key must be passed");
+        Y_ABORT_UNLESS(lastReadKey, "last key must be passed");
 
         struct TSingeRowWriter : public IRowWriter {
             TOwnedCellVec Row;
             bool Done = false;
             void AddRow(const TConstArrayRef<TCell>& row) override {
-                Y_VERIFY(!Done);
+                Y_ABORT_UNLESS(!Done);
                 Row = TOwnedCellVec::Make(row);
                 Done = true;
             }
@@ -396,9 +396,9 @@ private:
         NArrow::TArrowToYdbConverter converter(KeyYqlSchema, singleRowWriter);
         TString errStr;
         bool ok = converter.Process(*lastReadKey, errStr);
-        Y_VERIFY(ok, "%s", errStr.c_str());
+        Y_ABORT_UNLESS(ok, "%s", errStr.c_str());
 
-        Y_VERIFY(singleRowWriter.Done);
+        Y_ABORT_UNLESS(singleRowWriter.Done);
         return singleRowWriter.Row;
     }
 
@@ -437,9 +437,9 @@ private:
                 << " finished: " << Result->Finished << " pageFault: " << Result->PageFault
                 << " stats:" << Stats.DebugString();
         } else {
-            Y_VERIFY(ChunksLimiter.Take(Bytes));
+            Y_ABORT_UNLESS(ChunksLimiter.Take(Bytes));
             Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
-            Y_VERIFY(AckReceivedInstant);
+            Y_ABORT_UNLESS(AckReceivedInstant);
             ScanCountersPool.AckWaitingInfo(TMonotonic::Now() - *AckReceivedInstant);
         }
         AckReceivedInstant.reset();
@@ -509,9 +509,9 @@ private:
         }
 
         void Return(const ui64 bytes) {
-            Y_VERIFY(InFlightGlobal.Sub(bytes) >= 0);
+            Y_ABORT_UNLESS(InFlightGlobal.Sub(bytes) >= 0);
             InFlightGuarded -= bytes;
-            Y_VERIFY(InFlightGuarded >= 0);
+            Y_ABORT_UNLESS(InFlightGuarded >= 0);
         }
     };
 
@@ -676,7 +676,7 @@ private:
                 if (!Owner.SectionFirst.contains(SectionName)) {
                     Owner.SectionFirst.emplace(SectionName, Start);
                 }
-                Y_VERIFY(Owner.StartGuards.emplace(SectionName, Start).second);
+                Y_ABORT_UNLESS(Owner.StartGuards.emplace(SectionName, Start).second);
             }
 
             ~TGuard() {
@@ -695,14 +695,14 @@ private:
             ++RequestsCount;
             const TInstant now = Now();
             for (auto&& i : ranges) {
-                Y_VERIFY(StartBlobRequest.emplace(i, now).second);
+                Y_ABORT_UNLESS(StartBlobRequest.emplace(i, now).second);
                 RequestedBytes += i.Size;
             }
         }
 
         void BlobReceived(const NBlobCache::TBlobRange& br, const bool fromCache, const TInstant replyInstant) {
             auto it = StartBlobRequest.find(br);
-            Y_VERIFY(it != StartBlobRequest.end());
+            Y_ABORT_UNLESS(it != StartBlobRequest.end());
             const TDuration d = replyInstant - it->second;
             if (fromCache) {
                 CacheBlobs.Received(br, d);
@@ -713,7 +713,7 @@ private:
         }
 
         void Finish() {
-            Y_VERIFY(!FinishInstant);
+            Y_ABORT_UNLESS(!FinishInstant);
             FinishInstant = Now();
         }
     };
@@ -892,7 +892,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
         }
         ReadMetadataRanges.emplace_back(newRange);
     }
-    Y_VERIFY(ReadMetadataRanges.size() == 1);
+    Y_ABORT_UNLESS(ReadMetadataRanges.size() == 1);
     return true;
 }
 

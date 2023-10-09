@@ -24,7 +24,7 @@ struct TSchemeShard::TTxSyncTenant : public TSchemeShard::TRwTxBase {
                     "TTxSyncTenant DoExecute"
                         << ", pathId: " << PathId
                         << ", at schemeshard: " << Self->TabletID());
-        Y_VERIFY(Self->IsDomainSchemeShard);
+        Y_ABORT_UNLESS(Self->IsDomainSchemeShard);
 
         SideEffects.UpdateTenants({PathId});
         SideEffects.ApplyOnExecute(Self, txc, ctx);
@@ -65,7 +65,7 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
     }
 
     TEvSchemeShard::TEvSyncTenantSchemeShard* ReleaseSync() {
-        Y_VERIFY(HasSync());
+        Y_ABORT_UNLESS(HasSync());
         return SyncEv.Release();
     }
 
@@ -78,8 +78,8 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
                         << ", msg: " << record.ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
 
-        Y_VERIFY(!Self->IsDomainSchemeShard);
-        Y_VERIFY(record.GetTabletId() == Self->ParentDomainId.OwnerId);
+        Y_ABORT_UNLESS(!Self->IsDomainSchemeShard);
+        Y_ABORT_UNLESS(record.GetTabletId() == Self->ParentDomainId.OwnerId);
 
         if (record.GetEffectiveACLVersion() > Self->ParentDomainEffectiveACLVersion) {
             Self->ParentDomainOwner = record.GetOwner();
@@ -146,7 +146,7 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
 
             Self->PersistShardMapping(db, shardIdx, tabletId, Self->RootPathId(), InvalidTxId, tabletType);
 
-            Y_VERIFY(record.GetSubdomainVersion() >= subdomain->GetVersion());
+            Y_ABORT_UNLESS(record.GetSubdomainVersion() >= subdomain->GetVersion());
             if (record.GetSubdomainVersion() > subdomain->GetVersion()) {
                 subdomain->SetVersion(record.GetSubdomainVersion());
             }
@@ -168,7 +168,7 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             if (!subdomain->GetTenantHiveID()) {
                 addPrivateShard(tenantHive, ETabletType::Hive);
             }
-            Y_VERIFY(tenantHive == subdomain->GetTenantHiveID());
+            Y_ABORT_UNLESS(tenantHive == subdomain->GetTenantHiveID());
         }
 
         if (record.HasTenantSysViewProcessor()) {
@@ -176,7 +176,7 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             if (!subdomain->GetTenantSysViewProcessorID()) {
                 addPrivateShard(tenantSVP, ETabletType::SysViewProcessor);
             }
-            Y_VERIFY(tenantSVP == subdomain->GetTenantSysViewProcessorID());
+            Y_ABORT_UNLESS(tenantSVP == subdomain->GetTenantSysViewProcessorID());
         }
 
         if (record.HasUpdateTenantRootACL()) {

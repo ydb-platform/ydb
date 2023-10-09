@@ -11,7 +11,7 @@ std::vector<NKikimr::NOlap::IPortionColumnChunk::TPtr> TChunkPreparation::DoInte
     auto chunks = TSimpleSplitter(saver, counters).SplitBySizes(rb, Data, splitSizes);
     std::vector<IPortionColumnChunk::TPtr> newChunks;
     for (auto&& i : chunks) {
-        Y_VERIFY(i.GetSlicedBatch()->num_columns() == 1);
+        Y_ABORT_UNLESS(i.GetSlicedBatch()->num_columns() == 1);
         newChunks.emplace_back(std::make_shared<TChunkPreparation>(
             saver.Apply(i.GetSlicedBatch()), i.GetSlicedBatch()->column(0), ColumnId, SchemaInfo));
     }
@@ -37,9 +37,9 @@ std::shared_ptr<arrow::Array> TColumnPortion::AppendBlob(const TString& data, co
 }
 
 std::shared_ptr<arrow::Array> TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a) {
-    Y_VERIFY(a);
+    Y_ABORT_UNLESS(a);
     ui32 i = 0;
-    Y_VERIFY(CurrentPortionRecords < Context.GetPortionRowsCountLimit());
+    Y_ABORT_UNLESS(CurrentPortionRecords < Context.GetPortionRowsCountLimit());
     for (; i < a->length(); ++i) {
         ui64 recordSize = 0;
         NArrow::Append(*Builder, *a, i, &recordSize);

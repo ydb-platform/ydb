@@ -466,7 +466,7 @@ TFuture<TIssues> TStateStorage::DeleteCheckpoints(
 TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
 {
     NYdb::TParamsBuilder paramsBuilder;
-    Y_VERIFY(!context->TaskIds.empty());
+    Y_ABORT_UNLESS(!context->TaskIds.empty());
     if (context->TaskIds.size() == 1) {
         paramsBuilder.AddParam("$task_id").Uint64(context->TaskIds[0]).Build();
     } else {
@@ -500,7 +500,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
         StatesTable,
         context->TaskIds.size() == 1 ? "task_id = $task_id" : "task_id IN $task_ids");
 
-    Y_VERIFY(context->Session);
+    Y_ABORT_UNLESS(context->Session);
     return context->Session->ExecuteDataQuery(
         query,
         TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
@@ -509,7 +509,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
 }
 
 TFuture<TStatus> TStateStorage::UpsertState(const TContextPtr& context) {
-    Y_VERIFY(context->States.size() == 1);
+    Y_ABORT_UNLESS(context->States.size() == 1);
     TString serializedState;
     if (!context->States[0].SerializeToString(&serializedState)) {
         return MakeFuture(MakeErrorStatus(EStatus::BAD_REQUEST, "Failed to serialize compute actor state", NYql::TSeverityIds::S_ERROR));
@@ -517,7 +517,7 @@ TFuture<TStatus> TStateStorage::UpsertState(const TContextPtr& context) {
 
     // publish nodes
     NYdb::TParamsBuilder paramsBuilder;
-    Y_VERIFY(context->TaskIds.size() == 1);
+    Y_ABORT_UNLESS(context->TaskIds.size() == 1);
     paramsBuilder.AddParam("$task_id").Uint64(context->TaskIds[0]).Build();
     paramsBuilder.AddParam("$graph_id").String(context->GraphId).Build();
     paramsBuilder.AddParam("$coordinator_generation").Uint64(context->CheckpointId.CoordinatorGeneration).Build();
@@ -540,7 +540,7 @@ TFuture<TStatus> TStateStorage::UpsertState(const TContextPtr& context) {
             ($task_id, $graph_id, $coordinator_generation, $seq_no, $blob);
     )", context->TablePathPrefix.c_str(), StatesTable);
 
-    Y_VERIFY(context->Session);
+    Y_ABORT_UNLESS(context->Session);
     auto future = context->Session->ExecuteDataQuery(
         query,
         TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),

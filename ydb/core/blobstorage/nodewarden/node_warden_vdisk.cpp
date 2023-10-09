@@ -10,7 +10,7 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::DestroyLocalVDisk(TVDiskRecord& vdisk) {
         STLOG(PRI_INFO, BS_NODE, NW35, "DestroyLocalVDisk", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()));
-        Y_VERIFY(!vdisk.RuntimeData);
+        Y_ABORT_UNLESS(!vdisk.RuntimeData);
 
         const TVSlotId vslotId = vdisk.GetVSlotId();
         StopAggregator(MakeBlobStorageVDiskID(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId));
@@ -81,7 +81,7 @@ namespace NKikimr::NStorage {
         const TActorId vdiskServiceId = MakeBlobStorageVDiskID(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId);
 
         // generate correct VDiskId (based on relevant generation of containing group) and groupInfo pointer
-        Y_VERIFY(!vdisk.RuntimeData);
+        Y_ABORT_UNLESS(!vdisk.RuntimeData);
         TVDiskID vdiskId = vdisk.GetVDiskId();
         TIntrusivePtr<TBlobStorageGroupInfo> groupInfo;
 
@@ -194,9 +194,9 @@ namespace NKikimr::NStorage {
             StartAggregator(vdiskServiceId, groupInfo->GroupID);
         }
 
-        Y_VERIFY(vdisk.ScrubState == TVDiskRecord::EScrubState::IDLE);
-        Y_VERIFY(!vdisk.QuantumFinished.ByteSizeLong());
-        Y_VERIFY(!vdisk.ScrubCookie);
+        Y_ABORT_UNLESS(vdisk.ScrubState == TVDiskRecord::EScrubState::IDLE);
+        Y_ABORT_UNLESS(!vdisk.QuantumFinished.ByteSizeLong());
+        Y_ABORT_UNLESS(!vdisk.ScrubCookie);
 
         vdisk.RuntimeData.emplace(TVDiskRecord::TRuntimeData{
             .GroupInfo = groupInfo,
@@ -328,7 +328,7 @@ namespace NKikimr::NStorage {
         }
 
         TIntrusivePtr<TBlobStorageGroupInfo>& currentInfo = vdisk.RuntimeData->GroupInfo;
-        Y_VERIFY(newInfo->GroupID == currentInfo->GroupID);
+        Y_ABORT_UNLESS(newInfo->GroupID == currentInfo->GroupID);
 
         const ui32 orderNumber = vdisk.RuntimeData->OrderNumber;
         const TActorId vdiskServiceId = vdisk.GetVDiskServiceId();

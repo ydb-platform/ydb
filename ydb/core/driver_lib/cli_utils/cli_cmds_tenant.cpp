@@ -183,7 +183,7 @@ public:
             TTenantClientGRpcCommand::PrintResponse(response);
         } else {
             Ydb::Cms::ListDatabasesResult result;
-            Y_VERIFY(response.result().UnpackTo(&result));
+            Y_ABORT_UNLESS(response.result().UnpackTo(&result));
 
             Cout << "Databases:" << Endl;
             for (auto &path : result.paths())
@@ -211,7 +211,7 @@ public:
             TTenantClientGRpcCommand::PrintResponse(response);
         } else {
             Ydb::Cms::DescribeDatabaseOptionsResult result;
-            Y_VERIFY(response.result().UnpackTo(&result));
+            Y_ABORT_UNLESS(response.result().UnpackTo(&result));
 
             Cout << "Storage units" << Endl;
             for (auto &unit : result.storage_units()) {
@@ -267,7 +267,7 @@ public:
             TTenantClientGRpcCommand::PrintResponse(response);
         } else {
             Ydb::Cms::GetDatabaseStatusResult result;
-            Y_VERIFY(response.result().UnpackTo(&result));
+            Y_ABORT_UNLESS(response.result().UnpackTo(&result));
             // type -> <required, allocated>
             THashMap<TString, std::pair<ui64, ui64>> pools;
             // <type, dc> -> <required, allocated>

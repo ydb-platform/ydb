@@ -138,7 +138,7 @@ public:
         WallClockAccepted = Now();
 
         const auto& record = Request->Record;
-        Y_VERIFY(record.HasTransaction());
+        Y_ABORT_UNLESS(record.HasTransaction());
 
         if (record.HasProxyFlags()) {
             ProxyFlags = record.GetProxyFlags();
@@ -168,7 +168,7 @@ public:
         }
 
         const auto& tx = record.GetTransaction();
-        Y_VERIFY(tx.HasCreateVolatileSnapshot());
+        Y_ABORT_UNLESS(tx.HasCreateVolatileSnapshot());
 
         TxFlags = tx.GetFlags() & ~NTxDataShard::TTxFlags::Immediate;
 
@@ -369,8 +369,8 @@ public:
             auto& state = kv.second;
 
             // TODO: support colocated tables
-            Y_VERIFY(state.Tables.size() == 1, "TODO: support colocated tables");
-            Y_VERIFY(state.Status == TPerShardState::EStatus::Unknown);
+            Y_ABORT_UNLESS(state.Tables.size() == 1, "TODO: support colocated tables");
+            Y_ABORT_UNLESS(state.Status == TPerShardState::EStatus::Unknown);
 
             auto tableId = *state.Tables.begin();
             auto path = tableId.PathId;
@@ -722,7 +722,7 @@ public:
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyPrepared, NKikimrIssues::TStatusIds::TRANSIENT, false, ctx);
         }
 
-        Y_VERIFY(SelectedCoordinator, "Unexpected null SelectedCoordinator");
+        Y_ABORT_UNLESS(SelectedCoordinator, "Unexpected null SelectedCoordinator");
 
         auto req = MakeHolder<TEvTxProxy::TEvProposeTransaction>(
             SelectedCoordinator, TxId, 0, AggrMinStep, AggrMaxStep);
@@ -1171,7 +1171,7 @@ public:
         WallClockAccepted = Now();
 
         const auto& record = Request->Record;
-        Y_VERIFY(record.HasTransaction());
+        Y_ABORT_UNLESS(record.HasTransaction());
 
         if (record.HasProxyFlags()) {
             ProxyFlags = record.GetProxyFlags();
@@ -1383,8 +1383,8 @@ public:
             auto& state = kv.second;
 
             // TODO: support colocated tables
-            Y_VERIFY(state.Tables.size() == 1, "TODO: support colocated tables");
-            Y_VERIFY(state.Status == TPerShardState::EStatus::Unknown);
+            Y_ABORT_UNLESS(state.Tables.size() == 1, "TODO: support colocated tables");
+            Y_ABORT_UNLESS(state.Status == TPerShardState::EStatus::Unknown);
 
             SendRequestToShard(shardId, *state.Tables.begin(), ctx);
 
@@ -1399,7 +1399,7 @@ public:
         auto& state = PerShardStates[shardId];
 
         state.Tables.insert(tableId);
-        Y_VERIFY(state.Tables.size() == 1, "TODO: support colocated tables");
+        Y_ABORT_UNLESS(state.Tables.size() == 1, "TODO: support colocated tables");
 
         if (state.Status != TPerShardState::EStatus::Unknown) {
             return;
@@ -1658,7 +1658,7 @@ private:
 
 IActor* CreateTxProxySnapshotReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon) {
     const auto& record = ev->Get()->Record;
-    Y_VERIFY(record.HasTransaction());
+    Y_ABORT_UNLESS(record.HasTransaction());
     const auto& tx = record.GetTransaction();
 
     if (tx.HasCreateVolatileSnapshot()) {

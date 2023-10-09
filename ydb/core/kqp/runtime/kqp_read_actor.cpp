@@ -398,8 +398,8 @@ public:
         , UseFollowers(false)
         , PipeCacheId(MainPipeCacheId)
     {
-        Y_VERIFY(Arena);
-        Y_VERIFY(settings->GetArena() == Arena->Get());
+        Y_ABORT_UNLESS(Arena);
+        Y_ABORT_UNLESS(settings->GetArena() == Arena->Get());
 
         TableId = TTableId(
             Settings->GetTable().GetTableId().GetOwnerId(),
@@ -806,7 +806,7 @@ public:
 
         if (Reads[id].SerializedContinuationToken) {
             NKikimrTxDataShard::TReadContinuationToken token;
-            Y_VERIFY(token.ParseFromString(*(Reads[id].SerializedContinuationToken)), "Failed to parse continuation token");
+            Y_ABORT_UNLESS(token.ParseFromString(*(Reads[id].SerializedContinuationToken)), "Failed to parse continuation token");
             state->FirstUnprocessedRequest = token.GetFirstUnprocessedQuery();
 
             if (token.GetLastProcessedKey()) {
@@ -907,7 +907,7 @@ public:
 
     TString DebugPrintContionuationToken(TString s) {
         NKikimrTxDataShard::TReadContinuationToken token;
-        Y_VERIFY(token.ParseFromString(s));
+        Y_ABORT_UNLESS(token.ParseFromString(s));
         TString lastKey = "(empty)";
         if (!token.GetLastProcessedKey().empty()) {
             TStringBuilder builder;

@@ -22,7 +22,7 @@ struct TFollowerTracker {
 
     bool DelMerged(TActorId x) {
         auto it = Merged.find(x);
-        Y_VERIFY(it != Merged.end(), "follower tracker consistency broken");
+        Y_ABORT_UNLESS(it != Merged.end(), "follower tracker consistency broken");
 
         if (it->second == 1) {
             Merged.erase(it);

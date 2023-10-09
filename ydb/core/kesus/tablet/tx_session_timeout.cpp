@@ -37,7 +37,7 @@ struct TKesusTablet::TTxSessionTimeout : public TTxBase {
             return true;
         }
 
-        Y_VERIFY(!session->OwnerProxy, "Timeout on attached session %" PRIu64, SessionId);
+        Y_ABORT_UNLESS(!session->OwnerProxy, "Timeout on attached session %" PRIu64, SessionId);
 
         if (session->LastOwnerProxy) {
             Events.emplace_back(session->LastOwnerProxy, 0,

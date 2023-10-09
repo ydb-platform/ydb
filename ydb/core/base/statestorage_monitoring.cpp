@@ -150,7 +150,7 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
     void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &ev, const TActorContext &ctx) {
         const NKikimrStateStorage::TEvInfo &record = ev->Get()->Record;
         const ui64 cookie = record.GetCookie();
-        Y_VERIFY(cookie < ReplicasInfo.size());
+        Y_ABORT_UNLESS(cookie < ReplicasInfo.size());
 
         auto &xinfo = ReplicasInfo[cookie];
 

@@ -151,7 +151,7 @@ void TSearchEventsProcessor::OnQueuesListQueryComplete(NKqp::TEvKqp::TEvQueryRes
 
     auto& response = ev->Get()->Record.GetRef().GetResponse();
 
-    Y_VERIFY(response.YdbResultsSize() == 1);
+    Y_ABORT_UNLESS(response.YdbResultsSize() == 1);
     TString queueName, cloudId;
     NYdb::TResultSetParser parser(response.GetYdbResults(0));
     // "SELECT Account, QueueName, CustomQueueName, CreatedTimestamp, FolderId"
@@ -164,12 +164,12 @@ void TSearchEventsProcessor::OnQueuesListQueryComplete(NKqp::TEvKqp::TEvQueryRes
         auto insResult = ExistingQueues.insert(std::make_pair(
                 queueName, TQueueEvent{EQueueEventType::Existed, createTs, customName, cloudId, folderId}
         ));
-        Y_VERIFY(insResult.second);
+        Y_ABORT_UNLESS(insResult.second);
     }
     if (SessionId.empty()) {
         SessionId = response.GetSessionId();
     } else {
-        Y_VERIFY(SessionId == response.GetSessionId());
+        Y_ABORT_UNLESS(SessionId == response.GetSessionId());
     }
 
     LastQueuesKey.QueueName = queueName;
@@ -191,7 +191,7 @@ void TSearchEventsProcessor::RunEventsListing(const TActorContext& ctx) {
 void TSearchEventsProcessor::OnEventsListingDone(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     QueuesEvents.clear();
     const auto& record = ev->Get()->Record.GetRef();
-    Y_VERIFY(record.GetResponse().YdbResultsSize() == 1);
+    Y_ABORT_UNLESS(record.GetResponse().YdbResultsSize() == 1);
     NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
 
     while (parser.TryNextRow()) {
@@ -206,7 +206,7 @@ void TSearchEventsProcessor::OnEventsListingDone(NKqp::TEvKqp::TEvQueryResponse:
         auto insResult = qEvents.insert(std::make_pair(
                 timestamp, TQueueEvent{EQueueEventType(evType), timestamp, customName, cloudId, folderId}
         ));
-        Y_VERIFY(insResult.second);
+        Y_ABORT_UNLESS(insResult.second);
     }
     ProcessEventsQueue(ctx);
 }

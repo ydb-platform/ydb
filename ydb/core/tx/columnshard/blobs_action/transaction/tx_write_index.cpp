@@ -7,14 +7,14 @@ namespace NKikimr::NColumnShard {
 bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     auto changes = Ev->Get()->IndexChanges;
     TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("external_task_id", changes->GetTaskIdentifier());
-    Y_VERIFY(Self->InsertTable);
-    Y_VERIFY(Self->TablesManager.HasPrimaryIndex());
+    Y_ABORT_UNLESS(Self->InsertTable);
+    Y_ABORT_UNLESS(Self->TablesManager.HasPrimaryIndex());
     txc.DB.NoMoreReadsForTx();
 
     ACFL_DEBUG("event", "TTxWriteIndex::Execute")("change_type", changes->TypeString())("details", *changes);
     if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
         NOlap::TSnapshot snapshot(Self->LastPlannedStep, Self->LastPlannedTxId);
-        Y_VERIFY(Ev->Get()->IndexInfo.GetLastSchema()->GetSnapshot() <= snapshot);
+        Y_ABORT_UNLESS(Ev->Get()->IndexInfo.GetLastSchema()->GetSnapshot() <= snapshot);
 
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
@@ -83,7 +83,7 @@ TTxWriteIndex::TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr
     , Ev(ev)
     , TabletTxNo(++Self->TabletTxCounter)
 {
-    Y_VERIFY(Ev && Ev->Get()->IndexChanges);
+    Y_ABORT_UNLESS(Ev && Ev->Get()->IndexChanges);
 }
 
 }

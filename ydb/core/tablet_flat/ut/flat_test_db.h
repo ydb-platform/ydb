@@ -108,7 +108,7 @@ public:
 
     void Init(const TScheme& scheme) override {
         Y_UNUSED(scheme);
-        Y_VERIFY("Not supported by flat db wrapper");
+        Y_ABORT_UNLESS("Not supported by flat db wrapper");
     }
 
     const TScheme& GetScheme() const override {
@@ -117,7 +117,7 @@ public:
 
     TString FinishTransaction(bool commit) override {
         Y_UNUSED(commit);
-        Y_VERIFY("Not supported by flat db wrapper");
+        Y_ABORT_UNLESS("Not supported by flat db wrapper");
         return "42";
     }
 

@@ -16,14 +16,14 @@ ui32 GetMaxHeaderSize() {
 
 NKikimrPQ::TBatchHeader ExtractHeader(const char *data, ui32 size) {
     ui16 sz = ReadUnaligned<ui16>(data);
-    Y_VERIFY(sz < size);
+    Y_ABORT_UNLESS(sz < size);
     data += sizeof(ui16);
     NKikimrPQ::TBatchHeader header;
     bool res = header.ParseFromArray(data, sz);
-    Y_VERIFY(res);
-    Y_VERIFY((ui32)header.ByteSize() == sz);
+    Y_ABORT_UNLESS(res);
+    Y_ABORT_UNLESS((ui32)header.ByteSize() == sz);
 
-    Y_VERIFY(header.ByteSize() + header.GetPayloadSize() + sizeof(ui16) <= size);
+    Y_ABORT_UNLESS(header.ByteSize() + header.GetPayloadSize() + sizeof(ui16) <= size);
     return header;
 }
 

@@ -19,9 +19,9 @@ void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
 }
 
 void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
-    Y_VERIFY(PortionsToEvict.size() || PortionsToRemove.size());
+    Y_ABORT_UNLESS(PortionsToEvict.size() || PortionsToRemove.size());
     for (const auto& p : PortionsToEvict) {
-        Y_VERIFY(!p.GetPortionInfo().Empty());
+        Y_ABORT_UNLESS(!p.GetPortionInfo().Empty());
 
         auto agent = BlobsAction.GetReading(p.GetPortionInfo());
         for (const auto& rec : p.GetPortionInfo().Records) {
@@ -39,10 +39,10 @@ std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPorti
     TConstructionContext& context) const {
     const TPortionInfo& portionInfo = info.GetPortionInfo();
     auto& evictFeatures = info.GetFeatures();
-    Y_VERIFY(portionInfo.GetMeta().GetTierName() != evictFeatures.TargetTierName);
+    Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.TargetTierName);
 
     auto* tiering = Tiering.FindPtr(evictFeatures.PathId);
-    Y_VERIFY(tiering);
+    Y_ABORT_UNLESS(tiering);
     auto compression = tiering->GetCompression(evictFeatures.TargetTierName);
     if (!compression) {
         // Nothing to recompress. We have no other kinds of evictions yet.
@@ -67,8 +67,8 @@ std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPorti
 }
 
 NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
-    Y_VERIFY(!Blobs.empty());
-    Y_VERIFY(!PortionsToEvict.empty());
+    Y_ABORT_UNLESS(!Blobs.empty());
+    Y_ABORT_UNLESS(!PortionsToEvict.empty());
 
     for (auto&& info : PortionsToEvict) {
         if (auto pwb = UpdateEvictedPortion(info, Blobs, context)) {

@@ -543,7 +543,7 @@ namespace NKikimr {
             }
 
             bool SeekFirst() {
-                Y_VERIFY(Tree, "Uninitialized iterator");
+                Y_ABORT_UNLESS(Tree, "Uninitialized iterator");
 
                 auto* page = Tree->First.Follow(CurrentPointer).ToLeafPage();
                 Y_VERIFY_DEBUG(page, "Tree is missing the first page");
@@ -562,7 +562,7 @@ namespace NKikimr {
             }
 
             bool SeekLast() {
-                Y_VERIFY(Tree, "Uninitialized iterator");
+                Y_ABORT_UNLESS(Tree, "Uninitialized iterator");
 
                 auto* page = Tree->Last.Follow(CurrentPointer).ToLeafPage();
                 Y_VERIFY_DEBUG(page, "Tree is missing the last page");
@@ -587,7 +587,7 @@ namespace NKikimr {
              */
             template<class TKeyArg>
             bool SeekLowerBound(TKeyArg&& key, bool backwards = false) {
-                Y_VERIFY(Tree, "Uninitialized iterator");
+                Y_ABORT_UNLESS(Tree, "Uninitialized iterator");
 
                 auto current = Tree->Root.Follow(CurrentPointer);
                 while (current.IsInnerPage()) {
@@ -627,7 +627,7 @@ namespace NKikimr {
              */
             template<class TKeyArg>
             bool SeekUpperBound(TKeyArg&& key, bool backwards = false) {
-                Y_VERIFY(Tree, "Uninitialized iterator");
+                Y_ABORT_UNLESS(Tree, "Uninitialized iterator");
 
                 auto current = Tree->Root.Follow(CurrentPointer);
                 while (current.IsInnerPage()) {
@@ -808,7 +808,7 @@ namespace NKikimr {
             { }
 
             TSafeIterator Iterator() const noexcept {
-                Y_VERIFY(Tree, "Use of an uninitialized object");
+                Y_ABORT_UNLESS(Tree, "Use of an uninitialized object");
 
                 return TSafeIterator(Tree);
             }
@@ -856,7 +856,7 @@ namespace NKikimr {
             size_t index;
             if (count == 0) {
                 // This tree is currently empty
-                Y_VERIFY(InsertPath.empty());
+                Y_ABORT_UNLESS(InsertPath.empty());
                 index = 0;
             } else {
                 // Insert position is before the upper bound
@@ -905,7 +905,7 @@ namespace NKikimr {
             // TODO: exception safety?
             const bool threadSafe = GetLiveReaders() > 0;
 
-            Y_VERIFY(!InsertPath.empty() && InsertPath.back().Tag.IsLeafPage());
+            Y_ABORT_UNLESS(!InsertPath.empty() && InsertPath.back().Tag.IsLeafPage());
             TLeafPage* const leaf = InsertPath.back().Tag.ToLeafPage();
             const size_t leafIndex = InsertPath.back().Index;
             InsertPath.pop_back();
@@ -940,7 +940,7 @@ namespace NKikimr {
                     currentRight = newRoot;
                     currentMiddle = nullptr;
                 } else {
-                    Y_VERIFY(InsertPath.back().Tag.IsInnerPage());
+                    Y_ABORT_UNLESS(InsertPath.back().Tag.IsInnerPage());
                     TInnerPage* const inner = InsertPath.back().Tag.ToInnerPage();
                     const size_t innerIndex = InsertPath.back().Index;
                     InsertPath.pop_back();

@@ -519,18 +519,18 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     tableVerProto.SetPathId(pathId);
 
     if (tableProto.HasSchemaPreset()) {
-        Y_VERIFY(!tableProto.HasSchema(), "Tables has either schema or preset");
+        Y_ABORT_UNLESS(!tableProto.HasSchema(), "Tables has either schema or preset");
 
         TSchemaPreset preset;
         preset.Deserialize(tableProto.GetSchemaPreset());
-        Y_VERIFY(!preset.IsStandaloneTable());
+        Y_ABORT_UNLESS(!preset.IsStandaloneTable());
         tableVerProto.SetSchemaPresetId(preset.GetId());
 
         if (TablesManager.RegisterSchemaPreset(preset, db)) {
             TablesManager.AddPresetVersion(tableProto.GetSchemaPreset().GetId(), version, tableProto.GetSchemaPreset().GetSchema(), db);
         }
     } else {
-        Y_VERIFY(tableProto.HasSchema(), "Tables has either schema or preset");
+        Y_ABORT_UNLESS(tableProto.HasSchema(), "Tables has either schema or preset");
         *tableVerProto.MutableSchema() = tableProto.GetSchema();
     }
 
@@ -560,7 +560,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     NIceDb::TNiceDb db(txc.DB);
 
     const ui64 pathId = alterProto.GetPathId();
-    Y_VERIFY(TablesManager.HasTable(pathId), "AlterTable on a dropped or non-existent table");
+    Y_ABORT_UNLESS(TablesManager.HasTable(pathId), "AlterTable on a dropped or non-existent table");
 
     LOG_S_DEBUG("AlterTable for pathId: " << pathId
         << " schema: " << alterProto.GetSchema()
@@ -678,7 +678,7 @@ protected:
         auto guard = TxEvent->PutResult->StartCpuGuard();
 
         NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
-        Y_VERIFY(TxEvent->IndexChanges->ConstructBlobs(context).Ok());
+        Y_ABORT_UNLESS(TxEvent->IndexChanges->ConstructBlobs(context).Ok());
         if (!TxEvent->IndexChanges->GetWritePortionsCount()) {
             TxEvent->SetPutStatus(NKikimrProto::OK);
         }
@@ -687,8 +687,8 @@ protected:
     }
 public:
     virtual TString GetTaskClassIdentifier() const override {
-        Y_VERIFY(TxEvent);
-        Y_VERIFY(TxEvent->IndexChanges);
+        Y_ABORT_UNLESS(TxEvent);
+        Y_ABORT_UNLESS(TxEvent->IndexChanges);
         return "Changes::ConstructBlobs::" + TxEvent->IndexChanges->TypeString();
     }
 
@@ -698,8 +698,8 @@ public:
         , TabletId(tabletId)
         , ParentActorId(parentActorId)
     {
-        Y_VERIFY(TxEvent);
-        Y_VERIFY(TxEvent->IndexChanges);
+        Y_ABORT_UNLESS(TxEvent);
+        Y_ABORT_UNLESS(TxEvent->IndexChanges);
     }
 };
 
@@ -760,9 +760,9 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
         memoryNeed += ptr->GetMeta().GetRawBytes();
     }
 
-    Y_VERIFY(data.size());
+    Y_ABORT_UNLESS(data.size());
     auto indexChanges = TablesManager.MutablePrimaryIndex().StartInsert(std::move(data));
-    Y_VERIFY(indexChanges);
+    Y_ABORT_UNLESS(indexChanges);
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     indexChanges->Start(*this);
@@ -794,7 +794,7 @@ void TColumnShard::SetupIndexation() {
     for (auto it = InsertTable->GetPathPriorities().rbegin(); it != InsertTable->GetPathPriorities().rend(); ++it) {
         for (auto* pathInfo : it->second) {
             for (auto& data : pathInfo->GetCommitted()) {
-                Y_VERIFY(data.BlobSize());
+                Y_ABORT_UNLESS(data.BlobSize());
                 bytesToIndex += data.BlobSize();
                 dataToIndex.push_back(&data);
                 if (bytesToIndex >= Limits.MaxInsertBytes) {
@@ -924,14 +924,14 @@ void TColumnShard::Die(const TActorContext& ctx) {
 }
 
 void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-    Y_VERIFY(Tiers);
+    Y_ABORT_UNLESS(Tiers);
     ALS_INFO(NKikimrServices::TX_COLUMNSHARD) << "test handle NMetadata::NProvider::TEvRefreshSubscriberData"
         << ev->Get()->GetSnapshot()->SerializeToString();
     Tiers->TakeConfigs(ev->Get()->GetSnapshot(), nullptr);
 }
 
 void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering) {
-    Y_VERIFY(!!Tiers);
+    Y_ABORT_UNLESS(!!Tiers);
     if (!!Tiers) {
         if (useTiering) {
             Tiers->EnablePathId(pathId, useTiering);

@@ -31,8 +31,8 @@ public:
         LOG_I(DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateCdcStream);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateCdcStream);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -45,14 +45,14 @@ public:
             << ": step# " << step);
 
         const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateCdcStream);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateCdcStream);
         const auto& pathId = txState->TargetPathId;
 
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         auto path = context.SS->PathsById.at(pathId);
 
-        Y_VERIFY(context.SS->CdcStreams.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->CdcStreams.contains(pathId));
         auto stream = context.SS->CdcStreams.at(pathId);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -244,7 +244,7 @@ public:
         }
 
         auto stream = TCdcStreamInfo::Create(streamDesc);
-        Y_VERIFY(stream);
+        Y_ABORT_UNLESS(stream);
 
         auto guard = context.DbGuard();
         const auto pathId = context.SS->AllocatePathId();
@@ -263,7 +263,7 @@ public:
         streamPath.MaterializeLeaf(owner, pathId);
         result->SetPathId(pathId.LocalPathId);
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateCdcStream, streamPath.Base()->PathId);
         txState.State = TTxState::Propose;
 
@@ -302,10 +302,10 @@ public:
 class TConfigurePartsAtTable: public NCdcStreamState::TConfigurePartsAtTable {
 protected:
     void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         auto path = context.SS->PathsById.at(pathId);
 
-        Y_VERIFY(context.SS->Tables.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         auto table = context.SS->Tables.at(pathId);
 
         auto& notice = *tx.MutableCreateCdcStreamNotice();
@@ -314,14 +314,14 @@ protected:
 
         bool found = false;
         for (const auto& [childName, childPathId] : path->GetChildren()) {
-            Y_VERIFY(context.SS->PathsById.contains(childPathId));
+            Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
             auto childPath = context.SS->PathsById.at(childPathId);
 
             if (!childPath->IsCdcStream() || childPath->Dropped()) {
                 continue;
             }
 
-            Y_VERIFY(context.SS->CdcStreams.contains(childPathId));
+            Y_ABORT_UNLESS(context.SS->CdcStreams.contains(childPathId));
             auto stream = context.SS->CdcStreams.at(childPathId);
 
             if (stream->State != TCdcStreamInfo::EState::ECdcStreamStateInvalid) {
@@ -333,7 +333,7 @@ protected:
                 << ", another# " << childPathId);
             found = true;
 
-            Y_VERIFY(stream->AlterData);
+            Y_ABORT_UNLESS(stream->AlterData);
             context.SS->DescribeCdcStream(childPathId, childName, stream->AlterData, *notice.MutableStreamDescription());
 
             if (stream->AlterData->State == TCdcStreamInfo::EState::ECdcStreamStateScan) {
@@ -377,27 +377,27 @@ public:
         }
 
         const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateCdcStreamAtTableWithInitialScan);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateCdcStreamAtTableWithInitialScan);
         const auto& pathId = txState->TargetPathId;
 
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         auto path = context.SS->PathsById.at(pathId);
 
         TMaybe<TPathId> streamPathId;
         for (const auto& [_, childPathId] : path->GetChildren()) {
-            Y_VERIFY(context.SS->PathsById.contains(childPathId));
+            Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
             auto childPath = context.SS->PathsById.at(childPathId);
 
             if (childPath->CreateTxId != OperationId.GetTxId()) {
                 continue;
             }
 
-            Y_VERIFY(childPath->IsCdcStream() && !childPath->Dropped());
-            Y_VERIFY(context.SS->CdcStreams.contains(childPathId));
+            Y_ABORT_UNLESS(childPath->IsCdcStream() && !childPath->Dropped());
+            Y_ABORT_UNLESS(context.SS->CdcStreams.contains(childPathId));
             auto stream = context.SS->CdcStreams.at(childPathId);
 
-            Y_VERIFY(stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan);
+            Y_ABORT_UNLESS(stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan);
             Y_VERIFY_S(!streamPathId, "Too many cdc streams are planned to fill with initial scan"
                 << ": found# " << *streamPathId
                 << ", another# " << childPathId);
@@ -408,7 +408,7 @@ public:
             return true;
         }
 
-        Y_VERIFY(streamPathId);
+        Y_ABORT_UNLESS(streamPathId);
         context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRunCdcStreamScan(*streamPathId));
 
         return true;
@@ -557,17 +557,17 @@ public:
             context.SS->SnapshotTables[OperationId.GetTxId()].insert(tablePath.Base()->PathId);
         }
 
-        Y_VERIFY(context.SS->Tables.contains(tablePath.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
-        Y_VERIFY(table->AlterVersion != 0);
-        Y_VERIFY(!table->AlterData);
+        Y_ABORT_UNLESS(table->AlterVersion != 0);
+        Y_ABORT_UNLESS(!table->AlterData);
 
         const auto txType = InitialScan
             ? TTxState::TxCreateCdcStreamAtTableWithInitialScan
             : TTxState::TxCreateCdcStreamAtTable;
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
 
@@ -620,7 +620,7 @@ ISubOperation::TPtr CreateNewCdcStreamAtTable(TOperationId id, TTxState::ETxStat
 }
 
 TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
 
     LOG_D("CreateNewCdcStream"
         << ": opId# " << opId
@@ -759,7 +759,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     }
 
     {
-        Y_VERIFY(context.SS->Tables.contains(tablePath.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
         const auto& partitions = table->GetPartitions();
 
@@ -783,7 +783,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         partitionConfig.SetMaxCountInPartition(Max<i32>());
 
         for (const auto& tag : table->KeyColumnIds) {
-            Y_VERIFY(table->Columns.contains(tag));
+            Y_ABORT_UNLESS(table->Columns.contains(tag));
             const auto& column = table->Columns.at(tag);
 
             auto& keyComponent = *pqConfig.AddPartitionKeySchema();
@@ -800,17 +800,17 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
 
             if (i != partitions.size() - 1) {
                 TSerializedCellVec endKey(cur.EndOfRange);
-                Y_VERIFY(endKey.GetCells().size() <= table->KeyColumnIds.size());
+                Y_ABORT_UNLESS(endKey.GetCells().size() <= table->KeyColumnIds.size());
 
                 TString errStr;
                 auto& boundary = *desc.AddPartitionBoundaries();
                 for (ui32 ki = 0; ki < endKey.GetCells().size(); ++ki) {
                     const auto& cell = endKey.GetCells()[ki];
                     const auto tag = table->KeyColumnIds.at(ki);
-                    Y_VERIFY(table->Columns.contains(tag));
+                    Y_ABORT_UNLESS(table->Columns.contains(tag));
                     const auto typeId = table->Columns.at(tag).PType;
                     const bool ok = NMiniKQL::CellToValue(typeId, cell, *boundary.AddTuple(), errStr);
-                    Y_VERIFY(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
+                    Y_ABORT_UNLESS(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
                 }
             }
         }

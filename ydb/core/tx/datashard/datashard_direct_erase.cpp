@@ -31,7 +31,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
     }
 
     const TUserTable& tableInfo = *self->GetUserTables().at(tableId);
-    Y_VERIFY(tableInfo.LocalTid == localTableId);
+    Y_ABORT_UNLESS(tableInfo.LocalTid == localTableId);
 
     if (request.GetSchemaVersion() && tableInfo.GetTableSchemaVersion()
         && request.GetSchemaVersion() != tableInfo.GetTableSchemaVersion()) {
@@ -267,7 +267,7 @@ bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
 }
 
 TDirectTxResult TDirectTxErase::GetResult(TDataShard* self) {
-    Y_VERIFY(Result);
+    Y_ABORT_UNLESS(Result);
 
     if (Result->Record.GetStatus() == NKikimrTxDataShard::TEvEraseRowsResponse::OK) {
         self->IncCounter(COUNTER_ERASE_ROWS_SUCCESS);

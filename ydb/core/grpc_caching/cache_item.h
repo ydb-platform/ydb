@@ -27,7 +27,7 @@ namespace NKikimr {
         {}
 
         const TRequestRecord& GetRequest() const {
-            Y_VERIFY(Request != nullptr);
+            Y_ABORT_UNLESS(Request != nullptr);
             return *Request;
         }
 

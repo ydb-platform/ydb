@@ -45,12 +45,12 @@ public:
     }
 
     void Start() {
-        Y_VERIFY(SelfContext);
+        Y_ABORT_UNLESS(SelfContext);
         ScheduleDumpCountersToLog();
     }
 
     void Stop() {
-        Y_VERIFY(SelfContext);
+        Y_ABORT_UNLESS(SelfContext);
 
         with_lock(Lock) {
             Stopping = true;

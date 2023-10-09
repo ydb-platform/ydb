@@ -76,7 +76,7 @@ public:
     using TBase::Send;
     using TBase::TBase;
     void Reply(const typename TBase::TRequest& request, const typename TBase::TOutcome& outcome) const {
-        Y_VERIFY(!std::exchange(TBase::Replied, true), "Double-reply");
+        Y_ABORT_UNLESS(!std::exchange(TBase::Replied, true), "Double-reply");
 
         typename TEvResponse::TKey key;
         if (request.KeyHasBeenSet()) {
@@ -95,7 +95,7 @@ public:
     using TBase::Send;
     using TBase::TBase;
     void Reply(const typename TBase::TRequest& /*request*/, const typename TBase::TOutcome& outcome) const {
-        Y_VERIFY(!std::exchange(TBase::Replied, true), "Double-reply");
+        Y_ABORT_UNLESS(!std::exchange(TBase::Replied, true), "Double-reply");
 
         Send(std::make_unique<TEvListObjectsResponse>(outcome));
     }
@@ -110,7 +110,7 @@ public:
     using TBase::Send;
     using TBase::TBase;
     void Reply(const typename TBase::TRequest& /*request*/, const typename TBase::TOutcome& outcome) const {
-        Y_VERIFY(!std::exchange(TBase::Replied, true), "Double-reply");
+        Y_ABORT_UNLESS(!std::exchange(TBase::Replied, true), "Double-reply");
 
         Send(std::make_unique<TEvDeleteObjectsResponse>(outcome));
     }
@@ -125,7 +125,7 @@ public:
     using TBase::Send;
     using TBase::TBase;
     void Reply(const typename TBase::TRequest& /*request*/, const typename TBase::TOutcome& outcome) const {
-        Y_VERIFY(!std::exchange(TBase::Replied, true), "Double-reply");
+        Y_ABORT_UNLESS(!std::exchange(TBase::Replied, true), "Double-reply");
         Send(std::make_unique<TEvCheckObjectExistsResponse>(outcome, RequestContext));
     }
 };
@@ -180,7 +180,7 @@ public:
         auto& request = ev->Get()->Request;
 
         std::pair<ui64, ui64> range;
-        Y_VERIFY(request.RangeHasBeenSet() && TryParseRange(request.GetRange().c_str(), range));
+        Y_ABORT_UNLESS(request.RangeHasBeenSet() && TryParseRange(request.GetRange().c_str(), range));
         Range = range;
 
         Buffer.resize(range.second - range.first + 1);
@@ -194,7 +194,7 @@ public:
 
 protected:
     std::unique_ptr<IEventBase> MakeResponse(const typename TEvResponse::TKey& key, const TOutcome& outcome) const override {
-        Y_VERIFY(Range);
+        Y_ABORT_UNLESS(Range);
         std::unique_ptr<TEvResponse> response;
         if (outcome.IsSuccess()) {
             response = std::make_unique<TEvResponse>(key, *Range, outcome, std::move(Buffer));

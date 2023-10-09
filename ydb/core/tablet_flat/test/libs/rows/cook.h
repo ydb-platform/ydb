@@ -15,7 +15,7 @@ namespace NTest {
 
         ~TCookRow()
         {
-            Y_VERIFY(!*row, "Cooked row hasn't been grabbed to TRow");
+            Y_ABORT_UNLESS(!*row, "Cooked row hasn't been grabbed to TRow");
         }
 
         template<typename TVal>

@@ -33,9 +33,9 @@ public:
                                << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateTableIndex);
-        Y_VERIFY(txState->State == TTxState::Propose);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTableIndex);
+        Y_ABORT_UNLESS(txState->State == TTxState::Propose);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -46,7 +46,7 @@ public:
 
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_INDEXES_COUNT].Add(1);
 
-        Y_VERIFY(context.SS->Indexes.contains(path->PathId));
+        Y_ABORT_UNLESS(context.SS->Indexes.contains(path->PathId));
         TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(path->PathId);
         context.SS->PersistTableIndex(db, path->PathId);
         context.SS->Indexes[path->PathId] = indexData->AlterData;
@@ -64,8 +64,8 @@ public:
                                << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateTableIndex);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTableIndex);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -221,7 +221,7 @@ public:
 
         // store table index description
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateTableIndex, newIndexPath->PathId);
         txState.State = TTxState::Propose;
 

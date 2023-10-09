@@ -49,7 +49,7 @@ public:
         , GRpcRequestProxyId_(proxies[0])
         , GRpcProxies_(proxies)
     {
-        Y_VERIFY(proxies.size());
+        Y_ABORT_UNLESS(proxies.size());
     }
 
     void InitService(

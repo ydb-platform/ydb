@@ -103,11 +103,11 @@ struct TMessage {
             return Body.index() == i; \
         } \
         const auto& Get##name() const { \
-            Y_VERIFY(Is##name()); \
+            Y_ABORT_UNLESS(Is##name()); \
             return std::get<i>(Body); \
         } \
         auto& Get##name() { \
-            Y_VERIFY(Is##name()); \
+            Y_ABORT_UNLESS(Is##name()); \
             return std::get<i>(Body); \
         }
 

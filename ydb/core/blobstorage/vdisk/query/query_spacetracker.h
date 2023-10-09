@@ -20,7 +20,7 @@ namespace NKikimr {
             if (querySize) {
                 Size += querySize;
             } else {
-                Y_VERIFY(blobSize >= queryShift, "blobSize# %" PRIu64 " queryShift# %" PRIu64, blobSize, queryShift);
+                Y_ABORT_UNLESS(blobSize >= queryShift, "blobSize# %" PRIu64 " queryShift# %" PRIu64, blobSize, queryShift);
                 Size += blobSize - queryShift;
             }
         }

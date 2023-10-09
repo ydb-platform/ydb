@@ -19,7 +19,7 @@ TStruct ConvertResult(const NKikimrMiniKQL::TValue& value, const NKikimrMiniKQL:
 // convert C++ API result
 inline TStruct ConvertResult(const NKikimr::NClient::TQueryResult& apiResult) {
     const NKikimrClient::TResponse& response = apiResult.GetResult<NKikimrClient::TResponse>();
-    Y_VERIFY(response.HasExecutionEngineEvaluatedResponse());
+    Y_ABORT_UNLESS(response.HasExecutionEngineEvaluatedResponse());
     const auto& result = response.GetExecutionEngineEvaluatedResponse();
     // TODO: type caching
     return ConvertResult(result.GetValue(), result.GetType());

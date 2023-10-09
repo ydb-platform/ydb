@@ -34,7 +34,7 @@ void TCleanupActor::Bootstrap() {
 
 TDuration TCleanupActor::RandomCleanupPeriod() {
     const ui64 cleanupPeriodMs = Cfg().GetCleanupPeriodMs();
-    Y_VERIFY(cleanupPeriodMs > 0);
+    Y_ABORT_UNLESS(cleanupPeriodMs > 0);
     return TDuration::MilliSeconds(cleanupPeriodMs) +
         TDuration::MilliSeconds(RandomNumber<ui64>(cleanupPeriodMs / 4));
 }

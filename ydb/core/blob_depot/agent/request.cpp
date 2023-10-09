@@ -28,7 +28,7 @@ namespace NKikimr::NBlobDepot {
         RequestsInFlight.ForEach([this](TRequestInFlight *requestInFlight) {
             auto& map = requestInFlight->ToBlobDepotTablet ? Agent.TabletRequestInFlight : Agent.OtherRequestInFlight;
             auto node = map.extract(requestInFlight->Id);
-            Y_VERIFY(node);
+            Y_ABORT_UNLESS(node);
 
             if (requestInFlight->CancelCallback) {
                 requestInFlight->CancelCallback();
@@ -40,7 +40,7 @@ namespace NKikimr::NBlobDepot {
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay) {
         if (executionRelay) {
             const size_t num = SubrequestRelays.erase(executionRelay);
-            Y_VERIFY(num);
+            Y_ABORT_UNLESS(num);
         }
         requestInFlight.Unlink();
         ProcessResponse(requestInFlight.Id, std::move(requestInFlight.Context), std::move(response));
@@ -73,7 +73,7 @@ namespace NKikimr::NBlobDepot {
         TRequestsInFlight& map = toBlobDepotTablet ? TabletRequestInFlight : OtherRequestInFlight;
         const bool inserted = map.emplace(id, sender, std::move(context), std::move(cancelCallback),
             toBlobDepotTablet).second;
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
         if (executionRelay) {
             sender->SubrequestRelays.emplace(executionRelay);
         }
@@ -85,7 +85,7 @@ namespace NKikimr::NBlobDepot {
             (Id, ev->Cookie), (Type, TypeName<TEvent>()), (Sender, ev->Sender), (PipeServerId, PipeServerId),
             (Match, ev->Sender == PipeServerId));
         if (ev->Sender == PipeServerId) {
-            Y_VERIFY(IsConnected || ev->GetTypeRewrite() == TEvBlobDepot::EvRegisterAgentResult);
+            Y_ABORT_UNLESS(IsConnected || ev->GetTypeRewrite() == TEvBlobDepot::EvRegisterAgentResult);
             OnRequestComplete(ev->Cookie, ev->Get(), TabletRequestInFlight);
         }
     }
@@ -102,7 +102,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA17, "HandleOtherResponse", (AgentId, LogId), (Id, ev->Cookie),
             (Type, TypeName<TEvent>()), (Msg, *ev->Get()));
-        Y_VERIFY(ev->Get()->ExecutionRelay);
+        Y_ABORT_UNLESS(ev->Get()->ExecutionRelay);
         OnRequestComplete(ev->Cookie, ev->Get(), OtherRequestInFlight, std::move(ev->Get()->ExecutionRelay));
     }
 
@@ -119,7 +119,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::DropTabletRequest(ui64 id) {
         const size_t numErased = TabletRequestInFlight.erase(id);
-        Y_VERIFY(numErased == 1);
+        Y_ABORT_UNLESS(numErased == 1);
     }
 
 } // NKikimr::NBlobDepot

@@ -68,7 +68,7 @@ namespace NKikimr {
                              vdisk.ToString().data(), lsn));
 
             TNeighbors::TValue &ref = Neighbors[vdisk];
-            Y_VERIFY(ref.Get().LockedLsn == (ui64)-1);
+            Y_ABORT_UNLESS(ref.Get().LockedLsn == (ui64)-1);
             ref.Get().LockedLsn = lsn;
             LocksNum++;
         }
@@ -79,7 +79,7 @@ namespace NKikimr {
                              vdisk.ToString().data()));
 
             TNeighbors::TValue &ref = Neighbors[vdisk];
-            Y_VERIFY(ref.Get().LockedLsn != (ui64)-1);
+            Y_ABORT_UNLESS(ref.Get().LockedLsn != (ui64)-1);
             ref.Get().LockedLsn = (ui64)-1;
             LocksNum--;
         }

@@ -43,15 +43,15 @@ struct TTestState {
     // HELPER FUNCTIONS
     ////////////////////////////////////////////////////////////////////////////
     TPartLocation PrimaryVDiskForBlobPart(TLogoBlobID blobId) {
-        Y_VERIFY(blobId.PartId());
+        Y_ABORT_UNLESS(blobId.PartId());
         TLogoBlobID origBlobId(blobId, 0);
         TVDiskID vDiskId = Info->GetVDiskInSubgroup(blobId.PartId() - 1, origBlobId.Hash());
         return {blobId, vDiskId};
     }
 
     TPartLocation HandoffVDiskForBlobPart(TLogoBlobID blobId, ui64 handoffIdx) {
-        Y_VERIFY(blobId.PartId());
-        Y_VERIFY(handoffIdx < Type.Handoff());
+        Y_ABORT_UNLESS(blobId.PartId());
+        Y_ABORT_UNLESS(handoffIdx < Type.Handoff());
         TLogoBlobID origBlobId(blobId, 0);
         TVDiskID vDiskId = Info->GetVDiskInSubgroup(Type.TotalPartCount() + handoffIdx, origBlobId.Hash());
         return {blobId, vDiskId};
@@ -273,10 +273,10 @@ struct TTestState {
         for (ui64 idx = 0; idx < count; ++idx) {
             TAutoPtr<IEventHandle> handle;
             TEvBlobStorage::TEvPutResult *putResult = Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPutResult>(handle);
-            Y_VERIFY(!seenBlobs.count(putResult->Id));
+            Y_ABORT_UNLESS(!seenBlobs.count(putResult->Id));
             seenBlobs.insert(putResult->Id);
             auto it = specialStatus.find(putResult->Id);
-            Y_VERIFY(it != specialStatus.end());
+            Y_ABORT_UNLESS(it != specialStatus.end());
             NKikimrProto::EReplyStatus expectedStatus = it->second;
             Y_VERIFY_S(putResult->Status == expectedStatus, "expected status "
                     << NKikimrProto::EReplyStatus_Name(expectedStatus)

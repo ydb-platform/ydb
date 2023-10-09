@@ -57,7 +57,7 @@ public:
     virtual void OnError() = 0;
 
     void Start() {
-        Y_VERIFY(this->Context_, "Missing shared context");
+        Y_ABORT_UNLESS(this->Context_, "Missing shared context");
         auto context = this->Context_->CreateContext();
         {
             std::lock_guard lock(Mutex_);

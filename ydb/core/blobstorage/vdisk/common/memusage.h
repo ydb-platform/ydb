@@ -105,7 +105,7 @@ namespace NKikimr {
                 , InitialCapacity(Base.GetCapacity())
             {
 #ifndef NDEBUG
-                Y_VERIFY(InitialCapacity == Base.LastCapacity, "InitialCapacity# %zu Base.LastCapacity# %zu",
+                Y_ABORT_UNLESS(InitialCapacity == Base.LastCapacity, "InitialCapacity# %zu Base.LastCapacity# %zu",
                         InitialCapacity, Base.LastCapacity);
 #endif
             }
@@ -136,7 +136,7 @@ namespace NKikimr {
         ~TTrackableBase() {
             size_t capacity = GetCapacity();
 #ifndef NDEBUG
-            Y_VERIFY(capacity == LastCapacity, "capacity# %zu LastCapacity# %zu", capacity, LastCapacity);
+            Y_ABORT_UNLESS(capacity == LastCapacity, "capacity# %zu LastCapacity# %zu", capacity, LastCapacity);
 #endif
             Consumer.Subtract(capacity);
         }

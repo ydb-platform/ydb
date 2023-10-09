@@ -91,7 +91,7 @@ public:
         if (!batch) {
             return nullptr;
         }
-        Y_VERIFY(from.Compare(to) != std::partial_ordering::greater);
+        Y_ABORT_UNLESS(from.Compare(to) != std::partial_ordering::greater);
         const std::optional<ui32> idxFrom = FindPosition(batch, from, true, includeFrom);
         const std::optional<ui32> idxTo = FindPosition(batch, to, false, includeTo);
         if (!idxFrom || !idxTo || *idxTo < *idxFrom) {
@@ -110,14 +110,14 @@ public:
         if (dataColumns.size()) {
             Data = std::make_shared<TSortableScanData>(batch, dataColumns);
         }
-        Y_VERIFY(batch->num_rows());
+        Y_ABORT_UNLESS(batch->num_rows());
         Y_VERIFY_DEBUG(batch->ValidateFull().ok());
-        Y_VERIFY(Sorting->GetColumns().size());
+        Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 
     std::partial_ordering Compare(const TSortableBatchPosition& item) const {
-        Y_VERIFY(item.ReverseSort == ReverseSort);
-        Y_VERIFY(item.Sorting->GetColumns().size() == Sorting->GetColumns().size());
+        Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
+        Y_ABORT_UNLESS(item.Sorting->GetColumns().size() == Sorting->GetColumns().size());
         const auto directResult = NArrow::ColumnsCompare(Sorting->GetColumns(), Position, item.Sorting->GetColumns(), item.Position);
         if (ReverseSort) {
             if (directResult == std::partial_ordering::less) {

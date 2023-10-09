@@ -90,14 +90,14 @@ public:
     template <class T>
     T& GetMeAs() {
         auto result = dynamic_cast<T*>(this);
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
         return *result;
     }
 
     template <class T>
     const T& GetMeAs() const {
         auto result = dynamic_cast<const T*>(this);
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
         return *result;
     }
 

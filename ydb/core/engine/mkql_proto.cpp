@@ -105,7 +105,7 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             } else { \
                 CHECK_OR_RETURN_ERROR(false, Sprintf("Value of type " #name " expected in tuple at position %" PRIu32, i)); \
             } \
-            Y_VERIFY(c.IsInline()); \
+            Y_ABORT_UNLESS(c.IsInline()); \
             break; \
         }
 
@@ -191,70 +191,70 @@ bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue
     auto typeId = type.GetTypeId();
     switch (typeId) {
     case NScheme::NTypeIds::Int8:
-        Y_VERIFY(c.Size() == sizeof(i8));
+        Y_ABORT_UNLESS(c.Size() == sizeof(i8));
         val.MutableOptional()->SetInt32(*(i8*)c.Data());
         break;
     case NScheme::NTypeIds::Uint8:
-        Y_VERIFY(c.Size() == sizeof(ui8));
+        Y_ABORT_UNLESS(c.Size() == sizeof(ui8));
         val.MutableOptional()->SetUint32(*(ui8*)c.Data());
         break;
 
     case NScheme::NTypeIds::Int16:
-        Y_VERIFY(c.Size() == sizeof(i16));
+        Y_ABORT_UNLESS(c.Size() == sizeof(i16));
         val.MutableOptional()->SetInt32(ReadUnaligned<i16>(c.Data()));
         break;
     case NScheme::NTypeIds::Uint16:
-        Y_VERIFY(c.Size() == sizeof(ui16));
+        Y_ABORT_UNLESS(c.Size() == sizeof(ui16));
         val.MutableOptional()->SetUint32(ReadUnaligned<ui16>(c.Data()));
         break;
 
     case NScheme::NTypeIds::Int32:
-        Y_VERIFY(c.Size() == sizeof(i32));
+        Y_ABORT_UNLESS(c.Size() == sizeof(i32));
         val.MutableOptional()->SetInt32(ReadUnaligned<i32>(c.Data()));
         break;
     case NScheme::NTypeIds::Uint32:
-        Y_VERIFY(c.Size() == sizeof(ui32));
+        Y_ABORT_UNLESS(c.Size() == sizeof(ui32));
         val.MutableOptional()->SetUint32(ReadUnaligned<ui32>(c.Data()));
         break;
 
     case NScheme::NTypeIds::Int64:
-        Y_VERIFY(c.Size() == sizeof(i64));
+        Y_ABORT_UNLESS(c.Size() == sizeof(i64));
         val.MutableOptional()->SetInt64(ReadUnaligned<i64>(c.Data()));
         break;
     case NScheme::NTypeIds::Uint64:
-        Y_VERIFY(c.Size() == sizeof(ui64));
+        Y_ABORT_UNLESS(c.Size() == sizeof(ui64));
         val.MutableOptional()->SetUint64(ReadUnaligned<ui64>(c.Data()));
         break;
 
     case NScheme::NTypeIds::Bool:
-        Y_VERIFY(c.Size() == sizeof(bool));
+        Y_ABORT_UNLESS(c.Size() == sizeof(bool));
         val.MutableOptional()->SetBool(*(bool*)c.Data());
         break;
 
     case NScheme::NTypeIds::Float:
-        Y_VERIFY(c.Size() == sizeof(float));
+        Y_ABORT_UNLESS(c.Size() == sizeof(float));
         val.MutableOptional()->SetFloat(ReadUnaligned<float>(c.Data()));
         break;
 
     case NScheme::NTypeIds::Double:
-        Y_VERIFY(c.Size() == sizeof(double));
+        Y_ABORT_UNLESS(c.Size() == sizeof(double));
         val.MutableOptional()->SetDouble(ReadUnaligned<double>(c.Data()));
         break;
 
     case NScheme::NTypeIds::Date:
-        Y_VERIFY(c.Size() == sizeof(ui16));
+        Y_ABORT_UNLESS(c.Size() == sizeof(ui16));
         val.MutableOptional()->SetUint32(ReadUnaligned<i16>(c.Data()));
         break;
     case NScheme::NTypeIds::Datetime:
-        Y_VERIFY(c.Size() == sizeof(ui32));
+        Y_ABORT_UNLESS(c.Size() == sizeof(ui32));
         val.MutableOptional()->SetUint32(ReadUnaligned<ui32>(c.Data()));
         break;
     case NScheme::NTypeIds::Timestamp:
-        Y_VERIFY(c.Size() == sizeof(ui64));
+        Y_ABORT_UNLESS(c.Size() == sizeof(ui64));
         val.MutableOptional()->SetUint64(ReadUnaligned<ui64>(c.Data()));
         break;
     case NScheme::NTypeIds::Interval:
-        Y_VERIFY(c.Size() == sizeof(i64));
+        Y_ABORT_UNLESS(c.Size() == sizeof(i64));
         val.MutableOptional()->SetInt64(ReadUnaligned<i64>(c.Data()));
         break;
 

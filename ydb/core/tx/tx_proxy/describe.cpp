@@ -87,7 +87,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
         auto* pathDescription = result->Record.MutablePathDescription();
         auto* self = pathDescription->MutableSelf();
 
-        Y_VERIFY(!entry.Path.empty());
+        Y_ABORT_UNLESS(!entry.Path.empty());
         self->SetName(entry.Path.back());
         self->SetPathType(NKikimrSchemeOp::EPathTypeTable);
         FillSystemViewDescr(self, schemeShardId);
@@ -111,7 +111,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
             }
             col->SetId(id);
             if (column.KeyOrder >= 0) {
-                Y_VERIFY((size_t)column.KeyOrder < keyColumnIds.size());
+                Y_ABORT_UNLESS((size_t)column.KeyOrder < keyColumnIds.size());
                 keyColumnIds[column.KeyOrder] = id;
                 ++keySize;
             }
@@ -123,7 +123,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
         for (size_t i = 0; i < keySize; ++i) {
             auto columnId = keyColumnIds[i];
             auto columnIt = entry.Columns.find(columnId);
-            Y_VERIFY(columnIt != entry.Columns.end());
+            Y_ABORT_UNLESS(columnIt != entry.Columns.end());
             table->AddKeyColumnIds(columnId);
             table->AddKeyColumnNames(columnIt->second.Name);
         }
@@ -231,7 +231,7 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
 
     if (record.GetDescribePath().HasPath()) {
         TDomainsInfo *domainsInfo = AppData(ctx)->DomainsInfo.Get();
-        Y_VERIFY(!domainsInfo->Domains.empty());
+        Y_ABORT_UNLESS(!domainsInfo->Domains.empty());
 
         if (record.GetDescribePath().GetPath() == "/") {
             // Special handling for enumerating roots
@@ -301,7 +301,7 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
 
     TxProxyMon->CacheRequestLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
-    Y_VERIFY(navigate->ResultSet.size() == 1);
+    Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
     const auto& entry = navigate->ResultSet.front();
 
     LOG_LOG_S(ctx, (navigate->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_INFO),
@@ -410,7 +410,7 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
         const auto& self = pathDescription.GetSelf();
 
         TDomainsInfo *domainsInfo = AppData()->DomainsInfo.Get();
-        Y_VERIFY(!domainsInfo->Domains.empty());
+        Y_ABORT_UNLESS(!domainsInfo->Domains.empty());
 
         bool needSysFolder = false;
         if (self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeSubDomain ||

@@ -162,11 +162,11 @@ public:
         }
         // Override static settings with config
         for (const auto& config : Config.GetQuotaDescriptions()) {
-            Y_VERIFY(config.GetSubjectType());
-            Y_VERIFY(config.GetMetricName());
+            Y_ABORT_UNLESS(config.GetSubjectType());
+            Y_ABORT_UNLESS(config.GetMetricName());
             auto& metricsMap = QuotaInfoMap[config.GetSubjectType()];
             auto infoIt = metricsMap.find(config.GetMetricName());
-            Y_VERIFY(infoIt != metricsMap.end());
+            Y_ABORT_UNLESS(infoIt != metricsMap.end());
             auto& info = infoIt->second;
             if (config.GetDefaultLimit()) {
                 info.DefaultLimit = config.GetDefaultLimit();

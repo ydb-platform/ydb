@@ -83,8 +83,8 @@ public:
         }
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxForceDropExtSubDomain);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropExtSubDomain);
 
         TTabletId hive = TTabletId(record.GetOrigin());
         context.OnComplete.UnbindMsgFromPipe(OperationId, hive, TPipeMessageId(0, 0));
@@ -103,8 +103,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxForceDropExtSubDomain);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropExtSubDomain);
 
         TSubDomainInfo::TPtr domainInfo = context.SS->SubDomains.at(txState->TargetPathId);
         domainInfo->Initialize(context.SS->ShardInfos);
@@ -156,7 +156,7 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxForceDropExtSubDomain);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropExtSubDomain);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -194,8 +194,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxForceDropExtSubDomain);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropExtSubDomain);
 
         auto targetPath = context.SS->PathsById.at(txState->TargetPathId);
 
@@ -322,7 +322,7 @@ public:
 
             context.OnComplete.Dependence(otherTxId, OperationId.GetTxId());
 
-            Y_VERIFY(context.SS->Operations.contains(otherTxId));
+            Y_ABORT_UNLESS(context.SS->Operations.contains(otherTxId));
             auto otherOperation = context.SS->Operations.at(otherTxId);
             for (ui32 partId = 0; partId < otherOperation->Parts.size(); ++partId) {
                 if (auto part = otherOperation->Parts.at(partId)) {
@@ -369,7 +369,7 @@ ISubOperation::TPtr CreateForceDropExtSubDomain(TOperationId id, const TTxTransa
 }
 
 ISubOperation::TPtr CreateForceDropExtSubDomain(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropExtSubdomain>(id, state);
 }
 

@@ -29,7 +29,7 @@ TVector<TMaybe<NYT::TNode>> InferSchemaFromTablesContents(const TString& cluster
     }
 
     auto client = DynamicPointerCast<NYT::NApi::NRpcProxy::TClient>(connection->CreateClient(clientOptions));
-    Y_VERIFY(client);
+    Y_ABORT_UNLESS(client);
     auto apiServiceProxy = client->CreateApiServiceProxy();
 
     TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> inputs(requests.size());

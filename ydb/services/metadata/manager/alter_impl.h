@@ -135,7 +135,7 @@ public:
         Ydb::Table::CreateSessionResult session;
         currentFullReply.operation().result().UnpackTo(&session);
         SessionId = session.session_id();
-        Y_VERIFY(SessionId);
+        Y_ABORT_UNLESS(SessionId);
 
         InternalController = std::make_shared<TProcessingController<TObject>>(TBase::SelfId());
         TBase::Register(new TRestoreObjectsActor<TObject>(RestoreObjectIds, UserToken, InternalController, SessionId));
@@ -143,7 +143,7 @@ public:
 
     void Handle(typename TEvRestoreFinished<TObject>::TPtr& ev) {
         TransactionId = ev->Get()->GetTransactionId();
-        Y_VERIFY(TransactionId);
+        Y_ABORT_UNLESS(TransactionId);
         std::vector<TObject> objects = std::move(ev->Get()->MutableObjects());
         if (!PrepareRestoredObjects(objects)) {
             TBase::PassAway();

@@ -41,7 +41,7 @@ void TBlockIO::Inbox(TEventHandlePtr &eh)
             Handle(eh->Cookie, { ptr, size_t(ev->ResponseSz) });
         }
     } else if (auto *ev = eh->CastAsLocal<NBlockIO::TEvFetch>()) {
-        Y_VERIFY(!Owner, "TBlockIO actor now can hanle only one request");
+        Y_ABORT_UNLESS(!Owner, "TBlockIO actor now can hanle only one request");
 
         Owner = eh->Sender;
         Bootstrap(ev->Priority, ev->Fetch);
@@ -59,7 +59,7 @@ void TBlockIO::Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch> o
     Origin = origin;
     Priority = priority;
 
-    Y_VERIFY(Origin->Pages, "Got TFetch request without pages list");
+    Y_ABORT_UNLESS(Origin->Pages, "Got TFetch request without pages list");
 
     PagesToBlobsConverter = new TPagesToBlobsConverter(*Origin->PageCollection, Origin->Pages);
 
@@ -135,7 +135,7 @@ void TBlockIO::Dispatch() noexcept
             << " bricks in " << Pending << " reads, " << BlockStates.size() <<  "p req";
     }
 
-    Y_VERIFY(PagesToBlobsConverter->Complete(), "NPageCollection::TPagesToBlobsConverter cooked incomplete loads");
+    Y_ABORT_UNLESS(PagesToBlobsConverter->Complete(), "NPageCollection::TPagesToBlobsConverter cooked incomplete loads");
 }
 
 void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items) noexcept
@@ -160,7 +160,7 @@ void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items) noexcept
         const auto &brick = PagesToBlobsConverter->Queue[base + (&piece - &items[0])];
 
         auto& state = BlockStates.at(brick.Slot);
-        Y_VERIFY(state.Data.size() - state.Offset >= piece.Buffer.size());
+        Y_ABORT_UNLESS(state.Data.size() - state.Offset >= piece.Buffer.size());
         piece.Buffer.begin().ExtractPlainDataAndAdvance(state.Data.mutable_data() + state.Offset, piece.Buffer.size());
         state.Offset += piece.Buffer.size();
     }
@@ -171,7 +171,7 @@ void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items) noexcept
     size_t index = 0;
     for (ui32 pageId : Origin->Pages) {
         auto& state = BlockStates.at(index++);
-        Y_VERIFY(state.Offset == state.Data.size());
+        Y_ABORT_UNLESS(state.Offset == state.Data.size());
         if (Origin->PageCollection->Verify(pageId, state.Data)) {
             continue;
         } else if (auto logl = Logger->Log(ELnLev::Crit)) {

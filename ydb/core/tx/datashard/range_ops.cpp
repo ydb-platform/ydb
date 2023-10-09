@@ -224,7 +224,7 @@ TString NKikimr::DebugPrintRanges(TConstArrayRef<NScheme::TTypeInfo> types,
 }
 
 TString NKikimr::DebugPrintPoint(TConstArrayRef<NScheme::TTypeInfo> types, const TConstArrayRef<TCell> &point, const NScheme::TTypeRegistry& typeRegistry) {
-    Y_VERIFY(types.size() >= point.size());
+    Y_ABORT_UNLESS(types.size() >= point.size());
     TDbTupleRef pointRef(types.data(), point.data(), point.size());
 
     return DbgPrintTuple(pointRef, typeRegistry);

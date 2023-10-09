@@ -135,7 +135,7 @@ namespace NKikimr {
             Extracted.Barriers =
                 std::make_shared<TFreshAppendixBarriers>(std::move(barriers), vctx->FreshIndex, true);
         }
-        Y_VERIFY(Extracted.IsReady());
+        Y_ABORT_UNLESS(Extracted.IsReady());
     }
 
 

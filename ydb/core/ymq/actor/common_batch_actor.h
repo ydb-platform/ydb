@@ -73,7 +73,7 @@ private:
 
     void HandleResponse(TSqsEvents::TEvSqsResponse::TPtr& ev) {
         const ui64 cookie = ev->Cookie;
-        Y_VERIFY(cookie < Responses.size());
+        Y_ABORT_UNLESS(cookie < Responses.size());
         RLOG_SQS_TRACE("Batch actor got reply from proxy actor[" << cookie << "]: " << ev->Get()->Record);
         Responses[cookie] = std::move(ev->Get()->Record);
         if (++ResponsesReceived == Responses.size()) {

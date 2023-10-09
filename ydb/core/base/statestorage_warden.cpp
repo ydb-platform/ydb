@@ -125,8 +125,8 @@ public:
         , BoardInfo(board)
         , SchemeBoardInfo(schemeBoard)
     {
-        Y_VERIFY(GroupId == board->StateStorageGroup);
-        Y_VERIFY(GroupId == schemeBoard->StateStorageGroup);
+        Y_ABORT_UNLESS(GroupId == board->StateStorageGroup);
+        Y_ABORT_UNLESS(GroupId == schemeBoard->StateStorageGroup);
     }
 
     void Bootstrap()

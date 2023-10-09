@@ -5,7 +5,7 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWrit
     const NKikimrTxColumnShard::TLogicalMetadata& meta = blobData.GetLogicalMeta();
 
     const auto& blobRange = blobData.GetBlobRange();
-    Y_VERIFY(blobRange.GetBlobId().IsValid());
+    Y_ABORT_UNLESS(blobRange.GetBlobId().IsValid());
 
     // First write wins
     TBlobGroupSelector dsGroupSelector(Self->Info());
@@ -19,7 +19,7 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWrit
     bool ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
     if (ok) {
         // Put new data into blob cache
-        Y_VERIFY(blobRange.IsFullBlob());
+        Y_ABORT_UNLESS(blobRange.IsFullBlob());
 
         Self->UpdateInsertTableCounters();
         return true;
@@ -32,7 +32,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
     ACFL_DEBUG("event", "start_execute");
     const auto& writeMeta(PutBlobResult->Get()->GetWriteMeta());
-    Y_VERIFY(Self->TablesManager.IsReadyForWrite(writeMeta.GetTableId()));
+    Y_ABORT_UNLESS(Self->TablesManager.IsReadyForWrite(writeMeta.GetTableId()));
 
     txc.DB.NoMoreReadsForTx();
     TWriteOperation::TPtr operation;
@@ -40,8 +40,8 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         AFL_VERIFY(PutBlobResult->Get()->GetBlobData().size() == 1)("count", PutBlobResult->Get()->GetBlobData().size());
     } else {
         operation = Self->OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
-        Y_VERIFY(operation);
-        Y_VERIFY(operation->GetStatus() == EOperationStatus::Started);
+        Y_ABORT_UNLESS(operation);
+        Y_ABORT_UNLESS(operation->GetStatus() == EOperationStatus::Started);
     }
 
     TVector<TWriteId> writeIds;
@@ -75,7 +75,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         NEvents::TDataEvents::TCoordinatorInfo tInfo = Self->ProgressTxController->GetCoordinatorInfo(operation->GetTxId());
         Result = NEvents::TDataEvents::TEvWriteResult::BuildPrepared(operation->GetTxId(), tInfo);
     } else {
-        Y_VERIFY(writeIds.size() == 1);
+        Y_ABORT_UNLESS(writeIds.size() == 1);
         Result = std::make_unique<TEvColumnShard::TEvWriteResult>(Self->TabletID(), writeMeta, (ui64)writeIds.front(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     }
     return true;

@@ -112,7 +112,7 @@ public:
                 context.SS->PersistShardTx(db, shard.Idx, operationId.GetTxId());
             }
         }
-        Y_VERIFY(shardsToCreate == checkShardToCreate);
+        Y_ABORT_UNLESS(shardsToCreate == checkShardToCreate);
 
         return txState;
     }
@@ -131,7 +131,7 @@ public:
             const TChannelsBindings& volumeChannels,
             TOperationContext& context)
     {
-        Y_VERIFY(volume->AlterData->DefaultPartitionCount
+        Y_ABORT_UNLESS(volume->AlterData->DefaultPartitionCount
                 >= volume->DefaultPartitionCount);
         ui64 count = volume->AlterData->DefaultPartitionCount + 1;
         ui64 shardsToCreate = volume->AlterData->DefaultPartitionCount
@@ -430,7 +430,7 @@ public:
         }
 
         TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(path.Base()->PathId);
-        Y_VERIFY(volume);
+        Y_ABORT_UNLESS(volume);
 
         const auto* alterVolumeConfig = ParseParams(volume->VolumeConfig, alter, errStr);
         if (!alterVolumeConfig) {
@@ -592,7 +592,7 @@ public:
         auto newVolumeSpace = volume->GetVolumeSpace();
 
         auto domainDir = context.SS->PathsById.at(path.GetPathIdForDomain());
-        Y_VERIFY(domainDir);
+        Y_ABORT_UNLESS(domainDir);
 
         auto checkedSpaceChange = domainDir->CheckVolumeSpaceChange(newVolumeSpace, oldVolumeSpace, errStr);
         if (!checkedSpaceChange) {
@@ -649,7 +649,7 @@ ISubOperation::TPtr CreateAlterBSV(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr CreateAlterBSV(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TAlterBlockStoreVolume>(id, state);
 }
 

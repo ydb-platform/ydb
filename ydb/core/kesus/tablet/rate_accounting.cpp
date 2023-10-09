@@ -415,7 +415,7 @@ TInstant TRateAccounting::Report(
         values += skip;
         size -= skip;
         start += interval * skip;
-        Y_VERIFY(start >= reported, "rate accounting report deduplication error");
+        Y_ABORT_UNLESS(start >= reported, "rate accounting report deduplication error");
     }
 
     // Accept values and add them into history

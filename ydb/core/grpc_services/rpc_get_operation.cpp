@@ -163,7 +163,7 @@ private:
         }
 
         IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, tid);
-        Y_VERIFY(pipeActor);
+        Y_ABORT_UNLESS(pipeActor);
         PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
 
         auto request = MakeHolder<NConsole::TEvConsole::TEvGetOperationRequest>();
@@ -190,7 +190,7 @@ private:
         }
 
         IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, schemeShardTabletId);
-        Y_VERIFY(pipeActor);
+        Y_ABORT_UNLESS(pipeActor);
         PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
 
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();

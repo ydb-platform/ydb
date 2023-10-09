@@ -92,16 +92,16 @@ namespace NTable {
 
         TPartView Result() noexcept
         {
-            Y_VERIFY(Stage == EStage::Result);
-            Y_VERIFY(PartView, "Result may only be grabbed once");
-            Y_VERIFY(PartView.Slices, "Missing slices in Result stage");
+            Y_ABORT_UNLESS(Stage == EStage::Result);
+            Y_ABORT_UNLESS(PartView, "Result may only be grabbed once");
+            Y_ABORT_UNLESS(PartView.Slices, "Missing slices in Result stage");
             return std::move(PartView);
         }
 
         static TEpoch GrabEpoch(const TPartComponents &pc)
         {
-            Y_VERIFY(pc.PageCollectionComponents, "PartComponents should have at least one pageCollectionComponent");
-            Y_VERIFY(pc.PageCollectionComponents[0].Packet, "PartComponents should have a parsed meta pageCollectionComponent");
+            Y_ABORT_UNLESS(pc.PageCollectionComponents, "PartComponents should have at least one pageCollectionComponent");
+            Y_ABORT_UNLESS(pc.PageCollectionComponents[0].Packet, "PartComponents should have a parsed meta pageCollectionComponent");
 
             const auto &meta = pc.PageCollectionComponents[0].Packet->Meta;
 
@@ -111,7 +111,7 @@ namespace NTable {
                 {
                     TProtoBox<NProto::TRoot> root(meta.GetPageInplaceData(page));
 
-                    Y_VERIFY(root.HasEpoch());
+                    Y_ABORT_UNLESS(root.HasEpoch());
 
                     return TEpoch(root.GetEpoch());
                 }
@@ -154,8 +154,8 @@ namespace NTable {
         {
             TMemoryInput stream(plain.data(), plain.size());
             bool parsed = Root.ParseFromArcadiaStream(&stream);
-            Y_VERIFY(parsed && stream.Skip(1) == 0, "Cannot parse TPart meta");
-            Y_VERIFY(Root.HasEpoch(), "TPart meta has no epoch info");
+            Y_ABORT_UNLESS(parsed && stream.Skip(1) == 0, "Cannot parse TPart meta");
+            Y_ABORT_UNLESS(Root.HasEpoch(), "TPart meta has no epoch info");
         }
 
         void StageParseMeta() noexcept;

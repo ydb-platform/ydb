@@ -254,7 +254,7 @@ void SendVGetResult(ui32 vDiskIdx, NKikimrProto::EReplyStatus status, ui32 partI
     if (status == NKikimrProto::OK) {
         result->Record.SetCookie(from->InnerCookie);
         TVDiskState *part = nullptr;
-        Y_VERIFY(subgroup.size() > partId - 1);
+        Y_ABORT_UNLESS(subgroup.size() > partId - 1);
         part = &subgroup[partId - 1];
 
         result->AddResult(status, part->LogoBlobId, 0, TRope(part->Data), &queryCookie);
@@ -351,15 +351,15 @@ void GrabVPutEvent(TTestActorRuntime &runtime, TVector<TVDiskState> &subgroup, u
     UNIT_ASSERT(vput);
     TLogoBlobID id = LogoBlobIDFromLogoBlobID(vput->Record.GetBlobID());
     ui32 idx = id.PartId();
-    Y_VERIFY(idx);
+    Y_ABORT_UNLESS(idx);
     idx = idx - 1 + vDiskIdxShift;
     Y_VERIFY_S(idx < subgroup.size(), idx << ' ' << subgroup.size() << ' ' << vDiskIdxShift << ' ' << vput->ToString());
-    Y_VERIFY(!subgroup[idx].IsValid);
+    Y_ABORT_UNLESS(!subgroup[idx].IsValid);
     subgroup[idx].SetFrom(handle.Get(), vput);
 }
 
 void SendVPutResultEvent(TTestActorRuntime &runtime, TVDiskState &vdisk, NKikimrProto::EReplyStatus status) {
-    Y_VERIFY(vdisk.IsValid);
+    Y_ABORT_UNLESS(vdisk.IsValid);
     std::unique_ptr<TEvBlobStorage::TEvVPutResult> vPutResult(new TEvBlobStorage::TEvVPutResult(
         status, vdisk.LogoBlobId, vdisk.VDiskId,
         &vdisk.InnerCookie, TOutOfSpaceStatus(0u, 0.0), TAppData::TimeProvider->Now(),
@@ -554,7 +554,7 @@ Y_UNIT_TEST(TestGivenBlock42MultiPut2ItemsStatuses) {
         NKikimrProto::BLOCKED,
         NKikimrProto::DEADLINE
     };
-    Y_VERIFY(maybeStatuses[statusCount - 1] == NKikimrProto::DEADLINE);
+    Y_ABORT_UNLESS(maybeStatuses[statusCount - 1] == NKikimrProto::DEADLINE);
     for (ui64 fstIdx = 0; fstIdx < statusCount; ++fstIdx) {
         for (ui64 sndIdx = 0; sndIdx < statusCount; ++sndIdx) {
             TTestBasicRuntime runtime(1, false);
@@ -652,8 +652,8 @@ void MakeTestGivenBlock42GetRecoverMultiPutStatuses(NKikimrProto::EReplyStatus e
         TLogoBlobID(72075186224047637, 1, 863, 1, 786, 24576),
         TLogoBlobID(72075186224047637, 1, 2194, 1, 142, 12288)
     };
-    Y_VERIFY(blobIds.size() == blobCount);
-    Y_VERIFY(statuses.empty() || statuses.size() == blobCount);
+    Y_ABORT_UNLESS(blobIds.size() == blobCount);
+    Y_ABORT_UNLESS(statuses.empty() || statuses.size() == blobCount);
 
     TVector<TBlobTestSet::TBlob> blobs;
     for (const auto& id : blobIds) {
@@ -706,7 +706,7 @@ Y_UNIT_TEST(TestGivenBlock42GetRecoverMultiPutStatuses) {
         NKikimrProto::BLOCKED,
         NKikimrProto::DEADLINE
     };
-    Y_VERIFY(maybeStatuses[statusCount - 1] == NKikimrProto::DEADLINE);
+    Y_ABORT_UNLESS(maybeStatuses[statusCount - 1] == NKikimrProto::DEADLINE);
     for (ui64 idx = 0; idx < statusCount; ++idx) {
         MakeTestGivenBlock42GetRecoverMultiPutStatuses(maybeStatuses[idx]);
     }
@@ -719,7 +719,7 @@ Y_UNIT_TEST(TestGivenBlock42GetRecoverMultiPut2ItemsStatuses) {
         NKikimrProto::BLOCKED,
         NKikimrProto::DEADLINE
     };
-    Y_VERIFY(maybeStatuses[statusCount - 1] == NKikimrProto::DEADLINE);
+    Y_ABORT_UNLESS(maybeStatuses[statusCount - 1] == NKikimrProto::DEADLINE);
     for (ui64 idx = 1; idx < statusCount; ++idx) {
         MakeTestGivenBlock42GetRecoverMultiPutStatuses(maybeStatuses[idx], {maybeStatuses[idx], maybeStatuses[0]});
         MakeTestGivenBlock42GetRecoverMultiPutStatuses(maybeStatuses[idx], {maybeStatuses[0], maybeStatuses[idx]});

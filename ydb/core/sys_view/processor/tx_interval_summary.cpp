@@ -24,7 +24,7 @@ struct TSysViewProcessor::TTxIntervalSummary : public TTxBase {
                     break;
                 }
             }
-            Y_VERIFY(it != range.second);
+            Y_ABORT_UNLESS(it != range.second);
             Self->ByCpu.erase(it);
 
             query.Cpu += cpu;

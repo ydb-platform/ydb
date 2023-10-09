@@ -3,7 +3,7 @@
 namespace NKikimr::NArrow {
 
 size_t TReplaceKeyHelper::LowerBound(const std::vector<TRawReplaceKey>& batchKeys, const TReplaceKey& key, size_t offset) {
-    Y_VERIFY(offset <= batchKeys.size());
+    Y_ABORT_UNLESS(offset <= batchKeys.size());
     if (offset == batchKeys.size()) {
         return offset;
     }

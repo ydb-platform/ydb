@@ -36,7 +36,7 @@ namespace NFwd {
 
             ui32 Emplace(TPage &page)
             {
-                Y_VERIFY(page, "Cannot push invalid page to trace cache");
+                Y_ABORT_UNLESS(page, "Cannot push invalid page to trace cache");
 
                 Offset = (Pages.size() + Offset - 1) % Pages.size();
 
@@ -69,7 +69,7 @@ namespace NFwd {
 
         TResult Handle(IPageLoadingQueue *head, TPageId pageId, ui64 lower) noexcept override
         {
-            Y_VERIFY(pageId != Max<TPageId>(), "Invalid requested pageId");
+            Y_ABORT_UNLESS(pageId != Max<TPageId>(), "Invalid requested pageId");
 
             if (auto *page = Trace.Get(pageId))
                 return { page, false, true };

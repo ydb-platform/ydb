@@ -50,8 +50,8 @@ public:
         , TtlSettings(std::move(ttlSettings))
         , LogPrefix("Table " + TableName() + " updater. ")
     {   
-        Y_VERIFY(!PathComponents.empty());
-        Y_VERIFY(!Columns.empty());
+        Y_ABORT_UNLESS(!PathComponents.empty());
+        Y_ABORT_UNLESS(!Columns.empty());
     }
 
     void Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) override {
@@ -127,7 +127,7 @@ public:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
         const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
-        Y_VERIFY(request.ResultSet.size() == 1);
+        Y_ABORT_UNLESS(request.ResultSet.size() == 1);
         const NSchemeCache::TSchemeCacheNavigate::TEntry& result  = request.ResultSet[0];
         if (result.Status != EStatus::Ok) {
             KQP_PROXY_LOG_D(LogPrefix << "Describe result: " << result.Status);
@@ -235,7 +235,7 @@ public:
         }
         PipeClientClosedByUs = false;
         NActors::IActor* pipeActor = NTabletPipe::CreateClient(SelfId(), ev->Get()->Record.GetSchemeShardTabletId());
-        Y_VERIFY(pipeActor);
+        Y_ABORT_UNLESS(pipeActor);
         SchemePipeActorId = Register(pipeActor);
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);

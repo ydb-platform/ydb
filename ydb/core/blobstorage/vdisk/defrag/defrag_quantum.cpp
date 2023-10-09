@@ -56,7 +56,7 @@ namespace NKikimr {
             TEvDefragQuantumResult::TStat stat{.Eof = true};
 
             if (ChunksToDefrag) {
-                Y_VERIFY(*ChunksToDefrag);
+                Y_ABORT_UNLESS(*ChunksToDefrag);
             } else {
                 TDefragQuantumFindChunks findChunks(GetSnapshot(), DCtx->HugeBlobCtx);
                 const ui64 endTime = GetCycleCountFast() + DurationToCycles(NDefrag::MaxSnapshotHoldDuration);
@@ -95,7 +95,7 @@ namespace NKikimr {
                 Compact();
 
                 auto hugeStat = GetHugeStat();
-                Y_VERIFY(hugeStat.LockedChunks.size() < 100);
+                Y_ABORT_UNLESS(hugeStat.LockedChunks.size() < 100);
             }
 
             Send(ParentActorId, new TEvDefragQuantumResult(std::move(stat)));

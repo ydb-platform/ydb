@@ -105,7 +105,7 @@ public:
             TString label = labelRowset.GetValue<Schema::SlotLabels::Label>();
 
             TTenant::TPtr tenant = Self->GetTenant(tenantName);
-            Y_VERIFY(tenant);
+            Y_ABORT_UNLESS(tenant);
             tenant->AddUnusedSlotLabel(label);
 
             LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
@@ -128,13 +128,13 @@ public:
                 dataCenter = DataCenterToString(slotRowset.GetValue<Schema::Slots::DataCenter>());
             }
 
-            Y_VERIFY(!Self->Slots.contains(id));
+            Y_ABORT_UNLESS(!Self->Slots.contains(id));
             TSlot::TPtr slot = new TSlot(id, slotType, dataCenter);
             slot->LastRequestId = reqId;
             Self->AddSlot(slot);
 
             if (assignedTenantName) {
-                Y_VERIFY(!slot->IsBanned);
+                Y_ABORT_UNLESS(!slot->IsBanned);
                 TSlotDescription usedAs;
                 usedAs.SlotType = slotRowset.GetValue<Schema::Slots::UsedAsType>();
                 if (slotRowset.HaveValue<Schema::Slots::UsedAsDataCenterName>()) {
@@ -148,7 +148,7 @@ public:
                 }
                 auto label = slotRowset.GetValue<Schema::Slots::Label>();
                 auto tenant = Self->GetTenant(assignedTenantName);
-                Y_VERIFY(tenant);
+                Y_ABORT_UNLESS(tenant);
 
                 Self->AttachSlotNoConfigureNoDb(slot, tenant, usedAs, label);
             }

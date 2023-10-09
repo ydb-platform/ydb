@@ -14,7 +14,7 @@ namespace NKikimr::NReplication::NController {
 
 class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     void DescribePath(ui32 idx) {
-        Y_VERIFY(idx < Paths.size());
+        Y_ABORT_UNLESS(idx < Paths.size());
         Send(YdbProxy, new TEvYdbProxy::TEvDescribePathRequest(Paths.at(idx).first, {}), 0, idx);
         Pending.insert(idx);
     }
@@ -29,7 +29,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             return;
         }
 
-        Y_VERIFY(*it < Paths.size());
+        Y_ABORT_UNLESS(*it < Paths.size());
         const auto& path = Paths.at(*it);
 
         const auto& result = ev->Get()->Result;

@@ -57,7 +57,7 @@ bool TValidatorsRegistry::CheckConfig(const NKikimrConfig::TAppConfig &oldConfig
                                       const TDynBitMap &validatorClass,
                                       TVector<Ydb::Issue::IssueMessage> &issues) const
 {
-    Y_VERIFY(Locked);
+    Y_ABORT_UNLESS(Locked);
     if (!ItemClasses.contains(validatorClass))
         return true;
 
@@ -72,7 +72,7 @@ bool TValidatorsRegistry::CheckConfig(const NKikimrConfig::TAppConfig &oldConfig
                                       const NKikimrConfig::TAppConfig &newConfig,
                                       TVector<Ydb::Issue::IssueMessage> &issues) const
 {
-    Y_VERIFY(Locked);
+    Y_ABORT_UNLESS(Locked);
     for (auto &pr : Validators) {
         if (pr.second->IsEnabled() && !pr.second->CheckConfig(oldConfig, newConfig, issues))
             return false;
@@ -83,7 +83,7 @@ bool TValidatorsRegistry::CheckConfig(const NKikimrConfig::TAppConfig &oldConfig
 
 bool TValidatorsRegistry::EnableValidator(const TString &name)
 {
-    Y_VERIFY(Locked);
+    Y_ABORT_UNLESS(Locked);
     auto validator = GetValidator(name);
     if (!validator)
         return false;
@@ -98,7 +98,7 @@ bool TValidatorsRegistry::EnableValidator(const TString &name)
 
 bool TValidatorsRegistry::DisableValidator(const TString &name)
 {
-    Y_VERIFY(Locked);
+    Y_ABORT_UNLESS(Locked);
     auto validator = GetValidator(name);
     if (!validator)
         return false;
@@ -113,7 +113,7 @@ bool TValidatorsRegistry::DisableValidator(const TString &name)
 
 bool TValidatorsRegistry::IsValidatorEnabled(const TString &name) const
 {
-    Y_VERIFY(Locked);
+    Y_ABORT_UNLESS(Locked);
     auto validator = GetValidator(name);
     return validator ? validator->IsEnabled() : false;
 }
@@ -140,7 +140,7 @@ void TValidatorsRegistry::DisableValidators()
 
 IConfigValidator::TPtr TValidatorsRegistry::GetValidator(const TString &name) const
 {
-    Y_VERIFY(Locked);
+    Y_ABORT_UNLESS(Locked);
     if (Validators.contains(name))
         return Validators.at(name);
     return nullptr;
@@ -148,13 +148,13 @@ IConfigValidator::TPtr TValidatorsRegistry::GetValidator(const TString &name) co
 
 const TValidatorsRegistry::TValidators &TValidatorsRegistry::GetValidators() const
 {
-    Y_VERIFY(Locked);
+    Y_ABORT_UNLESS(Locked);
     return Validators;
 }
 
 const THashSet<TDynBitMap> &TValidatorsRegistry::GetValidatorClasses() const
 {
-    Y_VERIFY(Locked);
+    Y_ABORT_UNLESS(Locked);
     return ItemClasses;
 }
 

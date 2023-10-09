@@ -42,7 +42,7 @@ struct TKesusTablet::TTxConfigGet : public TTxBase {
         LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
             "[" << Self->TabletID() << "] TTxConfigGet::Complete (sender=" << Sender
                 << ", cookie=" << Cookie << ")");
-        Y_VERIFY(Reply);
+        Y_ABORT_UNLESS(Reply);
         ctx.Send(Sender, Reply.Release(), 0, Cookie);
     }
 };

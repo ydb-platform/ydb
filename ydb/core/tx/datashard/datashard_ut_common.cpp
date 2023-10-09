@@ -293,7 +293,7 @@ TRuntimeNode TEngineHolder::ProgramText2Bin(TTester& tester, const TString& prog
     );
 
     const TDuration TIME_LIMIT = TDuration::Seconds(NValgrind::PlainOrUnderValgrind(60, 300));
-    Y_VERIFY(resFuture.Wait(TIME_LIMIT), "ProgramText2Bin is taking too long to compile");
+    Y_ABORT_UNLESS(resFuture.Wait(TIME_LIMIT), "ProgramText2Bin is taking too long to compile");
     NYql::TConvertResult res = resFuture.GetValue();
     res.Errors.PrintTo(Cerr);
     UNIT_ASSERT(res.Node.GetNode());
@@ -882,7 +882,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
                             RebootTablet(Tester.Runtime, TTestTxConfig::TxTablet0, Tester.Sender);
                         }
 
-                        Y_VERIFY(delayedEvent);
+                        Y_ABORT_UNLESS(delayedEvent);
                         DelayedReadSets.clear();
                         Tester.Runtime.Send(delayedEvent.Release());
                         Cerr << "resending delayed RS" << Endl;
@@ -1893,7 +1893,7 @@ namespace {
                 case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResponseData: {
                     const auto rsData = msg->Record.GetSerializedReadTableResponse();
                     Ydb::ResultSet rsParsed;
-                    Y_VERIFY(rsParsed.ParseFromString(rsData));
+                    Y_ABORT_UNLESS(rsParsed.ParseFromString(rsData));
                     NYdb::TResultSet rs(rsParsed);
                     auto& columns = rs.GetColumnsMeta();
                     NYdb::TResultSetParser parser(rs);
@@ -1948,7 +1948,7 @@ namespace {
         }
 
         void Handle(TEvResume::TPtr&, const TActorContext& ctx) {
-            Y_VERIFY(State == EState::PauseSent);
+            Y_ABORT_UNLESS(State == EState::PauseSent);
             State = EState::Normal;
             SendQuotas(ctx);
         }

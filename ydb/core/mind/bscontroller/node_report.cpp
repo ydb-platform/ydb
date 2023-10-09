@@ -54,7 +54,7 @@ public:
                 case NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED:
                     if (slot->IsBeingDeleted()) {
                         const size_t num = const_cast<TPDiskInfo&>(*slot->PDisk).VSlotsOnPDisk.erase(slot->VSlotId.VSlotId);
-                        Y_VERIFY(num);
+                        Y_ABORT_UNLESS(num);
                         State->DeleteDestroyedVSlot(slot);
                     }
                     break;

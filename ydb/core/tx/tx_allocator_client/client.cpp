@@ -11,7 +11,7 @@ NKikimr::TTxAllocatorClient::TTxAllocatorClient(NKikimrServices::EServiceKikimr 
     , TxAllocators(std::move(txAllocators))
     , MaxCapacity(TxAllocators.size() * RequestPerAllocator)
 {
-    Y_VERIFY(!TxAllocators.empty());
+    Y_ABORT_UNLESS(!TxAllocators.empty());
 }
 
 void NKikimr::TTxAllocatorClient::Bootstrap(const NActors::TActorContext &ctx) {
@@ -98,7 +98,7 @@ bool NKikimr::TTxAllocatorClient::OnAllocateResult(TEvTxAllocator::TEvAllocateRe
         return false;
     }
 
-    Y_VERIFY(record.GetStatus() == NKikimrTx::TEvTxAllocateResult::SUCCESS);
+    Y_ABORT_UNLESS(record.GetStatus() == NKikimrTx::TEvTxAllocateResult::SUCCESS);
 
     AddAllocationRange(txAllocator, record);
     DeregisterRequest(txAllocator);

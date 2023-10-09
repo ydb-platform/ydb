@@ -21,7 +21,7 @@ IExecutor* TTabletExecutedFlat::CreateExecutor(const TActorContext &ctx) {
         IActor *executor = NFlatExecutorSetup::CreateExecutor(this, ctx.SelfID);
         const TActorId executorID = ctx.RegisterWithSameMailbox(executor);
         Executor0 = dynamic_cast<TExecutor *>(executor);
-        Y_VERIFY(Executor0);
+        Y_ABORT_UNLESS(Executor0);
 
         ITablet::ExecutorActorID = executorID;
     }
@@ -131,19 +131,19 @@ void TTabletExecutedFlat::HandleTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, c
 }
 
 void TTabletExecutedFlat::HandleLocalMKQL(TEvTablet::TEvLocalMKQL::TPtr &ev, const TActorContext &ctx) {
-    Y_VERIFY(Factory, "Need IMiniKQLFactory to execute MKQL query");
+    Y_ABORT_UNLESS(Factory, "Need IMiniKQLFactory to execute MKQL query");
 
     Execute(Factory->Make(ev), ctx);
 }
 
 void TTabletExecutedFlat::HandleLocalSchemeTx(TEvTablet::TEvLocalSchemeTx::TPtr &ev, const TActorContext &ctx) {
-    Y_VERIFY(Factory, "Need IMiniKQLFactory to execute scheme query");
+    Y_ABORT_UNLESS(Factory, "Need IMiniKQLFactory to execute scheme query");
 
     Execute(Factory->Make(ev), ctx);
 }
 
 void TTabletExecutedFlat::HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns::TPtr &ev, const TActorContext &ctx) {
-    Y_VERIFY(Factory, "Need IMiniKQLFactory to execute read columns query");
+    Y_ABORT_UNLESS(Factory, "Need IMiniKQLFactory to execute read columns query");
 
     Execute(Factory->Make(ev), ctx);
 }

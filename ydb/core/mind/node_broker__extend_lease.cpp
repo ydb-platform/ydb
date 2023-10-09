@@ -73,7 +73,7 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxExtendLease Complete");
 
-        Y_VERIFY(Response);
+        Y_ABORT_UNLESS(Response);
         LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
                     "TTxExtendLease reply with: " << Response->ToString());
         ctx.Send(Event->Sender, Response.Release());

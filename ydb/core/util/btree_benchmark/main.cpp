@@ -116,11 +116,11 @@ public:
             HashMap.emplace(key, ~key);
             Map.emplace(key, ~key);
         }
-        Y_VERIFY(Tree.Size() == Count);
-        Y_VERIFY(CowTree.Size() == Count);
-        Y_VERIFY(List.GetSize() == Count);
-        Y_VERIFY(HashMap.size() == Count);
-        Y_VERIFY(Map.size() == Count);
+        Y_ABORT_UNLESS(Tree.Size() == Count);
+        Y_ABORT_UNLESS(CowTree.Size() == Count);
+        Y_ABORT_UNLESS(List.GetSize() == Count);
+        Y_ABORT_UNLESS(HashMap.size() == Count);
+        Y_ABORT_UNLESS(Map.size() == Count);
 
         TreeSafeAccess = Tree.SafeAccess();
 
@@ -306,7 +306,7 @@ Y_CPU_BENCHMARK(TestRandomSearchBTree, iface) {
         ui64 sum = 0;
         for (ui64 key : FixtureData.UniqueKeys) {
             it.SeekLowerBound(key);
-            Y_VERIFY(it.IsValid() && it.GetKey() == key);
+            Y_ABORT_UNLESS(it.IsValid() && it.GetKey() == key);
             sum += it.GetValue();
         }
         Y_DO_NOT_OPTIMIZE_AWAY(sum);
@@ -319,7 +319,7 @@ Y_CPU_BENCHMARK(TestRandomSearchCowBTree, iface) {
         ui64 sum = 0;
         for (ui64 key : FixtureData.UniqueKeys) {
             it.SeekLowerBound(key);
-            Y_VERIFY(it.IsValid() && it.GetKey() == key);
+            Y_ABORT_UNLESS(it.IsValid() && it.GetKey() == key);
             sum += it.GetValue();
         }
         Y_DO_NOT_OPTIMIZE_AWAY(sum);
@@ -332,7 +332,7 @@ Y_CPU_BENCHMARK(TestRandomSearchCowBTreeWorstCase, iface) {
         for (ui64 key : FixtureData.UniqueKeys) {
             auto it = FixtureData.CowSnapshot.Iterator();
             it.SeekLowerBound(key);
-            Y_VERIFY(it.IsValid() && it.GetKey() == key);
+            Y_ABORT_UNLESS(it.IsValid() && it.GetKey() == key);
             sum += it.GetValue();
         }
         Y_DO_NOT_OPTIMIZE_AWAY(sum);
@@ -344,7 +344,7 @@ Y_CPU_BENCHMARK(TestRandomSearchSkipList, iface) {
         ui64 sum = 0;
         for (ui64 key : FixtureData.UniqueKeys) {
             auto it = FixtureData.List.SeekTo(key);
-            Y_VERIFY(it.IsValid() && it.GetValue().Key == key);
+            Y_ABORT_UNLESS(it.IsValid() && it.GetValue().Key == key);
             sum += it.GetValue().Value;
         }
         Y_DO_NOT_OPTIMIZE_AWAY(sum);
@@ -356,7 +356,7 @@ Y_CPU_BENCHMARK(TestRandomSearchHashMap, iface) {
         ui64 sum = 0;
         for (ui64 key : FixtureData.UniqueKeys) {
             auto it = FixtureData.HashMap.find(key);
-            Y_VERIFY(it != FixtureData.HashMap.end());
+            Y_ABORT_UNLESS(it != FixtureData.HashMap.end());
             sum += it->second;
         }
         Y_DO_NOT_OPTIMIZE_AWAY(sum);
@@ -368,7 +368,7 @@ Y_CPU_BENCHMARK(TestRandomSearchMap, iface) {
         ui64 sum = 0;
         for (ui64 key : FixtureData.UniqueKeys) {
             auto it = FixtureData.Map.find(key);
-            Y_VERIFY(it != FixtureData.Map.end());
+            Y_ABORT_UNLESS(it != FixtureData.Map.end());
             sum += it->second;
         }
         Y_DO_NOT_OPTIMIZE_AWAY(sum);
@@ -387,7 +387,7 @@ Y_CPU_BENCHMARK(TestIterateBTree, iface) {
             ++count;
         }
         Y_DO_NOT_OPTIMIZE_AWAY(sum);
-        Y_VERIFY(count == FixtureData.Tree.Size());
+        Y_ABORT_UNLESS(count == FixtureData.Tree.Size());
     }
 }
 
@@ -401,7 +401,7 @@ Y_CPU_BENCHMARK(TestIterateCowBTree, iface) {
             ++count;
         }
         Y_DO_NOT_OPTIMIZE_AWAY(sum);
-        Y_VERIFY(count == FixtureData.CowTree.Size());
+        Y_ABORT_UNLESS(count == FixtureData.CowTree.Size());
     }
 }
 
@@ -414,7 +414,7 @@ Y_CPU_BENCHMARK(TestIterateSkipList, iface) {
             ++count;
         }
         Y_DO_NOT_OPTIMIZE_AWAY(sum);
-        Y_VERIFY(count == FixtureData.List.GetSize());
+        Y_ABORT_UNLESS(count == FixtureData.List.GetSize());
     }
 }
 
@@ -427,7 +427,7 @@ Y_CPU_BENCHMARK(TestIterateHashMap, iface) {
             ++count;
         }
         Y_DO_NOT_OPTIMIZE_AWAY(sum);
-        Y_VERIFY(count == FixtureData.HashMap.size());
+        Y_ABORT_UNLESS(count == FixtureData.HashMap.size());
     }
 }
 
@@ -440,6 +440,6 @@ Y_CPU_BENCHMARK(TestIterateMap, iface) {
             ++count;
         }
         Y_DO_NOT_OPTIMIZE_AWAY(sum);
-        Y_VERIFY(count == FixtureData.Map.size());
+        Y_ABORT_UNLESS(count == FixtureData.Map.size());
     }
 }

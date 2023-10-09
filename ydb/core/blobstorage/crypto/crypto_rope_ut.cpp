@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageCryptoRope) {
 constexpr size_t ENCIPHER_ALIGN = 16;
 
 TRope RopeUnitialized(size_t size, size_t chunkSize, size_t chunkAlign = ENCIPHER_ALIGN) {
-    Y_VERIFY(chunkSize > 0);
+    Y_ABORT_UNLESS(chunkSize > 0);
     TRope rope;
     for (size_t i = 0; i < size / chunkSize; i++) {
         auto item = MakeIntrusive<TRopeAlignedBufferBackend>(chunkSize, chunkAlign);

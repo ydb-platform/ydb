@@ -18,7 +18,7 @@ inline const TString& GetCodecId(const ECodec codec) {
         {ECodec::LZOP, "\2"},
         {ECodec::ZSTD, "\3"}
     };
-    Y_VERIFY(idByCodec.contains(codec));
+    Y_ABORT_UNLESS(idByCodec.contains(codec));
     return idByCodec[codec];
 }
 

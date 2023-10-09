@@ -171,7 +171,7 @@ public:
                 return false;
             }
             PresetId = StoreInfo.SchemaPresetByName.at(PresetName);
-            Y_VERIFY(StoreInfo.SchemaPresets.contains(PresetId));
+            Y_ABORT_UNLESS(StoreInfo.SchemaPresets.contains(PresetId));
         }
 
         if (description.HasSchema()) {
@@ -269,12 +269,12 @@ public:
         TPath path = TPath::Init(pathId, context.SS);
 
         auto pendingInfo = context.SS->ColumnTables.TakeVerified(pathId);
-        Y_VERIFY(pendingInfo->AlterData);
+        Y_ABORT_UNLESS(pendingInfo->AlterData);
         TColumnTableInfo::TPtr tableInfo = pendingInfo->AlterData;
 
         txState->ClearShardsInProgress();
 
-        Y_VERIFY(tableInfo->ColumnShards.empty() || tableInfo->OwnedColumnShards.empty());
+        Y_ABORT_UNLESS(tableInfo->ColumnShards.empty() || tableInfo->OwnedColumnShards.empty());
 
         TString columnShardTxBody;
         auto seqNo = context.SS->StartRound(*txState);
@@ -284,8 +284,8 @@ public:
         {
             NKikimrTxColumnShard::TCreateTable* create{};
             if (tableInfo->IsStandalone()) {
-                Y_VERIFY(tableInfo->ColumnShards.empty());
-                Y_VERIFY(tableInfo->Description.HasSchema());
+                Y_ABORT_UNLESS(tableInfo->ColumnShards.empty());
+                Y_ABORT_UNLESS(tableInfo->Description.HasSchema());
 
                 auto* init = tx.MutableInitShard();
                 init->SetDataChannelCount(tableInfo->Description.GetStorageConfig().GetDataChannelCount());
@@ -295,9 +295,9 @@ public:
                 create = init->AddTables();
                 create->MutableSchema()->CopyFrom(tableInfo->Description.GetSchema());
             } else {
-                Y_VERIFY(tableInfo->OwnedColumnShards.empty());
-                Y_VERIFY(!tableInfo->Description.HasSchema());
-                Y_VERIFY(tableInfo->Description.HasSchemaPresetId());
+                Y_ABORT_UNLESS(tableInfo->OwnedColumnShards.empty());
+                Y_ABORT_UNLESS(!tableInfo->Description.HasSchema());
+                Y_ABORT_UNLESS(tableInfo->Description.HasSchemaPresetId());
 
                 create = tx.MutableEnsureTables()->AddTables();
 
@@ -306,17 +306,17 @@ public:
                 }
 
                 auto olapStorePath = path.FindOlapStore();
-                Y_VERIFY(olapStorePath, "Unexpected failure to find a tablestore");
+                Y_ABORT_UNLESS(olapStorePath, "Unexpected failure to find a tablestore");
                 auto storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
 
                 const ui32 presetId = tableInfo->Description.GetSchemaPresetId();
-                Y_VERIFY(storeInfo->SchemaPresets.contains(presetId),
+                Y_ABORT_UNLESS(storeInfo->SchemaPresets.contains(presetId),
                     "Failed to find schema preset %" PRIu32 " in a tablestore", presetId);
                 auto& preset = storeInfo->SchemaPresets.at(presetId);
                 preset.Serialize(*create->MutableSchemaPreset());
             }
 
-            Y_VERIFY(create);
+            Y_ABORT_UNLESS(create);
             create->SetPathId(pathId.LocalPathId);
 
             if (tableInfo->Description.HasTtlSettings()) {
@@ -324,7 +324,7 @@ public:
             }
         }
 
-        Y_VERIFY(tx.SerializeToString(&columnShardTxBody));
+        Y_ABORT_UNLESS(tx.SerializeToString(&columnShardTxBody));
 
         for (auto& shard : txState->Shards) {
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
@@ -384,7 +384,7 @@ public:
                      << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateColumnTable);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateColumnTable);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -396,11 +396,11 @@ public:
 
         auto table = context.SS->ColumnTables.TakeAlterVerified(pathId);
         if (table->IsStandalone()) {
-            Y_VERIFY(table->ColumnShards.empty());
+            Y_ABORT_UNLESS(table->ColumnShards.empty());
             auto currentLayout = TColumnTablesLayout::BuildTrivial(TColumnTablesLayout::ShardIdxToTabletId(table->OwnedColumnShards, *context.SS));
             auto layoutPolicy = std::make_shared<TOlapStoreInfo::TMinimalTablesCountLayout>();
             bool isNewGroup;
-            Y_VERIFY(table.InitShardingTablets(currentLayout, table->OwnedColumnShards.size(), layoutPolicy, isNewGroup));
+            Y_ABORT_UNLESS(table.InitShardingTablets(currentLayout, table->OwnedColumnShards.size(), layoutPolicy, isNewGroup));
         }
 
         context.SS->PersistColumnTableAlterRemove(db, pathId);
@@ -431,8 +431,8 @@ public:
                      << " at tablet: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateColumnTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateColumnTable);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -468,12 +468,12 @@ public:
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateColumnTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateColumnTable);
 
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
-        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
         txState->ShardsInProgress.erase(shardIdx);
         return txState->ShardsInProgress.empty();
@@ -491,8 +491,8 @@ public:
                      << " at tablet: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxCreateColumnTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateColumnTable);
 
         txState->ClearShardsInProgress();
 
@@ -634,7 +634,7 @@ public:
 
             if (auto olapStorePath = parentPath.FindOlapStore()) {
                 storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
-                Y_VERIFY(storeInfo, "Unexpected failure to find an tablestore info");
+                Y_ABORT_UNLESS(storeInfo, "Unexpected failure to find an tablestore info");
 
                 NSchemeShard::TPath::TChecker storeChecks = olapStorePath.Check();
                 storeChecks
@@ -803,7 +803,7 @@ public:
             columnShardInfo.BindedChannels = channelsBindings;
 
             tableInfo->StandaloneSharding = NKikimrSchemeOp::TColumnStoreSharding();
-            Y_VERIFY(tableInfo->OwnedColumnShards.empty());
+            Y_ABORT_UNLESS(tableInfo->OwnedColumnShards.empty());
             tableInfo->OwnedColumnShards.reserve(shardsCount);
 
             for (ui64 i = 0; i < shardsCount; ++i) {
@@ -825,7 +825,7 @@ public:
                 context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, pathId, opTxId, shard.TabletType);
                 context.SS->PersistChannelsBinding(db, shard.Idx, channelsBindings);
             }
-            Y_VERIFY(txState.Shards.size() == shardsCount);
+            Y_ABORT_UNLESS(txState.Shards.size() == shardsCount);
 
             auto pending = context.SS->ColumnTables.BuildNew(pathId);
             pending->AlterData = tableInfo;
@@ -896,7 +896,7 @@ ISubOperation::TPtr CreateNewColumnTable(TOperationId id, const TTxTransaction& 
 }
 
 ISubOperation::TPtr CreateNewColumnTable(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TCreateColumnTable>(id, state);
 }
 

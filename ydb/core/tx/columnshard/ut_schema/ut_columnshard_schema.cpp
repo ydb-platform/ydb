@@ -641,7 +641,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                     d = i.EvictAfter;
                 }
             }
-            Y_VERIFY(d);
+            Y_ABORT_UNLESS(d);
             i.SetTtl(*d);
         }
     }

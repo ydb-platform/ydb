@@ -193,7 +193,7 @@ void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
             break;
         }
         default:
-            Y_VERIFY(false, "Unexpected input format");
+            Y_ABORT_UNLESS(false, "Unexpected input format");
     }
 }
 
@@ -261,7 +261,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                     break;
                 }
                 default:
-                    Y_VERIFY(false, "Unexpected stdin format");
+                    Y_ABORT_UNLESS(false, "Unexpected stdin format");
             }
         } else {
             for (const auto &name: StdinParameters) {
@@ -305,7 +305,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                         break;
                     }
                     default:
-                        Y_VERIFY(false, "Unexpected stdin format");
+                        Y_ABORT_UNLESS(false, "Unexpected stdin format");
                 }
             }
         }
@@ -315,7 +315,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
         if (isEndReached) {
             return false;
         }
-        Y_VERIFY(StdinParameters.size() == 1, "Wrong number of stdin parameters");
+        Y_ABORT_UNLESS(StdinParameters.size() == 1, "Wrong number of stdin parameters");
         TString name = StdinParameters.front();
         TString fullname = "$" + name;
         auto paramIt = ParamTypes.find(fullname);
@@ -383,7 +383,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                     break;
                 }
                 default:
-                    Y_VERIFY(false, "Unexpected stdin format");
+                    Y_ABORT_UNLESS(false, "Unexpected stdin format");
             }
             ++listSize;
         }

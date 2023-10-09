@@ -32,7 +32,7 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvVGetResult res;
             res.SetStatus(globalStatus);
             VDiskIDFromVDiskID(vd, res.MutableVDiskID());
-            Y_VERIFY(blobs.size() == blobsStatus.size());
+            Y_ABORT_UNLESS(blobs.size() == blobsStatus.size());
             for (ui32 i = 0; i < blobs.size(); ++i) {
                 auto *q = res.AddResult();
                 q->SetStatus(blobsStatus[i]);

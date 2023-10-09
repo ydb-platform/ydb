@@ -25,7 +25,7 @@ class TSubscriberTest: public NUnitTest::TTestBase {
         Context->Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard());
         auto ev = Context->GrabEdgeEvent<TEvStateStorage::TEvListSchemeBoardResult>(edge);
 
-        Y_VERIFY(ev->Get()->Info);
+        Y_ABORT_UNLESS(ev->Get()->Info);
         auto allReplicas = ev->Get()->Info->SelectAllReplicas();
         return TVector<TActorId>(allReplicas.begin(), allReplicas.end());
     }
@@ -104,7 +104,7 @@ void TSubscriberTest::NotifyDelete() {
     const TActorId edge = Context->AllocateEdgeActor();
 
     auto replicas = ResolveReplicas();
-    Y_VERIFY(replicas.size() > 2);
+    Y_ABORT_UNLESS(replicas.size() > 2);
 
     for (const auto& replica : replicas) {
         Context->HandshakeReplica(replica, edge);
@@ -257,7 +257,7 @@ class TSubscriberCombinationsTest: public NUnitTest::TTestBase {
         context.Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard());
         auto ev = context.GrabEdgeEvent<TEvStateStorage::TEvListSchemeBoardResult>(edge);
 
-        Y_VERIFY(ev->Get()->Info);
+        Y_ABORT_UNLESS(ev->Get()->Info);
         auto allReplicas = ev->Get()->Info->SelectAllReplicas();
         return TVector<TActorId>(allReplicas.begin(), allReplicas.end());
     }

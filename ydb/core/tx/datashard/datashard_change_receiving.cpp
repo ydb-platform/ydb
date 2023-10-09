@@ -44,7 +44,7 @@ public:
 
             const auto& [sender, req] = Self->PendingChangeExchangeHandshakes.front();
             auto& [_, resp] = Statuses.emplace_back(sender, MakeHolder<TEvChangeExchange::TEvStatus>());
-            Y_VERIFY(ExecuteHandshake(db, req, resp->Record));
+            Y_ABORT_UNLESS(ExecuteHandshake(db, req, resp->Record));
             Self->PendingChangeExchangeHandshakes.pop_front();
         }
 
@@ -390,7 +390,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_VERIFY(Status);
+        Y_ABORT_UNLESS(Status);
 
         if (Status->Record.GetStatus() == NKikimrChangeExchange::TEvStatus::STATUS_OK) {
             Self->IncCounter(COUNTER_CHANGE_EXCHANGE_SUCCESSFUL_APPLY);

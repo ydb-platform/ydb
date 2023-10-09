@@ -155,7 +155,7 @@ private:
 
         // Error means Node Broker doesn't know about this node.
         // Node is either already expired or its ID is banned.
-        Y_VERIFY(rec.GetNodeId() == ctx.SelfID.NodeId());
+        Y_ABORT_UNLESS(rec.GetNodeId() == ctx.SelfID.NodeId());
         if (rec.GetStatus().GetCode() != NKikimrNodeBroker::TStatus::OK) {
             LOG_ERROR(ctx, NKikimrServices::NODE_BROKER, "Cannot extend lease: %s",
                       rec.GetStatus().GetReason().data());
@@ -172,11 +172,11 @@ private:
             EpochEnd = TInstant::FromValue(rec.GetEpoch().GetEnd());
 
             if (Expire != TInstant::Max()) {
-                Y_VERIFY(Expire > EpochEnd);
-                Y_VERIFY(rec.GetExpire() == rec.GetEpoch().GetNextEnd());
+                Y_ABORT_UNLESS(Expire > EpochEnd);
+                Y_ABORT_UNLESS(rec.GetExpire() == rec.GetEpoch().GetNextEnd());
 
                 ui64 window = (Expire - EpochEnd).GetValue() / 2;
-                Y_VERIFY(window);
+                Y_ABORT_UNLESS(window);
 
                 NextPing = EpochEnd + TDuration::FromValue(RandomNumber<ui64>(window));
             }

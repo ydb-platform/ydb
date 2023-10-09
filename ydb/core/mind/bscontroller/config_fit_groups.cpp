@@ -304,7 +304,7 @@ namespace NKikimr {
                                 for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
                                     if (vslot->GetShortVDiskId() == result.first) {
                                         auto it = preservedSlots.find(vslot->GetVDiskId());
-                                        Y_VERIFY(it != preservedSlots.end());
+                                        Y_ABORT_UNLESS(it != preservedSlots.end());
                                         preservedSlots.erase(it);
                                         replacedSlots.emplace(result.first, vslot->VSlotId);
                                         break;
@@ -339,7 +339,7 @@ namespace NKikimr {
                         } else {
                             if (adjustSpaceAvailable) {
                                 const TVSlotInfo *slot = State.VSlots.Find(vslotId);
-                                Y_VERIFY(slot);
+                                Y_ABORT_UNLESS(slot);
                                 if (!slot->PDisk->SlotSpaceEnforced(State.Self)) {
                                     // mark the space from destroyed slot as available
                                     Mapper->AdjustSpaceAvailable(vslotId.ComprisingPDiskId(), slot->Metrics.GetAllocatedSize());
@@ -402,9 +402,9 @@ namespace NKikimr {
 
                     for (const TVSlotId& vslotId : donors) {
                         TVSlotInfo *mutableSlot = State.VSlots.FindForUpdate(vslotId);
-                        Y_VERIFY(mutableSlot);
+                        Y_ABORT_UNLESS(mutableSlot);
                         const auto it = newSlots.find(mutableSlot->GetShortVDiskId());
-                        Y_VERIFY(it != newSlots.end());
+                        Y_ABORT_UNLESS(it != newSlots.end());
                         mutableSlot->MakeDonorFor(it->second);
                     }
                 }
@@ -482,7 +482,7 @@ namespace NKikimr {
                     for (const auto& filter : StoragePool.PDiskFilters) {
                         if (filter.MatchPDisk(info)) {
                             const bool inserted = RegisterPDisk(id, info, true);
-                            Y_VERIFY(inserted);
+                            Y_ABORT_UNLESS(inserted);
                             break;
                         }
                     }
@@ -574,13 +574,13 @@ namespace NKikimr {
                             const TVDiskID vdiskId(groupInfo->ID, groupInfo->Generation, failRealmIdx, failDomainIdx, vdiskIdx);
                             if (auto it = preservedSlots.find(vdiskId); it != preservedSlots.end()) {
                                 const TVSlotInfo *vslotInfo = State.VSlots.Find(it->second);
-                                Y_VERIFY(vslotInfo);
+                                Y_ABORT_UNLESS(vslotInfo);
                                 groupInfo->AddVSlot(vslotInfo);
                             } else {
                                 const TPDiskId pdiskId = domain[vdiskIdx];
-                                Y_VERIFY(!State.PDisksToRemove.count(pdiskId));
+                                Y_ABORT_UNLESS(!State.PDisksToRemove.count(pdiskId));
                                 TPDiskInfo *pdiskInfo = State.PDisks.FindForUpdate(pdiskId);
-                                Y_VERIFY(pdiskInfo);
+                                Y_ABORT_UNLESS(pdiskInfo);
                                 TVSlotId vslotId;
 
                                 // allocate new VSlot id; avoid collisions
@@ -680,7 +680,7 @@ namespace NKikimr {
             for (auto it = poolsAndGroups.begin(); it != poolsAndGroups.end(); ) {
                 const auto& [storagePoolId, groupId] = *it;
                 const auto spIt = storagePools.find(storagePoolId);
-                Y_VERIFY(spIt != storagePools.end());
+                Y_ABORT_UNLESS(spIt != storagePools.end());
                 if (!groupId) {
                     // process all groups in this pool and skip the rest
                     processSingleStoragePool(spIt->first, spIt->second, true, [&](const auto& callback) {

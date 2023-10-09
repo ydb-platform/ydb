@@ -63,7 +63,7 @@ Ydb::FederationDiscovery::ListFederationDatabasesRequest TFederatedDbObserver::C
 }
 
 void TFederatedDbObserver::RunFederationDiscoveryImpl() {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     FederationDiscoveryDelayContext = Connections_->CreateContext();
     if (!FederationDiscoveryDelayContext) {
@@ -95,7 +95,7 @@ void TFederatedDbObserver::RunFederationDiscoveryImpl() {
 }
 
 void TFederatedDbObserver::ScheduleFederationDiscoveryImpl(TDuration delay) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
     auto cb = [self = shared_from_this()](bool ok) {
         if (ok) {
             with_lock(self->Lock) {

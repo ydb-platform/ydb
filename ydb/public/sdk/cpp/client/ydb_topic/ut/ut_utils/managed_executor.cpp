@@ -39,7 +39,7 @@ auto TManagedExecutor::MakeTask(TFunction func) -> TFunction
 
 void TManagedExecutor::RunTask(TFunction&& func)
 {
-    Y_VERIFY(Planned > 0);
+    Y_ABORT_UNLESS(Planned > 0);
     --Planned;
     Executor->Post(MakeTask(std::move(func)));
 }
@@ -48,8 +48,8 @@ void TManagedExecutor::StartFuncs(const std::vector<size_t>& indicies)
 {
     with_lock (Mutex) {
         for (auto index : indicies) {
-            Y_VERIFY(index < Funcs.size());
-            Y_VERIFY(Funcs[index]);
+            Y_ABORT_UNLESS(index < Funcs.size());
+            Y_ABORT_UNLESS(Funcs[index]);
 
             RunTask(std::move(Funcs[index]));
         }

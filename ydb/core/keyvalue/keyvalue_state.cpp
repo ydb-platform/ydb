@@ -303,7 +303,7 @@ void TKeyValueState::CountTrashRecord(const TLogoBlobID& id) {
     auto& bytes = TabletCounters->Simple()[COUNTER_RECORD_BYTES];
     bytes -= id.BlobSize();
     ResourceMetrics->StorageUser.Set(bytes.Get());
-    Y_VERIFY(id.Channel() < ChannelDataUsage.size());
+    Y_ABORT_UNLESS(id.Channel() < ChannelDataUsage.size());
     ChannelDataUsage[id.Channel()] -= id.BlobSize();
 }
 
@@ -311,7 +311,7 @@ void TKeyValueState::CountWriteRecord(const TLogoBlobID& id) {
     TabletCounters->Simple()[COUNTER_RECORD_COUNT] += 1;
     TabletCounters->Simple()[COUNTER_RECORD_BYTES] += id.BlobSize();
     ResourceMetrics->StorageUser.Set(TabletCounters->Simple()[COUNTER_RECORD_BYTES].Get());
-    Y_VERIFY(id.Channel() < ChannelDataUsage.size());
+    Y_ABORT_UNLESS(id.Channel() < ChannelDataUsage.size());
     ChannelDataUsage[id.Channel()] += id.BlobSize();
 }
 
@@ -319,7 +319,7 @@ void TKeyValueState::CountDeleteInline(ui32 sizeBytes) {
     TabletCounters->Simple()[COUNTER_RECORD_COUNT] -= 1;
     TabletCounters->Simple()[COUNTER_RECORD_BYTES] -= sizeBytes;
     ResourceMetrics->StorageUser.Set(TabletCounters->Simple()[COUNTER_RECORD_BYTES].Get());
-    Y_VERIFY(0 < ChannelDataUsage.size());
+    Y_ABORT_UNLESS(0 < ChannelDataUsage.size());
     ChannelDataUsage[0] -= sizeBytes;
 }
 
@@ -435,11 +435,11 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
     TString arbitraryPart;
     TKeyHeader header;
     bool isOk = THelpers::ExtractKeyParts(key, arbitraryPart, header);
-    Y_VERIFY(isOk);
+    Y_ABORT_UNLESS(isOk);
 
     switch (header.ItemType) {
         case EIT_UNKNOWN: {
-            Y_VERIFY(false, "Unexpected EIT_UNKNOWN key header.");
+            Y_ABORT_UNLESS(false, "Unexpected EIT_UNKNOWN key header.");
             break;
         }
         case EIT_KEYVALUE_1:
@@ -463,7 +463,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
                     Cerr << str.Str();
                     IsDamaged = true;
                 } else {
-                    Y_VERIFY(false, "%s", str.Str().data());
+                    Y_ABORT_UNLESS(false, "%s", str.Str().data());
                 }
             }
             for (const TIndexRecord::TChainItem& item : record.Chain) {
@@ -479,8 +479,8 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             break;
         }
         case EIT_TRASH: {
-            Y_VERIFY(value.size() == 0);
-            Y_VERIFY(arbitraryPart.size() == sizeof(TTrashKeyArbitrary));
+            Y_ABORT_UNLESS(value.size() == 0);
+            Y_ABORT_UNLESS(arbitraryPart.size() == sizeof(TTrashKeyArbitrary));
             const TTrashKeyArbitrary *trashKey = (const TTrashKeyArbitrary *) arbitraryPart.data();
             Trash.insert(trashKey->LogoBlobId);
             TotalTrashSize += trashKey->LogoBlobId.BlobSize();
@@ -489,22 +489,22 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
         }
         case EIT_COLLECT: {
             // just ignore the record
-            Y_VERIFY(arbitraryPart.size() == 0);
+            Y_ABORT_UNLESS(arbitraryPart.size() == 0);
             break;
         }
         case EIT_STATE: {
-            Y_VERIFY(!IsStatePresent);
+            Y_ABORT_UNLESS(!IsStatePresent);
             IsStatePresent = true;
-            Y_VERIFY(arbitraryPart.size() == 0);
-            Y_VERIFY(value.size() >= sizeof(TKeyValueStoredStateData));
+            Y_ABORT_UNLESS(arbitraryPart.size() == 0);
+            Y_ABORT_UNLESS(value.size() >= sizeof(TKeyValueStoredStateData));
             const TKeyValueStoredStateData *data = (const TKeyValueStoredStateData *) value.data();
-            Y_VERIFY(data->CheckChecksum());
-            Y_VERIFY(data->DataHeader.ItemType == EIT_STATE);
+            Y_ABORT_UNLESS(data->CheckChecksum());
+            Y_ABORT_UNLESS(data->DataHeader.ItemType == EIT_STATE);
             StoredState = *data;
             break;
         }
         default: {
-            Y_VERIFY(false, "Unexcpected header.ItemType# %" PRIu32, (ui32)header.ItemType);
+            Y_ABORT_UNLESS(false, "Unexcpected header.ItemType# %" PRIu32, (ui32)header.ItemType);
             break;
         }
     }
@@ -513,7 +513,7 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
 void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 executorGeneration,
         ISimpleDb &db, const TActorContext &ctx, const TTabletStorageInfo *info) {
     Y_UNUSED(info);
-    Y_VERIFY(IsEmptyDbStart || IsStatePresent);
+    Y_ABORT_UNLESS(IsEmptyDbStart || IsStatePresent);
     TabletId = tabletId;
     KeyValueActorId = keyValueActorId;
     ExecutorGeneration = executorGeneration;
@@ -523,7 +523,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
     ui8 maxChannel = 0;
     for (const auto& channel : info->Channels) {
         const ui32 index = channel.Channel;
-        Y_VERIFY(index <= UsedChannels.size());
+        Y_ABORT_UNLESS(index <= UsedChannels.size());
         if (index == 0 || index >= BLOB_CHANNEL) {
             UsedChannels[index] = true;
             maxChannel = Max<ui8>(maxChannel, index);
@@ -539,7 +539,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             // extract blob id and validate its channel
             const TLogoBlobID &id = kv.first;
             const ui8 channel = id.Channel();
-            Y_VERIFY(channel >= BLOB_CHANNEL);
+            Y_ABORT_UNLESS(channel >= BLOB_CHANNEL);
 
             // create (generation, step) pair for current item and decrement it by one step as the barriers
             // are always inclusive
@@ -556,7 +556,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
 
             // update minimum barrier value for this channel/group
             const ui32 group = info->GroupFor(channel, generation);
-            Y_VERIFY(group != Max<ui32>());
+            Y_ABORT_UNLESS(group != Max<ui32>());
             if (const auto [it, inserted] = hardBarriers.try_emplace(TGroupChannel(group, channel), current); !inserted) {
                 it->second = Min(it->second, current);
             }
@@ -592,7 +592,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
 
         auto addBlobToKeep = [&] (const TLogoBlobID &id) {
             ui32 group = info->GroupFor(id);
-            Y_VERIFY(group != Max<ui32>(), "RefBlob# %s is mapped to an invalid group (-1)!",
+            Y_ABORT_UNLESS(group != Max<ui32>(), "RefBlob# %s is mapped to an invalid group (-1)!",
                     id.ToString().c_str());
             TGroupChannel key(group, id.Channel());
             THolder<TVector<TLogoBlobID>> &ptr = keepForGroupChannel[key];
@@ -604,9 +604,9 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
 
         const THelpers::TGenerationStep storedGenStep(StoredState.GetCollectGeneration(), StoredState.GetCollectStep());
         for (const auto& [id, _] : RefCounts) {
-            Y_VERIFY(id.Channel() >= BLOB_CHANNEL);
+            Y_ABORT_UNLESS(id.Channel() >= BLOB_CHANNEL);
             const THelpers::TGenerationStep blobGenStep = THelpers::GenerationStep(id);
-            Y_VERIFY(blobGenStep <= barrier);
+            Y_ABORT_UNLESS(blobGenStep <= barrier);
             if (storedGenStep < blobGenStep) { // otherwise Keep flag was already issued
                 addBlobToKeep(id);
             }
@@ -661,7 +661,7 @@ bool TKeyValueState::RegisterInitialCollectResult(const TActorContext &ctx, cons
 }
 
 void TKeyValueState::RegisterInitialGCCompletionExecute(ISimpleDb &db, const TActorContext &ctx) {
-    Y_VERIFY(ExecutorGeneration);
+    Y_ABORT_UNLESS(ExecutorGeneration);
     StoredState.SetCollectGeneration(ExecutorGeneration - 1);
     StoredState.SetCollectStep(Max<ui32>());
     THelpers::DbUpdateState(StoredState, db, ctx);
@@ -693,7 +693,7 @@ void TKeyValueState::SendCutHistory(const TActorContext &ctx, const TTabletStora
     THashSet<TSeenGeneration> seenGenerations;
     auto usedBlob = [&](const TLogoBlobID& id) {
         const ui8 channel = id.Channel();
-        Y_VERIFY(BLOB_CHANNEL <= channel && channel < info->Channels.size());
+        Y_ABORT_UNLESS(BLOB_CHANNEL <= channel && channel < info->Channels.size());
         if (const auto [_, inserted] = seenGenerations.emplace(channel, id.Generation()); inserted) {
             const auto& ch = info->Channels[channel];
             auto it = std::upper_bound(ch.History.begin(), ch.History.end(), id.Generation(),
@@ -702,8 +702,8 @@ void TKeyValueState::SendCutHistory(const TActorContext &ctx, const TTabletStora
                 return;
             }
             --it;
-            Y_VERIFY(it->FromGeneration <= id.Generation());
-            Y_VERIFY(id.Generation() < std::next(it)->FromGeneration);
+            Y_ABORT_UNLESS(it->FromGeneration <= id.Generation());
+            Y_ABORT_UNLESS(id.Generation() < std::next(it)->FromGeneration);
             uselessItems.erase(THistoryItem(channel, it->FromGeneration));
         }
     };
@@ -757,7 +757,7 @@ TLogoBlobID TKeyValueState::AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx
     } else {
         Step();
     }
-    Y_VERIFY(!CollectOperation || THelpers::GenerationStep(id) >
+    Y_ABORT_UNLESS(!CollectOperation || THelpers::GenerationStep(id) >
         THelpers::TGenerationStep(CollectOperation->Header.GetCollectGeneration(), CollectOperation->Header.GetCollectStep()));
     ++InFlightForStep[id.Step()];
     ++RequestUidStepToCount[std::make_tuple(requestUid, id.Step())];
@@ -847,7 +847,7 @@ void TKeyValueState::DropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool
     auto pred = [&](const auto& item) {
         const auto& [logoBlobId, initial] = item;
         const auto it = RefCounts.find(logoBlobId);
-        Y_VERIFY(it != RefCounts.end() && it->second); // item must exist and have a refcount
+        Y_ABORT_UNLESS(it != RefCounts.end() && it->second); // item must exist and have a refcount
         if (it->second != 1) { // just drop the reference, item kept alive
             --it->second;
         } else if (initial && !writesMade) { // this was just generated BlobId and no writes were possibly made
@@ -954,7 +954,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRead &request,
                         << " ! KEYVALUE CONSISTENCY ERROR!"
                         << " Message# " << request.Message
                         << " Marker# KV46";
-                    Y_VERIFY(false, "%s", str.Str().c_str());
+                    Y_ABORT_UNLESS(false, "%s", str.Str().c_str());
                 }
             }
         }
@@ -999,7 +999,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRangeRead &request,
                             << " ! KEYVALUE CONSISTENCY ERROR!"
                             << " Message# " << read.Message
                             << " Marker# KV47";
-                        Y_VERIFY(false, "%s", str.Str().c_str());
+                        Y_ABORT_UNLESS(false, "%s", str.Str().c_str());
                     }
                 }
             }
@@ -1066,7 +1066,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
                 channel = logoBlobId.Channel();
             } else {
                 // all blobs from the same write must be within the same channel
-                Y_VERIFY(channel == (int)logoBlobId.Channel());
+                Y_ABORT_UNLESS(channel == (int)logoBlobId.Channel());
             }
         }
         storage_channel = channel + MainStorageChannelInPublicApi;
@@ -1114,7 +1114,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request,
         TIntermediate* /*intermediate*/)
 {
     auto oldIter = Index.find(request.OldKey);
-    Y_VERIFY(oldIter != Index.end());
+    Y_ABORT_UNLESS(oldIter != Index.end());
     TIndexRecord& source = oldIter->second;
 
     TIndexRecord& dest = Index[request.NewKey];
@@ -1185,7 +1185,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
 
     for (const TString& key : request.InputKeys) {
         auto it = Index.find(key);
-        Y_VERIFY(it != Index.end());
+        Y_ABORT_UNLESS(it != Index.end());
         TIndexRecord& input = it->second;
 
         ui32 inlineSize = 0;
@@ -1336,7 +1336,7 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
         for (const TLogoBlobID& id : intermediate->TrimLeakedBlobs->FoundBlobs) {
             auto it = RefCounts.find(id);
             if (it != RefCounts.end()) {
-                Y_VERIFY(it->second != 0);
+                Y_ABORT_UNLESS(it->second != 0);
             } else if (!Trash.count(id)) { // we found a candidate for trash
                 if (numItems < intermediate->TrimLeakedBlobs->MaxItemsToTrim) {
                     LOG_WARN_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " trimming " << id);
@@ -1626,7 +1626,7 @@ bool TKeyValueState::IncrementGeneration(THolder<TIntermediate> &intermediate, I
     LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " TTxRequest IncrementGeneration");
 
     ui64 nextGeneration = StoredState.GetUserGeneration() + 1;
-    Y_VERIFY(nextGeneration > StoredState.GetUserGeneration());
+    Y_ABORT_UNLESS(nextGeneration > StoredState.GetUserGeneration());
     StoredState.SetUserGeneration(nextGeneration);
 
     THelpers::DbUpdateState(StoredState, db, ctx);
@@ -1653,7 +1653,7 @@ void TKeyValueState::Dereference(const TIndexRecord& record, ISimpleDb& db, cons
 
 void TKeyValueState::Dereference(const TLogoBlobID& id, ISimpleDb& db, const TActorContext& ctx, bool initial) {
     auto it = RefCounts.find(id);
-    Y_VERIFY(it != RefCounts.end());
+    Y_ABORT_UNLESS(it != RefCounts.end());
     --it->second;
     if (!it->second) {
         RefCounts.erase(it);
@@ -1742,7 +1742,7 @@ void TKeyValueState::CancelInFlight(ui64 requestUid) {
         const auto& [requestUid, step] = it->first;
         const ui32 drop = it->second;
         auto stepIt = InFlightForStep.find(step);
-        Y_VERIFY(stepIt != InFlightForStep.end() && drop <= stepIt->second);
+        Y_ABORT_UNLESS(stepIt != InFlightForStep.end() && drop <= stepIt->second);
         if (drop < stepIt->second) {
             stepIt->second -= drop;
         } else {
@@ -2247,7 +2247,7 @@ bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TK
                 if (channel != NKikimrClient::TKeyValueRequest::INLINE) {
                     const ui32 index = channel + BLOB_CHANNEL;
                     if (index < info->Channels.size()) {
-                        Y_VERIFY(index < enabled.size());
+                        Y_ABORT_UNLESS(index < enabled.size());
                         enabled.set(index);
                     }
                 }
@@ -2599,7 +2599,7 @@ void TKeyValueState::ReplyError(const TActorContext &ctx, TString errorDescripti
         NMsgBusProxy::EResponseStatus oldStatus, NKikimrKeyValue::Statuses::ReplyStatus newStatus,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
     LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, errorDescription);
-    Y_VERIFY(!intermediate->IsReplied);
+    Y_ABORT_UNLESS(!intermediate->IsReplied);
 
     if (intermediate->EvType == TEvKeyValue::TEvRequest::EventType) {
         THolder<TEvKeyValue::TEvResponse> response(new TEvKeyValue::TEvResponse);
@@ -2797,7 +2797,7 @@ bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
 
     if (result.WithError) {
         DropRefCountsOnError(intermediate->RefCountsIncr, false, ctx);
-        Y_VERIFY(intermediate->RefCountsIncr.empty());
+        Y_ABORT_UNLESS(intermediate->RefCountsIncr.empty());
 
         LOG_ERROR_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " PrepareExecuteTransactionRequest return flase, Marker# KV73"
@@ -2890,10 +2890,10 @@ void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TInt
 {
     auto fixWrite = [&](TIntermediate::TWrite& write) {
         for (auto& logoBlobId : write.LogoBlobIds) {
-            Y_VERIFY(logoBlobId.TabletID() == 0);
+            Y_ABORT_UNLESS(logoBlobId.TabletID() == 0);
             logoBlobId = AllocateLogoBlobId(logoBlobId.BlobSize(), logoBlobId.Channel(), intermediate->RequestUid);
             ui32 newRefCount = ++RefCounts[logoBlobId];
-            Y_VERIFY(newRefCount == 1);
+            Y_ABORT_UNLESS(newRefCount == 1);
             intermediate->RefCountsIncr.emplace_back(logoBlobId, true);
         }
     };
@@ -3213,7 +3213,7 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
 
     if (error) {
         DropRefCountsOnError(intermediate->RefCountsIncr, false, ctx);
-        Y_VERIFY(intermediate->RefCountsIncr.empty());
+        Y_ABORT_UNLESS(intermediate->RefCountsIncr.empty());
 
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " PrepareIntermediate return flase, Marker# KV41");
@@ -3297,15 +3297,15 @@ void TKeyValueState::VerifyEqualIndex(const TKeyValueState& state) const {
     auto i2 = state.Index.cbegin(), e2 = state.Index.cend();
     int i = 0;
     for (auto i1 = Index.cbegin(), e1 = Index.cend(); i1 != e1; ++i, ++i1, ++i2) {
-        Y_VERIFY(i2 != e2, "index length differs. Dump:\n%s\n%s\n", Dump().data(), state.Dump().data());
+        Y_ABORT_UNLESS(i2 != e2, "index length differs. Dump:\n%s\n%s\n", Dump().data(), state.Dump().data());
         const TString& k1 = i1->first;
         const TString& k2 = i2->first;
-        Y_VERIFY(k1 == k2, "index key #%d differs. Dump:\n%s\n%s\n", i, Dump().data(), state.Dump().data());
+        Y_ABORT_UNLESS(k1 == k2, "index key #%d differs. Dump:\n%s\n%s\n", i, Dump().data(), state.Dump().data());
         const TIndexRecord& v1 = i1->second;
         const TIndexRecord& v2 = i2->second;
-        Y_VERIFY(v1 == v2, "index value #%d differs. Dump:\n%s\n%s\n", i, Dump().data(), state.Dump().data());
+        Y_ABORT_UNLESS(v1 == v2, "index value #%d differs. Dump:\n%s\n%s\n", i, Dump().data(), state.Dump().data());
     }
-    Y_VERIFY(i2 == e2, "index length differs. Dump:\n%s\n%s\n", Dump().data(), state.Dump().data());
+    Y_ABORT_UNLESS(i2 == e2, "index length differs. Dump:\n%s\n%s\n", Dump().data(), state.Dump().data());
 }
 
 void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {

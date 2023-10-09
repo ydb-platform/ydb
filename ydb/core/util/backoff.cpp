@@ -14,7 +14,7 @@ TBackoffTimer::TBackoffTimer(ui64 initialMs, ui64 maxMs)
     , CurrentBackoffMs(0ull)
     , PreviousBackoffMs(0ull)
 {
-    Y_VERIFY(initialMs <= maxMs);
+    Y_ABORT_UNLESS(initialMs <= maxMs);
 }
 
 ui64 TBackoffTimer::NextBackoffMs() {

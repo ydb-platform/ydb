@@ -49,18 +49,18 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
 
     NIceDb::TNiceDb db(txc.DB);
 
-    Y_VERIFY(schemeTx.HasCreateTable());
+    Y_ABORT_UNLESS(schemeTx.HasCreateTable());
 
     const auto &createTableTx = schemeTx.GetCreateTable();
 
     TPathId tableId(DataShard.GetPathOwnerId(), createTableTx.GetId_Deprecated());
     if (createTableTx.HasPathId()) {
-        Y_VERIFY(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
+        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
         tableId.LocalPathId = createTableTx.GetPathId().GetLocalId();
     }
 
     auto userTable = DataShard.FindUserTable(tableId);
-    Y_VERIFY(userTable);
+    Y_ABORT_UNLESS(userTable);
 
     const bool mvcc = DataShard.IsMvccEnabled();
 
@@ -77,7 +77,7 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                 const bool ok = rs.ParseFromArray(
                     rsdata.Body.data() + SnapshotTransferReadSetMagic.size(),
                     rsdata.Body.size() - SnapshotTransferReadSetMagic.size());
-                Y_VERIFY(ok, "Failed to parse snapshot transfer readset");
+                Y_ABORT_UNLESS(ok, "Failed to parse snapshot transfer readset");
 
                 TString compressedBody = rs.GetBorrowedSnapshot();
                 snapBody = NBlockCodecs::Codec("lz4fast")->Decode(compressedBody);
@@ -118,7 +118,7 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
         DataShard.PersistLastLoanTableTid(db, userTable->LocalTid);
     }
 
-    Y_VERIFY(DataShard.GetSnapshotManager().GetSnapshots().empty(),
+    Y_ABORT_UNLESS(DataShard.GetSnapshotManager().GetSnapshots().empty(),
         "Found unexpected persistent snapshots at CopyTable destination");
 
     const auto minVersion = mvcc ? DataShard.GetSnapshotManager().GetLowWatermark()

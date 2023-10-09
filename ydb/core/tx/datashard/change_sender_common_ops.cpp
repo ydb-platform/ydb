@@ -10,7 +10,7 @@
 namespace NKikimr::NDataShard {
 
 void TBaseChangeSender::RegisterSender(THashMap<ui64, TSender>& senders, ui64 partitionId) {
-    Y_VERIFY(!senders.contains(partitionId));
+    Y_ABORT_UNLESS(!senders.contains(partitionId));
     auto& sender = senders[partitionId];
     sender.ActorId = ActorOps->Register(CreateSender(partitionId));
 
@@ -249,10 +249,10 @@ void TBaseChangeSender::OnGone(ui64 partitionId) {
 }
 
 void TBaseChangeSender::SendPreparedRecords(ui64 partitionId) {
-    Y_VERIFY(Senders.contains(partitionId));
+    Y_ABORT_UNLESS(Senders.contains(partitionId));
     auto& sender = Senders.at(partitionId);
 
-    Y_VERIFY(sender.Ready);
+    Y_ABORT_UNLESS(sender.Ready);
     sender.Ready = false;
 
     sender.Pending.reserve(sender.Prepared.size());
@@ -282,7 +282,7 @@ void TBaseChangeSender::ReEnqueueRecords(const TSender& sender) {
 }
 
 TBaseChangeSender::TBroadcast& TBaseChangeSender::EnsureBroadcast(const TChangeRecord& record) {
-    Y_VERIFY(record.IsBroadcast());
+    Y_ABORT_UNLESS(record.IsBroadcast());
 
     auto it = Broadcasting.find(record.GetOrder());
     if (it != Broadcasting.end()) {
@@ -308,7 +308,7 @@ TBaseChangeSender::TBroadcast& TBaseChangeSender::EnsureBroadcast(const TChangeR
 
 bool TBaseChangeSender::AddBroadcastPartition(ui64 order, ui64 partitionId) {
     auto it = Broadcasting.find(order);
-    Y_VERIFY(it != Broadcasting.end());
+    Y_ABORT_UNLESS(it != Broadcasting.end());
 
     auto& broadcast = it->second;
     if (broadcast.Partitions.contains(partitionId)) {
@@ -323,7 +323,7 @@ bool TBaseChangeSender::AddBroadcastPartition(ui64 order, ui64 partitionId) {
 
 bool TBaseChangeSender::RemoveBroadcastPartition(ui64 order, ui64 partitionId) {
     auto it = Broadcasting.find(order);
-    Y_VERIFY(it != Broadcasting.end());
+    Y_ABORT_UNLESS(it != Broadcasting.end());
 
     auto& broadcast = it->second;
     broadcast.Partitions.erase(partitionId);
@@ -335,7 +335,7 @@ bool TBaseChangeSender::RemoveBroadcastPartition(ui64 order, ui64 partitionId) {
 
 bool TBaseChangeSender::CompleteBroadcastPartition(ui64 order, ui64 partitionId) {
     auto it = Broadcasting.find(order);
-    Y_VERIFY(it != Broadcasting.end());
+    Y_ABORT_UNLESS(it != Broadcasting.end());
 
     auto& broadcast = it->second;
     broadcast.CompletedPartitions.insert(partitionId);
@@ -345,7 +345,7 @@ bool TBaseChangeSender::CompleteBroadcastPartition(ui64 order, ui64 partitionId)
 
 bool TBaseChangeSender::MaybeCompleteBroadcast(ui64 order) {
     auto it = Broadcasting.find(order);
-    Y_VERIFY(it != Broadcasting.end());
+    Y_ABORT_UNLESS(it != Broadcasting.end());
 
     auto& broadcast = it->second;
     if (broadcast.PendingPartitions || broadcast.Partitions.size() != broadcast.CompletedPartitions.size()) {

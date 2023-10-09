@@ -82,8 +82,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const {
-            Y_VERIFY(contentLength > 0);
-            Y_VERIFY(processedBytes < contentLength);
+            Y_ABORT_UNLESS(contentLength > 0);
+            Y_ABORT_UNLESS(processedBytes < contentLength);
 
             const ui64 start = processedBytes + PendingBytes();
             const ui64 end = Min(SumWithSaturation(start, RangeSize), contentLength) - 1;
@@ -126,7 +126,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         EDataStatus TryGetData(TStringBuf& data, TString& error) override {
-            Y_VERIFY(Pos == 0);
+            Y_ABORT_UNLESS(Pos == 0);
 
             const ui64 pos = AsStringBuf(Buffer.Size()).rfind('\n');
             if (TString::npos == pos) {
@@ -178,12 +178,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         void Feed(TString&& portion) override {
-            Y_VERIFY(Portion.Empty());
+            Y_ABORT_UNLESS(Portion.Empty());
             Portion.Assign(portion.data(), portion.size());
         }
 
         EDataStatus TryGetData(TStringBuf& data, TString& error) override {
-            Y_VERIFY(ReadyInputBytes == 0 && ReadyOutputPos == 0);
+            Y_ABORT_UNLESS(ReadyInputBytes == 0 && ReadyOutputPos == 0);
 
             auto input = ZSTD_inBuffer{Portion.Data(), Portion.Size(), 0};
             while (!ReadyOutputPos) {
@@ -292,14 +292,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         void AddRow(const TVector<TCell>& keys, const TVector<TCell>& values) {
-            Y_VERIFY(Record);
+            Y_ABORT_UNLESS(Record);
             auto& row = *Record->AddRows();
             row.SetKeyColumns(TSerializedCellVec::Serialize(keys));
             row.SetValueColumns(TSerializedCellVec::Serialize(values));
         }
 
         const std::shared_ptr<NKikimrTxDataShard::TEvUploadRowsRequest>& GetRecord() {
-            Y_VERIFY(Record);
+            Y_ABORT_UNLESS(Record);
             return Record;
         }
 
@@ -433,7 +433,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         IMPORT_LOG_N("Process download info at '" << marker << "'"
             << ": info# " << info);
 
-        Y_VERIFY(info.DataETag);
+        Y_ABORT_UNLESS(info.DataETag);
         if (!CheckETag(*info.DataETag, ETag, marker)) {
             return;
         }
@@ -541,7 +541,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return false;
         }
 
-        Y_VERIFY(!keys.empty());
+        Y_ABORT_UNLESS(!keys.empty());
         if (!TableInfo.IsMyKey(keys) /* TODO: maybe skip */) {
             Finish(false, TStringBuilder() << "Key is out of range on line: " << origLine);
             return false;
@@ -693,7 +693,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         TAutoPtr<IDestructable> prod = new TImportJobProduct(success, error, WrittenBytes, WrittenRows);
         Send(DataShard, new TDataShard::TEvPrivate::TEvAsyncJobComplete(prod), 0, TxId);
 
-        Y_VERIFY(TaskId);
+        Y_ABORT_UNLESS(TaskId);
         Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvFinishTask(TaskId));
 
         PassAway();

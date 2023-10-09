@@ -275,7 +275,7 @@ struct TUserTable : public TThrRefBase {
                 columnIds.reserve(columnNames.size());
                 for (const auto& columnName : columnNames) {
                     auto it = nameToId.find(columnName);
-                    Y_VERIFY(it != nameToId.end());
+                    Y_ABORT_UNLESS(it != nameToId.end());
                     columnIds.push_back(it->second);
                 }
             };
@@ -428,7 +428,7 @@ struct TUserTable : public TThrRefBase {
 
     void GetSchema(NKikimrSchemeOp::TTableDescription& description) const {
         bool ok = description.ParseFromArray(Schema.data(), Schema.size());
-        Y_VERIFY(ok);
+        Y_ABORT_UNLESS(ok);
     }
 
     void SetSchema(const NKikimrSchemeOp::TTableDescription& description) {

@@ -47,20 +47,20 @@ namespace NKikimr {
             friend class TDeferredItemQueueBase<TDeferredItemQueue>;
 
             void StartImpl(TWriter *writer) {
-                Y_VERIFY(!Writer);
+                Y_ABORT_UNLESS(!Writer);
                 Writer = writer;
-                Y_VERIFY(Writer);
+                Y_ABORT_UNLESS(Writer);
             }
 
             void ProcessItemImpl(const TDiskPart& preallocatedLocation, TRope&& buffer) {
                 TDiskPart writtenLocation = Writer->PushDataOnly(std::move(buffer));
 
                 // ensure that item was written into preallocated position
-                Y_VERIFY(writtenLocation == preallocatedLocation);
+                Y_ABORT_UNLESS(writtenLocation == preallocatedLocation);
             }
 
             void FinishImpl() {
-                Y_VERIFY(Writer);
+                Y_ABORT_UNLESS(Writer);
                 Writer = nullptr;
             }
 
@@ -326,14 +326,14 @@ namespace NKikimr {
                             if (IsFirstKey) {
                                 IsFirstKey = false;
                             } else {
-                                Y_VERIFY(!key.IsSameAs(PreviousKey), "duplicate keys: %s -> %s",
+                                Y_ABORT_UNLESS(!key.IsSameAs(PreviousKey), "duplicate keys: %s -> %s",
                                         PreviousKey.ToString().data(), key.ToString().data());
                             }
                             PreviousKey = key;
 
                             // iterator is valid and we have one more item to process; instruct merger whether we want
                             // data or not and proceed to TryProcessItem state
-                            Y_VERIFY(GcmpIt.Valid());
+                            Y_ABORT_UNLESS(GcmpIt.Valid());
                             IndexMerger.SetLoadDataMode(GcmpIt.KeepData());
                             It.PutToMerger(&IndexMerger);
 
@@ -360,7 +360,7 @@ namespace NKikimr {
 
                     case EState::TryProcessItem:
                         // ensure we have transformed item
-                        Y_VERIFY(TransformedItem);
+                        Y_ABORT_UNLESS(TransformedItem);
                         // try to process it
                         ETryProcessItemStatus status;
                         status = TryProcessItem();
@@ -381,7 +381,7 @@ namespace NKikimr {
                                 if (auto msg = CheckForReservation()) {
                                     msgsForYard.push_back(std::move(msg));
                                 } else {
-                                    Y_VERIFY(ChunkReservePending);
+                                    Y_ABORT_UNLESS(ChunkReservePending);
                                 }
                                 return false;
 
@@ -441,7 +441,7 @@ namespace NKikimr {
 
         TEvRestoreCorruptedBlob *Apply(NPDisk::TEvChunkReadResult *msg, TInstant now) {
             AtomicDecrement(*ReadsInFlight);
-            Y_VERIFY(InFlightReads > 0);
+            Y_ABORT_UNLESS(InFlightReads > 0);
             --InFlightReads;
 
             // apply read result to batcher
@@ -452,8 +452,8 @@ namespace NKikimr {
         bool ExpectingBlobRestoration = false;
 
         TEvRestoreCorruptedBlob *Apply(TEvRestoreCorruptedBlobResult *msg, bool *isAborting, TInstant now) {
-            Y_VERIFY(msg->Items.size() == 1);
-            Y_VERIFY(ExpectingBlobRestoration);
+            Y_ABORT_UNLESS(msg->Items.size() == 1);
+            Y_ABORT_UNLESS(ExpectingBlobRestoration);
             ExpectingBlobRestoration = false;
             auto& item = msg->Items.front();
             switch (item.Status) {
@@ -493,7 +493,7 @@ namespace NKikimr {
                     TEvRestoreCorruptedBlob::TItem item(payload.BlobId, payload.LocalParts, GType, payload.Location, payload.Id);
                     return new TEvRestoreCorruptedBlob(now + RestoreDeadline, {1u, item}, false, true);
                 } else {
-                    Y_VERIFY(status == NKikimrProto::OK);
+                    Y_ABORT_UNLESS(status == NKikimrProto::OK);
                     DeferredItems.AddReadDiskBlob(payload.Id, TRope(std::move(buffer)), payload.LocalParts);
                 }
             }
@@ -502,7 +502,7 @@ namespace NKikimr {
 
         void Apply(NPDisk::TEvChunkWriteResult * /*msg*/) {
             // adjust number of in flight messages
-            Y_VERIFY(InFlightWrites > 0);
+            Y_ABORT_UNLESS(InFlightWrites > 0);
             --InFlightWrites;
             AtomicDecrement(*WritesInFlight);
         }
@@ -616,7 +616,7 @@ namespace NKikimr {
                 if (inplacedDataSize != 0) {
                     ui32 numReads = 0;
                     auto lambda = [&](const TMemRec& memRec) {
-                        Y_VERIFY(memRec.GetType() == TBlobType::DiskBlob && memRec.HasData());
+                        Y_ABORT_UNLESS(memRec.GetType() == TBlobType::DiskBlob && memRec.HasData());
 
                         // find out where our disk blob resides
                         TDiskDataExtractor extr;
@@ -636,7 +636,7 @@ namespace NKikimr {
 
                     // either we read something or it is already in memory
                     const TDiskBlobMerger& diskBlobMerger = TransformedItem->DataMerger->GetDiskBlobMerger();
-                    Y_VERIFY(!diskBlobMerger.Empty() || numReads > 0, "Key# %s MemRec# %s LocalParts# %s KeepData# %s",
+                    Y_ABORT_UNLESS(!diskBlobMerger.Empty() || numReads > 0, "Key# %s MemRec# %s LocalParts# %s KeepData# %s",
                             It.GetCurKey().ToString().data(),
                             TransformedItem->MemRec->ToString(HullCtx->IngressCache.Get(), nullptr).data(),
                             TransformedItem->MemRec->GetLocalParts(GType).ToString().data(),
@@ -681,7 +681,7 @@ namespace NKikimr {
             CommitChunks.insert(CommitChunks.end(), conclusion.UsedChunks.begin(), conclusion.UsedChunks.end());
 
             // ensure that all writes were executed and drop writer
-            Y_VERIFY(!WriterPtr->GetPendingMessage());
+            Y_ABORT_UNLESS(!WriterPtr->GetPendingMessage());
             WriterPtr.reset();
 
             return true;
@@ -689,7 +689,7 @@ namespace NKikimr {
 
         void ProcessPendingMessages(TVector<std::unique_ptr<IEventBase>>& msgsForYard) {
             // ensure that we have writer
-            Y_VERIFY(WriterPtr);
+            Y_ABORT_UNLESS(WriterPtr);
 
             // send new messages until we reach in flight limit
             std::unique_ptr<NPDisk::TEvChunkWrite> msg;

@@ -169,11 +169,11 @@ namespace {
 namespace NKikimr::NAutoConfigInitializer {
 
     TASPools GetASPools(i16 cpuCount) {
-        Y_VERIFY(cpuCount >= 0);
+        Y_ABORT_UNLESS(cpuCount >= 0);
         if (cpuCount == 0) {
             cpuCount = GetCpuCount();
         }
-        Y_VERIFY(cpuCount > 0, "Can't read cpu count of this system");
+        Y_ABORT_UNLESS(cpuCount > 0, "Can't read cpu count of this system");
         if (cpuCount >= 4) {
             return TASPools();
         } else if (cpuCount == 3) {
@@ -232,7 +232,7 @@ namespace NKikimr::NAutoConfigInitializer {
         config->ClearExecutor();
 
         i16 cpuCount = config->HasCpuCount() ? config->GetCpuCount() : GetCpuCount();
-        Y_VERIFY(cpuCount);
+        Y_ABORT_UNLESS(cpuCount);
         config->SetCpuCount(cpuCount);
 
         if (!config->HasScheduler()) {

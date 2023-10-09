@@ -186,7 +186,7 @@ private:
                 issue.AddSubIssue(MakeIntrusive<TIssue>(YqlIssue(parsedPos.GetOrElse(TPosition()), TIssuesIds::DQ_GATEWAY_ERROR, TString{terminationMessage})));
             }
         }
-        Y_VERIFY(queryStatus != NYql::NDqProto::StatusIds::SUCCESS);
+        Y_ABORT_UNLESS(queryStatus != NYql::NDqProto::StatusIds::SUCCESS);
         return MakeHolder<NDq::TEvDq::TEvAbortExecution>(queryStatus, TVector<TIssue>{issue});
     }
 

@@ -26,7 +26,7 @@ namespace NKikimr {
         virtual void HandleReply(const TActorContext &ctx,
                                  const NKikimrBlobStorage::TEvVSyncGuidResult &record) override {
             // all checks are passed
-            Y_VERIFY(record.GetStatus() == NKikimrProto::OK);
+            Y_ABORT_UNLESS(record.GetStatus() == NKikimrProto::OK);
             ctx.Send(NotifyId, new TEvVDiskGuidWritten(TargetVDiskId, Guid, State));
         }
 
@@ -54,7 +54,7 @@ namespace NKikimr {
                                            const TActorId &notifyId,
                                            NKikimrBlobStorage::TSyncGuidInfo::EState state,
                                            TVDiskEternalGuid guid) {
-        Y_VERIFY(!(state == NKikimrBlobStorage::TSyncGuidInfo::Final &&
+        Y_ABORT_UNLESS(!(state == NKikimrBlobStorage::TSyncGuidInfo::Final &&
                    guid == TVDiskEternalGuid()));
         return new TWriteVDiskGuidProxy(std::move(vctx), selfVDiskId, targetVDiskId, targetServiceId,
                                         notifyId, state, guid);

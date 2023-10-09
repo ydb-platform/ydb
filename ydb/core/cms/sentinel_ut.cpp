@@ -350,10 +350,10 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
 
         void SetPDiskStateImpl(const TSet<TPDiskID>& ids, EPDiskState state) {
             for (const auto& id : ids) {
-                Y_VERIFY(MockNodes.contains(id.NodeId));
+                Y_ABORT_UNLESS(MockNodes.contains(id.NodeId));
                 auto& node = MockNodes.at(id.NodeId);
 
-                Y_VERIFY(node.PDiskStateInfo.contains(id.DiskId));
+                Y_ABORT_UNLESS(node.PDiskStateInfo.contains(id.DiskId));
                 auto& pdisk = node.PDiskStateInfo.at(id.DiskId);
 
                 pdisk.SetState(state);
@@ -445,7 +445,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             size_t idx = RandomNumber(nodes.size() - 1);
 
             auto info = std::next(nodes.begin(), idx)->second;
-            Y_VERIFY(info);
+            Y_ABORT_UNLESS(info);
             return info->PDisks;
         }
 

@@ -75,7 +75,7 @@ TString TEvPartitionWriter::TEvWriteAccepted::ToString() const {
 }
 
 TString TEvPartitionWriter::TEvWriteResponse::DumpError() const {
-    Y_VERIFY(!IsSuccess());
+    Y_ABORT_UNLESS(!IsSuccess());
 
     return TStringBuilder() << "Error {"
         << " SessionId: " << SessionId
@@ -455,9 +455,9 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         auto& record = ev->Get()->Record;
         const auto cookie = record.GetPartitionRequest().GetCookie();
 
-        Y_VERIFY(Pending.empty() || Pending.rbegin()->first < cookie);
-        Y_VERIFY(PendingReserve.empty() || PendingReserve.rbegin()->first < cookie);
-        Y_VERIFY(PendingWrite.empty() || PendingWrite.back() < cookie);
+        Y_ABORT_UNLESS(Pending.empty() || Pending.rbegin()->first < cookie);
+        Y_ABORT_UNLESS(PendingReserve.empty() || PendingReserve.rbegin()->first < cookie);
+        Y_ABORT_UNLESS(PendingWrite.empty() || PendingWrite.back() < cookie);
 
         Pending.emplace(cookie, std::move(ev->Get()->Record));
     }
@@ -514,10 +514,10 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void EnqueueReservedAndProcess(ui64 cookie) {
-        Y_VERIFY(!PendingReserve.empty());
+        Y_ABORT_UNLESS(!PendingReserve.empty());
         auto it = PendingReserve.begin();
 
-        Y_VERIFY(it->first == cookie);
+        Y_ABORT_UNLESS(it->first == cookie);
 
         ReceivedReserve.emplace(it->first, std::move(it->second));
 
@@ -582,11 +582,11 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void Write(ui64 cookie) {
-        Y_VERIFY(!PendingReserve.empty());
+        Y_ABORT_UNLESS(!PendingReserve.empty());
         auto it = PendingReserve.begin();
 
-        Y_VERIFY(it->first == cookie);
-        Y_VERIFY(PendingWrite.empty() || PendingWrite.back() < cookie);
+        Y_ABORT_UNLESS(it->first == cookie);
+        Y_ABORT_UNLESS(PendingWrite.empty() || PendingWrite.back() < cookie);
 
         Write(cookie, std::move(it->second.Request));
 
@@ -634,7 +634,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
             WriteAccepted(cookie);
 
-            Y_VERIFY(!PendingReserve.empty());
+            Y_ABORT_UNLESS(!PendingReserve.empty());
             auto it = PendingReserve.begin();
             auto& holder = it->second;
 

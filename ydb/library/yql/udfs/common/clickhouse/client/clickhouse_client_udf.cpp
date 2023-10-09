@@ -1164,7 +1164,7 @@ class TSerializeFormat : public TBoxedValue {
 
                         bool flush = !insertedNew && partIt->second.Block.bytes() >= BlockSizeLimit;
                         if (flush) {
-                            Y_VERIFY(FlushKey(partIt, result));
+                            Y_ABORT_UNLESS(FlushKey(partIt, result));
                         }
 
                         if (!flush && TotalSizeLimit && TotalSizeLimit <= TotalSize) {

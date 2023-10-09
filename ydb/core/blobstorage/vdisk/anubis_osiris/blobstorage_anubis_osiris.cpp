@@ -23,7 +23,7 @@ namespace NKikimr {
         LogoBlobIDFromLogoBlobID(Id, protoId);
         TString lbSerialized;
         bool res = proto.SerializeToString(&lbSerialized);
-        Y_VERIFY(res);
+        Y_ABORT_UNLESS(res);
         return lbSerialized;
     }
 

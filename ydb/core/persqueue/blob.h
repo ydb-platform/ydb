@@ -59,7 +59,7 @@ struct TClientBlob {
         , PartitionKey(partitionKey)
         , ExplicitHashKey(explicitHashKey)
     {
-        Y_VERIFY(PartitionKey.size() <= 256);
+        Y_ABORT_UNLESS(PartitionKey.size() <= 256);
     }
 
     ui32 GetPartDataSize() const {
@@ -186,7 +186,7 @@ struct TBatch {
         , PackedData(data, header.GetPayloadSize())
     {}
 
-    ui32 GetPackedSize() const { Y_VERIFY(Packed); return sizeof(ui16) + PackedData.size() + Header.ByteSize(); }
+    ui32 GetPackedSize() const { Y_ABORT_UNLESS(Packed); return sizeof(ui16) + PackedData.size() + Header.ByteSize(); }
     void Pack();
     void Unpack();
     void UnpackTo(TVector<TClientBlob> *result);

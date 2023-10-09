@@ -69,13 +69,13 @@ ui32 TInFlightShards::GetIndexByGeneration(const ui32 generation) {
 ui32 TInFlightShards::AllocateGeneration(TShardState::TPtr state) {
     {
         auto itTablet = Shards.find(state->TabletId);
-        Y_VERIFY(itTablet != Shards.end());
+        Y_ABORT_UNLESS(itTablet != Shards.end());
         auto it = itTablet->second.find(state->ScannerIdx);
-        Y_VERIFY(it != itTablet->second.end());
+        Y_ABORT_UNLESS(it != itTablet->second.end());
     }
 
     const ui32 nextGeneration = ++LastGeneration;
-    Y_VERIFY(AllocatedGenerations.emplace(nextGeneration, state->ScannerIdx).second);
+    Y_ABORT_UNLESS(AllocatedGenerations.emplace(nextGeneration, state->ScannerIdx).second);
     return nextGeneration;
 }
 

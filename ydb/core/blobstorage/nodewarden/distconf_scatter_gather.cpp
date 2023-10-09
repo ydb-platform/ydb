@@ -5,10 +5,10 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::IssueScatterTask(bool locallyGenerated, TEvScatter&& request) {
         const ui64 cookie = NextScatterCookie++;
         STLOG(PRI_DEBUG, BS_NODE, NWDC21, "IssueScatterTask", (Request, request), (Cookie, cookie));
-        Y_VERIFY(locallyGenerated || Binding);
+        Y_ABORT_UNLESS(locallyGenerated || Binding);
         const auto [it, inserted] = ScatterTasks.try_emplace(cookie, locallyGenerated ? std::nullopt : Binding,
             std::move(request));
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
         TScatterTask& task = it->second;
         PrepareScatterTask(cookie, task);
         for (auto& [nodeId, info] : DirectBoundNodes) {
@@ -23,7 +23,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::FinishAsyncOperation(ui64 cookie) {
         if (const auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()) {
             TScatterTask& task = it->second;
-            Y_VERIFY(task.AsyncOperationsPending);
+            Y_ABORT_UNLESS(task.AsyncOperationsPending);
             task.AsyncOperationsPending = false;
             if (task.PendingNodes.empty()) {
                 CompleteScatterTask(task);
@@ -46,8 +46,8 @@ namespace NKikimr::NStorage {
 
         // some state checks
         if (task.Origin) {
-            Y_VERIFY(Binding); // when binding is dropped, all scatter tasks must be dropped too
-            Y_VERIFY(Binding == task.Origin); // binding must not change
+            Y_ABORT_UNLESS(Binding); // when binding is dropped, all scatter tasks must be dropped too
+            Y_ABORT_UNLESS(Binding == task.Origin); // binding must not change
         }
 
         PerformScatterTask(task);
@@ -65,11 +65,11 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC23, "AbortScatterTask", (Cookie, cookie), (NodeId, nodeId));
 
         const auto it = ScatterTasks.find(cookie);
-        Y_VERIFY(it != ScatterTasks.end());
+        Y_ABORT_UNLESS(it != ScatterTasks.end());
         TScatterTask& task = it->second;
 
         const size_t n = task.PendingNodes.erase(nodeId);
-        Y_VERIFY(n == 1);
+        Y_ABORT_UNLESS(n == 1);
         if (task.PendingNodes.empty() && !task.AsyncOperationsPending) {
             CompleteScatterTask(task);
             ScatterTasks.erase(it);
@@ -80,15 +80,15 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC24, "AbortAllScatterTasks", (Binding, binding));
 
         for (auto& [cookie, task] : std::exchange(ScatterTasks, {})) {
-            Y_VERIFY(task.Origin);
-            Y_VERIFY(task.Origin == binding);
+            Y_ABORT_UNLESS(task.Origin);
+            Y_ABORT_UNLESS(task.Origin == binding);
 
             for (const ui32 nodeId : task.PendingNodes) {
                 const auto it = DirectBoundNodes.find(nodeId);
-                Y_VERIFY(it != DirectBoundNodes.end());
+                Y_ABORT_UNLESS(it != DirectBoundNodes.end());
                 TBoundNode& info = it->second;
                 const size_t n = info.ScatterTasks.erase(cookie);
-                Y_VERIFY(n == 1);
+                Y_ABORT_UNLESS(n == 1);
             }
         }
     }
@@ -112,12 +112,12 @@ namespace NKikimr::NStorage {
             auto& record = ev->Get()->Record;
             if (const auto jt = ScatterTasks.find(record.GetCookie()); jt != ScatterTasks.end()) {
                 const size_t n = info.ScatterTasks.erase(jt->first);
-                Y_VERIFY(n == 1);
+                Y_ABORT_UNLESS(n == 1);
 
                 TScatterTask& task = jt->second;
                 record.Swap(&task.CollectedResponses.emplace_back());
                 const size_t m = task.PendingNodes.erase(senderNodeId);
-                Y_VERIFY(m == 1);
+                Y_ABORT_UNLESS(m == 1);
                 if (task.PendingNodes.empty() && !task.AsyncOperationsPending) {
                     CompleteScatterTask(task);
                     ScatterTasks.erase(jt);

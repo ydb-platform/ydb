@@ -453,17 +453,17 @@ std::shared_ptr<arrow::RecordBatch> ExtractBatch(std::shared_ptr<arrow::Table> t
 
     arrow::TableBatchReader reader(*table);
     auto result = reader.Next();
-    Y_VERIFY(result.ok());
+    Y_ABORT_UNLESS(result.ok());
     batch = *result;
     result = reader.Next();
-    Y_VERIFY(result.ok() && !(*result));
+    Y_ABORT_UNLESS(result.ok() && !(*result));
     return batch;
 }
 
 std::shared_ptr<arrow::RecordBatch> AddSnapColumn(const std::shared_ptr<arrow::RecordBatch>& batch, ui64 snap) {
     auto snapColumn = NArrow::MakeUI64Array(snap, batch->num_rows());
     auto result = batch->AddColumn(batch->num_columns(), "snap", snapColumn);
-    Y_VERIFY(result.ok());
+    Y_ABORT_UNLESS(result.ok());
     return *result;
 }
 

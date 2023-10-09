@@ -445,7 +445,7 @@ void TTxCoordinator::DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const
     mediators.reserve(record.MediatorsSize());
 
     for (auto id: record.GetMediators()) {
-        Y_VERIFY(TabletID() != id, "found self id in mediators list");
+        Y_ABORT_UNLESS(TabletID() != id, "found self id in mediators list");
         mediators.push_back(id);
     }
 

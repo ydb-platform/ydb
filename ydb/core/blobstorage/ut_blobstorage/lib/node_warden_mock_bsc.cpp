@@ -3,7 +3,7 @@
 #include "node_warden_mock_vdisk.h"
 
 void TNodeWardenMockActor::SendRegisterNode() {
-    Y_VERIFY(PipeId);
+    Y_ABORT_UNLESS(PipeId);
 
     TVector<ui32> startedDynamicGroups, groupGenerations;
     for (const auto& [groupId, group] : Groups) {
@@ -23,7 +23,7 @@ void TNodeWardenMockActor::SendRegisterNode() {
 }
 
 void TNodeWardenMockActor::SendUpdateDiskStatus() {
-    Y_VERIFY(PipeId);
+    Y_ABORT_UNLESS(PipeId);
 
     auto ev = std::make_unique<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
 
@@ -104,7 +104,7 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
             case NKikimrBlobStorage::EEntityStatus::INITIAL:
             case NKikimrBlobStorage::EEntityStatus::CREATE: {
                 const auto setupIt = Setup->PDisks.find(std::make_tuple(pdiskId.NodeId, pdisk.GetPath()));
-                Y_VERIFY(setupIt != Setup->PDisks.end());
+                Y_ABORT_UNLESS(setupIt != Setup->PDisks.end());
                 const TSetup::TPDiskInfo& info = setupIt->second;
 
                 auto&& [it, inserted] = PDisks.try_emplace(pdiskId, std::make_unique<TPDiskState>(pdisk.GetPDiskGuid(),

@@ -75,7 +75,7 @@ namespace NActors {
 
                 this->DispatchEvents(options);
 
-                Y_VERIFY(f.HasValue() || f.HasException());
+                Y_ABORT_UNLESS(f.HasValue() || f.HasException());
             }
 
             return f.ExtractValue();

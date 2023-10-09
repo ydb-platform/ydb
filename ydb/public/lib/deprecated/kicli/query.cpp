@@ -10,7 +10,7 @@ TQuery::TQuery(TKikimr& kikimr)
 void TQuery::ParseTextParameters(NKikimrMiniKQL::TParams& params, const TString& parameters) {
     if (!parameters.empty()) {
         bool ok = ::google::protobuf::TextFormat::ParseFromString(parameters, &params);
-        Y_VERIFY(ok);
+        Y_ABORT_UNLESS(ok);
     }
 }
 

@@ -94,7 +94,7 @@ namespace NKikimr {
         };
         TString explanation;
         auto r = TSyncLogRepaired::Construct(std::move(params), ep.EntryPoint, ep.EntryPointLsn, explanation);
-        Y_VERIFY(r);
+        Y_ABORT_UNLESS(r);
         std::unique_ptr<NSyncLog::TSyncLogRecovery> recovery = std::make_unique<NSyncLog::TSyncLogRecovery>(std::move(r));
         const ui64 lastLsnOfIndexRecord = recovery->GetLastLsnOfIndexRecord();
         std::unique_ptr<TSyncLogRepaired> repaired = recovery->ReleaseRepaired();
@@ -136,7 +136,7 @@ namespace NKikimr {
 
         void Start(TSyncLogKeeperState *state, ui64 recoveryLogConfirmedLsn) {
             CommitData = std::make_unique<TSyncLogKeeperCommitData>(state->PrepareCommitData(recoveryLogConfirmedLsn));
-            Y_VERIFY((!CommitData->SwapSnap || CommitData->SwapSnap->Empty()) &&
+            Y_ABORT_UNLESS((!CommitData->SwapSnap || CommitData->SwapSnap->Empty()) &&
                     CommitData->ChunksToDeleteDelayed.empty() &&
                     CommitData->ChunksToDelete.empty());
             STR << "Commit started\n";
@@ -180,11 +180,11 @@ namespace NKikimr {
 
         // Trim all written data
         commit = Trim(10);
-        Y_VERIFY(!commit);
+        Y_ABORT_UNLESS(!commit);
 
         // Try to cut log and initiate commit
         commit = CutLog(12);
-        Y_VERIFY(commit);
+        Y_ABORT_UNLESS(commit);
 
         // start parallel commit
         TCommitWithNoSwapAndDelChunks parallelCommit(oldFormatForEntryPoint);
@@ -202,10 +202,10 @@ namespace NKikimr {
 
         // trim all written data
         commit = Trim(31);
-        Y_VERIFY(!commit);
+        Y_ABORT_UNLESS(!commit);
 
         commit = CutLog(31);
-        Y_VERIFY(commit);
+        Y_ABORT_UNLESS(commit);
 
         // start parallel commit
         TCommitWithNoSwapAndDelChunks parallelCommit2(oldFormatForEntryPoint);

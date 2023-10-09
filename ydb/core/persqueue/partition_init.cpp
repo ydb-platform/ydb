@@ -39,13 +39,13 @@ TInitializer::TInitializer(TPartition* partition)
 }
 
 void TInitializer::Execute(const TActorContext& ctx) {
-    Y_VERIFY(!InProgress, "Initialization already in progress");
+    Y_ABORT_UNLESS(!InProgress, "Initialization already in progress");
     InProgress = true;
     DoNext(ctx);
 }
 
 bool TInitializer::Handle(STFUNC_SIG) {
-    Y_VERIFY(InProgress, "Initialization is not started");
+    Y_ABORT_UNLESS(InProgress, "Initialization is not started");
     return CurrentStep->Get()->Handle(ev);
 }
 
@@ -163,13 +163,13 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
     }
 
     auto& res = ev->Get()->Record;
-    Y_VERIFY(res.ReadResultSize() == 1);
+    Y_ABORT_UNLESS(res.ReadResultSize() == 1);
 
     auto& response = res.GetReadResult(0);
 
     switch (response.GetStatus()) {
     case NKikimrProto::OK:
-        Y_VERIFY(Partition()->Config.ParseFromString(response.GetValue()));
+        Y_ABORT_UNLESS(Partition()->Config.ParseFromString(response.GetValue()));
         if (Partition()->Config.GetVersion() < Partition()->TabletConfig.GetVersion()) {
             auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(Partition()->TopicConverter,
                                                                      Partition()->TabletConfig);
@@ -233,7 +233,7 @@ void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActo
     }
 
     auto& response = ev->Get()->Record;
-    Y_VERIFY(response.GetStatusResultSize());
+    Y_ABORT_UNLESS(response.GetStatusResultSize());
 
     Partition()->DiskIsFull = DiskIsFull(ev);
     if (!Partition()->DiskIsFull) {
@@ -274,7 +274,7 @@ void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     }
 
     auto& response = ev->Get()->Record;
-    Y_VERIFY(response.ReadResultSize() == 2);
+    Y_ABORT_UNLESS(response.ReadResultSize() == 2);
 
     auto handleReadResult = [&](const NKikimrClient::TKeyValueResponse::TReadResult& response, auto&& action) {
         switch (response.GetStatus()) {
@@ -299,7 +299,7 @@ void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     auto loadMeta = [&](const NKikimrClient::TKeyValueResponse::TReadResult& response) {
         NKikimrPQ::TPartitionMeta meta;
         bool res = meta.ParseFromString(response.GetValue());
-        Y_VERIFY(res);
+        Y_ABORT_UNLESS(res);
         /* Bring back later, when switch to 21-2 will be unable
            StartOffset = meta.GetStartOffset();
            EndOffset = meta.GetEndOffset();
@@ -314,7 +314,7 @@ void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     auto loadTxMeta = [this](const NKikimrClient::TKeyValueResponse::TReadResult& response) {
         NKikimrPQ::TPartitionTxMeta meta;
         bool res = meta.ParseFromString(response.GetValue());
-        Y_VERIFY(res);
+        Y_ABORT_UNLESS(res);
 
         if (meta.HasPlanStep()) {
             Partition()->PlanStep = meta.GetPlanStep();
@@ -348,14 +348,14 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     }
 
     auto& response = ev->Get()->Record;
-    Y_VERIFY(response.ReadRangeResultSize() == 1);
+    Y_ABORT_UNLESS(response.ReadRangeResultSize() == 1);
 
     auto& range = response.GetReadRangeResult(0);
     auto now = ctx.Now();
 
-    Y_VERIFY(response.ReadRangeResultSize() == 1);
+    Y_ABORT_UNLESS(response.ReadRangeResultSize() == 1);
     //megaqc check here all results
-    Y_VERIFY(range.HasStatus());
+    Y_ABORT_UNLESS(range.HasStatus());
     const TString *key = nullptr;
     switch (range.GetStatus()) {
         case NKikimrProto::OK:
@@ -365,7 +365,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 
             for (ui32 i = 0; i < range.PairSize(); ++i) {
                 const auto& pair = range.GetPair(i);
-                Y_VERIFY(pair.HasStatus());
+                Y_ABORT_UNLESS(pair.HasStatus());
                 if (pair.GetStatus() != NKikimrProto::OK) {
                     LOG_ERROR_S(
                             ctx, NKikimrServices::PERSQUEUE,
@@ -377,8 +377,8 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
                     return;
                 }
 
-                Y_VERIFY(pair.HasKey());
-                Y_VERIFY(pair.HasValue());
+                Y_ABORT_UNLESS(pair.HasKey());
+                Y_ABORT_UNLESS(pair.HasValue());
 
                 key = &pair.GetKey();
                 const auto type = (*key)[TKeyPrefix::MarkPosition()];
@@ -394,7 +394,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             }
             //make next step
             if (range.GetStatus() == NKikimrProto::OVERRUN) {
-                Y_VERIFY(key);
+                Y_ABORT_UNLESS(key);
                 RequestInfoRange(ctx, Partition()->Tablet, PartitionId(), *key);
             } else {
                 Done(ctx);
@@ -437,11 +437,11 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     }
 
     auto& response = ev->Get()->Record;
-    Y_VERIFY(response.ReadRangeResultSize() == 1);
+    Y_ABORT_UNLESS(response.ReadRangeResultSize() == 1);
 
     auto& range = response.GetReadRangeResult(0);
 
-    Y_VERIFY(range.HasStatus());
+    Y_ABORT_UNLESS(range.HasStatus());
     switch(range.GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
@@ -449,7 +449,7 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             FillBlobsMetaData(range, ctx);
 
             if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
-                Y_VERIFY(range.PairSize());
+                Y_ABORT_UNLESS(range.PairSize());
                 RequestDataRange(ctx, Partition()->Tablet, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
                 return;
             }
@@ -477,21 +477,21 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
 
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         auto pair = range.GetPair(i);
-        Y_VERIFY(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+        Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
         TKey k(pair.GetKey());
         if (dataKeysBody.empty()) { //no data - this is first pair of first range
             head.Offset = endOffset = startOffset = k.GetOffset();
             if (k.GetPartNo() > 0) ++startOffset;
             head.PartNo = 0;
         } else {
-            Y_VERIFY(endOffset <= k.GetOffset(), "%s", pair.GetKey().c_str());
+            Y_ABORT_UNLESS(endOffset <= k.GetOffset(), "%s", pair.GetKey().c_str());
             if (endOffset < k.GetOffset()) {
                 gapOffsets.push_back(std::make_pair(endOffset, k.GetOffset()));
                 gapSize += k.GetOffset() - endOffset;
             }
         }
-        Y_VERIFY(k.GetCount() + k.GetInternalPartsCount() > 0);
-        Y_VERIFY(k.GetOffset() >= endOffset);
+        Y_ABORT_UNLESS(k.GetCount() + k.GetInternalPartsCount() > 0);
+        Y_ABORT_UNLESS(k.GetOffset() >= endOffset);
         endOffset = k.GetOffset() + k.GetCount();
         //at this point EndOffset > StartOffset
         if (!k.IsHead()) //head.Size will be filled after read or head blobs
@@ -508,7 +508,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
                         dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size});
     }
 
-    Y_VERIFY(endOffset >= startOffset);
+    Y_ABORT_UNLESS(endOffset >= startOffset);
 }
 
 
@@ -523,19 +523,19 @@ void TInitDataRangeStep::FormHeadAndProceed() {
     head.PartNo = 0;
 
     while (dataKeysBody.size() > 0 && dataKeysBody.back().Key.IsHead()) {
-        Y_VERIFY(dataKeysBody.back().Key.GetOffset() + dataKeysBody.back().Key.GetCount() == head.Offset); //no gaps in head allowed
+        Y_ABORT_UNLESS(dataKeysBody.back().Key.GetOffset() + dataKeysBody.back().Key.GetCount() == head.Offset); //no gaps in head allowed
         headKeys.push_front(dataKeysBody.back());
         head.Offset = dataKeysBody.back().Key.GetOffset();
         head.PartNo = dataKeysBody.back().Key.GetPartNo();
         dataKeysBody.pop_back();
     }
     for (const auto& p : dataKeysBody) {
-        Y_VERIFY(!p.Key.IsHead());
+        Y_ABORT_UNLESS(!p.Key.IsHead());
     }
 
-    Y_VERIFY(headKeys.empty() || head.Offset == headKeys.front().Key.GetOffset() && head.PartNo == headKeys.front().Key.GetPartNo());
-    Y_VERIFY(head.Offset < endOffset || head.Offset == endOffset && headKeys.empty());
-    Y_VERIFY(head.Offset >= startOffset || head.Offset == startOffset - 1 && head.PartNo > 0);
+    Y_ABORT_UNLESS(headKeys.empty() || head.Offset == headKeys.front().Key.GetOffset() && head.PartNo == headKeys.front().Key.GetPartNo());
+    Y_ABORT_UNLESS(head.Offset < endOffset || head.Offset == endOffset && headKeys.empty());
+    Y_ABORT_UNLESS(head.Offset >= startOffset || head.Offset == startOffset - 1 && head.PartNo > 0);
 }
 
 
@@ -553,7 +553,7 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
     for (auto& p : Partition()->HeadKeys) {
         keys.push_back({p.Key.Data(), p.Key.Size()});
     }
-    Y_VERIFY(keys.size() < Partition()->TotalMaxCount);
+    Y_ABORT_UNLESS(keys.size() < Partition()->TotalMaxCount);
     if (keys.empty()) {
         Done(ctx);
         return;
@@ -574,7 +574,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     }
 
     auto& response = ev->Get()->Record;
-    Y_VERIFY(response.ReadResultSize());
+    Y_ABORT_UNLESS(response.ReadResultSize());
 
     auto& head = Partition()->Head;
     auto& headKeys = Partition()->HeadKeys;
@@ -583,24 +583,24 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     auto totalLevels = Partition()->TotalLevels;
 
     ui32 currentLevel = 0;
-    Y_VERIFY(headKeys.size() == response.ReadResultSize());
+    Y_ABORT_UNLESS(headKeys.size() == response.ReadResultSize());
     for (ui32 i = 0; i < response.ReadResultSize(); ++i) {
         auto& read = response.GetReadResult(i);
-        Y_VERIFY(read.HasStatus());
+        Y_ABORT_UNLESS(read.HasStatus());
         switch(read.GetStatus()) {
             case NKikimrProto::OK: {
                 const TKey& key = headKeys[i].Key;
-                Y_VERIFY(key.IsHead());
+                Y_ABORT_UNLESS(key.IsHead());
 
                 ui32 size = headKeys[i].Size;
                 ui64 offset = key.GetOffset();
                 while (currentLevel + 1 < totalLevels && size < compactLevelBorder[currentLevel + 1])
                     ++currentLevel;
-                Y_VERIFY(size < compactLevelBorder[currentLevel]);
+                Y_ABORT_UNLESS(size < compactLevelBorder[currentLevel]);
 
                 dataKeysHead[currentLevel].AddKey(key, size);
-                Y_VERIFY(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
-                Y_VERIFY(!dataKeysHead[currentLevel].NeedCompaction());
+                Y_ABORT_UNLESS(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
+                Y_ABORT_UNLESS(!dataKeysHead[currentLevel].NeedCompaction());
 
                 LOG_DEBUG_S(
                         ctx, NKikimrServices::PERSQUEUE,
@@ -610,9 +610,9 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                             << " expected " << size
                 );
 
-                Y_VERIFY(offset + 1 >= Partition()->StartOffset);
-                Y_VERIFY(offset < Partition()->EndOffset);
-                Y_VERIFY(size == read.GetValue().size());
+                Y_ABORT_UNLESS(offset + 1 >= Partition()->StartOffset);
+                Y_ABORT_UNLESS(offset < Partition()->EndOffset);
+                Y_ABORT_UNLESS(size == read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
                     head.Batches.emplace_back(it.GetBatch());
@@ -718,7 +718,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     UsersInfoStorage->Init(Tablet, SelfId(), ctx);
 
-    Y_VERIFY(AppData(ctx)->PQConfig.GetMaxBlobsPerLevel() > 0);
+    Y_ABORT_UNLESS(AppData(ctx)->PQConfig.GetMaxBlobsPerLevel() > 0);
     ui32 border = LEVEL0;
     MaxSizeCheck = 0;
     MaxBlobSize = AppData(ctx)->PQConfig.GetMaxBlobSize();
@@ -726,7 +726,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     for (ui32 i = 0; i < TotalLevels; ++i) {
         CompactLevelBorder.push_back(border);
         MaxSizeCheck += border;
-        Y_VERIFY(i + 1 < TotalLevels && border < MaxBlobSize || i + 1 == TotalLevels && border == MaxBlobSize);
+        Y_ABORT_UNLESS(i + 1 < TotalLevels && border < MaxBlobSize || i + 1 == TotalLevels && border == MaxBlobSize);
         border *= AppData(ctx)->PQConfig.GetMaxBlobsPerLevel();
         border = Min(border, MaxBlobSize);
     }
@@ -950,7 +950,7 @@ void CalcTopicWriteQuotaParams(const NKikimrPQ::TPQConfig& pqConfig,
     if (IsQuotingEnabled(pqConfig, isLocalDC)) { // Mirrored topics are not quoted in local dc.
         const auto& quotingConfig = pqConfig.GetQuotingConfig();
 
-        Y_VERIFY(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
+        Y_ABORT_UNLESS(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
 
         // ToDo[migration] - double check
         auto topicPath = topicConverter->GetFederationPath();
@@ -995,7 +995,7 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, ui32 par
     auto range = read->MutableRange();
     TKeyPrefix from(c, partition);
     if (!key.empty()) {
-        Y_VERIFY(key.StartsWith(TStringBuf(from.Data(), from.Size())));
+        Y_ABORT_UNLESS(key.StartsWith(TStringBuf(from.Data(), from.Size())));
         from.Clear();
         from.Append(key.data(), key.size());
     }

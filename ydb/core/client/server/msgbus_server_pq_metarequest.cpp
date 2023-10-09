@@ -326,7 +326,7 @@ TPersQueueGetPartitionLocationsProcessor::TPersQueueGetPartitionLocationsProcess
 THolder<IActor> TPersQueueGetPartitionLocationsProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
-    Y_VERIFY(NodesInfo.get() != nullptr);
+    Y_ABORT_UNLESS(NodesInfo.get() != nullptr);
     return MakeHolder<TPersQueueGetPartitionLocationsTopicWorker>(
             SelfId(), topicEntry, name,
             PartitionsToRequest[name], RequestProto, NodesInfo
@@ -411,7 +411,7 @@ void TPersQueueGetPartitionLocationsTopicWorker::Answer(
             location.SetPartition(partition);
 
             const auto ansIt = PipeAnswers.find(tabletId);
-            Y_VERIFY(ansIt != PipeAnswers.end());
+            Y_ABORT_UNLESS(ansIt != PipeAnswers.end());
             bool statusInitializing = false;
             if (ansIt->second.Get() != nullptr && ansIt->second->Get()->Status == NKikimrProto::OK) {
                 const ui32 nodeId = ansIt->second->Get()->ServerId.NodeId();
@@ -483,7 +483,7 @@ TPersQueueGetReadSessionsInfoProcessor::TPersQueueGetReadSessionsInfoProcessor(
 THolder<IActor> TPersQueueGetReadSessionsInfoProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
-    Y_VERIFY(NodesInfo.get() != nullptr);
+    Y_ABORT_UNLESS(NodesInfo.get() != nullptr);
     return MakeHolder<TPersQueueGetReadSessionsInfoTopicWorker>(
             SelfId(), topicEntry, name, RequestProto, NodesInfo);
 }
@@ -528,7 +528,7 @@ void TPersQueueGetReadSessionsInfoTopicWorker::BootstrapImpl(const TActorContext
             const ui32 partitionIndex = partition.GetPartitionId();
             const ui64 tabletId = partition.GetTabletId();
             const bool inserted = PartitionToTablet.emplace(partitionIndex, tabletId).second;
-            Y_VERIFY(inserted);
+            Y_ABORT_UNLESS(inserted);
 
             if (HasTabletPipe(tabletId)) {
                 continue;

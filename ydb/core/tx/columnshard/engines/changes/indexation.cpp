@@ -18,7 +18,7 @@ void TInsertColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, 
     TBase::DoWriteIndex(self, context);
     for (const auto& insertedData : DataToIndex) {
         self.InsertTable->EraseCommitted(context.DBWrapper, insertedData);
-        Y_VERIFY(insertedData.GetBlobRange().IsFullBlob());
+        Y_ABORT_UNLESS(insertedData.GetBlobRange().IsFullBlob());
     }
     if (!DataToIndex.empty()) {
         self.UpdateInsertTableCounters();
@@ -30,7 +30,7 @@ bool TInsertColumnEngineChanges::AddPathIfNotExists(ui64 pathId) {
         return false;
     }
 
-    Y_VERIFY(FirstGranuleId);
+    Y_ABORT_UNLESS(FirstGranuleId);
     ui64 granule = FirstGranuleId;
     ++FirstGranuleId;
 
@@ -41,12 +41,12 @@ bool TInsertColumnEngineChanges::AddPathIfNotExists(ui64 pathId) {
 
 void TInsertColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
-    Y_VERIFY(DataToIndex.size());
+    Y_ABORT_UNLESS(DataToIndex.size());
     auto removing = BlobsAction.GetRemoving(IStoragesManager::DefaultStorageId);
     auto reading = BlobsAction.GetReading(IStoragesManager::DefaultStorageId);
     for (size_t i = 0; i < DataToIndex.size(); ++i) {
         const auto& insertedData = DataToIndex[i];
-        Y_VERIFY(insertedData.GetBlobRange().IsFullBlob());
+        Y_ABORT_UNLESS(insertedData.GetBlobRange().IsFullBlob());
         reading->AddRange(insertedData.GetBlobRange(), insertedData.GetBlobData().value_or(""));
         removing->DeclareRemove(insertedData.GetBlobRange().GetBlobId());
     }
@@ -65,21 +65,21 @@ void TInsertColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TC
 }
 
 TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
-    Y_VERIFY(!DataToIndex.empty());
-    Y_VERIFY(AppendedPortions.empty());
+    Y_ABORT_UNLESS(!DataToIndex.empty());
+    Y_ABORT_UNLESS(AppendedPortions.empty());
 
     auto maxSnapshot = TSnapshot::Zero();
     for (auto& inserted : DataToIndex) {
         TSnapshot insertSnap = inserted.GetSnapshot();
-        Y_VERIFY(insertSnap.Valid());
+        Y_ABORT_UNLESS(insertSnap.Valid());
         if (insertSnap > maxSnapshot) {
             maxSnapshot = insertSnap;
         }
     }
-    Y_VERIFY(maxSnapshot.Valid());
+    Y_ABORT_UNLESS(maxSnapshot.Valid());
 
     auto resultSchema = context.SchemaVersions.GetSchema(maxSnapshot);
-    Y_VERIFY(resultSchema->GetIndexInfo().IsSorted());
+    Y_ABORT_UNLESS(resultSchema->GetIndexInfo().IsSorted());
 
     THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> pathBatches;
     for (auto& inserted : DataToIndex) {
@@ -87,13 +87,13 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
         auto blobSchema = context.SchemaVersions.GetSchema(inserted.GetSchemaVersion());
         auto& indexInfo = blobSchema->GetIndexInfo();
-        Y_VERIFY(indexInfo.IsSorted());
+        Y_ABORT_UNLESS(indexInfo.IsSorted());
 
         std::shared_ptr<arrow::RecordBatch> batch;
         {
             auto itBlobData = Blobs.find(blobRange);
-            Y_VERIFY(itBlobData != Blobs.end(), "Data for range %s has not been read", blobRange.ToString().c_str());
-            Y_VERIFY(!itBlobData->second.empty(), "Blob data not present");
+            Y_ABORT_UNLESS(itBlobData != Blobs.end(), "Data for range %s has not been read", blobRange.ToString().c_str());
+            Y_ABORT_UNLESS(!itBlobData->second.empty(), "Blob data not present");
             // Prepare batch
             batch = NArrow::DeserializeBatch(itBlobData->second, indexInfo.ArrowSchema());
             Blobs.erase(itBlobData);
@@ -108,27 +108,27 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         pathBatches[inserted.PathId].push_back(batch);
         Y_VERIFY_DEBUG(NArrow::IsSorted(pathBatches[inserted.PathId].back(), resultSchema->GetIndexInfo().GetReplaceKey()));
     }
-    Y_VERIFY(Blobs.empty());
+    Y_ABORT_UNLESS(Blobs.empty());
 
     for (auto& [pathId, batches] : pathBatches) {
         AddPathIfNotExists(pathId);
 
         // We could merge data here cause tablet limits indexing data portions
         auto merged = NArrow::CombineSortedBatches(batches, resultSchema->GetIndexInfo().SortReplaceDescription());
-        Y_VERIFY(merged);
+        Y_ABORT_UNLESS(merged);
         Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(merged, resultSchema->GetIndexInfo().GetReplaceKey()));
 
         auto granuleBatches = TMarksGranules::SliceIntoGranules(merged, PathToGranule[pathId], resultSchema->GetIndexInfo());
         for (auto& [granule, batch] : granuleBatches) {
             auto portions = MakeAppendedPortions(batch, granule, maxSnapshot, nullptr, context);
-            Y_VERIFY(portions.size() > 0);
+            Y_ABORT_UNLESS(portions.size() > 0);
             for (auto& portion : portions) {
                 AppendedPortions.emplace_back(std::move(portion));
             }
         }
     }
 
-    Y_VERIFY(PathToGranule.size() == pathBatches.size());
+    Y_ABORT_UNLESS(PathToGranule.size() == pathBatches.size());
     return TConclusionStatus::Success();
 }
 
@@ -136,7 +136,7 @@ std::shared_ptr<arrow::RecordBatch> TInsertColumnEngineChanges::AddSpecials(cons
     const TIndexInfo& indexInfo, const TInsertedData& inserted) const
 {
     auto batch = TIndexInfo::AddSpecialColumns(srcBatch, inserted.GetSnapshot());
-    Y_VERIFY(batch);
+    Y_ABORT_UNLESS(batch);
 
     return NArrow::ExtractColumns(batch, indexInfo.ArrowSchemaWithSpecials());
 }

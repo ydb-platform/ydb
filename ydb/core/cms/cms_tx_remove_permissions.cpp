@@ -61,7 +61,7 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemovePermissions Complete");
 
         if (Response) {
-            Y_VERIFY(Request);
+            Y_ABORT_UNLESS(Request);
             Self->Reply(Request.Get(), Response, ctx);
         }
 

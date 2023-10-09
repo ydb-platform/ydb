@@ -37,12 +37,12 @@ public:
 
     std::shared_ptr<arrow::Scalar> GetFirstScalar() const {
         auto result = DoGetFirstScalar();
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
         return result;
     }
     std::shared_ptr<arrow::Scalar> GetLastScalar() const {
         auto result = DoGetLastScalar();
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
         return result;
     }
 

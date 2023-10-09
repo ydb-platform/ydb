@@ -42,9 +42,9 @@ public:
         const auto req = this->GetProtoRequest();
         auto ev = MakeHolder<EvRequestType>();
         auto request = dynamic_cast<RpcRequestType*>(this->Request_.get());
-        Y_VERIFY(request);
+        Y_ABORT_UNLESS(request);
         auto proxyCtx = dynamic_cast<IRequestProxyCtx*>(request);
-        Y_VERIFY(proxyCtx);
+        Y_ABORT_UNLESS(proxyCtx);
         TString user;
         const TString& internalToken = proxyCtx->GetSerializedToken();
         if (internalToken) {

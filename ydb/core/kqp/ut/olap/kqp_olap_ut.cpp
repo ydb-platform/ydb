@@ -287,15 +287,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                             maxCount = v;
                         }
                     } else if (c.first == "field") {
-                        Y_VERIFY(groups.emplace(c.second.GetProto().DebugString()).second);
+                        Y_ABORT_UNLESS(groups.emplace(c.second.GetProto().DebugString()).second);
                     }
                     if (verbose) {
                         Cerr << c.first << ":" << Endl << c.second.GetProto().DebugString() << Endl;
                     }
                 }
             }
-            Y_VERIFY(maxCount);
-            Y_VERIFY(minCount);
+            Y_ABORT_UNLESS(maxCount);
+            Y_ABORT_UNLESS(minCount);
             return TDistribution(count, *minCount, *maxCount, groups.size());
         }
 
@@ -1369,7 +1369,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
         Cerr << csController->GetFilteredRecordsCount().Val() << Endl;
-        Y_VERIFY(csController->GetFilteredRecordsCount().Val() * 10 <= rowsCount);
+        Y_ABORT_UNLESS(csController->GetFilteredRecordsCount().Val() * 10 <= rowsCount);
         UNIT_ASSERT(rows.size() == 0);
     }
 
@@ -2238,14 +2238,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 case NKqp::TKqpComputeEvents::EvScanData:
                 {
                     auto* msg = ev->Get<NKqp::TEvKqpCompute::TEvScanData>();
-                    Y_VERIFY(currentTest.MutableLimitChecker().CheckExpectedLimitOnScanData(msg->ArrowBatch ? msg->ArrowBatch->num_rows() : 0));
-                    Y_VERIFY(currentTest.MutableRecordChecker().CheckExpectedOnScanData(msg->ArrowBatch ? msg->ArrowBatch->num_columns() : 0));
+                    Y_ABORT_UNLESS(currentTest.MutableLimitChecker().CheckExpectedLimitOnScanData(msg->ArrowBatch ? msg->ArrowBatch->num_rows() : 0));
+                    Y_ABORT_UNLESS(currentTest.MutableRecordChecker().CheckExpectedOnScanData(msg->ArrowBatch ? msg->ArrowBatch->num_columns() : 0));
                     break;
                 }
                 case TEvDataShard::EvKqpScan:
                 {
                     auto* msg = ev->Get<TEvDataShard::TEvKqpScan>();
-                    Y_VERIFY(currentTest.MutableLimitChecker().CheckExpectedLimitOnScanTask(msg->Record.GetItemsLimit()));
+                    Y_ABORT_UNLESS(currentTest.MutableLimitChecker().CheckExpectedLimitOnScanTask(msg->Record.GetItemsLimit()));
                     break;
                 }
             }
@@ -2259,7 +2259,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto streamSender = runtime->AllocateEdgeActor();
             SendRequest(*runtime, streamSender, MakeStreamRequest(streamSender, queryFixed, false));
             auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqpCompute::TEvScanData>(streamSender, TDuration::Seconds(10));
-            Y_VERIFY(currentTest.CheckFinished());
+            Y_ABORT_UNLESS(currentTest.CheckFinished());
         }
     }
 
@@ -2332,14 +2332,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 case NKqp::TKqpComputeEvents::EvScanData:
                 {
                     auto* msg = ev->Get<NKqp::TEvKqpCompute::TEvScanData>();
-                    Y_VERIFY(currentTest.MutableLimitChecker().CheckExpectedLimitOnScanData(msg->ArrowBatch ? msg->ArrowBatch->num_rows() : 0));
-                    Y_VERIFY(currentTest.MutableRecordChecker().CheckExpectedOnScanData(msg->ArrowBatch ? msg->ArrowBatch->num_columns() : 0));
+                    Y_ABORT_UNLESS(currentTest.MutableLimitChecker().CheckExpectedLimitOnScanData(msg->ArrowBatch ? msg->ArrowBatch->num_rows() : 0));
+                    Y_ABORT_UNLESS(currentTest.MutableRecordChecker().CheckExpectedOnScanData(msg->ArrowBatch ? msg->ArrowBatch->num_columns() : 0));
                     break;
                 }
                 case TEvDataShard::EvKqpScan:
                 {
                     auto* msg = ev->Get<TEvDataShard::TEvKqpScan>();
-                    Y_VERIFY(currentTest.MutableLimitChecker().CheckExpectedLimitOnScanTask(msg->Record.GetItemsLimit()));
+                    Y_ABORT_UNLESS(currentTest.MutableLimitChecker().CheckExpectedLimitOnScanTask(msg->Record.GetItemsLimit()));
                     break;
                 }
             }
@@ -2355,7 +2355,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto streamSender = runtime->AllocateEdgeActor();
             SendRequest(*runtime, streamSender, MakeStreamRequest(streamSender, queryFixed, false));
             auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqpCompute::TEvScanData>(streamSender, TDuration::Seconds(10));
-            Y_VERIFY(currentTest.CheckFinished());
+            Y_ABORT_UNLESS(currentTest.CheckFinished());
         }
     }
 
@@ -3425,9 +3425,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             helper.PrintCount();
             {
                 auto d = helper.GetDistribution();
-                Y_VERIFY(d.GetCount() == rowsCount);
-                Y_VERIFY(d.GetGroupsCount() == groupsCount);
-                Y_VERIFY(d.GetMaxCount() - d.GetMinCount() <= 1);
+                Y_ABORT_UNLESS(d.GetCount() == rowsCount);
+                Y_ABORT_UNLESS(d.GetGroupsCount() == groupsCount);
+                Y_ABORT_UNLESS(d.GetMaxCount() - d.GetMinCount() <= 1);
             }
             helper.GetVolumes(rawBytesUnpack1PK, bytesUnpack1PK, false);
             Sleep(TDuration::Seconds(5));
@@ -3459,9 +3459,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 {
                     auto d = helper.GetDistribution();
                     Cerr << d.DebugString() << Endl;
-                    Y_VERIFY(d.GetCount() == 2 * rowsCount);
-                    Y_VERIFY(d.GetGroupsCount() == groupsCount);
-                    Y_VERIFY(d.GetMaxCount() - d.GetMinCount() <= 2);
+                    Y_ABORT_UNLESS(d.GetCount() == 2 * rowsCount);
+                    Y_ABORT_UNLESS(d.GetGroupsCount() == groupsCount);
+                    Y_ABORT_UNLESS(d.GetMaxCount() - d.GetMinCount() <= 2);
                 }
             }
         }
@@ -3476,7 +3476,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         result << "frq_compression: " << 1.0 * bytesPack / rawBytesPack << Endl;
         result << "pk_size : " << rawBytesPK1 << " / " << bytesPK1 << Endl;
         Cerr << result << Endl;
-        Y_VERIFY(bytesPack / bytesUnpack < 0.1);
+        Y_ABORT_UNLESS(bytesPack / bytesUnpack < 0.1);
     }
 
     Y_UNIT_TEST(SelectLimit1ManyShards) {
@@ -4307,7 +4307,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         settings.AppConfig.MutableColumnShardConfig()->MutableTablesStorageLayoutPolicy()->MutableIdentityGroups();
-        Y_VERIFY(settings.AppConfig.GetColumnShardConfig().GetTablesStorageLayoutPolicy().HasIdentityGroups());
+        Y_ABORT_UNLESS(settings.AppConfig.GetColumnShardConfig().GetTablesStorageLayoutPolicy().HasIdentityGroups());
         TKikimrRunner kikimr(settings);
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore1", 20, 4);
         UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore1", "olapTable_1", 5));

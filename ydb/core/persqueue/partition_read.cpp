@@ -21,8 +21,8 @@
 #include <util/system/byteorder.h>
 
 #define VERIFY_RESULT_BLOB(blob, pos) \
-    Y_VERIFY(!blob.Data.empty(), "Empty data. SourceId: %s, SeqNo: %" PRIu64, blob.SourceId.data(), blob.SeqNo); \
-    Y_VERIFY(blob.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, blob.SeqNo);
+    Y_ABORT_UNLESS(!blob.Data.empty(), "Empty data. SourceId: %s, SeqNo: %" PRIu64, blob.SourceId.data(), blob.SeqNo); \
+    Y_ABORT_UNLESS(blob.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, blob.SeqNo);
 
 namespace NKikimr::NPQ {
 
@@ -136,7 +136,7 @@ void TPartition::UpdateAvailableSize(const TActorContext& ctx) {
 
 void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
-    Y_VERIFY(record.HasSender());
+    Y_ABORT_UNLESS(record.HasSender());
 
     TActorId sender = ActorIdFromProto(record.GetSender());
     if (InitDone && EndOffset > (ui64)record.GetOffset()) { //already has data, answer right now
@@ -154,7 +154,7 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
         THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
         auto res = HasDataRequests.insert(req);
         HasDataDeadlines.insert(dl);
-        Y_VERIFY(res.second);
+        Y_ABORT_UNLESS(res.second);
 
         if (InitDone && record.HasClientId() && !record.GetClientId().empty()) {
             auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
@@ -241,7 +241,7 @@ std::pair<TInstant, TInstant> TPartition::GetTime(const TUserInfo& userInfo, ui6
 
 void TPartition::Handle(TEvPQ::TEvGetClientOffset::TPtr& ev, const TActorContext& ctx) {
     auto& userInfo = UsersInfoStorage->GetOrCreate(ev->Get()->ClientId, ctx);
-    Y_VERIFY(userInfo.Offset >= -1, "Unexpected Offset: %" PRIi64, userInfo.Offset);
+    Y_ABORT_UNLESS(userInfo.Offset >= -1, "Unexpected Offset: %" PRIi64, userInfo.Offset);
     ui64 offset = Max<i64>(userInfo.Offset, 0);
     auto ts = GetTime(userInfo, offset);
     TabletCounters.Cumulative()[COUNTER_PQ_GET_CLIENT_OFFSET_OK].Increment(1);
@@ -257,7 +257,7 @@ void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& 
     }
 
     const ui64& offset = ev->Get()->Offset;
-    Y_VERIFY(offset <= (ui64)Max<i64>(), "Unexpected Offset: %" PRIu64, offset);
+    Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Unexpected Offset: %" PRIu64, offset);
 
     AddUserAct(ev->Release());
 
@@ -336,7 +336,7 @@ TReadAnswer TReadInfo::FormAnswer(
     readResult->SetMaxOffset(endOffset);
     readResult->SetRealReadOffset(Offset);
     readResult->SetReadFromTimestampMs(ReadTimestampMs);
-    Y_VERIFY(endOffset <= (ui64)Max<i64>(), "Max offset is too big: %" PRIu64, endOffset);
+    Y_ABORT_UNLESS(endOffset <= (ui64)Max<i64>(), "Max offset is too big: %" PRIu64, endOffset);
 
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "FormAnswer " << Blobs.size());
 
@@ -365,12 +365,12 @@ TReadAnswer TReadInfo::FormAnswer(
         return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (size >= Size || cnt >= Count);
     };
 
-    Y_VERIFY(blobs.size() == Blobs.size());
+    Y_ABORT_UNLESS(blobs.size() == Blobs.size());
     response->Check();
     bool needStop = false;
     for (ui32 pos = 0; pos < blobs.size() && !needStop; ++pos) {
-        Y_VERIFY(Blobs[pos].Offset == blobs[pos].Offset, "Mismatch %" PRIu64 " vs %" PRIu64, Blobs[pos].Offset, blobs[pos].Offset);
-        Y_VERIFY(Blobs[pos].Count == blobs[pos].Count, "Mismatch %" PRIu32 " vs %" PRIu32, Blobs[pos].Count, blobs[pos].Count);
+        Y_ABORT_UNLESS(Blobs[pos].Offset == blobs[pos].Offset, "Mismatch %" PRIu64 " vs %" PRIu64, Blobs[pos].Offset, blobs[pos].Offset);
+        Y_ABORT_UNLESS(Blobs[pos].Count == blobs[pos].Count, "Mismatch %" PRIu32 " vs %" PRIu32, Blobs[pos].Count, blobs[pos].Count);
 
         ui64 offset = blobs[pos].Offset;
         ui32 count = blobs[pos].Count;
@@ -388,15 +388,15 @@ TReadAnswer TReadInfo::FormAnswer(
             readResult->SetSizeLag(sizeLag - size);
             return {answerSize, std::move(answer)};
         }
-        Y_VERIFY(blobValue.size() == blobs[pos].Size, "value for offset %" PRIu64 " count %u size must be %u, but got %u",
+        Y_ABORT_UNLESS(blobValue.size() == blobs[pos].Size, "value for offset %" PRIu64 " count %u size must be %u, but got %u",
                                                         offset, count, blobs[pos].Size, (ui32)blobValue.size());
 
         if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
             Offset = offset;
             PartNo = partNo;
         }
-        Y_VERIFY(offset <= Offset);
-        Y_VERIFY(offset < Offset || partNo <= PartNo);
+        Y_ABORT_UNLESS(offset <= Offset);
+        Y_ABORT_UNLESS(offset < Offset || partNo <= PartNo);
         TKey key(TKeyPrefix::TypeData, 0, offset, partNo, count, internalPartsCount, false);
         for (TBlobIterator it(key, blobValue); it.IsValid() && !needStop; it.Next()) {
             TBatch batch = it.GetBatch();
@@ -423,7 +423,7 @@ TReadAnswer TReadInfo::FormAnswer(
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 
-                Y_VERIFY(PartNo == res.GetPartNo(), "pos %" PRIu32 " i %" PRIu32 " Offset %" PRIu64 " PartNo %" PRIu16 " offset %" PRIu64 " partNo %" PRIu16,
+                Y_ABORT_UNLESS(PartNo == res.GetPartNo(), "pos %" PRIu32 " i %" PRIu32 " Offset %" PRIu64 " PartNo %" PRIu16 " offset %" PRIu64 " partNo %" PRIu16,
                          pos, i, Offset, PartNo, offset, res.GetPartNo());
 
                 if (userInfo) {
@@ -479,7 +479,7 @@ TReadAnswer TReadInfo::FormAnswer(
             }
         }
     }
-    Y_VERIFY(Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, Offset);
+    Y_ABORT_UNLESS(Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, Offset);
     ui64 answerSize = answer->Response.ByteSize();
     if (userInfo && Destination != 0) {
         userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC,
@@ -506,7 +506,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
 
 
 TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, ui32* rcount, ui32* rsize) {
-    Y_VERIFY(rcount && rsize);
+    Y_ABORT_UNLESS(rcount && rsize);
     ui32& count = *rcount;
     ui32& size = *rsize;
     count = size = 0;
@@ -516,10 +516,10 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(const ui64 startOffse
             [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
         if (it == DataKeysBody.begin()) //could be true if data is deleted or gaps are created
             return blobs;
-        Y_VERIFY(it != DataKeysBody.begin()); //always greater, startoffset can't be less that StartOffset
-        Y_VERIFY(it == DataKeysBody.end() || it->Key.GetOffset() > startOffset || it->Key.GetOffset() == startOffset && it->Key.GetPartNo() > partNo);
+        Y_ABORT_UNLESS(it != DataKeysBody.begin()); //always greater, startoffset can't be less that StartOffset
+        Y_ABORT_UNLESS(it == DataKeysBody.end() || it->Key.GetOffset() > startOffset || it->Key.GetOffset() == startOffset && it->Key.GetPartNo() > partNo);
         --it;
-        Y_VERIFY(it->Key.GetOffset() < startOffset || (it->Key.GetOffset() == startOffset && it->Key.GetPartNo() <= partNo));
+        Y_ABORT_UNLESS(it->Key.GetOffset() < startOffset || (it->Key.GetOffset() == startOffset && it->Key.GetPartNo() <= partNo));
         ui32 cnt = 0;
         ui32 sz = 0;
         if (startOffset > it->Key.GetOffset() + it->Key.GetCount()) { //there is a gap
@@ -529,7 +529,7 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(const ui64 startOffse
                 sz = it->Size;
             }
         } else {
-            Y_VERIFY(it->Key.GetCount() >= (startOffset - it->Key.GetOffset()));
+            Y_ABORT_UNLESS(it->Key.GetCount() >= (startOffset - it->Key.GetOffset()));
             cnt = it->Key.GetCount() - (startOffset - it->Key.GetOffset()); //don't count all elements from first blob
             sz = (cnt == it->Key.GetCount() ? it->Size : 0); //not readed client blobs can be of ~8Mb, so don't count this size at all
         }
@@ -558,7 +558,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(const ui64 startOffset, 
     ui32 pos = 0;
     if (startOffset > Head.Offset || startOffset == Head.Offset && partNo > Head.PartNo) {
         pos = Head.FindPos(startOffset, partNo);
-        Y_VERIFY(pos != Max<ui32>());
+        Y_ABORT_UNLESS(pos != Max<ui32>());
     }
     ui32 lastBlobSize = 0;
     for (;pos < Head.Batches.size(); ++pos) {
@@ -572,7 +572,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(const ui64 startOffset, 
 
             ui64 curOffset = offset;
 
-            Y_VERIFY(pno == blobs[i].GetPartNo());
+            Y_ABORT_UNLESS(pno == blobs[i].GetPartNo());
             bool skip = offset < startOffset || offset == startOffset &&
                 blobs[i].GetPartNo() < partNo;
             if (blobs[i].IsLastPart()) {
@@ -653,7 +653,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
 
     const TString& user = read->ClientId;
 
-    Y_VERIFY(read->Offset <= EndOffset);
+    Y_ABORT_UNLESS(read->Offset <= EndOffset);
 
     auto& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
 
@@ -725,7 +725,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const 
         return;
     }
 
-    Y_VERIFY(offset < EndOffset);
+    Y_ABORT_UNLESS(offset < EndOffset);
 
     ProcessRead(ctx, std::move(info), cookie, false);
 }
@@ -772,7 +772,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
         return;
     }
 
-    Y_VERIFY(!ReadingTimestamp);
+    Y_ABORT_UNLESS(!ReadingTimestamp);
 
     ReadingTimestamp = true;
     ReadingForUser = user;
@@ -780,7 +780,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     ReadingForUserReadRuleGeneration = userInfo.ReadRuleGeneration;
 
     for (const auto& user : UpdateUserInfoTimestamp) {
-        Y_VERIFY(user.first != ReadingForUser || user.second != ReadingForUserReadRuleGeneration);
+        Y_ABORT_UNLESS(user.first != ReadingForUser || user.second != ReadingForUserReadRuleGeneration);
     }
 
     LOG_DEBUG_S(
@@ -833,9 +833,9 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
             " queuesize " << UpdateUserInfoTimestamp.size() <<
             " startOffset " << StartOffset
     );
-    Y_VERIFY(userInfo->ReadScheduled);
+    Y_ABORT_UNLESS(userInfo->ReadScheduled);
     userInfo->ReadScheduled = false;
-    Y_VERIFY(ReadingForUser != "");
+    Y_ABORT_UNLESS(ReadingForUser != "");
 
     if (!userInfo->ActualTimestamps) {
         LOG_INFO_S(
@@ -884,11 +884,11 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
             continue;
         ReadTimestampForOffset(user, *userInfo, ctx);
     }
-    Y_VERIFY(ReadingTimestamp || UpdateUserInfoTimestamp.empty());
+    Y_ABORT_UNLESS(ReadingTimestamp || UpdateUserInfoTimestamp.empty());
 }
 
 void TPartition::HandleSetOffsetResponse(ui64 cookie, const TActorContext& ctx) {
-    Y_VERIFY(cookie == SET_OFFSET_COOKIE);
+    Y_ABORT_UNLESS(cookie == SET_OFFSET_COOKIE);
 
 
     if (ChangeConfig) {
@@ -962,7 +962,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     ui32 count = 0;
     ui32 size = 0;
 
-    Y_VERIFY(!info.User.empty());
+    Y_ABORT_UNLESS(!info.User.empty());
     auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
 
     if (subscription) {
@@ -1006,7 +1006,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
 
     const TString user = info.User;
     bool res = ReadInfo.insert({cookie, std::move(info)}).second;
-    Y_VERIFY(res);
+    Y_ABORT_UNLESS(res);
 
     THolder<TEvPQ::TEvBlobRequest> request(new TEvPQ::TEvBlobRequest(user, cookie, Partition,
                                                                      lastOffset, std::move(blobs)));

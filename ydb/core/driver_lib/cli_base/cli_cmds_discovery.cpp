@@ -18,7 +18,7 @@ void TClientCommandDiscoveryBase::PrintResponse(const Ydb::Operations::Operation
         TClientGRpcCommand::PrintResponse(response);
     } else {
         Ydb::Discovery::ListEndpointsResult result;
-        Y_VERIFY(response.result().UnpackTo(&result));
+        Y_ABORT_UNLESS(response.result().UnpackTo(&result));
         Cout << "OK [" << result.Getself_location() << "]" << Endl;
         for (auto &endpoint : result.Getendpoints()) {
             Cout << (endpoint.Getssl() ? "grpcs://" : "grpc://");

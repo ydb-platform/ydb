@@ -12,7 +12,7 @@ using namespace NStorage;
 
 void TNodeWarden::RegisterPendingActor(const TActorId& actorId) {
     const bool inserted = PendingMessageQ.emplace(actorId, std::deque<std::unique_ptr<IEventHandle>>()).second;
-    Y_VERIFY(inserted);
+    Y_ABORT_UNLESS(inserted);
 }
 
 void TNodeWarden::EnqueuePendingMessage(TAutoPtr<IEventHandle> ev) {
@@ -27,7 +27,7 @@ void TNodeWarden::EnqueuePendingMessage(TAutoPtr<IEventHandle> ev) {
 
 void TNodeWarden::IssuePendingMessages(const TActorId& actorId) {
     const auto it = PendingMessageQ.find(actorId);
-    Y_VERIFY(it != PendingMessageQ.end());
+    Y_ABORT_UNLESS(it != PendingMessageQ.end());
     for (auto& ev : it->second) {
         TActivationContext::Send(ev.release());
     }
@@ -36,7 +36,7 @@ void TNodeWarden::IssuePendingMessages(const TActorId& actorId) {
 
 void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet &serviceSet, bool isStatic, bool comprehensive, bool updateCache) {
     if (Cfg->IsCacheEnabled() && updateCache) {
-        Y_VERIFY(!isStatic);
+        Y_ABORT_UNLESS(!isStatic);
         return EnqueueSyncOp(WrapCacheOp(UpdateServiceSet(serviceSet, comprehensive, [=] {
             return ApplyServiceSet(serviceSet, false, comprehensive, false);
         })));
@@ -69,7 +69,7 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
             pdiskQ.erase({vslotId.NodeId, vslotId.PDiskId});
         }
         for (const TPDiskKey& pdiskId : pdiskQ) { // terminate excessive PDisks
-            Y_VERIFY(pdiskId.NodeId == LocalNodeId);
+            Y_ABORT_UNLESS(pdiskId.NodeId == LocalNodeId);
             DestroyLocalPDisk(pdiskId.PDiskId);
         }
     }
@@ -112,7 +112,7 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
 
     // find local pdisk config to extract GUID
     auto it = LocalPDisks.find(TPDiskKey(LocalNodeId, pdiskId));
-    Y_VERIFY(it != LocalPDisks.end());
+    Y_ABORT_UNLESS(it != LocalPDisks.end());
 
     // get config
     const NKikimrBlobStorage::TIncrHugeConfig& config = Cfg->IncrHugeConfig;

@@ -313,7 +313,7 @@ public:
     }
 
     void RequestFinished() {
-        Y_VERIFY(HttpRequestInflight > 0);
+        Y_ABORT_UNLESS(HttpRequestInflight > 0);
         HttpRequestInflight--;
         PopRequests();
         MaybeFinish();

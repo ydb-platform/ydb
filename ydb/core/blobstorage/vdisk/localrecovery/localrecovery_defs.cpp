@@ -219,7 +219,7 @@ namespace NKikimr {
 
     void TLocalRecoveryInfo::SetStartingPoint(TLogSignature signature, ui64 lsn) {
         bool success = StartingPoints.insert(TSignatureToLsn::value_type(signature, lsn)).second;
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
     }
 
     void TLocalRecoveryInfo::HandleReadLogResult(

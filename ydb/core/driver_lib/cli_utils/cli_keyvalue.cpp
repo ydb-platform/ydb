@@ -65,15 +65,15 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
 
     TString readBuffer;
     if (requestConfig.IsReadToFile) {
-        Y_VERIFY(record.CmdReadSize() == 1);
+        Y_ABORT_UNLESS(record.CmdReadSize() == 1);
         auto& cmdRead = *record.MutableCmdRead(0);
         cmdRead.SetSize(maxReadBlockSize);
     }
 
     if (requestConfig.IsWriteFromFile) {
-        Y_VERIFY(record.CmdWriteSize() == 1);
-        Y_VERIFY(record.GetCmdWrite(0).HasKey());
-        Y_VERIFY(!record.GetCmdWrite(0).HasValue());
+        Y_ABORT_UNLESS(record.CmdWriteSize() == 1);
+        Y_ABORT_UNLESS(record.GetCmdWrite(0).HasKey());
+        Y_ABORT_UNLESS(!record.GetCmdWrite(0).HasValue());
         TString data = TUnbufferedFileInput(requestConfig.WriteFromPath).ReadAll();
         if (data.size() <= maxWriteBlockSize) {
             record.MutableCmdWrite(0)->SetValue(data);
@@ -134,11 +134,11 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
         }
 
         if (requestConfig.IsReadToFile) {
-            Y_VERIFY(status == NMsgBusProxy::MSTATUS_OK);
-            Y_VERIFY(response.ReadResultSize() == 1);
-            Y_VERIFY(response.GetReadResult(0).HasStatus());
-            Y_VERIFY(response.GetReadResult(0).GetStatus() == NKikimrProto::OK);
-            Y_VERIFY(response.GetReadResult(0).HasValue());
+            Y_ABORT_UNLESS(status == NMsgBusProxy::MSTATUS_OK);
+            Y_ABORT_UNLESS(response.ReadResultSize() == 1);
+            Y_ABORT_UNLESS(response.GetReadResult(0).HasStatus());
+            Y_ABORT_UNLESS(response.GetReadResult(0).GetStatus() == NKikimrProto::OK);
+            Y_ABORT_UNLESS(response.GetReadResult(0).HasValue());
             TString data = response.GetReadResult(0).GetValue();
             readBuffer += data;
 
@@ -148,13 +148,13 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
                 last.MutableCmdRead(0)->SetOffset(readBuffer.size());
             }
         } else if (requestConfig.IsWriteFromFile) {
-            Y_VERIFY(status == NMsgBusProxy::MSTATUS_OK);
+            Y_ABORT_UNLESS(status == NMsgBusProxy::MSTATUS_OK);
             if (response.WriteResultSize() == 1) {
-                Y_VERIFY(response.GetWriteResult(0).HasStatus());
-                Y_VERIFY(response.GetWriteResult(0).GetStatus() == NKikimrProto::OK);
+                Y_ABORT_UNLESS(response.GetWriteResult(0).HasStatus());
+                Y_ABORT_UNLESS(response.GetWriteResult(0).GetStatus() == NKikimrProto::OK);
             } else if (response.ConcatResultSize() == 1) {
-                Y_VERIFY(response.GetConcatResult(0).HasStatus());
-                Y_VERIFY(response.GetConcatResult(0).GetStatus() == NKikimrProto::OK);
+                Y_ABORT_UNLESS(response.GetConcatResult(0).HasStatus());
+                Y_ABORT_UNLESS(response.GetConcatResult(0).GetStatus() == NKikimrProto::OK);
             } else {
                 Y_FAIL("unexpected case");
             }

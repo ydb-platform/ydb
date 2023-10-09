@@ -107,7 +107,7 @@ void TTableClient::TImpl::StartPeriodicSessionPoolTask() {
                 TSession::TImpl::GetSmartDeleter(strongClient)
             ));
 
-        Y_VERIFY(session.GetId());
+        Y_ABORT_UNLESS(session.GetId());
 
         const auto sessionPoolSettings = session.Client_->Settings_.SessionPoolSettings_;
         const auto spentTime = session.SessionImpl_->GetTimeToTouchFast() - session.SessionImpl_->GetTimeInPastFast();
@@ -243,7 +243,7 @@ void TTableClient::TImpl::StartPeriodicHostScanTask() {
             if (foreignHost) {
                 // But no hosts at local
                 if (hostMap.empty()) {
-                    Y_VERIFY(!winner.second);
+                    Y_ABORT_UNLESS(!winner.second);
                     // Scan whole cluster - we have no local dc
                     winner = ScanLocation(strongClient, hostMap, true);
                 } else {
@@ -861,7 +861,7 @@ TAsyncStatus TTableClient::TImpl::CloseInternal(const TKqpSessionCommon* session
 }
 
 bool TTableClient::TImpl::ReturnSession(TKqpSessionCommon* sessionImpl) {
-    Y_VERIFY(sessionImpl->GetState() == TSession::TImpl::S_ACTIVE ||
+    Y_ABORT_UNLESS(sessionImpl->GetState() == TSession::TImpl::S_ACTIVE ||
             sessionImpl->GetState() == TSession::TImpl::S_IDLE);
 
     if (RequestMigrator_.DoCheckAndMigrate(sessionImpl)) {

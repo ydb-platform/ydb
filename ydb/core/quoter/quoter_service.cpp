@@ -34,15 +34,15 @@ NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
 }
 
 TRequest& TReqState::Get(TRequestId idx) {
-    Y_VERIFY(idx.Value < Requests.size());
+    Y_ABORT_UNLESS(idx.Value < Requests.size());
     auto &x = Requests[idx.Value];
-    Y_VERIFY(x.Source);
+    Y_ABORT_UNLESS(x.Source);
     return Requests[idx.Value];
 }
 
 TRequestId TReqState::Idx(TRequest &request) {
     const TRequestId idx = TRequestId{static_cast<ui32>(&request - &*Requests.begin())};
-    Y_VERIFY(idx.Value < Requests.size());
+    Y_ABORT_UNLESS(idx.Value < Requests.size());
     return idx;
 }
 
@@ -129,7 +129,7 @@ void TReqState::Free(TRequestId idx) {
 }
 
 TResourceLeaf& TResState::Get(TResourceLeafId idx) {
-    Y_VERIFY(idx < Leafs.size());
+    Y_ABORT_UNLESS(idx < Leafs.size());
     return Leafs[idx];
 }
 
@@ -417,14 +417,14 @@ void TQuoterService::ForgetRequest(TRequest &request, TRequestId reqIdx) {
                 if (leaf.NextInWaitQueue != Max<ui32>()) {
                     ResState.Get(leaf.NextInWaitQueue).PrevInWaitQueue = leaf.PrevInWaitQueue;
                 } else {
-                    Y_VERIFY(leaf.Resource->QueueTail == leafIdx);
+                    Y_ABORT_UNLESS(leaf.Resource->QueueTail == leafIdx);
                     leaf.Resource->QueueTail = leaf.PrevInWaitQueue;
                 }
 
                 if (leaf.PrevInWaitQueue != Max<ui32>()) {
                     ResState.Get(leaf.PrevInWaitQueue).NextInWaitQueue = leaf.NextInWaitQueue;
                 } else {
-                    Y_VERIFY(leaf.Resource->QueueHead == leafIdx);
+                    Y_ABORT_UNLESS(leaf.Resource->QueueHead == leafIdx);
                     leaf.Resource->QueueHead = leaf.NextInWaitQueue;
                 }
 
@@ -578,7 +578,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
             // ok, got quoterId, proceed
             quoterId = qIndxIt->second;
             quoter = Quoters.FindPtr(quoterId);
-            Y_VERIFY(quoter != nullptr);
+            Y_ABORT_UNLESS(quoter != nullptr);
         }
     }
 
@@ -661,8 +661,8 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
 
 void TQuoterService::MarkScheduleAllocation(TResource& quores, TDuration delay, TInstant now) {
     TryTickSchedule(now);
-    Y_VERIFY(quores.NextTick != TInstant::Zero() && quores.NextTick != TInstant::Max());
-    Y_VERIFY(delay > TDuration::Zero());
+    Y_ABORT_UNLESS(quores.NextTick != TInstant::Zero() && quores.NextTick != TInstant::Max());
+    Y_ABORT_UNLESS(delay > TDuration::Zero());
 
     if (delay == TDuration::Max()) {
         if (quores.Activation) {
@@ -755,9 +755,9 @@ void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, co
 
     request.Operator = msg->Operator;
     request.Deadline = TInstant::Max();
-    Y_VERIFY(request.Operator == EResourceOperator::And); // todo: support other modes
+    Y_ABORT_UNLESS(request.Operator == EResourceOperator::And); // todo: support other modes
 
-    Y_VERIFY(msg->Reqs.size() >= 1);
+    Y_ABORT_UNLESS(msg->Reqs.size() >= 1);
     bool canAllow = true;
     for (const auto &leaf : msg->Reqs) {
         LWTRACK(RequestResource, request.Orbit, leaf.Amount, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId);
@@ -784,7 +784,7 @@ void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, co
     }
 
     if (canAllow) {
-        Y_VERIFY(request.ResourceLeaf == Max<ui32>());
+        Y_ABORT_UNLESS(request.ResourceLeaf == Max<ui32>());
         return AllowRequest(request, reqIdx);
     }
 
@@ -982,7 +982,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
         return;
 
     auto resIt = quoter.WaitingResource.find(resourceName);
-    Y_VERIFY(resIt != quoter.WaitingResource.end());
+    Y_ABORT_UNLESS(resIt != quoter.WaitingResource.end());
 
     TSet<TRequestId> waitingRequests = std::move(resIt->second);
     quoter.WaitingResource.erase(resIt);
@@ -1008,7 +1008,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
 
     // success, create resource
     auto resPairIt = quoter.Resources.emplace(resourceId, new TResource(quoterId, resourceId, quoter.QuoterName, resourceName, Config, quoter.Counters.QuoterCounters));
-    Y_VERIFY(resPairIt.second, "must be no duplicating resources");
+    Y_ABORT_UNLESS(resPairIt.second, "must be no duplicating resources");
     quoter.ResourcesIndex.emplace(resourceName, resourceId);
 
     Counters.ActiveProxyResources->Inc();
@@ -1024,7 +1024,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
         TResourceLeafId resIdx = req.ResourceLeaf;
         while (resIdx != TResourceLeafId{}) {
             TResourceLeaf &leaf = ResState.Get(resIdx);
-            Y_VERIFY(leaf.RequestIdx == reqId);
+            Y_ABORT_UNLESS(leaf.RequestIdx == reqId);
             if (leaf.State == EResourceState::ResolveResource
                     && leaf.QuoterId == quoterId
                     && leaf.ResourceName == resourceName)
@@ -1107,7 +1107,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
             if (update.Ticks == 0) {
                 quores.QuotaChannels.erase(update.Channel);
             } else {
-                Y_VERIFY(update.Rate >= 0.0);
+                Y_ABORT_UNLESS(update.Rate >= 0.0);
                 quores.QuotaChannels[update.Channel] = update;
             }
         }
@@ -1131,7 +1131,7 @@ void TQuoterService::Handle(TEvQuota::TEvRpcTimeout::TPtr &ev) {
 
 void TQuoterService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
     THolder<NSchemeCache::TSchemeCacheNavigate> navigate(ev->Get()->Request.Release());
-    Y_VERIFY(navigate->ResultSet.size() == 1);
+    Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
 
     auto &navEntry = navigate->ResultSet.front();
     const TString &path = CanonizePath(navEntry.Path);
@@ -1141,7 +1141,7 @@ void TQuoterService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr
         return;
 
     auto quoterIt = Quoters.find(quotersIndexIt->second);
-    Y_VERIFY(quoterIt != Quoters.end());
+    Y_ABORT_UNLESS(quoterIt != Quoters.end());
     if (quoterIt->second.ProxyId)
         return;
 
@@ -1172,8 +1172,8 @@ void TQuoterService::CreateKesusQuoter(NSchemeCache::TSchemeCacheNavigate::TEntr
         for (TResourceLeafId resLeafIdx = req.ResourceLeaf; resLeafIdx != Max<ui32>(); ) {
             TResourceLeaf &leaf = ResState.Get(resLeafIdx);
             if (leaf.QuoterId == quoterId) {
-                Y_VERIFY(leaf.State == EResourceState::ResolveQuoter);
-                Y_VERIFY(leaf.ResourceName);
+                Y_ABORT_UNLESS(leaf.State == EResourceState::ResolveQuoter);
+                Y_ABORT_UNLESS(leaf.ResourceName);
 
                 auto itpair = quoter.WaitingResource.emplace(leaf.ResourceName, TSet<TRequestId>());
                 itpair.first->second.emplace(reqIdx);
@@ -1344,7 +1344,7 @@ void TQuoterService::AllocateResource(TResource &quores) {
         if (delay == TDuration::Zero()) {
             // resource available and charged
             // detach from Resource request queue
-            Y_VERIFY(leaf.PrevInWaitQueue == Max<ui32>());
+            Y_ABORT_UNLESS(leaf.PrevInWaitQueue == Max<ui32>());
             quores.QueueHead = leaf.NextInWaitQueue;
 
             if (quores.QueueHead != Max<ui32>()) {
@@ -1418,7 +1418,7 @@ void TQuoterService::HandleTick() {
         auto deadlineIt = ScheduleDeadline.find(LastProcessed);
         if (deadlineIt != ScheduleDeadline.end()) {
             TRequest &placeholder = ReqState.Get(deadlineIt->second);
-            Y_VERIFY(placeholder.Source.NodeId() == 0);
+            Y_ABORT_UNLESS(placeholder.Source.NodeId() == 0);
             while (placeholder.NextDeadlineRequest != Max<ui32>()) {
                 TRequest &reqToCancel = ReqState.Get(placeholder.NextDeadlineRequest);
                 DeadlineRequest(reqToCancel, placeholder.NextDeadlineRequest);

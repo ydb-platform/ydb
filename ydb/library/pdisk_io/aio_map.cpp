@@ -142,7 +142,7 @@ class TRandomWaitThreadPool : public IThreadPool {
             }
             TDuration wait = TDuration::Max();
             if (WaitQueue) {
-                Y_VERIFY(WaitQueue.begin()->first > now);
+                Y_ABORT_UNLESS(WaitQueue.begin()->first > now);
                 wait = WaitQueue.begin()->first - now;
             }
             IncomingQueue.ProducedWait(wait);
@@ -187,7 +187,7 @@ class TRandomWaitThreadPool : public IThreadPool {
     }
 
     void Stop() noexcept override {
-        Y_VERIFY(!StopFlag.load());
+        Y_ABORT_UNLESS(!StopFlag.load());
         StopFlag.store(true);
         IncomingQueue.Push(nullptr);
         WorkThread.Join();

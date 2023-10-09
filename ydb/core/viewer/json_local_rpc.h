@@ -150,7 +150,7 @@ public:
                             (const NThreading::TFuture<TProtoResponse>& future) {
             auto& response = future.GetValueSync();
             auto result = MakeHolder<TEvLocalRpcPrivate::TEvGrpcRequestResult<TProtoResult>>();
-            Y_VERIFY(response.operation().ready());
+            Y_ABORT_UNLESS(response.operation().ready());
             if (response.operation().status() == Ydb::StatusIds::SUCCESS) {
                 TProtoResult rs;
                 response.operation().result().UnpackTo(&rs);

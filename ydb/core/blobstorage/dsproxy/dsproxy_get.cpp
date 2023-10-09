@@ -125,13 +125,13 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
             }
         }
         for (size_t i = 0; i < vGets.size(); ++i) {
-            Y_VERIFY(vGets[i]->Record.HasCookie());
+            Y_ABORT_UNLESS(vGets[i]->Record.HasCookie());
             TVGetCookie cookie(vGets[i]->Record.GetCookie());
             if (RootCauseTrack.IsOn) {
                 cookie.SetCauseIdx(RootCauseTrack.RegisterCause());
                 vGets[i]->Record.SetCookie(cookie);
             }
-            Y_VERIFY(vGets[i]->Record.HasVDiskID());
+            Y_ABORT_UNLESS(vGets[i]->Record.HasVDiskID());
             TVDiskID vDiskId = VDiskIDFromVDiskID(vGets[i]->Record.GetVDiskID());
             const TVDiskIdShort shortId(vDiskId);
             ui32 orderNumber = Info->GetOrderNumber(shortId);
@@ -141,13 +141,13 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
             DiskCounters[orderNumber].Sent++;
         }
         for (size_t i = 0; i < vPuts.size(); ++i) {
-            Y_VERIFY(vPuts[i]->Record.HasCookie());
+            Y_ABORT_UNLESS(vPuts[i]->Record.HasCookie());
             TBlobCookie cookie(vPuts[i]->Record.GetCookie());
             if (RootCauseTrack.IsOn) {
                 cookie.SetCauseIdx(RootCauseTrack.RegisterCause());
                 vPuts[i]->Record.SetCookie(cookie);
             }
-            Y_VERIFY(vPuts[i]->Record.HasVDiskID());
+            Y_ABORT_UNLESS(vPuts[i]->Record.HasVDiskID());
             TVDiskID vDiskId = VDiskIDFromVDiskID(vPuts[i]->Record.GetVDiskID());
             const TVDiskIdShort shortId(vDiskId);
             ui32 orderNumber = Info->GetOrderNumber(shortId);
@@ -187,7 +187,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
         ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
         const NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
-        Y_VERIFY(record.HasStatus());
+        Y_ABORT_UNLESS(record.HasStatus());
 
         ui64 totalSize = 0;
         ui64 tabletId = 0;
@@ -204,7 +204,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         ++GeneratedSubrequests;
         GeneratedSubrequestBytes += totalSize;
 
-        Y_VERIFY(record.HasVDiskID());
+        Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vdisk);
 
@@ -216,7 +216,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
                 GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()),
                 NKikimrBlobStorage::EGetHandleClass_Name(GetImpl.GetHandleClass()),
                 NKikimrProto::EReplyStatus_Name(record.GetStatus()));
-        Y_VERIFY(record.HasCookie());
+        Y_ABORT_UNLESS(record.HasCookie());
         TVGetCookie cookie(record.GetCookie());
         if (RootCauseTrack.IsOn) {
             RootCauseTrack.OnReply(cookie.GetCauseIdx(),
@@ -247,7 +247,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
             SendReplyAndDie(getResult);
             return;
         }
-        Y_VERIFY(RequestsSent > ResponsesReceived, "RequestsSent# %" PRIu32 " ResponsesReceived# %" PRIu32
+        Y_ABORT_UNLESS(RequestsSent > ResponsesReceived, "RequestsSent# %" PRIu32 " ResponsesReceived# %" PRIu32
                 " GetImpl.DumpFullState# %s", RequestsSent, ResponsesReceived, GetImpl.DumpFullState().c_str());
 
         TryScheduleGetAcceleration();
@@ -275,7 +275,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
     }
 
     TLogoBlobID GetFirstBlobId(TEvBlobStorage::TEvVMultiPutResult::TPtr &ev) {
-        Y_VERIFY(ev->Get()->Record.ItemsSize());
+        Y_ABORT_UNLESS(ev->Get()->Record.ItemsSize());
         return LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetItems(0).GetBlobID());
     }
 
@@ -317,12 +317,12 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         const TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
 
         for (auto &item : record.GetItems()) {
-            Y_VERIFY(item.HasStatus());
-            Y_VERIFY(item.HasBlobID());
-            Y_VERIFY(item.HasCookie());
+            Y_ABORT_UNLESS(item.HasStatus());
+            Y_ABORT_UNLESS(item.HasBlobID());
+            Y_ABORT_UNLESS(item.HasCookie());
             NKikimrProto::EReplyStatus itemStatus = item.GetStatus();
             TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
-            Y_VERIFY(itemStatus != NKikimrProto::RACE); // we should get RACE for the whole request and handle it in CheckForTermErrors
+            Y_ABORT_UNLESS(itemStatus != NKikimrProto::RACE); // we should get RACE for the whole request and handle it in CheckForTermErrors
             if (itemStatus == NKikimrProto::BLOCKED || itemStatus == NKikimrProto::DEADLINE) {
                 R_LOG_ERROR_S("BPG26", "Handle TEvVMultiPutResultItem"
                     << " blobId# " << blobId.ToString()
@@ -345,7 +345,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
 
     template <typename TPutEvent, typename TPutEventResult>
     void HandleVPutResult(typename TPutEventResult::TPtr &ev) {
-        Y_VERIFY(ev->Get()->Record.HasStatus());
+        Y_ABORT_UNLESS(ev->Get()->Record.HasStatus());
 
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
         ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
@@ -369,7 +369,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
                 NKikimrBlobStorage::EPutHandleClass_Name(GetImpl.GetPutHandleClass()),
                 NKikimrProto::EReplyStatus_Name(status));
 
-        Y_VERIFY(record.HasCookie());
+        Y_ABORT_UNLESS(record.HasCookie());
         TBlobCookie cookie(record.GetCookie());
         if (RootCauseTrack.IsOn) {
             RootCauseTrack.OnReply(cookie.GetCauseIdx(),
@@ -389,7 +389,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         ResponsesReceived++;
 
         if (HandleVPutInnerErrorStatuses(ev, getResult)) {
-            Y_VERIFY(getResult);
+            Y_ABORT_UNLESS(getResult);
             SendReplyAndDie(getResult);
             return;
         }
@@ -399,7 +399,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
             SendReplyAndDie(getResult);
             return;
         }
-        Y_VERIFY(RequestsSent > ResponsesReceived, "RequestsSent# %" PRIu64 " ResponsesReceived# %" PRIu64,
+        Y_ABORT_UNLESS(RequestsSent > ResponsesReceived, "RequestsSent# %" PRIu64 " ResponsesReceived# %" PRIu64,
                 ui64(RequestsSent), ui64(ResponsesReceived));
 
         TrySchedulePutAcceleration();
@@ -537,7 +537,7 @@ public:
         SendVGetsAndVPuts(vGets, vPuts);
         TryScheduleGetAcceleration();
 
-        Y_VERIFY(RequestsSent > ResponsesReceived);
+        Y_ABORT_UNLESS(RequestsSent > ResponsesReceived);
         Become(&TThis::StateWait);
         SanityCheck(); // May Die
     }

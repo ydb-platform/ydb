@@ -148,18 +148,18 @@ class TTestActorSystem {
         {}
 
         void WaitForEvent(std::unique_ptr<IEventHandle> *handlePtr) {
-            Y_VERIFY(!HandlePtr);
+            Y_ABORT_UNLESS(!HandlePtr);
             HandlePtr = handlePtr;
         }
 
         void StopWaitingForEvent() {
-            Y_VERIFY(HandlePtr);
+            Y_ABORT_UNLESS(HandlePtr);
             HandlePtr = nullptr;
         }
 
         void StateFunc(TAutoPtr<IEventHandle>& ev) {
-            Y_VERIFY(HandlePtr, "event is not being captured by this actor Tag# %s", Tag.data());
-            Y_VERIFY(!*HandlePtr);
+            Y_ABORT_UNLESS(HandlePtr, "event is not being captured by this actor Tag# %s", Tag.data());
+            Y_ABORT_UNLESS(!*HandlePtr);
             HandlePtr->reset(ev.Release());
         }
     };
@@ -194,7 +194,7 @@ public:
             PerNodeInfo.emplace(i + 1, TPerNodeInfo());
         }
 
-        Y_VERIFY(!CurrentTestActorSystem);
+        Y_ABORT_UNLESS(!CurrentTestActorSystem);
         CurrentTestActorSystem = this;
 
         AppData.MonotonicTimeProvider = CreateMonotonicTimeProvider();
@@ -203,7 +203,7 @@ public:
     }
 
     ~TTestActorSystem() {
-        Y_VERIFY(CurrentTestActorSystem == this);
+        Y_ABORT_UNLESS(CurrentTestActorSystem == this);
         CurrentTestActorSystem = nullptr;
     }
 
@@ -328,7 +328,7 @@ public:
         for (auto& [nodeId, info] : PerNodeInfo) {
             info.ActorSystem->Stop();
         }
-        Y_VERIFY(!TlsActivationContext);
+        Y_ABORT_UNLESS(!TlsActivationContext);
         for (;;) {
             // exchange container to prevent side-effects while destroying actors (they may use actor system in dtors);
             // do this in cycle because actor destructor code may spawn more actors
@@ -366,7 +366,7 @@ public:
     void SetLogPriority(NActors::NLog::EComponent component, NActors::NLog::EPriority priority) {
         TString explanation;
         int res = LoggerSettings_->SetLevel(priority, component, explanation);
-        Y_VERIFY(!res, "failed to set log level: %s", explanation.data());
+        Y_ABORT_UNLESS(!res, "failed to set log level: %s", explanation.data());
     }
 
     void SetOwnLogPriority(NActors::NLog::EPrio priority) {
@@ -394,7 +394,7 @@ public:
         }
 
         nodeId = nodeId ? nodeId : CurrentNodeId;
-        Y_VERIFY(nodeId);
+        Y_ABORT_UNLESS(nodeId);
 
         if (OwnLogPriority >= NActors::NLog::EPrio::Info) {
             auto actor = GetActor(TransformEvent(ev.Get(), nodeId));
@@ -426,9 +426,9 @@ public:
     }
 
     void Schedule(TInstant ts, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, ui32 nodeId) {
-        Y_VERIFY(ts >= Clock);
+        Y_ABORT_UNLESS(ts >= Clock);
         nodeId = nodeId ? nodeId : CurrentNodeId;
-        Y_VERIFY(nodeId);
+        Y_ABORT_UNLESS(nodeId);
         if (ev) {
             auto* evf = ev.Get();
             if (evf && evf->HasEvent() && evf->GetTypeRewrite() == evf->Type && !EventName.count(evf->Type)) {
@@ -451,7 +451,7 @@ public:
         TString name = TypeName(*actor);
         ++ActorStats[name].Created;
         const bool inserted = ActorName.emplace(actor, name).second;
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
 
         // specify node id if not provided
         nodeId = nodeId ? nodeId : CurrentNodeId;
@@ -511,7 +511,7 @@ public:
                 if (items.empty()) {
                     ScheduleQ.erase(it);
                 } else {
-                    Y_VERIFY(Clock <= timestamp);
+                    Y_ABORT_UNLESS(Clock <= timestamp);
                     Clock = timestamp;
                     item.emplace(std::move(items.front()));
                     items.pop_front();
@@ -544,7 +544,7 @@ public:
                 const TDuration timing = TDuration::Seconds(timer.Passed());
 
                 const auto it = ActorName.find(actor);
-                Y_VERIFY(it != ActorName.end(), "%p", actor);
+                Y_ABORT_UNLESS(it != ActorName.end(), "%p", actor);
 
                 auto& stats = EventProcessingStats[std::make_pair(it->second, type)];
                 ++stats.HitCount;
@@ -597,9 +597,9 @@ public:
             // remove destroyed actors from the mailbox
             for (const auto& actor : info->ExecutorThread->GetUnregistered()) {
                 const TActorId& actorId = actor->SelfId();
-                Y_VERIFY(TMailboxId(actorId) == mboxIt->first);
+                Y_ABORT_UNLESS(TMailboxId(actorId) == mboxIt->first);
                 const auto nameIt = ActorName.find(actor.Get());
-                Y_VERIFY(nameIt != ActorName.end());
+                Y_ABORT_UNLESS(nameIt != ActorName.end());
                 ++ActorStats[nameIt->second].Destroyed;
                 ActorName.erase(nameIt);
             }
@@ -623,7 +623,7 @@ public:
         std::vector<TEdgeActor*> edges;
         for (const TActorId& edgeActorId : edgeActorIds) {
             TEdgeActor *edge = dynamic_cast<TEdgeActor*>(GetActor(edgeActorId));
-            Y_VERIFY(edge);
+            Y_ABORT_UNLESS(edge);
             edge->WaitForEvent(&res);
             edges.push_back(edge);
         }
@@ -637,7 +637,7 @@ public:
     template<typename TEvent>
     std::unique_ptr<TEventHandle<TEvent>> WaitForEdgeActorEvent(const TActorId& edgeActorId, bool termOnCapture = true) {
         auto ev = WaitForEdgeActorEvent({edgeActorId});
-        Y_VERIFY(ev->GetTypeRewrite() == TEvent::EventType, "unexpected Event# 0x%08" PRIx32, ev->GetTypeRewrite());
+        Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvent::EventType, "unexpected Event# 0x%08" PRIx32, ev->GetTypeRewrite());
         if (termOnCapture) {
             DestroyActor(edgeActorId);
         }
@@ -647,16 +647,16 @@ public:
     void DestroyActor(TActorId actorId) {
         // find per-node info for this actor
         TPerNodeInfo *info = GetNode(actorId.NodeId());
-        Y_VERIFY(info);
+        Y_ABORT_UNLESS(info);
 
         // find mailbox
         auto it = Mailboxes.find(actorId);
-        Y_VERIFY(it != Mailboxes.end());
+        Y_ABORT_UNLESS(it != Mailboxes.end());
         TMailboxInfo& mbox = it->second;
 
         // update stats
         const auto nameIt = ActorName.find(mbox.Header.FindActor(actorId.LocalId()));
-        Y_VERIFY(nameIt != ActorName.end());
+        Y_ABORT_UNLESS(nameIt != ActorName.end());
         ++ActorStats[nameIt->second].Destroyed;
         ActorName.erase(nameIt);
 
@@ -730,25 +730,25 @@ private:
     IExecutorPool *CreateTestExecutorPool(ui32 nodeId);
 
     TActorId TransformEvent(IEventHandle *ev, ui32 nodeId) {
-        Y_VERIFY(nodeId);
+        Y_ABORT_UNLESS(nodeId);
         TActorId recip = ev->GetRecipientRewrite();
         if (recip.NodeId() && recip.NodeId() != nodeId) {
-            //Y_VERIFY(!ev->HasEvent() || ev->GetBase()->IsSerializable(), "event can't pass through interconnect");
-            Y_VERIFY(ev->Recipient == recip, "original recipient actor id lost");
+            //Y_ABORT_UNLESS(!ev->HasEvent() || ev->GetBase()->IsSerializable(), "event can't pass through interconnect");
+            Y_ABORT_UNLESS(ev->Recipient == recip, "original recipient actor id lost");
             recip = GetNode(nodeId)->ActorSystem->InterconnectProxy(recip.NodeId());
             ev->Rewrite(TEvInterconnect::EvForward, recip);
         } else if (recip.IsService()) {
-            Y_VERIFY(!recip.NodeId() || recip.NodeId() == nodeId, "recipient node mismatch");
+            Y_ABORT_UNLESS(!recip.NodeId() || recip.NodeId() == nodeId, "recipient node mismatch");
             recip = GetNode(nodeId)->ActorSystem->LookupLocalService(recip);
             ev->Rewrite(ev->GetTypeRewrite(), recip);
         }
-        Y_VERIFY(!recip || (recip.NodeId() == nodeId && !recip.IsService()));
+        Y_ABORT_UNLESS(!recip || (recip.NodeId() == nodeId && !recip.IsService()));
         return recip;
     }
 
     TPerNodeInfo *GetNode(ui32 nodeId) {
         const auto nodeIt = PerNodeInfo.find(nodeId);
-        Y_VERIFY(nodeIt != PerNodeInfo.end());
+        Y_ABORT_UNLESS(nodeIt != PerNodeInfo.end());
         return &nodeIt->second;
     }
 };

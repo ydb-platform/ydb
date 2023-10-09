@@ -40,7 +40,7 @@ public:
         BLOG_D("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}("
                << tablet->Id << "," << tablet->ChannelProfileReassignReason << "," << Groups << ")");
 
-        Y_VERIFY(tablet->TabletStorageInfo);
+        Y_ABORT_UNLESS(tablet->TabletStorageInfo);
         TIntrusivePtr<TTabletStorageInfo>& tabletStorageInfo(tablet->TabletStorageInfo);
         ui32 channels = tablet->GetChannelCount();
         NIceDb::TNiceDb db(txc.DB);
@@ -134,7 +134,7 @@ public:
 
             if (channelId < tabletChannels.size()) {
                 channel = &tabletChannels[channelId];
-                Y_VERIFY(channel->Channel == channelId);
+                Y_ABORT_UNLESS(channel->Channel == channelId);
                 if (!tablet->ReleaseAllocationUnit(channelId)) {
                     BLOG_W("Failed to release AU for tablet " << tablet->Id << " channel " << channelId);
                 }
@@ -150,7 +150,7 @@ public:
             } else if (group->HasErasureSpecies()) {
                 channel->Type = TBlobStorageGroupType(static_cast<TErasureType::EErasureSpecies>(group->GetErasureSpecies()));
             } else {
-                Y_VERIFY(channelId < tablet->BoundChannels.size());
+                Y_ABORT_UNLESS(channelId < tablet->BoundChannels.size());
                 auto& boundChannel = tablet->BoundChannels[channelId];
                 channel->StoragePool = boundChannel.GetStoragePoolName();
             }

@@ -108,7 +108,7 @@ std::vector<Ydb::Column> TTableRecord::SelectOwnedColumns(const std::vector<Ydb:
 }
 
 ui32 TTableRecords::AddRecordImpl(const TTableRecord& record) {
-    Y_VERIFY(Columns.size());
+    Y_ABORT_UNLESS(Columns.size());
     ui32 foundColumns = 0;
     Records.resize(Records.size() + 1);
     for (ui32 i = 0; i < Columns.size(); ++i) {
@@ -261,7 +261,7 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildUpdateQuery(const TStrin
 
 void TTableRecords::AddColumn(const Ydb::Column& c, const Ydb::Value& v) {
     for (auto&& i : Columns) {
-        Y_VERIFY(i.name() != c.name());
+        Y_ABORT_UNLESS(i.name() != c.name());
     }
     Columns.emplace_back(c);
     for (auto&& i : Records) {

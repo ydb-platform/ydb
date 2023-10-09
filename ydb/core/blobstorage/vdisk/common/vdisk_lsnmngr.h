@@ -25,14 +25,14 @@ namespace NKikimr {
 
         void Allocated(TLsnSeg seg) {
             auto m = Guard(WriteLock);
-            Y_VERIFY(InFly.Empty() || InFly.Back().Last < seg.First,
+            Y_ABORT_UNLESS(InFly.Empty() || InFly.Back().Last < seg.First,
                      "this# %s seg# %s", ToString().data(), seg.ToString().data());
             InFly.Push(seg);
         }
 
         void Confirmed(TLsnSeg seg) {
             auto m = Guard(WriteLock);
-            Y_VERIFY(seg.Last != ui64(-1) &&
+            Y_ABORT_UNLESS(seg.Last != ui64(-1) &&
                      seg.Last != 0 &&
                      static_cast<ui64>(AtomicGet(ConfirmedLsn)) < seg.Last &&
                      !InFly.Empty() &&
@@ -221,7 +221,7 @@ namespace NKikimr {
 
         // lsn we starting with after local recovery and lsn shift
         ui64 GetStartLsn() const {
-            Y_VERIFY(CurrentLsnPtr);
+            Y_ABORT_UNLESS(CurrentLsnPtr);
             return StartLsn;
         }
 

@@ -23,7 +23,7 @@ private:
 
     IDataSource& GetSourceVerified(const ui32 idx) {
         auto it = Sources.find(idx);
-        Y_VERIFY(it != Sources.end());
+        Y_ABORT_UNLESS(it != Sources.end());
         return *it->second;
     }
 

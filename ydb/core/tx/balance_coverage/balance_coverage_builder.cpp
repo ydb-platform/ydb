@@ -39,7 +39,7 @@ namespace NKikimr {
     }
 
     bool TBalanceCoverageBuilder::AddNode(TAutoPtr<TNode>& node, const NKikimrTx::TBalanceTrack& track, ui32 index) {
-        Y_VERIFY(node->Tablet == track.GetHop(index).GetShard());
+        Y_ABORT_UNLESS(node->Tablet == track.GetHop(index).GetShard());
         ++index;
         if (index == track.HopSize()) {
             bool oldResult = node->HasResult;

@@ -122,7 +122,7 @@ namespace NKikimr {
             LogoBlobIDFromLogoBlobID(LogoBlobID, &proto);
             TString lbSerialized;
             bool res = proto.SerializeToString(&lbSerialized);
-            Y_VERIFY(res);
+            Y_ABORT_UNLESS(res);
             ui16 lbSerializedSize = lbSerialized.size();
             str.Write(&lbSerializedSize, sizeof(ui16));
             str.Write(lbSerialized.data(), lbSerializedSize);

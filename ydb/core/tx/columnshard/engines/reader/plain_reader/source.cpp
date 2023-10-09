@@ -14,10 +14,10 @@ void IDataSource::InitFetchStageData(const std::shared_ptr<arrow::RecordBatch>& 
         batch = NArrow::MakeEmptyBatch(FetchingPlan->GetFetchingStage()->GetSchema(), numRows);
     }
     if (batch) {
-        Y_VERIFY((ui32)batch->num_columns() == FetchingPlan->GetFetchingStage()->GetSize());
+        Y_ABORT_UNLESS((ui32)batch->num_columns() == FetchingPlan->GetFetchingStage()->GetSize());
     }
     NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchStageData"));
-    Y_VERIFY(!FetchStageData);
+    Y_ABORT_UNLESS(!FetchStageData);
     FetchStageData = std::make_shared<TFetchStageData>(batch);
     auto intervals = Intervals;
     for (auto&& i : intervals) {
@@ -27,10 +27,10 @@ void IDataSource::InitFetchStageData(const std::shared_ptr<arrow::RecordBatch>& 
 
 void IDataSource::InitFilterStageData(const std::shared_ptr<NArrow::TColumnFilter>& appliedFilter, const std::shared_ptr<NArrow::TColumnFilter>& earlyFilter, const std::shared_ptr<arrow::RecordBatch>& batch) {
     NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFilterStageData"));
-    Y_VERIFY(!FilterStageData);
+    Y_ABORT_UNLESS(!FilterStageData);
     FilterStageData = std::make_shared<TFilterStageData>(appliedFilter, earlyFilter, batch);
     if (batch) {
-        Y_VERIFY((ui32)batch->num_columns() == FetchingPlan->GetFilterStage()->GetSize());
+        Y_ABORT_UNLESS((ui32)batch->num_columns() == FetchingPlan->GetFilterStage()->GetSize());
     }
     auto intervals = Intervals;
     for (auto&& i : intervals) {
@@ -42,7 +42,7 @@ void IDataSource::InitFilterStageData(const std::shared_ptr<NArrow::TColumnFilte
 void IDataSource::InitFetchingPlan(const TFetchingPlan& fetchingPlan) {
     if (!FilterStageFlag) {
         FilterStageFlag = true;
-        Y_VERIFY(!FetchingPlan);
+        Y_ABORT_UNLESS(!FetchingPlan);
         FetchingPlan = fetchingPlan;
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
         DoStartFilterStage();
@@ -50,8 +50,8 @@ void IDataSource::InitFetchingPlan(const TFetchingPlan& fetchingPlan) {
 }
 
 bool IDataSource::OnIntervalFinished(const ui32 intervalIdx) {
-    Y_VERIFY(Intervals.size());
-    Y_VERIFY(Intervals.front()->GetIntervalIdx() == intervalIdx);
+    Y_ABORT_UNLESS(Intervals.size());
+    Y_ABORT_UNLESS(Intervals.front()->GetIntervalIdx() == intervalIdx);
     Intervals.pop_front();
     return Intervals.empty();
 }
@@ -68,7 +68,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,
         auto itFilter = cFilter.GetIterator(false, Portion->NumRows(i));
         bool itFinished = false;
         for (auto&& c : columnChunks) {
-            Y_VERIFY(!itFinished);
+            Y_ABORT_UNLESS(!itFinished);
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetNumRowsVerified())) {
                 readingAction->AddRange(c->BlobRange);
             } else {
@@ -82,7 +82,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,
 
 void TPortionDataSource::DoStartFilterStage() {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoFetchEF");
-    Y_VERIFY(FetchingPlan->GetFilterStage()->GetSize());
+    Y_ABORT_UNLESS(FetchingPlan->GetFilterStage()->GetSize());
     auto& columnIds = FetchingPlan->GetFilterStage()->GetColumnIds();
 
     auto readAction = Portion->GetBlobsStorage()->StartReadingAction("CS::READ::FILTER");
@@ -96,8 +96,8 @@ void TPortionDataSource::DoStartFilterStage() {
 
 void TPortionDataSource::DoStartFetchStage() {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoStartFetchStage");
-    Y_VERIFY(!FetchStageData);
-    Y_VERIFY(FilterStageData);
+    Y_ABORT_UNLESS(!FetchStageData);
+    Y_ABORT_UNLESS(FilterStageData);
     if (FetchingPlan->GetFetchingStage()->GetSize() && !FilterStageData->IsEmptyFilter()) {
         auto& columnIds = FetchingPlan->GetFetchingStage()->GetColumnIds();
 
@@ -120,7 +120,7 @@ void TPortionDataSource::DoAbort() {
 void TCommittedDataSource::DoFetch() {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoFetch");
     if (!ReadStarted) {
-        Y_VERIFY(!ResultReady);
+        Y_ABORT_UNLESS(!ResultReady);
         ReadStarted = true;
 
         std::shared_ptr<IBlobsStorageOperator> storageOperator = ReadData.GetContext().GetStoragesManager()->GetInsertOperator();

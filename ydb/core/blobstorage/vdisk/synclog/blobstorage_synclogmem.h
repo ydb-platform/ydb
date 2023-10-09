@@ -137,7 +137,7 @@ namespace NKikimr {
                 , Begin(nullptr)
                 , End(nullptr)
             {
-                Y_VERIFY(pagePtr);
+                Y_ABORT_UNLESS(pagePtr);
                 Begin = (const TRecordHdr *)(PagePtr->Data());
                 End = (const TRecordHdr *)(PagePtr->FreeSpace());
             }
@@ -173,8 +173,8 @@ namespace NKikimr {
                     total++;
                     lastLsn = p->Lsn;
                 }
-                Y_VERIFY(total > 0 && total == PagePtr->GetRecsNum());
-                Y_VERIFY(lastLsn == PagePtr->GetLastLsn());
+                Y_ABORT_UNLESS(total > 0 && total == PagePtr->GetRecsNum());
+                Y_ABORT_UNLESS(lastLsn == PagePtr->GetLastLsn());
             }
         };
 

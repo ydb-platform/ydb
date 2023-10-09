@@ -119,14 +119,14 @@ public:
     template <class T>
     const T& GetAsSafe() const {
         auto result = std::dynamic_pointer_cast<T>(Object);
-        Y_VERIFY(!!result);
+        Y_ABORT_UNLESS(!!result);
         return *result;
     }
 
     template <class T>
     T& GetAsSafe() {
         auto result = std::dynamic_pointer_cast<T>(Object);
-        Y_VERIFY(!!result);
+        Y_ABORT_UNLESS(!!result);
         return *result;
     }
 

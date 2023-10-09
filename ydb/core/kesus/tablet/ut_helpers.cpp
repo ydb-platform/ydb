@@ -126,7 +126,7 @@ TActorId TTestContext::GetTabletActorId() {
     SendFromEdge(edge, new TEvKesus::TEvDummyRequest(), cookie);
     TAutoPtr<IEventHandle> handle;
     Runtime->GrabEdgeEvent<TEvKesus::TEvDummyResponse>(handle);
-    Y_VERIFY(handle);
+    Y_ABORT_UNLESS(handle);
     UNIT_ASSERT_VALUES_EQUAL(handle->Recipient, edge);
     UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, cookie);
     return handle->Sender;
@@ -479,7 +479,7 @@ THashMap<ui64, TTestContext::TSimpleSessionInfo> TTestContext::DescribeSessions(
     auto result = ExpectEdgeEvent<TEvKesus::TEvDescribeSessionsResult>(edge, cookie);
     THashMap<ui64, TSimpleSessionInfo> sessions;
     for (const auto& sessionInfo : result->Record.GetSessions()) {
-        Y_VERIFY(!sessions.contains(sessionInfo.GetSessionId()));
+        Y_ABORT_UNLESS(!sessions.contains(sessionInfo.GetSessionId()));
         auto& session = sessions[sessionInfo.GetSessionId()];
         session.TimeoutMillis = sessionInfo.GetTimeoutMillis();
         session.Description = sessionInfo.GetDescription();

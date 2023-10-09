@@ -219,7 +219,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams);
         if (!rawProcessingParams.empty()) {
             Self->ProcessingParams.reset(new NKikimrSubDomains::TProcessingParams());
-            Y_VERIFY(Self->ProcessingParams->ParseFromString(rawProcessingParams));
+            Y_ABORT_UNLESS(Self->ProcessingParams->ParseFromString(rawProcessingParams));
         }
     }
 
@@ -238,7 +238,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             TString schema = rowset.GetValue<Schema::UserTables::Schema>();
             NKikimrSchemeOp::TTableDescription descr;
             bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
-            Y_VERIFY(parseOk);
+            Y_ABORT_UNLESS(parseOk);
             Self->AddUserTable(TPathId(Self->GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid));
             if (!rowset.Next())
                 return false;
@@ -275,7 +275,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
             TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot> snapshot = new NKikimrTxDataShard::TEvSplitTransferSnapshot;
             bool parseOk = ParseFromStringNoSizeLimit(*snapshot, snapBody);
-            Y_VERIFY(parseOk);
+            Y_ABORT_UNLESS(parseOk);
             Self->SplitSrcSnapshotSender.AddDst(dstTablet);
             Self->SplitSrcSnapshotSender.SaveSnapshotForSending(dstTablet, snapshot);
 
@@ -308,7 +308,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         if (!splitDescr.empty()) {
             Self->DstSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
             bool parseOk = ParseFromStringNoSizeLimit(*Self->DstSplitDescription, splitDescr);
-            Y_VERIFY(parseOk);
+            Y_ABORT_UNLESS(parseOk);
         }
 
         LOAD_SYS_BOOL(db, Schema::Sys_DstSplitSchemaInitialized, Self->DstSplitSchemaInitialized);
@@ -362,7 +362,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         if (!splitDescr.empty()) {
             Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
             bool parseOk = ParseFromStringNoSizeLimit(*Self->SrcSplitDescription, splitDescr);
-            Y_VERIFY(parseOk);
+            Y_ABORT_UNLESS(parseOk);
 
             switch (Self->State) {
             case TShardState::SplitSrcWaitForNoTxInFlight:
@@ -379,13 +379,13 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
-    Y_VERIFY(Self->State != TShardState::Unknown);
+    Y_ABORT_UNLESS(Self->State != TShardState::Unknown);
 
-    Y_VERIFY(Self->SplitSrcSnapshotSender.AllAcked() || Self->State == TShardState::SplitSrcSendingSnapshot,
+    Y_ABORT_UNLESS(Self->SplitSrcSnapshotSender.AllAcked() || Self->State == TShardState::SplitSrcSendingSnapshot,
              "Unexpected state %s while having unsent split snapshots at datashard %" PRIu64,
              DatashardStateName(Self->State).data(), Self->TabletID());
 
-    Y_VERIFY(Self->ReceiveSnapshotsFrom.empty() || Self->State == TShardState::SplitDstReceivingSnapshot,
+    Y_ABORT_UNLESS(Self->ReceiveSnapshotsFrom.empty() || Self->State == TShardState::SplitDstReceivingSnapshot,
              "Unexpected state %s while having non-received split snapshots at datashard %" PRIu64,
              DatashardStateName(Self->State).data(), Self->TabletID());
 
@@ -608,7 +608,7 @@ public:
             if (rawProcessingParams.empty()) {
                 auto appdata = AppData(ctx);
                 const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(Self->TabletID());
-                Y_VERIFY(selfDomain != appdata->DomainsInfo->BadDomainId);
+                Y_ABORT_UNLESS(selfDomain != appdata->DomainsInfo->BadDomainId);
                 const auto& domain = appdata->DomainsInfo->GetDomain(selfDomain);
 
                 NKikimrSubDomains::TProcessingParams params = ExtractProcessingParams(domain);
@@ -696,7 +696,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     }
 
     auto* userTablesSchema = scheme.GetTableInfo(Schema::UserTables::TableId);
-    Y_VERIFY(userTablesSchema, "UserTables");
+    Y_ABORT_UNLESS(userTablesSchema, "UserTables");
 
     // Check if tables changed since last time we synchronized them
     ui64 lastSysUpdate = txc.DB.Head(Schema::Sys::TableId).Serial;
@@ -785,7 +785,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
                 TString schema = rowset.GetValue<Schema::UserTables::Schema>();
                 NKikimrSchemeOp::TTableDescription descr;
                 bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
-                Y_VERIFY(parseOk);
+                Y_ABORT_UNLESS(parseOk);
                 tables.push_back(TRow{
                     TPathId(GetPathOwnerId(), tableId),
                     new TUserTable(localTid, descr, shadowTid),
@@ -808,7 +808,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
                 TString schema = rowset.GetValue<Schema::UserTables::Schema>();
                 NKikimrSchemeOp::TTableDescription descr;
                 bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
-                Y_VERIFY(parseOk);
+                Y_ABORT_UNLESS(parseOk);
                 tables.push_back(TRow{
                     TPathId(GetPathOwnerId(), tableId),
                     new TUserTable(localTid, descr, shadowTid),

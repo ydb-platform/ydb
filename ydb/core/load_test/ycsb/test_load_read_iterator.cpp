@@ -477,7 +477,7 @@ private:
         case EState::FullScanGetKeys:
             return StopWithError(ctx, TStringBuilder() << "TEvTestLoadFinished while in " << State);
         case EState::ReadHeadPoints: {
-            Y_VERIFY(Inflight == 0);
+            Y_ABORT_UNLESS(Inflight == 0);
             LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "headread with inflight# " << Inflights[InflightIndex]
                 << " finished: " << ev->Get()->ToString());
             Errors += record.GetReport().GetOperationsError();
@@ -510,8 +510,8 @@ private:
     }
 
     void RunHeadReads(const TActorContext& ctx) {
-        Y_VERIFY(Inflight == 0);
-        Y_VERIFY(InflightIndex < Inflights.size());
+        Y_ABORT_UNLESS(Inflight == 0);
+        Y_ABORT_UNLESS(InflightIndex < Inflights.size());
 
         HeadReadsHist.Reset();
         StartTsSubTest = TInstant::Now();

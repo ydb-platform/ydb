@@ -54,8 +54,8 @@ public:
         , ColumnStat(columnStat)
         , IndexInfo(schema->GetIndexInfo())
     {
-        Y_VERIFY(PortionRowsCountLimit);
-        Y_VERIFY(ChunkRawBytesLimit);
+        Y_ABORT_UNLESS(PortionRowsCountLimit);
+        Y_ABORT_UNLESS(ChunkRawBytesLimit);
     }
 };
 

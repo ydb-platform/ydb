@@ -82,7 +82,7 @@ namespace {
 
         void Handle(TEvBlobStorage::TEvRangeResult::TPtr ev) {
             const auto it = RequestsInFlight.find(ev->Cookie);
-            Y_VERIFY(it != RequestsInFlight.end());
+            Y_ABORT_UNLESS(it != RequestsInFlight.end());
             const auto& [sender, senderCookie, subRequestId, json] = it->second;
 
             auto *result = ev->Get();

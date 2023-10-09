@@ -85,7 +85,7 @@ namespace NActors {
     }
 
     void TTestActorRuntime::AddAppDataInit(std::function<void(ui32, NKikimr::TAppData&)> callback) {
-        Y_VERIFY(!IsInitialized, "Actor system is already initialized");
+        Y_ABORT_UNLESS(!IsInitialized, "Actor system is already initialized");
         AppDataInit_.push_back(std::move(callback));
     }
 
@@ -184,7 +184,7 @@ namespace NActors {
     }
 
     ui16 TTestActorRuntime::GetMonPort(ui32 nodeIndex) const {
-        Y_VERIFY(nodeIndex < MonPorts.size(), "Unknown MonPort for nodeIndex = %" PRIu32, nodeIndex);
+        Y_ABORT_UNLESS(nodeIndex < MonPorts.size(), "Unknown MonPort for nodeIndex = %" PRIu32, nodeIndex);
         return MonPorts[nodeIndex];
     }
 
@@ -193,7 +193,7 @@ namespace NActors {
 
     NKikimr::TAppData& TTestActorRuntime::GetAppData(ui32 nodeIndex) {
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(nodeIndex < NodeCount);
+        Y_ABORT_UNLESS(nodeIndex < NodeCount);
         ui32 nodeId = FirstNodeId + nodeIndex;
         auto* node = GetNodeById(nodeId);
         return *node->GetAppData<NKikimr::TAppData>();

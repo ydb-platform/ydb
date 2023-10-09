@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
 //        TAutoPtr<IEventHandle> handle;
         TEvTabletBase::TEvBlockBlobStorageResult::TPtr response = runtime->GrabEdgeEventRethrow<TEvTabletBase::TEvBlockBlobStorageResult>(edge);
-        Y_VERIFY(response->Get()->TabletId == storageInfo.GetTabletID());
+        Y_ABORT_UNLESS(response->Get()->TabletId == storageInfo.GetTabletID());
         UNIT_ASSERT_EQUAL(response->Get()->Status, NKikimrProto::NO_GROUP);
     }
 
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
                                        IEventHandle::FlagForwardOnNondelivery, 0, &nodeWarden), nodeIdx);
 
         TEvBlobStorage::TEvCollectGarbageResult::TPtr response = runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvCollectGarbageResult>(edge);
-        Y_VERIFY(response->Get()->TabletId == storageInfo.GetTabletID());
+        Y_ABORT_UNLESS(response->Get()->TabletId == storageInfo.GetTabletID());
         UNIT_ASSERT_EQUAL(response->Get()->Status, NKikimrProto::NO_GROUP);
     }
     ui32 GetNodeIdx(TBaseTestEnv &env, ui32 nodeId) {

@@ -49,12 +49,12 @@ namespace NBoot {
 
         void Assign(ui32 slot, TArrayRef<const char> body) noexcept
         {
-            Y_VERIFY(slot < Back->Switches.size(), "Invalid switch index");
+            Y_ABORT_UNLESS(slot < Back->Switches.size(), "Invalid switch index");
 
             auto &entry = Back->Switches[slot];
             auto index = TCookie(entry.LargeGlobId.Lead.Cookie()).Index();
 
-            Y_VERIFY(entry.LargeGlobId, "Assigning TSwitch entry w/o valid TLargeGlobId");
+            Y_ABORT_UNLESS(entry.LargeGlobId, "Assigning TSwitch entry w/o valid TLargeGlobId");
 
             if (index != TCookie::EIdx::TurnLz4) {
                 Apply(entry, body);

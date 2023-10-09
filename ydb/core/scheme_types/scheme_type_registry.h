@@ -30,10 +30,10 @@ public:
 
     void RegisterType(const IType *type) {
         const TTypeId typeId = type->GetTypeId();
-        Y_VERIFY(typeId <= Max<TTypeId>());
+        Y_ABORT_UNLESS(typeId <= Max<TTypeId>());
 
-        Y_VERIFY(TypeByIdMap.insert({ typeId, type }).second);
-        Y_VERIFY(TypeByNameMap.insert({ type->GetName(), type }).second);
+        Y_ABORT_UNLESS(TypeByIdMap.insert({ typeId, type }).second);
+        Y_ABORT_UNLESS(TypeByNameMap.insert({ type->GetName(), type }).second);
 
         TypeMetadataRegistry.Register(type);
     }

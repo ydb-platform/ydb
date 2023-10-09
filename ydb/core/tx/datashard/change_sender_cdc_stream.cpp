@@ -54,7 +54,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         }
 
         const auto& info = result.GetResult().SourceIdInfo;
-        Y_VERIFY(info.GetExplicit());
+        Y_ABORT_UNLESS(info.GetExplicit());
 
         MaxSeqNo = info.GetSeqNo();
         Ready();
@@ -367,7 +367,7 @@ class TCdcChangeSenderMain
             }
 
             bool operator()(const TPQPartitionInfo& lhs, const TPQPartitionInfo& rhs) const {
-                Y_VERIFY(lhs.KeyRange.ToBound || rhs.KeyRange.ToBound);
+                Y_ABORT_UNLESS(lhs.KeyRange.ToBound || rhs.KeyRange.ToBound);
 
                 if (!lhs.KeyRange.ToBound) {
                     return false;
@@ -377,7 +377,7 @@ class TCdcChangeSenderMain
                     return true;
                 }
 
-                Y_VERIFY(lhs.KeyRange.ToBound && rhs.KeyRange.ToBound);
+                Y_ABORT_UNLESS(lhs.KeyRange.ToBound && rhs.KeyRange.ToBound);
 
                 const int compares = CompareTypedCellVectors(
                     lhs.KeyRange.ToBound->GetCells().data(),
@@ -579,10 +579,10 @@ class TCdcChangeSenderMain
 
         Stream = TUserTable::TCdcStream(entry.CdcStreamInfo->Description);
 
-        Y_VERIFY(entry.ListNodeEntry->Children.size() == 1);
+        Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
         const auto& topic = entry.ListNodeEntry->Children.at(0);
 
-        Y_VERIFY(topic.Kind == TNavigate::KindTopic);
+        Y_ABORT_UNLESS(topic.Kind == TNavigate::KindTopic);
         TopicPathId = topic.PathId;
 
         ResolveTopic();
@@ -661,8 +661,8 @@ class TCdcChangeSenderMain
             PartitionToShard.emplace(partitionId, shardId);
 
             auto keyRange = TPartitionKeyRange::Parse(partition.GetKeyRange());
-            Y_VERIFY(!keyRange.FromBound || keyRange.FromBound->GetCells().size() == KeyDesc->Schema.size());
-            Y_VERIFY(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == KeyDesc->Schema.size());
+            Y_ABORT_UNLESS(!keyRange.FromBound || keyRange.FromBound->GetCells().size() == KeyDesc->Schema.size());
+            Y_ABORT_UNLESS(!keyRange.ToBound || keyRange.ToBound->GetCells().size() == KeyDesc->Schema.size());
 
             partitions.insert({partitionId, shardId, std::move(keyRange)});
             shards.insert(shardId);
@@ -676,11 +676,11 @@ class TCdcChangeSenderMain
         for (const auto& cur : partitions) {
             if (isFirst) {
                 isFirst = false;
-                Y_VERIFY(!cur.KeyRange.FromBound.Defined());
+                Y_ABORT_UNLESS(!cur.KeyRange.FromBound.Defined());
             } else {
-                Y_VERIFY(cur.KeyRange.FromBound.Defined());
-                Y_VERIFY(prev);
-                Y_VERIFY(prev->KeyRange.ToBound.Defined());
+                Y_ABORT_UNLESS(cur.KeyRange.FromBound.Defined());
+                Y_ABORT_UNLESS(prev);
+                Y_ABORT_UNLESS(prev->KeyRange.ToBound.Defined());
                 // TODO: compare cells
             }
 
@@ -689,7 +689,7 @@ class TCdcChangeSenderMain
         }
 
         if (prev) {
-            Y_VERIFY(!prev->KeyRange.ToBound.Defined());
+            Y_ABORT_UNLESS(!prev->KeyRange.ToBound.Defined());
         }
 
         CreateSenders(MakePartitionIds(KeyDesc->Partitions));
@@ -711,13 +711,13 @@ class TCdcChangeSenderMain
     }
 
     ui64 GetPartitionId(const TChangeRecord& record) const override {
-        Y_VERIFY(KeyDesc);
-        Y_VERIFY(KeyDesc->Partitions);
+        Y_ABORT_UNLESS(KeyDesc);
+        Y_ABORT_UNLESS(KeyDesc->Partitions);
 
         switch (Stream.Format) {
             case NKikimrSchemeOp::ECdcStreamFormatProto: {
                 const auto range = TTableRange(record.GetKey());
-                Y_VERIFY(range.Point);
+                Y_ABORT_UNLESS(range.Point);
 
                 TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
                     KeyDesc->Partitions.begin(), KeyDesc->Partitions.end(), true,
@@ -732,7 +732,7 @@ class TCdcChangeSenderMain
                     }
                 );
 
-                Y_VERIFY(it != KeyDesc->Partitions.end());
+                Y_ABORT_UNLESS(it != KeyDesc->Partitions.end());
                 return it->PartitionId;
             }
 
@@ -752,7 +752,7 @@ class TCdcChangeSenderMain
     }
 
     IActor* CreateSender(ui64 partitionId) override {
-        Y_VERIFY(PartitionToShard.contains(partitionId));
+        Y_ABORT_UNLESS(PartitionToShard.contains(partitionId));
         const auto shardId = PartitionToShard.at(partitionId);
         return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Stream);
     }
@@ -784,7 +784,7 @@ class TCdcChangeSenderMain
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        Y_VERIFY(ev->Get()->PathId == PathId);
+        Y_ABORT_UNLESS(ev->Get()->PathId == PathId);
 
         RemoveRecords();
         PassAway();

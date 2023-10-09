@@ -92,7 +92,7 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
     bool hasGroupByWithFields = false;
     bool hasGroupByWithNoFields = false;
     if (meta.HasOlapProgram()) {
-        Y_VERIFY(program.ParseFromString(meta.GetOlapProgram().GetProgram()));
+        Y_ABORT_UNLESS(program.ParseFromString(meta.GetOlapProgram().GetProgram()));
         for (auto&& command : program.GetCommand()) {
             if (!command.HasGroupBy()) {
                 continue;

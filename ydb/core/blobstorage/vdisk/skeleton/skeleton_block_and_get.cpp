@@ -32,9 +32,9 @@ public:
         , VDiskIncarnationGuid(vDiskIncarnationGuid)
         , GInfo(gInfo)
     {
-        Y_VERIFY(ev->Get()->Record.HasForceBlockTabletData());
-        Y_VERIFY(ev->Get()->Record.GetForceBlockTabletData().HasId());
-        Y_VERIFY(ev->Get()->Record.GetForceBlockTabletData().HasGeneration());
+        Y_ABORT_UNLESS(ev->Get()->Record.HasForceBlockTabletData());
+        Y_ABORT_UNLESS(ev->Get()->Record.GetForceBlockTabletData().HasId());
+        Y_ABORT_UNLESS(ev->Get()->Record.GetForceBlockTabletData().HasGeneration());
         Request = std::move(ev);
     }
 

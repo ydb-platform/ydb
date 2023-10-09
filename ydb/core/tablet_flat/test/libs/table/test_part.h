@@ -109,7 +109,7 @@ namespace NTest {
     private:
         const TSharedData* Get(const TPart *part, ui32 room, ui32 ref) const
         {
-            Y_VERIFY(ref != Max<ui32>(), "Got invalid page reference");
+            Y_ABORT_UNLESS(ref != Max<ui32>(), "Got invalid page reference");
 
             return CheckedCast<const TPartStore*>(part)->Store->GetPage(room, ref);
         }
@@ -123,7 +123,7 @@ namespace NTest {
 
         const TIntrusiveConstPtr<TPartStore>& Lone() const noexcept
         {
-            Y_VERIFY(Parts.size() == 1, "Need egg with one part inside");
+            Y_ABORT_UNLESS(Parts.size() == 1, "Need egg with one part inside");
 
             return Parts[0];
         }
@@ -154,7 +154,7 @@ namespace NTest {
             for (size_t i = 0; ; i++) {
                 auto ready = i == 0 ? index.Seek(0) : index.Next();
                 if (ready != EReady::Data) {
-                    Y_VERIFY(ready != EReady::Page, "Unexpected page fault");
+                    Y_ABORT_UNLESS(ready != EReady::Page, "Unexpected page fault");
                     break;
                 }
                 result++;
@@ -172,7 +172,7 @@ namespace NTest {
         inline const TPartIndexIt::TRecord * GetLastRecord(const TPartStore& part) {
             TTestEnv env;
             TPartIndexIt index(&part, &env, { });
-            Y_VERIFY(index.SeekLast() == EReady::Data);
+            Y_ABORT_UNLESS(index.SeekLast() == EReady::Data);
             return index.GetLastRecord();
         }
 
@@ -180,12 +180,12 @@ namespace NTest {
             TTestEnv env;
             TPartIndexIt index(&part, &env, { });
 
-            Y_VERIFY(index.Seek(0) == EReady::Data);
+            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
             for (TPageId p = 0; p < pageId; p++) {
-                Y_VERIFY(index.Next() == EReady::Data);
+                Y_ABORT_UNLESS(index.Next() == EReady::Data);
             }
 
-            Y_VERIFY(index.GetPageId() == pageId);
+            Y_ABORT_UNLESS(index.GetPageId() == pageId);
             return index.GetRecord();
         }
     }

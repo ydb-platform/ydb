@@ -396,14 +396,14 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
     void MoveEntryToResolved(ui64 tabletId, TAutoPtr<TEntry>& entry) {
         TAutoPtr<TEntry>* resolvedEntryPtr;
-        Y_VERIFY(ResolvedTablets.Insert(tabletId, entry, resolvedEntryPtr));
-        Y_VERIFY(UnresolvedTablets.Erase(tabletId));
+        Y_ABORT_UNLESS(ResolvedTablets.Insert(tabletId, entry, resolvedEntryPtr));
+        Y_ABORT_UNLESS(UnresolvedTablets.Erase(tabletId));
     }
 
     void MoveEntryToUnresolved(ui64 tabletId, TAutoPtr<TEntry>& entry) {
         TAutoPtr<TEntry>* unresolvedEntryPtr;
-        Y_VERIFY(UnresolvedTablets.Insert(tabletId, entry, unresolvedEntryPtr));
-        Y_VERIFY(ResolvedTablets.Erase(tabletId));
+        Y_ABORT_UNLESS(UnresolvedTablets.Insert(tabletId, entry, unresolvedEntryPtr));
+        Y_ABORT_UNLESS(ResolvedTablets.Erase(tabletId));
     }
 
     void CheckDelayedNodeProblem(ui64 tabletId, const TActorContext &ctx) {

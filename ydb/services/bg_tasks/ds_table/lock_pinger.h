@@ -19,7 +19,7 @@ public:
         : TBase(executorController->GetRequestConfig(), executorController->GetUserToken())
         , TaskIds(taskIds)
         , ExecutorController(executorController) {
-        Y_VERIFY(TaskIds.size());
+        Y_ABORT_UNLESS(TaskIds.size());
     }
 };
 }

@@ -14,7 +14,7 @@ public:
     TConclusion(TConclusionStatus&& status)
         : Result(std::move(status)) {
         auto* resStatus = std::get_if<TConclusionStatus>(&Result);
-        Y_VERIFY(resStatus->IsFail());
+        Y_ABORT_UNLESS(resStatus->IsFail());
     }
 
     bool IsFail() const {
@@ -27,7 +27,7 @@ public:
 
     TConclusion(const TConclusionStatus& status)
         : Result(status) {
-        Y_VERIFY(IsFail());
+        Y_ABORT_UNLESS(IsFail());
     }
 
     TConclusion(TResult&& result)
@@ -40,19 +40,19 @@ public:
 
     const TConclusionStatus& GetError() const {
         auto result = std::get_if<TConclusionStatus>(&Result);
-        Y_VERIFY(result, "incorrect object for error request");
+        Y_ABORT_UNLESS(result, "incorrect object for error request");
         return *result;
     }
 
     const TResult& GetResult() const {
         auto result = std::get_if<TResult>(&Result);
-        Y_VERIFY(result, "incorrect object for result request");
+        Y_ABORT_UNLESS(result, "incorrect object for result request");
         return *result;
     }
 
     TResult&& DetachResult() {
         auto result = std::get_if<TResult>(&Result);
-        Y_VERIFY(result, "incorrect object for result request");
+        Y_ABORT_UNLESS(result, "incorrect object for result request");
         return std::move(*result);
     }
 

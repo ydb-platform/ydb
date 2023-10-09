@@ -101,7 +101,7 @@ private:
         this->template ReplyBatch<TEvResponse, TEntry, TExtractorMap, true>(ev);
 
         if (!record.GetLastBatch()) {
-            Y_VERIFY(record.HasNext());
+            Y_ABORT_UNLESS(record.HasNext());
             Request.MutableFrom()->CopyFrom(record.GetNext());
             Request.SetInclusiveFrom(true);
         }

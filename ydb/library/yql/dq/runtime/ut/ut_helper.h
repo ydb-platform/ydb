@@ -26,7 +26,7 @@ public:
         }
 
         auto result = Blobs.emplace(blobId, std::move(blob));
-        Y_VERIFY(result.second);
+        Y_ABORT_UNLESS(result.second);
         UsedSpace += result.first->second.size();
     }
 
@@ -47,7 +47,7 @@ public:
             data.Append(it.ContiguousData(), it.ContiguousSize());
         }
 
-        Y_VERIFY(data.size() == blob.size());
+        Y_ABORT_UNLESS(data.size() == blob.size());
 
         Blobs.erase(blobId);
         UsedSpace -= data.size();

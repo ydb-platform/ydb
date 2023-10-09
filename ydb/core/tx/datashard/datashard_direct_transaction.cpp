@@ -19,8 +19,8 @@ TDirectTransaction::TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex
 
 void TDirectTransaction::BuildExecutionPlan(bool loaded)
 {
-    Y_VERIFY(GetExecutionPlan().empty());
-    Y_VERIFY(!loaded);
+    Y_ABORT_UNLESS(GetExecutionPlan().empty());
+    Y_ABORT_UNLESS(!loaded);
 
     TVector<EExecutionUnitKind> plan;
     plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);

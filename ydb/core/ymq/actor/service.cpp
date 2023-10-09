@@ -120,7 +120,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     }
 
     void StartLocalLeader(const TString& reason) {
-        Y_VERIFY(!LocalLeader_);
+        Y_ABORT_UNLESS(!LocalLeader_);
         Counters_ = Counters_->GetCountersForLeaderNode();
         LWPROBE(CreateLeader, UserName_, QueueName_, reason);
         LocalLeader_ = TActivationContext::Register(new TQueueLeader(
@@ -130,7 +130,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
         LOG_SQS_INFO("Start local leader [" << UserName_ << "/" << QueueName_ << "] actor " << LocalLeader_);
 
         if (FolderId_) {
-            Y_VERIFY(FolderCounters_);
+            Y_ABORT_UNLESS(FolderCounters_);
             FolderCounters_->InitCounters();
             INC_COUNTER(FolderCounters_, total_count);
         }
@@ -142,14 +142,14 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     }
 
     void StopLocalLeader(const TString& reason) {
-        Y_VERIFY(LocalLeader_);
+        Y_ABORT_UNLESS(LocalLeader_);
         Counters_ = Counters_->GetCountersForNotLeaderNode();
         LWPROBE(DestroyLeader, UserName_, QueueName_, reason);
         LOG_SQS_INFO("Stop local leader [" << UserName_ << "/" << QueueName_ << "] actor " << LocalLeader_);
         TActivationContext::Send(new IEventHandle(LocalLeader_, SelfId(), new TEvPoisonPill()));
         LocalLeader_ = TActorId();
         if (FolderId_) {
-            Y_VERIFY(FolderCounters_);
+            Y_ABORT_UNLESS(FolderCounters_);
             DEC_COUNTER(FolderCounters_, total_count);
         }
     }
@@ -159,7 +159,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     }
 
     void DecLocalLeaderRef() {
-        Y_VERIFY(LocalLeaderRefCount_ > 0);
+        Y_ABORT_UNLESS(LocalLeaderRefCount_ > 0);
         --LocalLeaderRefCount_;
     }
 
@@ -280,7 +280,7 @@ void TSqsService::TLocalLeaderManager::DecLocalLeaderRef(TQueueInfoPtr queue, co
 }
 
 void TSqsService::TLocalLeaderManager::LocalLeaderStarted(TInstant now) {
-    Y_VERIFY(Inflight > 0);
+    Y_ABORT_UNLESS(Inflight > 0);
     --Inflight;
 
     ProcessAwaiting(now);
@@ -308,7 +308,7 @@ struct TSqsService::TUserInfo : public TAtomicRefCount<TUserInfo> {
     void InitQuoterResources() {
         const auto& cfg = Cfg().GetQuotingConfig();
         if (cfg.GetEnableQuoting()) {
-            Y_VERIFY(cfg.HasLocalRateLimiterConfig() != cfg.HasKesusQuoterConfig()); // exactly one must be set
+            Y_ABORT_UNLESS(cfg.HasLocalRateLimiterConfig() != cfg.HasKesusQuoterConfig()); // exactly one must be set
             if (cfg.HasLocalRateLimiterConfig()) { // the only one that is fully supported
                 const auto& rates = cfg.GetLocalRateLimiterConfig().GetRates();
                 // allocate resources
@@ -426,7 +426,7 @@ void TSqsService::Bootstrap() {
         }
 
         auto factory = AppData()->SqsAuthFactory;
-        Y_VERIFY(factory);
+        Y_ABORT_UNLESS(factory);
 
         MakeAndRegisterYcEventsProcessor();
     }
@@ -1068,28 +1068,28 @@ void TSqsService::HandleUserSettingsChanged(TSqsEvents::TEvUserSettingsChanged::
     const auto& newSettings = ev->Get()->Settings;
     if (IsIn(*diff, USER_SETTING_DISABLE_COUNTERS)) {
         const auto value = newSettings->find(USER_SETTING_DISABLE_COUNTERS);
-        Y_VERIFY(value != newSettings->end());
+        Y_ABORT_UNLESS(value != newSettings->end());
         const bool disableCounters = FromStringWithDefault(value->second, false);
         user->Counters_->DisableCounters(disableCounters);
     }
 
     if (IsIn(*diff, USER_SETTING_SHOW_DETAILED_COUNTERS_DEADLINE_MS)) {
         const auto value = newSettings->find(USER_SETTING_SHOW_DETAILED_COUNTERS_DEADLINE_MS);
-        Y_VERIFY(value != newSettings->end());
+        Y_ABORT_UNLESS(value != newSettings->end());
         const ui64 deadline = FromStringWithDefault(value->second, 0ULL);
         user->Counters_->ShowDetailedCounters(TInstant::MilliSeconds(deadline));
     }
 
     if (IsIn(*diff, USER_SETTING_EXPORT_TRANSACTION_COUNTERS)) {
         const auto value = newSettings->find(USER_SETTING_EXPORT_TRANSACTION_COUNTERS);
-        Y_VERIFY(value != newSettings->end());
+        Y_ABORT_UNLESS(value != newSettings->end());
         const bool needExport = FromStringWithDefault(value->second, false);
         user->Counters_->ExportTransactionCounters(needExport);
     }
 
     if (IsIn(*diff, USE_CPU_LEADER_OPTIMIZATION)) {
         const auto value = newSettings->find(USE_CPU_LEADER_OPTIMIZATION);
-        Y_VERIFY(value != newSettings->end());
+        Y_ABORT_UNLESS(value != newSettings->end());
         const bool use = FromStringWithDefault(value->second, false);
         user->UseLeaderCPUOptimization = use;
         for (auto queue : user->Queues_) {
@@ -1271,7 +1271,7 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
 }
 
 void TSqsService::CreateNodeTrackingSubscription(TQueueInfoPtr queueInfo) {
-    Y_VERIFY(!queueInfo->NodeTrackingSubscriptionId);
+    Y_ABORT_UNLESS(!queueInfo->NodeTrackingSubscriptionId);
     queueInfo->NodeTrackingSubscriptionId = ++MaxNodeTrackingSubscriptionId;
     LOG_SQS_DEBUG("Create node tracking subscription queue_id_number=" << queueInfo->Version_
         << " tables_format=" << queueInfo->TablesFormat_ << " subscription_id=" << queueInfo->NodeTrackingSubscriptionId
@@ -1298,7 +1298,7 @@ void TSqsService::CancleNodeTrackingSubscription(TQueueInfoPtr queueInfo) {
     LOG_SQS_DEBUG("Cancle node tracking subscription queue_id_number=" << queueInfo->Version_
         << " tables_format=" << queueInfo->TablesFormat_ << " subscription_id=" << queueInfo->NodeTrackingSubscriptionId
     );
-    Y_VERIFY(queueInfo->NodeTrackingSubscriptionId);
+    Y_ABORT_UNLESS(queueInfo->NodeTrackingSubscriptionId);
     auto id = queueInfo->NodeTrackingSubscriptionId;
     queueInfo->NodeTrackingSubscriptionId = 0;
 
@@ -1376,7 +1376,7 @@ void TSqsService::ProcessConnectTimeoutToLeader() {
 }
 
 void TSqsService::HandleWakeup(TEvWakeup::TPtr& ev) {
-    Y_VERIFY(ev->Get()->Tag != 0);
+    Y_ABORT_UNLESS(ev->Get()->Tag != 0);
     switch (ev->Get()->Tag) {
     case LIST_USERS_WAKEUP_TAG:
         ScheduledRequestingUsersList_ = false;
@@ -1562,7 +1562,7 @@ void TSqsService::MakeAndRegisterYcEventsProcessor() {
     auto root = YcSearchEventsConfig.TenantMode ? TString() : Cfg().GetRoot();
 
     auto factory = AppData()->SqsEventsWriterFactory;
-    Y_VERIFY(factory);
+    Y_ABORT_UNLESS(factory);
     Register(new TSearchEventsProcessor(
             root, YcSearchEventsConfig.ReindexInterval, YcSearchEventsConfig.RescanInterval,
             YcSearchEventsConfig.Database,

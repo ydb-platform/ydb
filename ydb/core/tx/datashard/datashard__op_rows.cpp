@@ -39,7 +39,7 @@ public:
             Op->IncrementInProgress();
         }
 
-        Y_VERIFY(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
+        Y_ABORT_UNLESS(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
 

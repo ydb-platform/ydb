@@ -126,7 +126,7 @@ namespace NRedo {
             } else {
                 auto *ev = reinterpret_cast<const TEvBegin_v1*>(chunk.data());
 
-                Y_VERIFY(ev->Serial > 0, "Invalid serial in EvBegin record");
+                Y_ABORT_UNLESS(ev->Serial > 0, "Invalid serial in EvBegin record");
 
                 Base.DoBegin(ev->Tail, ev->Head, ev->Serial, ev->Stamp);
             }
@@ -134,7 +134,7 @@ namespace NRedo {
 
         void DoAnnex(const TArrayRef<const char> chunk)
         {
-            Y_VERIFY(chunk.size() >= sizeof(TEvAnnex));
+            Y_ABORT_UNLESS(chunk.size() >= sizeof(TEvAnnex));
 
             using TGlobId = TStdPad<NPageCollection::TGlobId>;
 
@@ -146,7 +146,7 @@ namespace NRedo {
 
         void DoFlush(const TArrayRef<const char> chunk)
         {
-            Y_VERIFY(chunk.size() >= sizeof(TEvFlush));
+            Y_ABORT_UNLESS(chunk.size() >= sizeof(TEvFlush));
 
             auto *ev = reinterpret_cast<const TEvFlush*>(chunk.begin());
 
@@ -238,7 +238,7 @@ namespace NRedo {
 
         void DoFlushLegacy(const TArrayRef<const char> chunk)
         {
-            Y_VERIFY(chunk.size() >= sizeof(TEvFlush_Legacy));
+            Y_ABORT_UNLESS(chunk.size() >= sizeof(TEvFlush_Legacy));
 
             auto *op = reinterpret_cast<const TEvFlush_Legacy*>(chunk.begin());
 
@@ -260,9 +260,9 @@ namespace NRedo {
 
         ui32 ReadValue(const char* buf, ui32 maxSz, TRawTypeValue& val)
         {
-            Y_VERIFY(maxSz >= sizeof(TValue), "Buffer to small");
+            Y_ABORT_UNLESS(maxSz >= sizeof(TValue), "Buffer to small");
             const TValue* vp = (const TValue*)buf;
-            Y_VERIFY(maxSz >= sizeof(TValue) + vp->Size, "Value size execeeds the buffer size");
+            Y_ABORT_UNLESS(maxSz >= sizeof(TValue) + vp->Size, "Value size execeeds the buffer size");
             val = vp->IsNull() ? TRawTypeValue() : TRawTypeValue(vp + 1, vp->Size, NScheme::TTypeInfo(vp->TypeId));
             return sizeof(TValue) + vp->Size;
         }
@@ -282,13 +282,13 @@ namespace NRedo {
 
         ui32 ReadOneOp(const char* buf, ui32 maxSz, TUpdateOp& uo)
         {
-            Y_VERIFY(maxSz >= sizeof(TUpdate), "Buffer to small");
+            Y_ABORT_UNLESS(maxSz >= sizeof(TUpdate), "Buffer to small");
             const TUpdate* up = (const TUpdate*)buf;
-            Y_VERIFY(maxSz >= sizeof(TUpdate) + up->Val.Size, "Value size execeeds the buffer size");
+            Y_ABORT_UNLESS(maxSz >= sizeof(TUpdate) + up->Val.Size, "Value size execeeds the buffer size");
             bool null = TCellOp::HaveNoPayload(up->CellOp) || up->Val.IsNull();
             uo = TUpdateOp(up->Tag, up->CellOp, null ? TRawTypeValue() : TRawTypeValue(up + 1, up->Val.Size, NScheme::TTypeInfo(up->Val.TypeId)));
 
-            Y_VERIFY(up->CellOp == ELargeObj::Inline || (up->CellOp == ELargeObj::Extern && up->Val.Size == sizeof(ui32)));
+            Y_ABORT_UNLESS(up->CellOp == ELargeObj::Inline || (up->CellOp == ELargeObj::Extern && up->Val.Size == sizeof(ui32)));
 
             return sizeof(TUpdate) + up->Val.Size;
         }

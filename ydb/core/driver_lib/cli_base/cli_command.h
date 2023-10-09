@@ -32,9 +32,9 @@ public:
     static TAutoPtr<ProtobufType> GetProtobuf(const TString& string) {
         TAutoPtr<ProtobufType> pb(new ProtobufType);
         if (IsProtobuf(string)) {
-            Y_VERIFY(::google::protobuf::TextFormat::ParseFromString(string, pb.Get()));
+            Y_ABORT_UNLESS(::google::protobuf::TextFormat::ParseFromString(string, pb.Get()));
         } else {
-            Y_VERIFY(ParsePBFromFile(string, pb.Get()));
+            Y_ABORT_UNLESS(ParsePBFromFile(string, pb.Get()));
         }
         return pb;
     }
@@ -42,9 +42,9 @@ public:
     template <typename ProtobufType>
     static void ParseProtobuf(ProtobufType* pb, const TString& string) {
         if (IsProtobuf(string)) {
-            Y_VERIFY(::google::protobuf::TextFormat::ParseFromString(string, pb));
+            Y_ABORT_UNLESS(::google::protobuf::TextFormat::ParseFromString(string, pb));
         } else {
-            Y_VERIFY(ParsePBFromFile(string, pb));
+            Y_ABORT_UNLESS(ParsePBFromFile(string, pb));
         }
     }
 

@@ -38,8 +38,8 @@ TDSAccessorInitialized::TDSAccessorInitialized(const NRequest::TConfig& config,
 
 void TDSAccessorInitialized::OnModificationFinished(const TString& modificationId) {
     ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "modifiers count: " << Modifiers.size();
-    Y_VERIFY(Modifiers.size());
-    Y_VERIFY(Modifiers.front()->GetModificationId() == modificationId);
+    Y_ABORT_UNLESS(Modifiers.size());
+    Y_ABORT_UNLESS(Modifiers.front()->GetModificationId() == modificationId);
     if (NProvider::TServiceOperator::IsEnabled() && InitializationSnapshot) {
         TDBInitialization dbInit(ComponentId, Modifiers.front()->GetModificationId());
         NModifications::IOperationsManager::TExternalModificationContext extContext;
@@ -74,7 +74,7 @@ void TDSAccessorInitialized::OnPreparationProblem(const TString& errorMessage) c
 void TDSAccessorInitialized::OnAlteringProblem(const TString& errorMessage) {
     AFL_ERROR(NKikimrServices::METADATA_INITIALIZER)("event", "OnAlteringProblem")("error", errorMessage);
     NActors::ScheduleInvokeActivity([self = this->SelfPtr]() {
-        Y_VERIFY(self->Modifiers.size());
+        Y_ABORT_UNLESS(self->Modifiers.size());
         self->OnModificationFinished(self->Modifiers.front()->GetModificationId());
     }, TDuration::Seconds(1));
 }
@@ -82,7 +82,7 @@ void TDSAccessorInitialized::OnAlteringProblem(const TString& errorMessage) {
 void TDSAccessorInitialized::OnModificationFailed(const TString& errorMessage, const TString& modificationId) {
     AFL_ERROR(NKikimrServices::METADATA_INITIALIZER)("event", "OnModificationFailed")("error", errorMessage)("modificationId", modificationId);
     NActors::ScheduleInvokeActivity([self = this->SelfPtr]() {
-        Y_VERIFY(self->Modifiers.size());
+        Y_ABORT_UNLESS(self->Modifiers.size());
         self->DoNextModifier(false);
     }, TDuration::Seconds(1));
 }

@@ -4,7 +4,7 @@
 namespace NKikimr {
 
     void TScrubCoroImpl::DropGarbageBlob(const TLogoBlobID& fullId) {
-        Y_VERIFY(!fullId.PartId());
+        Y_ABORT_UNLESS(!fullId.PartId());
         if (const auto it = UnreadableBlobs.find(fullId); it != UnreadableBlobs.end()) {
             STLOGX(GetActorContext(), PRI_NOTICE, BS_VDISK_SCRUB, VDS39, VDISKP(LogPrefix,
                 "dropped garbage unreadable blob"), (BlobId, it->first), (UnreadableParts, it->second.UnreadableParts));
@@ -21,7 +21,7 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::UpdateUnreadableParts(const TLogoBlobID& fullId, NMatrix::TVectorType corrupted, TDiskPart corruptedPart) {
-        Y_VERIFY(!fullId.PartId());
+        Y_ABORT_UNLESS(!fullId.PartId());
         const auto it = UnreadableBlobs.find(fullId);
 
         const NMatrix::TVectorType prevCorrupted = it != UnreadableBlobs.end()
@@ -55,7 +55,7 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::UpdateReadableParts(const TLogoBlobID& fullId, NMatrix::TVectorType readable) {
-        Y_VERIFY(!fullId.PartId());
+        Y_ABORT_UNLESS(!fullId.PartId());
         if (const auto it = UnreadableBlobs.find(fullId); it != UnreadableBlobs.end()) {
             STLOGX(GetActorContext(), PRI_NOTICE, BS_VDISK_SCRUB, VDS42, VDISKP(LogPrefix,
                 "read parts of previously unreadable blob"), (BlobId, it->first),
@@ -152,7 +152,7 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::Handle(TEvTakeHullSnapshotResult::TPtr ev) {
-        Y_VERIFY(GenerateRestoreCorruptedBlobQueryScheduled);
+        Y_ABORT_UNLESS(GenerateRestoreCorruptedBlobQueryScheduled);
         GenerateRestoreCorruptedBlobQueryScheduled = false;
 
         auto& snap = ev->Get()->Snap;

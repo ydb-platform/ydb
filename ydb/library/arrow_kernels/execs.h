@@ -51,7 +51,7 @@ cp::ArrayKernelExec ArithmeticBinaryExec(cp::internal::detail::GetTypeId getId) 
         case arrow::Type::DOUBLE:
             return KernelGenerator<arrow::DoubleType, arrow::DoubleType, arrow::DoubleType, Op>::Exec;
         default:
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
             return cp::internal::ExecFail;
     }
 }
@@ -78,7 +78,7 @@ cp::ArrayKernelExec ArithmeticBinaryIntExec(cp::internal::detail::GetTypeId getI
         case arrow::Type::UINT64:
             return KernelGenerator<arrow::UInt64Type, arrow::UInt64Type, arrow::UInt64Type, Op>::Exec;
         default:
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
             return cp::internal::ExecFail;
     }
 }
@@ -109,7 +109,7 @@ cp::ArrayKernelExec ArithmeticUnaryExec(cp::internal::detail::GetTypeId getId) {
         case arrow::Type::DOUBLE:
             return KernelGenerator<arrow::DoubleType, arrow::DoubleType, Op>::Exec;
         default:
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
             return cp::internal::ExecFail;
     }
 }
@@ -140,7 +140,7 @@ cp::ArrayKernelExec MathUnaryExec(cp::internal::detail::GetTypeId getId) {
         case arrow::Type::DOUBLE:
             return KernelGenerator<arrow::DoubleType, arrow::DoubleType, Op>::Exec;
         default:
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
             return cp::internal::ExecFail;
     }
 }
@@ -171,7 +171,7 @@ cp::ArrayKernelExec MathBinaryExec(cp::internal::detail::GetTypeId getId) {
         case arrow::Type::DOUBLE:
             return KernelGenerator<arrow::DoubleType, arrow::DoubleType, arrow::DoubleType, Op>::Exec;
         default:
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
             return cp::internal::ExecFail;
     }
 }

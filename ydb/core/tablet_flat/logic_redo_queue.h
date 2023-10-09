@@ -74,7 +74,7 @@ namespace NRedo {
 
         void Cut(ui32 table, NTable::TSnapEdge edge, TGCBlobDelta &gc) noexcept
         {
-            Y_VERIFY(edge.TxStamp != Max<ui64>(), "Undefined TxStamp of edge");
+            Y_ABORT_UNLESS(edge.TxStamp != Max<ui64>(), "Undefined TxStamp of edge");
 
             auto &cur = Edges[table];
 
@@ -116,7 +116,7 @@ namespace NRedo {
 
                     Push(entry.Release());
                 } else {
-                    Y_VERIFY(entry->References == 0);
+                    Y_ABORT_UNLESS(entry->References == 0);
                 }
             }
         }

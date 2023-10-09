@@ -34,7 +34,7 @@ namespace NKikimr {
             : TTimeSeries<T>(lifetime)
             , Counters(counters)
         {
-            Y_VERIFY(Counters);
+            Y_ABORT_UNLESS(Counters);
             Samples = Counters->GetCounter("samples", false);
             for (auto perc : percentiles) {
                 auto subgroup = Counters->GetSubgroup("percentile", Sprintf("%.1f", perc * 100.f));
@@ -43,7 +43,7 @@ namespace NKikimr {
         }
 
         void CalculateQuantiles() const {
-            Y_VERIFY(Counters);
+            Y_ABORT_UNLESS(Counters);
 
             *Samples = Items.size();
 
@@ -97,7 +97,7 @@ namespace NKikimr {
             size_t maxIndex = values.size() - 1;
             while (count--) {
                 const size_t numerator = *numerators++;
-                Y_VERIFY(numerator >= 0 && numerator <= denominator);
+                Y_ABORT_UNLESS(numerator >= 0 && numerator <= denominator);
                 const size_t index = maxIndex * numerator / denominator;
                 *res++ = values[index];
             }

@@ -38,7 +38,7 @@ NMem::TTreeSnapshot TMemTable::Immediate() const {
 }
 
 void TMemTable::PrepareRollback() {
-    Y_VERIFY(!RollbackState);
+    Y_ABORT_UNLESS(!RollbackState);
     auto& state = RollbackState.emplace();
     state.Snapshot = Tree.Snapshot();
     state.OpsCount = OpsCount;
@@ -49,7 +49,7 @@ void TMemTable::PrepareRollback() {
 }
 
 void TMemTable::RollbackChanges() {
-    Y_VERIFY(RollbackState);
+    Y_ABORT_UNLESS(RollbackState);
     auto& state = *RollbackState;
     Tree.RollbackTo(state.Snapshot);
     state.Snapshot = { };
@@ -98,7 +98,7 @@ void TMemTable::RollbackChanges() {
 }
 
 void TMemTable::CommitChanges(TArrayRef<const TMemGlob> blobs) {
-    Y_VERIFY(RollbackState);
+    Y_ABORT_UNLESS(RollbackState);
     auto& state = *RollbackState;
     state.Snapshot = { };
     Tree.CollectGarbage();
@@ -109,7 +109,7 @@ void TMemTable::CommitChanges(TArrayRef<const TMemGlob> blobs) {
 }
 
 void TMemTable::CommitBlobs(TArrayRef<const TMemGlob> blobs) {
-    Y_VERIFY(!RollbackState);
+    Y_ABORT_UNLESS(!RollbackState);
     Blobs.Commit(Blobs.Size(), blobs);
 }
 

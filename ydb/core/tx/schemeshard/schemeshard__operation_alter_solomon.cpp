@@ -36,8 +36,8 @@ public:
                                << ", at tablet" << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterSolomonVolume);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterSolomonVolume);
 
         auto solomon = context.SS->SolomonVolumes[txState->TargetPathId];
         Y_VERIFY_S(solomon, "solomon volume is null. PathId: " << txState->TargetPathId);
@@ -125,8 +125,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterSolomonVolume);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterSolomonVolume);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -289,7 +289,7 @@ public:
         if (alter.GetUpdateChannelsBinding()) {
             txState.Shards.reserve(alter.HasPartitionCount() ? alter.GetPartitionCount() : solomon->Partitions.size());
         } else {
-            Y_VERIFY(alter.HasPartitionCount());
+            Y_ABORT_UNLESS(alter.HasPartitionCount());
             txState.Shards.reserve(alter.GetPartitionCount() - solomon->Partitions.size());
         }
 
@@ -360,7 +360,7 @@ ISubOperation::TPtr CreateAlterSolomon(TOperationId id, const TTxTransaction& tx
 }
 
 ISubOperation::TPtr CreateAlterSolomon(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TAlterSolomon>(id, state);
 }
 

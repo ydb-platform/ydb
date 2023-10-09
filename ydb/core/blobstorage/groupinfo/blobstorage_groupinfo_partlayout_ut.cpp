@@ -49,7 +49,7 @@ public:
                         if (Queue.empty() && Done) {
                             return;
                         }
-                        Y_VERIFY(!Queue.empty());
+                        Y_ABORT_UNLESS(!Queue.empty());
                         layout = std::move(Queue.front());
                         Queue.pop_front();
                         if (Queue.size() < 1024) {
@@ -66,7 +66,7 @@ public:
                     ui32 generic = CountEffectiveReplicas(layout, gtype.TotalPartCount(), gtype.BlobSubgroupSize());
 
                     // verify the value
-                    Y_VERIFY(count == generic, "count# %" PRIu32 " generic# %" PRIu32 " layout# %s erasure# %s",
+                    Y_ABORT_UNLESS(count == generic, "count# %" PRIu32 " generic# %" PRIu32 " layout# %s erasure# %s",
                         count, generic, layout.ToString(gtype).data(),
                         TBlobStorageGroupType::ErasureSpeciesName(gtype.GetErasure()).data());
 

@@ -129,7 +129,7 @@ public:
 
     void RequestMemory(ui64 bytes)
     {
-        Y_VERIFY(!MemoryGCToken);
+        Y_ABORT_UNLESS(!MemoryGCToken);
         RequestedMemory += bytes;
     }
 
@@ -153,16 +153,16 @@ public:
 
     TAutoPtr<TMemoryToken> HoldMemory(ui64 size)
     {
-        Y_VERIFY(!MemoryGCToken);
-        Y_VERIFY(size <= MemoryLimit);
-        Y_VERIFY(size > 0);
+        Y_ABORT_UNLESS(!MemoryGCToken);
+        Y_ABORT_UNLESS(size <= MemoryLimit);
+        Y_ABORT_UNLESS(size > 0);
         MemoryGCToken = new TMemoryGCToken(size, TaskId);
         return new TMemoryToken(MemoryGCToken);
     }
 
     void UseMemoryToken(TAutoPtr<TMemoryToken> token)
     {
-        Y_VERIFY(!MemoryToken);
+        Y_ABORT_UNLESS(!MemoryToken);
         MemoryToken = std::move(token);
     }
 
@@ -473,7 +473,7 @@ namespace NFlatExecutorSetup {
             : TabletActorID(tablet)
             , TabletInfo(info)
         {
-            Y_VERIFY(TTabletTypes::TypeInvalid != TabletInfo->TabletType);
+            Y_ABORT_UNLESS(TTabletTypes::TypeInvalid != TabletInfo->TabletType);
         }
 
         TActorId ExecutorActorID;

@@ -82,8 +82,8 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
         }
 
         ui64 semaphoreId = Self->NextSemaphoreId++;
-        Y_VERIFY(semaphoreId > 0);
-        Y_VERIFY(!Self->Semaphores.contains(semaphoreId));
+        Y_ABORT_UNLESS(semaphoreId > 0);
+        Y_ABORT_UNLESS(!Self->Semaphores.contains(semaphoreId));
         Self->PersistSysParam(db, Schema::SysParam_NextSemaphoreId, ToString(Self->NextSemaphoreId));
         semaphore = &Self->Semaphores[semaphoreId];
         semaphore->Id = semaphoreId;
@@ -112,7 +112,7 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
                 << ", cookie=" << Cookie << ")");
         Self->RemoveSessionTx(Record.GetSessionId());
 
-        Y_VERIFY(Reply);
+        Y_ABORT_UNLESS(Reply);
         ctx.Send(Sender, Reply.Release(), 0, Cookie);
     }
 };

@@ -56,7 +56,7 @@ void TNodesCounterBase::UpdateNode(ui32 nodeId, NKikimrCms::EState state) {
 }
 
 void TNodesCounterBase::LockNode(ui32 nodeId) {
-    Y_VERIFY(NodeToState.contains(nodeId));
+    Y_ABORT_UNLESS(NodeToState.contains(nodeId));
 
     ++LockedNodesCount;
     if (NodeToState[nodeId] == NODE_STATE_DOWN) {
@@ -68,7 +68,7 @@ void TNodesCounterBase::LockNode(ui32 nodeId) {
 }
 
 void TNodesCounterBase::UnlockNode(ui32 nodeId) {
-    Y_VERIFY(NodeToState.contains(nodeId));
+    Y_ABORT_UNLESS(NodeToState.contains(nodeId));
 
     --LockedNodesCount;
     if (NodeToState[nodeId] == NODE_STATE_RESTART) {
@@ -80,7 +80,7 @@ void TNodesCounterBase::UnlockNode(ui32 nodeId) {
 }
 
 bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TString& reason) const {
-    Y_VERIFY(NodeToState.contains(nodeId));
+    Y_ABORT_UNLESS(NodeToState.contains(nodeId));
     auto nodeState = NodeToState.at(nodeId);
 
     bool isForceRestart = mode == NKikimrCms::MODE_FORCE_RESTART;
@@ -140,7 +140,7 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
 }
 
 bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TString& reason) const {
-    Y_VERIFY(NodeToState.contains(nodeId));
+    Y_ABORT_UNLESS(NodeToState.contains(nodeId));
     auto nodeState = NodeToState.at(nodeId);
 
     NCH_LOG_D("Checking limits for sys tablet: " << NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)

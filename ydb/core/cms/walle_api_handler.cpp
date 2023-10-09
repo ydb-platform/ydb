@@ -306,7 +306,7 @@ private:
     }
 
     void SendToCms(IEventBase *ev, const TActorContext &ctx) {
-        Y_VERIFY(!CmsPipe);
+        Y_ABORT_UNLESS(!CmsPipe);
 
         ui32 domain = AppData(ctx)->DomainsInfo->Domains.begin()->first;
         NTabletPipe::TClientConfig pipeConfig;

@@ -86,11 +86,11 @@ namespace NKikimr {
         using TFreshCompaction = ::NKikimr::THullCompaction<TKey, TMemRec, TIterator>;
 
         auto &hullCtx = hullDs->HullCtx;
-        Y_VERIFY(hullCtx->FreshCompaction);
+        Y_ABORT_UNLESS(hullCtx->FreshCompaction);
 
         // get fresh segment to compact
         TIntrusivePtr<TFreshSegment> freshSegment = rtCtx->LevelIndex->FindFreshSegmentForCompaction();
-        Y_VERIFY(freshSegment);
+        Y_ABORT_UNLESS(freshSegment);
         const ui64 mergeElementsApproximation = freshSegment->ElementsInserted();
 
         // prepare snapshots
@@ -111,7 +111,7 @@ namespace NKikimr {
                 VDISKP(hullCtx->VCtx->VDiskLogPrefix,
                     "%s: fresh scheduled", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
 
-        Y_VERIFY(lastLsn <= rtCtx->LsnMngr->GetConfirmedLsnForHull(),
+        Y_ABORT_UNLESS(lastLsn <= rtCtx->LsnMngr->GetConfirmedLsnForHull(),
                 "Last fresh lsn MUST be confirmed; lastLsn# %" PRIu64 " confirmed# %" PRIu64,
                 lastLsn, rtCtx->LsnMngr->GetConfirmedLsnForHull());
 
@@ -212,7 +212,7 @@ namespace NKikimr {
         }
 
         void HandleWakeup(const TActorContext& ctx) {
-            Y_VERIFY(CompactionScheduled);
+            Y_ABORT_UNLESS(CompactionScheduled);
             CompactionScheduled = false;
             if (ctx.Now() >= NextCompactionWakeup) {
                 ScheduleCompaction(ctx);
@@ -258,7 +258,7 @@ namespace NKikimr {
 
         void Handle(typename TSelected::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
-            Y_VERIFY(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateCompPolicyAtWork);
+            Y_ABORT_UNLESS(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateCompPolicyAtWork);
             RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateNoComp);
 
             NHullComp::EAction action = ev->Get()->Action;
@@ -279,12 +279,12 @@ namespace NKikimr {
                     break;
                 }
                 case NHullComp::ActDeleteSsts: {
-                    Y_VERIFY(CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty());
+                    Y_ABORT_UNLESS(CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty());
                     ApplyCompactionResult(ctx, {}, {});
                     break;
                 }
                 case NHullComp::ActMoveSsts: {
-                    Y_VERIFY(!CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty());
+                    Y_ABORT_UNLESS(!CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty());
                     ApplyCompactionResult(ctx, {}, {});
                     break;
                 }
@@ -461,19 +461,19 @@ namespace NKikimr {
                 auto aid = ctx.RegisterWithSameMailbox(committer.release());
                 ActiveActors.Insert(aid);
             } else {
-                Y_VERIFY(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateCompInProgress);
+                Y_ABORT_UNLESS(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateCompInProgress);
 
                 CompactionTask->CompactSsts.CompactionFinished(std::move(msg->SegVec),
                     std::move(msg->FreedHugeBlobs), msg->Aborted);
 
                 if (msg->Aborted) { // if the compaction was aborted, ensure there was no index change
-                    Y_VERIFY(CompactionTask->GetSstsToAdd().Empty());
-                    Y_VERIFY(CompactionTask->GetSstsToDelete().Empty());
-                    Y_VERIFY(CompactionTask->GetHugeBlobsToDelete().Empty());
-                    Y_VERIFY(!msg->CommitChunks);
-                    Y_VERIFY(!msg->FreshSegment);
+                    Y_ABORT_UNLESS(CompactionTask->GetSstsToAdd().Empty());
+                    Y_ABORT_UNLESS(CompactionTask->GetSstsToDelete().Empty());
+                    Y_ABORT_UNLESS(CompactionTask->GetHugeBlobsToDelete().Empty());
+                    Y_ABORT_UNLESS(!msg->CommitChunks);
+                    Y_ABORT_UNLESS(!msg->FreshSegment);
                 } else {
-                    Y_VERIFY(!CompactionTask->GetSstsToDelete().Empty());
+                    Y_ABORT_UNLESS(!CompactionTask->GetSstsToDelete().Empty());
                 }
 
                 ApplyCompactionResult(ctx, std::move(msg->CommitChunks), std::move(msg->ReservedChunks));
@@ -494,7 +494,7 @@ namespace NKikimr {
             const auto oneAddition = msg->Essence.EnsureOnlyOneSst<TKey, TMemRec>();
 
             // move level-0 SSTable segment into uncommitted set and spawn committer actor
-            Y_VERIFY(oneAddition.Sst->IsLoaded());
+            Y_ABORT_UNLESS(oneAddition.Sst->IsLoaded());
             RTCtx->LevelIndex->UncommittedReplSegments.push_back(oneAddition.Sst);
 
             auto actor = std::make_unique<TAsyncReplSstCommitter>(HullLogCtx, HullDbCommitterCtx, RTCtx->LevelIndex,
@@ -590,7 +590,7 @@ namespace NKikimr {
             STLOG(PRI_INFO, BS_HULLCOMP, VDHC01, VDISKP(HullDs->HullCtx->VCtx, "TEvHullCompact"),
                 (ConfirmedLsn, confirmedLsn), (Msg, *msg),
                 (CompState, TLevelIndexBase::LevelCompStateToStr(RTCtx->LevelIndex->GetCompState())));
-            Y_VERIFY(TKeyToEHullDbType<TKey>() == msg->Type);
+            Y_ABORT_UNLESS(TKeyToEHullDbType<TKey>() == msg->Type);
 
             switch (msg->Mode) {
                 using E = decltype(msg->Mode);
@@ -600,7 +600,7 @@ namespace NKikimr {
                     break;
 
                 case E::FRESH_ONLY:
-                    Y_VERIFY(FreshOnlyCompactQ.empty() || FreshOnlyCompactQ.back().first <= confirmedLsn);
+                    Y_ABORT_UNLESS(FreshOnlyCompactQ.empty() || FreshOnlyCompactQ.back().first <= confirmedLsn);
                     FreshOnlyCompactQ.emplace_back(confirmedLsn, ev);
                     break;
             }

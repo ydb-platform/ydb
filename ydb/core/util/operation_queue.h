@@ -603,7 +603,7 @@ void TOperationQueue<T, TQueue>::StartOperations() {
     if ((ReadyQueue.Empty() && WaitingItems.Empty()) || RunningItems.Size() == Config.InflightLimit)
         return;
 
-    Y_VERIFY(RunningItems.Size() < Config.InflightLimit);
+    Y_ABORT_UNLESS(RunningItems.Size() < Config.InflightLimit);
 
     auto now = Timer.Now();
     TokenBucket.Fill(now);

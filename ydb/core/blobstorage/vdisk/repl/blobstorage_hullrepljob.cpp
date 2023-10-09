@@ -368,7 +368,7 @@ namespace NKikimr {
 
             // run proxies
             SetupDiskProxies();
-            Y_VERIFY(!NumRunningProxies);
+            Y_ABORT_UNLESS(!NumRunningProxies);
             for (const TVDiskProxyPtr& p : DiskProxySet) {
                 if (p) {
                     ActiveActors.Insert(p->Run(SelfId()));
@@ -421,7 +421,7 @@ namespace NKikimr {
                         TVDiskProxyPtr &ptr = DiskProxySet.at(orderNum);
                         if (!ptr) {
                             auto queueIt = QueueActorMapPtr->find(vdisk);
-                            Y_VERIFY(queueIt != QueueActorMapPtr->end());
+                            Y_ABORT_UNLESS(queueIt != QueueActorMapPtr->end());
                             ptr = MakeIntrusive<TVDiskProxy>(ReplCtx, vdisk, queueIt->second);
                         }
 
@@ -449,7 +449,7 @@ namespace NKikimr {
                 const TReplSstStreamWriter::EState state = Writer.GetState();
                 const bool noWorkForWriter = RecoveryQueue.empty() || RecoveryQueue.front().IsHugeBlob;
                 if (state == TReplSstStreamWriter::EState::COLLECT) {
-                    Y_VERIFY(!WriterFinished);
+                    Y_ABORT_UNLESS(!WriterFinished);
                     break;
                 } else if (state == TReplSstStreamWriter::EState::STOPPED && noWorkForWriter) {
                     break;
@@ -457,7 +457,7 @@ namespace NKikimr {
 
                 switch (state) {
                     case TReplSstStreamWriter::EState::STOPPED:
-                        Y_VERIFY(RecoveryQueue && !RecoveryQueue.front().IsHugeBlob && !WriterFinished);
+                        Y_ABORT_UNLESS(RecoveryQueue && !RecoveryQueue.front().IsHugeBlob && !WriterFinished);
                         Writer.Begin();
                         break;
 
@@ -539,7 +539,7 @@ namespace NKikimr {
                 if (!CurrentItem) {
                     const TLogoBlobID id = MergeHeap.front()->GenLogoBlobId();
                     CurrentItem.emplace(id, ReplCtx->VCtx->Top->GType);
-                    Y_VERIFY(std::exchange(LastProcessedKey, id) < id);
+                    Y_ABORT_UNLESS(std::exchange(LastProcessedKey, id) < id);
                 }
                 auto& item = *CurrentItem;
 
@@ -626,9 +626,9 @@ namespace NKikimr {
                 TimeAccount.SetState(ETimeState::PHANTOM);
                 return false; // still waiting for proxy response about phantom validation
             }
-            Y_VERIFY(PhantomChecksPending.empty());
+            Y_ABORT_UNLESS(PhantomChecksPending.empty());
 
-            Y_VERIFY(!NumRunningProxies && MergeHeap.empty() && RecoveryQueue.empty());
+            Y_ABORT_UNLESS(!NumRunningProxies && MergeHeap.empty() && RecoveryQueue.empty());
             TimeAccount.SetState(ETimeState::OTHER);
 
             if (!RecoveryMachineFinished) {
@@ -654,7 +654,7 @@ namespace NKikimr {
             }
 
             if (Writer.GetState() == TReplSstStreamWriter::EState::STOPPED) {
-                Y_VERIFY(RecoveryQueue.empty());
+                Y_ABORT_UNLESS(RecoveryQueue.empty());
                 Finish();
                 return false;
             }
@@ -692,7 +692,7 @@ namespace NKikimr {
                 (Msg, ev->Get()->ToString()));
 
             auto [begin, end] = PhantomChecksInFlight.equal_range(ev->Cookie);
-            Y_VERIFY(begin != end);
+            Y_ABORT_UNLESS(begin != end);
 
             std::unordered_map<TLogoBlobID, std::tuple<bool, bool>> isPhantom;
             auto *msg = ev->Get();
@@ -712,7 +712,7 @@ namespace NKikimr {
                 const auto& [_, item] = *it;
                 const auto& [id, parts] = item;
                 auto node = isPhantom.extract(id);
-                Y_VERIFY(node);
+                Y_ABORT_UNLESS(node);
                 auto [phantom, looksLikePhantom] = node.mapped();
                 RecoveryMachine->ProcessPhantomBlob(id, parts, phantom, looksLikePhantom);
                 if (phantom) {
@@ -721,7 +721,7 @@ namespace NKikimr {
             }
 
             PhantomChecksInFlight.erase(begin, end);
-            Y_VERIFY(isPhantom.empty());
+            Y_ABORT_UNLESS(isPhantom.empty());
 
             Merge();
         }
@@ -736,7 +736,7 @@ namespace NKikimr {
                         // we are already at in flight limit, do not accept more messages
                         return EProcessQueueAction::Exit;
                     }
-                    Y_VERIFY(HugeBlobsInFlight < HugeBlobsInFlightMax);
+                    Y_ABORT_UNLESS(HugeBlobsInFlight < HugeBlobsInFlightMax);
                     ++HugeBlobsInFlight;
 
                     ++ReplCtx->MonGroup.ReplHugeBlobsRecovered();
@@ -801,7 +801,7 @@ namespace NKikimr {
                     (VDiskId, msg->VDiskId.ToString()));
                 --NumRunningProxies;
             } else {
-                Y_VERIFY(proxy->Valid());
+                Y_ABORT_UNLESS(proxy->Valid());
                 MergeHeap.push_back(proxy);
                 PushHeap(MergeHeap.begin(), MergeHeap.end(), TVDiskProxy::TPtrGreater());
             }
@@ -825,7 +825,7 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr& /*ev*/) {
             // FIXME: Handle NotOK
             // this message is received when huge blob is written by Skeleton
-            Y_VERIFY(HugeBlobsInFlight != 0);
+            Y_ABORT_UNLESS(HugeBlobsInFlight != 0);
             --HugeBlobsInFlight;
             Merge();
         }

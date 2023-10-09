@@ -117,7 +117,7 @@ namespace NYql::NDqs {
                     auto selfId = ctx.SelfID;
                     auto* actorSystem = ctx.ExecutorThread.ActorSystem;
                     Ctx->GetFinishFuture().Subscribe([selfId, actorSystem](const NGrpc::IRequestContextBase::TAsyncFinishResult& future) {
-                        Y_VERIFY(future.HasValue());
+                        Y_ABORT_UNLESS(future.HasValue());
                         if (future.GetValue() == NGrpc::IRequestContextBase::EFinishStatus::CANCEL) {
                             actorSystem->Send(selfId, new TEvents::TEvPoison());
                         }
@@ -421,7 +421,7 @@ namespace NYql::NDqs {
                 Send(GraphExecutionEventsActorId, new TEvGraphExecutionEvent(record));
                 Synchronize<TEvGraphExecutionEvent>([callback, traceId = TraceId](TEvGraphExecutionEvent::TPtr& ev) {
                     YQL_LOG_CTX_ROOT_SESSION_SCOPE(traceId);
-                    Y_VERIFY(ev->Get()->Record.GetEventType() == NYql::NDqProto::EGraphExecutionEventType::SYNC);
+                    Y_ABORT_UNLESS(ev->Get()->Record.GetEventType() == NYql::NDqProto::EGraphExecutionEventType::SYNC);
                     callback(ev);
                 });
             }
@@ -525,7 +525,7 @@ namespace NYql::NDqs {
         ADD_REQUEST(CloseSession, CloseSessionRequest, CloseSessionResponse, {
             Y_UNUSED(this);
             auto* request = dynamic_cast<const Yql::DqsProto::CloseSessionRequest*>(ctx->GetRequest());
-            Y_VERIFY(!!request);
+            Y_ABORT_UNLESS(!!request);
 
             Yql::DqsProto::CloseSessionResponse result;
             Sessions.CloseSession(request->GetSession());
@@ -535,7 +535,7 @@ namespace NYql::NDqs {
         ADD_REQUEST(PingSession, PingSessionRequest, PingSessionResponse, {
             Y_UNUSED(this);
             auto* request = dynamic_cast<const Yql::DqsProto::PingSessionRequest*>(ctx->GetRequest());
-            Y_VERIFY(!!request);
+            Y_ABORT_UNLESS(!!request);
 
             YQL_CLOG(TRACE, ProviderDq) << "PingSession " << request->GetSession();
 
@@ -555,7 +555,7 @@ namespace NYql::NDqs {
         ADD_REQUEST(OpenSession, OpenSessionRequest, OpenSessionResponse, {
             Y_UNUSED(this);
             auto* request = dynamic_cast<const Yql::DqsProto::OpenSessionRequest*>(ctx->GetRequest());
-            Y_VERIFY(!!request);
+            Y_ABORT_UNLESS(!!request);
 
             YQL_CLOG(DEBUG, ProviderDq) << "OpenSession for " << request->GetSession() << " " << request->GetUsername();
 
@@ -569,7 +569,7 @@ namespace NYql::NDqs {
 
         ADD_REQUEST(JobStop, JobStopRequest, JobStopResponse, {
             auto* request = dynamic_cast<const Yql::DqsProto::JobStopRequest*>(ctx->GetRequest());
-            Y_VERIFY(!!request);
+            Y_ABORT_UNLESS(!!request);
 
             auto ev = MakeHolder<TEvJobStop>(*request);
 
@@ -668,7 +668,7 @@ namespace NYql::NDqs {
 
         ADD_REQUEST(RegisterNode, RegisterNodeRequest, RegisterNodeResponse, {
             auto* request = dynamic_cast<const Yql::DqsProto::RegisterNodeRequest*>(ctx->GetRequest());
-            Y_VERIFY(!!request);
+            Y_ABORT_UNLESS(!!request);
 
             if (!request->GetPort()
                 || request->GetRole().empty()
@@ -701,7 +701,7 @@ namespace NYql::NDqs {
 
         ADD_REQUEST(GetMaster, GetMasterRequest, GetMasterResponse, {
             auto* request = dynamic_cast<const Yql::DqsProto::GetMasterRequest*>(ctx->GetRequest());
-            Y_VERIFY(!!request);
+            Y_ABORT_UNLESS(!!request);
 
             auto requestEvent = MakeHolder<TEvGetMasterRequest>();
 
@@ -719,7 +719,7 @@ namespace NYql::NDqs {
 
         ADD_REQUEST(ConfigureFailureInjector, ConfigureFailureInjectorRequest, ConfigureFailureInjectorResponse,{
             auto* request = dynamic_cast<const Yql::DqsProto::ConfigureFailureInjectorRequest*>(ctx->GetRequest());
-            Y_VERIFY(!!request);
+            Y_ABORT_UNLESS(!!request);
 
             auto requestEvent = MakeHolder<TEvConfigureFailureInjectorRequest>(*request);
 
@@ -737,7 +737,7 @@ namespace NYql::NDqs {
 
         ADD_REQUEST(IsReady, IsReadyRequest, IsReadyResponse, {
             auto* request = dynamic_cast<const Yql::DqsProto::IsReadyRequest*>(ctx->GetRequest());
-            Y_VERIFY(!!request);
+            Y_ABORT_UNLESS(!!request);
 
             auto ev = MakeHolder<TEvIsReady>(*request);
 
@@ -760,7 +760,7 @@ namespace NYql::NDqs {
 
         ADD_REQUEST(Routes, RoutesRequest, RoutesResponse, {
             auto* request = dynamic_cast<const Yql::DqsProto::RoutesRequest*>(ctx->GetRequest());
-            Y_VERIFY(!!request);
+            Y_ABORT_UNLESS(!!request);
 
             auto ev = MakeHolder<TEvRoutesRequest>();
 
@@ -784,7 +784,7 @@ namespace NYql::NDqs {
 /* 1. move grpc to providers/dq, 2. move benchmark to providers/dq 3. uncomment
         ADD_REQUEST(Benchmark, BenchmarkRequest, BenchmarkResponse, {
             auto* req = dynamic_cast<const Yql::DqsProto::BenchmarkRequest*>(ctx->GetRequest());
-            Y_VERIFY(!!req);
+            Y_ABORT_UNLESS(!!req);
 
             TWorkerManagerBenchmarkOptions options;
             if (req->GetWorkerCount()) {

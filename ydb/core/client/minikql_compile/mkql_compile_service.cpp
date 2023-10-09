@@ -111,7 +111,7 @@ private:
     void Handle(NYql::TMiniKQLCompileActorEvents::TEvCompileResult::TPtr& ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
         auto it = Compiling.find(ev->Sender);
-        Y_VERIFY(it != Compiling.end());
+        Y_ABORT_UNLESS(it != Compiling.end());
 
         TCompileContext::TPtr cptr = it->second;
         Compiling.erase(it);

@@ -42,7 +42,7 @@ protected:
         AbortedFlag = true;
         Scanner->Abort();
         PartialResults.clear();
-        Y_VERIFY(IsFinished());
+        Y_ABORT_UNLESS(IsFinished());
     }
     virtual bool DoIsFinished() const override {
         return (Scanner->IsFinished() && PartialResults.empty());

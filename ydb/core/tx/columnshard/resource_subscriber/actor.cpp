@@ -15,7 +15,7 @@ public:
 
 void TActor::Handle(TEvStartTask::TPtr& ev) {
     auto task = ev->Get()->GetTask();
-    Y_VERIFY(task);
+    Y_ABORT_UNLESS(task);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "ask_resources")("task", task->DebugString());
     Tasks.emplace(++Counter, task);
     Send(NKikimr::NResourceBroker::MakeResourceBrokerID(), new NKikimr::NResourceBroker::TEvResourceBroker::TEvSubmitTask(
@@ -30,7 +30,7 @@ void TActor::Handle(TEvStartTask::TPtr& ev) {
 
 void TActor::Handle(NKikimr::NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr& ev) {
     auto it = Tasks.find(((TCookie*)ev->Get()->Cookie.Get())->GetTaskIdentifier());
-    Y_VERIFY(it != Tasks.end());
+    Y_ABORT_UNLESS(it != Tasks.end());
     auto task = it->second;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "result_resources")("task_id", ev->Get()->TaskId)("task", task->DebugString());
     task->OnAllocationSuccess(ev->Get()->TaskId, SelfId());

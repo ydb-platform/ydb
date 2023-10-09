@@ -148,7 +148,7 @@ namespace NKikimr::NBsController {
         auto r = spToGroups.equal_range(id);
         for (auto it = r.first; it != r.second; ++it) {
             const TGroupInfo *group = Groups.Find(it->second);
-            Y_VERIFY(group);
+            Y_ABORT_UNLESS(group);
             if (group->ErasureSpecies != storagePool.ErasureSpecies) {
                 throw TExError() << "GroupId# " << it->second << " has different erasure species";
             }
@@ -231,7 +231,7 @@ namespace NKikimr::NBsController {
         THashSet<TGroupId> storagePoolGroups;
         for (const auto &kv : StoragePoolGroups.Get()) {
             const bool inserted = storagePoolGroups.insert(kv.second).second;
-            Y_VERIFY(inserted);
+            Y_ABORT_UNLESS(inserted);
         }
 
         using TProperties = std::tuple<TBoxId,
@@ -277,7 +277,7 @@ namespace NKikimr::NBsController {
                 updateProperty(boxId, MakeMaybe(vslot->PDisk->BoxId), "BoxId");
             }
 
-            Y_VERIFY(boxId && vdiskKind && sharedWithOs && readCentric && category);
+            Y_ABORT_UNLESS(boxId && vdiskKind && sharedWithOs && readCentric && category);
 
             const TProperties key(*boxId, *vdiskKind, *sharedWithOs, *readCentric, *category, groupInfo.ErasureSpecies);
             groupMap[key].push_back(groupId);
@@ -426,8 +426,8 @@ namespace NKikimr::NBsController {
             TGroupInfo *group = Groups.FindForUpdate(groupId);
 
             // internal consistency checks
-            Y_VERIFY(group);
-            Y_VERIFY(group->StoragePoolId == originId);
+            Y_ABORT_UNLESS(group);
+            Y_ABORT_UNLESS(group->StoragePoolId == originId);
 
             // update the pool id of the group
             group->StoragePoolId = targetId;
@@ -536,7 +536,7 @@ namespace NKikimr::NBsController {
                 x->SetKind(pdisk.Category.Kind());
                 if (pdisk.PDiskConfig) {
                     bool success = x->MutablePDiskConfig()->ParseFromString(pdisk.PDiskConfig);
-                    Y_VERIFY(success);
+                    Y_ABORT_UNLESS(success);
                 }
                 x->SetGuid(pdisk.Guid);
                 x->SetNumStaticSlots(pdisk.StaticSlotUsage);

@@ -62,11 +62,11 @@ public:
     void FillExpectedRanges(THashSet<TBlobRange>& ranges) const {
         for (auto&& i : RangesForRead) {
             for (auto&& b : i.second) {
-                Y_VERIFY(ranges.emplace(b).second);
+                Y_ABORT_UNLESS(ranges.emplace(b).second);
             }
         }
         for (auto&& i : RangesForResult) {
-            Y_VERIFY(ranges.emplace(i.first).second);
+            Y_ABORT_UNLESS(ranges.emplace(i.first).second);
         }
     }
 

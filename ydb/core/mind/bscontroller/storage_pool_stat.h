@@ -102,30 +102,30 @@ namespace NKikimr::NBsController {
         void AddStoragePool(const TString& id, const TString& name, ui64 allocatedSize) {
             const bool inserted = Map.try_emplace(id, Counters->GetSubgroup("storagePoolId", id), id, name,
                 allocatedSize).second;
-            Y_VERIFY(inserted);
+            Y_ABORT_UNLESS(inserted);
         }
 
         void DeleteStoragePool(const TString& id) {
             Counters->RemoveSubgroup("storagePool", id);
             const size_t erased = Map.erase(id);
-            Y_VERIFY(erased);
+            Y_ABORT_UNLESS(erased);
         }
 
         void RenameStoragePool(const TString& id, const TString& name) {
             const auto it = Map.find(id);
-            Y_VERIFY(it != Map.end());
+            Y_ABORT_UNLESS(it != Map.end());
             it->second.Rename(name);
         }
 
         void Update(const TString& id, std::optional<TStorageStatusFlags> previous, std::optional<TStorageStatusFlags> current) {
             const auto it = Map.find(id);
-            Y_VERIFY(it != Map.end());
+            Y_ABORT_UNLESS(it != Map.end());
             it->second.Update(previous, current);
         }
 
         void UpdateAllocatedSize(const TString& id, i64 allocatedSizeIncrement) {
             const auto it = Map.find(id);
-            Y_VERIFY(it != Map.end());
+            Y_ABORT_UNLESS(it != Map.end());
             it->second.UpdateAllocatedSize(allocatedSizeIncrement);
         }
 

@@ -128,7 +128,7 @@ ui32 DetectConfigItemKind(const NKikimrConsole::TConfigItem &item)
     auto *reflection = item.GetConfig().GetReflection();
     reflection->ListFields(item.GetConfig(), &fields);
 
-    Y_VERIFY(fields.size() == 1, "Can't detect config item kind");
+    Y_ABORT_UNLESS(fields.size() == 1, "Can't detect config item kind");
 
     return fields[0]->number();
 }
@@ -162,7 +162,7 @@ std::pair<TDomainItemsContainer, TSelectorItemsContainer> ExtractSuitableItems(
             TUsageScope scope(item.GetUsageScope(), item.GetOrder());
             TSelectorKey key{scope, THash<TString>{}(item.GetCookie()), THash<TString>{}(item.GetConfig().ShortDebugString())};
             if (auto it = selectorItemsByOrder.find(key); it != selectorItemsByOrder.end()) {
-                Y_VERIFY(it->second.back().GetMergeStrategy() == item.GetMergeStrategy());
+                Y_ABORT_UNLESS(it->second.back().GetMergeStrategy() == item.GetMergeStrategy());
                 it->second.emplace_back(item);
             } else {
                 selectorItemsByOrder.emplace(key, TVector<NKikimrConsole::TConfigItem>{item});
@@ -520,21 +520,21 @@ NKikimrConsole::TConfigureRequest DumpYamlConfigRequest(const TString &cItem, co
     NKikimrConsole::TConfigureRequest result;
     auto doc = NFyaml::TDocument::Parse(cItem);
     auto root = doc.Root();
-    Y_VERIFY(root.Type() == NFyaml::ENodeType::Sequence, "Root has to be sequence");
+    Y_ABORT_UNLESS(root.Type() == NFyaml::ENodeType::Sequence, "Root has to be sequence");
     auto rootSeq = root.Sequence();
 
-    Y_VERIFY(rootSeq.size() == 1, "Only single-element configs are supported");
+    Y_ABORT_UNLESS(rootSeq.size() == 1, "Only single-element configs are supported");
     auto selectorNode = rootSeq.at(0);
 
-    Y_VERIFY(selectorNode.Type() == NFyaml::ENodeType::Mapping, "Selector has to be mapping");
+    Y_ABORT_UNLESS(selectorNode.Type() == NFyaml::ENodeType::Mapping, "Selector has to be mapping");
     auto configMap = selectorNode.Map();
 
     auto descNode = configMap["description"];
     auto selectorsNode = configMap["selector"];
     auto configNode = configMap["config"];
-    Y_VERIFY(descNode && selectorsNode && configNode, "Selector should have description, selector and config fields");
+    Y_ABORT_UNLESS(descNode && selectorsNode && configNode, "Selector should have description, selector and config fields");
 
-    Y_VERIFY(descNode.Type() == NFyaml::ENodeType::Scalar, "Description has to be scalar");
+    Y_ABORT_UNLESS(descNode.Type() == NFyaml::ENodeType::Scalar, "Description has to be scalar");
     auto desc = descNode.Scalar();
 
     std::regex cookieRegex("cookie=(\\S+)");
@@ -544,39 +544,39 @@ NKikimrConsole::TConfigureRequest DumpYamlConfigRequest(const TString &cItem, co
         cookie = cookieBegin->str().substr(strlen("cookie="), std::string::npos);
     }
 
-    Y_VERIFY(selectorsNode.Type() == NFyaml::ENodeType::Mapping, "Selectors field has to be mapping");
+    Y_ABORT_UNLESS(selectorsNode.Type() == NFyaml::ENodeType::Mapping, "Selectors field has to be mapping");
     auto selectorsMap = selectorsNode.Map();
-    Y_VERIFY(selectorsMap.size() <= 1, "Selectors should have zero or exactly one selectors");
+    Y_ABORT_UNLESS(selectorsMap.size() <= 1, "Selectors should have zero or exactly one selectors");
     TVector<TString> tenants;
     if (selectorsMap.size() == 1) {
-        Y_VERIFY(selectorsMap["tenant"], "The only supported selector is tenant");
+        Y_ABORT_UNLESS(selectorsMap["tenant"], "The only supported selector is tenant");
         switch (selectorsMap["tenant"].Type()) {
             case NFyaml::ENodeType::Scalar:
                 {
                     auto tenant = selectorsMap["tenant"].Scalar();
-                    Y_VERIFY(tenant.StartsWith(domain + "/"), "Tenant should be in domain");
+                    Y_ABORT_UNLESS(tenant.StartsWith(domain + "/"), "Tenant should be in domain");
                     tenants.push_back(tenant);
                 }
                 break;
             case NFyaml::ENodeType::Mapping:
                 {
-                    Y_VERIFY(selectorsMap["tenant"].Map()["in"] && selectorsMap["tenant"].Map()["in"].Type() == NFyaml::ENodeType::Sequence, "Invalid tenant list");
+                    Y_ABORT_UNLESS(selectorsMap["tenant"].Map()["in"] && selectorsMap["tenant"].Map()["in"].Type() == NFyaml::ENodeType::Sequence, "Invalid tenant list");
                     for (auto& node : selectorsMap["tenant"].Map()["in"].Sequence()) {
-                        Y_VERIFY(node.Type() == NFyaml::ENodeType::Scalar, "Invalid tenant");
-                        Y_VERIFY(node.Scalar().StartsWith(domain + "/"), "Tenant should be in domain");
+                        Y_ABORT_UNLESS(node.Type() == NFyaml::ENodeType::Scalar, "Invalid tenant");
+                        Y_ABORT_UNLESS(node.Scalar().StartsWith(domain + "/"), "Tenant should be in domain");
                         tenants.push_back(node.Scalar());
                     }
                 }
                 break;
             default:
-                Y_VERIFY(false, "Invalid tenant");
+                Y_ABORT_UNLESS(false, "Invalid tenant");
         }
     }
 
     std::regex msRegex("merge_strategy=(\\S+)");
     auto msBegin = std::sregex_iterator(desc.begin(), desc.end(), msRegex);
     auto nStrategies = std::distance(msBegin, std::sregex_iterator());
-    Y_VERIFY(nStrategies <= 1, "Description should have exactly one merge_strategy");
+    Y_ABORT_UNLESS(nStrategies <= 1, "Description should have exactly one merge_strategy");
     auto mergeStrategy = NKikimrConsole::TConfigItem::MERGE;
     if (nStrategies) {
         auto ms = msBegin->str().substr(strlen("merge_strategy="), std::string::npos);
@@ -587,21 +587,21 @@ NKikimrConsole::TConfigureRequest DumpYamlConfigRequest(const TString &cItem, co
         } else if (ms == "OVERWRITE") {
             mergeStrategy = NKikimrConsole::TConfigItem::OVERWRITE;
         } else {
-            Y_VERIFY(false, "Incorrect merge_strategy in description");
+            Y_ABORT_UNLESS(false, "Incorrect merge_strategy in description");
         }
     }
 
     auto prepareActions = [&](auto& result) {
-        Y_VERIFY(configNode.Type() == NFyaml::ENodeType::Mapping, "Config has to be mapping");
+        Y_ABORT_UNLESS(configNode.Type() == NFyaml::ENodeType::Mapping, "Config has to be mapping");
         switch (mergeStrategy) {
             case NKikimrConsole::TConfigItem::MERGE_OVERWRITE_REPEATED:
-                Y_VERIFY(CheckYamlMarkedForMergeOverwriteRepeated(configNode), "Inheritance tags doesn't match choosen merge strategy");
+                Y_ABORT_UNLESS(CheckYamlMarkedForMergeOverwriteRepeated(configNode), "Inheritance tags doesn't match choosen merge strategy");
             break;
             case NKikimrConsole::TConfigItem::MERGE:
-                Y_VERIFY(CheckYamlMarkedForMerge(configNode), "Inheritance tags doesn't match choosen merge strategy");
+                Y_ABORT_UNLESS(CheckYamlMarkedForMerge(configNode), "Inheritance tags doesn't match choosen merge strategy");
             break;
             default:
-                Y_VERIFY(CheckYamlMarkedForOverwrite(configNode), "Inheritance tags doesn't match choosen merge strategy");
+                Y_ABORT_UNLESS(CheckYamlMarkedForOverwrite(configNode), "Inheritance tags doesn't match choosen merge strategy");
         }
 
         for (auto& item : configNode.Map()) {

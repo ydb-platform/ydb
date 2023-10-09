@@ -135,7 +135,7 @@ void TTypePrinter1::OnVariant(const TType* underlyingType) {
         break;
     }
     default:
-        Y_VERIFY(false, "Unexpected underlying type in Variant");
+        Y_ABORT_UNLESS(false, "Unexpected underlying type in Variant");
     }
     *Output_ << '>';
 }
@@ -175,7 +175,7 @@ TTypePrinter5::TTypePrinter5(const ITypeInfoHelper2& typeHelper2, const TType* t
 
 void TTypePrinter5::OnPgImpl(ui32 typeId) {
     auto* description = TypeHelper2_.FindPgTypeDescription(typeId);
-    Y_VERIFY(description);
+    Y_ABORT_UNLESS(description);
     auto name = std::string_view(description->Name);
     if (name.starts_with('_')) {
         name.remove_prefix(1);

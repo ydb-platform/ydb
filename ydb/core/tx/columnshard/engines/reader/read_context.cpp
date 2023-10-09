@@ -24,8 +24,8 @@ IDataReader::IDataReader(const TReadContext& context, NOlap::TReadMetadata::TCon
     : Context(context)
     , ReadMetadata(readMetadata)
 {
-    Y_VERIFY(ReadMetadata);
-    Y_VERIFY(ReadMetadata->SelectInfo);
+    Y_ABORT_UNLESS(ReadMetadata);
+    Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
 }
 
 }

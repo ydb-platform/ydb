@@ -130,7 +130,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ui64 lsn = ev->Get()->Lsn;
             LWTRACK(VDiskRecoveryLogWriterVPutIsRecieved, ev->Get()->Orbit, Owner, lsn);
             TLogSignature signature = ev->Get()->Signature.GetUnmasked();
-            Y_VERIFY(TLogSignature::First < signature && signature < TLogSignature::Max);
+            Y_ABORT_UNLESS(TLogSignature::First < signature && signature < TLogSignature::Max);
             i64 msgSize = ev->Get()->ApproximateSize();
             // count written bytes
             *LsmLogBytesWritten += msgSize;
@@ -162,7 +162,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             for (auto &log : logs->Logs) {
                 LWTRACK(VDiskRecoveryLogWriterVPutIsRecieved, log->Orbit, Owner, log->Lsn);
                 TLogSignature signature = log->Signature.GetUnmasked();
-                Y_VERIFY(TLogSignature::First < signature && signature < TLogSignature::Max);
+                Y_ABORT_UNLESS(TLogSignature::First < signature && signature < TLogSignature::Max);
                 i64 msgSize = log->ApproximateSize();
                 // count written bytes
                 *LsmLogBytesWritten += msgSize;

@@ -210,7 +210,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
     }
 
     void Boot(const TActorContext &ctx) {
-        Y_VERIFY(!LookOnActorID);
+        Y_ABORT_UNLESS(!LookOnActorID);
 
         LOG_NOTICE(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, boot",
                    TabletInfo->TabletID, GetTabletTypeName());
@@ -224,7 +224,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
             LookOnActorID = x->Tablet(TabletInfo.Get(), ctx.SelfID, ctx, 0, AppData(ctx)->ResourceProfiles);
         }
 
-        Y_VERIFY(LookOnActorID);
+        Y_ABORT_UNLESS(LookOnActorID);
 
         Watched.Reset(new TWatched());
 
@@ -439,7 +439,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
     void HandleFree(TEvBootstrapper::TEvWatchResult::TPtr &ev, const TActorContext &ctx) {
         const NKikimrBootstrapper::TEvWatchResult &record = ev->Get()->Record;
-        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID);
+        Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
 
         if (record.GetRound() != RoundCounter)
             return;
@@ -477,7 +477,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
     void HandleFree(TEvBootstrapper::TEvWatch::TPtr &ev, const TActorContext &ctx) {
         const NKikimrBootstrapper::TEvWatch &record = ev->Get()->Record;
-        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID);
+        Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
 
         ctx.Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(), NKikimrBootstrapper::TEvWatchResult::FREE, SelfSeed, record.GetRound()));
     }
@@ -501,7 +501,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
     void HandleOwner(TEvBootstrapper::TEvWatch::TPtr &ev, const TActorContext &ctx) {
         const NKikimrBootstrapper::TEvWatch &record = ev->Get()->Record;
-        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID);
+        Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
 
         // add to watchers list (if node not already there)
         Watched->AddWatcher(ev->Sender, record.GetRound());
@@ -510,7 +510,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
     void HandleWatch(TEvBootstrapper::TEvWatch::TPtr &ev, const TActorContext &ctx) {
         const NKikimrBootstrapper::TEvWatch &record = ev->Get()->Record;
-        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID);
+        Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
 
         if (Watches->CheckWatch(ev->Sender.NodeId())) {
             ctx.Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(), NKikimrBootstrapper::TEvWatchResult::UNKNOWN, 0, record.GetRound()));
@@ -534,7 +534,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
     void HandleStandBy(TEvBootstrapper::TEvWatch::TPtr &ev, const TActorContext &ctx) {
         const NKikimrBootstrapper::TEvWatch &record = ev->Get()->Record;
-        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID);
+        Y_ABORT_UNLESS(record.GetTabletID() == TabletInfo->TabletID);
 
         ctx.Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(), NKikimrBootstrapper::TEvWatchResult::UNKNOWN, Max<ui64>(), record.GetRound()));
     }
@@ -563,7 +563,7 @@ public:
         , RoundCounter(0xdeadbeefdeadbeefull)
         , SelfSeed(0xdeadbeefdeadbeefull)
     {
-        Y_VERIFY(TTabletTypes::TypeInvalid != TabletInfo->TabletType);
+        Y_ABORT_UNLESS(TTabletTypes::TypeInvalid != TabletInfo->TabletType);
     }
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId &selfId, const TActorId &parentId) override {

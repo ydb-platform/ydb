@@ -170,7 +170,7 @@ struct TEvMediatorTimecast {
         explicit TEvSubscribeReadStep(ui64 coordinatorId)
             : CoordinatorId(coordinatorId)
         {
-            Y_VERIFY(coordinatorId != 0);
+            Y_ABORT_UNLESS(coordinatorId != 0);
         }
 
         TString ToString() const {
@@ -212,7 +212,7 @@ struct TEvMediatorTimecast {
             , NextReadStep(nextReadStep)
             , ReadStep(std::move(readStep))
         {
-            Y_VERIFY(ReadStep);
+            Y_ABORT_UNLESS(ReadStep);
         }
 
         TString ToString() const {

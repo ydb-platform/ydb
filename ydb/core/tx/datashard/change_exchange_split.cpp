@@ -296,10 +296,10 @@ class TCdcWorker: public TActorBootstrapped<TCdcWorker>, private TSchemeCacheHel
             return Ack();
         }
 
-        Y_VERIFY(entry.ListNodeEntry->Children.size() == 1);
+        Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
         const auto& topic = entry.ListNodeEntry->Children.at(0);
 
-        Y_VERIFY(topic.Kind == TNavigate::KindTopic);
+        Y_ABORT_UNLESS(topic.Kind == TNavigate::KindTopic);
         ResolveTopic(topic.PathId);
     }
 

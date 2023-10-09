@@ -252,7 +252,7 @@ public:
     }
 
     void AddLock(const TPermissionInfo &permission) {
-        Y_VERIFY(Lock.Empty());
+        Y_ABORT_UNLESS(Lock.Empty());
         Lock.ConstructInPlace(permission);
     }
 
@@ -691,12 +691,12 @@ public:
     }
 
     ui32 GetRingId(ui32 nodeId) {
-        Y_VERIFY(IsStateStorageReplicaNode(nodeId));
+        Y_ABORT_UNLESS(IsStateStorageReplicaNode(nodeId));
         return StateStorageNodeToRingId[nodeId];
     }
 
     void CheckNodeExistenceWithVerify(ui32 nodeId) const {
-      Y_VERIFY(HasNode(nodeId), "%s",
+      Y_ABORT_UNLESS(HasNode(nodeId), "%s",
                (TStringBuilder()
                 << "Node " << nodeId
                 << " does not exist in cluster, but exists in configuration.")
@@ -776,7 +776,7 @@ public:
     }
 
     const TTabletInfo &Tablet(ui64 id) const {
-        Y_VERIFY(HasTablet(id));
+        Y_ABORT_UNLESS(HasTablet(id));
         return Tablets.find(id)->second;
     }
 
@@ -802,7 +802,7 @@ public:
     }
 
     const TPDiskInfo &PDisk(TPDiskID pdId) const {
-        Y_VERIFY(HasPDisk(pdId));
+        Y_ABORT_UNLESS(HasPDisk(pdId));
         return *PDisks.find(pdId)->second;
     }
 
@@ -837,7 +837,7 @@ public:
     }
 
     const TVDiskInfo &VDisk(const TVDiskID &vdId) const {
-        Y_VERIFY(HasVDisk(vdId));
+        Y_ABORT_UNLESS(HasVDisk(vdId));
         return *VDisks.find(vdId)->second;
     }
 
@@ -859,7 +859,7 @@ public:
     }
 
     const TBSGroupInfo &BSGroup(ui32 groupId) const {
-        Y_VERIFY(HasBSGroup(groupId));
+        Y_ABORT_UNLESS(HasBSGroup(groupId));
         return BSGroups.find(groupId)->second;
     }
 
@@ -969,7 +969,7 @@ private:
     }
 
     TPDiskInfo &PDiskRef(TPDiskID pdId) {
-        Y_VERIFY(HasPDisk(pdId));
+        Y_ABORT_UNLESS(HasPDisk(pdId));
         return *PDisks.find(pdId)->second;
     }
 
@@ -979,7 +979,7 @@ private:
     }
 
     TVDiskInfo &VDiskRef(const TVDiskID &vdId) {
-        Y_VERIFY(HasVDisk(vdId));
+        Y_ABORT_UNLESS(HasVDisk(vdId));
         return *VDisks.find(vdId)->second;
     }
 
@@ -989,7 +989,7 @@ private:
     }
 
     TBSGroupInfo &BSGroupRef(ui32 groupId) {
-        Y_VERIFY(HasBSGroup(groupId));
+        Y_ABORT_UNLESS(HasBSGroup(groupId));
         return BSGroups.find(groupId)->second;
     }
 
@@ -1000,7 +1000,7 @@ private:
             CheckNodeExistenceWithVerify(nodeId);
             const auto &node = Node(nodeId);
             for (const auto &id : node.PDisks) {
-                Y_VERIFY(HasPDisk(id));
+                Y_ABORT_UNLESS(HasPDisk(id));
                 if (PDisk(id).Path == path) {
                     return id;
                 }

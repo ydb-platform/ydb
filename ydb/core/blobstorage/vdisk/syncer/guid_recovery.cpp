@@ -229,7 +229,7 @@ namespace NKikimr {
                 }
 
                 void Setup(TVDiskEternalGuid guid, ESyncState state) {
-                    Y_VERIFY(!Obtained);
+                    Y_ABORT_UNLESS(!Obtained);
                     Obtained = true;
                     Guid = guid;
                     State = state;
@@ -321,7 +321,7 @@ namespace NKikimr {
             {}
 
             void SetResponse(const TVDiskID &vdisk, TVDiskEternalGuid guid, ESyncState state) {
-                Y_VERIFY(Neighbors[vdisk].VDiskIdShort == vdisk);
+                Y_ABORT_UNLESS(Neighbors[vdisk].VDiskIdShort == vdisk);
 
                 Sublog.Log() << "RESPONSE: vdisk# " << vdisk.ToString()
                     << " state# " << state << " guid# " << guid << "\n";
@@ -366,7 +366,7 @@ namespace NKikimr {
 
             // calculates final decision
             TDecision ReachAVerdict() const {
-                Y_VERIFY(QuorumTracker.HasQuorum());
+                Y_ABORT_UNLESS(QuorumTracker.HasQuorum());
 
                 TVDiskQuorumDecision quorumDecision = VDiskQuorumDecision();
                 if (quorumDecision.IsInconsistent) {
@@ -434,7 +434,7 @@ namespace NKikimr {
                         }
                         return TVDiskQuorumDecision::Inconsistent(str.Str());
                     }
-                    Y_VERIFY(size == 1);
+                    Y_ABORT_UNLESS(size == 1);
                     const TVDiskEternalGuid guid = finalGuidMap.begin()->first;
                     if (finalQuorum.HasQuorum()) {
                         return TVDiskQuorumDecision::Final(guid);
@@ -672,7 +672,7 @@ namespace NKikimr {
                 // reconfigure every proxy that hasn't returned a value yet
                 auto reconfigureProxy = [&ctx] (std::unique_ptr<TEvVGenerationChange> &&msg,
                                                 TVDiskInfo<TNeighborVDiskState>& x) {
-                    Y_VERIFY(!x.Get().Obtained);
+                    Y_ABORT_UNLESS(!x.Get().Obtained);
                     ctx.Send(x.Get().ProxyId, msg.release());
                 };
 

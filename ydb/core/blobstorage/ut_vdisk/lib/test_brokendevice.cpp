@@ -21,7 +21,7 @@ protected:
         TAutoPtr<IDataSet::TIterator> It;
 
         void Send(const TActorContext &ctx) {
-            Y_VERIFY(It->IsValid());
+            Y_ABORT_UNLESS(It->IsValid());
             const auto &x = *It->Get();
             PutLogoBlobToVDisk(ctx, VDiskInfo.ActorID, VDiskInfo.VDiskID, x.Id, x.Data, x.HandleClass);
         }
@@ -65,7 +65,7 @@ private:
 
     void GoodState_Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev, const TActorContext &ctx) {
         STR << "GoodState_Handle\n";
-        Y_VERIFY(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%s",
+        Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%s",
                NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).data());
         LOG_NOTICE(ctx, NActorsServices::TEST, "  TEvVPutResult succeded");
 
@@ -79,7 +79,7 @@ private:
     void BrokenState_Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev, const TActorContext &ctx) {
         STR << "BrokenState_Handle\n";
 
-        Y_VERIFY(ev->Get()->Record.GetStatus() == NKikimrProto::VDISK_ERROR_STATE, "Status=%s",
+        Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::VDISK_ERROR_STATE, "Status=%s",
                NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).data());
         LOG_NOTICE(ctx, NActorsServices::TEST, "  TEvVPutResult succeded");
 

@@ -10,12 +10,12 @@ private:
     TConclusionStatus() = default;
     TConclusionStatus(const TString& errorMessage)
         : ErrorMessage(errorMessage) {
-        Y_VERIFY(!!ErrorMessage);
+        Y_ABORT_UNLESS(!!ErrorMessage);
     }
 
     TConclusionStatus(const char* errorMessage)
         : ErrorMessage(errorMessage) {
-        Y_VERIFY(!!ErrorMessage);
+        Y_ABORT_UNLESS(!!ErrorMessage);
     }
 public:
 
@@ -63,14 +63,14 @@ private:
         : ErrorMessage(errorMessage)
         , SpecialStatus(status)
     {
-        Y_VERIFY(!!ErrorMessage);
+        Y_ABORT_UNLESS(!!ErrorMessage);
     }
 
     TConclusionSpecialStatus(const TStatus& status,const char* errorMessage)
         : ErrorMessage(errorMessage)
         , SpecialStatus(status)
     {
-        Y_VERIFY(!!ErrorMessage);
+        Y_ABORT_UNLESS(!!ErrorMessage);
     }
 public:
 
@@ -87,12 +87,12 @@ public:
     }
 
     static TConclusionSpecialStatus Fail(const TStatus& status, const char* errorMessage) {
-        Y_VERIFY(status != StatusOk);
+        Y_ABORT_UNLESS(status != StatusOk);
         return TConclusionSpecialStatus(status, errorMessage);
     }
 
     static TConclusionSpecialStatus Fail(const TStatus& status, const TString& errorMessage) {
-        Y_VERIFY(status != StatusOk);
+        Y_ABORT_UNLESS(status != StatusOk);
         return TConclusionSpecialStatus(status, errorMessage);
     }
 

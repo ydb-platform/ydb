@@ -90,7 +90,7 @@ void SetupServices(TTestBasicRuntime& runtime) {
         auto nodesInfo = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
 
         ui32 nodeId = runtime.GetNodeId(0);
-        Y_VERIFY(nodesInfo->Nodes[0].NodeId == nodeId);
+        Y_ABORT_UNLESS(nodesInfo->Nodes[0].NodeId == nodeId);
         auto& nodeInfo = nodesInfo->Nodes[0];
 
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();

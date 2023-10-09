@@ -22,7 +22,7 @@ namespace NKikimr::NBlobDepot {
                     Response->Rewrite(TEvInterconnect::EvForward, interconnectSession);
                 }
                 const bool success = ev.Record.GetConfig().SerializeToString(&ConfigProtobuf);
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
             }
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -40,7 +40,7 @@ namespace NKikimr::NBlobDepot {
                 );
 
                 const bool success = Self->Config.ParseFromString(ConfigProtobuf);
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
 
                 return true;
             }

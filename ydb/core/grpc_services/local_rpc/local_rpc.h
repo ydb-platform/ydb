@@ -237,7 +237,7 @@ public:
 private:
     void Reply(NProtoBuf::Message *r, ui32) override {
         TResp* resp = dynamic_cast<TResp*>(r);
-        Y_VERIFY(resp);
+        Y_ABORT_UNLESS(resp);
         CbWrapper(*resp);
     }
 

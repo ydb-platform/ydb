@@ -389,12 +389,12 @@ public:
     ~TListPool() {
         for (auto& p: Pools) {
             for (auto& list: p.SmallPages) {
-                Y_VERIFY(list.Empty(), "%s", DebugInfo().data());
+                Y_ABORT_UNLESS(list.Empty(), "%s", DebugInfo().data());
             }
             for (auto& list: p.MediumPages) {
-                Y_VERIFY(list.Empty(), "%s", DebugInfo().data());
+                Y_ABORT_UNLESS(list.Empty(), "%s", DebugInfo().data());
             }
-            Y_VERIFY(p.FullPages.Empty(), "%s", DebugInfo().data());
+            Y_ABORT_UNLESS(p.FullPages.Empty(), "%s", DebugInfo().data());
         }
     }
 
@@ -408,7 +408,7 @@ public:
     T* GetList(size_t size) {
         static_assert(std::is_same<TPrimary, T>::value || std::is_same<TSecondary, T>::value, "Bad requested list type");
         static constexpr size_t PoolNdx = static_cast<size_t>(!std::is_same<TPrimary, T>::value);
-        Y_VERIFY(size >= 2);
+        Y_ABORT_UNLESS(size >= 2);
         T* res = nullptr;
 
         if (Y_LIKELY(size <= TListPoolBase::GetMaxListSize<T>())) {
@@ -439,7 +439,7 @@ public:
                 // Convert to large list
                 header = GetLargeListPage<T>();
                 list = header->GetList<T>();
-                Y_VERIFY(header->Capacity >= oldSize);
+                Y_ABORT_UNLESS(header->Capacity >= oldSize);
                 header->Size = oldSize;
             }
 
@@ -770,17 +770,17 @@ struct TNode {
     }
 
     T Get() const {
-        Y_VERIFY(FlagSingle == Flag);
+        Y_ABORT_UNLESS(FlagSingle == Flag);
         return ::ReadUnaligned<T>(&Storage);
     }
 
     T* GetList() {
-        Y_VERIFY(FlagList == Flag);
+        Y_ABORT_UNLESS(FlagList == Flag);
         return *reinterpret_cast<T**>(&Storage);
     }
 
     const T* GetList() const {
-        Y_VERIFY(FlagList == Flag);
+        Y_ABORT_UNLESS(FlagList == Flag);
         return *reinterpret_cast<const T* const*>(&Storage);
     }
 
@@ -1159,7 +1159,7 @@ public:
     }
 
     void SetMaxLoadFactor(float factor) {
-        Y_VERIFY(factor > 0);
+        Y_ABORT_UNLESS(factor > 0);
         MaxLoadFactor_ = factor;
     }
 

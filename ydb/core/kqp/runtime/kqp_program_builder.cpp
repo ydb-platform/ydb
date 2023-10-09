@@ -25,7 +25,7 @@ TType* GetRowType(const TProgramBuilder& builder, const TArrayRef<TKqpTableColum
                 break;
             }
             case NKikimr::NScheme::NTypeIds::Pg: {
-                Y_VERIFY(column.TypeDesc, "No pg type description");
+                Y_ABORT_UNLESS(column.TypeDesc, "No pg type description");
                 type = TPgType::Create(NPg::PgTypeIdFromTypeDesc(column.TypeDesc), builder.GetTypeEnvironment());
                 break;
             }

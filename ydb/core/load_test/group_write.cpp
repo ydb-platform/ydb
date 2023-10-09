@@ -73,7 +73,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         template<typename TEventPtr>
         void ProcessEvent(TEventPtr& ev, const TActorContext& ctx) {
             auto iter = Callbacks.find(ev->Cookie);
-            Y_VERIFY(iter != Callbacks.end(), "Cookie# %" PRIu64 " Type# %s", ev->Cookie, TypeName<TEventPtr>().data());
+            Y_ABORT_UNLESS(iter != Callbacks.end(), "Cookie# %" PRIu64 " Type# %s", ev->Cookie, TypeName<TEventPtr>().data());
             iter->second(ev->Get(), ctx);
             Callbacks.erase(iter);
         }
@@ -252,7 +252,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     << ev->ToString());
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvDiscoverResult *>(event);
-                Y_VERIFY(res);
+                Y_ABORT_UNLESS(res);
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK, NKikimrProto::EReplyStatus::NODATA})) {
                     return;
                 }
@@ -268,7 +268,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " going to send " << ev->ToString());
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvBlockResult *>(event);
-                Y_VERIFY(res);
+                Y_ABORT_UNLESS(res);
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK, NKikimrProto::EReplyStatus::ALREADY})) {
                     return;
                 } else if (res->Status == NKikimrProto::EReplyStatus::ALREADY && GroupBlockRetries-- > 0) {
@@ -294,7 +294,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvPutResult *>(event);
-                Y_VERIFY(res);
+                Y_ABORT_UNLESS(res);
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK})) {
                     return;
                 }
@@ -312,7 +312,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             ++GarbageCollectStep;
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult *>(event);
-                Y_VERIFY(res);
+                Y_ABORT_UNLESS(res);
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK})) {
                     return;
                 }
@@ -338,7 +338,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             ++GarbageCollectStep;
             auto callback = [this](IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult *>(event);
-                Y_VERIFY(res);
+                Y_ABORT_UNLESS(res);
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK})) {
                     return;
                 }
@@ -543,7 +543,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
             auto writeCallback = [this, writeQueryId](IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvPutResult *>(event);
-                Y_VERIFY(res);
+                Y_ABORT_UNLESS(res);
                 if (!CheckStatus(ctx, res, {})) {
                     return;
                 }
@@ -559,7 +559,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     ConfirmedBlobIds.insert(std::lower_bound(ConfirmedBlobIds.begin(), ConfirmedBlobIds.end(), id), id);
                 }
 
-                Y_VERIFY(WritesInFlight >= 1 && WriteBytesInFlight >= size);
+                Y_ABORT_UNLESS(WritesInFlight >= 1 && WriteBytesInFlight >= size);
                 --WritesInFlight;
                 WriteBytesInFlight -= size;
 
@@ -567,13 +567,13 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
                 auto it = SentTimestamp.find(writeQueryId);
                 const auto sendCycles = it->second;
-                Y_VERIFY(it != SentTimestamp.end());
+                Y_ABORT_UNLESS(it != SentTimestamp.end());
                 const TDuration response = CyclesToDuration(GetCycleCountFast() - sendCycles);
                 SentTimestamp.erase(it);
 
                 // It's very likely that "writeQueryId" will be found at the start
                 auto itInFlight = Find(WritesInFlightTimestamps, std::make_pair(writeQueryId, sendCycles));
-                Y_VERIFY(itInFlight != WritesInFlightTimestamps.end());
+                Y_ABORT_UNLESS(itInFlight != WritesInFlightTimestamps.end());
                 WritesInFlightTimestamps.erase(itInFlight);
 
                 ResponseQT->Increment(response.MicroSeconds());
@@ -612,7 +612,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         }
 
         void UpdateNextTimestemps(bool incrementCounter) {
-            Y_VERIFY(ScriptedRequests);
+            Y_ABORT_UNLESS(ScriptedRequests);
 
             if (incrementCounter) {
                 if (++ScriptedCounter == ScriptedRequests.size()) {
@@ -650,7 +650,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     true, Generation, GarbageCollectStep, nullptr, nullptr, TInstant::Max(), false);
             auto callback = [](IEventBase *event, const TActorContext& /*ctx*/) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult *>(event);
-                Y_VERIFY(res);
+                Y_ABORT_UNLESS(res);
             };
             SendToBSProxy(ctx, GroupId, ev.release(), QueryDispatcher.ObtainCookie(std::move(callback)));
 
@@ -704,18 +704,18 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
             auto readCallback = [this, size, readQueryId](IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvGetResult*>(event);
-                Y_VERIFY(res);
+                Y_ABORT_UNLESS(res);
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK})) {
                     return;
                 }
 
-                Y_VERIFY(ReadsInFlight >= 1 && ReadBytesInFlight >= size);
+                Y_ABORT_UNLESS(ReadsInFlight >= 1 && ReadBytesInFlight >= size);
                 --ReadsInFlight;
                 ReadBytesInFlight -= size;
                 TotalBytesRead += size;
 
                 auto it = ReadSentTimestamp.find(readQueryId);
-                Y_VERIFY(it != ReadSentTimestamp.end());
+                Y_ABORT_UNLESS(it != ReadSentTimestamp.end());
                 const TDuration response = CyclesToDuration(GetCycleCountFast() - it->second);
                 ReadSentTimestamp.erase(it);
 

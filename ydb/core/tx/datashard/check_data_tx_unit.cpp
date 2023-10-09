@@ -42,8 +42,8 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                                            TTransactionContext &,
                                            const TActorContext &ctx)
 {
-    Y_VERIFY(op->IsDataTx() || op->IsReadTable());
-    Y_VERIFY(!op->IsAborted());
+    Y_ABORT_UNLESS(op->IsDataTx() || op->IsReadTable());
+    Y_ABORT_UNLESS(!op->IsAborted());
 
     if (CheckRejectDataTx(op, ctx)) {
         op->Abort(EExecutionUnitKind::FinishPropose);
@@ -54,13 +54,13 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
     auto dataTx = tx->GetDataTx();
-    Y_VERIFY(dataTx);
-    Y_VERIFY(dataTx->Ready() || dataTx->RequirePrepare());
+    Y_ABORT_UNLESS(dataTx);
+    Y_ABORT_UNLESS(dataTx->Ready() || dataTx->RequirePrepare());
 
     if (dataTx->Ready()) {
         DataShard.IncCounter(COUNTER_MINIKQL_PROGRAM_SIZE, dataTx->ProgramSize());
     } else {
-        Y_VERIFY(dataTx->RequirePrepare());
+        Y_ABORT_UNLESS(dataTx->RequirePrepare());
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Require prepare Tx " << op->GetTxId() <<  " at " << DataShard.TabletID()
                     << ": " << dataTx->GetErrors());

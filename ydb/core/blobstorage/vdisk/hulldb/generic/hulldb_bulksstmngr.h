@@ -61,7 +61,7 @@ namespace NKikimr {
             , EntryPoint(entryPoint)
             , RemovedFromIndex(false)
         {
-            Y_VERIFY(firstBlobLsn && lastBlobLsn && !entryPoint.Empty(),
+            Y_ABORT_UNLESS(firstBlobLsn && lastBlobLsn && !entryPoint.Empty(),
                     "firstBlobLsn# %" PRIu64 " lastBlobLsn# %" PRIu64 " entryPoint# %s",
                     firstBlobLsn, lastBlobLsn, entryPoint.ToString().data());
         }
@@ -72,7 +72,7 @@ namespace NKikimr {
             , EntryPoint(proto.GetEntryPoint())
             , RemovedFromIndex(proto.GetRemovedFromIndex())
         {
-            Y_VERIFY(FirstBlobLsn && LastBlobLsn && !EntryPoint.Empty(),
+            Y_ABORT_UNLESS(FirstBlobLsn && LastBlobLsn && !EntryPoint.Empty(),
                     "FirstBlobLsn# %" PRIu64 " LastBlobLsn# %" PRIu64 " EntryPoint# %s",
                     FirstBlobLsn, LastBlobLsn, EntryPoint.ToString().data());
 
@@ -86,7 +86,7 @@ namespace NKikimr {
             // (because they are owned by matching SSTable), or we are removed from index, but ChunkIds are not empty
             // as we own them, because they are needed to recover SyncLog; in case when RemovedFromIndex=true and
             // ChunkIds are empty this bulk-formed segment must be collected and not written to index
-            Y_VERIFY(RemovedFromIndex == !ChunkIds.empty());
+            Y_ABORT_UNLESS(RemovedFromIndex == !ChunkIds.empty());
 
             pb.SetFirstBlobLsn(FirstBlobLsn);
             pb.SetLastBlobLsn(LastBlobLsn);
@@ -103,7 +103,7 @@ namespace NKikimr {
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             for (TChunkIdx chunkIdx : ChunkIds) {
                 const bool inserted = chunks.insert(chunkIdx).second;
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
             }
         }
 

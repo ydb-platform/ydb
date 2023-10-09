@@ -69,7 +69,7 @@ namespace NTest {
 
             for (auto &one: eggs) {
                 for (const auto &part : one->Parts) {
-                    Y_VERIFY(part->Slices, "Missing part slices");
+                    Y_ABORT_UNLESS(part->Slices, "Missing part slices");
                     partView.push_back({ part, nullptr, part->Slices });
                 }
             }
@@ -104,7 +104,7 @@ namespace NTest {
                 } else if (ready == EReady::Gone) {
                     auto eggs = blocks.Flush(subset.Scheme, Writer->Finish());
 
-                    Y_VERIFY(eggs.Written->Rows <= conf.MaxRows);
+                    Y_ABORT_UNLESS(eggs.Written->Rows <= conf.MaxRows);
 
                     return eggs;
                 } else if (ready != EReady::Page) {
@@ -137,7 +137,7 @@ namespace NTest {
 
         EScan Seek(TLead &lead, ui64 seq) noexcept override
         {
-            Y_VERIFY(seq < 2, "Test IScan impl Got too many Seek() calls");
+            Y_ABORT_UNLESS(seq < 2, "Test IScan impl Got too many Seek() calls");
 
             lead.To(Tags, { }, ESeek::Lower);
 

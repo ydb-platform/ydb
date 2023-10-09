@@ -13,17 +13,17 @@ void TGranulesStorage::UpdateGranuleInfo(const TGranuleMeta& granule) {
         if (it == GranulesCompactionPriority.end()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "UpdateGranuleInfo")("granule", granule.DebugString())("new_priority", gPriority.DebugString());
             it = GranulesCompactionPriority.emplace(granule.GetGranuleId(), gPriority).first;
-            Y_VERIFY(GranuleCompactionPrioritySorting[gPriority].emplace(granule.GetGranuleId()).second);
+            Y_ABORT_UNLESS(GranuleCompactionPrioritySorting[gPriority].emplace(granule.GetGranuleId()).second);
         } else {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "UpdateGranuleInfo")("granule", granule.DebugString())("new_priority", gPriority.DebugString())("old_priority", it->second.DebugString());
             auto itSorting = GranuleCompactionPrioritySorting.find(it->second);
-            Y_VERIFY(itSorting != GranuleCompactionPrioritySorting.end());
-            Y_VERIFY(itSorting->second.erase(granule.GetGranuleId()));
+            Y_ABORT_UNLESS(itSorting != GranuleCompactionPrioritySorting.end());
+            Y_ABORT_UNLESS(itSorting->second.erase(granule.GetGranuleId()));
             if (itSorting->second.empty()) {
                 GranuleCompactionPrioritySorting.erase(itSorting);
             }
             it->second = gPriority;
-            Y_VERIFY(GranuleCompactionPrioritySorting[gPriority].emplace(granule.GetGranuleId()).second);
+            Y_ABORT_UNLESS(GranuleCompactionPrioritySorting[gPriority].emplace(granule.GetGranuleId()).second);
         }
     }
 }
@@ -38,10 +38,10 @@ std::shared_ptr<NKikimr::NOlap::TGranuleMeta> TGranulesStorage::GetGranuleForCom
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "zero_granule_reached");
             break;
         }
-        Y_VERIFY(it->second.size());
+        Y_ABORT_UNLESS(it->second.size());
         for (auto&& i : it->second) {
             auto itGranule = granules.find(i);
-            Y_VERIFY(itGranule != granules.end());
+            Y_ABORT_UNLESS(itGranule != granules.end());
 //            if (TMonotonic::Now() - itGranule->second->GetLastCompactionInstant() > TDuration::Seconds(1) || it->first.GetWeight().GetInternalLevelWeight() > 5000000) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "test_granule")("granule_stats", it->first.DebugString())("granule_id", i);
                 return itGranule->second;

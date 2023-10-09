@@ -18,7 +18,7 @@ public:
         auto &rec = Request->Get()->Record;
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TTxRemoveConfigSubscriptions Execute: " << rec.ShortDebugString());
 
-        Y_VERIFY(Self->PendingSubscriptionModifications.IsEmpty());
+        Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
         Response = new TEvConsole::TEvRemoveConfigSubscriptionsResponse;
         Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
@@ -42,7 +42,7 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxRemoveConfigSubscriptions Complete");
 
-        Y_VERIFY(Response);
+        Y_ABORT_UNLESS(Response);
         if (!Self->PendingSubscriptionModifications.IsEmpty()) {
             TAutoPtr<IEventHandle> ev = new IEventHandle(Request->Sender,
                                                          Self->SelfId(),

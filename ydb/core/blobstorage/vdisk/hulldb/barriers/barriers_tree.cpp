@@ -80,7 +80,7 @@ namespace NKikimr {
             if (it == Index.end()) {
                 // inserts are rare
                 auto res = Index.insert(TIndex::value_type(indexKey, {}));
-                Y_VERIFY(res.second);
+                Y_ABORT_UNLESS(res.second);
                 it = res.first;
             }
 

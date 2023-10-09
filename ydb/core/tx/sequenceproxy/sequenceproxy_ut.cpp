@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(edge);
             auto* msg = ev->Get();
             const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
-            Y_VERIFY(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+            Y_ABORT_UNLESS(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
 
             ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
             auto notifyReq = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(edge);
             auto* msg = ev->Get();
             const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
-            Y_VERIFY(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+            Y_ABORT_UNLESS(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
 
             ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
             auto notifyReq = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();

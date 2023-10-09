@@ -47,7 +47,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
     env.Sim(TDuration::Minutes(1));
 
     auto groups = env.GetGroups();
-    Y_VERIFY(groups.size() == 1);
+    Y_ABORT_UNLESS(groups.size() == 1);
 
     auto groupInfo = env.GetGroupInfo(groups.front());
     std::vector<TActorId> queues;
@@ -65,7 +65,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
                 NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticMaxThroughput));
         });
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge);
-        Y_VERIFY(res->Get()->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(res->Get()->Status == NKikimrProto::OK);
     }
 
     ui32 numDisksWithBlob = 0;
@@ -81,21 +81,21 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
         const TActorId& edge = env.Runtime->AllocateEdgeActor(queueId.NodeId());
         env.Runtime->Send(new IEventHandle(queueId, edge, ev.release()), queueId.NodeId());
         const bool inserted = edges.insert(edge).second;
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
     }
     while (!edges.empty()) {
         auto res = env.Runtime->WaitForEdgeActorEvent(edges);
         const size_t numErased = edges.erase(res->Recipient);
-        Y_VERIFY(numErased);
+        Y_ABORT_UNLESS(numErased);
         env.Runtime->DestroyActor(res->Recipient);
         auto *msg = res->CastAsLocal<TEvBlobStorage::TEvVGetResult>();
-        Y_VERIFY(msg);
+        Y_ABORT_UNLESS(msg);
         const auto& record = msg->Record;
-        Y_VERIFY(record.GetStatus() == NKikimrProto::OK);
-        Y_VERIFY(record.ResultSize() == 1);
+        Y_ABORT_UNLESS(record.GetStatus() == NKikimrProto::OK);
+        Y_ABORT_UNLESS(record.ResultSize() == 1);
         const auto& result = record.GetResult(0);
         const ui32 nodeId = record.GetCookie();
-        Y_VERIFY(nodeId);
+        Y_ABORT_UNLESS(nodeId);
         Cerr << nodeId << " -> " << NKikimrProto::EReplyStatus_Name(result.GetStatus()) << Endl;
         if (result.GetStatus() == NKikimrProto::OK) {
             ++numDisksWithBlob;
@@ -103,7 +103,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
                 ++numDisksNotOk;
             }
         } else {
-            Y_VERIFY(result.GetStatus() == NKikimrProto::NODATA);
+            Y_ABORT_UNLESS(result.GetStatus() == NKikimrProto::NODATA);
             if (states[nodeId - 1] == EState::FORMAT) {
                 log << "early abort -- formatted disk did not contain any parts" << Endl;
                 return s.Str();
@@ -120,7 +120,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
                 true, id.Generation(), Max<ui32>(), new TVector<TLogoBlobID>(1, id), nullptr, TInstant::Max(), false));
         });
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge);
-        Y_VERIFY(res->Get()->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(res->Get()->Status == NKikimrProto::OK);
     }
 
     auto checkBlob = [&] {
@@ -131,11 +131,11 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
         });
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge);
         auto *msg = res->Get();
-        Y_VERIFY(msg->ResponseSz == 1);
+        Y_ABORT_UNLESS(msg->ResponseSz == 1);
         return msg->Responses[0].Status;
     };
 
-    Y_VERIFY(checkBlob() == NKikimrProto::OK);
+    Y_ABORT_UNLESS(checkBlob() == NKikimrProto::OK);
 
     // wait some time for sync data to spread
     TInstant syncStartWall = Now();
@@ -151,30 +151,30 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
             const TActorId& edge = env.Runtime->AllocateEdgeActor(queueId.NodeId());
             env.Runtime->Send(new IEventHandle(queueId, edge, query.release()), edge.NodeId());
             const bool inserted = edges.insert(edge).second;
-            Y_VERIFY(inserted);
+            Y_ABORT_UNLESS(inserted);
         }
         while (!edges.empty()) {
             auto res = env.Runtime->WaitForEdgeActorEvent(edges);
             const size_t numErased = edges.erase(res->Recipient);
-            Y_VERIFY(numErased);
+            Y_ABORT_UNLESS(numErased);
             env.Runtime->DestroyActor(res->Recipient);
             auto *msg = res->CastAsLocal<TEvBlobStorage::TEvVGetBarrierResult>();
-            Y_VERIFY(msg);
+            Y_ABORT_UNLESS(msg);
 
             //log << "Result# " << msg->ToString() << Endl;
             const auto& record = msg->Record;
-            Y_VERIFY(record.GetStatus() == NKikimrProto::OK);
+            Y_ABORT_UNLESS(record.GetStatus() == NKikimrProto::OK);
             if (record.KeysSize() == 0 && record.ValuesSize() == 0) {
                 continue;
             }
-            Y_VERIFY(record.KeysSize() == 1);
-            Y_VERIFY(record.ValuesSize() == 1);
+            Y_ABORT_UNLESS(record.KeysSize() == 1);
+            Y_ABORT_UNLESS(record.ValuesSize() == 1);
             auto& key = record.GetKeys(0);
-            Y_VERIFY(key.GetTabletId() == id.TabletID());
-            Y_VERIFY(key.GetChannel() == id.Channel());
+            Y_ABORT_UNLESS(key.GetTabletId() == id.TabletID());
+            Y_ABORT_UNLESS(key.GetChannel() == id.Channel());
             auto& value = record.GetValues(0);
-            Y_VERIFY(value.GetCollectGen() == id.Generation());
-            Y_VERIFY(value.GetCollectStep() == Max<ui32>());
+            Y_ABORT_UNLESS(value.GetCollectGen() == id.Generation());
+            Y_ABORT_UNLESS(value.GetCollectStep() == Max<ui32>());
             ingress.insert(value.GetIngress());
             ++num;
         }
@@ -221,9 +221,9 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
     const NKikimrProto::EReplyStatus status = checkBlob();
     log << "checkBlob status# " << NKikimrProto::EReplyStatus_Name(status) << Endl;
     if (groupInfo->GetQuorumChecker().CheckFailModelForGroup(err)) {
-        Y_VERIFY(status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(status == NKikimrProto::OK);
     } else {
-        Y_VERIFY(status == NKikimrProto::ERROR || status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(status == NKikimrProto::ERROR || status == NKikimrProto::OK);
     }
 
     return s.Str();
@@ -271,7 +271,7 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
             while (states.size() < type.BlobSubgroupSize()) {
                 states.push_back(EState::OK);
             }
-            Y_VERIFY(states.size() == type.BlobSubgroupSize());
+            Y_ABORT_UNLESS(states.size() == type.BlobSubgroupSize());
             std::sort(states.begin(), states.end());
             do {
 #if SINGLE_THREAD

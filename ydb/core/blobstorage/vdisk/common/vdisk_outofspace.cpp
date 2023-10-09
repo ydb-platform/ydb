@@ -12,7 +12,7 @@ namespace NKikimr {
         : TotalVDisks(totalVDisks)
         , SelfOrderNum(selfOrderNum)
     {
-        Y_VERIFY(totalVDisks <= MaxVDisksInGroup);
+        Y_ABORT_UNLESS(totalVDisks <= MaxVDisksInGroup);
         for (ui32 i = 0; i < TotalVDisks; ++i) {
             AtomicSet(AllVDiskFlags[i], TAtomicBase(0));
         }

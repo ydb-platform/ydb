@@ -17,21 +17,21 @@ private:
 public:
 
     std::shared_ptr<arrow::Scalar> GetFirstScalar() const {
-        Y_VERIFY(Chunks.size());
+        Y_ABORT_UNLESS(Chunks.size());
         return Chunks.front()->GetFirstScalar();
     }
 
     std::shared_ptr<arrow::Scalar> GetLastScalar() const {
-        Y_VERIFY(Chunks.size());
+        Y_ABORT_UNLESS(Chunks.size());
         return Chunks.back()->GetLastScalar();
     }
 
     void Merge(TSplittedColumn&& c) {
         Size += c.Size;
-        Y_VERIFY(Field->name() == c.Field->name());
+        Y_ABORT_UNLESS(Field->name() == c.Field->name());
         Y_VERIFY_DEBUG(Field->Equals(c.Field));
-        Y_VERIFY(ColumnId == c.ColumnId);
-        Y_VERIFY(ColumnId);
+        Y_ABORT_UNLESS(ColumnId == c.ColumnId);
+        Y_ABORT_UNLESS(ColumnId);
         RecordsCount += c.RecordsCount;
         for (auto&& i : c.Chunks) {
             Chunks.emplace_back(std::move(i));
@@ -39,9 +39,9 @@ public:
     }
 
     void SetChunks(const std::vector<IPortionColumnChunk::TPtr>& data) {
-        Y_VERIFY(Chunks.empty());
+        Y_ABORT_UNLESS(Chunks.empty());
         for (auto&& i : data) {
-            Y_VERIFY(i->GetColumnId() == ColumnId);
+            Y_ABORT_UNLESS(i->GetColumnId() == ColumnId);
             Size += i->GetPackedSize();
             RecordsCount += i->GetRecordsCount();
             Chunks.emplace_back(i);
@@ -50,7 +50,7 @@ public:
 
     void AddChunks(const std::vector<IPortionColumnChunk::TPtr>& data) {
         for (auto&& i : data) {
-            Y_VERIFY(i->GetColumnId() == ColumnId);
+            Y_ABORT_UNLESS(i->GetColumnId() == ColumnId);
             Size += i->GetPackedSize();
             RecordsCount += i->GetRecordsCount();
             Chunks.emplace_back(i);

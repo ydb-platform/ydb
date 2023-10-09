@@ -111,8 +111,8 @@ public:
         , QueryId(0)
         , ShutdownState(std::nullopt)
     {
-        Y_VERIFY(ModuleResolverState);
-        Y_VERIFY(ModuleResolverState->ModuleResolver);
+        Y_ABORT_UNLESS(ModuleResolverState);
+        Y_ABORT_UNLESS(ModuleResolverState->ModuleResolver);
 
         Config->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), Settings.Cluster, kqpSettings->Settings, false);
 
@@ -179,7 +179,7 @@ public:
         LOG_D("Received request, proxyRequestId: " << proxyRequestId
             << " rpcCtx: " << (void*)(ev->Get()->GetRequestCtx().get()));
 
-        Y_VERIFY(!QueryState);
+        Y_ABORT_UNLESS(!QueryState);
 
         MakeNewQueryState();
 
@@ -306,7 +306,7 @@ public:
             return;
         }
 
-        Y_VERIFY(QueryState);
+        Y_ABORT_UNLESS(QueryState);
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, SessionId, QueryState->RequestEv->GetTraceId());
 
         if (ev->Get()->Finished) {
@@ -326,7 +326,7 @@ public:
             return;
         }
 
-        Y_VERIFY(CleanupState);
+        Y_ABORT_UNLESS(CleanupState);
         if (CleanupState->Final) {
             ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::BAD_SESSION, "Session is being closed");
         } else {
@@ -342,9 +342,9 @@ public:
         Y_UNUSED(ev);
         Y_UNUSED(ctx);
 
-        Y_VERIFY(CleanupState);
+        Y_ABORT_UNLESS(CleanupState);
         if (!CleanupState->Final) {
-            Y_VERIFY(QueryState);
+            Y_ABORT_UNLESS(QueryState);
             QueryState->KeepSession = false;
         }
     }
@@ -357,7 +357,7 @@ public:
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, SessionId);
 
         if (ev->Get()->Finished) {
-            Y_VERIFY(CleanupState);
+            Y_ABORT_UNLESS(CleanupState);
             auto result = CleanupState->AsyncResult->GetResult();
             if (!result.Success()) {
                 LOG_E("Failed to cleanup: " << result.Issues().ToString());
@@ -442,7 +442,7 @@ private:
     }
 
     void PerformQuery(const TActorContext& ctx) {
-        Y_VERIFY(QueryState);
+        Y_ABORT_UNLESS(QueryState);
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, SessionId, QueryState->RequestEv->GetTraceId());
 
         Gateway->SetToken(Settings.Cluster, QueryState->RequestEv->GetUserToken());
@@ -530,7 +530,7 @@ private:
     }
 
     void EndCleanup(const TActorContext &ctx) {
-        Y_VERIFY(CleanupState);
+        Y_ABORT_UNLESS(CleanupState);
 
         if (CleanupState->AsyncResult) {
             auto cleanupTime = TInstant::Now() - CleanupState->Start;
@@ -706,7 +706,7 @@ private:
     }
 
     void ContinueQueryProcess(const TActorContext &ctx) {
-        Y_VERIFY(QueryState);
+        Y_ABORT_UNLESS(QueryState);
 
         TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
         TActorId selfId = ctx.SelfID;
@@ -722,7 +722,7 @@ private:
     }
 
     void ContinueCleanup(const TActorContext &ctx) {
-        Y_VERIFY(CleanupState);
+        Y_ABORT_UNLESS(CleanupState);
 
         TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
         TActorId selfId = ctx.SelfID;
@@ -738,7 +738,7 @@ private:
     }
 
     bool Reply(THolder<TEvKqp::TEvQueryResponse>&& responseEv, const TActorContext &ctx) {
-        Y_VERIFY(QueryState);
+        Y_ABORT_UNLESS(QueryState);
 
         auto& record = responseEv->Record.GetRef();
         auto& response = *record.MutableResponse();
@@ -784,7 +784,7 @@ private:
     }
 
     bool ReplyQueryResult(const TActorContext& ctx) {
-        Y_VERIFY(QueryState);
+        Y_ABORT_UNLESS(QueryState);
         auto& queryResult = QueryState->QueryResult;
 
         auto responseEv = MakeHolder<TEvKqp::TEvQueryResponse>();
@@ -926,7 +926,7 @@ private:
     }
 
     void FillResponse(TEvKqp::TProtoArenaHolder<NKikimrKqp::TEvQueryResponse>& record) {
-        Y_VERIFY(QueryState);
+        Y_ABORT_UNLESS(QueryState);
 
         auto& queryResult = QueryState->QueryResult;
         auto arena = queryResult.ProtobufArenaPtr;

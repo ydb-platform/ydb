@@ -366,7 +366,7 @@ public:
 
     bool DefineItemOrder(TConfigItem::TPtr item, const TActorContext &ctx)
     {
-        Y_VERIFY(!item->UsageScope.Order);
+        Y_ABORT_UNLESS(!item->UsageScope.Order);
 
         TConfigItems conflicts;
         Self->ConfigIndex.CollectItemsByConflictingScope(item->UsageScope, {item->Kind}, true, conflicts);
@@ -458,7 +458,7 @@ public:
         auto &rec = Request->Get()->Record;
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TTxConfigure: " << rec.ShortDebugString());
 
-        Y_VERIFY(Self->PendingConfigModifications.IsEmpty());
+        Y_ABORT_UNLESS(Self->PendingConfigModifications.IsEmpty());
 
         Response = new TEvConsole::TEvConfigureResponse;
 
@@ -591,7 +591,7 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxConfigure Complete");
 
-        Y_VERIFY(Response);
+        Y_ABORT_UNLESS(Response);
 
         if (!Self->PendingConfigModifications.IsEmpty()) {
             TAutoPtr<IEventHandle> ev = new IEventHandle(Request->Sender,

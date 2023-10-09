@@ -29,17 +29,17 @@ namespace NKikimr::NBlobDepot {
     {}
 
     bool TResolvedValue::Supersedes(const TResolvedValue& old) const {
-        Y_VERIFY(Defined);
+        Y_ABORT_UNLESS(Defined);
         if (!old.Defined) {
             return true;
         } else if (Version < old.Version) {
             return false;
         } else if (Version == old.Version) {
-            Y_VERIFY(Chain == old.Chain);
-            Y_VERIFY(old.ReliablyWritten <= ReliablyWritten); // value may not become 'unreliably written'
+            Y_ABORT_UNLESS(Chain == old.Chain);
+            Y_ABORT_UNLESS(old.ReliablyWritten <= ReliablyWritten); // value may not become 'unreliably written'
             return old.ReliablyWritten < ReliablyWritten;
         } else {
-            Y_VERIFY(old.ReliablyWritten <= ReliablyWritten); // item can't suddenly become unreliably written
+            Y_ABORT_UNLESS(old.ReliablyWritten <= ReliablyWritten); // item can't suddenly become unreliably written
             return true;
         }
     }

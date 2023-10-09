@@ -264,7 +264,7 @@ public:
                         TVector<NYdb::TValue> batch;
                         batch.push_back(value.Build());
 
-                        Y_VERIFY(result.Tx);
+                        Y_ABORT_UNLESS(result.Tx);
                         const auto params = ::NIdxTest::CreateParamsAsList(batch, ParamName_);
 
                         return result.Tx->GetSession().ExecuteDataQuery(
@@ -789,7 +789,7 @@ public:
         TVector<TString> updates;
         updates.reserve(OpsPerTx_);
         TVector<std::pair<TColumn, TString>> resultColumns;
-        Y_VERIFY(Stmt_ == IWorkLoader::LC_DELETE || Stmt_ == IWorkLoader::LC_UPDATE);
+        Y_ABORT_UNLESS(Stmt_ == IWorkLoader::LC_DELETE || Stmt_ == IWorkLoader::LC_UPDATE);
 
         for (size_t opIndex = 0, paramId = 0; opIndex < OpsPerTx_; ++opIndex) {
             TString predicate;

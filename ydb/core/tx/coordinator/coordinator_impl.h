@@ -95,13 +95,13 @@ struct TMediatorStep {
             : TxId(txId)
             , PushToAffected(affected, affected + affectedSize)
         {
-            Y_VERIFY(TxId != 0);
+            Y_ABORT_UNLESS(TxId != 0);
         }
 
         TTx(TTxId txId)
             : TxId(txId)
         {
-            Y_VERIFY(TxId != 0);
+            Y_ABORT_UNLESS(TxId != 0);
         }
     };
 

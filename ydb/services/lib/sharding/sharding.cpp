@@ -11,7 +11,7 @@ namespace NKikimr::NDataStreams::V1 {
     namespace {
 
         NYql::NDecimal::TUint128 Uint128FromString(const TString& bytes, ui32 base = 10) {
-            Y_VERIFY(base == 10 || base == 16);
+            Y_ABORT_UNLESS(base == 10 || base == 16);
             NYql::NDecimal::TUint128 x = 1;
             NYql::NDecimal::TUint128 res = 0;
             for (auto it = bytes.rbegin(); it != bytes.rend(); ++it) {

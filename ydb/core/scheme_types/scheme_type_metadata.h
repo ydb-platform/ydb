@@ -39,8 +39,8 @@ public:
     typedef THashMap<::TString, const ITypeMetadata*> TMapByName;
 
     void Register(const ITypeMetadata* metadata) {
-        Y_VERIFY(MapById.insert({ metadata->GetTypeId(), metadata }).second);
-        Y_VERIFY(MapByName.insert({ metadata->GetName(), metadata }).second);
+        Y_ABORT_UNLESS(MapById.insert({ metadata->GetTypeId(), metadata }).second);
+        Y_ABORT_UNLESS(MapByName.insert({ metadata->GetName(), metadata }).second);
     }
 
     const ITypeMetadata* GetType(TTypeId typeId) const {

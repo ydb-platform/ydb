@@ -318,7 +318,7 @@ namespace NKikimr {
         public:
             template <class TFront>
             void Completed(const TActorContext &ctx, const TVMsgContext &msgCtx, TFront &front, ui64 cookie) {
-                Y_VERIFY(InFlightCount >= 1 && InFlightBytes >= msgCtx.RecByteSize && InFlightCost >= msgCtx.Cost,
+                Y_ABORT_UNLESS(InFlightCount >= 1 && InFlightBytes >= msgCtx.RecByteSize && InFlightCost >= msgCtx.Cost,
                          "IntQueueId# %s InFlightCount# %" PRIu64 " InFlightBytes# %" PRIu64
                          " InFlightCost# %" PRIu64 " msgCtx# %s Deadlines# %" PRIu64,
                          NKikimrBlobStorage::EVDiskInternalQueueId_Name(IntQueueId).data(),
@@ -589,7 +589,7 @@ namespace NKikimr {
                     const_cast<ui64&>(evHandle->Cookie) = it->second;
                     InternalIdToCookie.erase(it);
                 } else {
-                    Y_VERIFY(!required, "Internal error, it can't find internal id");
+                    Y_ABORT_UNLESS(!required, "Internal error, it can't find internal id");
                 }
             }
 
@@ -597,7 +597,7 @@ namespace NKikimr {
                 ReturnCookie(evHandle, true);
 
                 TInstant now = TAppData::TimeProvider->Now();
-                Y_VERIFY(msgCtx.ActorId);
+                Y_ABORT_UNLESS(msgCtx.ActorId);
                 auto feedback = QueueBackpressure->Processed(msgCtx.ActorId, msgCtx.MsgId, msgCtx.Cost, now);
                 NKikimrBlobStorage::TMsgQoS *msgQoS = nullptr;
                 switch (evHandle->Type) {
@@ -616,7 +616,7 @@ namespace NKikimr {
                     UPDATE_WINDOW_STATUS(TEvBlobStorage::TEvVGetBarrierResult)
 #undef UPDATE_WINDOW_STATUS
                 }
-                Y_VERIFY(msgQoS);
+                Y_ABORT_UNLESS(msgQoS);
                 feedback.first.Serialize(*msgQoS->MutableWindow());
                 NotifyOtherClients(ctx, feedback);
             }
@@ -735,7 +735,7 @@ namespace NKikimr {
 
         void SetupMonitoring(const TActorContext &ctx) {
             TAppData *appData = AppData(ctx);
-            Y_VERIFY(appData);
+            Y_ABORT_UNLESS(appData);
             auto mon = appData->Mon;
             if (mon) {
                 NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
@@ -1079,7 +1079,7 @@ namespace NKikimr {
         template <class TEventPtr>
         inline void CheckEvent(TEventPtr &ev, const char *msgName) {
             Y_VERIFY_DEBUG(VCtx->CostModel);
-            Y_VERIFY(ev->Get(), "Incoming message of type %s is null at the VDisk border. This MUST never happens, "
+            Y_ABORT_UNLESS(ev->Get(), "Incoming message of type %s is null at the VDisk border. This MUST never happens, "
                    "check VDisk clients: bufSize# %u", msgName, unsigned(ev->GetSize()));
         }
 
@@ -1201,7 +1201,7 @@ namespace NKikimr {
             // we don't work if queues are incompatible
 
             bool compatible = Compatible(extQueueId, intQueueId);
-            Y_VERIFY(compatible, "%s: %s: extQueue is incompatible with intQueue; intQueue# %s extQueue# %s",
+            Y_ABORT_UNLESS(compatible, "%s: %s: extQueue is incompatible with intQueue; intQueue# %s extQueue# %s",
                    VCtx->VDiskLogPrefix.data(), msgName, NKikimrBlobStorage::EVDiskInternalQueueId_Name(intQueueId).data(),
                    NKikimrBlobStorage::EVDiskQueueId_Name(extQueueId).data());
 
@@ -1364,7 +1364,7 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvVGet::TPtr &ev, const TActorContext &ctx) {
             const ui64 cost = VCtx->CostModel->GetCost(*ev->Get());
             // select correct internal queue
-            Y_VERIFY(ev->Get()->Record.HasHandleClass());
+            Y_ABORT_UNLESS(ev->Get()->Record.HasHandleClass());
             auto cls = ev->Get()->Record.GetHandleClass();
             NKikimrBlobStorage::EVDiskInternalQueueId intQueueId;
             switch (cls) {
@@ -1418,13 +1418,13 @@ namespace NKikimr {
                 const auto& record = ev->Get()->Record;
                 if (record.HasVDiskID()) {
                     const TVDiskID& vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-                    Y_VERIFY(vdiskId.GroupID == SelfVDiskId.GroupID);
-                    Y_VERIFY(TVDiskIdShort(vdiskId) == TVDiskIdShort(SelfVDiskId));
+                    Y_ABORT_UNLESS(vdiskId.GroupID == SelfVDiskId.GroupID);
+                    Y_ABORT_UNLESS(TVDiskIdShort(vdiskId) == TVDiskIdShort(SelfVDiskId));
                     if (vdiskId != SelfVDiskId) {
                         if (SelfVDiskId.GroupGeneration < vdiskId.GroupGeneration && record.HasRecentGroup()) {
                             auto newInfo = TBlobStorageGroupInfo::Parse(record.GetRecentGroup(), nullptr, nullptr);
                             ChangeGeneration(vdiskId, newInfo, ctx);
-                            Y_VERIFY(vdiskId == SelfVDiskId);
+                            Y_ABORT_UNLESS(vdiskId == SelfVDiskId);
                             const ui32 groupId = newInfo->GroupID;
                             const ui32 generation = newInfo->GroupGeneration;
                             auto ev = std::make_unique<TEvBlobStorage::TEvUpdateGroupInfo>(groupId, generation, *newInfo->Group);
@@ -1573,18 +1573,18 @@ namespace NKikimr {
         void ChangeGeneration(const TVDiskID& vdiskId, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
                 const TActorContext& ctx) {
             // check group id
-            Y_VERIFY(info->GroupID == GInfo->GroupID, "GroupId# %" PRIu32 " new GroupId# %" PRIu32,
+            Y_ABORT_UNLESS(info->GroupID == GInfo->GroupID, "GroupId# %" PRIu32 " new GroupId# %" PRIu32,
                 GInfo->GroupID, info->GroupID);
 
             // check target disk id
-            Y_VERIFY(TVDiskIdShort(SelfVDiskId) == TVDiskIdShort(vdiskId), "Incorrect target VDiskId"
+            Y_ABORT_UNLESS(TVDiskIdShort(SelfVDiskId) == TVDiskIdShort(vdiskId), "Incorrect target VDiskId"
                     " SelfVDiskId# %s new VDiskId# %s", SelfVDiskId.ToString().data(), vdiskId.ToString().data());
 
             // check the disk location inside group
-            Y_VERIFY(info->GetVDiskId(TVDiskIdShort(vdiskId)) == vdiskId);
+            Y_ABORT_UNLESS(info->GetVDiskId(TVDiskIdShort(vdiskId)) == vdiskId);
 
             // check that NewInfo has the same topology as the one VDisk started with
-            Y_VERIFY(VCtx->Top->EqualityCheck(info->GetTopology()));
+            Y_ABORT_UNLESS(VCtx->Top->EqualityCheck(info->GetTopology()));
 
             // check generation for possible race
             if (info->GroupGeneration <= GInfo->GroupGeneration) {

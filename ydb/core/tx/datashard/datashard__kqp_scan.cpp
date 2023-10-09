@@ -182,8 +182,8 @@ private:
 
 private:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept final {
-        Y_VERIFY(scheme);
-        Y_VERIFY(driver);
+        Y_ABORT_UNLESS(scheme);
+        Y_ABORT_UNLESS(driver);
 
         Driver = driver;
         ScanActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
@@ -260,7 +260,7 @@ private:
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
         LastKey = TOwnedCellVec(key);
 
-        Y_VERIFY(SkipNullKeys.size() <= key.size());
+        Y_ABORT_UNLESS(SkipNullKeys.size() <= key.size());
         for (ui32 i = 0; i < SkipNullKeys.size(); ++i) {
             if (SkipNullKeys[i] && key[i].IsNull()) {
                 return EScan::Feed;
@@ -455,14 +455,14 @@ private:
                 if (finish) {
                     bool sent = Send(ComputeActorId, new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                         "Query size limit exceeded."));
-                    Y_VERIFY(sent);
+                    Y_ABORT_UNLESS(sent);
 
                     ReportDatashardStats();
                     return true;
                 } else {
                     bool sent = Send(SelfId(), new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                         "Query size limit exceeded."));
-                    Y_VERIFY(sent);
+                    Y_ABORT_UNLESS(sent);
 
                     ReportDatashardStats();
                     return false;
@@ -470,7 +470,7 @@ private:
             }
 
             if (!finish) {
-                Y_VERIFY(ChunksLimiter.Take(sendBytes));
+                Y_ABORT_UNLESS(ChunksLimiter.Take(sendBytes));
                 Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
             }
 
@@ -595,7 +595,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
 
     auto tableInfo = infoIt->second; // copy table info ptr here
     auto& tableColumns = tableInfo->Columns;
-    Y_VERIFY(request.GetColumnTags().size() == request.GetColumnTypes().size());
+    Y_ABORT_UNLESS(request.GetColumnTags().size() == request.GetColumnTypes().size());
 
     if (tableInfo->GetTableSchemaVersion() != 0 &&
         request.GetSchemaVersion() != tableInfo->GetTableSchemaVersion())

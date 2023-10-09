@@ -9,7 +9,7 @@ TRBSplitLimiter::TRBSplitLimiter(std::shared_ptr<NColumnShard::TSplitterCounters
     , Batch(batch)
     , Settings(settings)
 {
-    Y_VERIFY(Batch->num_rows());
+    Y_ABORT_UNLESS(Batch->num_rows());
     std::vector<TBatchSerializedSlice> slices;
     auto stats = schemaInfo->GetBatchSerializationStats(Batch);
     ui32 recordsCount = Settings.GetMinRecordsCount();
@@ -31,12 +31,12 @@ TRBSplitLimiter::TRBSplitLimiter(std::shared_ptr<NColumnShard::TSplitterCounters
         Slices.emplace_back(TBatchSerializedSlice(std::move(spanObjects)));
         chunkStartPosition += spanObjects.size();
     }
-    Y_VERIFY(chunkStartPosition == slices.size());
+    Y_ABORT_UNLESS(chunkStartPosition == slices.size());
     ui32 recordsCountCheck = 0;
     for (auto&& i : Slices) {
         recordsCountCheck += i.GetRecordsCount();
     }
-    Y_VERIFY(recordsCountCheck == batch->num_rows());
+    Y_ABORT_UNLESS(recordsCountCheck == batch->num_rows());
 }
 
 bool TRBSplitLimiter::Next(std::vector<std::vector<IPortionColumnChunk::TPtr>>& portionBlobs, std::shared_ptr<arrow::RecordBatch>& batch) {

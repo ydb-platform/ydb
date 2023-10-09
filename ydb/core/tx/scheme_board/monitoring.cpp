@@ -98,7 +98,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         }
 
         auto byActivity = ByActivityType.find(registered->second.ActivityType);
-        Y_VERIFY(byActivity != ByActivityType.end());
+        Y_ABORT_UNLESS(byActivity != ByActivityType.end());
 
         byActivity->second.erase(ev->Sender);
         if (byActivity->second.empty()) {
@@ -286,7 +286,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
     const TJsonValue::TMapType& GetAttrs(const TActorId& actorId) const {
         auto it = RegisteredActors.find(actorId);
-        Y_VERIFY(it != RegisteredActors.end());
+        Y_ABORT_UNLESS(it != RegisteredActors.end());
 
         return it->second.Attributes.GetMapSafe();
     }
@@ -565,7 +565,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                     TABLEH() { str << "#"; }
                                     TABLEH() { str << "Actor"; }
 
-                                    Y_VERIFY(!actorIds.empty());
+                                    Y_ABORT_UNLESS(!actorIds.empty());
                                     for (const auto& [key, _] : GetAttrs(*actorIds.begin())) {
                                         TABLEH() { str << key; }
                                     }
@@ -648,7 +648,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
     static TString RenderReplica(const NKikimrSchemeBoardMon::TEvInfoResponse& record) {
-        Y_VERIFY(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kReplicaResponse);
+        Y_ABORT_UNLESS(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kReplicaResponse);
         const auto& response = record.GetReplicaResponse();
 
         TStringStream str;
@@ -732,7 +732,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
     static TString RenderPopulator(const NKikimrSchemeBoardMon::TEvInfoResponse& record) {
-        Y_VERIFY(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kPopulatorResponse);
+        Y_ABORT_UNLESS(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kPopulatorResponse);
         const auto& response = record.GetPopulatorResponse();
 
         TStringStream str;
@@ -828,7 +828,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
     static TString RenderReplicaPopulator(const NKikimrSchemeBoardMon::TEvInfoResponse& record) {
-        Y_VERIFY(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kReplicaPopulatorResponse);
+        Y_ABORT_UNLESS(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kReplicaPopulatorResponse);
         const auto& response = record.GetReplicaPopulatorResponse();
 
         TStringStream str;
@@ -903,7 +903,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
     static TString RenderSubscriber(const NKikimrSchemeBoardMon::TEvInfoResponse& record) {
-        Y_VERIFY(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kSubscriberResponse);
+        Y_ABORT_UNLESS(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kSubscriberResponse);
         const auto& response = record.GetSubscriberResponse();
 
         TStringStream str;
@@ -977,7 +977,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
     static TString RenderSubscriberProxy(const NKikimrSchemeBoardMon::TEvInfoResponse& record) {
-        Y_VERIFY(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kSubscriberProxyResponse);
+        Y_ABORT_UNLESS(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kSubscriberProxyResponse);
         const auto& response = record.GetSubscriberProxyResponse();
 
         TStringStream str;
@@ -1003,7 +1003,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
     static TString RenderReplicaSubscriber(const NKikimrSchemeBoardMon::TEvInfoResponse& record) {
-        Y_VERIFY(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kReplicaSubscriberResponse);
+        Y_ABORT_UNLESS(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kReplicaSubscriberResponse);
         const auto& response = record.GetReplicaSubscriberResponse();
 
         TStringStream str;
@@ -1028,7 +1028,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
     static TString RenderCache(const NKikimrSchemeBoardMon::TEvInfoResponse& record) {
-        Y_VERIFY(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kCacheResponse);
+        Y_ABORT_UNLESS(record.GetResponseCase() == NKikimrSchemeBoardMon::TEvInfoResponse::kCacheResponse);
 
         TStringStream str;
 
@@ -1055,7 +1055,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
     static TActorId MakeStateStorageProxyId() {
         const auto& domains = AppData()->DomainsInfo->Domains;
-        Y_VERIFY(domains.size() <= 1);
+        Y_ABORT_UNLESS(domains.size() <= 1);
 
         for (const auto& domain : domains) {
             return NKikimr::MakeStateStorageProxyID(domain.second->DefaultSchemeBoardGroup);

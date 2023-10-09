@@ -36,9 +36,9 @@ Y_UNIT_TEST_SUITE(TMonitoring) {
 
         void Bootstrap(const TActorContext &ctx) {
             TAppData *appData = AppData(ctx);
-            Y_VERIFY(appData);
+            Y_ABORT_UNLESS(appData);
             auto mon = appData->Mon;
-            Y_VERIFY(mon);
+            Y_ABORT_UNLESS(mon);
 
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
 
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(TMonitoring) {
 
             const TString resp = str.Str();
             // we MUST get response from "Incarnation: 2"
-            Y_VERIFY(resp.find("Incarnation: 2") != TString::npos);
+            Y_ABORT_UNLESS(resp.find("Incarnation: 2") != TString::npos);
 
             Env->Signal();
             Die(ctx);

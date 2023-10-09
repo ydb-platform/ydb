@@ -8,11 +8,11 @@ bool TAssembleBatch::DoExecute() {
     /// It's not OK to apply predicate before replacing key duplicates otherwise.
     /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
 
-    Y_VERIFY(BatchConstructor.GetColumnsCount());
+    Y_ABORT_UNLESS(BatchConstructor.GetColumnsCount());
 
     TPortionInfo::TPreparedBatchData::TAssembleOptions options;
     auto addBatch = BatchConstructor.Assemble(options);
-    Y_VERIFY(addBatch);
+    Y_ABORT_UNLESS(addBatch);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)
         ("columns_count", addBatch->num_columns())("num_rows", addBatch->num_rows());
     Filter->Apply(addBatch);

@@ -292,10 +292,10 @@ private:
     NUdf::TUnboxedValue Read(TComputationContext& ctx) {
         ui32 length = 0;
         auto wasRead = FileState->Input->Load(&length, sizeof(length));
-        Y_VERIFY(wasRead == sizeof(length));
+        Y_ABORT_UNLESS(wasRead == sizeof(length));
         FileState->Buffer.Reserve(length);
         wasRead = FileState->Input->Load((void*)FileState->Buffer.Data(), length);
-        Y_VERIFY(wasRead == length);
+        Y_ABORT_UNLESS(wasRead == length);
         return ReadValue = ItemPacker.Unpack(TStringBuf(FileState->Buffer.Data(), length), ctx.HolderFactory);
     }
 
@@ -1563,10 +1563,10 @@ private:
     NUdf::TUnboxedValue Read() {
         ui32 length = 0;
         auto wasRead = FileState->Input->Load(&length, sizeof(length));
-        Y_VERIFY(wasRead == sizeof(length));
+        Y_ABORT_UNLESS(wasRead == sizeof(length));
         FileState->Buffer.Reserve(length);
         wasRead = FileState->Input->Load((void*)FileState->Buffer.Data(), length);
-        Y_VERIFY(wasRead == length);
+        Y_ABORT_UNLESS(wasRead == length);
         return ItemPacker.Unpack(TStringBuf(FileState->Buffer.Data(), length), Ctx->HolderFactory);
     }
 

@@ -77,10 +77,10 @@ namespace NKikimr {
             // put data item iff we gather all parts OR we need a concrete part and parts contain it
             for (TDiskBlob::TPartIterator it = diskBlob.begin(), e = diskBlob.end(); it != e; ++it) {
                 const ui8 partId = it.GetPartId();
-                Y_VERIFY(partId > 0);
+                Y_ABORT_UNLESS(partId > 0);
                 const TLogoBlobID blobId(CurID, partId);
                 const ui32 partSize = diskBlob.GetPartSize(partId - 1);
-                Y_VERIFY(partSize == Ctx->VCtx->Top->GType.PartSize(blobId));
+                Y_ABORT_UNLESS(partSize == Ctx->VCtx->Top->GType.PartSize(blobId));
                 if (QueryPartId == 0 || QueryPartId == partId) {
                     FoundAnything = true;
                     auto& item = TmpItems[partId - 1];
@@ -119,7 +119,7 @@ namespace NKikimr {
         for (ui8 i = missingParts.FirstPosition(); i != missingParts.GetSize(); i = missingParts.NextPosition(i)) {
             // NOT_YET
             if (QueryPartId == 0 || i + 1 == QueryPartId) {
-                Y_VERIFY(TmpItems[i].Empty());
+                Y_ABORT_UNLESS(TmpItems[i].Empty());
                 FoundAnything = true;
                 TmpItems[i].UpdateWithNotYet(TLogoBlobID(CurID, i + 1), Cookie);
             }
@@ -154,11 +154,11 @@ namespace NKikimr {
     }
 
     void TReadBatcher::PrepareReadPlan() {
-        Y_VERIFY(!Result->DiskDataItemPtrs.empty() && Result->GlueReads.empty());
+        Y_ABORT_UNLESS(!Result->DiskDataItemPtrs.empty() && Result->GlueReads.empty());
 
         // sort read requests
         Sort(Result->DiskDataItemPtrs.begin(), Result->DiskDataItemPtrs.end(), TDataItem::DiskPartLess);
-        Y_VERIFY(CheckDiskDataItemsOrdering(true));
+        Y_ABORT_UNLESS(CheckDiskDataItemsOrdering(true));
 
         // plan real requests
         TGlueRead *back = nullptr;
@@ -174,7 +174,7 @@ namespace NKikimr {
                 } else {
                     ui32 prevEnd = back->Part.Offset + back->Part.Size;
                     ui32 nextBeg = item->ActualRead.Offset;
-                    Y_VERIFY(prevEnd <= nextBeg, "back: %s item: %s dataItems: %s",
+                    Y_ABORT_UNLESS(prevEnd <= nextBeg, "back: %s item: %s dataItems: %s",
                            back->Part.ToString().data(), item->ActualRead.ToString().data(), DiskDataItemsToString().data());
 
                     if (nextBeg <= prevEnd + Ctx->PDiskCtx->Dsk->GlueRequestDistanceBytes) {

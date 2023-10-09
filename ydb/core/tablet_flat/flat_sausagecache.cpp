@@ -42,7 +42,7 @@ TPrivatePageCache::TInfo::TInfo(const TInfo &info)
 
 void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
     auto itpair = PageCollections.insert(decltype(PageCollections)::value_type(info->Id, info));
-    Y_VERIFY(itpair.second, "double registration of page collection is forbidden. logic flaw?");
+    Y_ABORT_UNLESS(itpair.second, "double registration of page collection is forbidden. logic flaw?");
     ++Stats.TotalCollections;
 
     for (const auto& kv : info->PageMap) {
@@ -71,7 +71,7 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
 TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(TLogoBlobID id) {
     // todo: amortize destruction cost (how?)
     auto it = PageCollections.find(id);
-    Y_VERIFY(it != PageCollections.end(), "trying to forget unknown page collection. logic flaw?");
+    Y_ABORT_UNLESS(it != PageCollections.end(), "trying to forget unknown page collection. logic flaw?");
     TIntrusivePtr<TInfo> info = it->second;
 
     TPage::TWaitQueuePtr ret;
@@ -106,13 +106,13 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(
 
 void TPrivatePageCache::LockPageCollection(TLogoBlobID id) {
     auto it = PageCollections.find(id);
-    Y_VERIFY(it != PageCollections.end(), "trying to lock unknown page collection. logic flaw?");
+    Y_ABORT_UNLESS(it != PageCollections.end(), "trying to lock unknown page collection. logic flaw?");
     ++it->second->Users;
 }
 
 bool TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
     auto it = PageCollections.find(id);
-    Y_VERIFY(it != PageCollections.end(), "trying to unlock unknown page collection. logic flaw?");
+    Y_ABORT_UNLESS(it != PageCollections.end(), "trying to unlock unknown page collection. logic flaw?");
     TIntrusivePtr<TInfo> info = it->second;
 
     --info->Users;
@@ -123,8 +123,8 @@ bool TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
             auto* page = kv.second.Get();
             Y_VERIFY_DEBUG(page);
 
-            Y_VERIFY(!page->WaitQueue, "non-empty wait queue in forgotten page.");
-            Y_VERIFY(!page->PinPad, "non-empty pin pad in forgotten page.");
+            Y_ABORT_UNLESS(!page->WaitQueue, "non-empty wait queue in forgotten page.");
+            Y_ABORT_UNLESS(!page->PinPad, "non-empty pin pad in forgotten page.");
 
             if (page->SharedBody)
                 Stats.TotalSharedBody -= page->Size;
@@ -210,7 +210,7 @@ std::pair<ui32, ui64> TPrivatePageCache::Request(TVector<ui32> &pages, TPrivateP
             page->LoadState = TPage::LoadStateRequested;
             bytesToRequest += page->Size;
 
-            Y_VERIFY(!page->WaitQueue);
+            Y_ABORT_UNLESS(!page->WaitQueue);
             page->WaitQueue = new TPage::TWaitQueue();
             page->WaitQueue->Push(waitPad);
             waitPad->Inc();
@@ -287,7 +287,7 @@ void TPrivatePageCache::TPrivatePageCache::TryEraseIfUnnecessary(TPage *page) {
         const ui32 pageId = page->Id;
         auto* info = page->Info;
         Y_VERIFY_DEBUG(info->PageMap[pageId].Get() == page);
-        Y_VERIFY(info->PageMap.erase(pageId));
+        Y_ABORT_UNLESS(info->PageMap.erase(pageId));
     }
 }
 
@@ -454,10 +454,10 @@ THashMap<TPrivatePageCache::TInfo*, TVector<ui32>> TPrivatePageCache::GetToLoad(
 
 void TPrivatePageCache::ResetTouchesAndToLoad(bool verifyEmpty) {
     if (verifyEmpty) {
-        Y_VERIFY(!Touches);
-        Y_VERIFY(!Stats.CurrentCacheHits);
-        Y_VERIFY(!ToLoad);
-        Y_VERIFY(!Stats.CurrentCacheMisses);
+        Y_ABORT_UNLESS(!Touches);
+        Y_ABORT_UNLESS(!Stats.CurrentCacheHits);
+        Y_ABORT_UNLESS(!ToLoad);
+        Y_ABORT_UNLESS(!Stats.CurrentCacheMisses);
     }
 
     while (Touches) {

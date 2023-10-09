@@ -20,7 +20,7 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatch(const ISnaps
         return batch;
     }
     const std::shared_ptr<arrow::Schema>& resultArrowSchema = GetSchema();
-    Y_VERIFY(dataSchema.GetSnapshot() < GetSnapshot());
+    Y_ABORT_UNLESS(dataSchema.GetSnapshot() < GetSnapshot());
     std::vector<std::shared_ptr<arrow::Array>> newColumns;
     newColumns.reserve(resultArrowSchema->num_fields());
 
@@ -30,9 +30,9 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatch(const ISnaps
         auto oldColumnIndex = dataSchema.GetFieldIndex(columnId);
         if (oldColumnIndex >= 0) { // ColumnExists
             auto oldColumnInfo = dataSchema.GetFieldByIndex(oldColumnIndex);
-            Y_VERIFY(oldColumnInfo);
+            Y_ABORT_UNLESS(oldColumnInfo);
             auto columnData = batch->GetColumnByName(oldColumnInfo->name());
-            Y_VERIFY(columnData);
+            Y_ABORT_UNLESS(columnData);
             newColumns.push_back(columnData);
         } else { // AddNullColumn
             auto nullColumn = NArrow::MakeEmptyBatch(arrow::schema({resultField}), batch->num_rows());
@@ -69,7 +69,7 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TStr
     }
 
     const auto& sortingKey = GetIndexInfo().GetSortingKey();
-    Y_VERIFY(sortingKey);
+    Y_ABORT_UNLESS(sortingKey);
 
     // Check PK is NOT NULL
     for (auto& field : sortingKey->fields()) {

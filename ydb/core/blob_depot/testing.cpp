@@ -25,7 +25,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Validate(NTesting::TGroupOverseer& overseer) const {
-        Y_VERIFY(Config.HasVirtualGroupId());
+        Y_ABORT_UNLESS(Config.HasVirtualGroupId());
         overseer.EnumerateBlobs(Config.GetVirtualGroupId(), [&](TLogoBlobID userId, NTesting::EBlobState userState) {
             switch (userState) {
                 case NTesting::EBlobState::NOT_WRITTEN:
@@ -39,7 +39,7 @@ namespace NKikimr::NBlobDepot {
                     Cerr << userId.ToString() << Endl;
                     const TData::TKey key(userId);
                     const TData::TValue *value = Data->FindKey(key);
-                    Y_VERIFY(value); // key must exist
+                    Y_ABORT_UNLESS(value); // key must exist
                     ui32 numDataBytes = 0;
                     EnumerateBlobsForValueChain(value->ValueChain, TabletID(), [&](TLogoBlobID id, ui32, ui32 size) {
                         const ui32 groupId = Info()->GroupFor(id.Channel(), id.Generation());
@@ -49,7 +49,7 @@ namespace NKikimr::NBlobDepot {
                             << " Id# " << id.ToString() << " State# " << (int)state);
                         numDataBytes += size;
                     });
-                    Y_VERIFY(numDataBytes == userId.BlobSize());
+                    Y_ABORT_UNLESS(numDataBytes == userId.BlobSize());
                     break;
                 }
 

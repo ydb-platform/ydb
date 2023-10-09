@@ -93,9 +93,9 @@ static int MakeRequest(const TConfig& config, const Ydb::PersQueue::ClusterDisco
 
             if (res == 0) {
                 Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult discoveryResult;
-                Y_VERIFY(response.result().UnpackTo(&discoveryResult));
+                Y_ABORT_UNLESS(response.result().UnpackTo(&discoveryResult));
 
-                Y_VERIFY(response.ready()); // there's nothing to wait for
+                Y_ABORT_UNLESS(response.ready()); // there's nothing to wait for
 
                 Cerr << "Code: " << ToString(response.status()) << ". Result message: " << NProtobufJson::Proto2Json(discoveryResult, {}) << Endl;
                 return 0;
@@ -108,7 +108,7 @@ static int MakeRequest(const TConfig& config, const Ydb::PersQueue::ClusterDisco
 }
 
 int PersQueueDiscoverClustersRequest(TCommandConfig&, int argc, char** argv) {
-    Y_VERIFY(argc > 2);
+    Y_ABORT_UNLESS(argc > 2);
 
     if (argv[1] == TStringBuf("write-session")) {
         TCmdPersQueueDiscoverWriteSessionClustersConfig config;

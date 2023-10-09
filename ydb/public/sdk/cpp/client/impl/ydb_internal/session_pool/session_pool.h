@@ -40,7 +40,7 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
 {
     auto promise = NThreading::NewPromise<TResponse>();
     asyncResponse.Subscribe([impl, promise, cb, updateTimeout, timeout](NThreading::TFuture<TResponse> future) mutable {
-        Y_VERIFY(future.HasValue());
+        Y_ABORT_UNLESS(future.HasValue());
 
         // TResponse can hold refcounted user provided data (TSession for example)
         // and we do not want to have copy of it (for example it can cause delay dtor call)

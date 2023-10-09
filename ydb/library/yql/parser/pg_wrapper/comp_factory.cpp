@@ -4246,13 +4246,13 @@ TCoerceResult PgNativeBinaryCoerce(const TStringBuf binary, void* typeDesc, i32 
 
 TConvertResult PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {
     auto* typeDesc = TypeDescFromPgTypeId(pgTypeId);
-    Y_VERIFY(typeDesc);
+    Y_ABORT_UNLESS(typeDesc);
     return static_cast<TPgTypeDescriptor*>(typeDesc)->NativeBinaryFromNativeText(str);
 }
 
 TConvertResult PgNativeTextFromNativeBinary(const TString& binary, ui32 pgTypeId) {
     auto* typeDesc = TypeDescFromPgTypeId(pgTypeId);
-    Y_VERIFY(typeDesc);
+    Y_ABORT_UNLESS(typeDesc);
     return static_cast<TPgTypeDescriptor*>(typeDesc)->NativeTextFromNativeBinary(binary);
 }
 

@@ -80,7 +80,7 @@ void TWriteSessionImpl::SetCallbackContext(std::shared_ptr<NPersQueue::TCallback
 }
 
 void TWriteSessionImpl::Start(const TDuration& delay) {
-    Y_VERIFY(CbContext);
+    Y_ABORT_UNLESS(CbContext);
     ++ConnectionAttemptsDone;
     if (!Started) {
         with_lock(Lock) {
@@ -105,7 +105,7 @@ void TWriteSessionImpl::Start(const TDuration& delay) {
 }
 
 TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStatus& status) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     THandleResult result;
     if (AtomicGet(Aborting)) {
@@ -136,8 +136,8 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
 
 void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& delay)
 {
-    Y_VERIFY(Lock.IsLocked());
-    Y_VERIFY(Settings.PartitionId_.Defined() && Settings.DirectWriteToPartition_);
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    Y_ABORT_UNLESS(Settings.PartitionId_.Defined() && Settings.DirectWriteToPartition_);
 
     if (AtomicGet(Aborting)) {
         return;
@@ -242,7 +242,7 @@ void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::To
 }
 
 TMaybe<TEndpointKey> TWriteSessionImpl::GetPreferredEndpointImpl(ui32 partitionId, ui64 partitionNodeId) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     TEndpointKey preferredEndpoint{"", partitionNodeId};
 
@@ -320,7 +320,7 @@ TVector<TWriteSessionEvent::TEvent> TWriteSessionImpl::GetEvents(bool block, TMa
 }
 
 ui64 TWriteSessionImpl::GetNextSeqNoImpl(const TMaybe<ui64>& seqNo) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     ui64 seqNoValue = LastSeqNo + 1;
     if (!AutoSeqNoMode.Defined()) {
@@ -360,7 +360,7 @@ ui64 TWriteSessionImpl::GetNextSeqNoImpl(const TMaybe<ui64>& seqNo) {
     return seqNoValue;
 }
 inline void TWriteSessionImpl::CheckHandleResultImpl(THandleResult& result) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     result.DoSetSeqNo = result.DoStop && !InitSeqNoSetDone && (InitSeqNoSetDone = true);
 }
@@ -408,7 +408,7 @@ void TWriteSessionImpl::WriteEncoded(TContinuationToken&& token, TWriteMessage&&
 }
 
 TWriteSessionImpl::THandleResult TWriteSessionImpl::OnErrorImpl(NYdb::TPlainStatus&& status) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     (*Counters->Errors)++;
     auto result = RestartImpl(status);
@@ -572,7 +572,7 @@ void TWriteSessionImpl::OnConnect(
 
 // Produce init request for session.
 void TWriteSessionImpl::InitImpl() {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     TClientMessage req;
     auto* init = req.mutable_init_request();
@@ -606,7 +606,7 @@ void TWriteSessionImpl::InitImpl() {
 
 // Called under lock. Invokes Processor->Write, which is assumed to be deadlock-safe
 void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&& req) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     Y_ASSERT(Processor);
     if (Aborting) {
@@ -756,7 +756,7 @@ void TPrintable<TWriteSessionEvent::TReadyToAcceptEvent>::DebugString(TStringBui
 }
 
 TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMessageImpl() {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     TProcessSrvMessageResult result;
     switch (ServerMessage->GetServerMessageCase()) {
@@ -825,7 +825,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 auto ack = batchWriteResponse.acks(messageIndex);
                 ui64 sequenceNumber = ack.seq_no();
 
-                Y_VERIFY(ack.has_written() || ack.has_skipped());
+                Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped());
                 auto msgWriteStatus = ack.has_written()
                                 ? TWriteSessionEvent::TWriteAck::EES_WRITTEN
                                 : (ack.skipped().reason() == Ydb::Topic::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason::StreamWriteMessage_WriteResponse_WriteAck_Skipped_Reason_REASON_ALREADY_WRITTEN
@@ -895,10 +895,10 @@ bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 sequenceNumber) {
     (*Counters->BytesWrittenCompressed) += compressedSize;
     (*Counters->BytesInflightUncompressed) -= size;
 
-    Y_VERIFY(Counters->BytesInflightCompressed->Val() >= 0);
-    Y_VERIFY(Counters->BytesInflightUncompressed->Val() >= 0);
+    Y_ABORT_UNLESS(Counters->BytesInflightCompressed->Val() >= 0);
+    Y_ABORT_UNLESS(Counters->BytesInflightUncompressed->Val() >= 0);
 
-    Y_VERIFY(sentFront.SeqNo == sequenceNumber);
+    Y_ABORT_UNLESS(sentFront.SeqNo == sequenceNumber);
 
     (*Counters->BytesInflightTotal) = MemoryUsage;
     SentOriginalMessages.pop();
@@ -906,11 +906,11 @@ bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 sequenceNumber) {
 }
 
 TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     bool wasOk = MemoryUsage <= Settings.MaxMemoryUsage_;
     //if (diff < 0) {
-    //    Y_VERIFY(MemoryUsage >= static_cast<size_t>(std::abs(diff)));
+    //    Y_ABORT_UNLESS(MemoryUsage >= static_cast<size_t>(std::abs(diff)));
     //}
     MemoryUsage += diff;
     bool nowOk = MemoryUsage <= Settings.MaxMemoryUsage_;
@@ -944,12 +944,12 @@ TBuffer CompressBuffer(TVector<TStringBuf>& data, ECodec codec, i32 level) {
 
 // May call OnCompressed with sync executor. No external lock.
 void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (Aborting) {
         return;
     }
-    Y_VERIFY(block_.Valid);
+    Y_ABORT_UNLESS(block_.Valid);
 
     std::shared_ptr<TBlock> blockPtr(std::make_shared<TBlock>());
     blockPtr->Move(block_);
@@ -958,12 +958,12 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
                    level = Settings.CompressionLevel_,
                    isSyncCompression = !CompressionExecutor->IsAsync(),
                    blockPtr]() mutable {
-        Y_VERIFY(!blockPtr->Compressed);
+        Y_ABORT_UNLESS(!blockPtr->Compressed);
 
         auto compressedData = CompressBuffer(
                 blockPtr->OriginalDataRefs, codec, level
         );
-        Y_VERIFY(!compressedData.Empty());
+        Y_ABORT_UNLESS(!compressedData.Empty());
         blockPtr->Data = std::move(compressedData);
         blockPtr->Compressed = true;
         blockPtr->CodecID = static_cast<ui32>(codec);
@@ -990,10 +990,10 @@ void TWriteSessionImpl::OnCompressed(TBlock&& block, bool isSyncCompression) {
 }
 
 TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     UpdateTimedCountersImpl();
-    Y_VERIFY(block.Valid);
+    Y_ABORT_UNLESS(block.Valid);
     auto memoryUsage = OnMemoryUsageChangedImpl(static_cast<i64>(block.Data.size()) - block.OriginalMemoryUsage);
     (*Counters->BytesInflightUncompressed) -= block.OriginalSize;
     (*Counters->BytesInflightCompressed) += block.Data.size();
@@ -1004,7 +1004,7 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
 }
 
 void TWriteSessionImpl::ResetForRetryImpl() {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     SessionEstablished = false;
     const size_t totalPackedMessages = PackedMessagesToSend.size() + SentPackedMessage.size();
@@ -1027,13 +1027,13 @@ void TWriteSessionImpl::ResetForRetryImpl() {
     if (!OriginalMessagesToSend.empty() && OriginalMessagesToSend.front().SeqNo < minSeqNo)
         minSeqNo = OriginalMessagesToSend.front().SeqNo;
     MinUnsentSeqNo = minSeqNo;
-    Y_VERIFY(PackedMessagesToSend.size() == totalPackedMessages);
-    Y_VERIFY(OriginalMessagesToSend.size() == totalOriginalMessages);
+    Y_ABORT_UNLESS(PackedMessagesToSend.size() == totalPackedMessages);
+    Y_ABORT_UNLESS(OriginalMessagesToSend.size() == totalOriginalMessages);
 }
 
 // Called from client Write() methods
 void TWriteSessionImpl::FlushWriteIfRequiredImpl() {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (!CurrentBatch.Empty() && !CurrentBatch.FlushRequested) {
         MessagesAcquired += static_cast<ui64>(CurrentBatch.Acquire());
@@ -1050,7 +1050,7 @@ void TWriteSessionImpl::FlushWriteIfRequiredImpl() {
 }
 
 size_t TWriteSessionImpl::WriteBatchImpl() {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     LOG_LAZY(DbDriverState->Log,
         TLOG_DEBUG,
@@ -1058,7 +1058,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             << CurrentBatch.Messages.begin()->SeqNo << " to " << CurrentBatch.Messages.back().SeqNo
     );
 
-    Y_VERIFY(CurrentBatch.Messages.size() <= MaxBlockMessageCount);
+    Y_ABORT_UNLESS(CurrentBatch.Messages.size() <= MaxBlockMessageCount);
 
     const bool skipCompression = Settings.Codec_ == ECodec::RAW || CurrentBatch.HasCodec();
     if (!skipCompression && Settings.CompressionExecutor_->IsAsync()) {
@@ -1083,7 +1083,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             block.OriginalMemoryUsage = CurrentBatch.Data.size();
             block.OriginalDataRefs.emplace_back(datum);
             if (CurrentBatch.Messages[i].Codec.Defined()) {
-                Y_VERIFY(CurrentBatch.Messages.size() == 1);
+                Y_ABORT_UNLESS(CurrentBatch.Messages.size() == 1);
                 block.CodecID = static_cast<ui32>(*currMessage.Codec);
                 block.OriginalSize = currMessage.OriginalSize;
                 block.Compressed = false;
@@ -1120,7 +1120,7 @@ size_t GetMaxGrpcMessageSize() {
 }
 
 bool TWriteSessionImpl::IsReadyToSendNextImpl() const {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (!SessionEstablished) {
         return false;
@@ -1130,15 +1130,15 @@ bool TWriteSessionImpl::IsReadyToSendNextImpl() const {
     if (PackedMessagesToSend.empty()) {
         return false;
     }
-    Y_VERIFY(!OriginalMessagesToSend.empty(), "There are packed messages but no original messages");
-    Y_VERIFY(OriginalMessagesToSend.front().SeqNo <= PackedMessagesToSend.top().Offset, "Lost original message(s)");
+    Y_ABORT_UNLESS(!OriginalMessagesToSend.empty(), "There are packed messages but no original messages");
+    Y_ABORT_UNLESS(OriginalMessagesToSend.front().SeqNo <= PackedMessagesToSend.top().Offset, "Lost original message(s)");
 
     return PackedMessagesToSend.top().Offset == OriginalMessagesToSend.front().SeqNo;
 }
 
 
 void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: try to update token");
 
@@ -1159,7 +1159,7 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
 }
 
 void TWriteSessionImpl::SendImpl() {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB
     while(IsReadyToSendNextImpl()) {
@@ -1169,11 +1169,11 @@ void TWriteSessionImpl::SendImpl() {
         // Sent blocks while we can without messages reordering
         while (IsReadyToSendNextImpl() && clientMessage.ByteSizeLong() < GetMaxGrpcMessageSize()) {
             const auto& block = PackedMessagesToSend.top();
-            Y_VERIFY(block.Valid);
+            Y_ABORT_UNLESS(block.Valid);
             writeRequest->set_codec(static_cast<i32>(block.CodecID));
-            Y_VERIFY(block.MessageCount == 1);
+            Y_ABORT_UNLESS(block.MessageCount == 1);
             for (size_t i = 0; i != block.MessageCount; ++i) {
-                Y_VERIFY(!OriginalMessagesToSend.empty());
+                Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
 
                 auto& message = OriginalMessagesToSend.front();
 
@@ -1266,7 +1266,7 @@ bool TWriteSessionImpl::Close(TDuration closeTimeout) {
 }
 
 void TWriteSessionImpl::HandleWakeUpImpl() {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     FlushWriteIfRequiredImpl();
     if (AtomicGet(Aborting)) {
@@ -1295,7 +1295,7 @@ void TWriteSessionImpl::HandleWakeUpImpl() {
 }
 
 void TWriteSessionImpl::UpdateTimedCountersImpl() {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     auto now = TInstant::Now();
     auto delta = (now - LastCountersUpdateTs).MilliSeconds();
@@ -1334,7 +1334,7 @@ void TWriteSessionImpl::UpdateTimedCountersImpl() {
 }
 
 void TWriteSessionImpl::AbortImpl() {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (!AtomicGet(Aborting)) {
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: aborting");
@@ -1352,7 +1352,7 @@ void TWriteSessionImpl::AbortImpl() {
 }
 
 void TWriteSessionImpl::CloseImpl(EStatus statusCode, NYql::TIssues&& issues) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Write session will now close");
     EventsQueue->Close(TSessionClosedEvent(statusCode, std::move(issues)));
@@ -1360,7 +1360,7 @@ void TWriteSessionImpl::CloseImpl(EStatus statusCode, NYql::TIssues&& issues) {
 }
 
 void TWriteSessionImpl::CloseImpl(EStatus statusCode, const TString& message) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     NYql::TIssues issues;
     issues.AddIssue(message);
@@ -1368,7 +1368,7 @@ void TWriteSessionImpl::CloseImpl(EStatus statusCode, const TString& message) {
 }
 
 void TWriteSessionImpl::CloseImpl(TPlainStatus&& status) {
-    Y_VERIFY(Lock.IsLocked());
+    Y_ABORT_UNLESS(Lock.IsLocked());
 
     LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Write session will now close");
     EventsQueue->Close(TSessionClosedEvent(std::move(status)));

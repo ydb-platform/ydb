@@ -24,7 +24,7 @@ namespace NKikimr::NFlatTxCoordinator {
 
     TCoordinatorHooksGuard::TCoordinatorHooksGuard(ICoordinatorHooks& hooks) {
         auto* current = ICoordinatorHooks::Get();
-        Y_VERIFY(!current, "Unexpected attempt to install nested hooks");
+        Y_ABORT_UNLESS(!current, "Unexpected attempt to install nested hooks");
         ICoordinatorHooks::Set(&hooks);
     }
 

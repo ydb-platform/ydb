@@ -25,14 +25,14 @@ TS3BufferRaw::TS3BufferRaw(const TTagToColumn& columns, ui64 rowsLimit, ui64 byt
 }
 
 void TS3BufferRaw::ColumnsOrder(const TVector<ui32>& tags) {
-    Y_VERIFY(tags.size() == Columns.size());
+    Y_ABORT_UNLESS(tags.size() == Columns.size());
 
     Indices.clear();
     for (ui32 i = 0; i < tags.size(); ++i) {
         const ui32 tag = tags.at(i);
         auto it = Columns.find(tag);
-        Y_VERIFY(it != Columns.end());
-        Y_VERIFY(Indices.emplace(tag, i).second);
+        Y_ABORT_UNLESS(it != Columns.end());
+        Y_ABORT_UNLESS(Indices.emplace(tag, i).second);
     }
 }
 
@@ -40,8 +40,8 @@ void TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
     bool needsComma = false;
     for (const auto& [tag, column] : Columns) {
         auto it = Indices.find(tag);
-        Y_VERIFY(it != Indices.end());
-        Y_VERIFY(it->second < (*row).size());
+        Y_ABORT_UNLESS(it != Indices.end());
+        Y_ABORT_UNLESS(it->second < (*row).size());
         const auto& cell = (*row)[it->second];
 
         BytesRead += cell.Size();
@@ -153,7 +153,7 @@ IEventBase* TS3BufferRaw::PrepareEvent(bool last, NExportScan::IBuffer::TStats& 
 }
 
 void TS3BufferRaw::Clear() {
-    Y_VERIFY(Flush(false));
+    Y_ABORT_UNLESS(Flush(false));
 }
 
 bool TS3BufferRaw::IsFilled() const {

@@ -42,7 +42,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         auto req = dynamic_cast<TEvNodeRegistrationRequest*>(Request.get());
-        Y_VERIFY(req, "Unexpected request type for TNodeRegistrationRPC");
+        Y_ABORT_UNLESS(req, "Unexpected request type for TNodeRegistrationRPC");
         const TNodeAuthorizationResult nodeAuthorizationResult = IsNodeAuthorized(req->FindClientCert());
         if (!nodeAuthorizationResult.IsAuthorized) {
             SendReplyAndDie(ctx);

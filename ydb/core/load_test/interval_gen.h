@@ -18,7 +18,7 @@ namespace NKikimr {
                 , Max(x.HasMaxUs() ? TDuration::MicroSeconds(x.GetMaxUs()) : TDuration::MilliSeconds(x.GetMaxMs()))
             {
                 const bool a = x.HasMinUs(), b = x.HasMaxUs(), c = x.HasMinMs(), d = x.HasMaxMs();
-                Y_VERIFY((a && b && !c && !d) || (!a && !b && c && d));
+                Y_ABORT_UNLESS((a && b && !c && !d) || (!a && !b && c && d));
             }
 
             TDuration Generate() const {
@@ -37,7 +37,7 @@ namespace NKikimr {
                 : Frequency(x.GetFrequency())
                 , Xmin(exp(-Frequency * (x.GetMaxIntervalMs() * 1e-3)))
             {
-                Y_VERIFY(x.HasFrequency() && x.HasMaxIntervalMs());
+                Y_ABORT_UNLESS(x.HasFrequency() && x.HasMaxIntervalMs());
             }
 
             TDuration Generate() const {

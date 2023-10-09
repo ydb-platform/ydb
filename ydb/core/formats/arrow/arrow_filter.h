@@ -96,12 +96,12 @@ public:
         }
 
         bool GetCurrentAcceptance() const {
-            Y_VERIFY(CurrentRemainVolume);
+            Y_ABORT_UNLESS(CurrentRemainVolume);
             return CurrentValue;
         }
 
         bool IsBatchForSkip(const ui32 size) const {
-            Y_VERIFY(CurrentRemainVolume);
+            Y_ABORT_UNLESS(CurrentRemainVolume);
             return !CurrentValue && CurrentRemainVolume >= size;
         }
 

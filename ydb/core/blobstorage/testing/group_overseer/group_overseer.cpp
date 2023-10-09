@@ -64,7 +64,7 @@ namespace NKikimr::NTesting {
     private:
         template<typename T>
         void ExamineQueryEvent(ui32 nodeId, IEventHandle& ev, ui32 resultEventType) {
-            Y_VERIFY(ev.GetTypeRewrite() == T::EventType);
+            Y_ABORT_UNLESS(ev.GetTypeRewrite() == T::EventType);
 
             const auto it = OverseenServiceMap.find(ev.Recipient);
             if (it == OverseenServiceMap.end()) {
@@ -82,7 +82,7 @@ namespace NKikimr::NTesting {
 
         template<typename T>
         void ExamineResultEvent(ui32 nodeId, IEventHandle& ev) {
-            Y_VERIFY(ev.GetTypeRewrite() == T::EventType);
+            Y_ABORT_UNLESS(ev.GetTypeRewrite() == T::EventType);
 
             const TQueryId queryId{nodeId, T::EventType, ev.Recipient, ev.Cookie};
             const auto it = QueryToGroup.find(queryId);
@@ -97,7 +97,7 @@ namespace NKikimr::NTesting {
                     T::EventType != TEvBlobStorage::EvInplacePatchResult &&
                     T::EventType != TEvBlobStorage::EvCollectGarbageResult &&
                     T::EventType != TEvBlobStorage::EvDiscoverResult) {
-                Y_VERIFY(groupId == msg.GroupId);
+                Y_ABORT_UNLESS(groupId == msg.GroupId);
             }
 
             const auto groupStateIt = GroupStates.try_emplace(groupId, groupId).first;

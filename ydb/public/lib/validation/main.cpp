@@ -72,7 +72,7 @@ bool IsScalarType(const FieldDescriptor* field) {
 
 class TFieldGenerator: public TThrRefBase {
     void Required(TPrinter& printer) const {
-        Y_VERIFY(!Field->is_repeated(), "Repeated fields cannot be required or not");
+        Y_ABORT_UNLESS(!Field->is_repeated(), "Repeated fields cannot be required or not");
 
         if (Field->options().GetExtension(Ydb::required)) {
             if (Field->cpp_type() == FieldDescriptor::CPPTYPE_STRING) {
@@ -196,7 +196,7 @@ class TFieldGenerator: public TThrRefBase {
     }
 
     void Size(TPrinter& printer) const {
-        Y_VERIFY(Field->is_repeated(), "Cannot check size of non-repeated field");
+        Y_ABORT_UNLESS(Field->is_repeated(), "Cannot check size of non-repeated field");
 
         TVariables vars = Vars;
         vars["kind"] = " size";
@@ -237,7 +237,7 @@ class TFieldGenerator: public TThrRefBase {
     }
 
     void MapKey(TPrinter& printer) const {
-        Y_VERIFY(Field->is_map(), "Cannot validate map key of non-map field");
+        Y_ABORT_UNLESS(Field->is_map(), "Cannot validate map key of non-map field");
 
         printer->Print(Vars, "for (const auto& value : $field$()) {\n");
         printer->Indent();
@@ -572,7 +572,7 @@ public:
             if (it == items.end()) {
                 it = items.emplace(nullptr, TItem(nullptr)).first;
             }
-            Y_VERIFY(it != items.end());
+            Y_ABORT_UNLESS(it != items.end());
             it->second.AddField(fieldGen);
         }
 

@@ -467,7 +467,7 @@ public:
         Stateless = false;
         bool encoded;
         GetDictionaryKeyTypes(keyType, KeyTypes, IsTuple, encoded, UseIHash);
-        Y_VERIFY(!encoded, "TODO");
+        Y_ABORT_UNLESS(!encoded, "TODO");
         Equate = UseIHash ? MakeEquateImpl(KeyType) : nullptr;
         Hash = UseIHash ? MakeHashImpl(KeyType) : nullptr;
     }

@@ -158,7 +158,7 @@ protected:
             if (!TTxInit::LoadStateFromDB(state, txc.DB)) {
                 return false;
             }
-            Y_VERIFY(!state.IsDamaged());
+            Y_ABORT_UNLESS(!state.IsDamaged());
             state.VerifyEqualIndex(Self->State);
             txc.DB.NoMoreReadsForTx();
             return true;
@@ -342,7 +342,7 @@ protected:
     void Handle(TEvKeyValue::TEvCompleteGC::TPtr &ev, const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvCompleteGC " << ev->Get()->ToString());
-        Y_VERIFY(ev->Sender == (ev->Get()->Repeat ? ctx.SelfID : CollectorActorId));
+        Y_ABORT_UNLESS(ev->Sender == (ev->Get()->Repeat ? ctx.SelfID : CollectorActorId));
         CollectorActorId = {};
         State.OnEvCompleteGC(ev->Get()->Repeat);
         Execute(new TTxCompleteGC(this), ctx);

@@ -539,7 +539,7 @@ private:
         };
 
         EStep Check(const NUdf::TUnboxedValuePod bitmapValue) {
-            Y_VERIFY(!IsFinished_);
+            Y_ABORT_UNLESS(!IsFinished_);
             auto& bitmap = Arrays_.back();
             if (!InputSize_) {
                 bitmap = TArrowBlock::From(bitmapValue).GetDatum().array();
@@ -565,7 +565,7 @@ private:
                 for (size_t i = 0; i < Builders_.size(); ++i) {
                     if (Builders_[i]) {
                         Arrays_[i] = TArrowBlock::From(Values[i]).GetDatum().array();
-                        Y_VERIFY(ui64(Arrays_[i]->length) == InputSize_);
+                        Y_ABORT_UNLESS(ui64(Arrays_[i]->length) == InputSize_);
                     }
                 }
             }
@@ -578,7 +578,7 @@ private:
             while (takeInputPopcnt < outputAvail && takeInputLen < InputSize_) {
                 takeInputPopcnt += bitmapData[takeInputLen++];
             }
-            Y_VERIFY(takeInputLen > 0);
+            Y_ABORT_UNLESS(takeInputLen > 0);
             for (size_t i = 0; i < Builders_.size(); ++i) {
                 if (Builders_[i]) {
                     auto& arr = Arrays_[i];

@@ -102,7 +102,7 @@ protected:
                 return i;
             }
         }
-        Y_VERIFY(false);
+        Y_ABORT_UNLESS(false);
         return Columns.front();
     }
 public:
@@ -136,7 +136,7 @@ public:
     }
 
     explicit TGeneralSerializedSlice(TVectorView<TGeneralSerializedSlice>&& objects) {
-        Y_VERIFY(objects.size());
+        Y_ABORT_UNLESS(objects.size());
         std::swap(*this, objects.front());
         for (ui32 i = 1; i < objects.size(); ++i) {
             MergeSlice(std::move(objects[i]));
@@ -163,7 +163,7 @@ public:
 
     explicit TBatchSerializedSlice(TVectorView<TBatchSerializedSlice>&& objects)
     {
-        Y_VERIFY(objects.size());
+        Y_ABORT_UNLESS(objects.size());
         std::swap(*this, objects.front());
         for (ui32 i = 1; i < objects.size(); ++i) {
             MergeSlice(std::move(objects[i]));

@@ -147,7 +147,7 @@ private:
         }
 
         void AttachProxy(TProxyInfo* proxy, ui64 cookie, ui64 seqNo) {
-            Y_VERIFY(proxy);
+            Y_ABORT_UNLESS(proxy);
             if (OwnerProxy != proxy) {
                 if (OwnerProxy) {
                     OwnerProxy->AttachedSessions.erase(Id);
@@ -176,7 +176,7 @@ private:
 
         ui64 RemoveSemaphoreWatchCookie(TSemaphoreInfo* semaphore) {
             auto it = SemaphoreWatchCookie.find(semaphore);
-            Y_VERIFY(it != SemaphoreWatchCookie.end());
+            Y_ABORT_UNLESS(it != SemaphoreWatchCookie.end());
             ui64 cookie = it->second;
             SemaphoreWatchCookie.erase(it);
             return cookie;
@@ -209,7 +209,7 @@ private:
         }
 
         bool CanAcquire(ui64 count) const {
-            Y_VERIFY(count <= Limit);
+            Y_ABORT_UNLESS(count <= Limit);
             return count <= (Limit - Count);
         }
 
@@ -443,7 +443,7 @@ private:
 
     void RemoveSessionTx(ui64 sessionId) {
         auto it = SessionsTxCount.find(sessionId);
-        Y_VERIFY(it != SessionsTxCount.end());
+        Y_ABORT_UNLESS(it != SessionsTxCount.end());
         if (!--it->second) {
             SessionsTxCount.erase(it);
         }

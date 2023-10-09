@@ -3,7 +3,7 @@
 namespace NKikimr::NCSIndex {
 
 void TDataUpserter::OnDescriptionSuccess(NMetadata::NProvider::TTableInfo&& result, const TString& /*requestId*/) {
-    Y_VERIFY(SelfContainer);
+    Y_ABORT_UNLESS(SelfContainer);
     const std::vector<TString> pkFields = result.GetPKFieldNames();
     AtomicCounter.Inc();
     for (auto&& i : Indexes) {

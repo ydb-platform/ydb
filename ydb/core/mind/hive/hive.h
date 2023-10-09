@@ -115,12 +115,12 @@ struct TCompleteNotifications {
     }
 
     void Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
-        Y_VERIFY(!!SelfID);
+        Y_ABORT_UNLESS(!!SelfID);
         Notifications.emplace_back(new IEventHandle(recipient, SelfID, ev, flags, cookie), TDuration());
     }
 
     void Schedule(TDuration duration, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
-        Y_VERIFY(!!SelfID);
+        Y_ABORT_UNLESS(!!SelfID);
         Notifications.emplace_back(new IEventHandle(SelfID, {}, ev, flags, cookie), duration);
     }
 

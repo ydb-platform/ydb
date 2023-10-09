@@ -19,7 +19,7 @@ struct TNotifications {
     THashSet<TActorId> Actors;
 
     void Add(const TActorId& actor, TTxId txId) {
-        Y_VERIFY(!TxId || TxId == txId);
+        Y_ABORT_UNLESS(!TxId || TxId == txId);
         TxId = txId;
         Actors.insert(actor);
     }

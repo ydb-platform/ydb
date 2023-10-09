@@ -21,7 +21,7 @@ public:
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
         if (tablet != nullptr && tablet->IsReadyToReassignTablet()) {
             auto channel = msg->Record.GetChannel();
-            Y_VERIFY(channel < tablet->TabletStorageInfo->Channels.size());
+            Y_ABORT_UNLESS(channel < tablet->TabletStorageInfo->Channels.size());
             TTabletChannelInfo& channelInfo = tablet->TabletStorageInfo->Channels[channel];
             auto fromGeneration = msg->Record.GetFromGeneration();
             auto groupId = msg->Record.GetGroupID();

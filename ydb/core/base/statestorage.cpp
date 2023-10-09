@@ -67,7 +67,7 @@ void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection) con
     const ui32 hash = StateStorageHashFromTabletID(tabletId);
     const ui32 total = Rings.size();
 
-    Y_VERIFY(NToSelect <= total);
+    Y_ABORT_UNLESS(NToSelect <= total);
 
     if (selection->Sz < NToSelect) {
         selection->Status.Reset(new TStateStorageInfo::TSelection::EStatus[NToSelect]);
@@ -93,7 +93,7 @@ TActorId TStateStorageInfo::TRing::SelectReplica(ui32 hash) const {
     if (Replicas.size() == 1)
         return Replicas[0];
 
-    Y_VERIFY(!Replicas.empty());
+    Y_ABORT_UNLESS(!Replicas.empty());
     if (UseRingSpecificNodeSelection) {
         return Replicas[CombineHashes(hash, ContentHash()) % Replicas.size()];
     } else {
@@ -194,8 +194,8 @@ static void CopyStateStorageRingInfo(
     const bool hasNodes = source.NodeSize() > 0;
 
     if (hasRings) { // has explicitely defined rings, use them as info rings
-        Y_VERIFY(!hasNodes);
-        Y_VERIFY(source.RingSize() < MaxRingCount);
+        Y_ABORT_UNLESS(!hasNodes);
+        Y_ABORT_UNLESS(source.RingSize() < MaxRingCount);
         info->Rings.resize(source.RingSize());
 
         for (ui32 iring = 0, ering = source.RingSize(); iring != ering; ++iring) {
@@ -206,13 +206,13 @@ static void CopyStateStorageRingInfo(
             info->Rings[iring].IsDisabled = ring.GetIsDisabled();
 
             if (ring.GetUseSingleNodeActorId()) {
-                Y_VERIFY(ring.NodeSize() == 1);
+                Y_ABORT_UNLESS(ring.NodeSize() == 1);
 
                 const TActorId replicaActorID = TActorId(ring.GetNode(0), TStringBuf(serviceId, serviceId + 12));
                 info->Rings[iring].Replicas.push_back(replicaActorID);
             }
             else {
-               Y_VERIFY(ring.NodeSize() > 0);
+               Y_ABORT_UNLESS(ring.NodeSize() > 0);
 
                for (ui32 inode = 0, enode = ring.NodeSize(); inode != enode; ++inode) {
                     serviceId[depth + 1] = (inode + 1);
@@ -228,8 +228,8 @@ static void CopyStateStorageRingInfo(
     }
 
     if (hasNodes) { // has explicitely defined replicas, use nodes as 1-node rings
-        Y_VERIFY(!hasRings);
-        Y_VERIFY(source.NodeSize() < MaxNodeCount);
+        Y_ABORT_UNLESS(!hasRings);
+        Y_ABORT_UNLESS(source.NodeSize() < MaxNodeCount);
 
         info->Rings.resize(source.NodeSize());
         for (ui32 inode = 0, enode = source.NodeSize(); inode != enode; ++inode) {
@@ -256,7 +256,7 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActor
     }
     
     const size_t offset = FindIndex(namePrefix, char());
-    Y_VERIFY(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
+    Y_ABORT_UNLESS(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
 
     memcpy(namePrefix + offset, reinterpret_cast<const char *>(&info->StateStorageGroup), sizeof(ui32));
     CopyStateStorageRingInfo(config.GetRing(), info.Get(), namePrefix, offset + sizeof(ui32));

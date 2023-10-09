@@ -15,9 +15,9 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
         const TBlobStorageGroupInfo &info, TBlobStorageGroupInfo::EBlobState *pessimisticState,
         TBlobStorageGroupInfo::EBlobState *optimisticState, TBlobStorageGroupInfo::EBlobState *altruisticState,
         bool considerSlowAsError) {
-    Y_VERIFY(pessimisticState);
-    Y_VERIFY(optimisticState);
-    Y_VERIFY(altruisticState);
+    Y_ABORT_UNLESS(pessimisticState);
+    Y_ABORT_UNLESS(optimisticState);
+    Y_ABORT_UNLESS(altruisticState);
     TSubgroupPartLayout presentLayout;
     TSubgroupPartLayout optimisticLayout;
     TSubgroupPartLayout altruisticLayout;
@@ -176,7 +176,7 @@ std::optional<EStrategyOutcome> TStrategyBase::ProcessPessimistic(const TBlobSto
                 state.WholeSituation = TBlobState::ESituation::Present;
                 return EStrategyOutcome::DONE; // blob has been restored
             } else {
-                Y_VERIFY(!doVerify);
+                Y_ABORT_UNLESS(!doVerify);
             }
             break;
     }
@@ -213,7 +213,7 @@ bool TStrategyBase::VerifyTheWholeSituation(TBlobState &state) {
 
 void TStrategyBase::PreparePartLayout(const TBlobState &state, const TBlobStorageGroupInfo &info,
         TBlobStorageGroupType::TPartLayout *layout, ui32 slowDiskIdx) {
-    Y_VERIFY(layout);
+    Y_ABORT_UNLESS(layout);
     const ui32 totalPartCount = info.Type.TotalPartCount();
     const ui32 blobSubringSize = info.Type.BlobSubgroupSize();
     layout->VDiskPartMask.resize(blobSubringSize);
@@ -290,7 +290,7 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
     if (!isPartsAvailable) {
         // Prepare new put request set
         TIntervalSet<i32> fullInterval(0, state.Id.BlobSize());
-        Y_VERIFY(fullInterval == state.Whole.Here(), "Can't put unrestored blob! Unexpected blob state# %s", state.ToString().c_str());
+        Y_ABORT_UNLESS(fullInterval == state.Whole.Here(), "Can't put unrestored blob! Unexpected blob state# %s", state.ToString().c_str());
 
         TStackVec<TRope, TypicalPartsInBlob> partData(info.Type.TotalPartCount());
         ErasureSplit((TErasureType::ECrcMode)state.Id.CrcMode(), info.Type,
@@ -301,8 +301,8 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
             const ui32 partSize = info.Type.PartSize(TLogoBlobID(state.Id, partIdx + 1));
             if (partSize) {
                 state.AddPartToPut(partIdx, std::move(partData[partIdx]));
-                Y_VERIFY(part.Data.IsMonolith());
-                Y_VERIFY(part.Data.GetMonolith().size() == partSize);
+                Y_ABORT_UNLESS(part.Data.IsMonolith());
+                Y_ABORT_UNLESS(part.Data.GetMonolith().size() == partSize);
             }
         }
     }
@@ -322,7 +322,7 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
                 isNeeded = true;
                 break;
             case TBlobState::ESituation::Error:
-                Y_VERIFY(false);
+                Y_ABORT_UNLESS(false);
                 break;
             case TBlobState::ESituation::Present:
                 break;
@@ -335,7 +335,7 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
             A_LOG_DEBUG_SX(logCtx, "BPG32", "Sending missing VPut part# " << (ui32)record.PartIdx
                     << " to# " << (ui32)record.VDiskIdx
                     << " blob Id# " << partId.ToString());
-            Y_VERIFY(state.Parts[record.PartIdx].Data.IsMonolith());
+            Y_ABORT_UNLESS(state.Parts[record.PartIdx].Data.IsMonolith());
             groupDiskRequests.AddPut(disk.OrderNumber, partId, state.Parts[record.PartIdx].Data.GetMonolith(),
                     TDiskPutRequest::ReasonInitial, info.Type.IsHandoffInSubgroup(record.VDiskIdx),
                     state.ExtraBlockChecks, state.Span, state.BlobIdx);

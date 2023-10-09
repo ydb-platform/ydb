@@ -55,7 +55,7 @@ void TAllocState::KillAllBoxed() {
     }
 
     {
-        Y_VERIFY(CurrentPAllocList == &GlobalPAllocList);
+        Y_ABORT_UNLESS(CurrentPAllocList == &GlobalPAllocList);
         CleanupPAllocList(&GlobalPAllocList);
     }
 
@@ -132,7 +132,7 @@ void TAllocState::UnlockObject(::NKikimr::NUdf::TUnboxedValuePod value) {
     }
 
     auto it = LockedObjectsRefs.find(obj);
-    Y_VERIFY(it != LockedObjectsRefs.end());
+    Y_ABORT_UNLESS(it != LockedObjectsRefs.end());
     if (--it->second.Locks == 0) {
        value.UnlockRef(it->second.OriginalRefs);
        LockedObjectsRefs.erase(it);
@@ -145,7 +145,7 @@ void TScopedAlloc::Acquire() {
         TlsAllocState = &MyState_;
         PgAcquireThreadContext(MyState_.MainContext);
     } else {
-        Y_VERIFY(TlsAllocState == &MyState_, "Mismatch allocator in thread");
+        Y_ABORT_UNLESS(TlsAllocState == &MyState_, "Mismatch allocator in thread");
     }
 
     ++AttachedCount_;
@@ -153,7 +153,7 @@ void TScopedAlloc::Acquire() {
 
 void TScopedAlloc::Release() {
     if (AttachedCount_ && --AttachedCount_ == 0) {
-        Y_VERIFY(TlsAllocState == &MyState_, "Mismatch allocator in thread");
+        Y_ABORT_UNLESS(TlsAllocState == &MyState_, "Mismatch allocator in thread");
         PgReleaseThreadContext(MyState_.MainContext);
         TlsAllocState = PrevState_;
         PrevState_ = nullptr;

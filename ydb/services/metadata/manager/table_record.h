@@ -39,7 +39,7 @@ private:
     std::vector<TString> GetColumnIds() const;
 
     void PopRecord() {
-        Y_VERIFY(Records.size());
+        Y_ABORT_UNLESS(Records.size());
         Records.pop_back();
     }
 
@@ -59,7 +59,7 @@ public:
     }
 
     void InitColumns(const std::vector<Ydb::Column>& columns) {
-        Y_VERIFY(Columns.empty());
+        Y_ABORT_UNLESS(Columns.empty());
         Columns = columns;
     }
     void ReserveRows(const ui32 rowsCount) {

@@ -626,7 +626,7 @@ void TUserActionProcessorFixture::WaitDataRangeRequest()
 
 void TUserActionProcessorFixture::SendDataRangeResponse(ui64 begin, ui64 end)
 {
-    Y_VERIFY(begin <= end);
+    Y_ABORT_UNLESS(begin <= end);
 
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);

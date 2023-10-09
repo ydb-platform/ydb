@@ -21,9 +21,9 @@ namespace NKikimr {
         TTimeGrid(TDuration period)
             : Period(period)
         {
-            Y_VERIFY(Period >= TDuration::Seconds(1));
-            Y_VERIFY(Period <= TDuration::Hours(1));
-            Y_VERIFY(TDuration::Hours(1).MicroSeconds() % Period.MicroSeconds() == 0);
+            Y_ABORT_UNLESS(Period >= TDuration::Seconds(1));
+            Y_ABORT_UNLESS(Period <= TDuration::Hours(1));
+            Y_ABORT_UNLESS(TDuration::Hours(1).MicroSeconds() % Period.MicroSeconds() == 0);
         }
 
         const TSlot Get(TInstant now) const {

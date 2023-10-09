@@ -100,14 +100,14 @@ public:
         , ResourceId_(data.ResourceID)
         , Counters_(*data.Counters)
     {
-        Y_VERIFY(RequestId_);
+        Y_ABORT_UNLESS(RequestId_);
     }
 
     TError* MakeMutableError() {
 #define SQS_REQUEST_CASE(action) \
        return Response_.Y_CAT(Mutable, action)()->MutableError();
 
-        SQS_SWITCH_REQUEST_CUSTOM(*RequestHolder_, ENUMERATE_ALL_ACTIONS, Y_VERIFY(false)); // ALL actions are listed here
+        SQS_SWITCH_REQUEST_CUSTOM(*RequestHolder_, ENUMERATE_ALL_ACTIONS, Y_ABORT_UNLESS(false)); // ALL actions are listed here
 #undef SQS_REQUEST_CASE
     }
 
@@ -136,13 +136,13 @@ public:
 #define SQS_REQUEST_CASE(action) \
         ActionClass_ = EActionClass::AccountFolderBound;
 
-        SQS_SWITCH_REQUEST_CUSTOM(*RequestHolder_, ENUMERATE_ACCOUNT_FOLDER_BOUND_ACTIONS, Y_VERIFY(true));
+        SQS_SWITCH_REQUEST_CUSTOM(*RequestHolder_, ENUMERATE_ACCOUNT_FOLDER_BOUND_ACTIONS, Y_ABORT_UNLESS(true));
 #undef SQS_REQUEST_CASE
 
 #define SQS_REQUEST_CASE(action) \
         ActionClass_ = EActionClass::CustomUIBatch;
 
-        SQS_SWITCH_REQUEST_CUSTOM(*RequestHolder_, ENUMERATE_CUSTOM_UI_BATCH_ACTIONS, Y_VERIFY(true));
+        SQS_SWITCH_REQUEST_CUSTOM(*RequestHolder_, ENUMERATE_CUSTOM_UI_BATCH_ACTIONS, Y_ABORT_UNLESS(true));
 #undef SQS_REQUEST_CASE
 
         if (Signature_) {
@@ -486,7 +486,7 @@ public:
 #define SQS_REQUEST_CASE(action) \
         ProposeStaticCreds(*RequestHolder_->Y_CAT(Mutable, action)());
 
-        SQS_SWITCH_REQUEST_CUSTOM(*RequestHolder_, ENUMERATE_ALL_ACTIONS, Y_VERIFY(false));
+        SQS_SWITCH_REQUEST_CUSTOM(*RequestHolder_, ENUMERATE_ALL_ACTIONS, Y_ABORT_UNLESS(false));
 #undef SQS_REQUEST_CASE
 
         Register(CreateProxyActionActor(*RequestHolder_, std::move(Callback_), EnableQueueLeader_), NActors::TMailboxType::HTSwap, PoolId_);

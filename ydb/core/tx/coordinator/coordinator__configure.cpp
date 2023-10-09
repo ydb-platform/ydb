@@ -70,7 +70,7 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
             }
 
             TString encodedConfig;
-            Y_VERIFY(Config.SerializeToString(&encodedConfig));
+            Y_ABORT_UNLESS(Config.SerializeToString(&encodedConfig));
             db.Table<Schema::DomainConfiguration>().Key(Version).Update(
                 NIceDb::TUpdate<Schema::DomainConfiguration::Config>(encodedConfig));
             persistedConfig = true;

@@ -32,7 +32,7 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::HandleUpdateGroupStat() {
-        Y_VERIFY(GroupStatUpdateScheduled);
+        Y_ABORT_UNLESS(GroupStatUpdateScheduled);
         GroupStatUpdateScheduled = false;
         if (Info) {
             Stat.Fadeout(TActivationContext::Now());

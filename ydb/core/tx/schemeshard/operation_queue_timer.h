@@ -323,13 +323,13 @@ public:
     const TShardCompactionInfo& Front() const {
         switch (ActiveQueue) {
         case EActiveQueue::ByLastCompaction:
-            Y_VERIFY(!QueueLastCompaction.Empty(), "QueueLastCompaction empty");
+            Y_ABORT_UNLESS(!QueueLastCompaction.Empty(), "QueueLastCompaction empty");
             return QueueLastCompaction.Front();
         case EActiveQueue::BySearchHeight:
-            Y_VERIFY(!QueueSearchHeight.Empty(), "QueueSearchHeight empty");
+            Y_ABORT_UNLESS(!QueueSearchHeight.Empty(), "QueueSearchHeight empty");
             return QueueSearchHeight.Front();
         case EActiveQueue::ByRowDeletes:
-            Y_VERIFY(!QueueRowDeletes.Empty(), "QueueRowDeletes empty");
+            Y_ABORT_UNLESS(!QueueRowDeletes.Empty(), "QueueRowDeletes empty");
             return QueueRowDeletes.Front();
         }
     }

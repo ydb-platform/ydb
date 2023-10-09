@@ -63,12 +63,12 @@ void TExecutor::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev)
             return;
         }
     }
-    Y_VERIFY(false, "unexpected snapshot");
+    Y_ABORT_UNLESS(false, "unexpected snapshot");
 }
 
 void TExecutor::Bootstrap() {
     Become(&TExecutor::StateMain);
-    Y_VERIFY(NMetadata::NProvider::TServiceOperator::IsEnabled(), "metadata service not active");
+    Y_ABORT_UNLESS(NMetadata::NProvider::TServiceOperator::IsEnabled(), "metadata service not active");
 
     auto managerIndexes = std::make_shared<NMetadata::NCSIndex::TFetcher>();
     Sender<NMetadata::NProvider::TEvSubscribeExternal>(managerIndexes).SendTo(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()));

@@ -60,7 +60,7 @@ protected:
 
 public:
     const TFetchingPlan& GetFetchingPlan() const {
-        Y_VERIFY(FetchingPlan);
+        Y_ABORT_UNLESS(FetchingPlan);
         return *FetchingPlan;
     }
 
@@ -69,7 +69,7 @@ public:
     }
 
     void StartMerging() {
-        Y_VERIFY(!MergingStartedFlag);
+        Y_ABORT_UNLESS(!MergingStartedFlag);
         MergingStartedFlag = true;
     }
 
@@ -100,7 +100,7 @@ public:
     }
 
     const TFilterStageData& GetFilterStageData() const {
-        Y_VERIFY(FilterStageData);
+        Y_ABORT_UNLESS(FilterStageData);
         return *FilterStageData;
     }
 
@@ -122,11 +122,11 @@ public:
         if (Start.IsReverseSort()) {
             std::swap(Start, Finish);
         }
-        Y_VERIFY(Start.Compare(Finish) != std::partial_ordering::greater);
+        Y_ABORT_UNLESS(Start.Compare(Finish) != std::partial_ordering::greater);
     }
 
     virtual ~IDataSource() {
-        Y_VERIFY(Intervals.empty());
+        Y_ABORT_UNLESS(Intervals.empty());
     }
 };
 

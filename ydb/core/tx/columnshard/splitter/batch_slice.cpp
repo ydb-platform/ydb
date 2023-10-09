@@ -12,7 +12,7 @@ bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
         }
     }
     std::vector<TSplittedBlob> result;
-    Y_VERIFY(Settings.GetMaxBlobSize() >= 2 * Settings.GetMinBlobSize());
+    Y_ABORT_UNLESS(Settings.GetMaxBlobSize() >= 2 * Settings.GetMinBlobSize());
     while (chunksInProgress.size()) {
         i64 fullSize = 0;
         for (auto&& i : chunksInProgress) {
@@ -35,8 +35,8 @@ bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
                 const i64 nextOtherSize = fullSize - nextPartSize;
                 const i64 otherSize = fullSize - partSize;
                 if (nextPartSize >= Settings.GetMaxBlobSize() || nextOtherSize < Settings.GetMinBlobSize()) {
-                    Y_VERIFY(otherSize >= Settings.GetMinBlobSize());
-                    Y_VERIFY(partSize < Settings.GetMaxBlobSize());
+                    Y_ABORT_UNLESS(otherSize >= Settings.GetMinBlobSize());
+                    Y_ABORT_UNLESS(partSize < Settings.GetMaxBlobSize());
                     if (partSize >= Settings.GetMinBlobSize()) {
                         result.emplace_back(TSplittedBlob());
                         for (ui32 chunk = 0; chunk < i; ++chunk) {
@@ -46,8 +46,8 @@ bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
                         chunksInProgress.erase(chunksInProgress.begin(), chunksInProgress.begin() + i);
                         hasNoSplitChanges = true;
                     } else {
-                        Y_VERIFY((i64)chunksInProgress[i]->GetPackedSize() > Settings.GetMinBlobSize() - partSize);
-                        Y_VERIFY(otherSize - (Settings.GetMinBlobSize() - partSize) >= Settings.GetMinBlobSize());
+                        Y_ABORT_UNLESS((i64)chunksInProgress[i]->GetPackedSize() > Settings.GetMinBlobSize() - partSize);
+                        Y_ABORT_UNLESS(otherSize - (Settings.GetMinBlobSize() - partSize) >= Settings.GetMinBlobSize());
 
                         Counters->BySizeSplitter.OnTrashSerialized(chunksInProgress[i]->GetPackedSize());
                         const std::vector<ui64> sizes = {(ui64)(Settings.GetMinBlobSize() - partSize)};
@@ -76,9 +76,9 @@ bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
     ui32 currentChunkIdx = 0;
     for (auto&& i : result) {
         for (auto&& c : i.GetChunks()) {
-            Y_VERIFY(c->GetColumnId());
+            Y_ABORT_UNLESS(c->GetColumnId());
             if (!lastColumnId || *lastColumnId != c->GetColumnId()) {
-                Y_VERIFY(columnIds.emplace(c->GetColumnId()).second);
+                Y_ABORT_UNLESS(columnIds.emplace(c->GetColumnId()).second);
                 lastColumnId = c->GetColumnId();
                 currentChunkIdx = 0;
             }
@@ -103,12 +103,12 @@ TGeneralSerializedSlice::TGeneralSerializedSlice(const std::map<ui32, std::vecto
         if (!recordsCount) {
             recordsCount = column.GetRecordsCount();
         } else {
-            Y_VERIFY(*recordsCount == column.GetRecordsCount());
+            Y_ABORT_UNLESS(*recordsCount == column.GetRecordsCount());
         }
         Size += column.GetSize();
         Columns.emplace_back(std::move(column));
     }
-    Y_VERIFY(recordsCount);
+    Y_ABORT_UNLESS(recordsCount);
     RecordsCount = *recordsCount;
 }
 
@@ -123,7 +123,7 @@ TBatchSerializedSlice::TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch>
     : TBase(schema, counters, settings)
     , Batch(batch)
 {
-    Y_VERIFY(batch);
+    Y_ABORT_UNLESS(batch);
     RecordsCount = batch->num_rows();
     Columns.reserve(batch->num_columns());
     for (auto&& i : batch->schema()->fields()) {
@@ -149,7 +149,7 @@ TBatchSerializedSlice::TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch>
 }
 
 void TGeneralSerializedSlice::MergeSlice(TGeneralSerializedSlice&& slice) {
-    Y_VERIFY(Columns.size() == slice.Columns.size());
+    Y_ABORT_UNLESS(Columns.size() == slice.Columns.size());
     RecordsCount += slice.GetRecordsCount();
     for (ui32 i = 0; i < Columns.size(); ++i) {
         Size += slice.Columns[i].GetSize();

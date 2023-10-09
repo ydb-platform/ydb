@@ -875,7 +875,7 @@ public:
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::WriteAttributes, subj);
         auto name = NPersQueue::ConvertOldConsumerName(oldName);
         auto pos = name.rfind("/");
-        Y_VERIFY(pos != TString::npos);
+        Y_ABORT_UNLESS(pos != TString::npos);
         auto pref = "/Root/PQ/" + name.substr(0, pos);
         ModifyACL(pref, name.substr(pos + 1), acl.SerializeAsString());
     }
@@ -943,7 +943,7 @@ public:
         ui64 sourceIdMaxCount = 6000000,
         ui64 sourceIdLifetime = 86400
     ) {
-        Y_VERIFY(name.StartsWith("rt3."));
+        Y_ABORT_UNLESS(name.StartsWith("rt3."));
 
         Cerr << "PQ Client: create topic: " << name << " with " << nParts << " partitions" << Endl;
         auto request = TRequestCreatePQ(
@@ -977,7 +977,7 @@ public:
         bool fillPartitionConfig = false,
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {}
     ) {
-        Y_VERIFY(name.StartsWith("rt3."));
+        Y_ABORT_UNLESS(name.StartsWith("rt3."));
         TRequestAlterPQ requestDescr(name, nParts, cacheSize, lifetimeS, fillPartitionConfig, mirrorFrom);
         THolder<NMsgBusProxy::TBusPersQueue> alterRequest = requestDescr.GetRequest();
 
@@ -1011,7 +1011,7 @@ public:
             bool waitForTopicDeletion = true
     ) {
 
-        Y_VERIFY(name.StartsWith("rt3."));
+        Y_ABORT_UNLESS(name.StartsWith("rt3."));
         THolder<NMsgBusProxy::TBusPersQueue> deleteRequest = TRequestDeletePQ{name}.GetRequest();
 
         CallPersQueueGRPC(deleteRequest->Record);

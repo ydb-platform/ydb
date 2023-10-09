@@ -265,7 +265,7 @@ namespace NKikimr::NSQS {
 
     ui64 TNodeTrackerActor::GetTabletId(const TMap<TKeyPrefix, ui64>& tabletsPerEndKeyRange, TKeyPrefix keyPrefix) const {
         auto it = tabletsPerEndKeyRange.lower_bound(keyPrefix);
-        Y_VERIFY(it != tabletsPerEndKeyRange.end());
+        Y_ABORT_UNLESS(it != tabletsPerEndKeyRange.end());
         return it->second;
     }
 
@@ -338,7 +338,7 @@ namespace NKikimr::NSQS {
             lastCurrent = intervalC.second;
             lastActual = intervalA.second;
         }
-        Y_VERIFY(currentIt == current.end());
+        Y_ABORT_UNLESS(currentIt == current.end());
     }
 
     void TNodeTrackerActor::UpdateKeyRanges(
@@ -361,7 +361,7 @@ namespace NKikimr::NSQS {
     void TNodeTrackerActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const NActors::TActorContext& ctx) {
         LOG_SQS_DEBUG(GetLogPrefix() << "got tables description.");
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        Y_VERIFY(result->ResultSet.size() == 2);
+        Y_ABORT_UNLESS(result->ResultSet.size() == 2);
         for (auto result : result->ResultSet) {
             if (result.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 DescribeTablesFailed(TStringBuilder() << "describe tables failed : " << result.ToString(), ctx);

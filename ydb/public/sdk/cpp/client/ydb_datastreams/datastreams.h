@@ -20,7 +20,7 @@ namespace NYdb::NDataStreams::V1 {
 
     public:
         const TProtoResult& GetResult() const {
-            Y_VERIFY(Result, "Uninitialized result");
+            Y_ABORT_UNLESS(Result, "Uninitialized result");
             return *Result;
         }
 

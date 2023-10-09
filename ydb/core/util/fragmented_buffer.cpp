@@ -10,12 +10,12 @@ bool TFragmentedBuffer::IsMonolith() const {
 }
 
 TRope TFragmentedBuffer::GetMonolith() {
-    Y_VERIFY(IsMonolith());
+    Y_ABORT_UNLESS(IsMonolith());
     return BufferForOffset.begin()->second;
 }
 
 void TFragmentedBuffer::SetMonolith(TRope&& data) {
-    Y_VERIFY(data);
+    Y_ABORT_UNLESS(data);
     BufferForOffset.clear();
     BufferForOffset[0] = std::move(data);
 }
@@ -69,9 +69,9 @@ TRope TFragmentedBuffer::Read(ui32 begin, ui32 size) const {
     // X....Y X.....Y X'.....Y'
     //        b.b.e.e
     auto it = BufferForOffset.upper_bound(begin);
-    Y_VERIFY(it != BufferForOffset.begin());
+    Y_ABORT_UNLESS(it != BufferForOffset.begin());
     --it;
-    Y_VERIFY(it->first <= begin && begin + size <= it->first + it->second.size());
+    Y_ABORT_UNLESS(it->first <= begin && begin + size <= it->first + it->second.size());
     const auto iter = it->second.begin() + (begin - it->first);
     return {iter, iter + size};
 }

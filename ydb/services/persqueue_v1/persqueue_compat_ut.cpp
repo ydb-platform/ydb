@@ -68,14 +68,14 @@ public:
     }
 
     std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(const TString& path) {
-        Y_VERIFY(PQClient);
+        Y_ABORT_UNLESS(PQClient);
         TWriteSessionSettings settings;
         settings.Path(path).MessageGroupId("test-src");
         return PQClient->CreateSimpleBlockingWriteSession(settings);
     }
 
     std::shared_ptr<IReadSession> CreateReadSession(const TVector<TString>& paths) {
-        Y_VERIFY(PQClient);
+        Y_ABORT_UNLESS(PQClient);
 
 
         TReadSessionSettings settings;
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
         THashMap<TString, THashSet<TString>> clustersFound;
         for (auto i = 0u; i < paths.size() * 2; i++) {
             auto ev = readSession->GetEvent(true);
-            Y_VERIFY(ev.Defined());
+            Y_ABORT_UNLESS(ev.Defined());
             auto* lockEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev);
             if (!lockEvent) {
                 if (auto* otherEv = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*ev)) {

@@ -545,7 +545,7 @@ size_t AddValue(const TMutableColumnPtr& column, const TCell& cell, NScheme::TTy
         auto typeId = type.GetTypeId();
         if (typeId == NScheme::NTypeIds::Pg) {
             // TODO: support pg types
-            Y_VERIFY(false, "pg types are not supported");
+            Y_ABORT_UNLESS(false, "pg types are not supported");
         } else if (typeId == NScheme::NTypeIds::Decimal) {
             AddDecimal(column, cell);
         } else {

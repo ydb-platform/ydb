@@ -24,7 +24,7 @@ void TFetchingInterval::ConstructResult() {
         Merger->DrainCurrentTo(*RBBuilder, Finish, IncludeFinish);
         Scanner.OnIntervalResult(RBBuilder->Finalize(), GetIntervalIdx());
     } else {
-        Y_VERIFY(Merger->IsEmpty());
+        Y_ABORT_UNLESS(Merger->IsEmpty());
         Sources.begin()->second->StartMerging();
         auto batch = Sources.begin()->second->GetBatch();
         if (batch && batch->num_rows()) {
@@ -49,7 +49,7 @@ void TFetchingInterval::OnSourceFilterStageReady(const ui32 /*sourceIdx*/) {
 }
 
 void TFetchingInterval::StartMerge(std::shared_ptr<NIndexedReader::TMergePartialStream> merger) {
-    Y_VERIFY(!Merger);
+    Y_ABORT_UNLESS(!Merger);
     Merger = merger;
     ConstructResult();
 }
@@ -66,7 +66,7 @@ TFetchingInterval::TFetchingInterval(const NIndexedReader::TSortableBatchPositio
     , IntervalIdx(intervalIdx)
     , RBBuilder(builder)
 {
-    Y_VERIFY(Sources.size());
+    Y_ABORT_UNLESS(Sources.size());
     for (auto&& [_, i] : Sources) {
         i->RegisterInterval(this);
         Scanner.AddSourceByIdx(i);

@@ -96,7 +96,7 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
         const auto& record = tx->GetDataTx()->GetReadTableTransaction();
 
         if (record.HasSnapshotStep() && record.HasSnapshotTxId()) {
-            Y_VERIFY(op->HasAcquiredSnapshotKey(), "Missing snapshot reference in ReadTable tx");
+            Y_ABORT_UNLESS(op->HasAcquiredSnapshotKey(), "Missing snapshot reference in ReadTable tx");
 
             bool wait = false;
             TRowVersion snapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
@@ -117,7 +117,7 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
                 return EExecutionStatus::Continue;
             }
         } else if (!DataShard.IsMvccEnabled()) {
-            Y_VERIFY(tx->GetScanSnapshotId(), "Missing snapshot in ReadTable tx");
+            Y_ABORT_UNLESS(tx->GetScanSnapshotId(), "Missing snapshot in ReadTable tx");
         }
 
         auto tid = record.GetTableId().GetTableId();

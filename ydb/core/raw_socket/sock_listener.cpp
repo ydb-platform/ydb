@@ -117,7 +117,7 @@ public:
         }
         int err = errno;
         if (err == EAGAIN || err == EWOULDBLOCK) { // request poller for further connection polling
-            Y_VERIFY(PollerToken);
+            Y_ABORT_UNLESS(PollerToken);
             PollerToken->Request(true, false);
         }
     }

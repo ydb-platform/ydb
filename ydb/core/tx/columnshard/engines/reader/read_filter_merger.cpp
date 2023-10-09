@@ -4,10 +4,10 @@
 namespace NKikimr::NOlap::NIndexedReader {
 
 void TMergePartialStream::PutControlPoint(std::shared_ptr<TSortableBatchPosition> point) {
-    Y_VERIFY(point);
-    Y_VERIFY(point->IsSameSortingSchema(SortSchema));
-    Y_VERIFY(point->IsReverseSort() == Reverse);
-    Y_VERIFY(++ControlPoints == 1);
+    Y_ABORT_UNLESS(point);
+    Y_ABORT_UNLESS(point->IsSameSortingSchema(SortSchema));
+    Y_ABORT_UNLESS(point->IsReverseSort() == Reverse);
+    Y_ABORT_UNLESS(++ControlPoints == 1);
 
     SortHeap.emplace_back(TBatchIterator(*point));
     std::push_heap(SortHeap.begin(), SortHeap.end());
@@ -46,9 +46,9 @@ void TMergePartialStream::AddNewToHeap(const std::optional<ui32> poolId, std::sh
 }
 
 void TMergePartialStream::RemoveControlPoint() {
-    Y_VERIFY(ControlPoints == 1);
-    Y_VERIFY(ControlPointEnriched());
-    Y_VERIFY(-- ControlPoints == 0);
+    Y_ABORT_UNLESS(ControlPoints == 1);
+    Y_ABORT_UNLESS(ControlPointEnriched());
+    Y_ABORT_UNLESS(-- ControlPoints == 0);
     std::pop_heap(SortHeap.begin(), SortHeap.end());
     SortHeap.pop_back();
 }
@@ -70,7 +70,7 @@ void TMergePartialStream::CheckSequenceInDebug(const TSortableBatchPosition& nex
 }
 
 bool TMergePartialStream::DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish) {
-    Y_VERIFY((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
+    Y_ABORT_UNLESS((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
     PutControlPoint(std::make_shared<TSortableBatchPosition>(readTo));
     bool cpReachedFlag = false;
     while (SortHeap.size() && !cpReachedFlag) {
@@ -91,7 +91,7 @@ bool TMergePartialStream::DrainCurrentTo(TRecordBatchBuilder& builder, const TSo
 }
 
 bool TMergePartialStream::DrainAll(TRecordBatchBuilder& builder) {
-    Y_VERIFY((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
+    Y_ABORT_UNLESS((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
     while (SortHeap.size()) {
         if (auto currentPosition = DrainCurrentPosition()) {
             CheckSequenceInDebug(*currentPosition);
@@ -102,8 +102,8 @@ bool TMergePartialStream::DrainAll(TRecordBatchBuilder& builder) {
 }
 
 std::optional<TSortableBatchPosition> TMergePartialStream::DrainCurrentPosition() {
-    Y_VERIFY(SortHeap.size());
-    Y_VERIFY(!SortHeap.front().IsControlPoint());
+    Y_ABORT_UNLESS(SortHeap.size());
+    Y_ABORT_UNLESS(!SortHeap.front().IsControlPoint());
     TSortableBatchPosition result = SortHeap.front().GetKeyColumns();
     TSortableBatchPosition resultVersion = SortHeap.front().GetVersionColumns();
     bool isFirst = true;

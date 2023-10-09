@@ -378,7 +378,7 @@ struct TGraph {
                     if (maybeEdge1 == Edges.end() && maybeEdge2 == Edges.end()) {
                         AddEdge(TEdge(leftNodeId,rightNodeId,std::make_pair(left, right)));
                     } else {
-                        Y_VERIFY(maybeEdge1 != Edges.end() && maybeEdge2 != Edges.end());
+                        Y_ABORT_UNLESS(maybeEdge1 != Edges.end() && maybeEdge2 != Edges.end());
                         maybeEdge1->JoinConditions.emplace(left, right);
                         maybeEdge2->JoinConditions.emplace(right, left);
                     }
@@ -1037,7 +1037,7 @@ private:
             break;
         }
         default:
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
         };
         output->Nodes[index] = r;
         return index;
@@ -1070,7 +1070,7 @@ private:
                     if (maybeEdge1 == JoinGraph.Edges.end() && maybeEdge2 == JoinGraph.Edges.end()) {
                         JoinGraph.AddEdge(TEdge(leftNodeId, rightNodeId, std::make_pair(left, right)));
                     } else {
-                        Y_VERIFY(maybeEdge1 != JoinGraph.Edges.end() && maybeEdge2 != JoinGraph.Edges.end());
+                        Y_ABORT_UNLESS(maybeEdge1 != JoinGraph.Edges.end() && maybeEdge2 != JoinGraph.Edges.end());
                         maybeEdge1->JoinConditions.emplace(left, right);
                         maybeEdge2->JoinConditions.emplace(right, left);
                     }

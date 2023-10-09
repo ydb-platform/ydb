@@ -56,7 +56,7 @@ void TKesusTablet::TQuoterResourceSessionsAccumulator::Accumulate(const TActorId
         resInfo->SetAmount(amount);
         resInfo->MutableStateNotification()->SetStatus(Ydb::StatusIds::SUCCESS);
     } else {
-        Y_VERIFY(indexIt->second < info.Event->Record.ResourcesInfoSize());
+        Y_ABORT_UNLESS(indexIt->second < info.Event->Record.ResourcesInfoSize());
         resInfo = info.Event->Record.MutableResourcesInfo(indexIt->second);
         resInfo->SetAmount(resInfo->GetAmount() + amount);
     }
@@ -79,7 +79,7 @@ void TKesusTablet::TQuoterResourceSessionsAccumulator::Sync(const TActorId& reci
         resInfo->SetAvailable(amount);
         resInfo->SetLastReportId(lastReportId);
     } else {
-        Y_VERIFY(indexIt->second < info.Event->Record.ResourcesInfoSize());
+        Y_ABORT_UNLESS(indexIt->second < info.Event->Record.ResourcesInfoSize());
         resInfo = info.Event->Record.MutableResourcesInfo(indexIt->second);
         resInfo->SetAvailable(amount);
         resInfo->SetLastReportId(lastReportId);

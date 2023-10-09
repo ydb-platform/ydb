@@ -19,7 +19,7 @@ namespace NBoot {
 
         ~TRoot()
         {
-            Y_VERIFY(RefCount() == 1, "Boot env shouldn't be deleted by TIntrusivePtr");
+            Y_ABORT_UNLESS(RefCount() == 1, "Boot env shouldn't be deleted by TIntrusivePtr");
         }
 
         const NUtil::ILogger* Logger() const noexcept override
@@ -73,16 +73,16 @@ namespace NBoot {
 
         void Start(TIntrusivePtr<IStep> step) noexcept override
         {
-            Y_VERIFY(step->Env == nullptr, "IStep is already fired");
-            Y_VERIFY(step->Owner, "Start called on step without an owner");
+            Y_ABORT_UNLESS(step->Env == nullptr, "IStep is already fired");
+            Y_ABORT_UNLESS(step->Owner, "Start called on step without an owner");
 
             Queue.emplace_back(EOp::Start, std::move(step));
         }
 
         void Finish(TIntrusivePtr<IStep> step) noexcept override
         {
-            Y_VERIFY(step, "Finish called without a step");
-            Y_VERIFY(step->Owner, "Finish called on step without an owner");
+            Y_ABORT_UNLESS(step, "Finish called without a step");
+            Y_ABORT_UNLESS(step->Owner, "Finish called on step without an owner");
 
             Queue.emplace_back(EOp::Finish, std::move(step));
         }

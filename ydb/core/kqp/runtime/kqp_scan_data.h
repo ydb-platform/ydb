@@ -220,8 +220,8 @@ public:
                     , Cells(std::move(cells))
                     , AllocatedBytes(allocatedBytes)
                 {
-                    Y_VERIFY(AllocatedBytes);
-                    Y_VERIFY(RowsCount);
+                    Y_ABORT_UNLESS(AllocatedBytes);
+                    Y_ABORT_UNLESS(RowsCount);
                 }
 
                 double BytesForRecordEstimation() {
@@ -281,8 +281,8 @@ public:
                     , BatchValues(std::move(value))
                     , AllocatedBytes(allocatedBytes)
                 {
-                    Y_VERIFY(AllocatedBytes);
-                    Y_VERIFY(RowsCount);
+                    Y_ABORT_UNLESS(AllocatedBytes);
+                    Y_ABORT_UNLESS(RowsCount);
                 }
 
                 double BytesForRecordEstimation() {

@@ -198,7 +198,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                     : CreateInsecureCredentialsProviderFactory()->CreateProvider(strongState));
 
             DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
-            Y_VERIFY(States_.emplace(key, strongState).second);
+            Y_ABORT_UNLESS(States_.emplace(key, strongState).second);
             break;
         }
     }

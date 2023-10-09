@@ -52,7 +52,7 @@ namespace NTable {
 
         bool Touch(ERowOp op) noexcept
         {
-            Y_VERIFY(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
+            Y_ABORT_UNLESS(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
                 "Sequence for row state is already finalized");
 
             switch (op) {
@@ -70,7 +70,7 @@ namespace NTable {
 
         void Set(TPos on, TCellOp code, const TCell &cell) noexcept
         {
-            Y_VERIFY(State[on] == ECellOp::Empty, "Updating cell that already has a value assigned");
+            Y_ABORT_UNLESS(State[on] == ECellOp::Empty, "Updating cell that already has a value assigned");
 
             if (Y_UNLIKELY(code == ECellOp::Empty)) {
                 // Source column is not set, nothing to update
@@ -78,7 +78,7 @@ namespace NTable {
                 return;
             }
 
-            Y_VERIFY(Left_ > 0, "Cells update counter is out of sync");
+            Y_ABORT_UNLESS(Left_ > 0, "Cells update counter is out of sync");
             --Left_;
 
             if (Y_UNLIKELY(code == ECellOp::Reset)) {
@@ -102,7 +102,7 @@ namespace NTable {
         }
 
         void Merge(const TRowState& other) noexcept {
-            Y_VERIFY(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
+            Y_ABORT_UNLESS(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
                 "Sequence for row state is already finalized");
 
             if (Y_UNLIKELY(other.Rop == ERowOp::Absent)) {

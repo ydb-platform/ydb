@@ -70,7 +70,7 @@ void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& 
         case NKikimrMiniKQL::ETypeKind::Data: {
             const NKikimrMiniKQL::TDataType& protoData = input.GetData();
             NUdf::TDataTypeId schemeType = protoData.GetScheme();
-            Y_VERIFY(NUdf::FindDataSlot(schemeType), "unknown type id: %d", (int) schemeType);
+            Y_ABORT_UNLESS(NUdf::FindDataSlot(schemeType), "unknown type id: %d", (int) schemeType);
             if (schemeType == NYql::NProto::TypeIds::Decimal) {
                 auto typeParams = output.mutable_decimal_type();
                 typeParams->set_precision(protoData.GetDecimalParams().GetPrecision());

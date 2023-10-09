@@ -4,7 +4,7 @@
 namespace NKikimr::NOlap {
 
 TUnifiedBlobId IBlobsWritingAction::AddDataForWrite(const TString& data) {
-    Y_VERIFY(!WritingStarted);
+    Y_ABORT_UNLESS(!WritingStarted);
     auto blobId = AllocateNextBlobId(data);
     AFL_VERIFY(BlobsForWrite.emplace(blobId, data).second);
     BlobsWaiting.emplace(blobId);
@@ -24,12 +24,12 @@ void IBlobsWritingAction::OnBlobWriteResult(const TUnifiedBlobId& blobId, const 
         Counters->OnFail(blobId.BlobSize(), TMonotonic::Now() - it->second);
     }
     WritingStart.erase(it);
-    Y_VERIFY(BlobsWaiting.erase(blobId));
+    Y_ABORT_UNLESS(BlobsWaiting.erase(blobId));
     return DoOnBlobWriteResult(blobId, status);
 }
 
 bool IBlobsWritingAction::IsReady() const {
-    Y_VERIFY(WritingStarted);
+    Y_ABORT_UNLESS(WritingStarted);
     return BlobsWaiting.empty();
 }
 

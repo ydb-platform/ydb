@@ -71,7 +71,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                 }
 
                 const TTxId txId = proposal.TxId;
-                Y_VERIFY(txId);
+                Y_ABORT_UNLESS(txId);
 
                 bool volatileTx = proposal.HasVolatileFlag();
                 if (!volatileTx) {
@@ -139,7 +139,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                     TTransaction& transaction = transactions[txId];
 
                     transaction.PlanOnStep = PlanOnStep;
-                    Y_VERIFY(!proposal.AffectedSet.empty());
+                    Y_ABORT_UNLESS(!proposal.AffectedSet.empty());
                     for (const auto &txprop : proposal.AffectedSet) {
                         const TTabletId affectedTablet = txprop.TabletId;
                         const TTabletId mediatorId = Self->Config.Mediators->Select(affectedTablet);
@@ -284,7 +284,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         for (auto &pr : StepsToConfirm) {
             const ui64 mediatorId = pr.first;
             TMediator &mediator = Self->Mediator(mediatorId, ctx);
-            Y_VERIFY(!mediator.Queue.empty());
+            Y_ABORT_UNLESS(!mediator.Queue.empty());
             pr.second->Confirmed = true;
             for (auto it = pr.second; it != mediator.Queue.begin();) {
                 --it;

@@ -38,8 +38,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
         TPathId pathId = txState->TargetPathId;
 
@@ -56,11 +56,11 @@ public:
 
             drop->SetPathId(pathId.LocalPathId);
 
-            Y_VERIFY(tx.SerializeToString(&columnShardTxBody));
+            Y_ABORT_UNLESS(tx.SerializeToString(&columnShardTxBody));
         }
 
         for (auto& shard : txState->Shards) {
-            Y_VERIFY(shard.TabletType == ETabletType::ColumnShard);
+            Y_ABORT_UNLESS(shard.TabletType == ETabletType::ColumnShard);
 
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
 
@@ -116,10 +116,10 @@ public:
                                << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
         TPathId pathId = txState->TargetPathId;
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
         Y_VERIFY_S(context.SS->PathsById.contains(path->ParentPathId),
                    "no parent with id: " <<  path->ParentPathId << " for node with id: " << path->PathId);
@@ -127,7 +127,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        Y_VERIFY(!path->Dropped());
+        Y_ABORT_UNLESS(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
 
@@ -160,13 +160,13 @@ public:
                                << " at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
             TShardIdx idx = shard.Idx;
-            Y_VERIFY(context.SS->ShardInfos.contains(idx));
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(idx));
             TTabletId tablet = context.SS->ShardInfos.at(idx).TabletID;
             shardSet.insert(tablet);
         }
@@ -198,12 +198,12 @@ public:
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
-        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
         txState->ShardsInProgress.erase(shardIdx);
         if (txState->ShardsInProgress.empty()) {
@@ -227,13 +227,13 @@ public:
                                << " at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
         txState->ClearShardsInProgress();
 
         for (auto& shard : txState->Shards) {
-            Y_VERIFY(shard.TabletType == ETabletType::ColumnShard);
+            Y_ABORT_UNLESS(shard.TabletType == ETabletType::ColumnShard);
 
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
             auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
@@ -264,12 +264,12 @@ private:
 
     bool Finish(TOperationContext& context) {
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
         bool isStandalone = false;
         {
-            Y_VERIFY(context.SS->ColumnTables.contains(txState->TargetPathId));
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState->TargetPathId));
             auto tableInfo = context.SS->ColumnTables.GetVerified(txState->TargetPathId);
             isStandalone = tableInfo->IsStandalone();
         }
@@ -297,15 +297,15 @@ public:
     }
 
     bool HandleReply(NBackgroundTasks::TEvAddTaskResult::TPtr& ev, TOperationContext& context) override {
-        Y_VERIFY(ev->Get()->IsSuccess());
+        Y_ABORT_UNLESS(ev->Get()->IsSuccess());
         return Finish(context);
     }
 
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             DebugHint() << " ProgressState"
@@ -408,7 +408,7 @@ public:
         txState.MinStep = TStepId(1);
 
 
-        Y_VERIFY(context.SS->ColumnTables.contains(path.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->ColumnTables.contains(path.Base()->PathId));
         auto tableInfo = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
         if (tableInfo->IsStandalone()) {
             NIceDb::TNiceDb db(context.GetDB());
@@ -436,10 +436,10 @@ public:
                 }
             }
 
-            Y_VERIFY(context.SS->OlapStores.contains(storePathId));
+            Y_ABORT_UNLESS(context.SS->OlapStores.contains(storePathId));
             TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(storePathId);
 
-            Y_VERIFY(storeInfo->ColumnTables.contains(path->PathId));
+            Y_ABORT_UNLESS(storeInfo->ColumnTables.contains(path->PathId));
             storeInfo->ColumnTablesUnderOperation.insert(path->PathId);
 
             // Sequentially chain operations in the same olap store
@@ -504,12 +504,12 @@ public:
                          << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         TPathId pathId = txState->TargetPathId;
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-        Y_VERIFY(path);
+        Y_ABORT_UNLESS(path);
 
         if (path->Dropped()) {
             // We don't really need to do anything
@@ -559,7 +559,7 @@ ISubOperation::TPtr CreateDropColumnTable(TOperationId id, const TTxTransaction&
 }
 
 ISubOperation::TPtr CreateDropColumnTable(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropColumnTable>(id, state);
 }
 

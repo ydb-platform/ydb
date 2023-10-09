@@ -25,7 +25,7 @@ namespace NPage {
             , Extra(extra)
             , Prefix(sizeof(TLabel) + (label ? sizeof(TLabelExt) : 0) + sizeof(TRecordsHeader) + Extra)
         {
-            Y_VERIFY((version & 0x8000) == 0, "Invalid version value");
+            Y_ABORT_UNLESS((version & 0x8000) == 0, "Invalid version value");
         }
 
         explicit operator bool() const noexcept
@@ -36,7 +36,7 @@ namespace NPage {
         template<typename T>
         T* ExtraAs() noexcept
         {
-            Y_VERIFY(sizeof(T) == Extra, "Cannot cast extra block to T");
+            Y_ABORT_UNLESS(sizeof(T) == Extra, "Cannot cast extra block to T");
 
             return TDeref<T>::At(Blob.mutable_data(), Prefix - Extra);
         }
@@ -57,7 +57,7 @@ namespace NPage {
 
         void Open(size_t more, size_t least, ui32 rows = 0) noexcept
         {
-            Y_VERIFY(!Blob, "TDataPageBuilder is already has live page");
+            Y_ABORT_UNLESS(!Blob, "TDataPageBuilder is already has live page");
 
             PageBytes = Max(least, BytesUsed() + more);
             PageRows = rows ? rows : Max<ui32>();
@@ -71,7 +71,7 @@ namespace NPage {
 
         TSharedData Close() noexcept
         {
-            Y_VERIFY(Deltas.empty());
+            Y_ABORT_UNLESS(Deltas.empty());
 
             if (!Blob)
                 return { };
@@ -177,7 +177,7 @@ namespace NPage {
                 Y_VERIFY_DEBUG(recordSize <= Left());
                 Y_VERIFY_DEBUG(BytesUsed() + recordSize <= PageBytes);
                 size_t offset = Offset();
-                Y_VERIFY(offset < Max<ui32>(), "Record offset is out of bounds");
+                Y_ABORT_UNLESS(offset < Max<ui32>(), "Record offset is out of bounds");
                 Offsets.push_back(offset);
             } else {
                 if (recordSize) {
@@ -211,11 +211,11 @@ namespace NPage {
                 Deltas.pop_back();
 
                 // Chain start must be within the first 4GB or the offset would be corrupted
-                Y_VERIFY(start < Max<ui32>(), "Record offset is out of bounds");
-                Y_VERIFY(Offsets.back() == Max<ui32>());
+                Y_ABORT_UNLESS(start < Max<ui32>(), "Record offset is out of bounds");
+                Y_ABORT_UNLESS(Offsets.back() == Max<ui32>());
                 Offsets.back() = start;
 
-                Y_VERIFY(Deltas.empty());
+                Y_ABORT_UNLESS(Deltas.empty());
             }
         }
 
@@ -224,7 +224,7 @@ namespace NPage {
         {
             auto* item = rec.GetItem(info);
             if (info.IsFixed) {
-                Y_VERIFY(value.Size() == info.FixedSize, "invalid fixed cell size)");
+                Y_ABORT_UNLESS(value.Size() == info.FixedSize, "invalid fixed cell size)");
                 memcpy(rec.template GetFixed<void>(item), value.Data(), value.Size());
             } else {
                 auto *ref = rec.template GetFixed<TDataRef>(item);
@@ -238,7 +238,7 @@ namespace NPage {
     private:
         void Resize(size_t bytes) noexcept
         {
-            Y_VERIFY(bytes > Prefix, "Too few bytes for page");
+            Y_ABORT_UNLESS(bytes > Prefix, "Too few bytes for page");
 
             if (auto was = std::exchange(Blob, TSharedData::Uninitialized(bytes))) {
                 char *end = Blob.mutable_data();
@@ -267,7 +267,7 @@ namespace NPage {
         {
             size_t offset = Tail - Blob.mutable_begin();
             size_t available = Blob.size() - offset;
-            Y_VERIFY(size <= available, "Requested %" PRISZT " bytes, have %" PRISZT " available", size, available);
+            Y_ABORT_UNLESS(size <= available, "Requested %" PRISZT " bytes, have %" PRISZT " available", size, available);
             Y_VERIFY_DEBUG(offset + size <= PageBytes, "Requested bytes are out of current page limits");
             return std::exchange(Tail, Tail + size);
         }
@@ -316,7 +316,7 @@ namespace NPage {
         {
             size_t expected = GroupInfo.Columns.size() - GroupInfo.ColsKeyData.size();
 
-            Y_VERIFY(Pinout.size() == expected, "TDataPageWriter got an invalid pinout");
+            Y_ABORT_UNLESS(Pinout.size() == expected, "TDataPageWriter got an invalid pinout");
         }
 
         ui32 PrefixSize() const noexcept
@@ -331,7 +331,7 @@ namespace NPage {
 
         TSizeInfo CalcSize(TCellsRef key, const TRowState& row, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId) const
         {
-            Y_VERIFY(key.size() == GroupInfo.KeyTypes.size());
+            Y_ABORT_UNLESS(key.size() == GroupInfo.KeyTypes.size());
 
             const bool isErased = GroupId.Index == 0 && maxVersion < TRowVersion::Max();
             const bool isVersioned = GroupId.Index == 0 && minVersion > TRowVersion::Min();
@@ -424,7 +424,7 @@ namespace NPage {
 
         NPage::TDataPage::TRecord& GetLastRecord() const noexcept
         {
-            Y_VERIFY(LastRecord != nullptr);
+            Y_ABORT_UNLESS(LastRecord != nullptr);
             return *LastRecord;
         }
 
@@ -436,7 +436,7 @@ namespace NPage {
             const bool isDelta = txId != 0;
 
             if (isDelta) {
-                Y_VERIFY(!isErased && !isVersioned);
+                Y_ABORT_UNLESS(!isErased && !isVersioned);
                 DataPageBuilder.PushDelta(recordSize);
             } else {
                 DataPageBuilder.PushOffset(recordSize);
@@ -490,7 +490,7 @@ namespace NPage {
                     auto cellOp = row.GetCellOp(pin.To);
 
                     if (info.IsFixed /* may place only as ELargeObj::Inline */) {
-                        Y_VERIFY(cellOp == ELargeObj::Inline, "Got fixed non-inlined");
+                        Y_ABORT_UNLESS(cellOp == ELargeObj::Inline, "Got fixed non-inlined");
 
                         DataPageBuilder.AddValue(info, cell, rec)->Flg = *cellOp;
                     } else if (auto lob = SaveBlob(cellOp, pin.To, cell, saver, isDelta)) {
@@ -571,7 +571,7 @@ namespace NPage {
 
         TPgSize CalcSize(TCellsRef key) const noexcept
         {
-            Y_VERIFY(key.size() == GroupInfo.KeyTypes.size());
+            Y_ABORT_UNLESS(key.size() == GroupInfo.KeyTypes.size());
 
             TPgSize ret = TPgSizeOf<NPage::TIndex::TRecord>::Value;
             ret += sizeof(TPgSize);

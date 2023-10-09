@@ -29,7 +29,7 @@ namespace NPage {
         {
             const auto got = NPage::TLabelWrapper().Read(Raw, EPage::Bloom);
 
-            Y_VERIFY(got == ECodec::Plain && got.Version == 0);
+            Y_ABORT_UNLESS(got == ECodec::Plain && got.Version == 0);
 
             auto *header = TDeref<THeader>::At(got.Page.data(), 0);
 

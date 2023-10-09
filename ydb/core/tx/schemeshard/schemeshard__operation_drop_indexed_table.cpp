@@ -26,7 +26,7 @@ void DropPath(NIceDb::TNiceDb& db, TOperationContext& context,
 
     context.SS->TabletCounters->Simple()[COUNTER_TABLE_INDEXES_COUNT].Sub(1);
 
-    Y_VERIFY(txState.PlanStep);
+    Y_ABORT_UNLESS(txState.PlanStep);
     path->SetDropped(txState.PlanStep, operationId.GetTxId());
     context.SS->PersistDropStep(db, path->PathId, txState.PlanStep, operationId);
     context.SS->PersistRemoveTableIndex(db, path->PathId);
@@ -79,9 +79,9 @@ public:
                                << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropTableIndex);
-        Y_VERIFY(txState->State == TTxState::Propose);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropTableIndex);
+        Y_ABORT_UNLESS(txState->State == TTxState::Propose);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -90,7 +90,7 @@ public:
 
         Y_VERIFY_S(context.SS->PathsById.contains(txState->TargetPathId), "Unknown pathId: " << txState->TargetPathId);
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
-        Y_VERIFY(path.IsResolved());
+        Y_ABORT_UNLESS(path.IsResolved());
 
 
         NextState = TTxState::WaitShadowPathPublication;
@@ -104,8 +104,8 @@ public:
                                << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropTableIndex);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropTableIndex);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -139,7 +139,7 @@ public:
                                << ", msg: " << ev->Get()->ToString()
                                << ", at tablet" << ssId);
 
-        Y_VERIFY(ActivePathId == ev->Get()->PathId);
+        Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
@@ -151,9 +151,9 @@ public:
         context.OnComplete.RouteByTabletsFromOperation(OperationId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
-        Y_VERIFY(txState->PlanStep);
+        Y_ABORT_UNLESS(txState->PlanStep);
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
@@ -172,9 +172,9 @@ public:
         }
 
         auto activePath = TPath::Resolve(path.PathString(), context.SS);
-        Y_VERIFY(activePath.IsResolved());
+        Y_ABORT_UNLESS(activePath.IsResolved());
 
-        Y_VERIFY(activePath != path);
+        Y_ABORT_UNLESS(activePath != path);
 
         ActivePathId = activePath->PathId;
         context.OnComplete.PublishAndWaitPublication(OperationId, activePath->PathId);
@@ -211,7 +211,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
 
@@ -226,7 +226,7 @@ public:
         context.OnComplete.RouteByTabletsFromOperation(OperationId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
@@ -336,7 +336,7 @@ public:
             }
         }
 
-        Y_VERIFY(context.SS->Indexes.contains(index.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->Indexes.contains(index.Base()->PathId));
 
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, index.Base()->PathId);
@@ -390,7 +390,7 @@ ISubOperation::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState sta
 }
 
 TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
-    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
 
     auto dropOperation = tx.GetDrop();
 
@@ -474,7 +474,7 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
                 return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
             }
         }
-        Y_VERIFY(child.Base()->PathId == childPathId);
+        Y_ABORT_UNLESS(child.Base()->PathId == childPathId);
 
         if (child.IsSequence()) {
             auto dropSequence = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
@@ -494,9 +494,9 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
             result.push_back(CreateDropCdcStreamImpl(NextPartId(nextId, result), dropStream));
         }
 
-        Y_VERIFY(child.Base()->GetChildren().size() == 1);
+        Y_ABORT_UNLESS(child.Base()->GetChildren().size() == 1);
         for (auto& [implName, implPathId] : child.Base()->GetChildren()) {
-            Y_VERIFY(implName == "indexImplTable" || implName == "streamImpl",
+            Y_ABORT_UNLESS(implName == "indexImplTable" || implName == "streamImpl",
                 "unexpected name %s", implName.c_str());
 
             TPath implPath = child.Child(implName);
@@ -525,7 +525,7 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
                     return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
                 }
             }
-            Y_VERIFY(implPath.Base()->PathId == implPathId);
+            Y_ABORT_UNLESS(implPath.Base()->PathId == implPathId);
 
             if (implPath.Base()->IsTable()) {
                 auto dropIndexTable = TransactionTemplate(child.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);

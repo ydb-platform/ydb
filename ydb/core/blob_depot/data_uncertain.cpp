@@ -15,7 +15,7 @@ namespace NKikimr::NBlobDepot {
 
     void TData::TUncertaintyResolver::PushResultWithUncertainties(TResolveResultAccumulator&& result,
             std::deque<TKey>&& uncertainties) {
-        Y_VERIFY(!uncertainties.empty());
+        Y_ABORT_UNLESS(!uncertainties.empty());
 
         auto entry = MakeIntrusive<TResolveOnHold>(std::move(result));
 
@@ -75,7 +75,7 @@ namespace NKikimr::NBlobDepot {
         auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT73, "TUncertaintyResolver::Handle(TEvGetResult)", (Id, Self->GetLogId()),
             (Msg, msg));
-        Y_VERIFY(msg.ResponseSz == 1);
+        Y_ABORT_UNLESS(msg.ResponseSz == 1);
         auto& resp = msg.Responses[0];
         FinishBlob(resp.Id, resp.Status == NKikimrProto::OK ? EKeyBlobState::CONFIRMED :
             resp.Status == NKikimrProto::NODATA ? EKeyBlobState::WASNT_WRITTEN :
@@ -96,7 +96,7 @@ namespace NKikimr::NBlobDepot {
         for (TKeys::value_type *keyRecord : blob.KeysWaitingForThisBlob) {
             TKeyContext& keyContext = keyRecord->second;
             const auto blobStateIt = keyContext.BlobState.find(id);
-            Y_VERIFY(blobStateIt != keyContext.BlobState.end());
+            Y_ABORT_UNLESS(blobStateIt != keyContext.BlobState.end());
             blobStateIt->second = {state, errorReason};
             keyRecordsToCheck.insert(keyRecord);
         }
@@ -121,7 +121,7 @@ namespace NKikimr::NBlobDepot {
                 case EKeyBlobState::INITIAL: {
                     TBlobContext& blob = Blobs[id];
                     const auto [_, inserted] = blob.KeysWaitingForThisBlob.insert(keyRecord);
-                    Y_VERIFY(inserted);
+                    Y_ABORT_UNLESS(inserted);
                     if (blob.KeysWaitingForThisBlob.size() == 1) {
                         // have to query this blob and wait for the response
                         const ui32 groupId = Self->Info()->GroupFor(id.Channel(), id.Generation());
@@ -214,10 +214,10 @@ namespace NKikimr::NBlobDepot {
             const auto& [state, errorReason] = s;
             if (state == EKeyBlobState::QUERY_IN_FLIGHT) {
                 const auto blobIt = Blobs.find(id);
-                Y_VERIFY(blobIt != Blobs.end());
+                Y_ABORT_UNLESS(blobIt != Blobs.end());
                 TBlobContext& blobContext = blobIt->second;
                 const size_t numErased = blobContext.KeysWaitingForThisBlob.erase(&*keyIt);
-                Y_VERIFY(numErased == 1);
+                Y_ABORT_UNLESS(numErased == 1);
                 if (blobContext.KeysWaitingForThisBlob.empty()) {
                     Blobs.erase(blobIt);
                 }

@@ -62,7 +62,7 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
 
 
         void InitializePQ() {
-            Y_VERIFY(Server == nullptr);
+            Y_ABORT_UNLESS(Server == nullptr);
             Server = MakeHolder<NPersQueue::TTestServer>(false);
             Server->ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(TenantModeEnabled());
             Server->ServerSettings.PQConfig.MutablePQDiscoveryConfig()->SetLBFrontEnabled(true);

@@ -197,8 +197,8 @@ public:
             return;
         }
 
-        Y_VERIFY(other.Rows);
-        Y_VERIFY(other.IsEmpty());
+        Y_ABORT_UNLESS(other.Rows);
+        Y_ABORT_UNLESS(other.IsEmpty());
 
         other.Rows.swap(Rows);
         other.ByteSize = ByteSize;
@@ -378,7 +378,7 @@ public:
             TMemoryPool valueDataPool(256);
             TVector<TCell> cells;
             TString err;
-            Y_VERIFY(BuildExtraColumns(cells, ColumnBuildSettings, err, valueDataPool));
+            Y_ABORT_UNLESS(BuildExtraColumns(cells, ColumnBuildSettings, err, valueDataPool));
             TSerializedCellVec valueCells(cells);
             TString serializedValue = TSerializedCellVec::Serialize(cells);
             TSerializedCellVec keyCopy(key);
@@ -524,7 +524,7 @@ private:
                            << " Uploader: " << Uploader.ToString()
                            << " ev->Sender: " << ev->Sender.ToString());
         } else {
-            Y_VERIFY(Driver == nullptr);
+            Y_ABORT_UNLESS(Driver == nullptr);
             return;
         }
 

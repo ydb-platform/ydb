@@ -39,20 +39,20 @@ public:
     }
 
     void SetCurrentStatus(ERunStatus status, TDuration computeCpuTime) {
-        Y_VERIFY(ui32(status) < StatusesCount);
+        Y_ABORT_UNLESS(ui32(status) < StatusesCount);
         UpdateStatusTime(computeCpuTime);
         CurrentStatus = status;
     }
 
     TDuration operator[](ERunStatus status) const {
         const ui32 index = ui32(status);
-        Y_VERIFY(index < StatusesCount);
+        Y_ABORT_UNLESS(index < StatusesCount);
         return StatusTime[index];
     }
 
     void Load(ERunStatus status, TDuration d) {
         const ui32 index = ui32(status);
-        Y_VERIFY(index < StatusesCount);
+        Y_ABORT_UNLESS(index < StatusesCount);
         StatusTime[index] = d;
     }
 
@@ -272,11 +272,11 @@ public:
             HeapTask_ = std::make_unique<NDqProto::TDqTask>();
             HeapTask_->Swap(task);
             Task_ = HeapTask_.get();
-            Y_VERIFY(!Arena);
+            Y_ABORT_UNLESS(!Arena);
         } else {
             Task_ = task;
-            Y_VERIFY(Arena);
-            Y_VERIFY(task->GetArena() == Arena->Get());
+            Y_ABORT_UNLESS(Arena);
+            Y_ABORT_UNLESS(task->GetArena() == Arena->Get());
         }
     }
 
@@ -285,7 +285,7 @@ public:
             HeapTask_ = std::make_unique<NDqProto::TDqTask>();
             HeapTask_->CopyFrom(*task.Task_);
             Task_ = HeapTask_.get();
-            Y_VERIFY(!task.Arena);
+            Y_ABORT_UNLESS(!task.Arena);
         } else {
             Y_FAIL("not allowed to copy dq settings for arena allocated messages.");
         }
@@ -300,7 +300,7 @@ public:
     }
 
     const NDqProto::TDqTask& GetSerializedTask() const {
-        Y_VERIFY(!ParamProvider, "GetSerialized isn't supported if external ParamProvider callback is specified!");
+        Y_ABORT_UNLESS(!ParamProvider, "GetSerialized isn't supported if external ParamProvider callback is specified!");
         return *Task_;
     }
 

@@ -178,7 +178,7 @@ public:
             NotifyExternalResourcesAllocated(txId, taskId, resources);
             return true;
         }
-        Y_VERIFY(resources.MemoryPool == EKqpMemoryPool::ScanQuery);
+        Y_ABORT_UNLESS(resources.MemoryPool == EKqpMemoryPool::ScanQuery);
         if (Y_UNLIKELY(resources.Memory == 0 && resources.ExecutionUnits == 0)) {
             return true;
         }
@@ -291,7 +291,7 @@ public:
             } else {
                 extraAlloc = true;
                 bool merged = ResourceBroker->MergeTasksInstant(taskState.ResourceBrokerTaskId, rbTaskId, SelfId);
-                Y_VERIFY(merged);
+                Y_ABORT_UNLESS(merged);
             }
         } // with_lock (txBucket.Lock)
 

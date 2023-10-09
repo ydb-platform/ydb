@@ -186,7 +186,7 @@ ui64 GetGeneration(const TEvDqCompute::TEvSaveTaskStateResult::TPtr& ev) {
 template <class E>
 bool TDqComputeActorCheckpoints::ShouldIgnoreOldCoordinator(const E& ev, bool verifyOnGenerationFromFuture) {
     const ui64 generation = GetGeneration(ev);
-    Y_VERIFY(!verifyOnGenerationFromFuture || !CheckpointCoordinator || generation <= CheckpointCoordinator->Generation,
+    Y_ABORT_UNLESS(!verifyOnGenerationFromFuture || !CheckpointCoordinator || generation <= CheckpointCoordinator->Generation,
         "Got incorrect checkpoint coordinator generation: %lu > %lu", generation, CheckpointCoordinator->Generation);
     if (CheckpointCoordinator && generation < CheckpointCoordinator->Generation) {
         LOG_W("Ignoring event " << ev->Get()->ToStringHeader() << " from previous coordinator: "
@@ -204,8 +204,8 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvNewCheckpointCoordinato
     LOG_D("Got TEvNewCheckpointCoordinator event: generation " << newGeneration << ", actorId: " << ev->Sender);
 
     if (CheckpointCoordinator && CheckpointCoordinator->Generation == newGeneration) { // The same message. It was retry from coordinator.
-        Y_VERIFY(CheckpointCoordinator->ActorId == ev->Sender, "there shouldn't be two different checkpoint coordinators with the same generation");
-        Y_VERIFY(GraphId == ev->Get()->Record.GetGraphId());
+        Y_ABORT_UNLESS(CheckpointCoordinator->ActorId == ev->Sender, "there shouldn't be two different checkpoint coordinators with the same generation");
+        Y_ABORT_UNLESS(GraphId == ev->Get()->Record.GetGraphId());
         return;
     }
 
@@ -219,7 +219,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvNewCheckpointCoordinato
     GraphId = ev->Get()->Record.GetGraphId();
 
     EventsQueue.OnNewRecipientId(ev->Sender);
-    Y_VERIFY(EventsQueue.OnEventReceived(ev->Get()));
+    Y_ABORT_UNLESS(EventsQueue.OnEventReceived(ev->Get()));
     EventsQueue.Send(new TEvDqCompute::TEvNewCheckpointCoordinatorAck());
 
     const bool resumeInputs = bool(PendingCheckpoint);
@@ -426,13 +426,13 @@ bool TDqComputeActorCheckpoints::ComputeActorStateSaved() const {
 }
 
 NDqProto::TCheckpoint TDqComputeActorCheckpoints::GetPendingCheckpoint() const {
-    Y_VERIFY(PendingCheckpoint);
+    Y_ABORT_UNLESS(PendingCheckpoint);
     return *PendingCheckpoint.Checkpoint;
 }
 
 void TDqComputeActorCheckpoints::DoCheckpoint() {
-    Y_VERIFY(CheckpointCoordinator);
-    Y_VERIFY(PendingCheckpoint);
+    Y_ABORT_UNLESS(CheckpointCoordinator);
+    Y_ABORT_UNLESS(PendingCheckpoint);
 
     LOG_PCP_D("Performing task checkpoint");
     if (SaveState()) {
@@ -445,7 +445,7 @@ void TDqComputeActorCheckpoints::DoCheckpoint() {
 [[nodiscard]]
 bool TDqComputeActorCheckpoints::SaveState() {
     try {
-        Y_VERIFY(!PendingCheckpoint.SavedComputeActorState);
+        Y_ABORT_UNLESS(!PendingCheckpoint.SavedComputeActorState);
         PendingCheckpoint.SavedComputeActorState = true;
         ComputeActor->SaveState(*PendingCheckpoint.Checkpoint, PendingCheckpoint.ComputeActorState);
     } catch (const std::exception& e) {
@@ -494,18 +494,18 @@ void TDqComputeActorCheckpoints::AbortCheckpoint() {
 }
 
 void TDqComputeActorCheckpoints::OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
-    Y_VERIFY(CheckpointCoordinator);
-    Y_VERIFY(checkpoint.GetGeneration() <= CheckpointCoordinator->Generation);
+    Y_ABORT_UNLESS(CheckpointCoordinator);
+    Y_ABORT_UNLESS(checkpoint.GetGeneration() <= CheckpointCoordinator->Generation);
     if (checkpoint.GetGeneration() < CheckpointCoordinator->Generation) {
         LOG_W("Ignoring sink[" << outputIndex << "] state saved event from previous coordinator: "
             << checkpoint.GetGeneration() << " < " << CheckpointCoordinator->Generation);
         return;
     }
-    Y_VERIFY(PendingCheckpoint);
-    Y_VERIFY(PendingCheckpoint.Checkpoint->GetId() == checkpoint.GetId(),
+    Y_ABORT_UNLESS(PendingCheckpoint);
+    Y_ABORT_UNLESS(PendingCheckpoint.Checkpoint->GetId() == checkpoint.GetId(),
         "Expected pending checkpoint id %lu, but got %lu", PendingCheckpoint.Checkpoint->GetId(), checkpoint.GetId());
     for (const NDqProto::TSinkState& sinkState : PendingCheckpoint.ComputeActorState.GetSinks()) {
-        Y_VERIFY(sinkState.GetOutputIndex() != outputIndex, "Double save sink[%lu] state", outputIndex);
+        Y_ABORT_UNLESS(sinkState.GetOutputIndex() != outputIndex, "Double save sink[%lu] state", outputIndex);
     }
 
     NDqProto::TSinkState* sinkState = PendingCheckpoint.ComputeActorState.AddSinks();
@@ -518,7 +518,7 @@ void TDqComputeActorCheckpoints::OnSinkStateSaved(NDqProto::TSinkState&& state, 
 }
 
 void TDqComputeActorCheckpoints::TryToSavePendingCheckpoint() {
-    Y_VERIFY(PendingCheckpoint);
+    Y_ABORT_UNLESS(PendingCheckpoint);
     if (PendingCheckpoint.IsReady()) {
         auto saveTaskStateRequest = MakeHolder<TEvDqCompute::TEvSaveTaskState>(GraphId, Task.GetId(), *PendingCheckpoint.Checkpoint);
         saveTaskStateRequest->State.Swap(&PendingCheckpoint.ComputeActorState);
@@ -531,7 +531,7 @@ void TDqComputeActorCheckpoints::TryToSavePendingCheckpoint() {
 }
 
 TDqComputeActorCheckpoints::TPendingCheckpoint& TDqComputeActorCheckpoints::TPendingCheckpoint::operator=(const NDqProto::TCheckpoint& checkpoint) {
-    Y_VERIFY(!Checkpoint);
+    Y_ABORT_UNLESS(!Checkpoint);
     Checkpoint = checkpoint;
     return *this;
 }

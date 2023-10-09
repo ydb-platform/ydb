@@ -110,7 +110,7 @@ public:
         , Finish(finish)
         , Reversed(reversed)
     {
-        Y_VERIFY(Start <= Finish && Finish <= List.size());
+        Y_ABORT_UNLESS(Start <= Finish && Finish <= List.size());
     }
 
 private:

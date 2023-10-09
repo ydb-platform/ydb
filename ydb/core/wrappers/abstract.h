@@ -112,7 +112,7 @@ protected:
 public:
     using TPtr = std::shared_ptr<IExternalStorageOperator>;
     void InitReplyAdapter(IReplyAdapter::TPtr adapter) {
-        Y_VERIFY(!ReplyAdapter);
+        Y_ABORT_UNLESS(!ReplyAdapter);
         ReplyAdapter = TReplyAdapterContainer(adapter);
     }
 

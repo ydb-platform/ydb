@@ -95,7 +95,7 @@ namespace NTable {
             auto index = Index.TryLoadRaw();
 
             // temporary solution: its too hard to handle index page faults in Clean/More methods
-            Y_VERIFY(index, "Index should have been loaded before using TForward");
+            Y_ABORT_UNLESS(index, "Index should have been loaded before using TForward");
 
             Tail = (*index)->Begin();
             Head = (*index)->Begin();

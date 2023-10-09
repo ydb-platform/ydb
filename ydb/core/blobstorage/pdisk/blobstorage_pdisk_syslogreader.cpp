@@ -94,7 +94,7 @@ void TSysLogReader::Start() {
     finalCompletion->CostNs = PDisk->DriveModel.TimeForSizeNs(SizeToRead, 0, TDriveModel::EOperationType::OP_TYPE_READ);
     const ui32 bufferSize = PDisk->BufferPool->GetBufferSize();
     const ui32 partsToRead = (SizeToRead + bufferSize - 1) / bufferSize;
-    Y_VERIFY(partsToRead > 0);
+    Y_ABORT_UNLESS(partsToRead > 0);
     TVector<TCompletionAction *> completionParts;
     TVector<TBuffer *> bufferParts;
     completionParts.reserve(partsToRead);

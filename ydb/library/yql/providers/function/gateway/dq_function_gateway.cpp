@@ -6,7 +6,7 @@ namespace NYql {
 
 void TDqFunctionGatewayFactory::Register(const TDqFunctionType& type, TGatewayCreator creator) {
     auto [_, registered] = CreatorsByType.emplace(type, std::move(creator));
-    Y_VERIFY(registered);
+    Y_ABORT_UNLESS(registered);
 }
 
 bool TDqFunctionGatewayFactory::IsKnownFunctionType(const TDqFunctionType& type) {

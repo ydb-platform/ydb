@@ -215,7 +215,7 @@ private:
 
         if (!this->Context.c_call()) {
             // Request dropped before it could start
-            Y_VERIFY(status == NGrpc::EQueueEventStatus::ERROR);
+            Y_ABORT_UNLESS(status == NGrpc::EQueueEventStatus::ERROR);
             // Drop extra reference by OnDoneTag
             this->UnRef();
             // We will be freed after return
@@ -309,7 +309,7 @@ private:
         auto flags = Flags.load(std::memory_order_acquire);
         auto added = FlagAttached;
         do {
-            Y_VERIFY(!(flags & FlagAttached), "Attach cannot be called more than once");
+            Y_ABORT_UNLESS(!(flags & FlagAttached), "Attach cannot be called more than once");
             Actor = actor;
             doneCalled = flags & FlagDoneCalled;
             doneSuccess = flags & FlagDoneSuccess;
@@ -328,7 +328,7 @@ private:
         auto guard = SingleThreaded.Enforce();
 
         auto flags = Flags.load(std::memory_order_acquire);
-        Y_VERIFY(flags & FlagAttached, "Read cannot be called before Attach");
+        Y_ABORT_UNLESS(flags & FlagAttached, "Read cannot be called before Attach");
 
         if (flags & FlagFinishCalled) {
             return false;
@@ -336,7 +336,7 @@ private:
 
         if (Y_LIKELY(0 == ReadQueue++)) {
             // This is the first read, start reading from the stream
-            Y_VERIFY(!ReadInProgress);
+            Y_ABORT_UNLESS(!ReadInProgress);
             ReadInProgress = MakeHolder<typename IContext::TEvReadFinished>();
             Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
         } else {
@@ -422,18 +422,18 @@ private:
                 this->GetPeerName().c_str());
         }
 
-        Y_VERIFY(!options.is_corked(),
+        Y_ABORT_UNLESS(!options.is_corked(),
             "WriteOptions::set_corked() is unsupported");
-        Y_VERIFY(!options.get_buffer_hint(),
+        Y_ABORT_UNLESS(!options.get_buffer_hint(),
             "WriteOptions::set_buffer_hint() is unsupported");
-        Y_VERIFY(!options.is_last_message(),
+        Y_ABORT_UNLESS(!options.is_last_message(),
             "WriteOptions::set_last_message() is unsupported");
 
         auto guard = SingleThreaded.Enforce();
 
         with_lock (WriteLock) {
             auto flags = Flags.load(std::memory_order_acquire);
-            Y_VERIFY(flags & FlagAttached, "Write cannot be called before Attach");
+            Y_ABORT_UNLESS(flags & FlagAttached, "Write cannot be called before Attach");
 
             if (flags & FlagFinishCalled) {
                 return false;
@@ -568,7 +568,7 @@ private:
             Status->error_message().c_str());
 
         auto flags = (Flags |= FlagFinishDone);
-        Y_VERIFY(flags & FlagFinishCalled);
+        Y_ABORT_UNLESS(flags & FlagFinishCalled);
         Y_VERIFY_DEBUG(!(flags & FlagWriteActive));
 
         switch (Status->error_code()) {
@@ -587,7 +587,7 @@ private:
         }
 
         if (flags & FlagStarted) {
-            Y_VERIFY(Status);
+            Y_ABORT_UNLESS(Status);
             if (Counters) {
                 Counters->FinishProcessing(0, 0, Status->ok(), 0, TDuration::Seconds(RequestTimer.Passed()));
             }

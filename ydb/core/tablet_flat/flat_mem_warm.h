@@ -90,7 +90,7 @@ namespace NMem {
         explicit TTreeAllocatorState(size_t pageSize)
             : PageSize(pageSize)
         {
-            Y_VERIFY(PageSize >= sizeof(TFreeItem));
+            Y_ABORT_UNLESS(PageSize >= sizeof(TFreeItem));
         }
 
         ~TTreeAllocatorState() noexcept {
@@ -209,7 +209,7 @@ namespace NMem {
                 rop == ERowOp::Upsert || rop == ERowOp::Erase || rop == ERowOp::Reset,
                 "Unexpected row operation");
 
-            Y_VERIFY(ops.size() < Max<ui16>(), "Too large update ops array");
+            Y_ABORT_UNLESS(ops.size() < Max<ui16>(), "Too large update ops array");
 
             // Filter legacy empty values and re-order them in tag order
             ScratchUpdateTags.clear();
@@ -333,7 +333,7 @@ namespace NMem {
             }
 
             const size_t mergedSize = ScratchUpdateTags.size() + ScratchMergeTags.size();
-            Y_VERIFY(mergedSize < Max<ui16>(), "Merged row update is too large");
+            Y_ABORT_UNLESS(mergedSize < Max<ui16>(), "Merged row update is too large");
 
             auto *update = NewUpdate(mergedSize);
 

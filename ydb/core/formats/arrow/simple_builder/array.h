@@ -52,9 +52,9 @@ private:
 protected:
     virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const override {
         TBuilder fBuilder = TFillerBuilderConstructor<typename TFiller::TValue>::Construct();
-        Y_VERIFY(fBuilder.Reserve(recordsCount).ok());
+        Y_ABORT_UNLESS(fBuilder.Reserve(recordsCount).ok());
         for (ui32 i = 0; i < recordsCount; ++i) {
-            Y_VERIFY(fBuilder.Append(Filler.GetValue(i)).ok());
+            Y_ABORT_UNLESS(fBuilder.Append(Filler.GetValue(i)).ok());
         }
         return *fBuilder.Finish();
     }
@@ -83,7 +83,7 @@ protected:
         auto addStatus = fBuilder.AppendValues(values.data(), recordsCount);
         if (!addStatus.ok()) {
             const std::string errorMessage = addStatus.ToString();
-            Y_VERIFY(false, "%s", errorMessage.data());
+            Y_ABORT_UNLESS(false, "%s", errorMessage.data());
         }
         return *fBuilder.Finish();
     }
@@ -103,9 +103,9 @@ private:
 protected:
     virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const override {
         auto fBuilder = std::make_shared<arrow::DictionaryBuilder<typename TFiller::TValue>>(std::make_shared<typename TFiller::TValue>());
-        Y_VERIFY(fBuilder->Reserve(recordsCount).ok());
+        Y_ABORT_UNLESS(fBuilder->Reserve(recordsCount).ok());
         for (ui32 i = 0; i < recordsCount; ++i) {
-            Y_VERIFY(fBuilder->Append(Filler.GetValue(i)).ok());
+            Y_ABORT_UNLESS(fBuilder->Append(Filler.GetValue(i)).ok());
         }
         return *fBuilder->Finish();
     }

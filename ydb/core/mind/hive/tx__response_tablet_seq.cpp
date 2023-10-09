@@ -26,7 +26,7 @@ public:
             return true;
         }
         if (pbRecord.GetBeginId() != pbRecord.GetEndId()) {
-            Y_VERIFY(pbRecord.GetOwner().GetOwner() == Self->TabletID());
+            Y_ABORT_UNLESS(pbRecord.GetOwner().GetOwner() == Self->TabletID());
             Owner = {TSequencer::NO_OWNER, pbRecord.GetOwner().GetOwnerIdx()};
             Sequence = {pbRecord.GetBeginId(), pbRecord.GetEndId()};
             BLOG_D("Received sequence " << Sequence);

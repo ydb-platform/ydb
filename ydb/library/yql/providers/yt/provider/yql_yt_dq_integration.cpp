@@ -658,7 +658,7 @@ private:
 };
 
 THolder<IDqIntegration> CreateYtDqIntegration(TYtState* state) {
-    Y_VERIFY(state);
+    Y_ABORT_UNLESS(state);
     return MakeHolder<TYtDqIntegration>(state);
 }
 

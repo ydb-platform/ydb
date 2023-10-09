@@ -303,11 +303,11 @@ NSsa::TAssign TProgramBuilder::MaterializeParameter(const std::string& name, con
     auto parameterName = parameter.GetName();
     auto column = parameterValues->GetColumnByName(parameterName);
 #if 0
-    Y_VERIFY(
+    Y_ABORT_UNLESS(
         column,
         "No parameter %s in serialized parameters.", parameterName.c_str()
     );
-    Y_VERIFY(
+    Y_ABORT_UNLESS(
         column->length() == 1,
         "Incorrect values count in parameter array"
     );
@@ -446,7 +446,7 @@ bool TProgramContainer::HasEarlyFilterOnly() const {
 }
 
 bool TProgramContainer::Init(const IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram, TString& error) {
-    Y_VERIFY(serializedProgram);
+    Y_ABORT_UNLESS(serializedProgram);
 
     NKikimrSSA::TProgram programProto;
     NKikimrSSA::TOlapProgram olapProgramProto;
@@ -476,7 +476,7 @@ bool TProgramContainer::Init(const IColumnResolver& columnResolver, NKikimrSchem
     }
 
     if (olapProgramProto.HasParameters()) {
-        Y_VERIFY(olapProgramProto.HasParametersSchema(), "Parameters are present, but there is no schema.");
+        Y_ABORT_UNLESS(olapProgramProto.HasParametersSchema(), "Parameters are present, but there is no schema.");
 
         auto schema = NArrow::DeserializeSchema(olapProgramProto.GetParametersSchema());
         ProgramParameters = NArrow::DeserializeBatch(olapProgramProto.GetParameters(), schema);
@@ -548,11 +548,11 @@ bool TProgramContainer::ParseProgram(const IColumnResolver& columnResolver, cons
     if (ssaProgram->SourceColumns.empty()) {
         auto& ydbSchema = columnResolver.GetSchema();
 
-        Y_VERIFY(!ydbSchema.KeyColumns.empty());
+        Y_ABORT_UNLESS(!ydbSchema.KeyColumns.empty());
         ui32 key = ydbSchema.KeyColumns[0];
 
         auto it = ydbSchema.Columns.find(key);
-        Y_VERIFY(it != ydbSchema.Columns.end());
+        Y_ABORT_UNLESS(it != ydbSchema.Columns.end());
 
         ssaProgram->SourceColumns[key] = it->second.Name;
     }

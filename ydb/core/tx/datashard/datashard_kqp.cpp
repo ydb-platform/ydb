@@ -129,12 +129,12 @@ NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
                 if (useGenericReadSets) {
                     NKikimrTx::TReadSetData genericData;
                     bool ok = genericData.ParseFromString(data.Body);
-                    Y_VERIFY(ok, "Failed to parse generic readset data from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
+                    Y_ABORT_UNLESS(ok, "Failed to parse generic readset data from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
                         source, target, data.Origin);
 
                     if (genericData.HasData()) {
                         ok = genericData.GetData().UnpackTo(&kqpReadset);
-                        Y_VERIFY(ok, "Failed to parse kqp readset data from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
+                        Y_ABORT_UNLESS(ok, "Failed to parse kqp readset data from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
                             source, target, data.Origin);
                     }
                 } else {
@@ -365,9 +365,9 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
     const TActorContext& ctx, TEngineBay& engineBay)
 {
     if (Read) {
-        Y_VERIFY(readMeta);
+        Y_ABORT_UNLESS(readMeta);
     } else {
-        Y_VERIFY(writeMeta);
+        Y_ABORT_UNLESS(writeMeta);
     }
 
     switch (rangeKind.Kind_case()) {
@@ -668,7 +668,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrT
     if (useGenericReadSets) {
         for (const auto& [key, data] : readsetData) {
             bool ok = genericData[key].MutableData()->PackFrom(data);
-            Y_VERIFY(ok, "Failed to pack readset data from %" PRIu64 " to %" PRIu64, key.first, key.second);
+            Y_ABORT_UNLESS(ok, "Failed to pack readset data from %" PRIu64 " to %" PRIu64, key.first, key.second);
         }
 
         for (auto& [key, data] : genericData) {
@@ -678,7 +678,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrT
 
             TString bodyStr;
             bool ok = data.SerializeToString(&bodyStr);
-            Y_VERIFY(ok, "Failed to serialize readset from %" PRIu64 " to %" PRIu64, key.first, key.second);
+            Y_ABORT_UNLESS(ok, "Failed to serialize readset from %" PRIu64 " to %" PRIu64, key.first, key.second);
 
             outReadSets[key] = std::move(bodyStr);
         }
@@ -727,7 +727,7 @@ bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) 
             if (tx->GetDataTx()->GetUseGenericReadSets()) {
                 NKikimrTx::TReadSetData genericData;
                 bool ok = genericData.ParseFromString(data.Body);
-                Y_VERIFY(ok, "Failed to parse generic readset from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
+                Y_ABORT_UNLESS(ok, "Failed to parse generic readset from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
                     readSet.first.first, readSet.first.second, data.Origin);
 
                 if (genericData.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
@@ -778,8 +778,8 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
 
     // We may have some stale data since before the restart
     // We expect all stale data to be cleared on restarts
-    Y_VERIFY(tx->OutReadSets().empty());
-    Y_VERIFY(tx->AwaitingDecisions().empty());
+    Y_ABORT_UNLESS(tx->OutReadSets().empty());
+    Y_ABORT_UNLESS(tx->AwaitingDecisions().empty());
 
     // Note: usually all shards send locks, since they either have side effects or need to validate locks
     // However it is technically possible to have pure-read shards, that don't contribute to the final decision
@@ -819,7 +819,7 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
 
             TString bodyStr;
             bool ok = data.SerializeToString(&bodyStr);
-            Y_VERIFY(ok, "Failed to serialize readset from %" PRIu64 " to %" PRIu64, key.first, key.second);
+            Y_ABORT_UNLESS(ok, "Failed to serialize readset from %" PRIu64 " to %" PRIu64, key.first, key.second);
 
             tx->OutReadSets()[key] = std::move(bodyStr);
         }
@@ -856,7 +856,7 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
             }
 
             if (record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA) {
-                Y_VERIFY(!(record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET),
+                Y_ABORT_UNLESS(!(record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET),
                     "Unexpected FLAG_EXPECT_READSET + FLAG_NO_DATA in delayed readsets");
 
                 // No readset data: participant aborted the transaction
@@ -868,7 +868,7 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
 
             NKikimrTx::TReadSetData data;
             bool ok = data.ParseFromString(record.GetReadSet());
-            Y_VERIFY(ok, "Failed to parse readset from %" PRIu64 " to %" PRIu64, srcTabletId, dstTabletId);
+            Y_ABORT_UNLESS(ok, "Failed to parse readset from %" PRIu64 " to %" PRIu64, srcTabletId, dstTabletId);
 
             if (data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
                 // Explicit decision that is not a commit, need to abort
@@ -1007,7 +1007,7 @@ void KqpFillTxStats(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& 
     auto& stats = *result.Record.MutableTxStats();
     auto& perTable = *stats.AddTableAccessStats();
     perTable.MutableTableInfo()->SetSchemeshardId(dataShard.GetPathOwnerId());
-    Y_VERIFY(dataShard.GetUserTables().size() == 1, "TODO: Fix handling of collocated tables");
+    Y_ABORT_UNLESS(dataShard.GetUserTables().size() == 1, "TODO: Fix handling of collocated tables");
     auto tableInfo = dataShard.GetUserTables().begin();
     perTable.MutableTableInfo()->SetPathId(tableInfo->first);
     perTable.MutableTableInfo()->SetName(tableInfo->second->Path);
@@ -1037,7 +1037,7 @@ void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunne
     NMiniKQL::TKqpDatashardComputeContext& computeCtx, const NYql::NDqProto::EDqStatsMode& statsMode,
     TEvDataShard::TEvProposeTransactionResult& result)
 {
-    Y_VERIFY(dataShard.GetUserTables().size() == 1, "TODO: Fix handling of collocated tables");
+    Y_ABORT_UNLESS(dataShard.GetUserTables().size() == 1, "TODO: Fix handling of collocated tables");
     auto tableInfo = dataShard.GetUserTables().begin();
 
     // Directly use StatsMode instead of bool flag, too much is reported for STATS_COLLECTION_BASIC mode.

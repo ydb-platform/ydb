@@ -801,7 +801,7 @@ int RunMain(int argc, const char* argv[])
     if (!mountConfig.empty()) {
         TModulesTable modules;
         NYqlMountConfig::TMountConfig mount;
-        Y_VERIFY(NKikimr::ParsePBFromFile(mountConfig, &mount));
+        Y_ABORT_UNLESS(NKikimr::ParsePBFromFile(mountConfig, &mount));
         FillUserDataTableFromFileSystem(mount, dataTable);
 
         if (!CompileLibraries(dataTable, ctx, modules)) {

@@ -115,7 +115,7 @@ void TImmediateControlsConfigurator::CreateControls(TIntrusivePtr<TControlBoard>
     for (int i = 0; i < desc->field_count(); ++i) {
         auto *fieldDesc = desc->field(i);
 
-        Y_VERIFY(!fieldDesc->is_repeated(),
+        Y_ABORT_UNLESS(!fieldDesc->is_repeated(),
                  "Repeated fields are not allowed in Immediate Controls Config");
 
         auto fieldType = fieldDesc->type();
@@ -123,7 +123,7 @@ void TImmediateControlsConfigurator::CreateControls(TIntrusivePtr<TControlBoard>
             || fieldType == google::protobuf::FieldDescriptor::TYPE_INT64)
             AddControl(board, fieldDesc, prefix, allowExisting);
         else {
-            Y_VERIFY(fieldType == google::protobuf::FieldDescriptor::TYPE_MESSAGE,
+            Y_ABORT_UNLESS(fieldType == google::protobuf::FieldDescriptor::TYPE_MESSAGE,
                      "Only [u]int64 and message fields are allowed in Immediate Controls Config");
 
             CreateControls(board, fieldDesc->message_type(),
@@ -181,7 +181,7 @@ void TImmediateControlsConfigurator::ApplyConfig(const ::google::protobuf::Messa
         auto name = MakePrefix(prefix, fieldDesc->name());
         if (fieldType == google::protobuf::FieldDescriptor::TYPE_UINT64
             || fieldType == google::protobuf::FieldDescriptor::TYPE_INT64) {
-            Y_VERIFY(Controls.contains(name));
+            Y_ABORT_UNLESS(Controls.contains(name));
             if (reflection->HasField(cfg, fieldDesc)) {
                 TAtomicBase prev;
                 if (fieldType == google::protobuf::FieldDescriptor::TYPE_UINT64)
@@ -192,7 +192,7 @@ void TImmediateControlsConfigurator::ApplyConfig(const ::google::protobuf::Messa
                 board->RestoreDefault(name);
             }
         } else {
-            Y_VERIFY(fieldType == google::protobuf::FieldDescriptor::TYPE_MESSAGE,
+            Y_ABORT_UNLESS(fieldType == google::protobuf::FieldDescriptor::TYPE_MESSAGE,
                      "Only [u]int64 and message fields are allowed in Immediate Controls Config");
             ApplyConfig(reflection->GetMessage(cfg, fieldDesc), name, board);
         }

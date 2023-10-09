@@ -19,7 +19,7 @@ namespace NKikimr {
             // check if the blob is already restored and can be returned to caller
             if (state.WholeSituation == TBlobState::ESituation::Present || RestoreWholeFromMirror(state)) {
                 state.WholeSituation = TBlobState::ESituation::Present;
-                Y_VERIFY(state.Whole.Data && state.Whole.Data.GetTotalSize(), "%s", state.ToString().data());
+                Y_ABORT_UNLESS(state.Whole.Data && state.Whole.Data.GetTotalSize(), "%s", state.ToString().data());
                 return EStrategyOutcome::DONE;
             }
 
@@ -56,7 +56,7 @@ namespace NKikimr {
                     }
                     group.NumSlowDisks += state.Disks[diskIdx].IsSlow;
                 }
-                Y_VERIFY(untouched == 3 || untouched == 0);
+                Y_ABORT_UNLESS(untouched == 3 || untouched == 0);
                 group.Requested = !untouched;
                 numRequested += group.Requested;
                 group.Done = done == 3;
@@ -86,7 +86,7 @@ namespace NKikimr {
             }
 
             if (numRequested != numDone) { // any pending groups?
-                Y_VERIFY(numRequested == numDone + 1);
+                Y_ABORT_UNLESS(numRequested == numDone + 1);
             } else if (numRequested != std::size(groups.Groups)) {
                 // we have to find the next group that is not requested yet
                 TStackVec<TGroups::TGroupInfo*, 4> candidates;
@@ -100,13 +100,13 @@ namespace NKikimr {
                 Shuffle(candidates.begin(), candidates.end());
                 std::stable_sort(candidates.begin(), candidates.end(), pred);
                 // pick the first candidate
-                Y_VERIFY(candidates);
+                Y_ABORT_UNLESS(candidates);
                 auto& group = *candidates.front();
                 // issue queries
                 for (const ui32 diskIdx : group.DiskIdx) {
                     auto& disk = state.Disks[diskIdx];
                     auto& part = disk.DiskParts[group.PartIdx];
-                    Y_VERIFY(part.Requested.IsEmpty()); // ensure we haven't requested any data yet
+                    Y_ABORT_UNLESS(part.Requested.IsEmpty()); // ensure we haven't requested any data yet
                     const TLogoBlobID id(state.Id, group.PartIdx + 1);
                     groupDiskRequests.AddGet(disk.OrderNumber, id, state.Whole.NotHere());
                     part.Requested.Add(state.Whole.NotHere());
@@ -138,7 +138,7 @@ namespace NKikimr {
 
                     switch (part.Situation) {
                         case TBlobState::ESituation::Unknown: // we should have already probed all parts on all disks
-                            Y_VERIFY(!DiskPartsAllowed[partIdx][diskIdx]);
+                            Y_ABORT_UNLESS(!DiskPartsAllowed[partIdx][diskIdx]);
                             break;
 
                         case TBlobState::ESituation::Sent: // incorrect state

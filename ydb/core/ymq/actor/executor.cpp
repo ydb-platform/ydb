@@ -102,7 +102,7 @@ void TExecutorBuilder::StartExecutorActor() {
 }
 
 void TExecutorBuilder::SendToQueueLeader() {
-    Y_VERIFY(QueueLeaderActor_);
+    Y_ABORT_UNLESS(QueueLeaderActor_);
 
     auto ev = MakeHolder<TSqsEvents::TEvExecute>(Parent_, RequestId_, TQueuePath(Cfg().GetRoot(), UserName_, QueueName_, QueueVersion_), QueryId_, Shard_);
     ev->RetryOnTimeout = RetryOnTimeout_;
@@ -354,7 +354,7 @@ void TMiniKqlExecutionActor::HandleResponse(TResponse::TPtr& ev) {
 }
 
 void TMiniKqlExecutionActor::HandleWakeup(TEvWakeup::TPtr& ev) {
-    Y_VERIFY(ev->Get()->Tag != 0);
+    Y_ABORT_UNLESS(ev->Get()->Tag != 0);
     switch (ev->Get()->Tag) {
     case EXECUTE_RETRY_WAKEUP_TAG: {
         ProceedWithExecution();
@@ -449,7 +449,7 @@ void TMiniKqlExecutionActor::WaitForCompletion(bool retry) {
 }
 
 void TMiniKqlExecutionActor::HandleResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-    Y_VERIFY(ev->Get()->Record.GetTxId() == ResponseEvent_->Get()->Record.GetTxId());
+    Y_ABORT_UNLESS(ev->Get()->Record.GetTxId() == ResponseEvent_->Get()->Record.GetTxId());
     ResponseEvent_->Get()->Record.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
     RLOG_SQS_TRACE(GetRequestType() << " Queue " << TLogQueueName(QueuePath_) << " Sending mkql execution result: " << ResponseEvent_->Get()->Record);
 

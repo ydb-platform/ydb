@@ -333,7 +333,7 @@ protected:
         }
 
         void DecreaseCount() {
-            Y_VERIFY(Counter > 0);
+            Y_ABORT_UNLESS(Counter > 0);
             --Counter;
         }
 

@@ -5,7 +5,7 @@
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
 const std::vector<std::shared_ptr<IBlobsReadingAction>>& ITask::GetAgents() const {
-    Y_VERIFY(!BlobsFetchingStarted);
+    Y_ABORT_UNLESS(!BlobsFetchingStarted);
     return Agents;
 }
 
@@ -42,7 +42,7 @@ void ITask::AddData(const TBlobRange& range, const TString& data) {
     } else {
         ACFL_TRACE("event", "NewData")("range", range.ToString())("external_task_id", ExternalTaskId);
     }
-    Y_VERIFY(BlobsFetchingStarted);
+    Y_ABORT_UNLESS(BlobsFetchingStarted);
     {
         auto it = BlobsWaiting.find(range);
         AFL_VERIFY(it != BlobsWaiting.end());
@@ -56,7 +56,7 @@ void ITask::AddData(const TBlobRange& range, const TString& data) {
 
 void ITask::StartBlobsFetching(const THashSet<TBlobRange>& rangesInProgress) {
     ACFL_TRACE("task_id", ExternalTaskId)("event", "start");
-    Y_VERIFY(!BlobsFetchingStarted);
+    Y_ABORT_UNLESS(!BlobsFetchingStarted);
     BlobsFetchingStarted = true;
     ui64 size = 0;
     ui64 count = 0;
@@ -112,7 +112,7 @@ TString ITask::DebugString() const {
 
 void ITask::OnDataReady() {
     ACFL_DEBUG("event", "OnDataReady")("task", DebugString())("external_task_id", ExternalTaskId);
-    Y_VERIFY(!DataIsReadyFlag);
+    Y_ABORT_UNLESS(!DataIsReadyFlag);
     DataIsReadyFlag = true;
     DoOnDataReady(ResourcesGuard);
 }

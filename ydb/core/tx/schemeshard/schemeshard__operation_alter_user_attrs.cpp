@@ -71,7 +71,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterUserAttributes, path.Base()->PathId);
 
         path.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
@@ -97,7 +97,7 @@ public:
                        << ", at schemeshard: " << context.SS->TabletID());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return true;
@@ -114,7 +114,7 @@ public:
                        << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         if (txState->State != TTxState::Propose) {
             LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -124,7 +124,7 @@ public:
             return true;
         }
 
-        Y_VERIFY(txState->TxType == TTxState::TxAlterUserAttributes);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterUserAttributes);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -132,9 +132,9 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        Y_VERIFY(path->UserAttrs);
-        Y_VERIFY(path->UserAttrs->AlterData);
-        Y_VERIFY(path->UserAttrs->AlterVersion < path->UserAttrs->AlterData->AlterVersion);
+        Y_ABORT_UNLESS(path->UserAttrs);
+        Y_ABORT_UNLESS(path->UserAttrs->AlterData);
+        Y_ABORT_UNLESS(path->UserAttrs->AlterVersion < path->UserAttrs->AlterData->AlterVersion);
         context.SS->ApplyAndPersistUserAttrs(db, path->PathId);
 
         context.SS->ClearDescribePathCaches(path);
@@ -166,7 +166,7 @@ ISubOperation::TPtr CreateAlterUserAttrs(TOperationId id, const TTxTransaction& 
 }
 
 ISubOperation::TPtr CreateAlterUserAttrs(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state == TTxState::Invalid || state == TTxState::Propose);
+    Y_ABORT_UNLESS(state == TTxState::Invalid || state == TTxState::Propose);
     return MakeSubOperation<TAlterUserAttrs>(id);
 }
 

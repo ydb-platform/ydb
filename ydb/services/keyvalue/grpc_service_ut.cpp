@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
 
     void CmdWrite(ui64 tabletId, const TDeque<TString> &keys, const TDeque<TString> &values, TKikimrWithGrpcAndRootSchema &server)
     {
-        Y_VERIFY(keys.size() == values.size());
+        Y_ABORT_UNLESS(keys.size() == values.size());
         TAutoPtr<IEventHandle> handle;
         TEvKeyValue::TEvResponse *result;
         THolder<TEvKeyValue::TEvRequest> request;

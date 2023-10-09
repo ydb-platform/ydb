@@ -70,7 +70,7 @@ void TPrintable<TMessage>::DebugString(TStringBuilder& ret, bool printData) cons
     const auto* self = static_cast<const TMessage*>(this);
     ret << "Message {";
     auto ptr = dynamic_cast<const TReadSessionEvent::TDataReceivedEvent::TMessageBase*>(self);
-    Y_VERIFY(ptr);
+    Y_ABORT_UNLESS(ptr);
     ptr->DebugString(ret, printData);
     self->GetFederatedPartitionSession()->DebugString(ret);
     ret << " }";

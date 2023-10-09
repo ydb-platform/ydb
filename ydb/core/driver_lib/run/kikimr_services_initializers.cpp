@@ -302,7 +302,7 @@ void AddExecutorPool(
         } else if (systemConfig.HasEventsPerMailbox()) {
             basic.EventsPerMailbox = systemConfig.GetEventsPerMailbox();
         }
-        Y_VERIFY(basic.EventsPerMailbox != 0);
+        Y_ABORT_UNLESS(basic.EventsPerMailbox != 0);
         basic.MinThreadCount = poolConfig.GetMinThreads();
         basic.MaxThreadCount = poolConfig.GetMaxThreads();
         basic.DefaultThreadCount = poolConfig.GetThreads();
@@ -336,7 +336,7 @@ void AddExecutorPool(
         } else if (systemConfig.HasEventsPerMailbox()) {
             united.EventsPerMailbox = systemConfig.GetEventsPerMailbox();
         }
-        Y_VERIFY(united.EventsPerMailbox != 0);
+        Y_ABORT_UNLESS(united.EventsPerMailbox != 0);
         united.Balancing.Cpus = poolConfig.GetThreads();
         united.Balancing.MinCpus = poolConfig.GetMinThreads();
         united.Balancing.MaxCpus = poolConfig.GetMaxThreads();
@@ -596,9 +596,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig());
     }
 
-    Y_VERIFY(Config.HasActorSystemConfig());
-    Y_VERIFY(systemConfig.HasScheduler());
-    Y_VERIFY(systemConfig.ExecutorSize());
+    Y_ABORT_UNLESS(Config.HasActorSystemConfig());
+    Y_ABORT_UNLESS(systemConfig.HasScheduler());
+    Y_ABORT_UNLESS(systemConfig.ExecutorSize());
     const ui32 systemPoolId = appData->SystemPoolId;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters = appData->Counters;
 
@@ -678,15 +678,15 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             for (const auto& channel : icConfig.GetChannel()) {
                 const auto index = channel.GetIndex();
                 ui32 weight = 0;
-                Y_VERIFY(!(channel.HasQuota() && channel.HasWeight()), "Only one field should be set: Weight or Quota, Weight is preffered");
+                Y_ABORT_UNLESS(!(channel.HasQuota() && channel.HasWeight()), "Only one field should be set: Weight or Quota, Weight is preffered");
                 if (channel.HasWeight()) {
                     weight = channel.GetWeight();
                 } else if (channel.HasQuota()) {
                     weight = channel.GetQuota();
                 }
 
-                Y_VERIFY(index < 1U << IEventHandle::ChannelBits, "Channel index is too large: got %" PRIu32 ", should be less than %" PRIu32, index, 1U << IEventHandle::ChannelBits);
-                Y_VERIFY(weight > 0U && weight <= std::numeric_limits<ui16>::max(), "Channel weight is out of allowed range: got %" PRIu32 ", should be > 0 and < %" PRIu32, weight, std::numeric_limits<ui16>::max());
+                Y_ABORT_UNLESS(index < 1U << IEventHandle::ChannelBits, "Channel index is too large: got %" PRIu32 ", should be less than %" PRIu32, index, 1U << IEventHandle::ChannelBits);
+                Y_ABORT_UNLESS(weight > 0U && weight <= std::numeric_limits<ui16>::max(), "Channel weight is out of allowed range: got %" PRIu32 ", should be > 0 and < %" PRIu32, weight, std::numeric_limits<ui16>::max());
 
                 channels.insert({ui16(index), TChannelSettings{ui16(weight)}});
             }
@@ -774,7 +774,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
                 icCommon->CompatibilityInfo = TString();
                 bool success = CompatibilityInfo.MakeStored(NKikimrConfig::TCompatibilityRule::Interconnect).SerializeToString(&*icCommon->CompatibilityInfo);
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
                 icCommon->ValidateCompatibilityInfo = [&](const TString& peer, TString& errorReason) {
                     NKikimrConfig::TStoredCompatibilityInfo peerPB;
                     if (!peerPB.ParseFromString(peer)) {
@@ -793,7 +793,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 TMailboxType::ReadAsFilled, interconnectPoolId));
 
             if (nsConfig.GetType() != NKikimrConfig::TStaticNameserviceConfig::NS_EXTERNAL) {
-                Y_VERIFY(!table->StaticNodeTable.empty());
+                Y_ABORT_UNLESS(!table->StaticNodeTable.empty());
             }
 
             ui32 maxNode = 0;
@@ -991,7 +991,7 @@ void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSe
     bool knownss[maxssid + 1] = {};
     for (const NKikimrConfig::TDomainsConfig::TStateStorage &ssconf : Config.GetDomainsConfig().GetStateStorage()) {
         const ui32 ssid = ssconf.GetSSId();
-        Y_VERIFY(ssid <= maxssid);
+        Y_ABORT_UNLESS(ssid <= maxssid);
         knownss[ssid] = true;
 
         TIntrusivePtr<TStateStorageInfo> ssrInfo;
@@ -1640,7 +1640,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
     if (!IsServiceInitialized(setup, NMsgBusProxy::CreateMsgBusProxyId())
         && Config.HasGRpcConfig() && Config.GetGRpcConfig().GetStartGRpcProxy()) {
         IActor * proxy = NMsgBusProxy::CreateMessageBusServerProxy(nullptr);
-        Y_VERIFY(proxy);
+        Y_ABORT_UNLESS(proxy);
         setup->LocalServices.emplace_back(
             NMsgBusProxy::CreateMsgBusProxyId(),
             TActorSetupCmd(proxy, TMailboxType::ReadAsFilled, appData->UserPoolId));
@@ -1651,7 +1651,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             IActor * cache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(
                     appData->Counters, pqMetaRefresh
             );
-            Y_VERIFY(cache);
+            Y_ABORT_UNLESS(cache);
             setup->LocalServices.emplace_back(
                 NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
                 TActorSetupCmd(cache, TMailboxType::ReadAsFilled, appData->UserPoolId));
@@ -2125,7 +2125,7 @@ TCompConveyorInitializer::TCompConveyorInitializer(const TKikimrRunConfig& runCo
 void TCompConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     NConveyor::TConfig serviceConfig;
     if (Config.HasCompConveyorConfig()) {
-        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetCompConveyorConfig()));
+        Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetCompConveyorConfig()));
     }
     if (!serviceConfig.HasDefaultFractionOfThreadsCount()) {
         serviceConfig.SetDefaultFractionOfThreadsCount(0.33);
@@ -2150,7 +2150,7 @@ TScanConveyorInitializer::TScanConveyorInitializer(const TKikimrRunConfig& runCo
 void TScanConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     NConveyor::TConfig serviceConfig;
     if (Config.HasScanConveyorConfig()) {
-        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetScanConveyorConfig()));
+        Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetScanConveyorConfig()));
     }
     if (!serviceConfig.HasDefaultFractionOfThreadsCount()) {
         serviceConfig.SetDefaultFractionOfThreadsCount(0.33);
@@ -2175,7 +2175,7 @@ TInsertConveyorInitializer::TInsertConveyorInitializer(const TKikimrRunConfig& r
 void TInsertConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     NConveyor::TConfig serviceConfig;
     if (Config.HasInsertConveyorConfig()) {
-        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetInsertConveyorConfig()));
+        Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetInsertConveyorConfig()));
     }
     if (!serviceConfig.HasDefaultFractionOfThreadsCount()) {
         serviceConfig.SetDefaultFractionOfThreadsCount(0.2);
@@ -2200,7 +2200,7 @@ TExternalIndexInitializer::TExternalIndexInitializer(const TKikimrRunConfig& run
 void TExternalIndexInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     NCSIndex::TConfig serviceConfig;
     if (Config.HasExternalIndexConfig()) {
-        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetExternalIndexConfig()));
+        Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetExternalIndexConfig()));
     }
 
     if (serviceConfig.IsEnabled()) {
@@ -2218,7 +2218,7 @@ TMetadataProviderInitializer::TMetadataProviderInitializer(const TKikimrRunConfi
 void TMetadataProviderInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     NMetadata::NProvider::TConfig serviceConfig;
     if (Config.HasMetadataProviderConfig()) {
-        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetMetadataProviderConfig()));
+        Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetMetadataProviderConfig()));
     }
 
     if (serviceConfig.IsEnabled()) {
@@ -2236,7 +2236,7 @@ TBackgroundTasksInitializer::TBackgroundTasksInitializer(const TKikimrRunConfig&
 void TBackgroundTasksInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     NBackgroundTasks::TConfig serviceConfig;
     if (Config.HasBackgroundTasksConfig()) {
-        Y_VERIFY(serviceConfig.DeserializeFromProto(Config.GetBackgroundTasksConfig()));
+        Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetBackgroundTasksConfig()));
     }
 
     if (serviceConfig.IsEnabled()) {

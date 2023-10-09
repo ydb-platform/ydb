@@ -105,7 +105,7 @@ void TDsProxyNodeMon::CountPutPesponseTime(NPDisk::EDeviceType type, NKikimrBlob
     const double durationMsFloat = duration.MicroSeconds() / 1000.0;
     PutResponseTime.Increment(durationMs);
     const ui32 idx = IdxForType(type);
-    Y_VERIFY(IsCountersPresentedForIdx[idx]);
+    Y_ABORT_UNLESS(IsCountersPresentedForIdx[idx]);
     switch (cls) {
         case NKikimrBlobStorage::EPutHandleClass::TabletLog:
             PutTabletLogResponseTime.Increment(durationMs);
@@ -142,7 +142,7 @@ void TDsProxyNodeMon::CountGetResponseTime(NPDisk::EDeviceType type, NKikimrBlob
     const double durationMsFloat = duration.MicroSeconds() / 1000.0;
     GetResponseTime.Increment(durationMs);
     const ui32 idx = IdxForType(type);
-    Y_VERIFY(IsCountersPresentedForIdx[idx]);
+    Y_ABORT_UNLESS(IsCountersPresentedForIdx[idx]);
     switch (cls) {
         case NKikimrBlobStorage::EGetHandleClass::AsyncRead:
             GetAsyncReadResponseTime.Increment(durationMs);
@@ -180,7 +180,7 @@ void TDsProxyNodeMon::CountPatchResponseTime(NPDisk::EDeviceType type, TDuration
     const double durationMsFloat = duration.MicroSeconds() / 1000.0;
     PatchResponseTime.Increment(durationMs);
     const ui32 idx = IdxForType(type);
-    Y_VERIFY(IsCountersPresentedForIdx[idx]);
+    Y_ABORT_UNLESS(IsCountersPresentedForIdx[idx]);
     PatchResponseTimeHist[idx]->Collect(durationMsFloat);
 }
 

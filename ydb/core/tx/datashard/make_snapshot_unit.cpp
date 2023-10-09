@@ -53,11 +53,11 @@ EExecutionStatus TMakeSnapshotUnit::Execute(TOperation::TPtr op,
     if (!op->IsWaitingForSnapshot()) {
         ui64 tableId = schemeTx.GetSendSnapshot().GetTableId_Deprecated();
         if (schemeTx.GetSendSnapshot().HasTableId()) {
-            Y_VERIFY(DataShard.GetPathOwnerId() == schemeTx.GetSendSnapshot().GetTableId().GetOwnerId());
+            Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == schemeTx.GetSendSnapshot().GetTableId().GetOwnerId());
             tableId = schemeTx.GetSendSnapshot().GetTableId().GetTableId();
         }
 
-        Y_VERIFY(DataShard.GetUserTables().contains(tableId));
+        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
         ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
         const auto& openTxs = txc.DB.GetOpenTxs(localTableId);
         TIntrusivePtr<TTableSnapshotContext> snapContext
@@ -68,7 +68,7 @@ EExecutionStatus TMakeSnapshotUnit::Execute(TOperation::TPtr op,
         return EExecutionStatus::Continue;
     }
 
-    Y_VERIFY(!op->InputSnapshots().empty());
+    Y_ABORT_UNLESS(!op->InputSnapshots().empty());
     op->ResetWaitingForSnapshotFlag();
 
     return EExecutionStatus::Executed;

@@ -121,11 +121,11 @@ public:
     TKey(const TString& data)
     {
         Assign(data.data(), data.size());
-        Y_VERIFY(data.size() == KeySize() + IsHead());
-        Y_VERIFY(*(PtrOffset() - 1) == '_');
-        Y_VERIFY(*(PtrCount() - 1) == '_');
-        Y_VERIFY(*(PtrPartNo() - 1) == '_');
-        Y_VERIFY(*(PtrInternalPartsCount() - 1) == '_');
+        Y_ABORT_UNLESS(data.size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(*(PtrOffset() - 1) == '_');
+        Y_ABORT_UNLESS(*(PtrCount() - 1) == '_');
+        Y_ABORT_UNLESS(*(PtrPartNo() - 1) == '_');
+        Y_ABORT_UNLESS(*(PtrInternalPartsCount() - 1) == '_');
 
         ParsePartition();
         ParseOffset();
@@ -152,46 +152,46 @@ public:
     }
 
     void SetOffset(const ui64 offset) {
-        Y_VERIFY(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
         Offset = offset;
         memcpy(PtrOffset(), Sprintf("%.20" PRIu64, offset).data(), 20);
     }
 
     ui64 GetOffset() const {
-        Y_VERIFY(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
         return Offset;
     }
 
     void SetCount(const ui32 count) {
-        Y_VERIFY(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
         Count = count;
         memcpy(PtrCount(), Sprintf("%.10" PRIu32, count).data(), 10);
     }
 
     ui32 GetCount() const {
-        Y_VERIFY(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
         return Count;
     }
 
     void SetPartNo(const ui16 partNo) {
-        Y_VERIFY(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
         PartNo = partNo;
         memcpy(PtrPartNo(), Sprintf("%.5" PRIu16, partNo).data(), 5);
     }
 
     ui16 GetPartNo() const {
-        Y_VERIFY(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
         return PartNo;
     }
 
     void SetInternalPartsCount(const ui16 internalPartsCount) {
-        Y_VERIFY(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
         InternalPartsCount = internalPartsCount;
         memcpy(PtrInternalPartsCount(), Sprintf("%.5" PRIu16, internalPartsCount).data(), 5);
     }
 
     ui16 GetInternalPartsCount() const {
-        Y_VERIFY(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
         return InternalPartsCount;
     }
 

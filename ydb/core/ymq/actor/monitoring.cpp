@@ -47,7 +47,7 @@ namespace NKikimr::NSQS {
         RetryPeriod = RETRY_PERIOD_MIN;
         auto& response = record.GetResponse();
 
-        Y_VERIFY(response.YdbResultsSize() == 1);
+        Y_ABORT_UNLESS(response.YdbResultsSize() == 1);
         NYdb::TResultSetParser parser(response.GetYdbResults(0));
         TDuration removeQueuesDataLag;
         

@@ -237,7 +237,7 @@ namespace NKikimr {
                     Parts = parts;
                     DiskPtrs = {begin, end};
                     CircaLsns = TCircaLsns(end - begin, circaLsn);
-                    Y_VERIFY(DiskPtrs.size() == Parts.CountBits());
+                    Y_ABORT_UNLESS(DiskPtrs.size() == Parts.CountBits());
                 } else {
                     Merge(begin, end, parts, circaLsn);
                 }
@@ -264,7 +264,7 @@ namespace NKikimr {
             }
 
             TBlobType::EType GetBlobType() const {
-                Y_VERIFY(!Empty());
+                Y_ABORT_UNLESS(!Empty());
                 return DiskPtrs.size() == 1 ? TBlobType::HugeBlob : TBlobType::ManyHugeBlobs;
             }
 
@@ -314,7 +314,7 @@ namespace NKikimr {
 
             void Merge(const TDiskPart *begin, const TDiskPart *end, const NMatrix::TVectorType &parts, ui64 circaLsn)
             {
-                Y_VERIFY(end - begin == parts.CountBits());
+                Y_ABORT_UNLESS(end - begin == parts.CountBits());
                 Y_VERIFY_DEBUG(Parts.GetSize() == parts.GetSize());
                 const ui8 maxSize = parts.GetSize();
                 TDiskPtrs newDiskPtrs;
@@ -360,7 +360,7 @@ namespace NKikimr {
                 Parts |= parts;
                 DiskPtrs.swap(newDiskPtrs);
                 CircaLsns.swap(newCircaLsns);
-                Y_VERIFY(DiskPtrs.size() == Parts.CountBits());
+                Y_ABORT_UNLESS(DiskPtrs.size() == Parts.CountBits());
             }
         };
 

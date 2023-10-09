@@ -50,7 +50,7 @@ public:
 
     TColumnsSet(const std::vector<ui32>& columnIds, const TIndexInfo& indexInfo) {
         for (auto&& i : columnIds) {
-            Y_VERIFY(ColumnIds.emplace(i).second);
+            Y_ABORT_UNLESS(ColumnIds.emplace(i).second);
             ColumnNames.emplace(indexInfo.GetColumnName(i));
         }
         Schema = indexInfo.GetColumnsSchema(ColumnIds);

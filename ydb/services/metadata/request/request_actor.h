@@ -131,9 +131,9 @@ private:
         Ydb::Table::CreateSessionResult session;
         currentFullReply.operation().result().UnpackTo(&session);
         const TString sessionId = session.session_id();
-        Y_VERIFY(sessionId);
+        Y_ABORT_UNLESS(sessionId);
         std::optional<typename TDialogPolicy::TRequest> nextRequest = OnSessionId(sessionId);
-        Y_VERIFY(nextRequest);
+        Y_ABORT_UNLESS(nextRequest);
         TBase::Register(new TYDBCallbackRequest<TDialogPolicy>(*nextRequest, UserToken, TBase::SelfId(), Config));
     }
 protected:

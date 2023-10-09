@@ -14,7 +14,7 @@ NWrappers::NExternalStorage::IExternalStorageOperator::TPtr TOperator::GetCurren
     const ui32 idx = CurrentOperatorIdx.Val();
     AFL_VERIFY(idx < ExternalStorageOperators.size())("idx", idx)("size", ExternalStorageOperators.size());
     auto result = ExternalStorageOperators[idx];
-    Y_VERIFY(result);
+    Y_ABORT_UNLESS(result);
     return result;
 }
 

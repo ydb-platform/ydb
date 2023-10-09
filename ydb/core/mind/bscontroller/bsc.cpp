@@ -43,13 +43,13 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
     , ReplicationTime(replicationTime)
     , VSlotReadyTimestampQ(*vslotReadyTimestampQ)
 {
-    Y_VERIFY(pdisk);
+    Y_ABORT_UNLESS(pdisk);
     const auto& [it, inserted] = pdisk->VSlotsOnPDisk.emplace(VSlotId.VSlotId, this);
-    Y_VERIFY(inserted);
+    Y_ABORT_UNLESS(inserted);
 
     if (!IsBeingDeleted()) {
         if (Mood != TMood::Donor) {
-            Y_VERIFY(group);
+            Y_ABORT_UNLESS(group);
             Group = group;
             group->AddVSlot(this);
         }
@@ -204,38 +204,38 @@ void TBlobStorageController::ValidateInternalState() {
     for (const auto& [pdiskId, pdisk] : PDisks) {
         ui32 numActiveSlots = 0;
         for (const auto& [vslotId, vslot] : pdisk->VSlotsOnPDisk) {
-            Y_VERIFY(vslot == FindVSlot(TVSlotId(pdiskId, vslotId)));
-            Y_VERIFY(vslot->PDisk == pdisk.Get());
+            Y_ABORT_UNLESS(vslot == FindVSlot(TVSlotId(pdiskId, vslotId)));
+            Y_ABORT_UNLESS(vslot->PDisk == pdisk.Get());
             numActiveSlots += !vslot->IsBeingDeleted();
         }
-        Y_VERIFY(pdisk->NumActiveSlots == numActiveSlots);
+        Y_ABORT_UNLESS(pdisk->NumActiveSlots == numActiveSlots);
     }
     for (const auto& [vslotId, vslot] : VSlots) {
-        Y_VERIFY(vslot->VSlotId == vslotId);
-        Y_VERIFY(vslot->PDisk == FindPDisk(vslot->VSlotId.ComprisingPDiskId()));
+        Y_ABORT_UNLESS(vslot->VSlotId == vslotId);
+        Y_ABORT_UNLESS(vslot->PDisk == FindPDisk(vslot->VSlotId.ComprisingPDiskId()));
         const auto it = vslot->PDisk->VSlotsOnPDisk.find(vslotId.VSlotId);
-        Y_VERIFY(it != vslot->PDisk->VSlotsOnPDisk.end());
-        Y_VERIFY(it->second == vslot.Get());
+        Y_ABORT_UNLESS(it != vslot->PDisk->VSlotsOnPDisk.end());
+        Y_ABORT_UNLESS(it->second == vslot.Get());
         const TGroupInfo *group = FindGroup(vslot->GroupId);
         if (!vslot->IsBeingDeleted() && vslot->Mood != TMood::Donor) {
-            Y_VERIFY(group);
-            Y_VERIFY(vslot->Group == group);
+            Y_ABORT_UNLESS(group);
+            Y_ABORT_UNLESS(vslot->Group == group);
         } else {
-            Y_VERIFY(!vslot->Group);
+            Y_ABORT_UNLESS(!vslot->Group);
         }
         if (vslot->Mood == TMood::Donor) {
             const TVSlotInfo *acceptor = FindAcceptor(*vslot);
-            Y_VERIFY(!acceptor->IsBeingDeleted());
-            Y_VERIFY(acceptor->Mood != TMood::Donor);
-            Y_VERIFY(acceptor->Donors.contains(vslotId));
+            Y_ABORT_UNLESS(!acceptor->IsBeingDeleted());
+            Y_ABORT_UNLESS(acceptor->Mood != TMood::Donor);
+            Y_ABORT_UNLESS(acceptor->Donors.contains(vslotId));
         }
         for (const TVSlotId& donorVSlotId : vslot->Donors) {
             const TVSlotInfo *donor = FindVSlot(donorVSlotId);
-            Y_VERIFY(donor);
-            Y_VERIFY(donor->Mood == TMood::Donor);
-            Y_VERIFY(donor->GroupId == vslot->GroupId);
-            Y_VERIFY(donor->GroupGeneration < vslot->GroupGeneration);
-            Y_VERIFY(donor->GetShortVDiskId() == vslot->GetShortVDiskId());
+            Y_ABORT_UNLESS(donor);
+            Y_ABORT_UNLESS(donor->Mood == TMood::Donor);
+            Y_ABORT_UNLESS(donor->GroupId == vslot->GroupId);
+            Y_ABORT_UNLESS(donor->GroupGeneration < vslot->GroupGeneration);
+            Y_ABORT_UNLESS(donor->GetShortVDiskId() == vslot->GetShortVDiskId());
         }
         if (vslot->Group) {
             if (vslot->Status == NKikimrBlobStorage::EVDiskStatus::READY) {
@@ -248,21 +248,21 @@ void TBlobStorageController::ValidateInternalState() {
         }
     }
     for (const auto& [groupId, group] : GroupMap) {
-        Y_VERIFY(groupId == group->ID);
-        Y_VERIFY(FindGroup(groupId) == group.Get());
+        Y_ABORT_UNLESS(groupId == group->ID);
+        Y_ABORT_UNLESS(FindGroup(groupId) == group.Get());
         for (const TVSlotInfo *vslot : group->VDisksInGroup) {
-            Y_VERIFY(FindVSlot(vslot->VSlotId) == vslot);
-            Y_VERIFY(vslot->Group == group.Get());
-            Y_VERIFY(vslot->GroupId == groupId);
-            Y_VERIFY(vslot->GroupGeneration == group->Generation);
+            Y_ABORT_UNLESS(FindVSlot(vslot->VSlotId) == vslot);
+            Y_ABORT_UNLESS(vslot->Group == group.Get());
+            Y_ABORT_UNLESS(vslot->GroupId == groupId);
+            Y_ABORT_UNLESS(vslot->GroupGeneration == group->Generation);
         }
     }
     for (const auto& [key, value] : GroupLookup) {
         const auto it = GroupMap.find(key);
-        Y_VERIFY(it != GroupMap.end());
-        Y_VERIFY(value == it->second.Get());
+        Y_ABORT_UNLESS(it != GroupMap.end());
+        Y_ABORT_UNLESS(value == it->second.Get());
     }
-    Y_VERIFY(GroupLookup.size() == GroupMap.size());
+    Y_ABORT_UNLESS(GroupLookup.size() == GroupMap.size());
 #endif
 }
 

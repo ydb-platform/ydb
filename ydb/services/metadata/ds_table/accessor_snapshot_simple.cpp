@@ -33,7 +33,7 @@ void TDSAccessorSimple::Handle(TTableExistsActor::TEvController::TEvResult::TPtr
         PassAway();
         return;
     }
-    Y_VERIFY(PathesInCheck.erase(ev->Get()->GetTablePath()) == 1);
+    Y_ABORT_UNLESS(PathesInCheck.erase(ev->Get()->GetTablePath()) == 1);
     if (PathesInCheck.empty()) {
         TBase::StartSnapshotsFetching();
     }

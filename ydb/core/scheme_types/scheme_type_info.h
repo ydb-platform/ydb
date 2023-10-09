@@ -14,7 +14,7 @@ public:
         , TypeDesc(typeDesc)
     {
         if (TypeId != NTypeIds::Pg) {
-            Y_VERIFY(!TypeDesc);
+            Y_ABORT_UNLESS(!TypeDesc);
         }
     }
 

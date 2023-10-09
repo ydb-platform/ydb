@@ -161,7 +161,7 @@ void TTopicWorkloadReader::TryCommitTx(TTopicWorkloadReaderParams& params,
                                        TInstant& commitTime,
                                        TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>& stopPartitionSessionEvents)
 {
-    Y_VERIFY(txSupport);
+    Y_ABORT_UNLESS(txSupport);
 
     if ((commitTime > Now()) && (params.CommitMessages > txSupport->Rows.size())) {
         return;

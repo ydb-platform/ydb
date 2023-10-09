@@ -20,11 +20,11 @@ TMaybe<TReadInfo> TSubscriberLogic::ForgetSubscription(const ui64 cookie)
 
 void TSubscriberLogic::AddSubscription(TReadInfo&& info, const ui64 cookie)
 {
-    Y_VERIFY(WaitingReads.empty() || WaitingReads.back().Offset == info.Offset);
+    Y_ABORT_UNLESS(WaitingReads.empty() || WaitingReads.back().Offset == info.Offset);
     info.IsSubscription = true;
     WaitingReads.push_back({info.Offset, cookie});
     bool res = ReadInfo.insert({cookie, std::move(info)}).second;
-    Y_VERIFY(res);
+    Y_ABORT_UNLESS(res);
 }
 
 TVector<std::pair<TReadInfo, ui64>> TSubscriberLogic::CompleteSubscriptions(const ui64 endOffset)
@@ -38,7 +38,7 @@ TVector<std::pair<TReadInfo, ui64>> TSubscriberLogic::CompleteSubscriptions(cons
         auto it = ReadInfo.find(cookie);
         if (it != ReadInfo.end()) {
             it->second.Timestamp = TAppData::TimeProvider->Now();
-            Y_VERIFY(it->second.Offset == offset);
+            Y_ABORT_UNLESS(it->second.Offset == offset);
             res.emplace_back(std::move(it->second), it->first);
             ReadInfo.erase(it);
         }

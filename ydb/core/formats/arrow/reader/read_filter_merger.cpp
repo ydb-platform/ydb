@@ -68,7 +68,7 @@ std::optional<ui64> TSortableBatchPosition::FindPosition(std::shared_ptr<arrow::
         }
     }
     while (posFinish > posStart + 1) {
-        Y_VERIFY(position.InitPosition(0.5 * (posStart + posFinish)));
+        Y_ABORT_UNLESS(position.InitPosition(0.5 * (posStart + posFinish)));
         const auto comparision = position.Compare(forFound);
         if (comparision == std::partial_ordering::less) {
             posStart = position.Position;
@@ -78,7 +78,7 @@ std::optional<ui64> TSortableBatchPosition::FindPosition(std::shared_ptr<arrow::
             return checkEqualBorder(position.Position);
         }
     }
-    Y_VERIFY(posFinish != posStart);
+    Y_ABORT_UNLESS(posFinish != posStart);
     if (greater) {
         return posFinish;
     } else {

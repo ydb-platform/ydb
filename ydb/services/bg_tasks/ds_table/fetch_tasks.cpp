@@ -7,7 +7,7 @@ namespace NKikimr::NBackgroundTasks {
 void TFetchTasksActor::OnResult(const NMetadata::NRequest::TDialogYQLRequest::TResponse& currentFullReply) {
     Ydb::Table::ExecuteQueryResult qResult;
     currentFullReply.operation().result().UnpackTo(&qResult);
-    Y_VERIFY((size_t)qResult.result_sets().size() == 1);
+    Y_ABORT_UNLESS((size_t)qResult.result_sets().size() == 1);
     TTask::TDecoder decoder(qResult.result_sets()[0]);
     std::vector<TTask> newTasks;
     for (auto&& i : qResult.result_sets()[0].rows()) {

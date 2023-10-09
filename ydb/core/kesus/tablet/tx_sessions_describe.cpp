@@ -47,7 +47,7 @@ struct TKesusTablet::TTxSessionsDescribe : public TTxBase {
             "[" << Self->TabletID() << "] TTxSessionsDescribe::Complete (sender=" << Sender
                 << ", cookie=" << Cookie << ")");
 
-        Y_VERIFY(Reply);
+        Y_ABORT_UNLESS(Reply);
         ctx.Send(Sender, Reply.Release(), 0, Cookie);
     }
 };

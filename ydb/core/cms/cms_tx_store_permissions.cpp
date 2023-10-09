@@ -32,7 +32,7 @@ public:
         const auto &rec = Response->Get<TEvCms::TEvPermissionResponse>()->Record;
 
         if (MaintenanceTaskId) {
-            Y_VERIFY(Scheduled);
+            Y_ABORT_UNLESS(Scheduled);
 
             Self->State->MaintenanceRequests.emplace(Scheduled->RequestId, *MaintenanceTaskId);
             Self->State->MaintenanceTasks.emplace(*MaintenanceTaskId, TTaskInfo{
@@ -61,7 +61,7 @@ public:
                        NIceDb::TUpdate<Schema::Permission::RequestID>(requestId));
 
             if (MaintenanceTaskId) {
-                Y_VERIFY(Self->State->MaintenanceTasks.contains(*MaintenanceTaskId));
+                Y_ABORT_UNLESS(Self->State->MaintenanceTasks.contains(*MaintenanceTaskId));
                 Self->State->MaintenanceTasks.at(*MaintenanceTaskId).Permissions.insert(id);
             }
 

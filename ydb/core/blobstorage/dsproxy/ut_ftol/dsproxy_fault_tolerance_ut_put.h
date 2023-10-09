@@ -47,7 +47,7 @@ public:
 
                     case NKikimrProto::ERROR:
                         // ERROR can only be generated if the failure model is exceeded
-                        Y_VERIFY(!fitsFailModel);
+                        Y_ABORT_UNLESS(!fitsFailModel);
                         UNIT_ASSERT_VALUES_UNEQUAL("", result->ErrorReason);
                         break;
 

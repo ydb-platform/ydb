@@ -35,10 +35,10 @@ private:
         }
 
         std::unique_ptr<NActors::IEventHandle> Pop() {
-            Y_VERIFY(!Empty());
+            Y_ABORT_UNLESS(!Empty());
             auto it = Queue_.begin();
             auto& miniQueue = it->second;
-            Y_VERIFY(!miniQueue.empty());
+            Y_ABORT_UNLESS(!miniQueue.empty());
             auto ev = std::move(miniQueue.front());
             miniQueue.pop();
             if (miniQueue.empty()) {

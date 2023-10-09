@@ -75,7 +75,7 @@ public:
         }
 
         std::shared_ptr<TPatternCacheEntry> GetValueSync() const {
-            Y_VERIFY(HasFuture());
+            Y_ABORT_UNLESS(HasFuture());
             return Future.GetValueSync();
         }
 

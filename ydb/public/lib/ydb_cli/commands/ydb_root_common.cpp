@@ -262,7 +262,7 @@ namespace {
     }
 
     inline TString GetProfileSource(std::shared_ptr<IProfile> profile, bool explicitOption) {
-        Y_VERIFY(profile, "No profile to get source");
+        Y_ABORT_UNLESS(profile, "No profile to get source");
         if (explicitOption) {
             return TStringBuilder() << "profile \"" << profile->GetName() << "\" from explicit --profile option";
         }

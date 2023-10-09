@@ -159,7 +159,7 @@ private:
     // coverity[var_deref_model]: false positive
     void DoAction() override {
         Become(&TThis::StateFunc);
-        Y_VERIFY(QueueAttributes_.Defined());
+        Y_ABORT_UNLESS(QueueAttributes_.Defined());
 
         const bool isFifo = IsFifoQueue();
         THolder<TSqsEvents::TEvSendMessageBatch> req;
@@ -242,7 +242,7 @@ private:
         const bool isFifo = IsFifoQueue();
         for (size_t i = 0, size = ev->Get()->Statuses.size(); i < size; ++i) {
             const auto& status = ev->Get()->Statuses[i];
-            Y_VERIFY(!IsBatch_ || RequestToReplyIndexMapping_[i] < BatchRequest().EntriesSize());
+            Y_ABORT_UNLESS(!IsBatch_ || RequestToReplyIndexMapping_[i] < BatchRequest().EntriesSize());
             auto* currentResponse = IsBatch_ ? Response_.MutableSendMessageBatch()->MutableEntries(RequestToReplyIndexMapping_[i]) : Response_.MutableSendMessage();
             auto* currentRequest = IsBatch_ ? &BatchRequest().GetEntries(RequestToReplyIndexMapping_[i]) : &Request();
             if (status.Status == TSqsEvents::TEvSendMessageBatchResponse::ESendMessageStatus::OK

@@ -125,7 +125,7 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
     const bool sendMeCostSettings = now >= CostSettingsUpdate;
 
     for (auto it = Queues.Waiting.begin(); !Paused && it != Queues.Waiting.end(); ) {
-        Y_VERIFY(it == Queues.Waiting.begin());
+        Y_ABORT_UNLESS(it == Queues.Waiting.begin());
         TItem& item = *it;
 
         // check if deadline occured
@@ -198,7 +198,7 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
         // move item to in-flight queue
         SetItemQueue(item, EItemQueue::InFlight);
         const bool inserted = InFlightLookup.emplace(std::make_pair(item.SequenceId, item.MsgId), it).second;
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
         Queues.InFlight.splice(Queues.InFlight.end(), Queues.Waiting, it++);
         ++*QueueItemsSent;
 
@@ -239,12 +239,12 @@ bool TBlobStorageQueue::Expecting(ui64 msgId, ui64 sequenceId) const {
 bool TBlobStorageQueue::OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TActorId *outSender, ui64 *outCookie,
         TDuration *processingTime) {
     const auto lookupIt = InFlightLookup.find(std::make_pair(sequenceId, msgId));
-    Y_VERIFY(lookupIt != InFlightLookup.end());
+    Y_ABORT_UNLESS(lookupIt != InFlightLookup.end());
     const TItemList::iterator it = lookupIt->second;
 
-    Y_VERIFY(cookie == it->QueueCookie || cookie == 0);
+    Y_ABORT_UNLESS(cookie == it->QueueCookie || cookie == 0);
 
-    Y_VERIFY(InFlightCost >= it->Cost);
+    Y_ABORT_UNLESS(InFlightCost >= it->Cost);
     InFlightCost -= it->Cost;
 
     const bool relevant = it->Event.Relevant();
@@ -272,14 +272,14 @@ bool TBlobStorageQueue::OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TAc
 void TBlobStorageQueue::Unwind(ui64 failedMsgId, ui64 failedSequenceId, ui64 expectedMsgId, ui64 expectedSequenceId) {
     // find item in the InFlight queue; it MUST exist in that queue
     const auto lookupIt = InFlightLookup.find(std::make_pair(failedSequenceId, failedMsgId));
-    Y_VERIFY(lookupIt != InFlightLookup.end());
+    Y_ABORT_UNLESS(lookupIt != InFlightLookup.end());
     TItemList::iterator it = lookupIt->second;
 
     // process items
     ui64 cost = 0;
     for (auto x = it; x != Queues.InFlight.end(); ) {
         const ui32 erased = InFlightLookup.erase(std::make_pair(x->SequenceId, x->MsgId));
-        Y_VERIFY(erased);
+        Y_ABORT_UNLESS(erased);
         cost += x->Cost; // count item's cost
         if (!x->Event.Relevant()) {
             if (x == it) {
@@ -291,7 +291,7 @@ void TBlobStorageQueue::Unwind(ui64 failedMsgId, ui64 failedSequenceId, ui64 exp
             ++x;
         }
     }
-    Y_VERIFY(cost <= InFlightCost);
+    Y_ABORT_UNLESS(cost <= InFlightCost);
     InFlightCost -= cost;
 
     // splice items into waiting queue's front

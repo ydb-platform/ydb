@@ -33,14 +33,14 @@ protected:
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
-        Y_VERIFY(tx->GetSchemeTx().HasBackup());
+        Y_ABORT_UNLESS(tx->GetSchemeTx().HasBackup());
         const auto& backup = tx->GetSchemeTx().GetBackup();
 
         const ui64 tableId = backup.GetTableId();
-        Y_VERIFY(DataShard.GetUserTables().contains(tableId));
+        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
 
         const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
-        Y_VERIFY(txc.DB.GetScheme().GetTableInfo(localTableId));
+        Y_ABORT_UNLESS(txc.DB.GetScheme().GetTableInfo(localTableId));
 
         auto* appData = AppData(ctx);
         const auto& columns = DataShard.GetUserTables().at(tableId)->Columns;
@@ -148,7 +148,7 @@ protected:
 
         const ui64 tableId = tx->GetSchemeTx().GetBackup().GetTableId();
 
-        Y_VERIFY(DataShard.GetUserTables().contains(tableId));
+        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
         const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
 
         DataShard.CancelScan(localTableId, tx->GetScanTask());

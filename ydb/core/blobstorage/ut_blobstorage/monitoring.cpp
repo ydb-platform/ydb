@@ -90,7 +90,7 @@ void Test(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* acto
     ui64 vdiskCost = 0;
 
     auto* appData = env.Runtime->GetAppData();
-    Y_VERIFY(appData);
+    Y_ABORT_UNLESS(appData);
 
     auto vdisksTotal = [&](TString subsystem, TString counter, bool derivative = false) {
         ui64 ctr = 0;
@@ -257,7 +257,7 @@ protected:
         TLogoBlobID oldId = Blobs.front();
         Blobs.pop_front();
         TLogoBlobID newId(1, 1, oldId.Step() + 1, 10, DataSize, oldId.Cookie());
-        Y_VERIFY(TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(oldId, &newId, BlobIdMask, GroupId, GroupId));
+        Y_ABORT_UNLESS(TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(oldId, &newId, BlobIdMask, GroupId, GroupId));
         TArrayHolder<TEvBlobStorage::TEvPatch::TDiff> diffs(new TEvBlobStorage::TEvPatch::TDiff[1]);
         char c = 'a' + RequestCount % 26;
         diffs[0].Set(TString(DataSize, c), 0);

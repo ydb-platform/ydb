@@ -159,7 +159,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             const TWriteId writeId = TWriteId{ rowset.GetValue<Schema::LongTxWrites::WriteId>() };
             const ui32 writePartId = rowset.GetValue<Schema::LongTxWrites::WritePartId>();
             NKikimrLongTxService::TLongTxId proto;
-            Y_VERIFY(proto.ParseFromString(rowset.GetValue<Schema::LongTxWrites::LongTxId>()));
+            Y_ABORT_UNLESS(proto.ParseFromString(rowset.GetValue<Schema::LongTxWrites::LongTxId>()));
             const auto longTxId = NLongTxService::TLongTxId::FromProto(proto);
 
             Self->LoadLongTxWrite(writeId, writePartId, longTxId);
@@ -173,7 +173,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     for (const auto& pr : Self->CommitsInFlight) {
         ui64 txId = pr.first;
         for (TWriteId writeId : pr.second.WriteIds) {
-            Y_VERIFY(Self->LongTxWrites.contains(writeId),
+            Y_ABORT_UNLESS(Self->LongTxWrites.contains(writeId),
                 "TTxInit at %" PRIu64 " : Commit %" PRIu64 " references local write %" PRIu64 " that doesn't exist",
                 Self->TabletID(), txId, writeId);
             Self->AddLongTxWrite(writeId, txId);
@@ -305,13 +305,13 @@ bool TColumnShard::LoadTx(const ui64 txId, const NKikimrTxColumnShard::ETransact
     switch (txKind) {
         case NKikimrTxColumnShard::TX_KIND_SCHEMA: {
             TColumnShard::TAlterMeta meta;
-            Y_VERIFY(meta.Body.ParseFromString(txBody));
+            Y_ABORT_UNLESS(meta.Body.ParseFromString(txBody));
             AltersInFlight.emplace(txId, std::move(meta));
             break;
         }
         case NKikimrTxColumnShard::TX_KIND_COMMIT: {
             NKikimrTxColumnShard::TCommitTxBody body;
-            Y_VERIFY(body.ParseFromString(txBody));
+            Y_ABORT_UNLESS(body.ParseFromString(txBody));
 
             TColumnShard::TCommitMeta meta;
             for (auto& id : body.GetWriteIds()) {

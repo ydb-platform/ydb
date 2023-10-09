@@ -305,11 +305,11 @@ namespace NTable {
         {
             Seeks++;
 
-            Y_VERIFY(Lead, "Cannot seek with invalid lead");
+            Y_ABORT_UNLESS(Lead, "Cannot seek with invalid lead");
 
             auto keyDefaults = Subset.Scheme->Keys;
 
-            Y_VERIFY(Lead.Key.GetCells().size() <= keyDefaults->Size(), "TLead key is too large");
+            Y_ABORT_UNLESS(Lead.Key.GetCells().size() <= keyDefaults->Size(), "TLead key is too large");
 
             Iter = new TTableIt(Subset.Scheme.Get(), Lead.Tags, -1, SnapshotVersion, Subset.CommittedTransactions);
 
@@ -380,13 +380,13 @@ namespace NTable {
                 TVector<const TPartView*> parts;
                 parts.reserve(Subset.Flatten.size() + LoadedParts.size());
                 for (const auto& partView : Subset.Flatten) {
-                    Y_VERIFY(partView.Part, "Missing part in subset");
-                    Y_VERIFY(partView.Slices, "Missing part slices in subset");
+                    Y_ABORT_UNLESS(partView.Part, "Missing part in subset");
+                    Y_ABORT_UNLESS(partView.Slices, "Missing part slices in subset");
                     parts.push_back(&partView);
                 }
                 for (const auto& partView : LoadedParts) {
-                    Y_VERIFY(partView.Part, "Missing part in subset");
-                    Y_VERIFY(partView.Slices, "Missing part slices in subset");
+                    Y_ABORT_UNLESS(partView.Part, "Missing part in subset");
+                    Y_ABORT_UNLESS(partView.Slices, "Missing part slices in subset");
                     parts.push_back(&partView);
                 }
                 std::sort(parts.begin(), parts.end(),

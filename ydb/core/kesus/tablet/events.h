@@ -101,7 +101,7 @@ struct TEvKesus {
         "expected EvEnd <= EventSpaceEnd(TKikimrEvents::ES_KESUS)");
 
     inline static void FillError(NKikimrKesus::TKesusError* error, Ydb::StatusIds::StatusCode status, const TString& reason) {
-        Y_VERIFY(status != Ydb::StatusIds::SUCCESS, "Attempting to set error to SUCCESS");
+        Y_ABORT_UNLESS(status != Ydb::StatusIds::SUCCESS, "Attempting to set error to SUCCESS");
         error->SetStatus(status);
         error->AddIssues()->set_message(reason);
     }

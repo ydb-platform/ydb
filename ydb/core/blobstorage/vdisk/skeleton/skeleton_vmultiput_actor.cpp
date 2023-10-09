@@ -60,7 +60,7 @@ namespace NKikimr {
                 , OOSStatus(oosStatus)
                 , IncarnationGuid(incarnationGuid)
             {
-                Y_VERIFY(statuses.size() == Items.size());
+                Y_ABORT_UNLESS(statuses.size() == Items.size());
                 for (ui64 idx = 0; idx < Items.size(); ++idx) {
                     Items[idx].Status = statuses[idx];
                 }
@@ -99,11 +99,11 @@ namespace NKikimr {
             void Handle(TEvVMultiPutItemResult::TPtr &ev, const TActorContext &ctx) {
                 TLogoBlobID blobId = ev->Get()->BlobId;
                 ui64 idx = ev->Get()->ItemIdx;
-                Y_VERIFY(idx < Items.size(), "itemIdx# %" PRIu64 " ItemsSize# %" PRIu64, idx, (ui64)Items.size());
+                Y_ABORT_UNLESS(idx < Items.size(), "itemIdx# %" PRIu64 " ItemsSize# %" PRIu64, idx, (ui64)Items.size());
                 TItem &item = Items[idx];
-                Y_VERIFY(blobId == item.BlobId, "itemIdx# %" PRIu64 " blobId# %s item# %s", idx, blobId.ToString().data(), item.ToString().data());
+                Y_ABORT_UNLESS(blobId == item.BlobId, "itemIdx# %" PRIu64 " blobId# %s item# %s", idx, blobId.ToString().data(), item.ToString().data());
 
-                Y_VERIFY(!item.Received, "itemIdx# %" PRIu64 " item# %s", idx, item.ToString().data());
+                Y_ABORT_UNLESS(!item.Received, "itemIdx# %" PRIu64 " item# %s", idx, item.ToString().data());
                 item.Received = true;
                 item.Status = ev->Get()->Status;
                 item.ErrorReason = ev->Get()->ErrorReason;

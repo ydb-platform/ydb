@@ -306,7 +306,7 @@ ui64 TBlockState::Slice() {
         if (arr.empty())
             continue;
 
-        Y_VERIFY(ui64(arr.front()->length) <= Count);
+        Y_ABORT_UNLESS(ui64(arr.front()->length) <= Count);
         MKQL_ENSURE(ui64(arr.front()->length) <= Count, "Unexpected array length at column #" << i);
         sliceSize = std::min<ui64>(sliceSize, arr.front()->length);
     }

@@ -23,14 +23,14 @@ void TService::PrepareManagers(std::vector<IClassBehaviour::TPtr> managers, TAut
         switch (RegistrationData->GetStage()) {
             case TRegistrationData::EStage::Created:
                 RegistrationData->StartInitialization();
-                Y_VERIFY(RegistrationData->InRegistration.emplace(bInitializer->GetTypeId(), bInitializer).second);
+                Y_ABORT_UNLESS(RegistrationData->InRegistration.emplace(bInitializer->GetTypeId(), bInitializer).second);
                 RegisterWithSameMailbox(new TBehaviourRegistrator(bInitializer, RegistrationData, Config.GetRequestConfig()));
                 break;
             case TRegistrationData::EStage::WaitInitializerInfo:
                 break;
             case TRegistrationData::EStage::Active:
                 for (auto&& b : managers) {
-                    Y_VERIFY(!RegistrationData->Registered.contains(b->GetTypeId()));
+                    Y_ABORT_UNLESS(!RegistrationData->Registered.contains(b->GetTypeId()));
                     if (!RegistrationData->InRegistration.contains(b->GetTypeId()) && !RegistrationData->Registered.contains(b->GetTypeId())) {
                         RegistrationData->InRegistration.emplace(b->GetTypeId(), b);
                         RegisterWithSameMailbox(new TBehaviourRegistrator(b, RegistrationData, Config.GetRequestConfig()));

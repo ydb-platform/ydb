@@ -141,7 +141,7 @@ private:
     arrow::Datum CalcArrayArray(arrow::MemoryPool* pool, const std::shared_ptr<arrow::ArrayData>& arr1,
                                           const std::shared_ptr<arrow::ArrayData>& arr2) const
     {
-        Y_VERIFY(arr1->length == arr2->length);
+        Y_ABORT_UNLESS(arr1->length == arr2->length);
         auto buf1 = arr1->buffers[0];
         auto buf2 = arr2->buffers[0];
         const int64_t offset1 = arr1->offset;
@@ -277,7 +277,7 @@ private:
     arrow::Datum CalcArrayArray(arrow::MemoryPool* pool, const std::shared_ptr<arrow::ArrayData>& arr1,
                                           const std::shared_ptr<arrow::ArrayData>& arr2) const
     {
-        Y_VERIFY(arr1->length == arr2->length);
+        Y_ABORT_UNLESS(arr1->length == arr2->length);
         auto buf1 = arr1->buffers[0];
         auto buf2 = arr2->buffers[0];
         const int64_t offset1 = arr1->offset;
@@ -390,7 +390,7 @@ private:
     arrow::Datum CalcArrayArray(arrow::MemoryPool* pool, const std::shared_ptr<arrow::ArrayData>& arr1,
         const std::shared_ptr<arrow::ArrayData>& arr2) const
     {
-        Y_VERIFY(arr1->length == arr2->length);
+        Y_ABORT_UNLESS(arr1->length == arr2->length);
         auto b1 = arr1->buffers[0];
         auto b2 = arr2->buffers[0];
         const int64_t offset1 = arr1->offset;

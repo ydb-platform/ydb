@@ -88,7 +88,7 @@ TPKRangesFilter::TPKRangesFilter(const bool reverse)
     : ReverseFlag(reverse)
 {
     auto range = TPKRangeFilter::Build(TPredicateContainer::BuildNullPredicateFrom(), TPredicateContainer::BuildNullPredicateTo());
-    Y_VERIFY(range);
+    Y_ABORT_UNLESS(range);
     SortedRanges.emplace_back(*range);
 }
 

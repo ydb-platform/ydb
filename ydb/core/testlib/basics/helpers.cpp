@@ -70,8 +70,8 @@ namespace NKikimr {
             const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey, ui32 poolId, ui32 nodeId)
     {
         Y_UNUSED(ctx);
-        Y_VERIFY(!Runtime.IsRealThreads());
-        Y_VERIFY(nodeId >= Runtime.GetNodeId(0) && nodeId < Runtime.GetNodeId(0) + Runtime.GetNodeCount());
+        Y_ABORT_UNLESS(!Runtime.IsRealThreads());
+        Y_ABORT_UNLESS(nodeId >= Runtime.GetNodeId(0) && nodeId < Runtime.GetNodeId(0) + Runtime.GetNodeCount());
         ui32 nodeIndex = nodeId - Runtime.GetNodeId(0);
         Runtime.BlockOutputForActor(TActorId(nodeId, "actorsystem"));
 

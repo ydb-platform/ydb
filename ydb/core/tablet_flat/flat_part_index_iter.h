@@ -112,19 +112,19 @@ public:
     }
 
     TPageId GetPageId() const {
-        Y_VERIFY(Index);
-        Y_VERIFY(Iter);
+        Y_ABORT_UNLESS(Index);
+        Y_ABORT_UNLESS(Iter);
         return Iter->GetPageId();
     }
 
     TRowId GetRowId() const {
-        Y_VERIFY(Index);
-        Y_VERIFY(Iter);
+        Y_ABORT_UNLESS(Index);
+        Y_ABORT_UNLESS(Iter);
         return Iter->GetRowId();
     }
 
     TRowId GetNextRowId() const {
-        Y_VERIFY(Index);
+        Y_ABORT_UNLESS(Index);
         auto next = Iter + 1;
         return next
             ? next->GetRowId()
@@ -132,15 +132,15 @@ public:
     }
 
     const TRecord * GetRecord() const {
-        Y_VERIFY(Index);
-        Y_VERIFY(Iter);
+        Y_ABORT_UNLESS(Index);
+        Y_ABORT_UNLESS(Iter);
         return Iter.GetRecord();
     }
 
     // currently this method is needed for tests only, but it's worth to keep it for future optimizations
     const TRecord * GetLastRecord() const {
-        Y_VERIFY(Index);
-        Y_VERIFY(Iter, "Should be called only after SeekLast call");
+        Y_ABORT_UNLESS(Index);
+        Y_ABORT_UNLESS(Iter, "Should be called only after SeekLast call");
         return Index->GetLastKeyRecord();
     }
 

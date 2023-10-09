@@ -14,8 +14,8 @@ public:
         const TActorContext& ctx,
         NAddr::IRemoteAddrRef address) noexcept
     {
-        Y_VERIFY(address.Get() != nullptr);
-        Y_VERIFY(orig != nullptr);
+        Y_ABORT_UNLESS(address.Get() != nullptr);
+        Y_ABORT_UNLESS(orig != nullptr);
 
         orig->template AddMsgProtocol<TEvConnectWakeup>(
             &TOrigActor::template CallProtocolStateFunc<

@@ -80,11 +80,11 @@ namespace NKikimr {
             const TActorId actorId = ctx.Register(CreateRecoveryScanActor(ChunkInProgress, true, ChunkInProgressSerNum,
                 static_cast<ui64>(EScanCookie::Defrag), Keeper.State), TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
             const bool inserted = Keeper.State.ChildActors.insert(actorId).second;
-            Y_VERIFY(inserted);
+            Y_ABORT_UNLESS(inserted);
         }
 
         TChunkInfo *TDefragmenter::CheckCurrentChunk(const TActorContext& ctx) {
-            Y_VERIFY(ChunkInProgress);
+            Y_ABORT_UNLESS(ChunkInProgress);
             auto it = Keeper.State.Chunks.find(ChunkInProgress);
             if (it == Keeper.State.Chunks.end() || it->second.ChunkSerNum != ChunkInProgressSerNum ||
                     it->second.State == EChunkState::Deleting) {
@@ -93,14 +93,14 @@ namespace NKikimr {
                 FinishChunkInProgress(ctx);
                 return nullptr;
             } else {
-                Y_VERIFY(it->second.State == EChunkState::Complete);
+                Y_ABORT_UNLESS(it->second.State == EChunkState::Complete);
                 return &it->second;
             }
         }
 
         void TDefragmenter::ApplyScan(const TActorId& sender, TEvIncrHugeScanResult& msg, const TActorContext& ctx) {
             const size_t num = Keeper.State.ChildActors.erase(sender);
-            Y_VERIFY(num == 1);
+            Y_ABORT_UNLESS(num == 1);
 
             IHLOG_DEBUG(ctx, "ApplyScan received");
 
@@ -109,7 +109,7 @@ namespace NKikimr {
                 return;
             }
 
-            Y_VERIFY(msg.Status == NKikimrProto::OK);
+            Y_ABORT_UNLESS(msg.Status == NKikimrProto::OK);
 
             // generate some messages to read blobs
             Index = std::move(msg.Index);
@@ -138,11 +138,11 @@ namespace NKikimr {
                 if (!chunk.DeletedItems.Get(IndexPos)) {
                     // find locator for this blob and check if is still points here
                     const TBlobLocator& locator = Keeper.State.BlobLookup.Lookup(record.Id);
-                    Y_VERIFY(locator.ChunkIdx == ChunkInProgress);
-                    Y_VERIFY(locator.OffsetInBlocks == OffsetInBlocks);
-                    Y_VERIFY(locator.PayloadSize == record.PayloadSize);
-                    Y_VERIFY(locator.IndexInsideChunk == IndexPos);
-                    Y_VERIFY(locator.Owner == record.Owner);
+                    Y_ABORT_UNLESS(locator.ChunkIdx == ChunkInProgress);
+                    Y_ABORT_UNLESS(locator.OffsetInBlocks == OffsetInBlocks);
+                    Y_ABORT_UNLESS(locator.PayloadSize == record.PayloadSize);
+                    Y_ABORT_UNLESS(locator.IndexInsideChunk == IndexPos);
+                    Y_ABORT_UNLESS(locator.Owner == record.Owner);
 
                     // create read callback
                     auto callback = [this, record, chunkIdx = ChunkInProgress, chunkSerNum = ChunkInProgressSerNum,
@@ -166,7 +166,7 @@ namespace NKikimr {
                     InFlightReadBytes += size;
 
                     ++chunk.InFlightReq;
-                    Y_VERIFY(chunk.State != EChunkState::Deleting);
+                    Y_ABORT_UNLESS(chunk.State != EChunkState::Deleting);
                 }
 
                 // advance index and update offset in blocks
@@ -176,7 +176,7 @@ namespace NKikimr {
 
             // if current chunks ends and there are no more reads in flight, time to switch to another chunk
             if (IndexPos == Index.size() && !InFlightReads && !InFlightWrites) {
-                Y_VERIFY(chunk.State == EChunkState::Complete);
+                Y_ABORT_UNLESS(chunk.State == EChunkState::Complete);
                 FinishChunkInProgress(ctx);
             }
         }
@@ -192,14 +192,14 @@ namespace NKikimr {
 
             // adjust number of in-flight requests
             const ui32 bytes = sizeInBlocks * Keeper.State.BlockSize;
-            Y_VERIFY(InFlightReads > 0 && InFlightReadBytes >= bytes);
+            Y_ABORT_UNLESS(InFlightReads > 0 && InFlightReadBytes >= bytes);
             --InFlightReads;
             InFlightReadBytes -= bytes;
 
             // remove in-flight request; we may be blocking chunk deletion here (are there were read request to chunk
             // scheduled for deletion); if so and this was the last request, try to delete this chunk again
             auto it = Keeper.State.Chunks.find(chunkIdx);
-            Y_VERIFY(it != Keeper.State.Chunks.end() && it->second.ChunkSerNum == chunkSerNum);
+            Y_ABORT_UNLESS(it != Keeper.State.Chunks.end() && it->second.ChunkSerNum == chunkSerNum);
             --it->second.InFlightReq;
             if (!it->second.InFlightReq && it->second.State == EChunkState::Deleting) {
                 Keeper.Deleter.IssueLogChunkDelete(chunkIdx, ctx);
@@ -225,16 +225,16 @@ namespace NKikimr {
                 const TBlobLocator& locator = Keeper.State.BlobLookup.Lookup(record.Id);
 
                 // validate this locator
-                Y_VERIFY(locator.ChunkIdx == ChunkInProgress && locator.OffsetInBlocks == offsetInBlocks
+                Y_ABORT_UNLESS(locator.ChunkIdx == ChunkInProgress && locator.OffsetInBlocks == offsetInBlocks
                         && locator.PayloadSize == record.PayloadSize && locator.IndexInsideChunk == index
                         && locator.Owner == record.Owner, "locator# %s offsetInBlocks# %" PRIu32 " index# %" PRIu32
                         " record# %s", locator.ToString().data(), offsetInBlocks, index, record.ToString().data());
 
                 const TBlobHeader& header = *result.Data.DataPtr<const TBlobHeader>(0);
                 if (!locator.DeleteInProgress && result.Data.IsReadable(0, totalSize)) {
-                    Y_VERIFY(Crc32c(&header.IndexRecord, totalSize - sizeof(ui32)) == header.Checksum);
-                    Y_VERIFY(header.IndexRecord == record);
-                    Y_VERIFY(header.ChunkSerNum == ChunkInProgressSerNum);
+                    Y_ABORT_UNLESS(Crc32c(&header.IndexRecord, totalSize - sizeof(ui32)) == header.Checksum);
+                    Y_ABORT_UNLESS(header.IndexRecord == record);
+                    Y_ABORT_UNLESS(header.ChunkSerNum == ChunkInProgressSerNum);
                     TString data = header.ExtractInplacePayload();
 
                     // fill in delete locator with provided values
@@ -264,7 +264,7 @@ namespace NKikimr {
             // RACE is returned when the original item was deleted while write was in waiting in queue or in progress
             if (status != NKikimrProto::RACE) {
                 // ensure that write succeeds FIXME: error handling
-                Y_VERIFY(status == NKikimrProto::OK);
+                Y_ABORT_UNLESS(status == NKikimrProto::OK);
                 IHLOG_DEBUG(ctx, "generating virtual log record deleteLocator# %s", deleteLocator.ToString().data());
 
                 // delete this locator right now; we do not log it, because on recovery it's easy to find
@@ -272,10 +272,10 @@ namespace NKikimr {
                 Keeper.Deleter.DeleteDefrag({deleteLocator}, ctx);
 
                 auto it = Keeper.State.Chunks.find(deleteLocator.ChunkIdx);
-                Y_VERIFY(it != Keeper.State.Chunks.end());
+                Y_ABORT_UNLESS(it != Keeper.State.Chunks.end());
                 TChunkInfo& chunk = it->second;
-                Y_VERIFY(chunk.DeletedItems.Get(deleteLocator.IndexInsideChunk));
-                Y_VERIFY(chunk.ChunkSerNum == deleteLocator.ChunkSerNum);
+                Y_ABORT_UNLESS(chunk.DeletedItems.Get(deleteLocator.IndexInsideChunk));
+                Y_ABORT_UNLESS(chunk.ChunkSerNum == deleteLocator.ChunkSerNum);
             }
 
             --InFlightWrites;

@@ -52,10 +52,10 @@ public:
 
     void AddComputeActorStats(ui32 nodeId, NYql::NDqProto::TDqComputeActorStats&& stats);
     void AddNodeShardsCount(const ui32 stageId, const ui32 nodeId, const ui32 shardsCount) {
-        Y_VERIFY(ShardsCountByNode[stageId].emplace(nodeId, shardsCount).second);
+        Y_ABORT_UNLESS(ShardsCountByNode[stageId].emplace(nodeId, shardsCount).second);
     }
     void SetUseLlvm(const ui32 stageId, const bool value) {
-        Y_VERIFY(UseLlvmByStageId.emplace(stageId, value).second);
+        Y_ABORT_UNLESS(UseLlvmByStageId.emplace(stageId, value).second);
     }
 
     void AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats);

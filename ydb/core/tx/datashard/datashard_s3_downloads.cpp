@@ -47,8 +47,8 @@ const TS3Download* TS3DownloadsManager::Find(ui64 txId) const {
 const TS3Download& TS3DownloadsManager::Store(NIceDb::TNiceDb& db, ui64 txId, const TS3Download& newInfo) {
     auto& info = Downloads[txId];
 
-    Y_VERIFY(newInfo.DataETag);
-    Y_VERIFY(info.DataETag.GetOrElse(*newInfo.DataETag) == *newInfo.DataETag);
+    Y_ABORT_UNLESS(newInfo.DataETag);
+    Y_ABORT_UNLESS(info.DataETag.GetOrElse(*newInfo.DataETag) == *newInfo.DataETag);
     info = newInfo;
 
     using Schema = TDataShard::Schema;

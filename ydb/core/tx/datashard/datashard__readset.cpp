@@ -29,7 +29,7 @@ namespace NKikimr::NDataShard {
 
     void TDataShard::TTxReadSet::DoExecute(TTransactionContext &txc, const TActorContext &ctx) {
         auto state = Self->State;
-        Y_VERIFY(state != TShardState::Unknown
+        Y_ABORT_UNLESS(state != TShardState::Unknown
                  && state != TShardState::Uninitialized
                  && state != TShardState::Readonly,
                  "State %" PRIu32 " event %s", state, Ev->Get()->ToString().data());
@@ -63,7 +63,7 @@ namespace NKikimr::NDataShard {
 
         bool saved = Self->Pipeline.SaveInReadSet(msg, Ack, txc, ctx);
         if (!saved) { // delayed. Do not ack
-            Y_VERIFY(!Ack);
+            Y_ABORT_UNLESS(!Ack);
         }
     }
 

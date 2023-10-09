@@ -24,7 +24,7 @@ public:
         , Sender(sender)
         , Cookie(cookie)
     {
-        Y_VERIFY(!!Sender);
+        Y_ABORT_UNLESS(!!Sender);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_UNLOCK_TABLET_EXECUTION; }
@@ -107,11 +107,11 @@ ITransaction* THive::CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo) {
 void THive::ScheduleUnlockTabletExecution(TNodeInfo& node) {
     // Unlock tablets that have been locked by this node
     for (TLeaderTabletInfo* tablet : node.LockedTablets) {
-        Y_VERIFY(FindTabletEvenInDeleting(tablet->Id) == tablet);
-        Y_VERIFY(tablet->LockedToActor.NodeId() == node.Id);
+        Y_ABORT_UNLESS(FindTabletEvenInDeleting(tablet->Id) == tablet);
+        Y_ABORT_UNLESS(tablet->LockedToActor.NodeId() == node.Id);
         if (tablet->PendingUnlockSeqNo == 0) {
             tablet->PendingUnlockSeqNo = NextTabletUnlockSeqNo++;
-            Y_VERIFY(tablet->PendingUnlockSeqNo != 0);
+            Y_ABORT_UNLESS(tablet->PendingUnlockSeqNo != 0);
             auto event = new TEvPrivate::TEvUnlockTabletReconnectTimeout(tablet->Id, tablet->PendingUnlockSeqNo);
             if (tablet->LockedReconnectTimeout) {
                 Schedule(tablet->LockedReconnectTimeout, event);

@@ -91,7 +91,7 @@ struct TRateLimiterRequestsQueue {
     template <class TEventPtr>
     void OnResponse(TEventPtr& ev) {
         const auto it = Inflight.find(ev->Cookie);
-        Y_VERIFY(it != Inflight.end());
+        Y_ABORT_UNLESS(it != Inflight.end());
         ProcessResponse(it->second, ev);
         Inflight.erase(it);
         ProcessRequests();
@@ -275,7 +275,7 @@ public:
     }
 
     void Bootstrap() {
-        Y_VERIFY(Config.GetControlPlaneEnabled());
+        Y_ABORT_UNLESS(Config.GetControlPlaneEnabled());
         if (!Config.GetEnabled()) {
             Become(&TRateLimiterControlPlaneService::RateLimiterOffStateFunc);
             return;
@@ -294,7 +294,7 @@ public:
 
         YdbConnection = NewYdbConnection(Config.GetDatabase(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
 
-        Y_VERIFY(Config.LimitersSize() > 0);
+        Y_ABORT_UNLESS(Config.LimitersSize() > 0);
         RateLimiters.reserve(Config.LimitersSize());
         for (ui64 index = 0; index < Config.LimitersSize(); ++index) {
             const auto& limiterConfig = Config.GetLimiters(index);
@@ -307,7 +307,7 @@ public:
     }
 
     void TryStartWorking() {
-        Y_VERIFY(CreatingCoordinationNodes >= 0);
+        Y_ABORT_UNLESS(CreatingCoordinationNodes >= 0);
         if (CreatingCoordinationNodes > 0) {
             return;
         }

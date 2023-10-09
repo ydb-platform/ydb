@@ -30,7 +30,7 @@ namespace NWriter {
 
         ~TBlocks()
         {
-            Y_VERIFY(!Writer.Grab(), "Block writer still has some blobs");
+            Y_ABORT_UNLESS(!Writer.Grab(), "Block writer still has some blobs");
         }
 
         explicit operator bool() const noexcept
@@ -49,8 +49,8 @@ namespace NWriter {
                 pageCollection = MakePageCollection(std::move(meta));
             }
 
-            Y_VERIFY(!Writer, "Block writer is not empty after Finish");
-            Y_VERIFY(!Regular && !Sticky, "Unexpected non-empty page lists");
+            Y_ABORT_UNLESS(!Writer, "Block writer is not empty after Finish");
+            Y_ABORT_UNLESS(!Regular && !Sticky, "Unexpected non-empty page lists");
 
             return pageCollection;
         }

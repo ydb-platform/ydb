@@ -150,7 +150,7 @@ namespace NKikimr {
     public:
         // combine this set with the other one and store the result inplace
         friend TDerived& operator |=(TDerived& x, const TDerived& y) {
-            Y_VERIFY(x.Top == y.Top);
+            Y_ABORT_UNLESS(x.Top == y.Top);
             x.Mask |= y.Mask;
             return x;
         }
@@ -163,19 +163,19 @@ namespace NKikimr {
 
         // union of two nonintersecting subsets
         friend TDerived& operator +=(TDerived& x, const TDerived& y) {
-            Y_VERIFY(!(x & y));
+            Y_ABORT_UNLESS(!(x & y));
             return x |= y;
         }
 
         // inplace union of two nonintersecting subsets
         friend TDerived operator +(const TDerived& x, const TDerived& y) {
-            Y_VERIFY(!(x & y));
+            Y_ABORT_UNLESS(!(x & y));
             return x | y;
         }
 
         // calculate intersection of two sets and store the result inplace
         friend TDerived& operator &=(TDerived& x, const TDerived& y) {
-            Y_VERIFY(x.Top == y.Top);
+            Y_ABORT_UNLESS(x.Top == y.Top);
             x.Mask &= y.Mask;
             return x;
         }
@@ -213,7 +213,7 @@ namespace NKikimr {
 
         // check for specific bit
         bool operator [](ui32 index) const {
-            Y_VERIFY(index < static_cast<const TDerived&>(*this).GetNumBits());
+            Y_ABORT_UNLESS(index < static_cast<const TDerived&>(*this).GetNumBits());
             return (Mask >> index) & 1;
         }
 

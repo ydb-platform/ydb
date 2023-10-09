@@ -14,7 +14,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     ui32 itemIdx,
     TString& error
 ) {
-    Y_VERIFY(itemIdx < importInfo->Items.size());
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
@@ -40,7 +40,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     auto& tableDesc = *modifyScheme.MutableCreateTable();
     tableDesc.SetName(wdAndPath.second);
 
-    Y_VERIFY(ss->TableProfilesLoaded);
+    Y_ABORT_UNLESS(ss->TableProfilesLoaded);
     Ydb::StatusIds::StatusCode status;
     if (!FillTableDescription(modifyScheme, item.Scheme, ss->TableProfiles, status, error)) {
         return nullptr;
@@ -63,8 +63,8 @@ static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, 
     auto desc = DescribePath(ss, TlsActivationContext->AsActorContext(), pathId);
     auto record = desc->GetRecord();
 
-    Y_VERIFY(record.HasPathDescription());
-    Y_VERIFY(record.GetPathDescription().HasTable());
+    Y_ABORT_UNLESS(record.HasPathDescription());
+    Y_ABORT_UNLESS(record.GetPathDescription().HasTable());
 
     return record.GetPathDescription().GetTable();
 }
@@ -78,14 +78,14 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
 
     THashMap<TString, ui32> columnNameToIdx;
     for (ui32 i = 0; i < src.ColumnsSize(); ++i) {
-        Y_VERIFY(columnNameToIdx.emplace(src.GetColumns(i).GetName(), i).second);
+        Y_ABORT_UNLESS(columnNameToIdx.emplace(src.GetColumns(i).GetName(), i).second);
     }
 
     for (const auto& column : scheme.columns()) {
         auto it = columnNameToIdx.find(column.name());
-        Y_VERIFY(it != columnNameToIdx.end());
+        Y_ABORT_UNLESS(it != columnNameToIdx.end());
 
-        Y_VERIFY(it->second < src.ColumnsSize());
+        Y_ABORT_UNLESS(it->second < src.ColumnsSize());
         tableDesc.MutableColumns()->Add()->CopyFrom(src.GetColumns(it->second));
     }
 
@@ -98,7 +98,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     TImportInfo::TPtr importInfo,
     ui32 itemIdx
 ) {
-    Y_VERIFY(itemIdx < importInfo->Items.size());
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
@@ -108,7 +108,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     modifyScheme.SetInternal(true);
 
     const TPath dstPath = TPath::Init(item.DstPathId, ss);
-    Y_VERIFY(dstPath.IsResolved());
+    Y_ABORT_UNLESS(dstPath.IsResolved());
 
     modifyScheme.SetWorkingDir(dstPath.Parent().PathString());
 
@@ -168,7 +168,7 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
     ui32 itemIdx,
     const TString& uid
 ) {
-    Y_VERIFY(itemIdx < importInfo->Items.size());
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
     NKikimrIndexBuilder::TIndexBuildSettings settings;
@@ -176,7 +176,7 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
     const TPath dstPath = TPath::Init(item.DstPathId, ss);
     settings.set_source_path(dstPath.PathString());
 
-    Y_VERIFY(item.NextIndexIdx < item.Scheme.indexes_size());
+    Y_ABORT_UNLESS(item.NextIndexIdx < item.Scheme.indexes_size());
     settings.mutable_index()->CopyFrom(item.Scheme.indexes(item.NextIndexIdx));
 
     if (settings.mutable_index()->type_case() == Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET) {

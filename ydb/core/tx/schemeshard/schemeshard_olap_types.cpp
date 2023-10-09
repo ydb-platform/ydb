@@ -50,7 +50,7 @@ namespace NKikimr::NSchemeShard {
         }
 
         auto typeName = NMiniKQL::AdaptLegacyYqlType(TypeName);
-        Y_VERIFY(AppData()->TypeRegistry);
+        Y_ABORT_UNLESS(AppData()->TypeRegistry);
         const NScheme::IType* type =
             AppData()->TypeRegistry->GetType(typeName);
         if (!type) {
@@ -84,12 +84,12 @@ namespace NKikimr::NSchemeShard {
         }
         if (columnSchema.HasCompression()) {
             auto compression = NArrow::TCompression::BuildFromProto(columnSchema.GetCompression());
-            Y_VERIFY(compression.IsSuccess(), "%s", compression.GetErrorMessage().data());
+            Y_ABORT_UNLESS(compression.IsSuccess(), "%s", compression.GetErrorMessage().data());
             Compression = *compression;
         }
         if (columnSchema.HasDictionaryEncoding()) {
             auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
-            Y_VERIFY(settings.IsSuccess());
+            Y_ABORT_UNLESS(settings.IsSuccess());
             DictionaryEncoding = *settings;
         }
         NotNullFlag = columnSchema.GetNotNull();
@@ -114,7 +114,7 @@ namespace NKikimr::NSchemeShard {
     }
 
     bool TOlapColumnAdd::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors) {
-        Y_VERIFY(GetName() == diffColumn.GetName());
+        Y_ABORT_UNLESS(GetName() == diffColumn.GetName());
         {
             auto result = diffColumn.GetCompression().Apply(Compression);
             if (!result) {
@@ -259,11 +259,11 @@ namespace NKikimr::NSchemeShard {
             }
             TOlapColumnSchema newColumn(column, NextColumnId++);
             if (newColumn.GetKeyOrder()) {
-                Y_VERIFY(orderedKeyColumnIds.emplace(*newColumn.GetKeyOrder(), newColumn.GetId()).second);
+                Y_ABORT_UNLESS(orderedKeyColumnIds.emplace(*newColumn.GetKeyOrder(), newColumn.GetId()).second);
             }
 
-            Y_VERIFY(ColumnsByName.emplace(newColumn.GetName(), newColumn.GetId()).second);
-            Y_VERIFY(Columns.emplace(newColumn.GetId(), std::move(newColumn)).second);
+            Y_ABORT_UNLESS(ColumnsByName.emplace(newColumn.GetName(), newColumn.GetId()).second);
+            Y_ABORT_UNLESS(Columns.emplace(newColumn.GetId(), std::move(newColumn)).second);
         }
 
         for (auto&& columnDiff : schemaUpdate.GetAlterColumns()) {
@@ -273,7 +273,7 @@ namespace NKikimr::NSchemeShard {
                 return false;
             } else {
                 auto itColumn = Columns.find(it->second);
-                Y_VERIFY(itColumn != Columns.end());
+                Y_ABORT_UNLESS(itColumn != Columns.end());
                 TOlapColumnSchema& newColumn = itColumn->second;
                 if (!newColumn.ApplyDiff(columnDiff, errors)) {
                     return false;
@@ -285,7 +285,7 @@ namespace NKikimr::NSchemeShard {
             auto it = orderedKeyColumnIds.begin();
             for (ui32 i = 0; i < orderedKeyColumnIds.size(); ++i, ++it) {
                 KeyColumnIds.emplace_back(it->second);
-                Y_VERIFY(i == it->first);
+                Y_ABORT_UNLESS(i == it->first);
             }
             if (KeyColumnIds.empty()) {
                 errors.AddError(NKikimrScheme::StatusSchemeError, "No primary key specified");
@@ -315,7 +315,7 @@ namespace NKikimr::NSchemeShard {
     void TOlapSchema::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
         NextColumnId = tableSchema.GetNextColumnId();
         Version = tableSchema.GetVersion();
-        Y_VERIFY(tableSchema.HasEngine());
+        Y_ABORT_UNLESS(tableSchema.HasEngine());
         Engine = tableSchema.GetEngine();
         CompositeMarksFlag = tableSchema.GetCompositeMarks();
 
@@ -336,12 +336,12 @@ namespace NKikimr::NSchemeShard {
             TOlapColumnSchema column(keyOrder);
             column.ParseFromLocalDB(columnSchema);
             if (keyOrder) {
-                Y_VERIFY(*keyOrder < keyIds.size());
+                Y_ABORT_UNLESS(*keyOrder < keyIds.size());
                 keyIds[*keyOrder] = column.GetId();
             }
 
-            Y_VERIFY(ColumnsByName.emplace(column.GetName(), column.GetId()).second);
-            Y_VERIFY(Columns.emplace(column.GetId(), std::move(column)).second);
+            Y_ABORT_UNLESS(ColumnsByName.emplace(column.GetName(), column.GetId()).second);
+            Y_ABORT_UNLESS(Columns.emplace(column.GetId(), std::move(column)).second);
         }
         KeyColumnIds.swap(keyIds);
     }
@@ -351,7 +351,7 @@ namespace NKikimr::NSchemeShard {
         tableSchema.SetVersion(Version);
         tableSchema.SetCompositeMarks(CompositeMarksFlag);
 
-        Y_VERIFY(HasEngine());
+        Y_ABORT_UNLESS(HasEngine());
         tableSchema.SetEngine(GetEngineUnsafe());
 
         for (const auto& column : Columns) {
@@ -360,7 +360,7 @@ namespace NKikimr::NSchemeShard {
 
         for (auto&& cId : KeyColumnIds) {
             auto column = GetColumnById(cId);
-            Y_VERIFY(!!column);
+            Y_ABORT_UNLESS(!!column);
             *tableSchema.AddKeyColumnNames() = column->GetName();
         }
     }
@@ -494,9 +494,9 @@ namespace NKikimr::NSchemeShard {
     }
 
     void TOlapStoreSchemaPreset::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto) {
-        Y_VERIFY(presetProto.HasId());
-        Y_VERIFY(presetProto.HasName());
-        Y_VERIFY(presetProto.HasSchema());
+        Y_ABORT_UNLESS(presetProto.HasId());
+        Y_ABORT_UNLESS(presetProto.HasName());
+        Y_ABORT_UNLESS(presetProto.HasSchema());
         Id = presetProto.GetId();
         Name = presetProto.GetName();
         TOlapSchema::Parse(presetProto.GetSchema());

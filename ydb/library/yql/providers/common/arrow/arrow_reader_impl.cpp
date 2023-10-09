@@ -69,12 +69,12 @@ public:
     }
 
     virtual arrow::Result<int64_t> Read(int64_t, void* ) override {
-        Y_VERIFY(0);
+        Y_ABORT_UNLESS(0);
         return arrow::Result<int64_t>();
     }
 
     virtual arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t) override {
-        Y_VERIFY(0);
+        Y_ABORT_UNLESS(0);
         return arrow::Result<std::shared_ptr<arrow::Buffer>>();
     }
 
@@ -96,7 +96,7 @@ public:
     virtual arrow::Future<std::shared_ptr<arrow::Buffer>> ReadAsync(const arrow::io::IOContext&, int64_t,
                                                     int64_t) override
     {
-        Y_VERIFY(0);
+        Y_ABORT_UNLESS(0);
         return arrow::Future<std::shared_ptr<arrow::Buffer>>();
     }
 

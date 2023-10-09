@@ -90,7 +90,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 // For immediate transactions we want to translate this into a propose failure
                 if (op->IsImmediate()) {
                     const auto& dataTx = tx->GetDataTx();
-                    Y_VERIFY(!dataTx->Ready());
+                    Y_ABORT_UNLESS(!dataTx->Ready());
                     op->SetAbortedFlag();
                     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
                     op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
@@ -107,7 +107,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
     if (op->IsImmediate() && !dataTx->ReValidateKeys()) {
         // Immediate transactions may be reordered with schema changes and become invalid
-        Y_VERIFY(!dataTx->Ready());
+        Y_ABORT_UNLESS(!dataTx->Ready());
         op->SetAbortedFlag();
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
         op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
@@ -256,7 +256,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             //       relevant for future multi-table shards only.
             // NOTE: generation may not match an existing lock, but it's not a problem.
             for (auto& table : guardLocks.AffectedTables) {
-                Y_VERIFY(guardLocks.LockTxId);
+                Y_ABORT_UNLESS(guardLocks.LockTxId);
                 op->Result()->AddTxLock(
                     guardLocks.LockTxId,
                     DataShard.TabletID(),
@@ -313,7 +313,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             return EExecutionStatus::Continue;
         }
 
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
         op->Result().Swap(result);
         op->SetKqpAttachedRSFlag();
 
@@ -389,7 +389,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             TStringBuilder() << "Shard " << DataShard.TabletID() << " cannot write more uncommitted changes");
 
         for (auto& table : guardLocks.AffectedTables) {
-            Y_VERIFY(guardLocks.LockTxId);
+            Y_ABORT_UNLESS(guardLocks.LockTxId);
             op->Result()->AddTxLock(
                 guardLocks.LockTxId,
                 DataShard.TabletID(),

@@ -308,7 +308,7 @@ public:
 
     ui64 UpdateUsedSize(const TKey& key, const TValue& newValue, ui64 oldSize) override final {
         ui64 newSize = MeasureCallback(key, newValue);
-        Y_VERIFY(UsedSize >= oldSize);
+        Y_ABORT_UNLESS(UsedSize >= oldSize);
         UsedSize -= oldSize;
         UsedSize += newSize;
         return newSize;

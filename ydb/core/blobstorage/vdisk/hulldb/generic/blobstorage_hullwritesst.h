@@ -56,11 +56,11 @@ namespace NKikimr {
             , Finished(false)
             , HasBuffer(false)
         {
-            Y_VERIFY(chunkIdx != 0);
+            Y_ABORT_UNLESS(chunkIdx != 0);
         }
 
         void Push(const void *data, size_t len) {
-            Y_VERIFY(Offset + len <= ChunkSize && !Finished);
+            Y_ABORT_UNLESS(Offset + len <= ChunkSize && !Finished);
 
             while (len) {
                 if (!HasBuffer) {
@@ -83,7 +83,7 @@ namespace NKikimr {
         }
 
         void FinishChunk() {
-            Y_VERIFY(!Finished);
+            Y_ABORT_UNLESS(!Finished);
             Finished = true;
 
             if (Offset == ChunkSize)
@@ -120,8 +120,8 @@ namespace NKikimr {
         void CreateChunkWriteMsg() {
             if (Buffer.Size()) {
                 ui32 offsetInChunk = Offset - Buffer.Size();
-                Y_VERIFY(offsetInChunk % AppendBlockSize == 0);
-                Y_VERIFY(ChunkIdx);
+                Y_ABORT_UNLESS(offsetInChunk % AppendBlockSize == 0);
+                Y_ABORT_UNLESS(ChunkIdx);
                 NPDisk::TEvChunkWrite::TPartsPtr parts(new NPDisk::TEvChunkWrite::TBufBackedUpParts(std::move(Buffer)));
                 auto ev = std::make_unique<NPDisk::TEvChunkWrite>(Owner, OwnerRound, ChunkIdx, offsetInChunk, parts, nullptr, true, Priority);
                 MsgQueue.push(std::move(ev));
@@ -175,7 +175,7 @@ namespace NKikimr {
         template<typename TChunkGenerator>
         TMaybe<TDiskPart> AppendAlignedImpl(TChunkGenerator&& generator, size_t len) {
             if (!ChunkWriter) {
-                Y_VERIFY(!RChunks.empty());
+                Y_ABORT_UNLESS(!RChunks.empty());
                 const TChunkIdx chunkIdx = RChunks.front();
                 RChunks.pop_front();
 
@@ -334,7 +334,7 @@ namespace NKikimr {
             if (Offset + alignedSize > ChunkSize) {
                 Offset = 0;
                 ++RChunksIndex;
-                Y_VERIFY(RChunksIndex < UsedChunks.size() + RChunks.size());
+                Y_ABORT_UNLESS(RChunksIndex < UsedChunks.size() + RChunks.size());
             }
 
             const TChunkIdx chunkIdx = RChunksIndex < UsedChunks.size() ? UsedChunks[RChunksIndex]
@@ -352,21 +352,21 @@ namespace NKikimr {
                 // there is no space to fit in current chunk -- restart base writer with new chunk
                 TBase::FinishChunk();
                 result = TBase::AppendAligned(buffer);
-                Y_VERIFY(result);
+                Y_ABORT_UNLESS(result);
             }
 
             return *result;
         }
 
         TDataWriterConclusion Finish() {
-            Y_VERIFY(!Finished);
+            Y_ABORT_UNLESS(!Finished);
             const ui32 alignedOffset = AlignUpAppendBlockSize(Offset, AppendBlockSize);
             if (const size_t num = alignedOffset - Offset) {
                 char *buffer = (char*)alloca(num);
                 memset(buffer, 0, num);
                 const TMaybe<TDiskPart> part = TBase::AppendAligned(buffer, num);
-                Y_VERIFY(part);
-                Y_VERIFY((part->Offset + part->Size) % AppendBlockSize == 0);
+                Y_ABORT_UNLESS(part);
+                Y_ABORT_UNLESS((part->Offset + part->Size) % AppendBlockSize == 0);
             }
             Finished = true;
             return {std::move(TBase::ChunkWriter), std::move(UsedChunks)};
@@ -505,7 +505,7 @@ namespace NKikimr {
 
         void Push(const TKey &key, const TMemRec &memRec, const TDataMerger *dataMerger) {
             // check that keys are coming in strictly ascending order
-            Y_VERIFY(Recs.empty() || Recs.back().Key < key);
+            Y_ABORT_UNLESS(Recs.empty() || Recs.back().Key < key);
 
             switch (memRec.GetType()) {
                 case TBlobType::DiskBlob: {
@@ -516,7 +516,7 @@ namespace NKikimr {
                 }
                 case TBlobType::HugeBlob: {
                     const TVector<TDiskPart> &saved = dataMerger->GetHugeBlobMerger().SavedData();
-                    Y_VERIFY(saved.size() == 1);
+                    Y_ABORT_UNLESS(saved.size() == 1);
 
                     TMemRec memRecTmp(memRec);
                     memRecTmp.SetHugeBlob(saved.at(0));
@@ -691,7 +691,7 @@ namespace NKikimr {
         }
 
         EBlockStatus GenerateIndexBlockData(ui32 maxBlockSize) {
-            Y_VERIFY(RecsPos <= Items && OutboundPos <= Outbound.size());
+            Y_ABORT_UNLESS(RecsPos <= Items && OutboundPos <= Outbound.size());
             if (ui32 recsLeft = Items - RecsPos) {
                 if (ui32 numItems = Min<ui32>(recsLeft, maxBlockSize / sizeof(TRec))) {
                     Writer->Push(&Recs[RecsPos], numItems * sizeof(TRec));
@@ -714,11 +714,11 @@ namespace NKikimr {
         }
 
         void StartIndexChunk() {
-            Y_VERIFY(!Writer);
-            Y_VERIFY(!Finished);
+            Y_ABORT_UNLESS(!Writer);
+            Y_ABORT_UNLESS(!Finished);
 
             // obtain chunk index from reserved chunks list
-            Y_VERIFY(RChunks);
+            Y_ABORT_UNLESS(RChunks);
             const TChunkIdx chunkIdx = RChunks.front();
             RChunks.pop_front();
 
@@ -742,7 +742,7 @@ namespace NKikimr {
         }
 
         bool PackData(ui32 maxMsgs) {
-            Y_VERIFY(!Finished);
+            Y_ABORT_UNLESS(!Finished);
 
             while (MsgQueue.size() < maxMsgs) {
                 switch (PendingOp) {
@@ -767,7 +767,7 @@ namespace NKikimr {
                 if (freeSpace > sizeof(TIdxDiskLinker)) {
                     ui32 maxBlockSize = Min<ui32>(freeSpace - sizeof(TIdxDiskLinker), Writer->GetBlockSize());
                     status = GenerateIndexBlockData(maxBlockSize);
-                    Y_VERIFY(MsgQueue.size() <= maxMsgs);
+                    Y_ABORT_UNLESS(MsgQueue.size() <= maxMsgs);
                     if (MsgQueue.size() == maxMsgs) {
                         // we have now reached maxMsgs limit, but when we will be called next time, the same status
                         // will be returned, so there is no need to preserve it
@@ -782,7 +782,7 @@ namespace NKikimr {
                     case EBlockStatus::FINISHED:
                         if (Writer->GetFreeSpace() >= sizeof(TIdxDiskPlaceHolder)) {
                             PutPlaceHolder();
-                            Y_VERIFY(MsgQueue.size() <= maxMsgs);
+                            Y_ABORT_UNLESS(MsgQueue.size() <= maxMsgs);
                             if (MsgQueue.size() == maxMsgs) {
                                 PendingOp = EPendingOperation::FINISH_PLACEHOLDER;
                                 return false;
@@ -795,7 +795,7 @@ namespace NKikimr {
 
                     case EBlockStatus::NOT_ENOUGH_SPACE:
                         PutLinker();
-                        Y_VERIFY(MsgQueue.size() <= maxMsgs);
+                        Y_ABORT_UNLESS(MsgQueue.size() <= maxMsgs);
                         if (MsgQueue.size() == maxMsgs) {
                             PendingOp = EPendingOperation::FINISH_LINKER;
                             return false;
@@ -930,7 +930,7 @@ namespace NKikimr {
 
         const TIndexWriterConclusion<TKey, TMemRec> &GetConclusion() const {
             const auto &conclusion = IndexBuilder.GetConclusion();
-            Y_VERIFY(std::find(conclusion.UsedChunks.begin(), conclusion.UsedChunks.end(), conclusion.Addr.ChunkIdx) !=
+            Y_ABORT_UNLESS(std::find(conclusion.UsedChunks.begin(), conclusion.UsedChunks.end(), conclusion.Addr.ChunkIdx) !=
                 conclusion.UsedChunks.end());
             return conclusion;
         }

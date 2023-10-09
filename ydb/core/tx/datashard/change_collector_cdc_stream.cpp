@@ -49,8 +49,8 @@ namespace {
     auto MakeUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, TArrayRef<const NScheme::TTypeInfo> types) {
         TVector<TUpdateOp> result(Reserve(cells.size()));
 
-        Y_VERIFY(cells.size() == tags.size());
-        Y_VERIFY(cells.size() == types.size());
+        Y_ABORT_UNLESS(cells.size() == tags.size());
+        Y_ABORT_UNLESS(cells.size() == types.size());
 
         for (TPos pos = 0; pos < cells.size(); ++pos) {
             result.emplace_back(tags.at(pos), ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), types.at(pos)));
@@ -200,8 +200,8 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     const auto& lastKeyCells = info->LastKey->GetCells();
                     const auto keyCells = MakeKeyCells(key);
 
-                    Y_VERIFY(keyCells.size() == lastKeyCells.size());
-                    Y_VERIFY(keyCells.size() == keyTypes.size());
+                    Y_ABORT_UNLESS(keyCells.size() == lastKeyCells.size());
+                    Y_ABORT_UNLESS(keyCells.size() == keyTypes.size());
 
                     const int cmp = CompareTypedCellVectors(keyCells.data(), lastKeyCells.data(), keyTypes.data(), keyCells.size());
                     if (cmp > 0) {
@@ -217,7 +217,7 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         }
 
         if (initialState) {
-            Y_VERIFY(snapshotVersion.Defined());
+            Y_ABORT_UNLESS(snapshotVersion.Defined());
             TVersionContext ctx(Sink, *snapshotVersion);
 
             switch (stream.Mode) {
@@ -322,7 +322,7 @@ TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowO
         Y_FAIL("unreachable");
     }
 
-    Y_VERIFY(newState.IsFinalized());
+    Y_ABORT_UNLESS(newState.IsFinalized());
     return newState;
 }
 

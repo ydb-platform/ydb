@@ -313,7 +313,7 @@ private:
         if (req->has_csv_settings()) {
             return EUploadSource::CSV;
         }
-        Y_VERIFY(false, "unexpected format");
+        Y_ABORT_UNLESS(false, "unexpected format");
     }
 
     void AuditContextStart() override {
@@ -424,7 +424,7 @@ private:
     }
 
     bool ExtractRows(TString& errorMessage) override {
-        Y_VERIFY(Batch);
+        Y_ABORT_UNLESS(Batch);
         Rows = BatchToRows(Batch, errorMessage);
         return errorMessage.empty();
     }

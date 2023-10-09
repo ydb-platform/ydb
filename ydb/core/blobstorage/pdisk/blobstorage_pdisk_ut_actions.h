@@ -1715,7 +1715,7 @@ private:
             if (DeletedChunks < ChunksToReserve / 2) {
                 NPDisk::TCommitRecord commitRecord;
                 commitRecord.FirstLsnToKeep = 1 + ReleaseLsnStepSize * (DeletedChunks + 1);
-                Y_VERIFY(commitRecord.FirstLsnToKeep <= LogRecordsToWrite + 1);
+                Y_ABORT_UNLESS(commitRecord.FirstLsnToKeep <= LogRecordsToWrite + 1);
                 TLogRecAboutChunks log;
                 log.Type = EDeleteChunk;
                 log.Data.DeletedChunk = CommittedChunks.back();
@@ -1748,7 +1748,7 @@ public:
         Garbage = PrepareData(LogRecordSize);
         TLogRecAboutChunks log;
         log.Type = EGarbage;
-        Y_VERIFY(LogRecordSize >= sizeof(log));
+        Y_ABORT_UNLESS(LogRecordSize >= sizeof(log));
         memcpy(Garbage.Detach(), &log, sizeof(log));
     }
 };

@@ -121,7 +121,7 @@ TMergingSortedInputStream::TMergingSortedInputStream(const std::vector<IInputStr
 
 /// Read the first blocks, initialize the queue.
 void TMergingSortedInputStream::Init() {
-    Y_VERIFY(First);
+    Y_ABORT_UNLESS(First);
     First = false;
     size_t totalRows = 0;
     for (size_t i = 0; i < SourceBatches.size(); ++i) {
@@ -176,9 +176,9 @@ std::shared_ptr<arrow::RecordBatch> TMergingSortedInputStream::ReadImpl() {
         TSlicedRowsBuffer rowsBuffer(MaxBatchSize);
         Merge(rowsBuffer, Queue);
         auto batch = rowsBuffer.GetBatch();
-        Y_VERIFY(batch);
+        Y_ABORT_UNLESS(batch);
         if (!batch->num_rows()) {
-            Y_VERIFY(Finished);
+            Y_ABORT_UNLESS(Finished);
             return {};
         }
         return batch;
@@ -188,14 +188,14 @@ std::shared_ptr<arrow::RecordBatch> TMergingSortedInputStream::ReadImpl() {
             return {};
         }
 
-        Y_VERIFY(builders.size() == (size_t)Header->num_fields());
+        Y_ABORT_UNLESS(builders.size() == (size_t)Header->num_fields());
         TRowsBuffer rowsBuffer(builders, MaxBatchSize);
         Merge(rowsBuffer, Queue);
 
         auto arrays = NArrow::Finish(std::move(builders));
-        Y_VERIFY(arrays.size());
+        Y_ABORT_UNLESS(arrays.size());
         if (!arrays[0]->length()) {
-            Y_VERIFY(Finished);
+            Y_ABORT_UNLESS(Finished);
             return {};
         }
         return arrow::RecordBatch::Make(Header, arrays[0]->length(), arrays);
@@ -205,7 +205,7 @@ std::shared_ptr<arrow::RecordBatch> TMergingSortedInputStream::ReadImpl() {
 /// Get the next block from the corresponding source, if there is one.
 void TMergingSortedInputStream::FetchNextBatch(const TSortCursor& current, TSortingHeap& queue) {
     size_t order = current->order;
-    Y_VERIFY(order < Cursors.size() && &Cursors[order] == current.Impl);
+    Y_ABORT_UNLESS(order < Cursors.size() && &Cursors[order] == current.Impl);
 
     while (true) {
         SourceBatches[order] = Children[order]->Read();

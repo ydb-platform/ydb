@@ -83,9 +83,9 @@ namespace {
 // Format: "DS:group:logoBlobId"
 // Example: "DS:2181038103:[72075186224038245:51:31595:2:0:11952:0]"
 TUnifiedBlobId ParseExtendedDsBlobId(const TString& s, TString& error) {
-    Y_VERIFY(s.size() > 2);
+    Y_ABORT_UNLESS(s.size() > 2);
     const char* str = s.c_str();
-    Y_VERIFY(str[0] == 'D' && str[1] == 'S');
+    Y_ABORT_UNLESS(str[0] == 'D' && str[1] == 'S');
     i64 pos = 2;
     i64 endPos = s.size();
     if (str[pos++] != ':') {
@@ -106,9 +106,9 @@ TUnifiedBlobId ParseExtendedDsBlobId(const TString& s, TString& error) {
 // Format: "SM[tabletId:generation:step:cookie:size]"
 // Example: "SM[72075186224038245:51:31184:0:2528]"
 TUnifiedBlobId ParseSmallBlobId(const TString& s, TString& error) {
-    Y_VERIFY(s.size() > 2);
+    Y_ABORT_UNLESS(s.size() > 2);
     const char* str = s.c_str();
-    Y_VERIFY(str[0] == 'S' && str[1] == 'M');
+    Y_ABORT_UNLESS(str[0] == 'S' && str[1] == 'M');
     i64 pos = 2;
     i64 endPos = s.size();
     if (str[pos++] != '[') {

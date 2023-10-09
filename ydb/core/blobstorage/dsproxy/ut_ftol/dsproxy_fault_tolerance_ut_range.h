@@ -82,8 +82,8 @@ public:
                         for (const auto& item : event->Get()->Record.GetResult()) {
                             if (item.GetStatus() == NKikimrProto::OK) {
                                 TLogoBlobID partId(LogoBlobIDFromLogoBlobID(item.GetBlobID()));
-                                Y_VERIFY(partId.PartId() > 0);
-                                Y_VERIFY(partId.FullID() == id);
+                                Y_ABORT_UNLESS(partId.PartId() > 0);
+                                Y_ABORT_UNLESS(partId.FullID() == id);
                                 writtenPartsMask |= 1 << (partId.PartId() - 1);
                                 layout.AddItem(event->Get()->Record.GetCookie(), partId.PartId() - 1, Info->Type);
                             }

@@ -39,13 +39,13 @@ namespace NPQ {
             if (!lastRequest) {
                 Requests.push_back(size);
             } else {
-                Y_VERIFY(!Requests.empty());
+                Y_ABORT_UNLESS(!Requests.empty());
                 Requests.back() += size;
             }
         }
 
         ui64 DecReservedSize() {
-            //TODO: Y_VERIFY(!Requests.empty());
+            //TODO: Y_ABORT_UNLESS(!Requests.empty());
             if (Requests.empty())
                 return 0;
             ui64 size = Requests.front();

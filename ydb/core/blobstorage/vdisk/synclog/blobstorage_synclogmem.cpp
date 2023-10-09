@@ -8,7 +8,7 @@ namespace NKikimr {
         // TSyncLogPage
         ////////////////////////////////////////////////////////////////////////////
         void TSyncLogPage::Put(ui32 pageSize, const TRecordHdr *rec, ui32 dataSize) {
-            Y_VERIFY(HaveRoom(pageSize, dataSize) &&
+            Y_ABORT_UNLESS(HaveRoom(pageSize, dataSize) &&
                    (Header.LastLsn == 0 || rec->Lsn > Header.LastLsn),
                    "Header# %s rec# %s pageSize# %" PRIu32 " dataSize# %" PRIu32,
                    Header.ToString().data(), rec->ToString().data(), pageSize, dataSize);
@@ -114,7 +114,7 @@ namespace NKikimr {
                 if (first) {
                     first = false;
                 } else {
-                    Y_VERIFY(hdr->Lsn > lsn, "lsn# %" PRIu64 " hdrLsn# %" PRIu64, lsn, hdr->Lsn);
+                    Y_ABORT_UNLESS(hdr->Lsn > lsn, "lsn# %" PRIu64 " hdrLsn# %" PRIu64, lsn, hdr->Lsn);
                 }
                 lsn = hdr->Lsn;
 
@@ -229,7 +229,7 @@ namespace NKikimr {
                 return str.Str();
             };
 
-            Y_VERIFY(Pages.empty() || Pages.back()->GetLastLsn() < rec->Lsn,
+            Y_ABORT_UNLESS(Pages.empty() || Pages.back()->GetLastLsn() < rec->Lsn,
                    "pagesSize# %" PRIu32 " lastLsn# %" PRIu64 " recLsn# %" PRIu64 " dump#\n %s",
                    ui32(Pages.size()), Pages.back()->GetLastLsn(), rec->Lsn, errorReport().data());
 
@@ -288,12 +288,12 @@ namespace NKikimr {
             // void skip cache pages, i.e. find the first page that is not in cache
             TSyncLogPages::const_iterator it = ::LowerBound(Pages.begin(), Pages.end(), diskLastLsn, less);
             if (it == Pages.end()) {
-                Y_VERIFY(Pages.empty());
+                Y_ABORT_UNLESS(Pages.empty());
                 return TMemRecLogSnapshotPtr();
             }
 
             ui64 pageLastLsn = (*it)->GetLastLsn();
-            Y_VERIFY(pageLastLsn >= diskLastLsn);
+            Y_ABORT_UNLESS(pageLastLsn >= diskLastLsn);
             if (pageLastLsn == diskLastLsn)
                 ++it;
 
@@ -304,7 +304,7 @@ namespace NKikimr {
             // now it points to the first page we are going to swap
             ui32 recsNum = 0;
             while (it != Pages.end()) {
-                Y_VERIFY((*it)->GetLastLsn() > diskLastLsn);
+                Y_ABORT_UNLESS((*it)->GetLastLsn() > diskLastLsn);
                 if (freeNPages > 0 || (*it)->GetFirstLsn() < freeUpToLsn) { // '<', because 'excluding'
                     pages.push_back(*it);
                     recsNum += (*it)->GetRecsNum();

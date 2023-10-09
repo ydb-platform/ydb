@@ -10,22 +10,22 @@ namespace NKikimr::NTesting {
         TBlockInfo& block = Blocks[msg.TabletId];
         const auto inflightIt = block.InFlight.emplace(msg);
         const bool inserted1 = block.QueryToInFlight.emplace(queryId, inflightIt).second;
-        Y_VERIFY(inserted1);
+        Y_ABORT_UNLESS(inserted1);
         const bool inserted2 = BlockQueryToTabletId.emplace(queryId, msg.TabletId).second;
-        Y_VERIFY(inserted2);
+        Y_ABORT_UNLESS(inserted2);
     }
 
     template<>
     void TGroupState::ExamineResultEvent(const TQueryId& queryId, const TEvBlobStorage::TEvBlockResult& msg) {
         auto query = BlockQueryToTabletId.extract(queryId);
-        Y_VERIFY(query);
+        Y_ABORT_UNLESS(query);
 
         TBlockInfo& block = Blocks[query.mapped()];
 
         auto queryToInFlight = block.QueryToInFlight.extract(queryId);
-        Y_VERIFY(queryToInFlight);
+        Y_ABORT_UNLESS(queryToInFlight);
         auto inFlight = block.InFlight.extract(queryToInFlight.mapped());
-        Y_VERIFY(inFlight);
+        Y_ABORT_UNLESS(inFlight);
         TBlockedGeneration& gen = inFlight.value();
 
         if (msg.Status == NKikimrProto::OK) {
@@ -49,7 +49,7 @@ namespace NKikimr::NTesting {
         TBlobValueHash valueHash(msg);
 
         if (blob.ValueHash) {
-            Y_VERIFY(*blob.ValueHash == valueHash);
+            Y_ABORT_UNLESS(*blob.ValueHash == valueHash);
         } else {
             blob.ValueHash.emplace(valueHash);
         }
@@ -65,7 +65,7 @@ namespace NKikimr::NTesting {
             .IsBlocked = isBlocked == EConfidence::CONFIRMED, // if true, we can't get OK answer
             .IsCollected = isCollected == EConfidence::CONFIRMED, // if true, this blob is being put beyond the barrier
         }).second;
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
     }
 
     template<>
@@ -74,14 +74,14 @@ namespace NKikimr::NTesting {
 
         const auto it = Blobs.find(msg.Id);
         if (msg.Status != NKikimrProto::OK && it == Blobs.end()) {
-            Y_VERIFY(GetBlobState(msg.Id) == EBlobState::CERTAINLY_COLLECTED_OR_NEVER_WRITTEN);
+            Y_ABORT_UNLESS(GetBlobState(msg.Id) == EBlobState::CERTAINLY_COLLECTED_OR_NEVER_WRITTEN);
             return; // it's okay to get ERROR for TEvPut when the blob is already collected and is not in the map
         }
-        Y_VERIFY(it != Blobs.end());
+        Y_ABORT_UNLESS(it != Blobs.end());
         TBlobInfo& blob = it->second;
 
         auto putInFlight = blob.PutsInFlight.extract(queryId);
-        Y_VERIFY(putInFlight);
+        Y_ABORT_UNLESS(putInFlight);
 
         auto& v = putInFlight.mapped();
         if (v.IsBlocked && (msg.Status != NKikimrProto::BLOCKED && msg.Status != NKikimrProto::ERROR)) {
@@ -93,7 +93,7 @@ namespace NKikimr::NTesting {
         }
 
         if (msg.Status == NKikimrProto::OK) {
-            Y_VERIFY(blob.ValueHash);
+            Y_ABORT_UNLESS(blob.ValueHash);
             blob.ConfirmedValue = true;
         }
     }
@@ -163,7 +163,7 @@ namespace NKikimr::NTesting {
             });
 
             const bool inserted = barrier.CollectsInFlight.emplace(queryId, inFlightIt).second;
-            Y_VERIFY(inserted);
+            Y_ABORT_UNLESS(inserted);
         }
     }
 
@@ -191,7 +191,7 @@ namespace NKikimr::NTesting {
             auto inFlightIt = query.mapped();
             const bool hard = inFlightIt->Hard;
             auto inFlight = barrier.InFlight[hard].extract(inFlightIt);
-            Y_VERIFY(inFlight);
+            Y_ABORT_UNLESS(inFlight);
             if (msg.Status == NKikimrProto::OK) {
                 const auto& value = inFlight.value().Value;
                 std::optional<std::tuple<ui32, ui32>> prev;
@@ -351,8 +351,8 @@ namespace NKikimr::NTesting {
     }
 
     TGroupState::TBlobInfo *TGroupState::LookupBlob(TLogoBlobID id, bool create) const {
-        Y_VERIFY(id.BlobSize() != 0);
-        Y_VERIFY(id.PartId() == 0);
+        Y_ABORT_UNLESS(id.BlobSize() != 0);
+        Y_ABORT_UNLESS(id.PartId() == 0);
 
         const TLogoBlobID min(id.TabletID(), id.Generation(), id.Step(), id.Channel(), 0, id.Cookie());
         auto it = Blobs.lower_bound(min);
@@ -360,7 +360,7 @@ namespace NKikimr::NTesting {
             const TLogoBlobID& key = it->first;
             if (key.TabletID() == id.TabletID() && key.Channel() == id.Channel() && key.Generation() == id.Generation() &&
                     key.Step() == id.Step() && key.Cookie() == id.Cookie()) {
-                Y_VERIFY(key == id);
+                Y_ABORT_UNLESS(key == id);
             } else if (create) {
                 it = const_cast<decltype(Blobs)&>(Blobs).try_emplace(it, id);
             } else {

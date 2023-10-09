@@ -94,7 +94,7 @@ namespace NLongTxService {
                     writeIds.emplace_back(wId);
                 }
                 TString txBody;
-                Y_VERIFY(tx.SerializeToString(&txBody));
+                Y_ABORT_UNLESS(tx.SerializeToString(&txBody));
 
                 WaitingShards.emplace(tabletId, TRetryData{ writeIds, txBody, 0 });
                 SendPrepareTransaction(tabletId);
@@ -211,7 +211,7 @@ namespace NLongTxService {
         void HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
             const auto* msg = ev->Get();
             const ui64 tabletId = msg->TabletId;
-            Y_VERIFY(tabletId != SelectedCoordinator);
+            Y_ABORT_UNLESS(tabletId != SelectedCoordinator);
 
             TXLOG_DEBUG("Delivery problem"
                 << " TabletId# " << tabletId
@@ -244,8 +244,8 @@ namespace NLongTxService {
 
     private:
         void PlanTransaction() {
-            Y_VERIFY(SelectedCoordinator);
-            Y_VERIFY(WaitingShards.empty());
+            Y_ABORT_UNLESS(SelectedCoordinator);
+            Y_ABORT_UNLESS(WaitingShards.empty());
             ToRetry.clear();
 
             auto req = MakeHolder<TEvTxProxy::TEvProposeTransaction>(
@@ -401,7 +401,7 @@ namespace NLongTxService {
         }
 
         bool SendCheckPlannedTransaction(ui64 tabletId, bool delayed = false) {
-            Y_VERIFY(PlanStep);
+            Y_ABORT_UNLESS(PlanStep);
 
             if (delayed) {
                 auto it = WaitingShards.find(tabletId);

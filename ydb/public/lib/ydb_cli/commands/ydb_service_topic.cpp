@@ -86,7 +86,7 @@ namespace NYdb::NConsoleClient {
             NColorizer::TColors colors = NColorizer::AutoColors(Cout);
             for (const auto& codec : codecs) {
                 auto findResult = CodecsDescriptions.find(codec);
-                Y_VERIFY(findResult != CodecsDescriptions.end(),
+                Y_ABORT_UNLESS(findResult != CodecsDescriptions.end(),
                          "Couldn't find description for %s codec", (TStringBuilder() << codec).c_str());
                 description << "\n  " << colors.BoldColor() << codec << colors.OldColor()
                             << "\n    " << findResult->second;
@@ -141,7 +141,7 @@ namespace {
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
         for (const auto& mode: ExistingMeteringModes) {
             auto findResult = MeteringModesDescriptions.find(mode.second);
-            Y_VERIFY(findResult != MeteringModesDescriptions.end(),
+            Y_ABORT_UNLESS(findResult != MeteringModesDescriptions.end(),
                      "Couldn't find description for %s metering mode", (TStringBuilder() << mode.second).c_str());
             description << "\n  " << colors.BoldColor() << mode.first << colors.OldColor()
                         << "\n    " << findResult->second;

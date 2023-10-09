@@ -689,7 +689,7 @@ public:
                 _exit(0);
             }
             default:
-                Y_VERIFY(false);
+                Y_ABORT_UNLESS(false);
             }
         }
     }
@@ -720,7 +720,7 @@ public:
         }
 
         TString workingDirectory = taskParams[NTaskRunnerProxy::WorkingDirectoryParamName];
-        Y_VERIFY(workingDirectory);
+        Y_ABORT_UNLESS(workingDirectory);
         NFs::SetCurrentWorkingDirectory(workingDirectory);
 
         THashMap<TString, TString> modulesMapping;
@@ -745,7 +745,7 @@ public:
                         }
                         break;
                     default:
-                        Y_VERIFY(false);
+                        Y_ABORT_UNLESS(false);
                 }
             }
         });

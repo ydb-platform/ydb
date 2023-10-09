@@ -36,7 +36,7 @@ class TPDiskReaderLoadTestActor : public TActorBootstrapped<TPDiskReaderLoadTest
         {}
 
         TDataRef operator [](ui32 index) const override {
-            Y_VERIFY(index == 0);
+            Y_ABORT_UNLESS(index == 0);
             return std::make_pair(Buffer, Len);
         }
 

@@ -184,7 +184,7 @@ struct TKesusTablet::THtmlRenderer {
                     for (const auto& kv : session->OwnedSemaphores) {
                         const auto* owner = &kv.second;
                         const auto* semaphore = Self->Semaphores.FindPtr(kv.first);
-                        Y_VERIFY(semaphore);
+                        Y_ABORT_UNLESS(semaphore);
                         TABLER() {
                             TABLED() { RenderSemaphoreLink(out, semaphore->Name); }
                             TABLED() { RenderCount(out, owner->Count); }
@@ -209,7 +209,7 @@ struct TKesusTablet::THtmlRenderer {
                     for (const auto& kv : session->WaitingSemaphores) {
                         const auto* waiter = &kv.second;
                         const auto* semaphore = Self->Semaphores.FindPtr(kv.first);
-                        Y_VERIFY(semaphore);
+                        Y_ABORT_UNLESS(semaphore);
                         TABLER() {
                             TABLED() { RenderSemaphoreLink(out, semaphore->Name); }
                             TABLED() { RenderCount(out, waiter->Count); }
@@ -434,7 +434,7 @@ struct TKesusTablet::THtmlRenderer {
                     const auto& clients = resource->GetSessions();
                     for (const auto& [clientId, _] : clients) {
                         const TQuoterSession* session = Self->QuoterResources.FindSession(clientId, resource->GetResourceId());
-                        Y_VERIFY(session);
+                        Y_ABORT_UNLESS(session);
                         TABLER() {
                             TABLED() { out << clientId; }
                             TABLED() { out << session->GetClientVersion(); }

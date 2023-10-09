@@ -37,11 +37,11 @@ namespace NKikimr {
 
             void TChainLayoutBuilder::Check(ui32 left, ui32 right) {
                 // check integrity of the built layout
-                Y_VERIFY(Layout.size() > 1);
-                Y_VERIFY(Layout.begin()->Left <= left);
-                Y_VERIFY((Layout.end() - 1)->Right >= right);
+                Y_ABORT_UNLESS(Layout.size() > 1);
+                Y_ABORT_UNLESS(Layout.begin()->Left <= left);
+                Y_ABORT_UNLESS((Layout.end() - 1)->Right >= right);
                 for (size_t i = 1, s = Layout.size(); i < s; ++i) {
-                    Y_VERIFY(Layout[i - 1].Right == Layout[i].Left);
+                    Y_ABORT_UNLESS(Layout[i - 1].Right == Layout[i].Left);
                 }
             }
 
@@ -195,7 +195,7 @@ namespace NKikimr {
             ui32 usedChunksInFreeSpace = FreeSpace.size() + LockedChunks.size();
             ui32 usedSlotsInFreeSpace = usedChunksInFreeSpace * SlotsInChunk - FreeSlotsInFreeSpace;
             ui32 chunksToStoreDefragmentedSlots = slotsToChunks(usedSlotsInFreeSpace, SlotsInChunk);
-            Y_VERIFY(usedChunksInFreeSpace - chunksToStoreDefragmentedSlots >= 0);
+            Y_ABORT_UNLESS(usedChunksInFreeSpace - chunksToStoreDefragmentedSlots >= 0);
             ui32 canBeFreedChunks = usedChunksInFreeSpace - chunksToStoreDefragmentedSlots;
             ui32 fullyFilledChunks = slotsToChunks(AllocatedSlots - usedSlotsInFreeSpace, SlotsInChunk);
             ui32 currentlyUsedChunks = usedChunksInFreeSpace + fullyFilledChunks;
@@ -432,7 +432,7 @@ namespace NKikimr {
         }
 
         ui32 TAllChains::GetMinREALHugeBlobInBytes() const {
-            Y_VERIFY(MinREALHugeBlobInBlocks);
+            Y_ABORT_UNLESS(MinREALHugeBlobInBlocks);
             return MinREALHugeBlobInBlocks * AppendBlockSize + 1;
         }
 
@@ -487,7 +487,7 @@ namespace NKikimr {
                 ui32 skip = ChainDelegators.size() - size;
                 for (auto &x : ChainDelegators) {
                     if (skip > 0) {
-                        Y_VERIFY(!x.HaveBeenUsed());
+                        Y_ABORT_UNLESS(!x.HaveBeenUsed());
                         --skip;
                         continue;
                     }
@@ -530,16 +530,16 @@ namespace NKikimr {
                 TIt loadedIt = b.ChainDelegators.begin();
                 TIt loadedEnd = b.ChainDelegators.end();
                 for (TIt it = ChainDelegators.begin(); it != ChainDelegators.end(); ++it) {
-                    Y_VERIFY(loadedIt != loadedEnd);
+                    Y_ABORT_UNLESS(loadedIt != loadedEnd);
                     if (loadedIt->SlotSize == it->SlotSize) {
                         *it = std::move(*loadedIt);
                         ++loadedIt;
                     }
                 }
-                Y_VERIFY(loadedIt == loadedEnd);
+                Y_ABORT_UNLESS(loadedIt == loadedEnd);
             } else {
                 // entry point size rollback case
-                Y_VERIFY(size > ChainDelegators.size());
+                Y_ABORT_UNLESS(size > ChainDelegators.size());
                 ui32 curChainDelegatorsSize = ChainDelegators.size();
                 Y_FAIL_S("Impossible case; MinHugeBlobInBytes# " << MinHugeBlobInBytes
                         << " MilestoneBlobInBytes# " << MilestoneBlobInBytes
@@ -640,7 +640,7 @@ namespace NKikimr {
             const ui32 endBlocks = GetEndBlocks();
 
             NPrivate::TChainLayoutBuilder builder(startBlocks, mileStoneBlocks, endBlocks, Overhead);
-            Y_VERIFY(!builder.GetLayout().empty());
+            Y_ABORT_UNLESS(!builder.GetLayout().empty());
 
             TBuiltChainDelegators result;
             for (auto x : builder.GetLayout()) {
@@ -679,7 +679,7 @@ namespace NKikimr {
             ChainDelegators = std::move(b.ChainDelegators);
             MinREALHugeBlobInBlocks = oldMapCompatible ? b.MilestoneREALHugeBlobInBlocks : b.MinREALHugeBlobInBlocks;
 
-            Y_VERIFY(!ChainDelegators.empty());
+            Y_ABORT_UNLESS(!ChainDelegators.empty());
             BuildSearchTable();
 
             Y_VERIFY_S(GetMinREALHugeBlobInBytes() != 0, "INVALID CONFIGURATION: MinREALHugeBlobInBytes IS 0"
@@ -751,7 +751,7 @@ namespace NKikimr {
         TFreeRes THeap::Free(const TDiskPart &addr) {
             ui32 size = addr.Size;
             TChainDelegator *chainD = Chains.GetChain(size);
-            Y_VERIFY(chainD);
+            Y_ABORT_UNLESS(chainD);
 
             TFreeRes res = chainD->ChainPtr->Free(chainD->Convert(addr));
             if (res.ChunkId) {
@@ -855,7 +855,7 @@ namespace NKikimr {
         void THeap::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             for (TChunkIdx chunk : FreeChunks) {
                 const bool inserted = chunks.insert(chunk).second;
-                Y_VERIFY(inserted); // this chunk should be unique to the set
+                Y_ABORT_UNLESS(inserted); // this chunk should be unique to the set
             }
             Chains.GetOwnedChunks(chunks);
         }

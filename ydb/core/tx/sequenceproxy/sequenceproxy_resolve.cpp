@@ -70,7 +70,7 @@ namespace NSequenceProxy {
     void TSequenceProxy::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         ui64 cookie = ev->Cookie;
         auto it = ResolveInFlight.find(cookie);
-        Y_VERIFY(it != ResolveInFlight.end(), "TEvNavigateKeySetResult with cookie %" PRIu64 " does not match a previous request", cookie);
+        Y_ABORT_UNLESS(it != ResolveInFlight.end(), "TEvNavigateKeySetResult with cookie %" PRIu64 " does not match a previous request", cookie);
         auto database = std::move(it->second.Database);
         auto path = std::move(it->second.Path);
         ResolveInFlight.erase(it);

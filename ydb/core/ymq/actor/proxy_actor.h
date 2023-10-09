@@ -24,7 +24,7 @@ public:
         , Request_(req)
         , Cb_(std::move(cb))
     {
-        Y_VERIFY(RequestId_);
+        Y_ABORT_UNLESS(RequestId_);
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

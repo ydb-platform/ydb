@@ -103,7 +103,7 @@ public:
     }
 
     bool UpdateChannelsBinding(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db) {
-        Y_VERIFY(tablet.BoundChannels.size() <= BoundChannels.size(), "only expansion channels number is allowed in Binded Channels");
+        Y_ABORT_UNLESS(tablet.BoundChannels.size() <= BoundChannels.size(), "only expansion channels number is allowed in Binded Channels");
 
         std::bitset<MAX_TABLET_CHANNELS> newChannels;
 
@@ -174,7 +174,7 @@ public:
     void ReplyToSender(NKikimrProto::EReplyStatus status) {
         BLOG_D("THive::TTxCreateTablet::Execute TabletId: " << TabletId <<
             " Status: " << NKikimrProto::EReplyStatus_Name(status));
-        Y_VERIFY(!!Sender);
+        Y_ABORT_UNLESS(!!Sender);
         THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>(status, OwnerId, OwnerIdx, TabletId, Self->TabletID(), ErrorReason);
         if (ForwardRequest.HasHiveTabletId()) {
             reply->Record.MutableForwardRequest()->CopyFrom(ForwardRequest);
@@ -343,7 +343,7 @@ public:
         } else {
             TabletId = MakeTabletID(AssignStateStorage, Self->HiveUid, tabletIdIndex);
             BLOG_D("Hive " << Self->TabletID() << " allocated TabletId " << TabletId << " from TabletIdIndex " << tabletIdIndex);
-            Y_VERIFY(Self->Tablets.count(TabletId) == 0);
+            Y_ABORT_UNLESS(Self->Tablets.count(TabletId) == 0);
             for (auto owner : modified) {
                 auto sequence = Self->Sequencer.GetSequence(owner);
                 db.Table<Schema::Sequences>().Key(owner).Update(

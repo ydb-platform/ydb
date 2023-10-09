@@ -29,7 +29,7 @@ public:
         , DbDriverState_(Connections_->GetDriverState(
             database, discoveryEndpoint, discoveryMode, sslCredentials, credentialsProviderFactory))
     {
-        Y_VERIFY(DbDriverState_);
+        Y_ABORT_UNLESS(DbDriverState_);
     }
 
     TClientImplCommon(
@@ -46,7 +46,7 @@ public:
             )
         )
     {
-        Y_VERIFY(DbDriverState_);
+        Y_ABORT_UNLESS(DbDriverState_);
     }
 
     NThreading::TFuture<void> DiscoveryCompleted() const {

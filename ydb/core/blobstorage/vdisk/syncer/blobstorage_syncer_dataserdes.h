@@ -42,7 +42,7 @@ namespace NKikimr {
             TVDiskID vdisk(Str);
             GroupId = vdisk.GroupID;
             GroupGeneration = vdisk.GroupGeneration;
-            Y_VERIFY(val.VDiskIdShort == vdisk, "val.VDiskId# %s vdisk# %s",
+            Y_ABORT_UNLESS(val.VDiskIdShort == vdisk, "val.VDiskId# %s vdisk# %s",
                      val.VDiskIdShort.ToString().data(), vdisk.ToString().data());
             val.Get().ParseFromArcadiaStream(Str);
         }
@@ -134,14 +134,14 @@ namespace NKikimr {
             const auto &item = Proto->GetEntries(Counter);
             ++Counter;
             TVDiskID vdisk = VDiskIDFromVDiskID(item.GetVDiskID());
-            Y_VERIFY(val.VDiskIdShort == TVDiskIdShort(vdisk),
+            Y_ABORT_UNLESS(val.VDiskIdShort == TVDiskIdShort(vdisk),
                      "val.VDiskId# %s vdisk# %s",
                      val.VDiskIdShort.ToString().data(), vdisk.ToString().data());
             val.Get().Parse(item);
         }
 
         void Finish() {
-            Y_VERIFY(Counter == Proto->EntriesSize(), "Counter# %u size# %u",
+            Y_ABORT_UNLESS(Counter == Proto->EntriesSize(), "Counter# %u size# %u",
                      Counter, unsigned(Proto->EntriesSize()));
         }
 

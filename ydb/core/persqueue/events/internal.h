@@ -423,7 +423,7 @@ struct TEvPQ {
         void Check() const
         {
             //error or empty response(all from cache) or not empty response at all
-            Y_VERIFY(Error.HasError() || Blobs.empty() || !Blobs[0].Value.empty(),
+            Y_ABORT_UNLESS(Error.HasError() || Blobs.empty() || !Blobs[0].Value.empty(),
                 "Cookie %" PRIu64 " Error code: %" PRIu32 ", blobs count: %" PRIu64, Cookie, Error.ErrorCode, Blobs.size());
         }
 

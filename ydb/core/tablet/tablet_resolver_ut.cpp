@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TTabletResolver) {
 
         void HandleLookup(TEvStateStorage::TEvInfo::TPtr& ev) {
             auto* msg = ev->Get();
-            Y_VERIFY(msg->SignatureSz);
+            Y_ABORT_UNLESS(msg->SignatureSz);
             SignatureSz = msg->SignatureSz;
             Signature.Reset(msg->Signature.Release());
 

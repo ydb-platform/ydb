@@ -138,7 +138,7 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
             auto& builderImpl = static_cast<TBuilder&>(*builder);
             const ui32 arraySize = column.length();
             for (auto&& i : indexes) {
-                Y_VERIFY(i < arraySize);
+                Y_ABORT_UNLESS(i < arraySize);
                 TStatusValidator::Validate(builderImpl.Append(column.GetView(i)));
             }
         }
@@ -146,7 +146,7 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
         TStatusValidator::Validate(builder->Finish(&result));
         return true;
     });
-    Y_VERIFY(result);
+    Y_ABORT_UNLESS(result);
     return result;
 }
 

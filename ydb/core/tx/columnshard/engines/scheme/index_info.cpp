@@ -29,17 +29,17 @@ TIndexInfo::TIndexInfo(const TString& name, ui32 id)
 {}
 
 std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) {
-    Y_VERIFY(batch);
+    Y_ABORT_UNLESS(batch);
     i64 numColumns = batch->num_columns();
     i64 numRows = batch->num_rows();
 
     auto res = batch->AddColumn(numColumns, arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
                                 NArrow::MakeUI64Array(snapshot.GetPlanStep(), numRows));
-    Y_VERIFY(res.ok());
+    Y_ABORT_UNLESS(res.ok());
     res = (*res)->AddColumn(numColumns + 1, arrow::field(SPEC_COL_TX_ID, arrow::uint64()),
                             NArrow::MakeUI64Array(snapshot.GetTxId(), numRows));
-    Y_VERIFY(res.ok());
-    Y_VERIFY((*res)->num_columns() == numColumns + 2);
+    Y_ABORT_UNLESS(res.ok());
+    Y_ABORT_UNLESS((*res)->num_columns() == numColumns + 2);
     return *res;
 }
 
@@ -67,7 +67,7 @@ bool TIndexInfo::IsSpecialColumn(const ui32 fieldId) {
 
 ui32 TIndexInfo::GetColumnId(const std::string& name) const {
     auto id = GetColumnIdOptional(name);
-    Y_VERIFY(!!id, "undefined column %s", name.data());
+    Y_ABORT_UNLESS(!!id, "undefined column %s", name.data());
     return *id;
 }
 
@@ -97,7 +97,7 @@ TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
             return {};
         }
 
-        Y_VERIFY(ci != Columns.end());
+        Y_ABORT_UNLESS(ci != Columns.end());
         return ci->second.Name;
     }
 }
@@ -117,7 +117,7 @@ std::vector<TString> TIndexInfo::GetColumnNames(const std::vector<ui32>& ids) co
     out.reserve(ids.size());
     for (ui32 id : ids) {
         const auto ci = Columns.find(id);
-        Y_VERIFY(ci != Columns.end());
+        Y_ABORT_UNLESS(ci != Columns.end());
         out.push_back(ci->second.Name);
     }
     return out;
@@ -253,7 +253,7 @@ void TIndexInfo::SetAllKeys() {
 std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortDescription() const {
     if (GetSortingKey()) {
         auto key = GetExtendedKey(); // Sort with extended key, greater snapshot first
-        Y_VERIFY(key && key->num_fields() > 2);
+        Y_ABORT_UNLESS(key && key->num_fields() > 2);
         auto description = std::make_shared<NArrow::TSortDescription>(key);
         description->Directions[key->num_fields() - 1] = -1;
         description->Directions[key->num_fields() - 2] = -1;
@@ -266,7 +266,7 @@ std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortDescription() const {
 std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortReplaceDescription() const {
     if (GetSortingKey()) {
         auto key = GetExtendedKey(); // Sort with extended key, greater snapshot first
-        Y_VERIFY(key && key->num_fields() > 2);
+        Y_ABORT_UNLESS(key && key->num_fields() > 2);
         auto description = std::make_shared<NArrow::TSortDescription>(key, GetReplaceKey());
         description->Directions[key->num_fields() - 1] = -1;
         description->Directions[key->num_fields() - 2] = -1;
@@ -329,7 +329,7 @@ std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoader(const ui32 columnId) 
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>& columnIds) const {
-    Y_VERIFY(columnIds.size());
+    Y_ABORT_UNLESS(columnIds.size());
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : columnIds) {
         std::shared_ptr<arrow::Schema> schema;
@@ -339,7 +339,7 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>
             schema = Schema;
         }
         auto field = schema->GetFieldByName(GetColumnName(i));
-        Y_VERIFY(field);
+        Y_ABORT_UNLESS(field);
         fields.emplace_back(field);
     }
     return std::make_shared<arrow::Schema>(fields);
@@ -372,7 +372,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     }
 
     for (const auto& keyName : schema.GetKeyColumnNames()) {
-        Y_VERIFY(ColumnNames.contains(keyName));
+        Y_ABORT_UNLESS(ColumnNames.contains(keyName));
         KeyColumns.push_back(ColumnNames[keyName]);
     }
 
@@ -424,7 +424,7 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
     out.reserve(ids.size());
     for (const ui32 id : ids) {
         const auto ci = tableSchema.Columns.find(id);
-        Y_VERIFY(ci != tableSchema.Columns.end());
+        Y_ABORT_UNLESS(ci != tableSchema.Columns.end());
         out.emplace_back(ci->second.Name, ci->second.PType);
     }
     return out;

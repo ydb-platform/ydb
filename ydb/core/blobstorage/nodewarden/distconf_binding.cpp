@@ -22,7 +22,7 @@ namespace NKikimr::NStorage {
 
         // do not start configuration negotiation for dynamic nodes
         if (!iAmStatic) {
-            Y_VERIFY(NodeIds.empty());
+            Y_ABORT_UNLESS(NodeIds.empty());
             return;
         }
 
@@ -41,7 +41,7 @@ namespace NKikimr::NStorage {
                 }
                 changes = true;
             } else {
-                Y_VERIFY(*prevIt == *curIt);
+                Y_ABORT_UNLESS(*prevIt == *curIt);
                 ++prevIt;
                 ++curIt;
             }
@@ -69,7 +69,7 @@ namespace NKikimr::NStorage {
             const TMonotonic now = TActivationContext::Monotonic();
             TMonotonic closest;
             if (std::optional<ui32> nodeId = BindQueue.Pick(now, &closest)) {
-                Y_VERIFY(*nodeId != SelfId().NodeId());
+                Y_ABORT_UNLESS(*nodeId != SelfId().NodeId());
                 Binding.emplace(*nodeId, ++BindingCookie);
 
                 if (const auto [it, inserted] = SubscribedSessions.try_emplace(Binding->NodeId); it->second) {
@@ -92,7 +92,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::BindToSession(TActorId sessionId) {
-        Y_VERIFY(Binding);
+        Y_ABORT_UNLESS(Binding);
         Binding->SessionId = sessionId;
 
         auto ev = std::make_unique<TEvNodeConfigPush>();
@@ -117,8 +117,8 @@ namespace NKikimr::NStorage {
 
         // update subscription information
         const auto [it, inserted] = SubscribedSessions.try_emplace(nodeId, sessionId);
-        Y_VERIFY(!inserted);
-        Y_VERIFY(!it->second);
+        Y_ABORT_UNLESS(!inserted);
+        Y_ABORT_UNLESS(!it->second);
         it->second = sessionId;
 
         if (Binding && Binding->NodeId == nodeId) {
@@ -134,8 +134,8 @@ namespace NKikimr::NStorage {
         const ui32 nodeId = ev->Get()->NodeId;
 
         const auto it = SubscribedSessions.find(nodeId);
-        Y_VERIFY(it != SubscribedSessions.end());
-        Y_VERIFY(!it->second || it->second == ev->Sender);
+        Y_ABORT_UNLESS(it != SubscribedSessions.end());
+        Y_ABORT_UNLESS(!it->second || it->second == ev->Sender);
         SubscribedSessions.erase(it);
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC07, "TEvNodeDisconnected", (NodeId, nodeId));
@@ -192,14 +192,14 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::HandleWakeup() {
-        Y_VERIFY(Scheduled);
+        Y_ABORT_UNLESS(Scheduled);
         Scheduled = false;
         IssueNextBindRequest();
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigReversePush::TPtr ev) {
         const ui32 senderNodeId = ev->Sender.NodeId();
-        Y_VERIFY(senderNodeId != SelfId().NodeId());
+        Y_ABORT_UNLESS(senderNodeId != SelfId().NodeId());
         auto& record = ev->Get()->Record;
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC17, "TEvNodeConfigReversePush", (NodeId, senderNodeId), (Cookie, ev->Cookie),
@@ -209,7 +209,7 @@ namespace NKikimr::NStorage {
             return; // possible race with unbinding
         }
 
-        Y_VERIFY(Binding->RootNodeId || ScatterTasks.empty());
+        Y_ABORT_UNLESS(Binding->RootNodeId || ScatterTasks.empty());
 
         // check if this binding was accepted and if it is acceptable from our point of view
         if (record.GetRejected()) {
@@ -264,10 +264,10 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC34, "DeleteBound", (RefererNodeId, refererNodeId), (NodeId, nodeId));
 
         const auto it = AllBoundNodes.find(nodeId);
-        Y_VERIFY(it != AllBoundNodes.end());
+        Y_ABORT_UNLESS(it != AllBoundNodes.end());
         TIndirectBoundNode& node = it->second;
 
-        Y_VERIFY(!node.Configs.empty());
+        Y_ABORT_UNLESS(!node.Configs.empty());
         const TStorageConfigMeta prev = node.Configs.back();
 
         const auto refIt = node.Refs.find(refererNodeId);
@@ -289,7 +289,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigPush::TPtr ev) {
         const ui32 senderNodeId = ev->Sender.NodeId();
-        Y_VERIFY(senderNodeId != SelfId().NodeId());
+        Y_ABORT_UNLESS(senderNodeId != SelfId().NodeId());
         auto& record = ev->Get()->Record;
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC02, "TEvNodeConfigPush", (NodeId, senderNodeId), (Cookie, ev->Cookie),
@@ -318,7 +318,7 @@ namespace NKikimr::NStorage {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Subscribe, IEventHandle::FlagTrackDelivery,
                 ev->InterconnectSession, SelfId(), nullptr, senderNodeId));
         } else {
-            Y_VERIFY(!it->second || it->second == ev->InterconnectSession);
+            Y_ABORT_UNLESS(!it->second || it->second == ev->InterconnectSession);
         }
 
         std::unique_ptr<TEvNodeConfigPush> pushEv;
@@ -381,7 +381,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigUnbind::TPtr ev) {
         const ui32 senderNodeId = ev->Sender.NodeId();
-        Y_VERIFY(senderNodeId != SelfId().NodeId());
+        Y_ABORT_UNLESS(senderNodeId != SelfId().NodeId());
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC16, "TEvNodeConfigUnbind", (NodeId, senderNodeId), (Cookie, ev->Cookie),
             (SessionId, ev->InterconnectSession), (Binding, Binding));

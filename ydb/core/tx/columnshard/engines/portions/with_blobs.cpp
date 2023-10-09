@@ -5,17 +5,17 @@
 namespace NKikimr::NOlap {
 
 void TPortionInfoWithBlobs::TBlobInfo::RestoreChunk(const TPortionInfoWithBlobs& owner, const IPortionColumnChunk::TPtr& chunk) {
-    Y_VERIFY(!ResultBlob);
+    Y_ABORT_UNLESS(!ResultBlob);
     const TString& data = chunk->GetData();
     Size += data.size();
     auto address = TChunkAddress(chunk->GetColumnId(), chunk->GetChunkIdx());
-    Y_VERIFY(owner.GetPortionInfo().GetRecordPointer(address));
-    Y_VERIFY(Chunks.emplace(address, chunk).second);
+    Y_ABORT_UNLESS(owner.GetPortionInfo().GetRecordPointer(address));
+    Y_ABORT_UNLESS(Chunks.emplace(address, chunk).second);
     ChunksOrdered.emplace_back(chunk);
 }
 
 const TColumnRecord& TPortionInfoWithBlobs::TBlobInfo::AddChunk(TPortionInfoWithBlobs& owner, const IPortionColumnChunk::TPtr& chunk) {
-    Y_VERIFY(!ResultBlob);
+    Y_ABORT_UNLESS(!ResultBlob);
     TBlobRange bRange;
     const TString& data = chunk->GetData();
 
@@ -26,7 +26,7 @@ const TColumnRecord& TPortionInfoWithBlobs::TBlobInfo::AddChunk(TPortionInfoWith
 
     Size += data.size();
 
-    Y_VERIFY(Chunks.emplace(rec.GetAddress(), chunk).second);
+    Y_ABORT_UNLESS(Chunks.emplace(rec.GetAddress(), chunk).second);
     ChunksOrdered.emplace_back(chunk);
     auto& result = owner.PortionInfo.AppendOneChunkColumn(std::move(rec));
     return result;
@@ -61,13 +61,13 @@ void TPortionInfoWithBlobs::TBlobInfo::ExtractColumnChunks(const ui32 columnId, 
 }
 
 std::shared_ptr<arrow::RecordBatch> TPortionInfoWithBlobs::GetBatch(const ISnapshotSchema::TPtr& data, const ISnapshotSchema& result, const std::set<std::string>& columnNames) const {
-    Y_VERIFY(data);
+    Y_ABORT_UNLESS(data);
     if (columnNames.empty()) {
         if (!CachedBatch) {
             THashMap<TBlobRange, TString> blobs;
             for (auto&& i : PortionInfo.Records) {
                 blobs[i.BlobRange] = GetBlobByRangeVerified(i.ColumnId, i.Chunk);
-                Y_VERIFY(blobs[i.BlobRange].size() == i.BlobRange.Size);
+                Y_ABORT_UNLESS(blobs[i.BlobRange].size() == i.BlobRange.Size);
             }
             CachedBatch = PortionInfo.AssembleInBatch(*data, result, blobs);
             Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(*CachedBatch, result.GetIndexInfo().GetReplaceKey()));
@@ -79,14 +79,14 @@ std::shared_ptr<arrow::RecordBatch> TPortionInfoWithBlobs::GetBatch(const ISnaps
             columnNamesString.emplace_back(i.data(), i.size());
         }
         auto result = NArrow::ExtractColumns(*CachedBatch, columnNamesString);
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
         return result;
     } else {
         auto filteredSchema = std::make_shared<TFilteredSnapshotSchema>(data, columnNames);
         THashMap<TBlobRange, TString> blobs;
         for (auto&& i : PortionInfo.Records) {
             blobs[i.BlobRange] = GetBlobByRangeVerified(i.ColumnId, i.Chunk);
-            Y_VERIFY(blobs[i.BlobRange].size() == i.BlobRange.Size);
+            Y_ABORT_UNLESS(blobs[i.BlobRange].size() == i.BlobRange.Size);
         }
         return PortionInfo.AssembleInBatch(*data, *filteredSchema, blobs);
     }
@@ -114,7 +114,7 @@ NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::RestorePortion(cons
         auto builder = result.StartBlob();
         for (auto&& d : i.second) {
             auto itBlob = blobs.find(d->BlobRange);
-            Y_VERIFY(itBlob != blobs.end());
+            Y_ABORT_UNLESS(itBlob != blobs.end());
             builder.RestoreChunk(std::make_shared<TSimpleOrderedColumnChunk>(*d, itBlob->second));
         }
     }
@@ -165,8 +165,8 @@ std::optional<NKikimr::NOlap::TPortionInfoWithBlobs> TPortionInfoWithBlobs::Chan
             if (!bBuilder || result.GetBlobs().back().GetSize() + newBlob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
                 bBuilder = result.StartBlob();
             }
-            Y_VERIFY(rb);
-            Y_VERIFY(rb->num_columns() == 1);
+            Y_ABORT_UNLESS(rb);
+            Y_ABORT_UNLESS(rb->num_columns() == 1);
 
             bBuilder->AddChunk(std::make_shared<TSimpleOrderedColumnChunk>(rec, newBlob));
         }
@@ -204,8 +204,8 @@ void TPortionInfoWithBlobs::ExtractColumnChunks(const ui32 columnId, std::vector
     }
     std::vector<IPortionColumnChunk::TPtr> chunksLocal;
     for (auto&& i : chunksMap) {
-        Y_VERIFY(i.first.GetColumnId() == columnId);
-        Y_VERIFY(i.first.GetChunk() == chunksLocal.size());
+        Y_ABORT_UNLESS(i.first.GetColumnId() == columnId);
+        Y_ABORT_UNLESS(i.first.GetChunk() == chunksLocal.size());
         chunksLocal.emplace_back(i.second);
     }
     std::swap(chunksLocal, chunks);

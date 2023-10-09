@@ -301,7 +301,7 @@ public:
 
     void SendReplyAndDie(const TActorContext &ctx)
     {
-        Y_VERIFY(Response.HasStatus());
+        Y_ABORT_UNLESS(Response.HasStatus());
 
         auto response = MakeHolder<TBusConsoleResponse>();
         response->Record = std::move(Response);

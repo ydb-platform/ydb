@@ -19,7 +19,7 @@ namespace NTable {
             : Types(types)
             , Defs(defs)
         {
-            Y_VERIFY(Defs.size() > 0 && Defs.size() == Types.size());
+            Y_ABORT_UNLESS(Defs.size() > 0 && Defs.size() == Types.size());
             for (size_t index = 0; index < Types.size(); ++index) {
                 if (auto error = NScheme::HasUnexpectedValueSize(Defs[index], Types[index])) {
                     Y_FAIL("Column default at index %" PRISZT " validation failed: %s", index, error.c_str());
@@ -72,7 +72,7 @@ namespace NTable {
                 }
             }
 
-            Y_VERIFY(data == raw + offD + tail);
+            Y_ABORT_UNLESS(data == raw + offD + tail);
 
             return ::new(raw) TSelf(
                     { ptrT, types.size() },
@@ -118,7 +118,7 @@ namespace NTable {
                 TArrayRef<const TCell> defs)
             : TCellDefaults(types, defs)
         {
-            Y_VERIFY(order.size() == 0);
+            Y_ABORT_UNLESS(order.size() == 0);
         }
 
     public:
@@ -143,7 +143,7 @@ namespace NTable {
             : TCellDefaults(types, defs)
             , Types(order)
         {
-            Y_VERIFY(Types.size() == TCellDefaults::Types.size());
+            Y_ABORT_UNLESS(Types.size() == TCellDefaults::Types.size());
         }
 
     public:

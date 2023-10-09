@@ -40,7 +40,7 @@ bool TSchemaSnapshotManager::Load(NIceDb::TNiceDb& db) {
 
         NKikimrSchemeOp::TTableDescription desc;
         const bool ok = ParseFromStringNoSizeLimit(desc, schema);
-        Y_VERIFY(ok);
+        Y_ABORT_UNLESS(ok);
 
         const auto res = Snapshots.emplace(
             std::piecewise_construct,

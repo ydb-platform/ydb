@@ -52,7 +52,7 @@ namespace NBoot {
 
         bool HandleBio(NSharedCache::TEvResult &msg) noexcept override
         {
-            Y_VERIFY(Loader, "PageCollections loader got un unexpected pages fetch");
+            Y_ABORT_UNLESS(Loader, "PageCollections loader got un unexpected pages fetch");
 
             LeftReads -= 1;
 

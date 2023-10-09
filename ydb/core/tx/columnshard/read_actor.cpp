@@ -62,7 +62,7 @@ public:
             auto t = static_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult());
             Y_VERIFY_DEBUG(dynamic_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult()));
             if (!IndexedData->IsFinished()) {
-                Y_VERIFY(t->Apply(*IndexedData));
+                Y_ABORT_UNLESS(t->Apply(*IndexedData));
             }
             BuildResult(ctx);
             if (IndexedData->IsFinished()) {
@@ -80,7 +80,7 @@ public:
     }
 
     void SendErrorResult(const TActorContext& ctx, NKikimrTxColumnShard::EResultStatus status) {
-        Y_VERIFY(status != NKikimrTxColumnShard::EResultStatus::SUCCESS);
+        Y_ABORT_UNLESS(status != NKikimrTxColumnShard::EResultStatus::SUCCESS);
         SendResult(ctx, {}, true, status);
         IndexedData->Abort();
     }
@@ -98,7 +98,7 @@ public:
             metadata->SetFormat(NKikimrTxColumnShard::FORMAT_ARROW);
             metadata->SetSchema(GetSerializedSchema(batch));
             if (status == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
-                Y_VERIFY(!data.empty());
+                Y_ABORT_UNLESS(!data.empty());
             }
         }
 
@@ -204,7 +204,7 @@ private:
 
     TString GetSerializedSchema(const std::shared_ptr<arrow::RecordBatch>& batch) const {
         auto resultSchema = ReadMetadata->GetResultSchema();
-        Y_VERIFY(resultSchema);
+        Y_ABORT_UNLESS(resultSchema);
 
         // TODO: make real ResultSchema with SSA effects
         if (resultSchema->Equals(batch->schema())) {

@@ -50,7 +50,7 @@ NTabletFlatExecutor::ITransaction* TDataShard::CreateTxInitiateBorrowedPartsRetu
 }
 
 void TDataShard::CompletedLoansChanged(const TActorContext &ctx) {
-    Y_VERIFY(Executor()->GetStats().CompactedPartLoans);
+    Y_ABORT_UNLESS(Executor()->GetStats().CompactedPartLoans);
 
     CheckInitiateBorrowedPartsReturn(ctx);
 }
@@ -143,7 +143,7 @@ void TDataShard::Handle(TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev, const 
 bool TDataShard::HasSharedBlobs() const {
     const bool* hasSharedBlobsPtr = Executor()->GetStats().HasSharedBlobs;
     if (!hasSharedBlobsPtr) {
-        Y_VERIFY(Executor()->GetStats().IsFollower);
+        Y_ABORT_UNLESS(Executor()->GetStats().IsFollower);
         return false;
     }
     return *hasSharedBlobsPtr;
@@ -165,12 +165,12 @@ public:
         if (Self->State == TShardState::Offline)
             return true;
 
-        Y_VERIFY(Self->State == TShardState::PreOffline, "Unexpected state %s tabletId %" PRIu64,
+        Y_ABORT_UNLESS(Self->State == TShardState::PreOffline, "Unexpected state %s tabletId %" PRIu64,
                  DatashardStateName(Self->State).data(), Self->TabletID());
-        Y_VERIFY(!Self->HasSharedBlobs(), "Cannot go offline while there are shared blobs at tablet %" PRIu64, Self->TabletID());
-        Y_VERIFY(!Self->TransQueue.TxInFly(), "Cannot go offline while there is a Tx in flight at tablet %" PRIu64, Self->TabletID());
-        Y_VERIFY(Self->OutReadSets.Empty(), "Cannot go offline while there is a non-Ack-ed readset at tablet %" PRIu64, Self->TabletID());
-        Y_VERIFY(Self->TransQueue.GetSchemaOperations().empty(), "Cannot go offline while there is a schema Tx in flight at tablet %" PRIu64, Self->TabletID());
+        Y_ABORT_UNLESS(!Self->HasSharedBlobs(), "Cannot go offline while there are shared blobs at tablet %" PRIu64, Self->TabletID());
+        Y_ABORT_UNLESS(!Self->TransQueue.TxInFly(), "Cannot go offline while there is a Tx in flight at tablet %" PRIu64, Self->TabletID());
+        Y_ABORT_UNLESS(Self->OutReadSets.Empty(), "Cannot go offline while there is a non-Ack-ed readset at tablet %" PRIu64, Self->TabletID());
+        Y_ABORT_UNLESS(Self->TransQueue.GetSchemaOperations().empty(), "Cannot go offline while there is a schema Tx in flight at tablet %" PRIu64, Self->TabletID());
 
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Initiating switch from "
                     << DatashardStateName(Self->State) << " to Offline state");
@@ -225,7 +225,7 @@ void TDataShard::CheckStateChange(const TActorContext& ctx) {
         const bool mustActivateOthers = !ChangeSenderActivator.AllAcked();
 
         if (!hasSharedBlobs && !hasSchemaOps && !hasOutRs && !hasChangeRecords && !mustActivateOthers) {
-            Y_VERIFY(!TxInFly());
+            Y_ABORT_UNLESS(!TxInFly());
             Execute(new TTxGoOffline(this), ctx);
         }
     }

@@ -30,7 +30,7 @@ public:
  *       proto.SetHyperscan(::NHyperscan::Serialize(Database));
  *       TString data;
  *       auto res = proto.SerializeToString(&data);
- *       Y_VERIFY(res);
+ *       Y_ABORT_UNLESS(res);
  *       return data;
  */
     }

@@ -526,11 +526,11 @@ namespace Tests {
 
     void TServer::CreateBootstrapTablets() {
         const ui32 domainId = Settings->Domain;
-        Y_VERIFY(TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1) == ChangeStateStorage(TxAllocator, domainId));
+        Y_ABORT_UNLESS(TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1) == ChangeStateStorage(TxAllocator, domainId));
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(TxAllocator, domainId), TTabletTypes::TxAllocator), &CreateTxAllocator);
-        Y_VERIFY(TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1) == ChangeStateStorage(Coordinator, domainId));
+        Y_ABORT_UNLESS(TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1) == ChangeStateStorage(Coordinator, domainId));
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Coordinator, domainId), TTabletTypes::Coordinator), &CreateFlatTxCoordinator);
-        Y_VERIFY(TDomainsInfo::MakeTxMediatorIDFixed(domainId, 1) == ChangeStateStorage(Mediator, domainId));
+        Y_ABORT_UNLESS(TDomainsInfo::MakeTxMediatorIDFixed(domainId, 1) == ChangeStateStorage(Mediator, domainId));
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Mediator, domainId), TTabletTypes::Mediator), &CreateTxMediator);
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(SchemeRoot, domainId), TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(Hive, domainId), TTabletTypes::Hive), &CreateDefaultHive);
@@ -559,7 +559,7 @@ namespace Tests {
         boxConfig.SetBoxId(Settings->BOX_ID);
 
         ui32 nodeId = Runtime->GetNodeId(0);
-        Y_VERIFY(nodesInfo->Nodes[0].NodeId == nodeId);
+        Y_ABORT_UNLESS(nodesInfo->Nodes[0].NodeId == nodeId);
         auto& nodeInfo = nodesInfo->Nodes[0];
 
         NKikimrBlobStorage::TDefineHostConfig hostConfig;
@@ -650,12 +650,12 @@ namespace Tests {
     }
 
     void TServer::SetupDynamicLocalService(ui32 nodeIdx, const TString &tenantName) {
-        Y_VERIFY(nodeIdx >= StaticNodes());
+        Y_ABORT_UNLESS(nodeIdx >= StaticNodes());
         SetupLocalService(nodeIdx, tenantName);
     }
 
     void TServer::DestroyDynamicLocalService(ui32 nodeIdx) {
-        Y_VERIFY(nodeIdx >= StaticNodes());
+        Y_ABORT_UNLESS(nodeIdx >= StaticNodes());
         TActorId local = MakeLocalID(Runtime->GetNodeId(nodeIdx)); // MakeTenantPoolRootID?
         Runtime->Send(new IEventHandle(local, TActorId(), new TEvents::TEvPoisonPill()));
     }
@@ -1145,12 +1145,12 @@ namespace Tests {
     }
 
     const NYdb::TDriver& TServer::GetDriver() const {
-        Y_VERIFY(Driver);
+        Y_ABORT_UNLESS(Driver);
         return *Driver;
     }
 
     const NGrpc::TGRpcServer& TServer::GetGRpcServer() const {
-        Y_VERIFY(GRpcServer);
+        Y_ABORT_UNLESS(GRpcServer);
         return *GRpcServer;
     }
 
@@ -1968,7 +1968,7 @@ namespace Tests {
             new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release())),
             nodeIdx);
         auto ev = runtime->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender);
-        Y_VERIFY(ev);
+        Y_ABORT_UNLESS(ev);
     }
 
     void TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner) {
@@ -2033,12 +2033,12 @@ namespace Tests {
     }
 
     TString TClient::CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups) {
-        Y_VERIFY(StoragePoolTypes.contains(poolKind));
+        Y_ABORT_UNLESS(StoragePoolTypes.contains(poolKind));
         const TString poolName = Sprintf("name_%s_kind_%s", partOfName.c_str(), poolKind.c_str());
         const ui64 poolId = THash<TString>()(poolName);
 
         NKikimrBlobStorage::TDefineStoragePool storagePool = StoragePoolTypes.at(poolKind);
-        Y_VERIFY(storagePool.GetKind() == poolKind);
+        Y_ABORT_UNLESS(storagePool.GetKind() == poolKind);
         storagePool.SetStoragePoolId(poolId);
         storagePool.SetName(poolName);
         storagePool.SetNumGroups(groups);
@@ -2052,7 +2052,7 @@ namespace Tests {
 
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        Y_VERIFY(response.HasBlobStorageConfigResponse() && response.GetBlobStorageConfigResponse().GetSuccess());
+        Y_ABORT_UNLESS(response.HasBlobStorageConfigResponse() && response.GetBlobStorageConfigResponse().GetSuccess());
         UNIT_ASSERT((NMsgBusProxy::EResponseStatus)response.GetStatus());
 
         return poolName;
@@ -2472,12 +2472,12 @@ namespace Tests {
 
         if (res.GetStatus() == NKikimrProto::OK) {
             auto& info = res.GetInfo();
-            Y_VERIFY(res.GetTabletID() == info.GetTabletID());
-            Y_VERIFY(info.ChannelsSize() > 0);
+            Y_ABORT_UNLESS(res.GetTabletID() == info.GetTabletID());
+            Y_ABORT_UNLESS(info.ChannelsSize() > 0);
 
             auto& channel = info.GetChannels(0);
-            Y_VERIFY(channel.GetChannel() == 0);
-            Y_VERIFY(channel.HistorySize() > 0);
+            Y_ABORT_UNLESS(channel.GetChannel() == 0);
+            Y_ABORT_UNLESS(channel.HistorySize() > 0);
         }
     }
 
@@ -2571,15 +2571,15 @@ namespace Tests {
     }
 
     void TTenants::Run(const TString &name, ui32 nodes) {
-        Y_VERIFY(!Tenants.contains(name));
-        Y_VERIFY(Availabe() >= nodes);
+        Y_ABORT_UNLESS(!Tenants.contains(name));
+        Y_ABORT_UNLESS(Availabe() >= nodes);
 
         Tenants[name] = {};
         RunNodes(name, nodes);
     }
 
     void TTenants::Stop(const TString &name) {
-        Y_VERIFY(Tenants.contains(name));
+        Y_ABORT_UNLESS(Tenants.contains(name));
 
         Free(name, Size(name));
         Tenants.erase(name);
@@ -2594,22 +2594,22 @@ namespace Tests {
     }
 
     void TTenants::Add(const TString &name, ui32 nodes) {
-        Y_VERIFY(Tenants.contains(name));
-        Y_VERIFY(Availabe() >= nodes);
+        Y_ABORT_UNLESS(Tenants.contains(name));
+        Y_ABORT_UNLESS(Availabe() >= nodes);
 
         return RunNodes(name, nodes);
     }
 
     void TTenants::Free(const TString &name, ui32 nodes) {
-        Y_VERIFY(Tenants.contains(name));
-        Y_VERIFY(Size(name) >= nodes);
+        Y_ABORT_UNLESS(Tenants.contains(name));
+        Y_ABORT_UNLESS(Size(name) >= nodes);
 
         return StopNodes(name, nodes);
     }
 
     void TTenants::FreeNode(const TString &name, ui32 nodeIdx) {
-        Y_VERIFY(Tenants.contains(name));
-        Y_VERIFY(Size(name) >= 1);
+        Y_ABORT_UNLESS(Tenants.contains(name));
+        Y_ABORT_UNLESS(Size(name) >= 1);
 
         return StopPaticularNode(name, nodeIdx);
     }
@@ -2629,7 +2629,7 @@ namespace Tests {
     }
 
     const TVector<ui32> &TTenants::List(const TString &name) const {
-        Y_VERIFY(Tenants.contains(name));
+        Y_ABORT_UNLESS(Tenants.contains(name));
 
         return Tenants.at(name);
     }
@@ -2668,7 +2668,7 @@ namespace Tests {
         TVector<ui32>& nodes = Nodes(name);
 
         auto subj = std::find(nodes.begin(), nodes.end(), nodeIdx);
-        Y_VERIFY(subj != nodes.end());
+        Y_ABORT_UNLESS(subj != nodes.end());
 
         StopNode(name, nodeIdx);
 
@@ -2699,7 +2699,7 @@ namespace Tests {
     }
 
     ui32 TTenants::AllocNodeIdx() {
-        Y_VERIFY(VacantNodes);
+        Y_ABORT_UNLESS(VacantNodes);
         PopHeap(VacantNodes.begin(), VacantNodes.end());
         ui32 node = VacantNodes.back();
         VacantNodes.pop_back();

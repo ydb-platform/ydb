@@ -99,7 +99,7 @@ namespace NKikimr {
 
         void Process(const TActorContext &ctx) {
             auto item = Queue.Head();
-            Y_VERIFY(item);
+            Y_ABORT_UNLESS(item);
             TAutoPtr<IEventHandle> ev = item->Ev.release();
             item->Span.EndOk();
             Queue.Pop();

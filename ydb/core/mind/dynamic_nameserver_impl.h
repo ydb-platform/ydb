@@ -181,7 +181,7 @@ public:
         : StaticConfig(setup)
         , ResolvePoolId(resolvePoolId)
     {
-        Y_VERIFY(StaticConfig->IsEntriesUnique());
+        Y_ABORT_UNLESS(StaticConfig->IsEntriesUnique());
 
         for (size_t i = 0; i < DynamicConfigs.size(); ++i)
             DynamicConfigs[i] = new TDynamicConfig;

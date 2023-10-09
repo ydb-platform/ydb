@@ -13,7 +13,7 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
                     const TTxState& txState,
                     TPath& srcPath)
 {
-    Y_VERIFY(txState.PlanStep);
+    Y_ABORT_UNLESS(txState.PlanStep);
     srcPath->SetDropped(txState.PlanStep, operationId.GetTxId());
     context.SS->PersistDropStep(db, srcPath->PathId, txState.PlanStep, operationId);
     context.SS->PersistRemoveTable(db, srcPath->PathId, context.Ctx);
@@ -53,8 +53,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxMoveTableIndex);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveTableIndex);
 
         auto srcPath = TPath::Init(txState->SourcePathId, context.SS);
         auto dstPath = TPath::Init(txState->TargetPathId, context.SS);
@@ -88,9 +88,9 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxMoveTableIndex);
-        Y_VERIFY(txState->SourcePathId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveTableIndex);
+        Y_ABORT_UNLESS(txState->SourcePathId);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -136,7 +136,7 @@ public:
                                << ", msg: " << ev->Get()->ToString()
                                << ", at tablet" << ssId);
 
-        Y_VERIFY(ActivePathId == ev->Get()->PathId);
+        Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
@@ -148,7 +148,7 @@ public:
         context.OnComplete.RouteByTabletsFromOperation(OperationId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
@@ -168,9 +168,9 @@ public:
         }
 
         auto activePath = TPath::Resolve(srcPath.PathString(), context.SS);
-        Y_VERIFY(activePath.IsResolved());
+        Y_ABORT_UNLESS(activePath.IsResolved());
 
-        Y_VERIFY(activePath != srcPath);
+        Y_ABORT_UNLESS(activePath != srcPath);
 
         ActivePathId = activePath->PathId;
         context.OnComplete.PublishAndWaitPublication(OperationId, activePath->PathId);
@@ -219,7 +219,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
 
@@ -233,9 +233,9 @@ public:
         context.OnComplete.RouteByTabletsFromOperation(OperationId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
-        Y_VERIFY(txState->PlanStep);
+        Y_ABORT_UNLESS(txState->PlanStep);
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
@@ -272,8 +272,8 @@ public:
                                << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxMoveTableIndex);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveTableIndex);
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
@@ -551,7 +551,7 @@ ISubOperation::TPtr CreateMoveTableIndex(TOperationId id, const TTxTransaction& 
 }
 
 ISubOperation::TPtr CreateMoveTableIndex(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TMoveTableIndex>(id, state);
 }
 

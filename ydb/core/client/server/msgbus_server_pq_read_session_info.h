@@ -79,7 +79,7 @@ public:
     }
 private:
     void SendStatusRequest(const TString& sessionName, TActorId actorId, const TActorContext& ctx) override {
-        Y_VERIFY(sessionName.EndsWith("_v1"));
+        Y_ABORT_UNLESS(sessionName.EndsWith("_v1"));
         SendStatusRequest<NGRpcProxy::V1::TEvPQProxy::TEvReadSessionStatus>(actorId, ctx);
     }
 };

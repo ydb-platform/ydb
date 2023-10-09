@@ -347,7 +347,7 @@ namespace NKikimr {
                     iter##I += numBytes; \
                 } \
             } else if (parts[I]) { /* expected output */ \
-                Y_VERIFY(parts[I].IsContiguous()); \
+                Y_ABORT_UNLESS(parts[I].IsContiguous()); \
                 auto span = parts[I].GetContiguousSpanMut(); \
                 out##I = reinterpret_cast<ui64*>(span.data() + offset); \
                 Y_VERIFY_DEBUG(offset < span.size()); \
@@ -391,7 +391,7 @@ namespace NKikimr {
         const ui32 fullBlockSize = 4 * blockSize;
         const ui32 fullBlocks = fullSize / fullBlockSize;
 
-        Y_VERIFY(parts.size() == 6);
+        Y_ABORT_UNLESS(parts.size() == 6);
 
         ui32 availableMask = 0;
         ui32 size = 0; // actual size of a part
@@ -402,13 +402,13 @@ namespace NKikimr {
                 if (!size) {
                     size = parts[i].size();
                 } else {
-                    Y_VERIFY(size == parts[i].size());
+                    Y_ABORT_UNLESS(size == parts[i].size());
                 }
             }
         }
 
-        Y_VERIFY(PopCount(availableMask) >= 4);
-        Y_VERIFY(size % 32 == 0);
+        Y_ABORT_UNLESS(PopCount(availableMask) >= 4);
+        Y_ABORT_UNLESS(size % 32 == 0);
 
         if (whole) {
             restoreMask |= (1 << 4) - 1; // we have to restore all the data parts
@@ -416,11 +416,11 @@ namespace NKikimr {
 
         restoreMask &= ~availableMask;
 
-        Y_VERIFY(PopCount(restoreMask) <= 2);
+        Y_ABORT_UNLESS(PopCount(restoreMask) <= 2);
 
         for (ui32 part = 0; part < 6; ++part) {
             if (restoreMask >> part & 1) {
-                Y_VERIFY(!parts[part]);
+                Y_ABORT_UNLESS(!parts[part]);
                 parts[part] = TRcBuf::Uninitialized(size);
             }
         }
@@ -487,7 +487,7 @@ namespace NKikimr {
                 }
 
                 auto& p = parts[part];
-                Y_VERIFY(partLen <= p.size());
+                Y_ABORT_UNLESS(partLen <= p.size());
                 whole->Insert(whole->End(), TRope(p.Begin(), p.Position(partLen)));
             }
         }
@@ -495,8 +495,8 @@ namespace NKikimr {
 
     void ErasureRestoreFallback(TErasureType::ECrcMode crcMode, TErasureType erasure, ui32 fullSize, TRope *whole,
             std::span<TRope> parts, ui32 restoreMask, ui32 offset, bool isFragment) {
-        Y_VERIFY(parts.size() == erasure.TotalPartCount());
-        Y_VERIFY(!isFragment || !whole);
+        Y_ABORT_UNLESS(parts.size() == erasure.TotalPartCount());
+        Y_ABORT_UNLESS(!isFragment || !whole);
 
         const ui32 partSize = erasure.PartSize(crcMode, fullSize);
 
@@ -504,19 +504,19 @@ namespace NKikimr {
         ui32 commonSize = 0;
         for (const TRope& part : parts) {
             if (part) {
-                Y_VERIFY(!commonSize || part.size() == commonSize);
+                Y_ABORT_UNLESS(!commonSize || part.size() == commonSize);
                 commonSize = part.size();
             }
         }
-        Y_VERIFY(commonSize);
-        Y_VERIFY(isFragment ? commonSize <= partSize - offset : commonSize == partSize);
+        Y_ABORT_UNLESS(commonSize);
+        Y_ABORT_UNLESS(isFragment ? commonSize <= partSize - offset : commonSize == partSize);
 
         ui32 inputMask = 0;
 
         TDataPartSet p;
         p.FullDataSize = fullSize;
         p.IsFragment = isFragment;
-        Y_VERIFY(isFragment || !offset);
+        Y_ABORT_UNLESS(isFragment || !offset);
         for (ui32 i = 0; i < parts.size(); ++i) {
             TPartFragment fragment;
             if (parts[i]) {
@@ -553,9 +553,9 @@ namespace NKikimr {
     void ErasureRestore(TErasureType::ECrcMode crcMode, TErasureType erasure, ui32 fullSize, TRope *whole,
             std::span<TRope> parts, ui32 restoreMask, ui32 offset, bool isFragment) {
         if (crcMode == TErasureType::CrcModeNone && erasure.GetErasure() == TErasureType::Erasure4Plus2Block) {
-            Y_VERIFY(parts.size() == erasure.TotalPartCount());
-            Y_VERIFY(!isFragment || !whole);
-            Y_VERIFY(offset % 32 == 0);
+            Y_ABORT_UNLESS(parts.size() == erasure.TotalPartCount());
+            Y_ABORT_UNLESS(!isFragment || !whole);
+            Y_ABORT_UNLESS(offset % 32 == 0);
             ErasureRestoreBlock42(fullSize, whole, parts, restoreMask);
         } else {
             ErasureRestoreFallback(crcMode, erasure, fullSize, whole, parts, restoreMask, offset, isFragment);

@@ -48,7 +48,7 @@ TExecutorBootLogic::~TExecutorBootLogic()
 
     Steps->Execute(); /* should flush all jobs in internal queue */
 
-    Y_VERIFY(Steps->Alone(), "Bootlogic is still has pending IStep()s");
+    Y_ABORT_UNLESS(Steps->Alone(), "Bootlogic is still has pending IStep()s");
 }
 
 void TExecutorBootLogic::Describe(IOutputStream &out) const noexcept
@@ -67,8 +67,8 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveFollowerBoot(
         Steps->Spawn<NBoot::TStages>(std::move(msg->DependencyGraph), nullptr);
     } else {
         auto *update = msg->Update.Get();
-        Y_VERIFY(update->IsSnapshot);
-        Y_VERIFY(!update->NeedFollowerGcAck);
+        Y_ABORT_UNLESS(update->IsSnapshot);
+        Y_ABORT_UNLESS(!update->NeedFollowerGcAck);
 
         if (auto logl = Steps->Logger()->Log(ELnLev::Debug))
             logl
@@ -87,9 +87,9 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveFollowerBoot(
         const auto span = NPageCollection::TGroupBlobsByCookie(logo).Do();
         const auto largeGlobId = NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, GetBSGroupFor(logo[0]));
 
-        Y_VERIFY(span.size() == update->References.size());
-        Y_VERIFY(TCookie(logo[0].Cookie()).Type() == TCookie::EType::Log);
-        Y_VERIFY(largeGlobId, "Cannot make TLargeGlobId for snapshot");
+        Y_ABORT_UNLESS(span.size() == update->References.size());
+        Y_ABORT_UNLESS(TCookie(logo[0].Cookie()).Type() == TCookie::EType::Log);
+        Y_ABORT_UNLESS(largeGlobId, "Cannot make TLargeGlobId for snapshot");
 
         Steps->Spawn<NBoot::TStages>(nullptr, new NBoot::TBody{ largeGlobId, std::move(body) });
     }
@@ -160,12 +160,12 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
             << NFmt::Do(State()) << " Loading " << NFmt::Do(entry->LargeGlobId);
     }
 
-    Y_VERIFY(entry->LargeGlobId, "Support loads only of valid TLargeGlobId units");
-    Y_VERIFY(entry->Blobs(), "Valid TLargeGlobId unit hasn't been expanded to blobs");
+    Y_ABORT_UNLESS(entry->LargeGlobId, "Support loads only of valid TLargeGlobId units");
+    Y_ABORT_UNLESS(entry->Blobs(), "Valid TLargeGlobId unit hasn't been expanded to blobs");
 
     const ui32 group = entry->LargeGlobId.Group;
 
-    Y_VERIFY(group != NPageCollection::TLargeGlobId::InvalidGroup, "Got TLargeGlobId without BS group");
+    Y_ABORT_UNLESS(group != NPageCollection::TLargeGlobId::InvalidGroup, "Got TLargeGlobId without BS group");
 
     for (const auto &blobId : entry->Blobs()) {
         EntriesToLoad[blobId] = entry;
@@ -176,7 +176,7 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
 NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPageCollection::TFetch> req) {
     auto success = Loads.insert(std::make_pair(req->PageCollection.Get(), step)).second;
 
-    Y_VERIFY(success, "IPageCollection queued twice for loading");
+    Y_ABORT_UNLESS(success, "IPageCollection queued twice for loading");
 
     Ops->Send(
         MakeSharedPageCacheId(),
@@ -209,7 +209,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::CheckCompletion()
     if (LoadBlobQueue.SendRequests(SelfId))
         return OpResultContinue;
 
-    Y_VERIFY(EntriesToLoad.empty());
+    Y_ABORT_UNLESS(EntriesToLoad.empty());
 
     if (Steps && !Steps->Alone())
         return OpResultContinue;
@@ -246,7 +246,7 @@ void TExecutorBootLogic::OnBlobLoaded(const TLogoBlobID& id, TString body, uintp
 
     auto it = EntriesToLoad.find(id);
 
-    Y_VERIFY(it != EntriesToLoad.end(),
+    Y_ABORT_UNLESS(it != EntriesToLoad.end(),
         "OnBlobLoaded with unexpected blob id %s", id.ToString().c_str());
 
     auto entry = std::move(it->second);
@@ -300,7 +300,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
 }
 
 TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() noexcept {
-    Y_VERIFY(Result_->Database, "Looks like booting hasn't been done");
+    Y_ABORT_UNLESS(Result_->Database, "Looks like booting hasn't been done");
     return Result_;
 }
 
@@ -311,8 +311,8 @@ void TExecutorBootLogic::Cancel() {
 }
 
 void TExecutorBootLogic::FollowersSyncComplete() {
-    Y_VERIFY(Result_);
-    Y_VERIFY(Result().GcLogic);
+    Y_ABORT_UNLESS(Result_);
+    Y_ABORT_UNLESS(Result().GcLogic);
     Result().GcLogic->FollowersSyncComplete(true);
 }
 

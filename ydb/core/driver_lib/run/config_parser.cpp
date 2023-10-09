@@ -82,70 +82,70 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
 
 void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResult& res) {
     if (res.Has("sys-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("sys-file"), Config.AppConfig.MutableActorSystemConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("sys-file"), Config.AppConfig.MutableActorSystemConfig()));
     } else {
         auto sysConfig = DummyActorSystemConfig();
         Config.AppConfig.MutableActorSystemConfig()->CopyFrom(*sysConfig);
     }
 
     if (res.Has("naming-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("naming-file"), Config.AppConfig.MutableNameserviceConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("naming-file"), Config.AppConfig.MutableNameserviceConfig()));
     }
 
     if (res.Has("domains-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("domains-file"), Config.AppConfig.MutableDomainsConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("domains-file"), Config.AppConfig.MutableDomainsConfig()));
     }
 
     if (res.Has("bs-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("bs-file"), Config.AppConfig.MutableBlobStorageConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("bs-file"), Config.AppConfig.MutableBlobStorageConfig()));
     }
 
     if (res.Has("log-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("log-file"), Config.AppConfig.MutableLogConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("log-file"), Config.AppConfig.MutableLogConfig()));
     }
 
     if (res.Has("ic-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("ic-file"), Config.AppConfig.MutableInterconnectConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("ic-file"), Config.AppConfig.MutableInterconnectConfig()));
     }
 
     if (res.Has("channels-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("channels-file"), Config.AppConfig.MutableChannelProfileConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("channels-file"), Config.AppConfig.MutableChannelProfileConfig()));
     }
 
     if (res.Has("bootstrap-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("bootstrap-file"), Config.AppConfig.MutableBootstrapConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("bootstrap-file"), Config.AppConfig.MutableBootstrapConfig()));
     }
 
     if (res.Has("vdisk-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("vdisk-file"), Config.AppConfig.MutableVDiskConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("vdisk-file"), Config.AppConfig.MutableVDiskConfig()));
     }
 
     if (res.Has("drivemodel-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("drivemodel-file"), Config.AppConfig.MutableDriveModelConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("drivemodel-file"), Config.AppConfig.MutableDriveModelConfig()));
     }
 
     if (res.Has("kqp-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("kqp-file"), Config.AppConfig.MutableKQPConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("kqp-file"), Config.AppConfig.MutableKQPConfig()));
     }
 
     if (res.Has("incrhuge-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("incrhuge-file"), Config.AppConfig.MutableIncrHugeConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("incrhuge-file"), Config.AppConfig.MutableIncrHugeConfig()));
     }
 
     if (res.Has("grpc-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("grpc-file"), Config.AppConfig.MutableGRpcConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("grpc-file"), Config.AppConfig.MutableGRpcConfig()));
     }
 
     if (res.Has("feature-flags-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("feature-flags-file"), Config.AppConfig.MutableFeatureFlags(), true));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("feature-flags-file"), Config.AppConfig.MutableFeatureFlags(), true));
     }
 
     if (res.Has("sqs-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("sqs-file"), Config.AppConfig.MutableSqsConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("sqs-file"), Config.AppConfig.MutableSqsConfig()));
     }
 
     if (res.Has("http-proxy-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("http-proxy-file"), Config.AppConfig.MutableHttpProxyConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("http-proxy-file"), Config.AppConfig.MutableHttpProxyConfig()));
     }
 
     if (res.Has("grpc-port")) {
@@ -176,46 +176,46 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
     }
 
     if (res.Has("pq-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("pq-file"), Config.AppConfig.MutablePQConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("pq-file"), Config.AppConfig.MutablePQConfig()));
     }
 
     if (res.Has("pqcd-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("pqcd-file"), Config.AppConfig.MutablePQClusterDiscoveryConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("pqcd-file"), Config.AppConfig.MutablePQClusterDiscoveryConfig()));
     }
 
     if (res.Has("netclassifier-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("netclassifier-file"), Config.AppConfig.MutableNetClassifierConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("netclassifier-file"), Config.AppConfig.MutableNetClassifierConfig()));
     }
 
     if (res.Has("auth-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("auth-file"), Config.AppConfig.MutableAuthConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("auth-file"), Config.AppConfig.MutableAuthConfig()));
     }
 
     if (res.Has("auth-token-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("auth-token-file"), Config.AppConfig.MutableAuthConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("auth-token-file"), Config.AppConfig.MutableAuthConfig()));
     }
 
     if (res.Has("key-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("key-file"), Config.AppConfig.MutableKeyConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("key-file"), Config.AppConfig.MutableKeyConfig()));
     }
 
     if (res.Has("pdisk-key-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("pdisk-key-file"), Config.AppConfig.MutablePDiskKeyConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("pdisk-key-file"), Config.AppConfig.MutablePDiskKeyConfig()));
     }
 
     if (res.Has("alloc-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("alloc-file"), Config.AppConfig.MutableAllocatorConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("alloc-file"), Config.AppConfig.MutableAllocatorConfig()));
     } else {
         auto allocConfig = DummyAllocatorConfig();
         Config.AppConfig.MutableAllocatorConfig()->CopyFrom(*allocConfig);
     }
 
     if (res.Has("fq-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("fq-file"), Config.AppConfig.MutableFederatedQueryConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("fq-file"), Config.AppConfig.MutableFederatedQueryConfig()));
     }
 
     if (res.Has("public-http-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("public-http-file"), Config.AppConfig.MutablePublicHttpConfig()));
+        Y_ABORT_UNLESS(ParsePBFromFile(res.Get("public-http-file"), Config.AppConfig.MutablePublicHttpConfig()));
     }
 }
 
@@ -292,7 +292,7 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
         RunOpts.StartBusProxy = true;
     }
 
-    Y_VERIFY(RunOpts.NodeId > 0 && RunOpts.NodeId <= NActors::TActorId::MaxNodeId);
+    Y_ABORT_UNLESS(RunOpts.NodeId > 0 && RunOpts.NodeId <= NActors::TActorId::MaxNodeId);
 }
 
 void TRunCommandConfigParser::ApplyParsedOptions() {

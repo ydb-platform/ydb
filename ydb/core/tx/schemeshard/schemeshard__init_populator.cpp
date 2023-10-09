@@ -25,7 +25,7 @@ struct TSchemeShard::TTxInitPopulator : public TTransactionBase<TSchemeShard> {
     TTxType GetTxType() const override { return TXTYPE_INIT_POPULATOR; }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
-        Y_VERIFY(Self->IsSchemeShardConfigured());
+        Y_ABORT_UNLESS(Self->IsSchemeShardConfigured());
 
         for (auto item: Self->PathsById) {
             TPathId pathId = item.first;
@@ -66,7 +66,7 @@ struct TSchemeShard::TTxInitPopulator : public TTransactionBase<TSchemeShard> {
             std::move(Descriptions), Self->NextLocalPathId
         );
 
-        Y_VERIFY(!Self->SchemeBoardPopulator);
+        Y_ABORT_UNLESS(!Self->SchemeBoardPopulator);
         Self->SchemeBoardPopulator = Self->Register(populator);
 
         Self->PublishToSchemeBoard(std::move(DelayedPublications), ctx);

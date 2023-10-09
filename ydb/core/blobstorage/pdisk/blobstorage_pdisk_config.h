@@ -201,7 +201,7 @@ struct TPDiskConfig : public TThrRefBase {
         CostLimitNs = choose(500'000ull, 20'000'000ull, 50'000'000ull);
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
-        Y_VERIFY(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
+        Y_ABORT_UNLESS(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
                 "SPDK NVMe driver can be used only with NVMe devices!");
     }
 

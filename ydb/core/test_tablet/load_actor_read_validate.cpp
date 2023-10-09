@@ -52,11 +52,11 @@ namespace NKikimr::NTestShard {
             , KeysBefore(std::exchange(self.Keys, {}))
         {
             // ensure no concurrent operations are running
-            Y_VERIFY(self.WritesInFlight.empty());
-            Y_VERIFY(self.DeletesInFlight.empty());
-            Y_VERIFY(self.TransitionInFlight.empty());
+            Y_ABORT_UNLESS(self.WritesInFlight.empty());
+            Y_ABORT_UNLESS(self.DeletesInFlight.empty());
+            Y_ABORT_UNLESS(self.TransitionInFlight.empty());
             for (auto& [key, info] : KeysBefore) {
-                Y_VERIFY(info.ConfirmedState == info.PendingState);
+                Y_ABORT_UNLESS(info.ConfirmedState == info.PendingState);
                 info.ConfirmedKeyIndex = Max<size_t>();
             }
             self.ConfirmedKeys.clear();
@@ -124,7 +124,7 @@ namespace NKikimr::NTestShard {
 
         TString PopQueryByCookie(ui64 cookie) {
             auto node = QueriesInFlight.extract(cookie);
-            Y_VERIFY(node);
+            Y_ABORT_UNLESS(node);
             return node.mapped();
         }
 
@@ -141,7 +141,7 @@ namespace NKikimr::NTestShard {
                     return;
                 }
 
-                Y_VERIFY(r.ReadResultSize() == 1);
+                Y_ABORT_UNLESS(r.ReadResultSize() == 1);
                 const auto& res = r.GetReadResult(0);
                 const auto status = static_cast<NKikimrProto::EReplyStatus>(res.GetStatus());
 
@@ -155,7 +155,7 @@ namespace NKikimr::NTestShard {
                         (ErrorReason, r.GetErrorReason()));
                     return IssueNextReadRangeQuery();
                 }
-                Y_VERIFY(r.ReadRangeResultSize() == 1);
+                Y_ABORT_UNLESS(r.ReadRangeResultSize() == 1);
                 const auto& res = r.GetReadRangeResult(0);
                 const auto status = static_cast<NKikimrProto::EReplyStatus>(res.GetStatus());
                 Y_VERIFY_S(status == NKikimrProto::OK || status == NKikimrProto::NODATA || status == NKikimrProto::OVERRUN,
@@ -216,7 +216,7 @@ namespace NKikimr::NTestShard {
 
             if (outcome == EReadOutcome::RETRY && RetryCount < 32) {
                 const bool inserted = KeyReadsWaitingForRetry.insert(key).second;
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
                 STLOG(PRI_ERROR, TEST_SHARD, TS24, "read key failed -- going to retry", (TabletId, TabletId),
                     (Key, key), (Message, message));
             } else {
@@ -224,7 +224,7 @@ namespace NKikimr::NTestShard {
                     << (int)outcome << " RetryCount# " << RetryCount);
 
                 const bool inserted = Keys.try_emplace(key, value.size()).second;
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
 
                 ui64 len, seed, id;
                 StringSplitter(key).Split(',').CollectInto(&len, &seed, &id);
@@ -279,7 +279,7 @@ namespace NKikimr::NTestShard {
         void IssueRead(const TString& key) {
             const ui64 cookie = ++LastCookie;
             const bool inserted = QueriesInFlight.try_emplace(cookie, key).second;
-            Y_VERIFY(inserted);
+            Y_ABORT_UNLESS(inserted);
 
             std::unique_ptr<IEventBase> ev;
 
@@ -342,7 +342,7 @@ namespace NKikimr::NTestShard {
                     STLOG(PRI_DEBUG, TEST_SHARD, TS21, "read state", (TabletId, TabletId), (Key, item.GetKey()),
                         (State, item.GetState()));
                     const auto& [it, inserted] = State.try_emplace(item.GetKey(), item.GetState());
-                    Y_VERIFY(inserted);
+                    Y_ABORT_UNLESS(inserted);
                 }
                 ReadStateCookie = r.GetCookie();
                 IssueNextStateServerQuery();
@@ -371,8 +371,8 @@ namespace NKikimr::NTestShard {
                 if (TransitionInFlight.empty()) {
                     STLOG(PRI_INFO, TEST_SHARD, TS08, "finished read&validate", (TabletId, TabletId));
                     for (auto& [key, info] : Keys) {
-                        Y_VERIFY(info.ConfirmedState == info.PendingState);
-                        Y_VERIFY(info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED);
+                        Y_ABORT_UNLESS(info.ConfirmedState == info.PendingState);
+                        Y_ABORT_UNLESS(info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED);
                     }
                     Send(ParentId, new TEvValidationFinished(std::move(Keys), InitialCheck));
                     PassAway();
@@ -381,7 +381,7 @@ namespace NKikimr::NTestShard {
         }
 
         void SendRetries() {
-            Y_VERIFY(SendRetriesPending);
+            Y_ABORT_UNLESS(SendRetriesPending);
             SendRetriesPending = false;
             ++RetryCount;
             for (TString key : std::exchange(KeyReadsWaitingForRetry, {})) {
@@ -450,7 +450,7 @@ namespace NKikimr::NTestShard {
 
         void RegisterTransition(TString key, ::NTestShard::TStateServer::EEntityState from, ::NTestShard::TStateServer::EEntityState to) {
             const auto it = Keys.find(key);
-            Y_VERIFY(it != Keys.end());
+            Y_ABORT_UNLESS(it != Keys.end());
             it->second.PendingState = to;
 
             if (!Settings.HasStorageServerHost()) {
@@ -490,7 +490,7 @@ namespace NKikimr::NTestShard {
                     Y_FAIL();
             }
 
-            Y_VERIFY(!TransitionInFlight.empty());
+            Y_ABORT_UNLESS(!TransitionInFlight.empty());
             auto& key = *TransitionInFlight.front();
             TransitionInFlight.pop_front();
             key.second.ConfirmedState = key.second.PendingState;
@@ -619,7 +619,7 @@ namespace NKikimr::NTestShard {
 
     void TLoadActor::RunValidation(bool initialCheck) {
         Send(TabletActorId, new TTestShard::TEvSwitchMode(TTestShard::EMode::READ_VALIDATE));
-        Y_VERIFY(!ValidationActorId);
+        Y_ABORT_UNLESS(!ValidationActorId);
         ValidationActorId = RegisterWithSameMailbox(new TValidationActor(*this, initialCheck));
         ValidationRunningCount++;
     }
@@ -633,7 +633,7 @@ namespace NKikimr::NTestShard {
         BytesOfData = 0;
         for (auto& [key, info] : Keys) {
             BytesOfData += info.Len;
-            Y_VERIFY(info.ConfirmedKeyIndex == Max<size_t>());
+            Y_ABORT_UNLESS(info.ConfirmedKeyIndex == Max<size_t>());
             if (info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED) {
                 info.ConfirmedKeyIndex = ConfirmedKeys.size();
                 ConfirmedKeys.push_back(key);
@@ -718,7 +718,7 @@ namespace NKikimr::NTestShard {
         ui64 sizeRead = 0;
 
         auto it = KeysBeingRead.find(key);
-        Y_VERIFY(it != KeysBeingRead.end() && it->second);
+        Y_ABORT_UNLESS(it != KeysBeingRead.end() && it->second);
         if (!--it->second) {
             KeysBeingRead.erase(key);
         }
@@ -728,22 +728,22 @@ namespace NKikimr::NTestShard {
         TString data = FastGenDataForLZ4(len, seed);
 
         for (const auto& result : results) {
-            Y_VERIFY(index < items.size());
+            Y_ABORT_UNLESS(index < items.size());
             auto& [offset, size] = items[index++];
 
             STLOG(PRI_INFO, TEST_SHARD, TS18, "read key", (TabletId, TabletId), (Key, key), (Offset, offset), (Size, size),
                 (Status, NKikimrProto::EReplyStatus_Name(result.GetStatus())));
 
-            Y_VERIFY(result.GetStatus() == NKikimrProto::OK || result.GetStatus() == NKikimrProto::ERROR ||
+            Y_ABORT_UNLESS(result.GetStatus() == NKikimrProto::OK || result.GetStatus() == NKikimrProto::ERROR ||
                 result.GetStatus() == NKikimrProto::OVERRUN);
 
             if (result.GetStatus() == NKikimrProto::OK) {
                 TRope value;
                 if (payloadInResponse) {
-                    Y_VERIFY(result.GetDataCase() == NKikimrClient::TKeyValueResponse::TReadResult::kPayloadId);
+                    Y_ABORT_UNLESS(result.GetDataCase() == NKikimrClient::TKeyValueResponse::TReadResult::kPayloadId);
                     value = event.GetPayload(result.GetPayloadId());
                 } else {
-                    Y_VERIFY(result.GetDataCase() == NKikimrClient::TKeyValueResponse::TReadResult::kValue);
+                    Y_ABORT_UNLESS(result.GetDataCase() == NKikimrClient::TKeyValueResponse::TReadResult::kValue);
                     value = TRope(result.GetValue());
                 }
 

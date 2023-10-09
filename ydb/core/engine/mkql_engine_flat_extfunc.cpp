@@ -117,7 +117,7 @@ namespace {
                 , Payloads(payloads)
                 , Labels(labels)
             {
-                Y_VERIFY(payloads.size() == labels.size());
+                Y_ABORT_UNLESS(payloads.size() == labels.size());
             }
 
         private:

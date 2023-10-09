@@ -32,8 +32,8 @@ namespace NTable {
         {
             Key.reserve(KeyCellDefaults->Size());
 
-            Y_VERIFY(Key.capacity() > 0, "No key cells in part scheme");
-            Y_VERIFY(Remap, "Remap cannot be NULL");
+            Y_ABORT_UNLESS(Key.capacity() > 0, "No key cells in part scheme");
+            Y_ABORT_UNLESS(Remap, "Remap cannot be NULL");
         }
 
         static TAutoPtr<TMemIt> Make(
@@ -144,7 +144,7 @@ namespace NTable {
         bool IsDelta() const noexcept
         {
             auto* update = GetCurrentVersion();
-            Y_VERIFY(update);
+            Y_ABORT_UNLESS(update);
 
             return update->RowVersion.Step == Max<ui64>();
         }
@@ -152,19 +152,19 @@ namespace NTable {
         ui64 GetDeltaTxId() const noexcept
         {
             auto* update = GetCurrentVersion();
-            Y_VERIFY(update);
-            Y_VERIFY(update->RowVersion.Step == Max<ui64>());
+            Y_ABORT_UNLESS(update);
+            Y_ABORT_UNLESS(update->RowVersion.Step == Max<ui64>());
 
             return update->RowVersion.TxId;
         }
 
         void ApplyDelta(TRowState& row) const noexcept
         {
-            Y_VERIFY(row.Size() == Remap->Size(), "row state doesn't match the remap index");
+            Y_ABORT_UNLESS(row.Size() == Remap->Size(), "row state doesn't match the remap index");
 
             auto* update = GetCurrentVersion();
-            Y_VERIFY(update);
-            Y_VERIFY(update->RowVersion.Step == Max<ui64>());
+            Y_ABORT_UNLESS(update);
+            Y_ABORT_UNLESS(update->RowVersion.Step == Max<ui64>());
 
             if (row.Touch(update->Rop)) {
                 for (auto& up : **update) {
@@ -176,8 +176,8 @@ namespace NTable {
         bool SkipDelta() noexcept
         {
             auto* update = GetCurrentVersion();
-            Y_VERIFY(update);
-            Y_VERIFY(update->RowVersion.Step == Max<ui64>());
+            Y_ABORT_UNLESS(update);
+            Y_ABORT_UNLESS(update->RowVersion.Step == Max<ui64>());
 
             CurrentVersion = update->Next;
             return bool(CurrentVersion);
@@ -187,10 +187,10 @@ namespace NTable {
                    NTable::ITransactionMapSimplePtr committedTransactions,
                    NTable::ITransactionObserverSimplePtr transactionObserver) const noexcept
         {
-            Y_VERIFY(row.Size() == Remap->Size(), "row state doesn't match the remap index");
+            Y_ABORT_UNLESS(row.Size() == Remap->Size(), "row state doesn't match the remap index");
 
             auto* update = GetCurrentVersion();
-            Y_VERIFY(update);
+            Y_ABORT_UNLESS(update);
 
             for (;;) {
                 const bool isDelta = update->RowVersion.Step == Max<ui64>();
@@ -227,8 +227,8 @@ namespace NTable {
         TRowVersion GetRowVersion() const noexcept
         {
             auto* update = GetCurrentVersion();
-            Y_VERIFY(update);
-            Y_VERIFY(update->RowVersion.Step != Max<ui64>(), "GetRowVersion cannot be called on deltas");
+            Y_ABORT_UNLESS(update);
+            Y_ABORT_UNLESS(update->RowVersion.Step != Max<ui64>(), "GetRowVersion cannot be called on deltas");
             return update->RowVersion;
         }
 
@@ -265,7 +265,7 @@ namespace NTable {
                 transactionObserver.OnSkipCommitted(chain->RowVersion);
             } else {
                 auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
-                Y_VERIFY(commitVersion);
+                Y_ABORT_UNLESS(commitVersion);
                 if (*commitVersion <= rowVersion) {
                     return true;
                 }
@@ -375,7 +375,7 @@ namespace NTable {
                 if (auto blob = Env->Locate(MemTable, ref, up.Tag)) {
                     const auto got = NPage::TLabelWrapper().Read(**blob);
 
-                    Y_VERIFY(got == NPage::ECodec::Plain && got.Version == 0);
+                    Y_ABORT_UNLESS(got == NPage::ECodec::Plain && got.Version == 0);
 
                     row.Set(pos, { ECellOp(op), ELargeObj::Inline }, TCell(*got));
                 } else {

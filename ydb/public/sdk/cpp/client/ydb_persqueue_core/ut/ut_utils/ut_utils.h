@@ -155,14 +155,14 @@ public:
 
                 if (continueToken && !MessageBuffer.IsEmpty()) {
                     ::NPersQueue::TAcknowledgableMessage acknowledgeableMessage;
-                    Y_VERIFY(MessageBuffer.Dequeue(acknowledgeableMessage));
+                    Y_ABORT_UNLESS(MessageBuffer.Dequeue(acknowledgeableMessage));
                     if (AutoSeqNo) {
                         ackPromiseQueue.emplace_back(acknowledgeableMessage.AckPromise);
                     } else {
                         ackPromiseBySequenceNumber.emplace(acknowledgeableMessage.SequenceNumber,
                                                            acknowledgeableMessage.AckPromise);
                     }
-                    Y_VERIFY(continueToken);
+                    Y_ABORT_UNLESS(continueToken);
 
                     TMaybe<ui64> seqNo = Nothing();
                     if (!AutoSeqNo) {

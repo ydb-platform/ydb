@@ -456,7 +456,7 @@ public:
     TKikimrConfiguration& Config() { return *Configuration; }
     TKikimrTablesData& Tables() { return *TablesData; }
     TKikimrQueryContext& Query() { return *QueryCtx; }
-    TKikimrTransactionContextBase& Tx() { Y_VERIFY(HasTx()); return *TxCtx; }
+    TKikimrTransactionContextBase& Tx() { Y_ABORT_UNLESS(HasTx()); return *TxCtx; }
 
     TKikimrConfiguration::TPtr ConfigPtr() { return Configuration; }
     TIntrusivePtr<TKikimrTablesData> TablesPtr() { return TablesData; }

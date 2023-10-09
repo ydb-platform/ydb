@@ -519,7 +519,7 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TRowBatchReader::AddData(con
 TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(const TVector<TOwnedCellVec>& /*batch*/,
     TMaybe<ui64> /*shardId*/, const THolderFactory& /*holderFactory*/)
 {
-    Y_VERIFY(false, "Batch of TOwnedCellVec should never be called for BlockBatchReader!");
+    Y_ABORT_UNLESS(false, "Batch of TOwnedCellVec should never be called for BlockBatchReader!");
     return TBytesStatistics();
 }
 
@@ -668,7 +668,7 @@ public:
             return NUdf::EFetchStatus::Yield;
         }
 
-        Y_VERIFY(false);
+        Y_ABORT_UNLESS(false);
 //        result = std::move(ScanData.BuildNextDirectArrayHolder());
         return NUdf::EFetchStatus::Ok;
     }

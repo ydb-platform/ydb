@@ -25,10 +25,10 @@ std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<ar
 }
 
 std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<arrow::RecordBatch>& data, const ui32 maxBlobSize) const {
-    Y_VERIFY(data->num_columns() == 1);
+    Y_ABORT_UNLESS(data->num_columns() == 1);
     ui64 splitFactor = Stats ? Stats->PredictOptimalSplitFactor(data->num_rows(), maxBlobSize).value_or(1) : 1;
     while (true) {
-        Y_VERIFY(splitFactor < 100);
+        Y_ABORT_UNLESS(splitFactor < 100);
         std::vector<TSaverSplittedChunk> result;
         result.reserve(splitFactor);
         bool isCorrect = true;
@@ -46,7 +46,7 @@ std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<ar
                 serializedDataBytes += result.back().GetSerializedChunk().size();
                 if (result.back().GetSerializedChunk().size() >= maxBlobSize) {
                     isCorrect = false;
-                    Y_VERIFY(!linearSplitting.IsMinimalGranularity());
+                    Y_ABORT_UNLESS(!linearSplitting.IsMinimalGranularity());
                     break;
                 }
             }
@@ -69,19 +69,19 @@ std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitByRecordsCount(std::share
         result.emplace_back(subData, ColumnSaver.Apply(subData));
         position += i;
     }
-    Y_VERIFY(position == (ui64)data->num_rows());
+    Y_ABORT_UNLESS(position == (ui64)data->num_rows());
     return result;
 }
 
 std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitBySizes(std::shared_ptr<arrow::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const {
     auto splitPartSizesLocal = splitPartSizesExt;
-    Y_VERIFY(data);
+    Y_ABORT_UNLESS(data);
     {
         ui32 sumSizes = 0;
         for (auto&& i : splitPartSizesExt) {
             sumSizes += i;
         }
-        Y_VERIFY(sumSizes <= dataSerialization.size());
+        Y_ABORT_UNLESS(sumSizes <= dataSerialization.size());
 
         if (sumSizes < dataSerialization.size()) {
             splitPartSizesLocal.emplace_back(dataSerialization.size() - sumSizes);
@@ -104,12 +104,12 @@ std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitBySizes(std::shared_ptr<a
         if (idx + 1 == splitPartSizesLocal.size()) {
             expectedRecordsCount = remainedRecordsCount;
         }
-        Y_VERIFY(expectedRecordsCount);
+        Y_ABORT_UNLESS(expectedRecordsCount);
         recordsCount.emplace_back(expectedRecordsCount);
         remainedRecordsCount -= expectedRecordsCount;
-        Y_VERIFY(remainedRecordsCount >= 0);
+        Y_ABORT_UNLESS(remainedRecordsCount >= 0);
     }
-    Y_VERIFY(remainedRecordsCount == 0);
+    Y_ABORT_UNLESS(remainedRecordsCount == 0);
     return SplitByRecordsCount(data, recordsCount);
 }
 

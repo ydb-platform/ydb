@@ -40,7 +40,7 @@ public:
 
         auto it = Index.emplace(compileResult->Uid, TCacheEntry{compileResult,
                                     TAppData::TimeProvider->Now() + Ttl});
-        Y_VERIFY(it.second);
+        Y_ABORT_UNLESS(it.second);
 
         TItem* item = &const_cast<TItem&>(*it.first);
         auto removedItem = List.Insert(item);
@@ -57,8 +57,8 @@ public:
             }
         }
 
-        Y_VERIFY(List.GetSize() == Index.size());
-        Y_VERIFY(List.GetSize() == QueryIndex.size());
+        Y_ABORT_UNLESS(List.GetSize() == Index.size());
+        Y_ABORT_UNLESS(List.GetSize() == QueryIndex.size());
 
         return removedItem != nullptr;
     }
@@ -106,14 +106,14 @@ public:
 
         DecBytes(item->Value.CompileResult->PreparedQuery->ByteSize());
 
-        Y_VERIFY(item->Value.CompileResult);
-        Y_VERIFY(item->Value.CompileResult->Query);
+        Y_ABORT_UNLESS(item->Value.CompileResult);
+        Y_ABORT_UNLESS(item->Value.CompileResult->Query);
         QueryIndex.erase(*item->Value.CompileResult->Query);
 
         Index.erase(it);
 
-        Y_VERIFY(List.GetSize() == Index.size());
-        Y_VERIFY(List.GetSize() == QueryIndex.size());
+        Y_ABORT_UNLESS(List.GetSize() == Index.size());
+        Y_ABORT_UNLESS(List.GetSize() == QueryIndex.size());
         return true;
     }
 
@@ -133,8 +133,8 @@ public:
             EraseByUid(List.GetOldest()->Key);
         }
 
-        Y_VERIFY(List.GetSize() == Index.size());
-        Y_VERIFY(List.GetSize() == QueryIndex.size());
+        Y_ABORT_UNLESS(List.GetSize() == Index.size());
+        Y_ABORT_UNLESS(List.GetSize() == QueryIndex.size());
         return prevSize - Size();
     }
 
@@ -652,11 +652,11 @@ private:
         auto& compileResult = ev->Get()->CompileResult;
         auto& compileStats = ev->Get()->Stats;
 
-        Y_VERIFY(compileResult->Query);
+        Y_ABORT_UNLESS(compileResult->Query);
 
         auto compileRequest = RequestsQueue.FinishActiveRequest(*compileResult->Query);
-        Y_VERIFY(compileRequest.CompileActor == compileActorId);
-        Y_VERIFY(compileRequest.Uid == compileResult->Uid);
+        Y_ABORT_UNLESS(compileRequest.CompileActor == compileActorId);
+        Y_ABORT_UNLESS(compileRequest.Uid == compileResult->Uid);
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Received response"
             << ", sender: " << compileRequest.Sender

@@ -33,7 +33,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const
 }
 
 void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo::TPtr info) {
-    Y_VERIFY(info->BuildKind != TIndexBuildInfo::EBuildKind::BuildKindUnspecified);
+    Y_ABORT_UNLESS(info->BuildKind != TIndexBuildInfo::EBuildKind::BuildKindUnspecified);
     db.Table<Schema::IndexBuild>().Key(info->Id).Update(
         NIceDb::TUpdate<Schema::IndexBuild::Uid>(info->Uid),
         NIceDb::TUpdate<Schema::IndexBuild::DomainOwnerId>(info->DomainPathId.OwnerId),
@@ -232,31 +232,31 @@ void TSchemeShard::SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TAc
         auto buildInfo = IndexBuilds.at(id);
 
         if (buildInfo->LockTxId) {
-            Y_VERIFY(!TxIdToIndexBuilds.contains(buildInfo->LockTxId)
+            Y_ABORT_UNLESS(!TxIdToIndexBuilds.contains(buildInfo->LockTxId)
                      || TxIdToIndexBuilds.at(buildInfo->LockTxId) == buildInfo->Id);
             TxIdToIndexBuilds[buildInfo->LockTxId] = buildInfo->Id;
         }
 
         if (buildInfo->AlterMainTableTxId) {
-            Y_VERIFY(!TxIdToIndexBuilds.contains(buildInfo->AlterMainTableTxId)
+            Y_ABORT_UNLESS(!TxIdToIndexBuilds.contains(buildInfo->AlterMainTableTxId)
                      || TxIdToIndexBuilds.at(buildInfo->AlterMainTableTxId) == buildInfo->Id);
             TxIdToIndexBuilds[buildInfo->AlterMainTableTxId] = buildInfo->Id;
         }
 
         if (buildInfo->InitiateTxId) {
-            Y_VERIFY(!TxIdToIndexBuilds.contains(buildInfo->InitiateTxId)
+            Y_ABORT_UNLESS(!TxIdToIndexBuilds.contains(buildInfo->InitiateTxId)
                      || TxIdToIndexBuilds.at(buildInfo->InitiateTxId) == buildInfo->Id);
             TxIdToIndexBuilds[buildInfo->InitiateTxId] = buildInfo->Id;
         }
 
         if (buildInfo->ApplyTxId) {
-            Y_VERIFY(!TxIdToIndexBuilds.contains(buildInfo->ApplyTxId)
+            Y_ABORT_UNLESS(!TxIdToIndexBuilds.contains(buildInfo->ApplyTxId)
                      || TxIdToIndexBuilds.at(buildInfo->ApplyTxId) == buildInfo->Id);
             TxIdToIndexBuilds[buildInfo->ApplyTxId] = buildInfo->Id;
         }
 
         if (buildInfo->UnlockTxId) {
-            Y_VERIFY(!TxIdToIndexBuilds.contains(buildInfo->UnlockTxId)
+            Y_ABORT_UNLESS(!TxIdToIndexBuilds.contains(buildInfo->UnlockTxId)
                      || TxIdToIndexBuilds.at(buildInfo->UnlockTxId) == buildInfo->Id);
             TxIdToIndexBuilds[buildInfo->UnlockTxId] = buildInfo->Id;
         }

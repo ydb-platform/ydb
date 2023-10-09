@@ -36,7 +36,7 @@ namespace NKikimr {
             }
 
             if (HugeKeeperNotice) {
-                Y_VERIFY(HugeKeeperId);
+                Y_ABORT_UNLESS(HugeKeeperId);
                 actorSystem->Send(HugeKeeperId, HugeKeeperNotice.release());
             }
         }

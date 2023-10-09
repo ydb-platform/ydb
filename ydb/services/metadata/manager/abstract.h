@@ -97,7 +97,7 @@ public:
         IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
 
     const TTableSchema& GetSchema() const {
-        Y_VERIFY(!!ActualSchema);
+        Y_ABORT_UNLESS(!!ActualSchema);
         return *ActualSchema;
     }
 };
@@ -146,7 +146,7 @@ public:
     template <class TObject>
     std::shared_ptr<IObjectOperationsManager<TObject>> GetOperationsManagerFor() const {
         auto result = std::dynamic_pointer_cast<IObjectOperationsManager<TObject>>(Behaviour->GetOperationsManager());
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
         return result;
     }
 
@@ -162,7 +162,7 @@ public:
         , Behaviour(behaviour)
         , Controller(controller)
         , Context(context) {
-        Y_VERIFY(Behaviour->GetOperationsManager());
+        Y_ABORT_UNLESS(Behaviour->GetOperationsManager());
     }
 
     IObjectModificationCommand(const NInternal::TTableRecord& record,
@@ -172,7 +172,7 @@ public:
         : Behaviour(behaviour)
         , Controller(controller)
         , Context(context) {
-        Y_VERIFY(Behaviour->GetOperationsManager());
+        Y_ABORT_UNLESS(Behaviour->GetOperationsManager());
         Records.emplace_back(record);
 
     }

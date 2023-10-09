@@ -6,7 +6,7 @@ namespace NKikimr::NOlap::NBlobOperations::NTier {
 void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjectResponse::TPtr& ev) {
     TLogoBlobID logoBlobId;
     TString errorMessage;
-    Y_VERIFY(ev->Get()->Key);
+    Y_ABORT_UNLESS(ev->Get()->Key);
     AFL_VERIFY(TLogoBlobID::Parse(logoBlobId, *ev->Get()->Key, errorMessage))("error", errorMessage);
     BlobIdsToRemove.erase(logoBlobId);
     if (BlobIdsToRemove.empty()) {

@@ -112,7 +112,7 @@ NThreading::TFuture<void> TFederatedReadSession::WaitEvent() {
         }
         std::vector<NThreading::TFuture<void>> waiters;
         with_lock(self->Lock) {
-            Y_VERIFY(!self->SubSessions.empty(), "SubSessions empty in discovered state");
+            Y_ABORT_UNLESS(!self->SubSessions.empty(), "SubSessions empty in discovered state");
             for (const auto& sub : self->SubSessions) {
                 waiters.emplace_back(sub.Session->WaitEvent());
             }

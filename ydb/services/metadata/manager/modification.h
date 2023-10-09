@@ -75,7 +75,7 @@ public:
         , Objects(std::move(objects))
 
     {
-        Y_VERIFY(SessionId);
+        Y_ABORT_UNLESS(SessionId);
     }
 
     STATEFN(StateMain) {
@@ -91,7 +91,7 @@ public:
         TBase::Become(&TModifyObjectsActor::StateMain);
         BuildRequestDirect();
         BuildRequestHistory();
-        Y_VERIFY(Requests.size());
+        Y_ABORT_UNLESS(Requests.size());
         Requests.back().mutable_tx_control()->set_commit_tx(true);
 
         TBase::Register(new NRequest::TYDBCallbackRequest<NRequest::TDialogYQLRequest>(
@@ -137,7 +137,7 @@ private:
 protected:
     virtual Ydb::Table::ExecuteDataQueryRequest BuildModifyQuery() const override {
         auto manager = TObject::GetBehaviour()->GetOperationsManager();
-        Y_VERIFY(manager);
+        Y_ABORT_UNLESS(manager);
         auto objectIds = TBase::Objects.SelectColumns(manager->GetSchema().GetPKColumnIds());
         return objectIds.BuildDeleteQuery(TObject::GetBehaviour()->GetStorageTablePath());
     }

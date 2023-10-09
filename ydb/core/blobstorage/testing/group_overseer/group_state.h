@@ -82,11 +82,11 @@ namespace NKikimr::NTesting {
                 friend bool operator <(const TValue& x, const TValue& y) { return x.GetCollectGenStep() < y.GetCollectGenStep(); }
 
                 void Supersede(const TValue& with) {
-                    Y_VERIFY(std::tie(RecordGeneration, PerGenerationCounter) <= std::tie(with.RecordGeneration, with.PerGenerationCounter));
+                    Y_ABORT_UNLESS(std::tie(RecordGeneration, PerGenerationCounter) <= std::tie(with.RecordGeneration, with.PerGenerationCounter));
                     if (RecordGeneration == with.RecordGeneration && PerGenerationCounter == with.PerGenerationCounter) {
-                        Y_VERIFY(GetCollectGenStep() == with.GetCollectGenStep());
+                        Y_ABORT_UNLESS(GetCollectGenStep() == with.GetCollectGenStep());
                     } else {
-                        Y_VERIFY(GetCollectGenStep() <= with.GetCollectGenStep());
+                        Y_ABORT_UNLESS(GetCollectGenStep() <= with.GetCollectGenStep());
                     }
                     *this = with;
                 }

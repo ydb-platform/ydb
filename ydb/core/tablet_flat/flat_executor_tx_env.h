@@ -137,7 +137,7 @@ namespace NTabletFlatExecutor {
 
         void DropSnapshot(TIntrusivePtr<TTableSnapshotContext> snap) override
         {
-            Y_VERIFY(!DropSnap, "only one snapshot per transaction");
+            Y_ABORT_UNLESS(!DropSnap, "only one snapshot per transaction");
 
             DropSnap.Reset(new TBorrowSnap{ snap });
         }
@@ -161,7 +161,7 @@ namespace NTabletFlatExecutor {
             const ui32 source = proto.GetSourceTable();
 
             for (auto &part : proto.GetParts()) {
-                Y_VERIFY(part.HasBundle(), "Cannot find attached hotdogs in borrow");
+                Y_ABORT_UNLESS(part.HasBundle(), "Cannot find attached hotdogs in borrow");
 
                 LoanBundle.emplace_back(new TLoanBundle(source, tableId, lender,
                         TPageCollectionProtoHelper::MakePageCollectionComponents(part.GetBundle(), /* unsplit */ true)));
@@ -178,7 +178,7 @@ namespace NTabletFlatExecutor {
 
         void CleanupLoan(const TLogoId &bundle, ui64 from) override
         {
-            Y_VERIFY(!DropSnap, "must not drop snapshot and update loan in same transaction");
+            Y_ABORT_UNLESS(!DropSnap, "must not drop snapshot and update loan in same transaction");
             BorrowUpdates[bundle].StoppedLoans.push_back(from);
         }
 

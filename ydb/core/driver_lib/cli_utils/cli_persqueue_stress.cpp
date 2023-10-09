@@ -46,13 +46,13 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
         pr->MutableCmdGetOwnership();
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = config.SyncCall(request, reply);
-        Y_VERIFY(status == NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS(status == NBus::MESSAGE_OK);
         const auto& result = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         Cerr << result.DebugString() << "\n";
-        Y_VERIFY(result.GetStatus() == NMsgBusProxy::MSTATUS_OK);
-        Y_VERIFY(result.HasPartitionResponse());
+        Y_ABORT_UNLESS(result.GetStatus() == NMsgBusProxy::MSTATUS_OK);
+        Y_ABORT_UNLESS(result.HasPartitionResponse());
         cookie = result.GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
-        Y_VERIFY(!cookie.empty());
+        Y_ABORT_UNLESS(!cookie.empty());
         }
         ui64 messageNo = 0;
 
@@ -63,11 +63,11 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
         pr->MutableCmdGetMaxSeqNo()->AddSourceId(config.SourceId);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = config.SyncCall(request, reply);
-        Y_VERIFY(status == NBus::MESSAGE_OK);
+        Y_ABORT_UNLESS(status == NBus::MESSAGE_OK);
         const auto& result = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         Cerr << result.DebugString() << "\n";
-        Y_VERIFY(result.GetStatus() == NMsgBusProxy::MSTATUS_OK);
-        Y_VERIFY(result.HasPartitionResponse());
+        Y_ABORT_UNLESS(result.GetStatus() == NMsgBusProxy::MSTATUS_OK);
+        Y_ABORT_UNLESS(result.HasPartitionResponse());
         ui64 seqNo = result.GetPartitionResponse().GetCmdGetMaxSeqNoResult().GetSourceIdInfo(0).HasSeqNo() ? result.GetPartitionResponse().GetCmdGetMaxSeqNoResult().GetSourceIdInfo(0).GetSeqNo() : 0;
         while (true) {
             request.Reset(new NMsgBusProxy::TBusPersQueue);
@@ -90,7 +90,7 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
             status = config.SyncCall(request, reply);
             if (status != NBus::MESSAGE_OK)
                 Cerr << status << "\n";
-            Y_VERIFY(status == NBus::MESSAGE_OK);
+            Y_ABORT_UNLESS(status == NBus::MESSAGE_OK);
             const auto& result = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
             DoneBytes +=  totalSize;
             ui32 i = (TInstant::Now() - tt).MilliSeconds() / 10;
@@ -108,8 +108,8 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
             if (result.GetStatus() != NMsgBusProxy::MSTATUS_OK || result.GetErrorCode() !=  NPersQueue::NErrorCode::OK) {
                 Cerr << result.DebugString()  << "\n";
             }
-            Y_VERIFY(result.GetStatus() == NMsgBusProxy::MSTATUS_OK);
-            Y_VERIFY(result.GetErrorCode() == NPersQueue::NErrorCode::OK);
+            Y_ABORT_UNLESS(result.GetStatus() == NMsgBusProxy::MSTATUS_OK);
+            Y_ABORT_UNLESS(result.GetErrorCode() == NPersQueue::NErrorCode::OK);
             if (config.Speed) {
                 TInstant T2 = timestamp + TDuration::MilliSeconds(DoneBytes * 1000 / 1024.0 / config.Speed);
                 Sleep(T2 - TInstant::Now());
@@ -133,13 +133,13 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
                 read->SetClientId("user");
                 TAutoPtr<NBus::TBusMessage> reply;
                 NBus::EMessageStatus status = config.SyncCall(request, reply);
-                Y_VERIFY(status == NBus::MESSAGE_OK);
+                Y_ABORT_UNLESS(status == NBus::MESSAGE_OK);
                 const auto& result = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
                 if (result.GetStatus() != NMsgBusProxy::MSTATUS_OK || result.GetErrorCode() != NPersQueue::NErrorCode::OK) {
                     Cerr << result.DebugString() << "\n";
                 }
-                Y_VERIFY(result.GetStatus() == NMsgBusProxy::MSTATUS_OK);
-                Y_VERIFY(result.GetErrorCode() == NPersQueue::NErrorCode::OK);
+                Y_ABORT_UNLESS(result.GetStatus() == NMsgBusProxy::MSTATUS_OK);
+                Y_ABORT_UNLESS(result.GetErrorCode() == NPersQueue::NErrorCode::OK);
                 const auto& rd = result.GetPartitionResponse().GetCmdReadResult();
                 for (ui32 i = 0; i < rd.ResultSize(); ++i) {
                     bytes += rd.GetResult(i).ByteSize();
@@ -155,7 +155,7 @@ int PersQueueStress(TCommandConfig &cmdConf, int argc, char** argv) {
                 set->SetClientId("user");
 
                 status = config.SyncCall(request, reply);
-                Y_VERIFY(status == NBus::MESSAGE_OK);
+                Y_ABORT_UNLESS(status == NBus::MESSAGE_OK);
                 if (config.Speed) {
                     TInstant T2 = timestamp + TDuration::MilliSeconds(bytes * 1000 / 1024.0 / config.Speed);
                     Sleep(T2 - TInstant::Now());

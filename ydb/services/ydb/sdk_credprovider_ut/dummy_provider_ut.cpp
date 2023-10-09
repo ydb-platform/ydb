@@ -53,7 +53,7 @@ class TExampleDummyProviderFactory : public ICredentialsProviderFactory {
         {
             auto strong = facility.lock();
             // must be able to promote in ctor
-            Y_VERIFY(strong);
+            Y_ABORT_UNLESS(strong);
             strong->AddPeriodicTask(CreatePingPongTask(facility), TDuration::Seconds(1));
         }
 

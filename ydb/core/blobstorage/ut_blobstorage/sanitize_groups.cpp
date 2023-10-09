@@ -110,8 +110,8 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         for (ui32 i = 0; i < cfg.VSlotSize(); ++i) {
             auto vslot = cfg.GetVSlot(i);
             TPDiskId pdiskId(vslot.GetVSlotId().GetNodeId(), vslot.GetVSlotId().GetPDiskId());
-            Y_VERIFY(pdiskId != TPDiskId());
-            Y_VERIFY(pdisks.find(pdiskId) != pdisks.end());
+            Y_ABORT_UNLESS(pdiskId != TPDiskId());
+            Y_ABORT_UNLESS(pdisks.find(pdiskId) != pdisks.end());
             ui32 groupId = vslot.GetGroupId();
             geom.ResizeGroup(groups[groupId]);
             groups[groupId][vslot.GetFailRealmIdx()][vslot.GetFailDomainIdx()][vslot.GetVDiskIdx()] = pdiskId;

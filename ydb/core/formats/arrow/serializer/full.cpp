@@ -46,7 +46,7 @@ TString TFullDataSerializer::DoSerialize(const std::shared_ptr<arrow::RecordBatc
         auto writer = TStatusValidator::GetValid(arrow::ipc::MakeStreamWriter(&stream, batch->schema(), Options));
         TStatusValidator::Validate(writer->WriteRecordBatch(*batch));
         TStatusValidator::Validate(writer->Close());
-        Y_VERIFY(stream.GetPosition() == result.size());
+        Y_ABORT_UNLESS(stream.GetPosition() == result.size());
     }
     return result;
 }

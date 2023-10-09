@@ -138,8 +138,8 @@ TKvWorkloadGenerator::TKvWorkloadGenerator(const TKvWorkloadParams* params)
         MixedNextChangePartitionsSize = TInstant::Max();
     }
 
-    Y_VERIFY(Params.IntColumnsCnt <= Params.ColumnsCnt);
-    Y_VERIFY(Params.KeyColumnsCnt <= Params.ColumnsCnt);
+    Y_ABORT_UNLESS(Params.IntColumnsCnt <= Params.ColumnsCnt);
+    Y_ABORT_UNLESS(Params.KeyColumnsCnt <= Params.ColumnsCnt);
 }
 
 TKvWorkloadParams* TKvWorkloadGenerator::GetParams() {
@@ -388,7 +388,7 @@ TQueryInfoList TKvWorkloadGenerator::Mixed() {
             else 
                 doSelect = true;
         }
-        Y_VERIFY(doReadRows ^ doSelect);
+        Y_ABORT_UNLESS(doReadRows ^ doSelect);
 
         if (doSelect) {
             auto selectQuery = Select(std::move(rows));

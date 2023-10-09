@@ -110,9 +110,9 @@ public:
     }
 
     void Init(ui64 sectors, NSectorMap::EDiskMode diskMode) {
-        Y_VERIFY(sectors > 0);
+        Y_ABORT_UNLESS(sectors > 0);
 
-        Y_VERIFY((ui32)diskMode < DM_COUNT);
+        Y_ABORT_UNLESS((ui32)diskMode < DM_COUNT);
         EDeviceType deviceType = DiskModeToDeviceType(diskMode);
         DiskModeParams.SeekSleepMicroSeconds = DevicePerformance.at(deviceType).SeekTimeNs;
         DiskModeParams.FirstSectorReadRate = DevicePerformance.at(deviceType).FirstSectorReadBytesPerSec;
@@ -167,8 +167,8 @@ private:
     }
 
     static double CalcRate(double firstSectorRate, double lastSectorRate, double sector, double lastSector) {
-        Y_VERIFY(sector <= lastSector, "%lf %lf", sector, lastSector);
-        Y_VERIFY(lastSectorRate <= firstSectorRate, "%lf %lf", firstSectorRate, lastSectorRate);
+        Y_ABORT_UNLESS(sector <= lastSector, "%lf %lf", sector, lastSector);
+        Y_ABORT_UNLESS(lastSectorRate <= firstSectorRate, "%lf %lf", firstSectorRate, lastSectorRate);
         return firstSectorRate - (sector / lastSector) * (firstSectorRate - lastSectorRate);
     }
 
@@ -242,8 +242,8 @@ public:
     }
 
     void Read(ui8 *data, i64 size, ui64 offset, bool prevOperationIsInProgress = false) {
-        Y_VERIFY(size % NSectorMap::SECTOR_SIZE == 0);
-        Y_VERIFY(offset % NSectorMap::SECTOR_SIZE == 0);
+        Y_ABORT_UNLESS(size % NSectorMap::SECTOR_SIZE == 0);
+        Y_ABORT_UNLESS(offset % NSectorMap::SECTOR_SIZE == 0);
 
         i64 dataSize = size;
         ui64 dataOffset = offset;
@@ -269,8 +269,8 @@ public:
     }
 
     void Write(const ui8 *data, i64 size, ui64 offset, bool prevOperationIsInProgress = false) {
-        Y_VERIFY(size % NSectorMap::SECTOR_SIZE == 0);
-        Y_VERIFY(offset % NSectorMap::SECTOR_SIZE == 0);
+        Y_ABORT_UNLESS(size % NSectorMap::SECTOR_SIZE == 0);
+        Y_ABORT_UNLESS(offset % NSectorMap::SECTOR_SIZE == 0);
 
         i64 dataSize = size;
         ui64 dataOffset = offset;
@@ -303,8 +303,8 @@ public:
 
     void Trim(i64 size, ui64 offset) {
         TGuard<TTicketLock> guard(MapLock);
-        Y_VERIFY(size % NSectorMap::SECTOR_SIZE == 0);
-        Y_VERIFY(offset % NSectorMap::SECTOR_SIZE == 0);
+        Y_ABORT_UNLESS(size % NSectorMap::SECTOR_SIZE == 0);
+        Y_ABORT_UNLESS(offset % NSectorMap::SECTOR_SIZE == 0);
         for (; size > 0; size -= NSectorMap::SECTOR_SIZE) {
             if (auto it = Map.find(offset); it != Map.end()) {
                 AllocatedBytes.fetch_sub(it->second.size());

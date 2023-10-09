@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
         ui32 nodeId, pdiskId;
         std::tie(nodeId, pdiskId, std::ignore) = DecomposeVDiskServiceId(vdiskActorId);
         auto it = env.PDiskMockStates.find(std::make_pair(nodeId, pdiskId));
-        Y_VERIFY(it != env.PDiskMockStates.end());
+        Y_ABORT_UNLESS(it != env.PDiskMockStates.end());
         TPDiskMockState::TPtr snapshot = it->second->Snapshot();
 
         std::map<ui32, std::vector<const TLayout::TLayoutRecord*>> indexes;
@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
                         recs.insert(recs.end(), value.begin(), value.end());
                     }
                 }
-                Y_VERIFY(!recs.empty());
+                Y_ABORT_UNLESS(!recs.empty());
                 return recs[RandomNumber(recs.size())];
             };
 

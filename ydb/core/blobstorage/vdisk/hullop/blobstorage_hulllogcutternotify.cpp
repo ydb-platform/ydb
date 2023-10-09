@@ -30,7 +30,7 @@ namespace NKikimr {
                         lsn, PreviousCutLsnToString().data()));
 
             if (lsn != ui64(-1)) {
-                Y_VERIFY(!PreviousCutLsn || *PreviousCutLsn <= lsn);
+                Y_ABORT_UNLESS(!PreviousCutLsn || *PreviousCutLsn <= lsn);
                 if (!PreviousCutLsn || PreviousCutLsn < lsn) {
                     ctx.Send(LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::Hull, lsn));
                     PreviousCutLsn = lsn;
@@ -72,7 +72,7 @@ namespace NKikimr {
             const TVDiskContextPtr &vctx,
             const TActorId &logCutterId,
             TIntrusivePtr<THullDs> hullDs) {
-        Y_VERIFY(logCutterId);
+        Y_ABORT_UNLESS(logCutterId);
         return new THullLogCutterNotifier(vctx, logCutterId, hullDs);
     }
 

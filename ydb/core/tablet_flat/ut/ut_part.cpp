@@ -647,7 +647,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         TSubset subset(TEpoch::Zero(), cooked.Scheme);
         for (const auto &part : cooked.Parts) {
-            Y_VERIFY(part->Slices, "Missing part slices");
+            Y_ABORT_UNLESS(part->Slices, "Missing part slices");
             subset.Flatten.push_back({ part, nullptr, part->Slices });
         }
         for (int i = 1; i <= 1000; ++i) {

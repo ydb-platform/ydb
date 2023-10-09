@@ -63,7 +63,7 @@ public:
 
     TParamValueBuilder& AddParam(TParamsBuilder& owner, const TString& name) {
         auto param = GetParam(name);
-        Y_VERIFY(param);
+        Y_ABORT_UNLESS(param);
 
         auto result = ValueBuildersMap_.emplace(name, TParamValueBuilder(owner, *param->mutable_type(),
             *param->mutable_value()));
@@ -73,7 +73,7 @@ public:
 
     void AddParam(const TString& name, const TValue& value) {
         auto param = GetParam(name);
-        Y_VERIFY(param);
+        Y_ABORT_UNLESS(param);
 
         if (HasTypeInfo()) {
             if (!TypesEqual(param->type(), value.GetType().GetProto())) {

@@ -186,7 +186,7 @@ bool TBlobStorageGroupType::CorrectLayout(const TPartLayout &layout, TPartPlacem
 }
 
 ui64 TBlobStorageGroupType::PartSize(const TLogoBlobID &id) const {
-    // Y_VERIFY(id.PartId()); // TODO(alexvru): uncomment when dsproxy is ready for KIKIMR-9881
+    // Y_ABORT_UNLESS(id.PartId()); // TODO(alexvru): uncomment when dsproxy is ready for KIKIMR-9881
     if (GetErasure() == TBlobStorageGroupType::ErasureMirror3of4 && id.PartId() == 3) {
         return 0;
     } else {
@@ -195,7 +195,7 @@ ui64 TBlobStorageGroupType::PartSize(const TLogoBlobID &id) const {
 }
 
 ui64 TBlobStorageGroupType::MaxPartSize(const TLogoBlobID &id) const {
-    Y_VERIFY(!id.PartId());
+    Y_ABORT_UNLESS(!id.PartId());
     return TErasureType::PartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize());
 }
 

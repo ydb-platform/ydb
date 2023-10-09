@@ -32,7 +32,7 @@ NKikimr::NMetadata::NRequest::TDialogYQLRequest::TRequest TDeleting::BuildDelete
 }
 
 void TDeleting::Start(std::shared_ptr<TDeleting> selfContainer) {
-    Y_VERIFY(!!selfContainer);
+    Y_ABORT_UNLESS(!!selfContainer);
     SelfContainer = selfContainer;
 
     Ydb::Table::DropTableRequest request;

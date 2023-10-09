@@ -71,7 +71,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     template<typename T>
     void SendRequest(const T &op) {
-        Y_VERIFY(ReplicaSelection && ReplicaSelection->SelectedReplicas && ReplicaSelection->Sz);
+        Y_ABORT_UNLESS(ReplicaSelection && ReplicaSelection->SelectedReplicas && ReplicaSelection->Sz);
 
         ui64 cookie = 0;
         const ui32 sendFlags = IEventHandle::FlagTrackDelivery | (UseInterconnectSubscribes ? IEventHandle::FlagSubscribeOnSession : 0);
@@ -173,7 +173,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void MergeConnectionError(ui64 cookie) {
-        Y_VERIFY(cookie < Replicas);
+        Y_ABORT_UNLESS(cookie < Replicas);
 
         if (Signature[cookie] == 0) {
             Signature[cookie] = Max<ui64>();
@@ -188,8 +188,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         const ui64 cookie = record.GetCookie();
 
-        Y_VERIFY(cookie < Replicas);
-        Y_VERIFY(Signature[cookie] == 0 || Signature[cookie] == Max<ui64>());
+        Y_ABORT_UNLESS(cookie < Replicas);
+        Y_ABORT_UNLESS(Signature[cookie] == 0 || Signature[cookie] == Max<ui64>());
         Signature[cookie] = ev->Record.GetSignature();
         ++RepliesMerged;
         ++SignaturesMerged;
@@ -214,7 +214,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
                 } else if (!ReplyLeaderTablet) {
                     ReplyLeaderTablet = replyLeaderTablet;
                 } else {
-                    Y_VERIFY(ReplyLeaderTablet == replyLeaderTablet || !replyLeaderTablet);
+                    Y_ABORT_UNLESS(ReplyLeaderTablet == replyLeaderTablet || !replyLeaderTablet);
                 }
 
                 // todo: accurate handling of locked flag
@@ -455,7 +455,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void UpdateSigFor(ui64 cookie, ui64 sig) {
-        Y_VERIFY(cookie < Replicas);
+        Y_ABORT_UNLESS(cookie < Replicas);
 
         if (Signature[cookie] == 0) {
             Signature[cookie] = sig;
@@ -493,8 +493,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
         const ui64 cookie = msg->Record.GetCookie();
-        Y_VERIFY(cookie < Replicas);
-        Y_VERIFY(Signature[cookie] == 0 || Signature[cookie] == Max<ui64>());
+        Y_ABORT_UNLESS(cookie < Replicas);
+        Y_ABORT_UNLESS(Signature[cookie] == 0 || Signature[cookie] == Max<ui64>());
 
         return UpdateSigFor(cookie, msg->Record.GetSignature());
     }

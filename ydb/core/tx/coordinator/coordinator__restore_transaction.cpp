@@ -192,7 +192,7 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
             }
             // Splice all steps to the queue
             TMediator& mediator = Self->Mediator(mediatorId, ctx);
-            Y_VERIFY(mediator.Queue.empty());
+            Y_ABORT_UNLESS(mediator.Queue.empty());
             mediator.Queue.splice(mediator.Queue.end(), state.Steps);
         }
         return true;
@@ -212,7 +212,7 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
             TMediator &mediator = Self->Mediator(mediatorId, ctx);
             auto& state = Mediators[mediatorId];
             for (auto& pr : state.Index) {
-                Y_VERIFY(!pr.second->Confirmed);
+                Y_ABORT_UNLESS(!pr.second->Confirmed);
                 pr.second->Confirmed = true;
             }
             Self->SendMediatorStep(mediator, ctx);

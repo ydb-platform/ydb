@@ -25,9 +25,9 @@ public:
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
     {
-        Y_VERIFY(SerializedBytes);
-        Y_VERIFY(RecordsCount);
-        Y_VERIFY(RawBytes);
+        Y_ABORT_UNLESS(SerializedBytes);
+        Y_ABORT_UNLESS(RecordsCount);
+        Y_ABORT_UNLESS(RawBytes);
     }
 
     ui64 GetSerializedBytes() const{
@@ -47,11 +47,11 @@ public:
     }
 
     void RemoveStat(const TSimpleSerializationStat& stat) {
-        Y_VERIFY(SerializedBytes >= stat.SerializedBytes);
+        Y_ABORT_UNLESS(SerializedBytes >= stat.SerializedBytes);
         SerializedBytes -= stat.SerializedBytes;
-        Y_VERIFY(RecordsCount >= stat.RecordsCount);
+        Y_ABORT_UNLESS(RecordsCount >= stat.RecordsCount);
         RecordsCount -= stat.RecordsCount;
-        Y_VERIFY(RawBytes >= stat.RawBytes);
+        Y_ABORT_UNLESS(RawBytes >= stat.RawBytes);
         RawBytes -= stat.RawBytes;
     }
 

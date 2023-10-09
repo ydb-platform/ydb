@@ -31,7 +31,7 @@ namespace NFake {
             , Limit(Max(ui32(1), limit))
             , FollowerId(followerId)
         {
-            Y_VERIFY(TTabletTypes::TypeInvalid != Info->TabletType);
+            Y_ABORT_UNLESS(TTabletTypes::TypeInvalid != Info->TabletType);
         }
 
     private:
@@ -85,7 +85,7 @@ namespace NFake {
 
         void Start(const TActorContext &ctx) noexcept
         {
-            Y_VERIFY(!Agent, "Tablet actor is already started");
+            Y_ABORT_UNLESS(!Agent, "Tablet actor is already started");
 
             if (auto logl = Logger->Log(ELnLev::Debug)) {
                 logl
@@ -101,7 +101,7 @@ namespace NFake {
                 Agent = Setup->Follower(Info.Get(), SelfId(), ctx, FollowerId, profile);
             }
 
-            Y_VERIFY(Agent, "Failed to start new tablet actor");
+            Y_ABORT_UNLESS(Agent, "Failed to start new tablet actor");
 
             Borns += 1;
         }

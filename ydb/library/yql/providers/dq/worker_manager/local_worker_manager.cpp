@@ -174,7 +174,7 @@ private:
 
     void OnUndelivered(TEvents::TEvUndelivered::TPtr& ev)
     {
-        Y_VERIFY(ev->Get()->Reason == TEvents::TEvUndelivered::Disconnected
+        Y_ABORT_UNLESS(ev->Get()->Reason == TEvents::TEvUndelivered::Disconnected
             || ev->Get()->Reason == TEvents::TEvUndelivered::ReasonActorUnknown);
 
         YQL_CLOG(DEBUG, ProviderDq) << "Undelivered " << ev->Sender;
@@ -231,14 +231,14 @@ private:
 
         auto traceId = ev->Get()->Record.GetTraceId();
         auto count = ev->Get()->Record.GetCount();
-        Y_VERIFY(count > 0);
+        Y_ABORT_UNLESS(count > 0);
 
         auto& tasks = *ev->Get()->Record.MutableTask();
 
         ui64 totalInitialTaskMemoryLimit = 0;
         std::vector<ui64> quotas;
         if (createComputeActor) {
-            Y_VERIFY(static_cast<int>(tasks.size()) == static_cast<int>(count));
+            Y_ABORT_UNLESS(static_cast<int>(tasks.size()) == static_cast<int>(count));
             quotas.reserve(count);
             for (auto& task : tasks) {
                 auto taskLimit = task.GetInitialTaskMemoryLimit();

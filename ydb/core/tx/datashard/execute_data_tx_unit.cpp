@@ -88,7 +88,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
                 // For immediate transactions we want to translate this into a propose failure
                 if (op->IsImmediate()) {
                     const auto& dataTx = tx->GetDataTx();
-                    Y_VERIFY(!dataTx->Ready());
+                    Y_ABORT_UNLESS(!dataTx->Ready());
                     op->SetAbortedFlag();
                     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
                     op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
@@ -106,7 +106,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     if (op->IsImmediate() && !tx->ReValidateKeys()) {
         // Immediate transactions may be reordered with schema changes and become invalid
         const auto& dataTx = tx->GetDataTx();
-        Y_VERIFY(!dataTx->Ready());
+        Y_ABORT_UNLESS(!dataTx->Ready());
         op->SetAbortedFlag();
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
         op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
@@ -268,7 +268,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
                 break;
             case IEngineFlat::EResult::Cancelled:
                 LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage);
-                Y_VERIFY(tx->GetDataTx()->CanCancel());
+                Y_ABORT_UNLESS(tx->GetDataTx()->CanCancel());
                 break;
             default:
                 if (op->IsReadOnly() || op->IsImmediate()) {

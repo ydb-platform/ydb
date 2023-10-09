@@ -499,21 +499,21 @@ public:
 
     TRawPartitionStreamEvent<UseMigrationProtocol>& front()
     {
-        Y_VERIFY(!empty());
+        Y_ABORT_UNLESS(!empty());
 
         return (Ready.empty() ? NotReady : Ready).front();
     }
 
     void pop_front()
     {
-        Y_VERIFY(!empty());
+        Y_ABORT_UNLESS(!empty());
 
         (Ready.empty() ? NotReady : Ready).pop_front();
     }
 
     void pop_back()
     {
-        Y_VERIFY(!empty());
+        Y_ABORT_UNLESS(!empty());
 
         (NotReady.empty() ? Ready : NotReady).pop_back();
     }
@@ -710,7 +710,7 @@ public:
             return false;
         }
         if (rangesMode) { // Otherwise no need to send it to server.
-            Y_VERIFY(!Commits.Intersects(startOffset, endOffset));
+            Y_ABORT_UNLESS(!Commits.Intersects(startOffset, endOffset));
             Commits.InsertInterval(startOffset, endOffset);
         }
         ClientCommits.InsertInterval(startOffset, endOffset);

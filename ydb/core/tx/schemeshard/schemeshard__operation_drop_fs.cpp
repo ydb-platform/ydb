@@ -46,14 +46,14 @@ public:
             return false;
         }
 
-        Y_VERIFY(txState->TxType == TTxState::TxDropFileStore);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropFileStore);
         TPathId pathId = txState->TargetPathId;
         auto path = context.SS->PathsById.at(pathId);
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        Y_VERIFY(!path->Dropped());
+        Y_ABORT_UNLESS(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
@@ -103,8 +103,8 @@ public:
             << ", at schemeshard: " << ssId);
 
         auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropFileStore);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropFileStore);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -270,7 +270,7 @@ ISubOperation::TPtr CreateDropFileStore(TOperationId id, const TTxTransaction& t
 }
 
 ISubOperation::TPtr CreateDropFileStore(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropFileStore>(id, state);
 }
 

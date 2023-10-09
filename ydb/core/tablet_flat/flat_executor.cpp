@@ -311,11 +311,11 @@ void TExecutor::UpdateCompactions() {
 }
 
 void TExecutor::Handle(TEvTablet::TEvCheckBlobstorageStatusResult::TPtr &ev) {
-    Y_VERIFY(HasYellowCheckInFly);
+    Y_ABORT_UNLESS(HasYellowCheckInFly);
     HasYellowCheckInFly = false;
 
     const auto* info = Owner->Info();
-    Y_VERIFY(info);
+    Y_ABORT_UNLESS(info);
 
     TVector<ui32> lightYellowMoveGroups = std::move(ev->Get()->LightYellowMoveGroups);
     SortUnique(lightYellowMoveGroups);
@@ -360,16 +360,16 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
     auto loadedState = BootLogic->ExtractState();
     BootLogic.Destroy();
 
-    Y_VERIFY(Counters, "Expected to have Counters initialized during Boot processing");
+    Y_ABORT_UNLESS(Counters, "Expected to have Counters initialized during Boot processing");
 
-    Y_VERIFY(!GcLogic);
-    Y_VERIFY(!LogicRedo);
-    Y_VERIFY(!LogicAlter);
+    Y_ABORT_UNLESS(!GcLogic);
+    Y_ABORT_UNLESS(!LogicRedo);
+    Y_ABORT_UNLESS(!LogicAlter);
 
     Database = loadedState->Database;
     BorrowLogic = loadedState->Loans;
 
-    Y_VERIFY(!CompactionLogic);
+    Y_ABORT_UNLESS(!CompactionLogic);
 
     ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), FollowerId, Launcher);
 
@@ -401,7 +401,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     auto loadedState = BootLogic->ExtractState();
     BootLogic.Destroy();
 
-    Y_VERIFY(Counters, "Expected to have Counters initialized during Boot processing");
+    Y_ABORT_UNLESS(Counters, "Expected to have Counters initialized during Boot processing");
 
     CommitManager = loadedState->CommitManager;
     Database = loadedState->Database;
@@ -650,11 +650,11 @@ TExecutorCaches TExecutor::CleanupState() {
     PostponedFollowerUpdates.clear();
     PendingPartSwitches.clear();
     ReadyPartSwitches = 0;
-    Y_VERIFY(!LogicRedo);
+    Y_ABORT_UNLESS(!LogicRedo);
     Database.Destroy();
-    Y_VERIFY(!GcLogic);
-    Y_VERIFY(!LogicAlter);
-    Y_VERIFY(!CompactionLogic);
+    Y_ABORT_UNLESS(!GcLogic);
+    Y_ABORT_UNLESS(!LogicAlter);
+    Y_ABORT_UNLESS(!CompactionLogic);
     BorrowLogic.Destroy();
 
     return caches;
@@ -701,7 +701,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
 }
 
 void TExecutor::FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) {
-    Y_VERIFY(CurrentStateFunc() == &TThis::StateInit
+    Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateInit
         || CurrentStateFunc() == &TThis::StateFollowerBoot
         || CurrentStateFunc() == &TThis::StateFollower);
 
@@ -741,10 +741,10 @@ void TExecutor::FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext 
 }
 
 void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) {
-    Y_VERIFY(CurrentStateFunc() == &TThis::StateBoot && BootLogic);
+    Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateBoot && BootLogic);
 
     TEvTablet::TEvRestored *msg = ev->Get();
-    Y_VERIFY(Generation() == msg->Generation);
+    Y_ABORT_UNLESS(Generation() == msg->Generation);
 
     const TExecutorBootLogic::EOpResult res = BootLogic->ReceiveRestored(ev);
     return TranscriptBootOpResult(res, ctx);
@@ -758,28 +758,28 @@ void TExecutor::DetachTablet(const TActorContext &) {
 
 void TExecutor::FollowerUpdate(THolder<TEvTablet::TFUpdateBody> upd) {
     if (BootLogic) {
-        Y_VERIFY(CurrentStateFunc() == &TThis::StateFollowerBoot);
+        Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateFollowerBoot);
         PostponedFollowerUpdates.emplace_back(std::move(upd));
     } else if (PendingPartSwitches) {
-        Y_VERIFY(CurrentStateFunc() == &TThis::StateFollower);
+        Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateFollower);
         PostponedFollowerUpdates.emplace_back(std::move(upd));
     } else {
-        Y_VERIFY(CurrentStateFunc() == &TThis::StateFollower);
-        Y_VERIFY(PostponedFollowerUpdates.empty());
+        Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateFollower);
+        Y_ABORT_UNLESS(PostponedFollowerUpdates.empty());
         ApplyFollowerUpdate(std::move(upd));
     }
 }
 
 void TExecutor::FollowerAuxUpdate(TString upd) {
     if (BootLogic) {
-        Y_VERIFY(CurrentStateFunc() == &TThis::StateFollowerBoot);
+        Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateFollowerBoot);
         PostponedFollowerUpdates.emplace_back(new TEvTablet::TFUpdateBody(std::move(upd)));
     } else if (PendingPartSwitches) {
-        Y_VERIFY(CurrentStateFunc() == &TThis::StateFollower);
+        Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateFollower);
         PostponedFollowerUpdates.emplace_back(new TEvTablet::TFUpdateBody(std::move(upd)));
     } else {
-        Y_VERIFY(CurrentStateFunc() == &TThis::StateFollower);
-        Y_VERIFY(PostponedFollowerUpdates.empty());
+        Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateFollower);
+        Y_ABORT_UNLESS(PostponedFollowerUpdates.empty());
         ApplyFollowerAuxUpdate(upd);
     }
 }
@@ -795,7 +795,7 @@ void TExecutor::FollowerAttached() {
 }
 
 void TExecutor::FollowerSyncComplete() {
-    Y_VERIFY(CurrentStateFunc() == &TThis::StateWork || CurrentStateFunc() == &TThis::StateBoot);
+    Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWork || CurrentStateFunc() == &TThis::StateBoot);
     if (GcLogic)
         GcLogic->FollowersSyncComplete(false);
     else if (BootLogic)
@@ -810,7 +810,7 @@ void TExecutor::FollowerGcApplied(ui32 step, TDuration followerSyncDelay) {
     }
 
     auto it = InFlyCompactionGcBarriers.find(step);
-    Y_VERIFY(it != InFlyCompactionGcBarriers.end());
+    Y_ABORT_UNLESS(it != InFlyCompactionGcBarriers.end());
     CheckCollectionBarrier(it->second);
     InFlyCompactionGcBarriers.erase(it);
 
@@ -864,7 +864,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
     TVector<NPageCollection::TMemGlob> annex;
 
     if (update->EmbeddedBody) { // we embed only regular updates
-        Y_VERIFY(update->References.empty());
+        Y_ABORT_UNLESS(update->References.empty());
         dataUpdate = update->EmbeddedBody;
     } else {
         for (auto &xpair : update->References) {
@@ -872,7 +872,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
             const TString &body = xpair.second;
 
             const NBoot::TCookie cookie(id.Cookie());
-            Y_VERIFY(cookie.Type() == NBoot::TCookie::EType::Log);
+            Y_ABORT_UNLESS(cookie.Type() == NBoot::TCookie::EType::Log);
 
             if (NBoot::TCookie::CookieRangeRaw().Has(cookie.Raw)) {
                 auto group = Owner->Info()->GroupFor(id.Channel(), id.Generation());
@@ -939,8 +939,8 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
 
         if (update->AuxPayload) {
             const TString auxBody = NPageCollection::TSlicer::Lz4()->Decode(update->AuxPayload);
-            Y_VERIFY(auxProto.ParseFromString(auxBody));
-            Y_VERIFY(auxProto.BySwitchAuxSize() <= partSwitches.size());
+            Y_ABORT_UNLESS(auxProto.ParseFromString(auxBody));
+            Y_ABORT_UNLESS(auxProto.BySwitchAuxSize() <= partSwitches.size());
         }
 
         bool hadPendingPartSwitches = bool(PendingPartSwitches);
@@ -953,7 +953,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
 
             const NKikimrExecutorFlat::TFollowerPartSwitchAux::TBySwitch *aux = nullptr;
             if (proto.HasIntroducedParts() || proto.HasIntroducedTxStatus()) {
-                Y_VERIFY(nextAuxIdx < auxProto.BySwitchAuxSize());
+                Y_ABORT_UNLESS(nextAuxIdx < auxProto.BySwitchAuxSize());
                 aux = &auxProto.GetBySwitchAux(nextAuxIdx++);
             }
 
@@ -995,7 +995,7 @@ void TExecutor::RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
     NBlockIO::EPriority priority,
     EPageCollectionRequest requestCategory)
 {
-    Y_VERIFY(fetch->Pages.size() > 0, "Got TFetch req w/o any page");
+    Y_ABORT_UNLESS(fetch->Pages.size() > 0, "Got TFetch req w/o any page");
 
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
         priority,
@@ -1015,7 +1015,7 @@ void TExecutor::AddFollowerPartSwitch(
     partSwitch.Step = step;
 
     if (switchProto.HasIntroducedParts() && switchProto.GetIntroducedParts().BundlesSize()) {
-        Y_VERIFY(aux && aux->HotBundlesSize() == switchProto.GetIntroducedParts().BundlesSize());
+        Y_ABORT_UNLESS(aux && aux->HotBundlesSize() == switchProto.GetIntroducedParts().BundlesSize());
         for (auto x : xrange(aux->HotBundlesSize())) {
             NTable::TPartComponents c = TPageCollectionProtoHelper::MakePageCollectionComponents(aux->GetHotBundles(x));
             PrepareExternalPart(partSwitch, std::move(c));
@@ -1023,7 +1023,7 @@ void TExecutor::AddFollowerPartSwitch(
     }
 
     if (switchProto.HasIntroducedTxStatus()) {
-        Y_VERIFY(aux && aux->HotTxStatusSize() == switchProto.GetIntroducedTxStatus().TxStatusSize());
+        Y_ABORT_UNLESS(aux && aux->HotTxStatusSize() == switchProto.GetIntroducedTxStatus().TxStatusSize());
         for (const auto &x : aux->GetHotTxStatus()) {
             auto dataId = TLargeGlobIdProto::Get(x.GetDataId());
             auto epoch = NTable::TEpoch(x.GetEpoch());
@@ -1074,7 +1074,7 @@ void TExecutor::AddFollowerPartSwitch(
 }
 
 bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPartComponents &&pc) {
-    Y_VERIFY(pc);
+    Y_ABORT_UNLESS(pc);
 
     const ui32 tableId = partSwitch.TableId;
     const auto& dbScheme = Database->GetScheme();
@@ -1125,7 +1125,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
 
     if (auto* stage = bundle.GetStage<TPendingPartSwitch::TLoaderStage>()) {
         if (auto fetch = stage->Loader.Run()) {
-            Y_VERIFY(fetch.size() == 1, "Cannot handle loads from more than one page collection");
+            Y_ABORT_UNLESS(fetch.size() == 1, "Cannot handle loads from more than one page collection");
 
             for (auto req : fetch) {
                 stage->Fetching = req->PageCollection.Get();
@@ -1193,20 +1193,20 @@ void TExecutor::OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cook
     for (auto& waiter : waiters) {
         if (auto* r = waiter.GetWaiter<TPendingPartSwitch::TNewBundleWaiter>()) {
             auto* stage = r->Bundle->GetStage<TPendingPartSwitch::TMetaStage>();
-            Y_VERIFY(stage && !stage->Finished(),
+            Y_ABORT_UNLESS(stage && !stage->Finished(),
                 "Loaded blob %s for a bundle in an unexpected state", id.ToString().c_str());
             if (stage->Accept(r->Loader, id, body)) {
-                Y_VERIFY(stage->Finished());
+                Y_ABORT_UNLESS(stage->Finished());
                 waiting |= PrepareExternalPart(partSwitch, *r->Bundle);
             }
             continue;
         }
         if (auto* r = waiter.GetWaiter<TPendingPartSwitch::TNewTxStatusWaiter>()) {
             auto* stage = r->TxStatus->GetStage<TPendingPartSwitch::TTxStatusLoadStage>();
-            Y_VERIFY(stage && !stage->Finished(),
+            Y_ABORT_UNLESS(stage && !stage->Finished(),
                 "Loaded blob %s for a tx status in an unexpected state", id.ToString().c_str());
             if (stage->Accept(id, body)) {
-                Y_VERIFY(stage->Finished());
+                Y_ABORT_UNLESS(stage->Finished());
                 waiting |= PrepareExternalTxStatus(partSwitch, *r->TxStatus);
             }
             continue;
@@ -1316,7 +1316,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
 
     for (auto &bundle : partSwitch.NewBundles) {
         auto* stage = bundle.GetStage<TPendingPartSwitch::TResultStage>();
-        Y_VERIFY(stage && stage->PartView, "Missing bundle result in part switch");
+        Y_ABORT_UNLESS(stage && stage->PartView, "Missing bundle result in part switch");
         AddCachesOfBundle(stage->PartView);
         if (stickyColumns) {
             RequestInMemPagesForPartStore(partSwitch.TableId, stage->PartView, stickyColumns);
@@ -1330,7 +1330,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
     newTxStatus.reserve(partSwitch.NewTxStatus.size());
     for (auto &txStatus : partSwitch.NewTxStatus) {
         auto* stage = txStatus.GetStage<TPendingPartSwitch::TTxStatusResultStage>();
-        Y_VERIFY(stage && stage->TxStatus, "Missing tx status result in part switch");
+        Y_ABORT_UNLESS(stage && stage->TxStatus, "Missing tx status result in part switch");
         newTxStatus.push_back(std::move(stage->TxStatus));
     }
 
@@ -1338,7 +1338,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         NTable::TBundleSlicesMap updatedBundles;
         for (auto &change : partSwitch.Changed) {
             auto overlay = NTable::TOverlay::Decode(change.Legacy, change.Opaque);
-            Y_VERIFY(overlay.Slices && *overlay.Slices,
+            Y_ABORT_UNLESS(overlay.Slices && *overlay.Slices,
                 "Change for bundle %s has unexpected empty slices",
                 change.Label.ToString().data());
             updatedBundles[change.Label] = std::move(overlay.Slices);
@@ -1373,7 +1373,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
             Y_FAIL("Follower table replace subset isn't sticked to head");
         }
 
-        Y_VERIFY(newColdParts.empty(), "Unexpected cold part at a follower");
+        Y_ABORT_UNLESS(newColdParts.empty(), "Unexpected cold part at a follower");
         Database->Replace(partSwitch.TableId, std::move(newParts), *subset);
         Database->ReplaceTxStatus(partSwitch.TableId, std::move(newTxStatus), *subset);
 
@@ -1422,7 +1422,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
             auto srcSubset = Database->Subset(sourceTable, state.Bundles, NTable::TEpoch::Zero());
             TVector<NTable::TPartView> rebased(Reserve(srcSubset->Flatten.size()));
             for (const auto& partView : srcSubset->Flatten) {
-                Y_VERIFY(!partView->TxIdStats, "Cannot move parts with uncommitted deltas");
+                Y_ABORT_UNLESS(!partView->TxIdStats, "Cannot move parts with uncommitted deltas");
                 NTable::TEpoch epoch = state.BundleToEpoch.Value(partView->Label, partView->Epoch);
                 rebased.push_back(partView.CloneWithEpoch(epoch));
             }
@@ -1458,7 +1458,7 @@ TExecutor::TLeaseCommit* TExecutor::AttachLeaseCommit(TLogCommit* commit, bool f
 
         TString data;
         bool ok = proto.SerializeToString(&data);
-        Y_VERIFY(ok);
+        Y_ABORT_UNLESS(ok);
 
         commit->Metadata.emplace_back(ui32(NBoot::ELogCommitMeta::LeaseInfo), std::move(data));
         LeaseDurationUpdated = false;
@@ -1488,14 +1488,14 @@ TExecutor::TLeaseCommit* TExecutor::AttachLeaseCommit(TLogCommit* commit, bool f
 }
 
 TExecutor::TLeaseCommit* TExecutor::EnsureReadOnlyLease(TMonotonic at) {
-    Y_VERIFY(Stats->IsActive && !Stats->IsFollower);
-    Y_VERIFY(at >= LeaseEnd);
+    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower);
+    Y_ABORT_UNLESS(at >= LeaseEnd);
 
     if (!LeaseEnabled) {
         // Automatically enable leases
         LeaseEnabled = true;
         LeaseDuration = Owner->ReadOnlyLeaseDuration();
-        Y_VERIFY(LeaseDuration);
+        Y_ABORT_UNLESS(LeaseDuration);
         LeaseDurationUpdated = true;
     }
 
@@ -1524,7 +1524,7 @@ TExecutor::TLeaseCommit* TExecutor::EnsureReadOnlyLease(TMonotonic at) {
 }
 
 void TExecutor::ConfirmReadOnlyLease(TMonotonic at) {
-    Y_VERIFY(Stats->IsActive && !Stats->IsFollower);
+    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower);
     LeaseUsed = true;
 
     if (LeaseEnabled && at < LeaseEnd) {
@@ -1535,7 +1535,7 @@ void TExecutor::ConfirmReadOnlyLease(TMonotonic at) {
 }
 
 void TExecutor::ConfirmReadOnlyLease(TMonotonic at, std::function<void()> callback) {
-    Y_VERIFY(Stats->IsActive && !Stats->IsFollower);
+    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower);
     LeaseUsed = true;
 
     if (LeaseEnabled && at < LeaseEnd) {
@@ -1557,7 +1557,7 @@ bool TExecutor::CanExecuteTransaction() const {
 }
 
 void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, const TActorContext &ctx) {
-    Y_VERIFY(ActivationQueue, "attempt to execute transaction before activation");
+    Y_ABORT_UNLESS(ActivationQueue, "attempt to execute transaction before activation");
 
     TAutoPtr<TSeat> seat = new TSeat(++TransactionUniqCounter, self);
 
@@ -1584,7 +1584,7 @@ void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, cons
         Memory->RequestLimit(*seat, seat->CurrentTxDataLimit);
         auto *transptr = seat.Release();
         auto pairIt = PostponedTransactions.emplace(transptr, transptr);
-        Y_VERIFY(pairIt.second);
+        Y_ABORT_UNLESS(pairIt.second);
 
         return;
     }
@@ -1693,12 +1693,12 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
         // It may not be safe to call Broken right now, call it later
         Send(SelfId(), new TEvPrivate::TEvBrokenTransaction());
     } else if (done) {
-        Y_VERIFY(!txc.IsRescheduled());
-        Y_VERIFY(!seat->RequestedMemory);
+        Y_ABORT_UNLESS(!txc.IsRescheduled());
+        Y_ABORT_UNLESS(!seat->RequestedMemory);
         seat->OnPersistent = std::move(prod.OnPersistent);
         CommitTransactionLog(seat, env, prod.Change, cpuTimer, ctx);
     } else {
-        Y_VERIFY(!seat->CapturedMemory);
+        Y_ABORT_UNLESS(!seat->CapturedMemory);
         if (!PrivatePageCache->GetStats().CurrentCacheMisses && !seat->RequestedMemory && !txc.IsRescheduled()) {
             Y_Fail(NFmt::Do(*this) << " " << NFmt::Do(*seat) << " type "
                     << NFmt::Do(*seat->Self) << " postoned w/o demands");
@@ -1818,7 +1818,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
 
             auto *transptr = seat.Release();
             auto pairIt = PostponedTransactions.emplace(transptr, transptr);
-            Y_VERIFY(pairIt.second);
+            Y_ABORT_UNLESS(pairIt.second);
 
             // todo: counters
             return;
@@ -1928,7 +1928,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
         }
     } else {
-        Y_VERIFY(!Stats->IsFollower);
+        Y_ABORT_UNLESS(!Stats->IsFollower);
 
         const bool allowBatching = Scheme().Executor.AllowLogBatching;
         const bool force = !allowBatching
@@ -1944,14 +1944,14 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
 
         auto commitResult = LogicRedo->CommitRWTransaction(seat, *change, force);
 
-        Y_VERIFY(!force || commitResult.Commit);
+        Y_ABORT_UNLESS(!force || commitResult.Commit);
         auto *commit = commitResult.Commit.Get(); // could be nullptr
 
         for (auto& pr : env.MakeSnap) {
             const ui32 table = pr.first;
             auto& snap = pr.second;
 
-            Y_VERIFY(snap.Epoch, "Table was not snapshotted");
+            Y_ABORT_UNLESS(snap.Epoch, "Table was not snapshotted");
 
             for (auto &context: snap.Context) {
                 auto edge = NTable::TSnapEdge(change->Stamp - 1, *snap.Epoch);
@@ -2079,7 +2079,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
             }
 
             TIntrusivePtr<TBarrier> barrier(new TBarrier(commit->Step));
-            Y_VERIFY(InFlyCompactionGcBarriers.emplace(commit->Step, barrier).second);
+            Y_ABORT_UNLESS(InFlyCompactionGcBarriers.emplace(commit->Step, barrier).second);
             GcLogic->HoldBarrier(barrier->Step);
         }
 
@@ -2109,8 +2109,8 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
                     auto srcSubset = Database->Subset(src, snap->SnapContext->Impl->Edge(src).Head, { }, { });
                     auto dstSubset = Database->Subset(dst, NTable::TEpoch::Max(), { }, { });
 
-                    Y_VERIFY(srcSubset && dstSubset, "Unexpected failure to grab subsets");
-                    Y_VERIFY(srcSubset->Frozen.empty(), "Unexpected frozen parts in src subset");
+                    Y_ABORT_UNLESS(srcSubset && dstSubset, "Unexpected failure to grab subsets");
+                    Y_ABORT_UNLESS(srcSubset->Frozen.empty(), "Unexpected frozen parts in src subset");
 
                     // Check scheme compatibility (it may have changed due to alter)
                     srcSubset->Scheme->CheckCompatability(*dstSubset->Scheme);
@@ -2142,7 +2142,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
                     TVector<TLogoBlobID> labels;
                     TVector<NTable::TPartView> rebased(Reserve(srcSubset->Flatten.size()));
                     for (const NTable::TPartView& partView : srcSubset->Flatten) {
-                        Y_VERIFY(!partView->TxIdStats, "Cannot move parts with uncommitted deltas");
+                        Y_ABORT_UNLESS(!partView->TxIdStats, "Cannot move parts with uncommitted deltas");
                         if (srcEpoch != partView->Epoch) {
                             srcEpoch = partView->Epoch;
                             --dstEpoch;
@@ -2156,7 +2156,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
 
                     const auto logicResult = CompactionLogic->RemovedParts(src, labels);
 
-                    Y_VERIFY(!logicResult.Changes.SliceChanges, "Unexpected slice changes when removing parts");
+                    Y_ABORT_UNLESS(!logicResult.Changes.SliceChanges, "Unexpected slice changes when removing parts");
 
                     if (logicResult.Changes.StateChanges) {
                         NKikimrExecutorFlat::TTablePartSwitch proto;
@@ -2220,7 +2220,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
             partSwitch.TableId = loaned->LocalTableId;
             partSwitch.Step = commit->Step;
 
-            Y_VERIFY(loaned->PartComponents.PageCollectionComponents, "Loaned PartComponents without any page collections");
+            Y_ABORT_UNLESS(loaned->PartComponents.PageCollectionComponents, "Loaned PartComponents without any page collections");
 
             BorrowLogic->LoanBundle(
                 loaned->PartComponents.PageCollectionComponents.front().LargeGlobId.Lead, *loaned, commit);
@@ -2238,7 +2238,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
 
                     LogicRedo->CutLog(loaned->LocalTableId, { stamp, epoch }, dummy);
 
-                    Y_VERIFY(!dummy.Deleted && !dummy.Created);
+                    Y_ABORT_UNLESS(!dummy.Deleted && !dummy.Created);
 
                     auto *sx = proto.MutableTableSnapshoted();
                     sx->SetTable(loaned->LocalTableId);
@@ -2282,7 +2282,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
 
                     LogicRedo->CutLog(loaned->LocalTableId, { stamp, epoch }, dummy);
 
-                    Y_VERIFY(!dummy.Deleted && !dummy.Created);
+                    Y_ABORT_UNLESS(!dummy.Deleted && !dummy.Created);
 
                     auto *sx = proto.MutableTableSnapshoted();
                     sx->SetTable(loaned->LocalTableId);
@@ -2334,7 +2334,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
             }
 
             TIntrusivePtr<TBarrier> barrier(new TBarrier(commit->Step));
-            Y_VERIFY(InFlyCompactionGcBarriers.emplace(commit->Step, barrier).second);
+            Y_ABORT_UNLESS(InFlyCompactionGcBarriers.emplace(commit->Step, barrier).second);
             GcLogic->HoldBarrier(barrier->Step);
         }
 
@@ -2347,7 +2347,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
                     commit);
             }
             TIntrusivePtr<TBarrier> barrier(new TBarrier(commit->Step));
-            Y_VERIFY(InFlyCompactionGcBarriers.emplace(commit->Step, barrier).second);
+            Y_ABORT_UNLESS(InFlyCompactionGcBarriers.emplace(commit->Step, barrier).second);
             GcLogic->HoldBarrier(barrier->Step);
         }
 
@@ -2461,7 +2461,7 @@ void TExecutor::MakeLogSnapshot() {
 
         auto dumpTxStatus = [&](const TIntrusiveConstPtr<NTable::TTxStatusPart>& part) {
             const auto* txStatus = dynamic_cast<const NTable::TTxStatusPartStore*>(part.Get());
-            Y_VERIFY(txStatus);
+            Y_ABORT_UNLESS(txStatus);
             auto* p = snap.AddTxStatusParts();
             p->SetTable(tableId);
             auto* x = p->AddTxStatus();
@@ -2515,14 +2515,14 @@ void TExecutor::MakeLogSnapshot() {
 
 void TExecutor::Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
-    Y_VERIFY(ActivateTransactionInFlight > 0);
+    Y_ABORT_UNLESS(ActivateTransactionInFlight > 0);
     ActivateTransactionInFlight--;
 
     if (!CanExecuteTransaction())
         return;
 
     if (TAutoPtr<TSeat> seat = ActivationQueue->Pop()) {
-        Y_VERIFY(ActivateTransactionWaiting > 0);
+        Y_ABORT_UNLESS(ActivateTransactionWaiting > 0);
         ActivateTransactionWaiting--;
         ExecuteTransaction(seat, ctx);
     } else {
@@ -2531,14 +2531,14 @@ void TExecutor::Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorC
         // have more ActivateTransactionInFlight events that these waiting
         // transactions, so when we handle this event we must have at least
         // one transaction in queue.
-        Y_VERIFY(ActivateTransactionWaiting == 0);
+        Y_ABORT_UNLESS(ActivateTransactionWaiting == 0);
     }
 }
 
 void TExecutor::Handle(TEvPrivate::TEvBrokenTransaction::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
     Y_UNUSED(ctx);
-    Y_VERIFY(BrokenTransaction);
+    Y_ABORT_UNLESS(BrokenTransaction);
 
     return Broken();
 }
@@ -2562,7 +2562,7 @@ void TExecutor::Handle(NSharedCache::TEvRequest::TPtr &ev) {
     const auto priority = ev->Get()->Priority;
     TAutoPtr<NPageCollection::TFetch> msg = ev->Get()->Fetch;
 
-    Y_VERIFY(msg->Pages, "empty page collection request, do not do it");
+    Y_ABORT_UNLESS(msg->Pages, "empty page collection request, do not do it");
 
     const TLogoBlobID &metaId = msg->PageCollection->Label();
     TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(metaId);
@@ -2740,7 +2740,7 @@ void TExecutor::Handle(TEvTablet::TEvDropLease::TPtr &ev, const TActorContext &c
 }
 
 void TExecutor::Handle(TEvPrivate::TEvLeaseExtend::TPtr &, const TActorContext &) {
-    Y_VERIFY(LeaseExtendPending);
+    Y_ABORT_UNLESS(LeaseExtendPending);
     LeaseExtendPending = false;
 
     if (!LeaseCommits.empty() || !LeaseEnabled || LeaseDropped) {
@@ -2779,7 +2779,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         return Broken();
     }
 
-    Y_VERIFY(msg->Generation == Generation());
+    Y_ABORT_UNLESS(msg->Generation == Generation());
     const ui32 step = msg->Step;
 
     ActiveTransaction = true;
@@ -2797,7 +2797,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
 
     if (!LeaseCommits.empty()) {
         auto& l = LeaseCommits.front();
-        Y_VERIFY(step <= l.Step);
+        Y_ABORT_UNLESS(step <= l.Step);
         if (step == l.Step) {
             LeasePersisted = true;
             LeaseEnd = Max(LeaseEnd, l.LeaseEnd);
@@ -2856,7 +2856,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     case ECommit::Data:
         {
             auto it = InFlyCompactionGcBarriers.find(step);
-            Y_VERIFY(it != InFlyCompactionGcBarriers.end());
+            Y_ABORT_UNLESS(it != InFlyCompactionGcBarriers.end());
             // just check, real barrier release on follower gc ack
         }
 
@@ -2910,7 +2910,7 @@ void TExecutor::StartSeat(ui64 task, TResource *cookie_) noexcept
 {
     auto *cookie = CheckedCast<TMemory::TCookie*>(cookie_);
     auto it = PostponedTransactions.find(cookie->Seat);
-    Y_VERIFY(it != PostponedTransactions.end());
+    Y_ABORT_UNLESS(it != PostponedTransactions.end());
     TAutoPtr<TSeat> seat = std::move(it->second);
     PostponedTransactions.erase(it);
     Memory->AcquiredMemory(*seat, task);
@@ -3086,7 +3086,7 @@ void TExecutor::UtilizeSubset(const NTable::TSubset &subset,
     for (auto it : xrange(subset.Flatten.size())) {
         auto *partStore = subset.Flatten[it].As<const NTable::TPartStore>();
 
-        Y_VERIFY(seen.Sieve[it].Blobs.Get() == partStore->Blobs.Get());
+        Y_ABORT_UNLESS(seen.Sieve[it].Blobs.Get() == partStore->Blobs.Get());
 
         if (reusedBundles.contains(partStore->Label)) {
             // Delete only compacted large blobs at this moment
@@ -3109,14 +3109,14 @@ void TExecutor::UtilizeSubset(const NTable::TSubset &subset,
     for (auto it : xrange(subset.ColdParts.size())) {
         auto *part = subset.ColdParts[it].Get();
 
-        Y_VERIFY(!reusedBundles.contains(part->Label));
+        Y_ABORT_UNLESS(!reusedBundles.contains(part->Label));
 
         BorrowLogic->BundleCompacted(part->Label, commit);
     }
 
     for (auto it : xrange(subset.TxStatus.size())) {
         auto *partStore = dynamic_cast<const NTable::TTxStatusPartStore*>(subset.TxStatus[it].Get());
-        Y_VERIFY(partStore, "Unexpected failure to cast TxStatus to an implementation type");
+        Y_ABORT_UNLESS(partStore, "Unexpected failure to cast TxStatus to an implementation type");
 
         if (BorrowLogic->BundleCompacted(*partStore, commit)) {
             partStore->SaveAllBlobIdsTo(commit->GcDelta.Deleted);
@@ -3226,7 +3226,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         // Some compactions (e.g. triggered by log overhead after many scans)
         // may have no TMemTable inputs, we still want to cut log since it's
         // effectively a snapshot.
-        Y_VERIFY(msg->Params->Edge.Head > NTable::TEpoch::Zero());
+        Y_ABORT_UNLESS(msg->Params->Edge.Head > NTable::TEpoch::Zero());
         LogicRedo->CutLog(tableId, { snapStamp, ops->Subset->Head }, commit->GcDelta);
         auto *sx = proto.MutableTableSnapshoted();
         sx->SetTable(tableId);
@@ -3234,7 +3234,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         sx->SetStep(ExpandGenStepPair(snapStamp).second);
         sx->SetHead(ops->Subset->Head.ToProto());
     } else {
-        Y_VERIFY(!hadFrozen, "Compacted frozen parts without correct head epoch");
+        Y_ABORT_UNLESS(!hadFrozen, "Compacted frozen parts without correct head epoch");
     }
 
     if (results) {
@@ -3260,7 +3260,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     if (newTxStatus) {
         for (const auto &txStatus : newTxStatus) {
             auto *partStore = dynamic_cast<const NTable::TTxStatusPartStore*>(txStatus.Get());
-            Y_VERIFY(partStore);
+            Y_ABORT_UNLESS(partStore);
             partStore->SaveAllBlobIdsTo(commit->GcDelta.Created);
         }
     }
@@ -3273,7 +3273,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             totalGrow += NTable::TScreen::Sum(result.Growth);
         }
 
-        Y_VERIFY(ops->Trace->Seen + totalGrow == totalBlobs);
+        Y_ABORT_UNLESS(ops->Trace->Seen + totalGrow == totalBlobs);
 
         Counters->Cumulative()[TExecutorCounters::DB_ELOBS_ITEMS_GROW].Increment(totalGrow);
     }
@@ -3306,7 +3306,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             }
         }
         for (auto &part: ops->Subset->ColdParts) {
-            Y_VERIFY(!updatedSlices.contains(part->Label));
+            Y_ABORT_UNLESS(!updatedSlices.contains(part->Label));
         }
 
         UtilizeSubset(*ops->Subset, *ops->Trace, std::move(reusedBundles), commit.Get());
@@ -3378,7 +3378,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         p->SetTable(tableId);
         for (const auto &txStatus : newTxStatus) {
             auto *partStore = dynamic_cast<const NTable::TTxStatusPartStore*>(txStatus.Get());
-            Y_VERIFY(partStore);
+            Y_ABORT_UNLESS(partStore);
             {
                 auto *x = p->AddTxStatus();
                 TLargeGlobIdProto::Put(*x->MutableDataId(), partStore->GetDataId());
@@ -3406,7 +3406,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     commit->FollowerAux = NPageCollection::TSlicer::Lz4()->Encode(aux.SerializeAsString());
 
-    Y_VERIFY(InFlyCompactionGcBarriers.emplace(commit->Step, ops->Barrier).second);
+    Y_ABORT_UNLESS(InFlyCompactionGcBarriers.emplace(commit->Step, ops->Barrier).second);
 
     AttachLeaseCommit(commit.Get());
     CommitManager->Commit(commit);
@@ -3426,7 +3426,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     for (auto &snap : logicResult.CompleteSnapshots) {
         if (snap->Impl->Complete(tableId, ops->Barrier)) {
             auto snapIt = WaitingSnapshots.find(snap.Get());
-            Y_VERIFY(snapIt != WaitingSnapshots.end());
+            Y_ABORT_UNLESS(snapIt != WaitingSnapshots.end());
             TIntrusivePtr<TTableSnapshotContext> snapCtxPtr = snapIt->second;
             WaitingSnapshots.erase(snapIt);
 
@@ -3654,7 +3654,7 @@ TString TExecutor::BorrowSnapshot(ui32 table, const TTableSnapshotContext &snap,
     if (subset == nullptr)
         return { }; /* Lack of required pages in cache, retry later */
 
-    Y_VERIFY(!subset->Frozen, "Don't know how to borrow frozen parts");
+    Y_ABORT_UNLESS(!subset->Frozen, "Don't know how to borrow frozen parts");
 
     NKikimrExecutorFlat::TDatabaseBorrowPart proto;
 
@@ -3680,7 +3680,7 @@ TString TExecutor::BorrowSnapshot(ui32 table, const TTableSnapshotContext &snap,
 
     for (const auto &part : subset->TxStatus) {
         const auto *txStatus = dynamic_cast<const NTable::TTxStatusPartStore*>(part.Get());
-        Y_VERIFY(txStatus);
+        Y_ABORT_UNLESS(txStatus);
         auto *x = proto.AddTxStatusParts();
         TLargeGlobIdProto::Put(*x->MutableDataId(), txStatus->GetDataId());
         x->SetEpoch(txStatus->Epoch.ToProto());
@@ -3821,7 +3821,7 @@ STFUNC(TExecutor::StateInit) {
 }
 
 STFUNC(TExecutor::StateBoot) {
-    Y_VERIFY(BootLogic);
+    Y_ABORT_UNLESS(BootLogic);
     switch (ev->GetTypeRewrite()) {
         // N.B. must work during follower promotion to leader
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
@@ -3887,7 +3887,7 @@ STFUNC(TExecutor::StateFollower) {
 }
 
 STFUNC(TExecutor::StateFollowerBoot) {
-    Y_VERIFY(BootLogic);
+    Y_ABORT_UNLESS(BootLogic);
     switch (ev->GetTypeRewrite()) {
         // N.B. must handle activities started before resync
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
@@ -4125,7 +4125,7 @@ void TExecutor::UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr &ev) {
 }
 
 void TExecutor::SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) {
-    Y_VERIFY(Stats->IsActive && !Stats->IsFollower);
+    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower);
 
     NKikimrExecutorFlat::TFollowerAux proto;
     proto.SetUserAuxUpdate(std::move(upd));
@@ -4189,7 +4189,7 @@ TIntrusiveConstPtr<NTable::TRowScheme> TExecutor::RowScheme(ui32 table)
 const NTable::TScheme::TTableInfo* TExecutor::TableScheme(ui32 table)
 {
     auto* info = Scheme().GetTableInfo(table);
-    Y_VERIFY(info, "Unexpected request for schema of table %" PRIu32, table);
+    Y_ABORT_UNLESS(info, "Unexpected request for schema of table %" PRIu32, table);
     return info;
 }
 
@@ -4263,11 +4263,11 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
             static const NTable::TScheme::TFamily defaultFamilySettings;
             family = &defaultFamilySettings;
         }
-        Y_VERIFY(family, "Cannot find family %" PRIu32 " in table %" PRIu32, familyId, table);
+        Y_ABORT_UNLESS(family, "Cannot find family %" PRIu32 " in table %" PRIu32, familyId, table);
 
         auto roomId = family->Room;
         auto* room = tableInfo->Rooms.FindPtr(roomId);
-        Y_VERIFY(room, "Cannot find room %" PRIu32 " in table %" PRIu32, roomId, table);
+        Y_ABORT_UNLESS(room, "Cannot find room %" PRIu32 " in table %" PRIu32, roomId, table);
 
         auto& pageGroup = comp->Layout.Groups.at(group);
         auto& writeGroup = comp->Writer.Groups.at(group);
@@ -4372,7 +4372,7 @@ ui64 TExecutor::BeginRead(THolder<NTable::ICompactionRead> read)
             std::piecewise_construct,
             std::forward_as_tuple(readId),
             std::forward_as_tuple(readId, std::move(read)));
-    Y_VERIFY(r.second, "Cannot register a new read %" PRIu64, readId);
+    Y_ABORT_UNLESS(r.second, "Cannot register a new read %" PRIu64, readId);
 
     auto* state = &r.first->second;
     PostponeCompactionRead(state);
@@ -4396,7 +4396,7 @@ bool TExecutor::CancelRead(ui64 readId)
 
 void TExecutor::RequestChanges(ui32 table)
 {
-    Y_VERIFY(CompactionLogic);
+    Y_ABORT_UNLESS(CompactionLogic);
 
     CompactionLogic->RequestChanges(table);
     PlanCompactionChangesActivation();
@@ -4404,7 +4404,7 @@ void TExecutor::RequestChanges(ui32 table)
 
 void TExecutor::PostponeCompactionRead(TCompactionReadState* state)
 {
-    Y_VERIFY(PrivatePageCache->GetStats().CurrentCacheMisses, "Compaction read postponed with nothing to load");
+    Y_ABORT_UNLESS(PrivatePageCache->GetStats().CurrentCacheMisses, "Compaction read postponed with nothing to load");
 
     size_t newPinnedPages = 0;
     TCompactionReadState::TPinned pinned;
@@ -4607,7 +4607,7 @@ void TExecutor::ApplyCompactionChanges(
 
         for (const auto &sliceChange : changes.SliceChanges) {
             auto* current = pendingChanges.FindPtr(sliceChange.Label);
-            Y_VERIFY(current, "[%" PRIu64 "] cannot apply changes to table %" PRIu32 " part %s: not found",
+            Y_ABORT_UNLESS(current, "[%" PRIu64 "] cannot apply changes to table %" PRIu32 " part %s: not found",
                      TabletId(), tableId, sliceChange.Label.ToString().c_str());
 
             *current = NTable::TSlices::Replace(std::move(*current), sliceChange.NewSlices);

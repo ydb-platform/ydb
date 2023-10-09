@@ -64,7 +64,7 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         }
 
         const TString txBody = rowset.GetValue<Schema::TxInfo::TxBody>();
-        Y_VERIFY(Owner.LoadTx(txId, txInfo.TxKind, txBody));
+        Y_ABORT_UNLESS(Owner.LoadTx(txId, txInfo.TxKind, txBody));
 
         if (!rowset.Next()) {
             return false;
@@ -105,7 +105,7 @@ bool TTxController::AbortTx(const ui64 txId, NTabletFlatExecutor::TTransactionCo
     if (it == BasicTxInfo.end()) {
         return true;
     }
-    Y_VERIFY(it->second.PlanStep == 0);
+    Y_ABORT_UNLESS(it->second.PlanStep == 0);
     Owner.AbortTx(txId, it->second.TxKind, txc);
     if (it->second.MaxStep != Max<ui64>()) {
         DeadlineQueue.erase(TPlanQueueItem(it->second.MaxStep, txId));
@@ -141,7 +141,7 @@ std::optional<TTxController::TBasicTxInfo> TTxController::StartPlannedTx() {
         auto& item = node.value();
         TPlanQueueItem tx(item.Step, item.TxId);
         auto it = BasicTxInfo.find(item.TxId);
-        Y_VERIFY(it != BasicTxInfo.end());
+        Y_ABORT_UNLESS(it != BasicTxInfo.end());
         RunningQueue.emplace(std::move(item));
         return it->second;
     }
@@ -172,7 +172,7 @@ const TTxController::TBasicTxInfo* TTxController::GetTxInfo(const ui64 txId) con
 
 NEvents::TDataEvents::TCoordinatorInfo TTxController::GetCoordinatorInfo(const ui64 txId) const {
     auto txInfo = BasicTxInfo.FindPtr(txId);
-    Y_VERIFY(txInfo);
+    Y_ABORT_UNLESS(txInfo);
     if (Owner.ProcessingParams) {
         return NEvents::TDataEvents::TCoordinatorInfo(Owner.TabletID(), txInfo->MinStep, txInfo->MaxStep, Owner.ProcessingParams->GetCoordinators());
     }

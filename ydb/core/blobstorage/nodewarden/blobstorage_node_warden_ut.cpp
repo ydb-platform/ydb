@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         TActorId edge = runtime.AllocateEdgeActor();
         auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
-        Y_VERIFY(storagePool.GetKind() == kind);
+        Y_ABORT_UNLESS(storagePool.GetKind() == kind);
         storagePool.ClearStoragePoolId();
         storagePool.SetName(name);
         storagePool.SetNumGroups(1);

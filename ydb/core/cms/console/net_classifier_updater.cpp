@@ -136,7 +136,7 @@ private:
                 // cookied config item is missing, add it
                 InitDefaultConfiguration();
             } else {
-                Y_VERIFY(record.ConfigItemsSize() == 1); // only one config item should have the cookie
+                Y_ABORT_UNLESS(record.ConfigItemsSize() == 1); // only one config item should have the cookie
 
                 BLOG_D("NetClassifierUpdater found the distributable config via cookie");
 
@@ -293,7 +293,7 @@ private:
     void HandleWhileWorking(TEvConsole::TEvGetConfigItemsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
-            Y_VERIFY(record.ConfigItemsSize() == 1); // only one config item should have the cookie
+            Y_ABORT_UNLESS(record.ConfigItemsSize() == 1); // only one config item should have the cookie
 
             auto event = MakeHolder<TEvConsole::TEvConfigureRequest>();
 

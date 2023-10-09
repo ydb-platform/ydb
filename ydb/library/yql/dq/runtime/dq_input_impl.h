@@ -29,7 +29,7 @@ public:
     }
 
     void AddBatch(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) {
-        Y_VERIFY(batch.Width() == GetWidth());
+        Y_ABORT_UNLESS(batch.Width() == GetWidth());
 
         StoredBytes += space;
         StoredRows += batch.RowCount();
@@ -51,7 +51,7 @@ public:
 
     [[nodiscard]]
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
-        Y_VERIFY(batch.Width() == GetWidth());
+        Y_ABORT_UNLESS(batch.Width() == GetWidth());
         if (Empty()) {
             return false;
         }
@@ -60,7 +60,7 @@ public:
 
         if (IsPaused()) {
             ui64 batchesCount = GetBatchesBeforePause();
-            Y_VERIFY(batchesCount <= Batches.size());
+            Y_ABORT_UNLESS(batchesCount <= Batches.size());
 
             if (batch.IsWide()) {
                 while (batchesCount--) {
@@ -81,7 +81,7 @@ public:
             }
 
             BatchesBeforePause = PauseMask;
-            Y_VERIFY(GetBatchesBeforePause() == 0);
+            Y_ABORT_UNLESS(GetBatchesBeforePause() == 0);
             StoredBytes -= StoredBytesBeforePause;
             StoredRows -= StoredRowsBeforePause;
             StoredBytesBeforePause = 0;
@@ -131,7 +131,7 @@ public:
     }
 
     void Pause() override {
-        Y_VERIFY(!IsPaused());
+        Y_ABORT_UNLESS(!IsPaused());
         if (!Finished) {
             BatchesBeforePause = Batches.size() | PauseMask;
             StoredRowsBeforePause = StoredRows;
@@ -141,7 +141,7 @@ public:
 
     void Resume() override {
         StoredBytesBeforePause = StoredRowsBeforePause = BatchesBeforePause = 0;
-        Y_VERIFY(!IsPaused());
+        Y_ABORT_UNLESS(!IsPaused());
     }
 
     bool IsPaused() const override {

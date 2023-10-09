@@ -37,7 +37,7 @@ namespace NTable {
                     TRowId endRowId = minRowId + Data.End();
                     if (rowId < endRowId) {
                         Data = Page->Begin() + (rowId - minRowId);
-                        Y_VERIFY(Data, "Unexpected failure to find column group record for RowId=%lu", rowId);
+                        Y_ABORT_UNLESS(Data, "Unexpected failure to find column group record for RowId=%lu", rowId);
                         return EReady::Data;
                     }
                 }
@@ -57,7 +57,7 @@ namespace NTable {
             Y_VERIFY_DEBUG(Page.BaseRow() <= rowId, "Index and row have an unexpected relation");
 
             Data = Page->Begin() + (rowId - Page.BaseRow());
-            Y_VERIFY(Data, "Unexpected failure to find record for RowId=%lu", rowId);
+            Y_ABORT_UNLESS(Data, "Unexpected failure to find record for RowId=%lu", rowId);
             return EReady::Data;
         }
 
@@ -356,7 +356,7 @@ namespace NTable {
                 return EReady::Data;
             }
 
-            Y_VERIFY(Index.Next() == EReady::Gone, "Unexpected failure to seek in a non-final data page");
+            Y_ABORT_UNLESS(Index.Next() == EReady::Gone, "Unexpected failure to seek in a non-final data page");
             return Exhausted();
         }
 
@@ -555,7 +555,7 @@ namespace NTable {
                         }
 
                         // This loop may only terminate with a break
-                        Y_VERIFY(linear > 0, "Data binary search bug");
+                        Y_ABORT_UNLESS(linear > 0, "Data binary search bug");
                     }
 
                     // Save an estimate for MaxVersion
@@ -582,7 +582,7 @@ namespace NTable {
 
                 Data = Page->Begin();
 
-                Y_VERIFY(checkData() && RowVersion <= rowVersion, "Index and Data are out of sync");
+                Y_ABORT_UNLESS(checkData() && RowVersion <= rowVersion, "Index and Data are out of sync");
 
                 return EReady::Data;
             }
@@ -616,7 +616,7 @@ namespace NTable {
                     return EReady::Gone;
                 }
 
-                Y_VERIFY(RowVersion <= rowVersion, "Data binary search bug");
+                Y_ABORT_UNLESS(RowVersion <= rowVersion, "Data binary search bug");
 
                 // Save an estimate for MaxVersion
                 MaxVersion = rowVersion;
@@ -636,7 +636,7 @@ namespace NTable {
 
             // The above binary search failed, but since we started with
             // an index search the first row must be the one we want.
-            Y_VERIFY(RowVersion <= rowVersion, "Index binary search bug");
+            Y_ABORT_UNLESS(RowVersion <= rowVersion, "Index binary search bug");
 
             if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
                 // We don't want to repeat binary search on the next
@@ -651,7 +651,7 @@ namespace NTable {
 
             Data = Page->Begin();
 
-            Y_VERIFY(Data && checkData() && RowVersion <= rowVersion, "Index and Data are out of sync");
+            Y_ABORT_UNLESS(Data && checkData() && RowVersion <= rowVersion, "Index and Data are out of sync");
 
             // Save an estimate for MaxVersion
             MaxVersion = rowVersion;
@@ -834,7 +834,7 @@ namespace NTable {
             if (!SkipMainVersion) {
                 const auto& info = Part->Scheme->Groups[0];
                 const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
-                Y_VERIFY(!data->IsDelta(), "GetRowVersion cannot be called on deltas");
+                Y_ABORT_UNLESS(!data->IsDelta(), "GetRowVersion cannot be called on deltas");
 
                 if (!SkipEraseVersion && data->IsErased()) {
                     return data->GetMaxVersion(info);
@@ -878,7 +878,7 @@ namespace NTable {
                     if (!SkipMainVersion) {
                         const auto& info = Part->Scheme->Groups[0];
                         const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
-                        Y_VERIFY(!data->IsDelta(), "Unexpected delta without TxIdStats");
+                        Y_ABORT_UNLESS(!data->IsDelta(), "Unexpected delta without TxIdStats");
                         if (!SkipEraseVersion && data->IsErased()) {
                             transactionObserver.OnSkipCommitted(data->GetMaxVersion(info));
                         } else if (data->IsVersioned()) {
@@ -1019,7 +1019,7 @@ namespace NTable {
                 NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
         {
             Y_VERIFY_DEBUG(Main.IsValid(), "Attempt to use an invalid iterator");
-            Y_VERIFY(!SkipMainVersion, "Cannot use SkipToCommitted after positioning to history");
+            Y_ABORT_UNLESS(!SkipMainVersion, "Cannot use SkipToCommitted after positioning to history");
 
             const auto& info = Part->Scheme->Groups[0];
             const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
@@ -1238,7 +1238,7 @@ namespace NTable {
             auto op = data->GetCellOp(info);
 
             if (op == ECellOp::Empty) {
-                Y_VERIFY(!info.IsKey(), "Got an absent key cell");
+                Y_ABORT_UNLESS(!info.IsKey(), "Got an absent key cell");
             } else if (op == ELargeObj::Inline) {
                 row.Set(pin.To, op, data->Cell(info));
             } else if (op == ELargeObj::Extern || op == ELargeObj::Outer) {
@@ -1249,7 +1249,7 @@ namespace NTable {
                 if (auto blob = Env->Locate(Part, ref, op)) {
                     const auto got = NPage::TLabelWrapper().Read(**blob);
 
-                    Y_VERIFY(got == NPage::ECodec::Plain && got.Version == 0);
+                    Y_ABORT_UNLESS(got == NPage::ECodec::Plain && got.Version == 0);
 
                     row.Set(pin.To, { ECellOp(op), ELargeObj::Inline }, TCell(*got));
                 } else if (op == ELargeObj::Outer) {
@@ -1257,7 +1257,7 @@ namespace NTable {
 
                     row.Set(pin.To, op, { } /* cannot put some useful data */);
                 } else {
-                    Y_VERIFY(ref < (*Part->Blobs)->size(), "out of blobs catalog");
+                    Y_ABORT_UNLESS(ref < (*Part->Blobs)->size(), "out of blobs catalog");
 
                     /* Have to preserve reference to memory with TGlobId until
                         of next iterator alteration method invocation. This is
@@ -1694,7 +1694,7 @@ namespace NTable {
         Y_FORCE_INLINE EReady SeekToStart() noexcept
         {
             auto ready = CurrentIt->SeekToStart();
-            Y_VERIFY(ready != EReady::Gone,
+            Y_ABORT_UNLESS(ready != EReady::Gone,
                 "Unexpected slice without the first row");
             return ready;
         }
@@ -1702,7 +1702,7 @@ namespace NTable {
         Y_FORCE_INLINE EReady SeekToEnd() noexcept
         {
             auto ready = CurrentIt->SeekToEnd();
-            Y_VERIFY(ready != EReady::Gone,
+            Y_ABORT_UNLESS(ready != EReady::Gone,
                 "Unexpected slice without the last row");
             return ready;
         }

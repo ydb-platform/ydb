@@ -40,7 +40,7 @@ public:
     std::shared_ptr<arrow::Field> GetFieldByColumnId(const ui32 columnId) const;
     std::shared_ptr<arrow::Field> GetFieldByColumnIdVerified(const ui32 columnId) const {
         auto result = GetFieldByColumnId(columnId);
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
         return result;
     }
 

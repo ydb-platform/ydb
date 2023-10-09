@@ -111,23 +111,23 @@ public:
 
         if (execTimeStats.HasHugeWriteTime()) {
             auto it = std::upper_bound(HugePuts.begin(), HugePuts.end(), size, TCompareTimeSeries<TTimeSeries<THugePutInfo>>());
-            Y_VERIFY(it != HugePuts.begin());
+            Y_ABORT_UNLESS(it != HugePuts.begin());
             --it;
             it->second.Add(now, std::move(info));
         } else {
             auto it = std::upper_bound(Puts.begin(), Puts.end(), size, TCompareTimeSeries<TTimeSeries<TPutInfo>>());
-            Y_VERIFY(it != Puts.begin());
+            Y_ABORT_UNLESS(it != Puts.begin());
             --it;
             it->second.Add(now, std::move(info));
         }
     }
 
     void MergeIn(TBlobStorageGroupProxyTimeStats&& timeStats) {
-        Y_VERIFY(Puts.size() == timeStats.Puts.size());
+        Y_ABORT_UNLESS(Puts.size() == timeStats.Puts.size());
         for (auto it1 = Puts.begin(), it2 = timeStats.Puts.begin(); it1 != Puts.end(); ++it1, ++it2) {
             it1->second.MergeIn(std::move(it2->second));
         }
-        Y_VERIFY(HugePuts.size() == timeStats.HugePuts.size());
+        Y_ABORT_UNLESS(HugePuts.size() == timeStats.HugePuts.size());
         for (auto it1 = HugePuts.begin(), it2 = timeStats.HugePuts.begin(); it1 != HugePuts.end(); ++it1, ++it2) {
             it1->second.MergeIn(std::move(it2->second));
         }

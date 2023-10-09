@@ -51,11 +51,11 @@ namespace NKikimr {
 
             // verify sequence number -- it should exceed maximum value of stored number and all requests in-flight or
             // else this is duplicate query
-            Y_VERIFY(msg->Owner < OwnerToSeqNo.size());
+            Y_ABORT_UNLESS(msg->Owner < OwnerToSeqNo.size());
             ui64 ownerSeqNo = OwnerToSeqNo[msg->Owner];
             if (DeleteQueue) {
                 const ui64 inFlightSeqNo = DeleteQueue.back().SeqNo;
-                Y_VERIFY(inFlightSeqNo > ownerSeqNo, "inFlightSeqNo# %" PRIu64 " ownerSeqNo# %" PRIu64,
+                Y_ABORT_UNLESS(inFlightSeqNo > ownerSeqNo, "inFlightSeqNo# %" PRIu64 " ownerSeqNo# %" PRIu64,
                         inFlightSeqNo, ownerSeqNo);
                 ownerSeqNo = inFlightSeqNo;
             }
@@ -83,17 +83,17 @@ namespace NKikimr {
                 TBlobLocator& locator = Keeper.State.BlobLookup.Lookup(id);
 
                 // mark it as being deleted; ensure that there are no other deletion races
-                Y_VERIFY(!locator.DeleteInProgress);
+                Y_ABORT_UNLESS(!locator.DeleteInProgress);
                 locator.DeleteInProgress = true;
 
                 // check if item is being defragmented right now; if so, we put it into wait queue; otherwise generate
                 // delete locator
                 auto defragIt = Keeper.State.DefragWriteInProgress.find(id);
                 if (defragIt != Keeper.State.DefragWriteInProgress.end()) {
-                    Y_VERIFY(!defragIt->second);
+                    Y_ABORT_UNLESS(!defragIt->second);
                     defragIt->second = true;
                     ++item.NumDefragItems;
-                    Y_VERIFY(!WriteInProgress.count(id));
+                    Y_ABORT_UNLESS(!WriteInProgress.count(id));
                     WriteInProgress.emplace(id, it);
                     item.State = EItemState::WaitingForDefrag;
                     IHLOG_DEBUG(ctx, "Owner# %d SeqNo# %" PRIu64 " Id# %016" PRIx64 " deferred delete",
@@ -101,12 +101,12 @@ namespace NKikimr {
                 } else {
                     // find matching chunk, check that it is not being deleted
                     auto it = Keeper.State.Chunks.find(locator.ChunkIdx);
-                    Y_VERIFY(it != Keeper.State.Chunks.end());
+                    Y_ABORT_UNLESS(it != Keeper.State.Chunks.end());
                     TChunkInfo& chunk = it->second;
-                    Y_VERIFY(chunk.State != EChunkState::Deleting);
+                    Y_ABORT_UNLESS(chunk.State != EChunkState::Deleting);
 
                     // check that requested item is not deleted yet
-                    Y_VERIFY(!chunk.DeletedItems.Get(locator.IndexInsideChunk));
+                    Y_ABORT_UNLESS(!chunk.DeletedItems.Get(locator.IndexInsideChunk));
 
                     // calculate number of blocks occupied by this blob
                     const ui32 sizeInBlocks = Keeper.State.GetBlobSizeInBlocks(locator.PayloadSize);
@@ -124,7 +124,7 @@ namespace NKikimr {
         // this function is invoked as a notification for item that was moved when delete query for it was received
         void TDeleter::OnItemDefragWritten(TIncrHugeBlobId id, const TActorContext& ctx) {
             auto it = WriteInProgress.find(id);
-            Y_VERIFY(it != WriteInProgress.end());
+            Y_ABORT_UNLESS(it != WriteInProgress.end());
             TDeleteQueue::iterator itemIt = it->second;
             WriteInProgress.erase(it);
             TDeleteQueueItem& item = *itemIt;
@@ -134,7 +134,7 @@ namespace NKikimr {
 
             // get chunk
             auto chunkIt = Keeper.State.Chunks.find(locator.ChunkIdx);
-            Y_VERIFY(chunkIt != Keeper.State.Chunks.end());
+            Y_ABORT_UNLESS(chunkIt != Keeper.State.Chunks.end());
             TChunkInfo& chunk = chunkIt->second;
 
             // calculate size of this record in blocks
@@ -144,7 +144,7 @@ namespace NKikimr {
             item.DeleteLocators.push_back(TBlobDeleteLocator{locator.ChunkIdx, chunk.ChunkSerNum, id,
                     locator.IndexInsideChunk, sizeInBlocks});
 
-            Y_VERIFY(item.NumDefragItems > 0);
+            Y_ABORT_UNLESS(item.NumDefragItems > 0);
             if (!--item.NumDefragItems) {
                 IHLOG_DEBUG(ctx, "Owner# %d SeqNo# %" PRIu64 " delete resumed", item.Owner, item.SeqNo);
                 item.State = EItemState::Ready;
@@ -170,7 +170,7 @@ namespace NKikimr {
             switch (item.State) {
                 case EItemState::WaitingForDefrag:
                     // we can't process this item yet
-                    Y_VERIFY(item.NumDefragItems > 0);
+                    Y_ABORT_UNLESS(item.NumDefragItems > 0);
                     return;
 
                 case EItemState::Ready:
@@ -183,7 +183,7 @@ namespace NKikimr {
             }
 
             // ensure that we generated locator for each item
-            Y_VERIFY(item.DeleteLocators.size() == item.Ids.size());
+            Y_ABORT_UNLESS(item.DeleteLocators.size() == item.Ids.size());
 
             // sort locators as needed
             std::sort(item.DeleteLocators.begin(), item.DeleteLocators.end());
@@ -199,9 +199,9 @@ namespace NKikimr {
                     // handle deleted locators; remove them from lookup also
                     ProcessDeletedLocators(item.DeleteLocators, true, ctx);
                     // update per-owner sequential number; we do this only in case of success
-                    Y_VERIFY(item.Owner < OwnerToSeqNo.size());
+                    Y_ABORT_UNLESS(item.Owner < OwnerToSeqNo.size());
                     ui64& ownerSeqNo = OwnerToSeqNo[item.Owner];
-                    Y_VERIFY(item.SeqNo > ownerSeqNo);
+                    Y_ABORT_UNLESS(item.SeqNo > ownerSeqNo);
                     ownerSeqNo = item.SeqNo;
                 } else {
                     // if delete fails, then reset deletion flag for scheduled items
@@ -209,7 +209,7 @@ namespace NKikimr {
                         // find locator
                         TBlobLocator& locator = Keeper.State.BlobLookup.Lookup(id);
                         // ensure delete flag was set and reset it
-                        Y_VERIFY(locator.DeleteInProgress);
+                        Y_ABORT_UNLESS(locator.DeleteInProgress);
                         locator.DeleteInProgress = false;
                     }
                 }
@@ -249,7 +249,7 @@ namespace NKikimr {
                     IHLOG_DEBUG(ctx, "deleting %016" PRIx64 " from lookup table", deleteLocator.Id);
                     TBlobLocator locator;
                     bool status = Keeper.State.BlobLookup.Delete(deleteLocator.Id, &locator);
-                    Y_VERIFY(status);
+                    Y_ABORT_UNLESS(status);
                 }
             }
 
@@ -258,16 +258,16 @@ namespace NKikimr {
                 // get reference to current chunk
                 const TChunkIdx chunkIdx = it->ChunkIdx;
                 auto chunkIt = Keeper.State.Chunks.find(chunkIdx);
-                Y_VERIFY(chunkIt != Keeper.State.Chunks.end());
+                Y_ABORT_UNLESS(chunkIt != Keeper.State.Chunks.end());
                 TChunkInfo& chunk = chunkIt->second;
-                Y_VERIFY(chunk.State != EChunkState::Deleting);
+                Y_ABORT_UNLESS(chunk.State != EChunkState::Deleting);
 
                 // process items
                 for (; it != deleteLocators.end() && it->ChunkIdx == chunkIdx; ++it) {
-                    Y_VERIFY(chunk.ChunkSerNum == it->ChunkSerNum);
-                    Y_VERIFY(chunk.NumUsedBlocks >= it->SizeInBlocks);
+                    Y_ABORT_UNLESS(chunk.ChunkSerNum == it->ChunkSerNum);
+                    Y_ABORT_UNLESS(chunk.NumUsedBlocks >= it->SizeInBlocks);
                     chunk.NumUsedBlocks -= it->SizeInBlocks;
-                    Y_VERIFY(!chunk.DeletedItems.Get(it->IndexInsideChunk));
+                    Y_ABORT_UNLESS(!chunk.DeletedItems.Get(it->IndexInsideChunk));
                     chunk.DeletedItems.Set(it->IndexInsideChunk);
                 }
 
@@ -298,9 +298,9 @@ namespace NKikimr {
 
             // ensure that chunk is completely deleted, i.e. all of its items are marked deleted; mostly this is debug
             // feature
-            Y_VERIFY(chunk.NumUsedBlocks == 0 && chunk.DeletedItems.Count() == chunk.NumItems);
+            Y_ABORT_UNLESS(chunk.NumUsedBlocks == 0 && chunk.DeletedItems.Count() == chunk.NumItems);
             for (ui32 i = 0; i < chunk.NumItems; ++i) {
-                Y_VERIFY(chunk.DeletedItems.Get(i));
+                Y_ABORT_UNLESS(chunk.DeletedItems.Get(i));
             }
 
             // create callback that will actually delete this chunk from index when log is completed
@@ -310,10 +310,10 @@ namespace NKikimr {
 
                 // find chunk and ensure that it is in deleting state
                 auto it = Keeper.State.Chunks.find(chunkIdx);
-                Y_VERIFY(it != Keeper.State.Chunks.end());
+                Y_ABORT_UNLESS(it != Keeper.State.Chunks.end());
                 TChunkInfo& chunk = it->second;
-                Y_VERIFY(chunk.State == EChunkState::Deleting);
-                Y_VERIFY(chunk.InFlightReq == 0);
+                Y_ABORT_UNLESS(chunk.State == EChunkState::Deleting);
+                Y_ABORT_UNLESS(chunk.InFlightReq == 0);
 
                 // on success just delete chunk from set; otherwise try again
                 if (status == NKikimrProto::OK) {
@@ -333,7 +333,7 @@ namespace NKikimr {
 
         // this function is called during recovery to set up initial positions of sequence number for each owner
         void TDeleter::InsertOwnerOnRecovery(ui8 owner, ui64 seqNo) {
-            Y_VERIFY(owner < OwnerToSeqNo.size());
+            Y_ABORT_UNLESS(owner < OwnerToSeqNo.size());
             OwnerToSeqNo[owner] = seqNo;
         }
 

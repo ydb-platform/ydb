@@ -91,7 +91,7 @@ public:
 
     void Handle(TEvIncrHugeInitResult::TPtr& ev, const TActorContext& ctx) {
         TEvIncrHugeInitResult *msg = ev->Get();
-        Y_VERIFY(msg->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 
         TVector<TEvIncrHugeInitResult::TItem> referenceItems;
         for (const auto& pair : State.ConfirmedState) {
@@ -179,7 +179,7 @@ public:
                 }
             } else {
                 // advance both iterators, it's okay
-                Y_VERIFY(TLogoBlobID(refIt->Meta.RawU64) == TLogoBlobID(it->Meta.RawU64) &&
+                Y_ABORT_UNLESS(TLogoBlobID(refIt->Meta.RawU64) == TLogoBlobID(it->Meta.RawU64) &&
                         refIt->Id == it->Id && refIt->Lsn == it->Lsn);
                 ++refIt;
                 ++it;
@@ -307,11 +307,11 @@ public:
         LOG_DEBUG(ctx, NActorsServices::TEST, "finished Write Id# %016" PRIx64 " LogoBlobId# %s Lsn# %" PRIu64,
                 msg->Id, payload->LogoBlobId.ToString().data(), payload->Lsn);
 
-        Y_VERIFY(msg->Status == NKikimrProto::OK, "Status# %s", NKikimrProto::EReplyStatus_Name(msg->Status).data());
+        Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK, "Status# %s", NKikimrProto::EReplyStatus_Name(msg->Status).data());
 
         // find matching in-flight request
         auto it = State.InFlightWrites.find(std::make_pair(payload->Lsn, payload->LogoBlobId));
-        Y_VERIFY(it != State.InFlightWrites.end());
+        Y_ABORT_UNLESS(it != State.InFlightWrites.end());
 
         State.BytesWritten += it->second.LogoBlobId.BlobSize();
         TDuration delta = Now() - State.StartTime;
@@ -320,7 +320,7 @@ public:
                 (State.BytesWritten + 512 * 1024) / 1048576, delta.ToString().data(), speed);
 
         // insert new entry into confirmed state
-        Y_VERIFY(!State.ConfirmedState.count(msg->Id));
+        Y_ABORT_UNLESS(!State.ConfirmedState.count(msg->Id));
         State.ConfirmedState.emplace(msg->Id, std::move(it->second));
 
         // delete in-flight request
@@ -356,11 +356,11 @@ public:
         LOG_DEBUG(ctx, NActorsServices::TEST, "finished Read Status# %s Lsn# %" PRIu64,
                 NKikimrProto::EReplyStatus_Name(msg->Status).data(), lsn);
 
-        Y_VERIFY(msg->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 
         auto it = State.InFlightReads.find(lsn);
-        Y_VERIFY(it != State.InFlightReads.end());
-        Y_VERIFY(MD5::CalcRaw(msg->Data) == TStringBuf(reinterpret_cast<const char *>(it->second.DataDigest), 16));
+        Y_ABORT_UNLESS(it != State.InFlightReads.end());
+        Y_ABORT_UNLESS(MD5::CalcRaw(msg->Data) == TStringBuf(reinterpret_cast<const char *>(it->second.DataDigest), 16));
         State.InFlightReads.erase(it);
 
         DoSomething(ctx);
@@ -381,7 +381,7 @@ public:
                 GetNumRequestsInFlight());
 
         // move item from confirmed state into in-flight delete
-        Y_VERIFY(it != State.ConfirmedState.end());
+        Y_ABORT_UNLESS(it != State.ConfirmedState.end());
         State.InFlightDeletes.emplace(it->first, std::move(it->second));
         State.ConfirmedState.erase(it);
 
@@ -396,11 +396,11 @@ public:
         LOG_DEBUG(ctx, NActorsServices::TEST, "finished Delete Status# %s Id# %016" PRIx64,
                 NKikimrProto::EReplyStatus_Name(msg->Status).data(), id);
 
-        Y_VERIFY(msg->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 
         // remove item from delete in-flight map
         auto deleteIt = State.InFlightDeletes.find(id);
-        Y_VERIFY(deleteIt != State.InFlightDeletes.end());
+        Y_ABORT_UNLESS(deleteIt != State.InFlightDeletes.end());
         State.InFlightDeletes.erase(deleteIt);
 
         DoSomething(ctx);

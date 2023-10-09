@@ -35,7 +35,7 @@ void TTestEnv::AllocateAndCheck(ui64 size) {
 }
 
 void TTestEnv::AsyncAllocate(ui64 size) {
-    Y_VERIFY(TxAllocatorClient);
+    Y_ABORT_UNLESS(TxAllocatorClient);
     TActorId sender = Runtime.AllocateEdgeActor();
     TEvTxAllocatorClient::TEvAllocate *ev = new TEvTxAllocatorClient::TEvAllocate(size);
     Runtime.Send(new IEventHandle(TxAllocatorClient, sender, ev, 0, SomeCockie(size)), 0, true);

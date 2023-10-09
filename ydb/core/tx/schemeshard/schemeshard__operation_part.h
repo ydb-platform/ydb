@@ -291,7 +291,7 @@ private:
 
     template <typename... Args>
     bool Progress(TOperationContext& context, TFunc<Args...> func, Args&&... args) {
-        Y_VERIFY(StateFunc);
+        Y_ABORT_UNLESS(StateFunc);
         const bool isDone = std::invoke(func, StateFunc.Get(), std::forward<Args>(args)...);
         if (isDone) {
             StateDone(context);

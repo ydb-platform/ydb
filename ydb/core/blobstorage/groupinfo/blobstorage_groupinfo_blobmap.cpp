@@ -43,7 +43,7 @@ namespace NKikimr {
             {}
 
             void PickSubgroup(ui32 hash, TBlobStorageGroupInfo::TOrderNums &orderNums) override final {
-                Y_VERIFY(orderNums.empty());
+                Y_ABORT_UNLESS(orderNums.empty());
 
                 const ui32 numFailDomains = Topology->GetTotalFailDomainsNum();
                 ui32 domainIdx = hash % numFailDomains;
@@ -168,13 +168,13 @@ namespace NKikimr {
                 , NumFailDomainsPerFailRealm(Topology->FailRealms[0].FailDomains.size())
                 , NumVDisksPerFailDomain(Topology->FailRealms[0].FailDomains[0].VDisks.size())
             {
-                Y_VERIFY(NumFailRealms >= NumFailRealmsInSubgroup &&
+                Y_ABORT_UNLESS(NumFailRealms >= NumFailRealmsInSubgroup &&
                         NumFailDomainsPerFailRealm >= NumFailDomainsPerFailRealmInSubgroup,
                         "mirror-3-dc group tolopogy is invalid: %s", topology->ToString().data());
             }
 
             void PickSubgroup(ui32 hash, TBlobStorageGroupInfo::TOrderNums &orderNums) override final {
-                Y_VERIFY(orderNums.empty());
+                Y_ABORT_UNLESS(orderNums.empty());
 
                 ui32 baseRealm;
                 ui32 baseDomain;

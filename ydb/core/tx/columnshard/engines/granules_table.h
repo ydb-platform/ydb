@@ -18,7 +18,7 @@ public:
         , Granule(granule)
         , Mark(mark)
     {
-        Y_VERIFY(Mark.Size());
+        Y_ABORT_UNLESS(Mark.Size());
     }
 
     const TSnapshot& GetCreatedAt() const {

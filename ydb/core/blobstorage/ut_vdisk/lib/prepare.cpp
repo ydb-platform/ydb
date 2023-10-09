@@ -137,7 +137,7 @@ TAllPDisks::TAllPDisks(const TAllPDisksConfiguration &cfg)
         }
     } else {
         // using device
-        Y_VERIFY(cfg.PDisksNum == 1 && cfg.DiskSize == 0);
+        Y_ABORT_UNLESS(cfg.PDisksNum == 1 && cfg.DiskSize == 0);
         ui32 pDiskId = 1;
         ui64 pDiskGuid = 1; // some guide != 0
 

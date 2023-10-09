@@ -183,7 +183,7 @@ private:
     }
 
     void Handle(TEvPrivate::TEvCreateTableResponse::TPtr&) {
-        Y_VERIFY(TablesCreating > 0);
+        Y_ABORT_UNLESS(TablesCreating > 0);
         if (--TablesCreating == 0) {
             Send(Owner, std::move(ResultEvent));
             PassAway();
@@ -1548,7 +1548,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
-        Y_VERIFY(ev->Cookie < Response->Get()->Operations.size());
+        Y_ABORT_UNLESS(ev->Cookie < Response->Get()->Operations.size());
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             Response->Get()->Status = ev->Get()->Status;
@@ -1564,7 +1564,7 @@ public:
             op.set_status(*ev->Get()->OperationStatus);
             Ydb::Query::ExecuteScriptMetadata metadata;
             op.metadata().UnpackTo(&metadata);
-            Y_VERIFY(ev->Get()->ExecutionStatus);
+            Y_ABORT_UNLESS(ev->Get()->ExecutionStatus);
             metadata.set_exec_status(*ev->Get()->ExecutionStatus);
             op.mutable_metadata()->PackFrom(metadata);
             if (ev->Get()->OperationIssues) {

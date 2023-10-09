@@ -33,7 +33,7 @@ namespace NKikimr::NBsController {
 
             void Cleanup(const TActorId& vdiskServiceId) {
                 auto it = PerAggegatorInfo.find(vdiskServiceId);
-                Y_VERIFY(it != PerAggegatorInfo.end());
+                Y_ABORT_UNLESS(it != PerAggegatorInfo.end());
                 auto& item = it->second;
                 Accum.Subtract(item.Stat);
                 PerAggegatorInfo.erase(it);
@@ -132,7 +132,7 @@ namespace NKikimr::NBsController {
                         for (; it != Groups.end() && it->first < groupId; ++it)
                         {}
                     }
-                    Y_VERIFY(it != Groups.end() && it->first == groupId);
+                    Y_ABORT_UNLESS(it != Groups.end() && it->first == groupId);
 
                     // report this group to the event
                     ev->Updates.emplace_hint(ev->Updates.end(), groupId, it->second.Stats);

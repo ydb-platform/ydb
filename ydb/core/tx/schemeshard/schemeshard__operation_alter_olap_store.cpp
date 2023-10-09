@@ -95,9 +95,9 @@ public:
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterOlapStore);
         TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores[txState->TargetPathId];
-        Y_VERIFY(storeInfo);
+        Y_ABORT_UNLESS(storeInfo);
         TOlapStoreInfo::TPtr alterData = storeInfo->AlterData;
-        Y_VERIFY(alterData);
+        Y_ABORT_UNLESS(alterData);
 
         txState->ClearShardsInProgress();
 
@@ -198,15 +198,15 @@ public:
                      << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterOlapStore);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterOlapStore);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores[pathId];
-        Y_VERIFY(storeInfo);
+        Y_ABORT_UNLESS(storeInfo);
         TOlapStoreInfo::TPtr alterData = storeInfo->AlterData;
-        Y_VERIFY(alterData);
+        Y_ABORT_UNLESS(alterData);
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -244,8 +244,8 @@ public:
                      << " at tablet: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterOlapStore);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterOlapStore);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -286,12 +286,12 @@ public:
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterOlapStore);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterOlapStore);
 
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
-        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
         txState->ShardsInProgress.erase(shardIdx);
         return MaybeFinish(context);
@@ -305,8 +305,8 @@ public:
                      << " at tablet: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterOlapStore);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterOlapStore);
 
         if (!MessagesSent) {
             txState->ClearShardsInProgress();
@@ -339,7 +339,7 @@ public:
             TPathId pathId = txState->TargetPathId;
 
             TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores[pathId];
-            Y_VERIFY(storeInfo);
+            Y_ABORT_UNLESS(storeInfo);
 
             for (TPathId tablePathId : storeInfo->ColumnTables) {
                 TablesToUpdate.emplace_back(tablePathId);
@@ -390,7 +390,7 @@ public:
 
     bool MaybeFinish(TOperationContext& context) {
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterOlapStore);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterOlapStore);
 
         if (txState->ShardsInProgress.empty() && TablesToUpdate.empty()) {
             NIceDb::TNiceDb db(context.GetDB());
@@ -477,7 +477,7 @@ public:
             }
         }
 
-        Y_VERIFY(context.SS->OlapStores.contains(path->PathId));
+        Y_ABORT_UNLESS(context.SS->OlapStores.contains(path->PathId));
         TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(path->PathId);
 
         if (!storeInfo->ColumnTablesUnderOperation.empty()) {
@@ -557,7 +557,7 @@ ISubOperation::TPtr CreateAlterOlapStore(TOperationId id, const TTxTransaction& 
 }
 
 ISubOperation::TPtr CreateAlterOlapStore(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TAlterOlapStore>(id, state);
 }
 

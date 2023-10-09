@@ -13,7 +13,7 @@ public:
     }
 
     TReferenceSet(ui64 bits) {
-        Y_VERIFY((bits & 0x7f) == bits);
+        Y_ABORT_UNLESS((bits & 0x7f) == bits);
         Bits = bits;
     }
 
@@ -31,8 +31,8 @@ public:
     }
 
     void Add(i64 begin, i64 end) {
-        Y_VERIFY(begin >= 0 && begin < 8);
-        Y_VERIFY(end >= 0 && end <= 8);
+        Y_ABORT_UNLESS(begin >= 0 && begin < 8);
+        Y_ABORT_UNLESS(end >= 0 && end <= 8);
         for (i64 i = begin; i < end; ++i) {
             Bits |= (1 << i);
         }
@@ -55,8 +55,8 @@ public:
     }
 
     void Subtract(i64 begin, i64 end) {
-        Y_VERIFY(begin >= 0 && begin < 8);
-        Y_VERIFY(end >= 0 && end <= 8);
+        Y_ABORT_UNLESS(begin >= 0 && begin < 8);
+        Y_ABORT_UNLESS(end >= 0 && end <= 8);
         for (i64 i = begin; i < end; ++i) {
             Bits &= ~(1ull << i);
         }
@@ -108,7 +108,7 @@ public:
     }
 
     void Verify() const {
-        Y_VERIFY((Bits & 0x7f) == Bits);
+        Y_ABORT_UNLESS((Bits & 0x7f) == Bits);
     }
 
     size_t Size() const {

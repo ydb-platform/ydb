@@ -103,7 +103,7 @@ struct TObjectDistributions {
     };
 
     TObjectToBalance GetObjectToBalance() {
-        Y_VERIFY(!SortedDistributions.empty());
+        Y_ABORT_UNLESS(!SortedDistributions.empty());
         const auto& dist = *SortedDistributions.rbegin();
         i64 maxCnt = *dist.SortedDistribution.rbegin();
         TObjectToBalance result(dist.Id);

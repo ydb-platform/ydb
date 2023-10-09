@@ -32,7 +32,7 @@ bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
 }
 
 ui32 TCompactColumnEngineChanges::NumSplitInto(const ui32 srcRows) const {
-    Y_VERIFY(srcRows > 1);
+    Y_ABORT_UNLESS(srcRows > 1);
     const ui64 totalBytes = TotalBlobsSize();
     const ui32 numSplitInto = (totalBytes / Limits.GranuleSizeForOverloadPrevent) + 1;
     return std::max<ui32>(2, numSplitInto);
@@ -45,9 +45,9 @@ void TCompactColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self,
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
 
-    Y_VERIFY(SwitchedPortions.size());
+    Y_ABORT_UNLESS(SwitchedPortions.size());
     for (const auto& p : SwitchedPortions) {
-        Y_VERIFY(!p.Empty());
+        Y_ABORT_UNLESS(!p.Empty());
         auto action = BlobsAction.GetReading(p);
         for (const auto& rec : p.Records) {
             action->AddRange(rec.BlobRange);
@@ -66,7 +66,7 @@ void TCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShar
 
 void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
     self.BackgroundController.FinishCompaction(TPlanCompactionInfo(GranuleMeta->GetPathId()));
-    Y_VERIFY(NeedGranuleStatusProvide);
+    Y_ABORT_UNLESS(NeedGranuleStatusProvide);
     if (context.FinishedSuccessfully) {
         GranuleMeta->OnCompactionFinished();
     } else {
@@ -80,16 +80,16 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits
     , Limits(limits)
     , GranuleMeta(granule)
 {
-    Y_VERIFY(GranuleMeta);
+    Y_ABORT_UNLESS(GranuleMeta);
 
     SwitchedPortions.reserve(portions.size());
     for (const auto& portionInfo : portions) {
-        Y_VERIFY(!portionInfo->HasRemoveSnapshot());
+        Y_ABORT_UNLESS(!portionInfo->HasRemoveSnapshot());
         SwitchedPortions.emplace_back(*portionInfo);
         AFL_VERIFY(PortionsToRemove.emplace(portionInfo->GetAddress(), *portionInfo).second);
-        Y_VERIFY(portionInfo->GetGranule() == GranuleMeta->GetGranuleId());
+        Y_ABORT_UNLESS(portionInfo->GetGranule() == GranuleMeta->GetGranuleId());
     }
-    Y_VERIFY(SwitchedPortions.size());
+    Y_ABORT_UNLESS(SwitchedPortions.size());
 }
 
 TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {

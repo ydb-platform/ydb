@@ -82,7 +82,7 @@ public:
 
     void EnableLogs(const TVector<NKikimrServices::EServiceKikimr>& services = LOGGED_SERVICES,
                     NActors::NLog::EPriority prio = NActors::NLog::PRI_DEBUG) {
-        Y_VERIFY(CleverServer != nullptr, "Start server before enabling logs");
+        Y_ABORT_UNLESS(CleverServer != nullptr, "Start server before enabling logs");
         for (auto s : services) {
             CleverServer->GetRuntime()->SetLogPriority(s, prio);
         }

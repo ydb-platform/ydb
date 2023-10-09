@@ -41,8 +41,8 @@ namespace NKikimr {
             , Config(std::move(config))
             , MonGroup(VCtx->VDiskCounters, "subsystem", "syncer")
         {
-            Y_VERIFY(VCtx && LsnMngr && PDiskCtx);
-            Y_VERIFY(SkeletonId && LoggerId && LogCutterId && SyncLogId);
+            Y_ABORT_UNLESS(VCtx && LsnMngr && PDiskCtx);
+            Y_ABORT_UNLESS(SkeletonId && LoggerId && LogCutterId && SyncLogId);
         }
     };
 

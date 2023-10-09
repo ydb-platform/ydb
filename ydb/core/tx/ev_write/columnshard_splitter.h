@@ -108,12 +108,12 @@ private:
     }
 
     TYdbConclusionStatus SplitByHashImpl(const std::shared_ptr<arrow::RecordBatch>& batch, const NKikimrSchemeOp::TColumnTableSharding& descSharding) {
-        Y_VERIFY(descSharding.HasHashSharding());
-        Y_VERIFY(batch);
+        Y_ABORT_UNLESS(descSharding.HasHashSharding());
+        Y_ABORT_UNLESS(batch);
 
         TVector<ui64> tabletIds(descSharding.GetColumnShards().begin(), descSharding.GetColumnShards().end());
         const ui32 numShards = tabletIds.size();
-        Y_VERIFY(numShards);
+        Y_ABORT_UNLESS(numShards);
 
         TFullSplitData result(numShards);
         if (numShards == 1) {
@@ -140,7 +140,7 @@ private:
         }
 
         std::vector<std::shared_ptr<arrow::RecordBatch>> sharded = NArrow::ShardingSplit(batch, rowSharding, numShards);
-        Y_VERIFY(sharded.size() == numShards);
+        Y_ABORT_UNLESS(sharded.size() == numShards);
 
         THashMap<ui64, TString> out;
         for (size_t i = 0; i < sharded.size(); ++i) {
@@ -155,7 +155,7 @@ private:
             }
         }
 
-        Y_VERIFY(result.GetShardsInfo().size());
+        Y_ABORT_UNLESS(result.GetShardsInfo().size());
         FullSplitData = result;
         return TYdbConclusionStatus::Success();
     }
@@ -163,7 +163,7 @@ private:
     std::shared_ptr<arrow::Schema> ExtractArrowSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
         TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
         for (auto& col : schema.GetColumns()) {
-            Y_VERIFY(col.HasTypeId());
+            Y_ABORT_UNLESS(col.HasTypeId());
             auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
                 col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
             columns.emplace_back(col.GetName(), typeInfoMod.TypeInfo);

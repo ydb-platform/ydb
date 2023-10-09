@@ -123,8 +123,8 @@ private:
         LOG_TRACE_S(ctx, NKikimrServices::KESUS_PROXY,
             "Got TEvResolveResult for path " << msg->KesusPath.Quote());
         auto& entry = Cache[msg->KesusPath];
-        Y_VERIFY(entry.State == CACHE_STATE_RESOLVING);
-        Y_VERIFY(msg->Event->Request->ResultSet.size() == 1);
+        Y_ABORT_UNLESS(entry.State == CACHE_STATE_RESOLVING);
+        Y_ABORT_UNLESS(msg->Event->Request->ResultSet.size() == 1);
         entry.State = CACHE_STATE_ACTIVE;
         const auto& result = msg->Event->Request->ResultSet.front();
         entry.LastError.Clear();

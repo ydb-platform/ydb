@@ -50,22 +50,22 @@ namespace NKikimr {
                 , VCtx(vCtx)
             {
                 NKikimrBlobStorage::TEvVMovedPatch &record = Event->Get()->Record;
-                Y_VERIFY(record.HasOriginalGroupId());
+                Y_ABORT_UNLESS(record.HasOriginalGroupId());
                 OriginalGroupId = record.GetOriginalGroupId();
-                Y_VERIFY(record.HasPatchedGroupId());
+                Y_ABORT_UNLESS(record.HasPatchedGroupId());
                 PatchedGroupId = record.GetPatchedGroupId();
-                Y_VERIFY(record.HasOriginalBlobId());
+                Y_ABORT_UNLESS(record.HasOriginalBlobId());
                 OriginalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
-                Y_VERIFY(record.HasPatchedBlobId());
+                Y_ABORT_UNLESS(record.HasPatchedBlobId());
                 PatchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
 
                 DiffCount = record.DiffsSize();
                 Diffs.reset(new TEvBlobStorage::TEvPatch::TDiff[DiffCount]);
                 for (ui32 idx = 0; idx < DiffCount; ++idx) {
                     const NKikimrBlobStorage::TDiffBlock &diff = record.GetDiffs(idx);
-                    Y_VERIFY(diff.HasOffset());
+                    Y_ABORT_UNLESS(diff.HasOffset());
                     Diffs[idx].Offset = diff.GetOffset();
-                    Y_VERIFY(diff.HasBuffer());
+                    Y_ABORT_UNLESS(diff.HasBuffer());
                     Diffs[idx].Buffer = TRcBuf(diff.GetBuffer());
                 }
             }

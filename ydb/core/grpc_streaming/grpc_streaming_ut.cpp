@@ -179,13 +179,13 @@ public:
 
     void Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER, "Received TEvReadFinished, success = " << ev->Get()->Success);
-        Y_VERIFY(!ev->Get()->Success, "Unexpected read success");
+        Y_ABORT_UNLESS(!ev->Get()->Success, "Unexpected read success");
         Step();
     }
 
     void Handle(IContext::TEvWriteFinished::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER, "Received TEvWriteFinished, success = " << ev->Get()->Success);
-        Y_VERIFY(ev->Get()->Success, "Unexpected write failure");
+        Y_ABORT_UNLESS(ev->Get()->Success, "Unexpected write failure");
         Step();
     }
 
@@ -300,7 +300,7 @@ public:
 
     void Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER, "Received TEvReadFinished, success = " << ev->Get()->Success);
-        Y_VERIFY(ev->Get()->Success == false, "Unexpected Read success");
+        Y_ABORT_UNLESS(ev->Get()->Success == false, "Unexpected Read success");
         ReadFinished.Signal();
 
         // It should be possible to reply with an OK status here

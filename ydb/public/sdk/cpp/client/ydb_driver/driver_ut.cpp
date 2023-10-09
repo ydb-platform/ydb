@@ -32,7 +32,7 @@ namespace {
             Cerr << "ListEndpoints: " << request->ShortDebugString() << Endl;
 
             const auto* result = MockResults.FindPtr(request->database());
-            Y_VERIFY(result, "Mock service doesn't have a result for database '%s'", request->database().c_str());
+            Y_ABORT_UNLESS(result, "Mock service doesn't have a result for database '%s'", request->database().c_str());
 
             auto* op = response->mutable_operation();
             op->set_ready(true);

@@ -70,7 +70,7 @@ namespace NKikimr::NBlobDepot {
                     (QueryId, GetQueryId()), (QueryIdx, queryIdx), (Result, result));
 
                 auto& r = Response->Responses[queryIdx];
-                Y_VERIFY(r.Status == NKikimrProto::UNKNOWN);
+                Y_ABORT_UNLESS(r.Status == NKikimrProto::UNKNOWN);
                 if (result.Error()) {
                     r.Status = NKikimrProto::ERROR;
                     --AnswersRemain;
@@ -81,7 +81,7 @@ namespace NKikimr::NBlobDepot {
                     r.Status = NKikimrProto::OK;
                     --AnswersRemain;
                 } else {
-                    Y_VERIFY(Request.MustRestoreFirst <= value->ReliablyWritten);
+                    Y_ABORT_UNLESS(Request.MustRestoreFirst <= value->ReliablyWritten);
                     TReadArg arg{
                         *value,
                         Request.GetHandleClass,
@@ -107,7 +107,7 @@ namespace NKikimr::NBlobDepot {
                     (Tag, tag), (Outcome, outcome));
 
                 auto& resp = Response->Responses[tag];
-                Y_VERIFY(resp.Status == NKikimrProto::UNKNOWN);
+                Y_ABORT_UNLESS(resp.Status == NKikimrProto::UNKNOWN);
                 std::visit(TOverloaded{
                     [&](TReadOutcome::TOk& ok) {
                         resp.Status = NKikimrProto::OK;

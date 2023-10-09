@@ -311,7 +311,7 @@ public:
         }
 
         TDescription& Merge(TDescription&& other) noexcept {
-            Y_VERIFY(Owner == other.Owner);
+            Y_ABORT_UNLESS(Owner == other.Owner);
 
             if (!Path) {
                 Path = other.Path;
@@ -435,10 +435,10 @@ public:
             const bool isDeletion = !IsFilled();
 
             if (!PathId) {
-                Y_VERIFY(isDeletion);
+                Y_ABORT_UNLESS(isDeletion);
                 notify = MakeHolder<TSchemeBoardEvents::TEvNotifyBuilder>(Path, isDeletion);
             } else if (!Path) {
-                Y_VERIFY(isDeletion);
+                Y_ABORT_UNLESS(isDeletion);
                 notify = MakeHolder<TSchemeBoardEvents::TEvNotifyBuilder>(PathId, isDeletion);
             } else {
                 notify = MakeHolder<TSchemeBoardEvents::TEvNotifyBuilder>(Path, PathId, isDeletion);
@@ -482,7 +482,7 @@ public:
 
         TSubscriberInfo& GetSubscriberInfo(const TActorId& subscriber) {
             auto it = Subscribers.find(subscriber);
-            Y_VERIFY(it != Subscribers.end());
+            Y_ABORT_UNLESS(it != Subscribers.end());
             return it->second;
         }
 
@@ -655,7 +655,7 @@ private:
     bool IsSingleSubscriberOnNode(const TActorId& subscriber) const {
         const ui32 nodeId = subscriber.NodeId();
         auto it = Subscribers.lower_bound(TActorId(nodeId, 0, 0, 0));
-        Y_VERIFY(it != Subscribers.end());
+        Y_ABORT_UNLESS(it != Subscribers.end());
 
         return ++it == Subscribers.end() || it->first.NodeId() != nodeId;
     }
@@ -663,7 +663,7 @@ private:
     template <typename TPath>
     void Subscribe(const TActorId& subscriber, const TPath& path, ui64 domainOwnerId, const TCapabilities& capabilities) {
         TDescription* desc = Descriptions.FindPtr(path);
-        Y_VERIFY(desc);
+        Y_ABORT_UNLESS(desc);
 
         SBR_LOG_I("Subscribe"
             << ": subscriber# " << subscriber
@@ -681,7 +681,7 @@ private:
     template <typename TPath>
     void Unsubscribe(const TActorId& subscriber, const TPath& path) {
         TDescription* desc = Descriptions.FindPtr(path);
-        Y_VERIFY(desc);
+        Y_ABORT_UNLESS(desc);
 
         SBR_LOG_I("Unsubscribe"
             << ": subscriber# " << subscriber
@@ -747,8 +747,8 @@ private:
         const ui64 owner = record.GetOwner();
         const ui64 generation = record.GetGeneration();
 
-        Y_VERIFY(Populators.contains(owner));
-        Y_VERIFY(Populators.at(owner).PendingGeneration == generation);
+        Y_ABORT_UNLESS(Populators.contains(owner));
+        Y_ABORT_UNLESS(Populators.at(owner).PendingGeneration == generation);
 
         if (!record.GetNeedAck()) {
             return;
@@ -1050,10 +1050,10 @@ private:
                 desc = Descriptions.FindPtr(*pathId);
             }
 
-            Y_VERIFY(desc);
+            Y_ABORT_UNLESS(desc);
             auto& info = desc->GetSubscriberInfo(subscriber);
 
-            Y_VERIFY(info.GetDomainOwnerId() == owner);
+            Y_ABORT_UNLESS(info.GetDomainOwnerId() == owner);
             if (info.IsNotifiedStrongly() || info.IsWaitForAck()) {
                 continue;
             }
@@ -1081,7 +1081,7 @@ private:
         if (record.HasPath()) {
             SubscribeBy(ev->Sender, record.GetPath(), domainOwnerId, capabilities);
         } else {
-            Y_VERIFY(record.HasPathOwnerId() && record.HasLocalPathId());
+            Y_ABORT_UNLESS(record.HasPathOwnerId() && record.HasLocalPathId());
             SubscribeBy(ev->Sender, TPathId(record.GetPathOwnerId(), record.GetLocalPathId()), domainOwnerId, capabilities);
         }
     }
@@ -1095,7 +1095,7 @@ private:
         if (record.HasPath()) {
             UnsubscribeBy(ev->Sender, record.GetPath());
         } else {
-            Y_VERIFY(record.HasPathOwnerId() && record.HasLocalPathId());
+            Y_ABORT_UNLESS(record.HasPathOwnerId() && record.HasLocalPathId());
             UnsubscribeBy(ev->Sender, TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
         }
     }
@@ -1119,7 +1119,7 @@ private:
             desc = Descriptions.FindPtr(*pathId);
         }
 
-        Y_VERIFY(desc);
+        Y_ABORT_UNLESS(desc);
         auto& info = desc->GetSubscriberInfo(ev->Sender);
 
         const ui64 version = record.GetVersion();
@@ -1168,7 +1168,7 @@ private:
             desc = Descriptions.FindPtr(*pathId);
         }
 
-        Y_VERIFY(desc);
+        Y_ABORT_UNLESS(desc);
         auto& info = desc->GetSubscriberInfo(ev->Sender);
 
         if (!info.EnqueueSyncRequest(ev->Cookie) || info.IsWaitForAck()) {
@@ -1176,7 +1176,7 @@ private:
         }
 
         auto cookie = info.ProcessSyncRequest();
-        Y_VERIFY(cookie && *cookie == ev->Cookie);
+        Y_ABORT_UNLESS(cookie && *cookie == ev->Cookie);
 
         Send(ev->Sender, new TSchemeBoardEvents::TEvSyncVersionResponse(desc->GetVersion()), 0, *cookie);
     }

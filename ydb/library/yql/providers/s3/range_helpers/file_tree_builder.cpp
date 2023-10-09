@@ -9,8 +9,8 @@ void TFileTreeBuilder::AddPath(const TString& path, ui64 fileSize, bool isDirect
         bool isSubDirectory = i != size - 1;
         if (!isSubDirectory) {
             TPath& p = (*currentChildren)[TTreeKey{parts[i], isDirectory}];
-            Y_VERIFY(p.FileSize == 0);
-            Y_VERIFY(!p.Read);
+            Y_ABORT_UNLESS(p.FileSize == 0);
+            Y_ABORT_UNLESS(!p.Read);
             p.FileSize = fileSize;
             p.Read = true;
         } else {

@@ -350,7 +350,7 @@ private:
             TTabletTypes::EType tabletType,
             const TTabletCountersBase* limitedAppCounters = {})
         {
-            Y_VERIFY(executorCounters);
+            Y_ABORT_UNLESS(executorCounters);
 
             if (executorCounters) {
                 if (!TabletExecutorCounters.IsInitialized) {
@@ -392,7 +392,7 @@ private:
         }
 
         void Initialize(const TTabletCountersBase* executorCounters, const TTabletCountersBase* appCounters) {
-            Y_VERIFY(executorCounters);
+            Y_ABORT_UNLESS(executorCounters);
 
             if (!TabletExecutorCounters.IsInitialized) {
                 TabletExecutorCounters.Initialize(executorCounters);
@@ -443,7 +443,7 @@ private:
             {}
 
             void Initialize(const TTabletCountersBase* counters) {
-                Y_VERIFY(!IsInitialized);
+                Y_ABORT_UNLESS(!IsInitialized);
 
                 if (counters) {
                     THashMap<TString, THolder<NPrivate::THistogramCounter>> histogramAggregates;
@@ -507,7 +507,7 @@ private:
             }
 
             void Apply(ui64 tabletId, const TTabletCountersBase* counters, TTabletTypes::EType tabletType) {
-                Y_VERIFY(counters);
+                Y_ABORT_UNLESS(counters);
 
                 TInstant now = TInstant::Now();
                 auto it = LastAggregateUpdateTime.find(tabletId);
@@ -546,7 +546,7 @@ private:
                     if (diff) {
                         cumulativeValues[offset] = valueDiff * 1000000 / diff.MicroSeconds(); // differentiate value to per second rate
                     }
-                    Y_VERIFY(offset < CumulativeCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
+                    Y_ABORT_UNLESS(offset < CumulativeCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
                     *CumulativeCounters[offset] += valueDiff;
                 }
                 AggregatedCumulativeCounters.SetValues(tabletId, cumulativeValues, tabletType);
@@ -570,7 +570,7 @@ private:
             }
 
             void Forget(ui64 tabletId) {
-                Y_VERIFY(IsInitialized);
+                Y_ABORT_UNLESS(IsInitialized);
 
                 AggregatedSimpleCounters.ForgetTablet(tabletId);
                 AggregatedCumulativeCounters.ForgetTablet(tabletId);
@@ -625,7 +625,7 @@ private:
                         continue;
                     }
                     const ui32 offset = nextCumulativeOffset++;
-                    Y_VERIFY(offset < CumulativeCounters.size(),
+                    Y_ABORT_UNLESS(offset < CumulativeCounters.size(),
                         "inconsistent cumulative counters %u >= %lu", offset, CumulativeCounters.size());
                     if constexpr (IsSaving) {
                         (*cumulativeSum)[i] = *CumulativeCounters[offset];
@@ -1028,7 +1028,7 @@ public:
                 auto tabletCounters = GetOrAddCounters(type);
                 if (tabletCounters) {
                     if (!tabletCounters->IsInitialized()) {
-                        Y_VERIFY(ExecutorCounters.Get());
+                        Y_ABORT_UNLESS(ExecutorCounters.Get());
                         auto appCounters = CreateAppCountersByTabletType(type);
                         tabletCounters->Initialize(ExecutorCounters.Get(), appCounters.Get());
                     }
@@ -1257,7 +1257,7 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
     Become(&TThis::StateWork);
 
     TAppData* appData = AppData(ctx);
-    Y_VERIFY(!TabletMon);
+    Y_ABORT_UNLESS(!TabletMon);
 
     if (AppData(ctx)->FeatureFlags.GetEnableDbCounters() && !Follower) {
         auto callback = MakeIntrusive<TTabletMon::TTabletsDbWatcherCallback>(ctx.ActorSystem());
@@ -1365,7 +1365,7 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
         const auto ucByGroup = response.GetLabeledCountersByGroup(i);
         TVector<TString> groups;
         TVector<TString> groupNames;
-        Y_VERIFY(ucByGroup.GetDelimiter() == "/");
+        Y_ABORT_UNLESS(ucByGroup.GetDelimiter() == "/");
         StringSplitter(ucByGroup.GetGroup()).Split('/').SkipEmpty().Collect(&groups);
 
         if (parsePQTopic) {
@@ -1381,7 +1381,7 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
         }
 
         StringSplitter(ucByGroup.GetGroupNames()).Split('/').SkipEmpty().Collect(&groupNames);
-        Y_VERIFY(groups.size() == groupNames.size(), "%s and %s", ucByGroup.GetGroup().c_str(), ucByGroup.GetGroupNames().c_str());
+        Y_ABORT_UNLESS(groups.size() == groupNames.size(), "%s and %s", ucByGroup.GetGroup().c_str(), ucByGroup.GetGroupNames().c_str());
         auto group = mainGroup;
         for (ui32 j = 0; j < groups.size(); ++j) {
             if (parsePQTopic) {
@@ -1638,7 +1638,7 @@ public:
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
         const TEvInterconnect::TEvNodesInfo* nodesInfo = ev->Get();
-        Y_VERIFY(!nodesInfo->Nodes.empty());
+        Y_ABORT_UNLESS(!nodesInfo->Nodes.empty());
         Nodes.reserve(nodesInfo->Nodes.size());
         ui32 i = 0;
         for (const auto& ni : nodesInfo->Nodes) {
@@ -1745,7 +1745,7 @@ public:
                 TVector<TString> aggrGroups;
                 TVector<TString> groupParts, groupParts2;
                 StringSplitter(originalGroup).Split('/').SkipEmpty().Collect(&groupParts);
-                Y_VERIFY(groupParts.size() > 0);
+                Y_ABORT_UNLESS(groupParts.size() > 0);
                 groupParts2 = groupParts;
                 ui32 changePos = groupParts.size();
                 TString group = originalGroup;
@@ -1920,7 +1920,7 @@ public:
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
         const TEvInterconnect::TEvNodesInfo* nodesInfo = ev->Get();
-        Y_VERIFY(!nodesInfo->Nodes.empty());
+        Y_ABORT_UNLESS(!nodesInfo->Nodes.empty());
         Nodes.reserve(nodesInfo->Nodes.size());
         ui32 i = 0;
         for (const auto& ni : nodesInfo->Nodes) {

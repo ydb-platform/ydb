@@ -52,10 +52,10 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
     UpdatePortionStats(Counters, portionInfo, updateType, exPortionInfo);
 
     const ui64 granule = portionInfo.GetGranule();
-    Y_VERIFY(granule);
-    Y_VERIFY(Granules.contains(granule));
+    Y_ABORT_UNLESS(granule);
+    Y_ABORT_UNLESS(Granules.contains(granule));
     ui64 pathId = Granules[granule]->PathId();
-    Y_VERIFY(pathId);
+    Y_ABORT_UNLESS(pathId);
     if (!PathStats.contains(pathId)) {
         auto& stats = PathStats[pathId];
         stats = std::make_shared<TColumnEngineStats>();
@@ -91,8 +91,8 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     ui64 metadataBytes = 0;
     TColumnEngineStats::TPortionsStats deltaStats = DeltaStats(portionInfo, metadataBytes);
 
-    Y_VERIFY(!exPortionInfo || exPortionInfo->GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
-    Y_VERIFY(portionInfo.GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
+    Y_ABORT_UNLESS(!exPortionInfo || exPortionInfo->GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
+    Y_ABORT_UNLESS(portionInfo.GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
 
     TColumnEngineStats::TPortionsStats& srcStats = exPortionInfo
         ? (exPortionInfo->HasRemoveSnapshot()
@@ -142,7 +142,7 @@ void TColumnEngineForLogs::UpdateDefaultSchema(const TSnapshot& snapshot, TIndex
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop) {
-    Y_VERIFY(!Loaded);
+    Y_ABORT_UNLESS(!Loaded);
     Loaded = true;
     {
         auto guard = GranulesStorage->StartPackModification();
@@ -182,17 +182,17 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBl
                     continue;
                 }
 
-                Y_VERIFY(Granules.contains(granule));
+                Y_ABORT_UNLESS(Granules.contains(granule));
                 auto spg = Granules[granule];
-                Y_VERIFY(spg);
+                Y_ABORT_UNLESS(spg);
                 GranulesTable->Erase(db, spg->Record);
                 EraseGranule(pathId, granule, mark);
             }
         }
     }
 
-    Y_VERIFY(!(LastPortion >> 63), "near to int overflow");
-    Y_VERIFY(!(LastGranule >> 63), "near to int overflow");
+    Y_ABORT_UNLESS(!(LastPortion >> 63), "near to int overflow");
+    Y_ABORT_UNLESS(!(LastGranule >> 63), "near to int overflow");
     return true;
 }
 
@@ -212,7 +212,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>&
             currentIndexInfo = &VersionedIndex.GetSchema(portion.GetMinSnapshot())->GetIndexInfo();
             lastSnapshot = portion.GetMinSnapshot();
         }
-        Y_VERIFY(portion.ValidSnapshotInfo());
+        Y_ABORT_UNLESS(portion.ValidSnapshotInfo());
         // Do not count the blob as lost since it exists in the index.
         lostBlobs.erase(loadContext.GetBlobRange().BlobId);
         // Locate granule and append the record.
@@ -247,7 +247,7 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
 }
 
 std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept {
-    Y_VERIFY(dataToIndex.size());
+    Y_ABORT_UNLESS(dataToIndex.size());
 
     TSaverContext saverContext(StoragesManager->GetInsertOperator(), StoragesManager);
 
@@ -304,9 +304,9 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
         }
 
         for (const auto& [_, granule]: PathGranules[pathId]) {
-            Y_VERIFY(Granules.contains(granule));
+            Y_ABORT_UNLESS(Granules.contains(granule));
             auto spg = Granules[granule];
-            Y_VERIFY(spg);
+            Y_ABORT_UNLESS(spg);
             for (auto& [portion, info] : spg->GetPortions()) {
                 affectedRecords += info->NumChunks();
                 changes->PortionsToDrop.push_back(*info);
@@ -339,7 +339,7 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
             break;
         }
         for (auto&& i : it->second) {
-            Y_VERIFY(i.CheckForCleanup(snapshot));
+            Y_ABORT_UNLESS(i.CheckForCleanup(snapshot));
             affectedRecords += i.NumChunks();
             changes->PortionsToDrop.push_back(i);
         }
@@ -360,7 +360,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
     ui64 evictionSize = 0;
     ui64 dropBlobs = 0;
     auto& indexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
-    Y_VERIFY(context.Changes->Tiering.emplace(pathId, ttl).second);
+    Y_ABORT_UNLESS(context.Changes->Tiering.emplace(pathId, ttl).second);
 
     TDuration dWaiting = NYDBTest::TControllers::GetColumnShardController()->GetTTLDefaultWaitingDuration(TDuration::Minutes(5));
     auto itGranules = PathGranules.find(pathId);
@@ -374,12 +374,12 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
     }
 
     auto ttlColumnNames = ttl.GetTtlColumns();
-    Y_VERIFY(ttlColumnNames.size() == 1); // TODO: support different ttl columns
+    Y_ABORT_UNLESS(ttlColumnNames.size() == 1); // TODO: support different ttl columns
     ui32 ttlColumnId = indexInfo.GetColumnId(*ttlColumnNames.begin());
     for (const auto& [ts, granule] : itGranules->second) {
         auto itGranule = Granules.find(granule);
         auto spg = itGranule->second;
-        Y_VERIFY(spg);
+        Y_ABORT_UNLESS(spg);
 
         for (auto& [portion, info] : spg->GetPortions()) {
             if (info->HasRemoveSnapshot()) {
@@ -398,7 +398,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                 bool keep = !expireTimestampOpt;
                 if (expireTimestampOpt) {
                     auto mpiOpt = ttl.Ttl->ScalarToInstant(max);
-                    Y_VERIFY(mpiOpt);
+                    Y_ABORT_UNLESS(mpiOpt);
                     const TInstant maxTtlPortionInstant = *mpiOpt;
                     const TDuration d = maxTtlPortionInstant - *expireTimestampOpt;
                     keep = !!d;
@@ -418,7 +418,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                             continue;
                         }
                         auto mpiOpt = tierInfo.ScalarToInstant(max);
-                        Y_VERIFY(mpiOpt);
+                        Y_ABORT_UNLESS(mpiOpt);
                         const TInstant maxTieringPortionInstant = *mpiOpt;
 
                         const TDuration d = tierInfo.GetEvictInstant(context.Now) - maxTieringPortionInstant;
@@ -457,7 +457,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
             }
         }
     }
-    Y_VERIFY(!!dWaiting);
+    Y_ABORT_UNLESS(!!dWaiting);
     return dWaiting;
 }
 
@@ -523,15 +523,15 @@ std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const TH
 }
 
 std::vector<std::vector<std::pair<TMark, ui64>>> TColumnEngineForLogs::EmptyGranuleTracks(ui64 pathId) const {
-    Y_VERIFY(PathGranules.contains(pathId));
+    Y_ABORT_UNLESS(PathGranules.contains(pathId));
     const auto& pathGranules = PathGranules.find(pathId)->second;
 
     std::vector<std::vector<std::pair<TMark, ui64>>> emptyGranules;
     ui64 emptyStart = 0;
     for (const auto& [mark, granule]: pathGranules) {
-        Y_VERIFY(Granules.contains(granule));
+        Y_ABORT_UNLESS(Granules.contains(granule));
         auto spg = Granules.find(granule)->second;
-        Y_VERIFY(spg);
+        Y_ABORT_UNLESS(spg);
 
         if (spg->Empty()) {
             if (!emptyStart) {
@@ -554,7 +554,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
     }
     {
         TApplyChangesContext context(db, snapshot);
-        Y_VERIFY(indexChanges->ApplyChanges(*this, context));
+        Y_ABORT_UNLESS(indexChanges->ApplyChanges(*this, context));
     }
     CountersTable->Write(db, LAST_PORTION, LastPortion);
     CountersTable->Write(db, LAST_GRANULE, LastGranule);
@@ -591,10 +591,10 @@ std::optional<ui64> TColumnEngineForLogs::NewGranule(const TGranuleRecord& rec) 
 }
 
 void TColumnEngineForLogs::EraseGranule(ui64 pathId, ui64 granule, const TMark& mark) {
-    Y_VERIFY(PathGranules.contains(pathId));
+    Y_ABORT_UNLESS(PathGranules.contains(pathId));
     auto it = Granules.find(granule);
-    Y_VERIFY(it != Granules.end());
-    Y_VERIFY(it->second->IsErasable());
+    Y_ABORT_UNLESS(it != Granules.end());
+    Y_ABORT_UNLESS(it->second->IsErasable());
     Granules.erase(it);
     EmptyGranules.erase(granule);
     PathGranules[pathId].erase(mark);
@@ -611,12 +611,12 @@ void TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, const 
 }
 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {
-    Y_VERIFY(!portionInfo.Empty());
+    Y_ABORT_UNLESS(!portionInfo.Empty());
     const ui64 portion = portionInfo.GetPortion();
     auto it = Granules.find(portionInfo.GetGranule());
-    Y_VERIFY(it != Granules.end());
+    Y_ABORT_UNLESS(it != Granules.end());
     auto& spg = it->second;
-    Y_VERIFY(spg);
+    Y_ABORT_UNLESS(spg);
     auto p = spg->GetPortionPtr(portion);
 
     if (!p) {
@@ -626,7 +626,7 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
         if (updateStats) {
             UpdatePortionStats(*p, EStatsUpdateType::ERASE);
         }
-        Y_VERIFY(spg->ErasePortion(portion));
+        Y_ABORT_UNLESS(spg->ErasePortion(portion));
         return true;
     }
 }
@@ -683,9 +683,9 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
             }
 
             auto it = Granules.find(granule);
-            Y_VERIFY(it != Granules.end());
+            Y_ABORT_UNLESS(it != Granules.end());
             auto& spg = it->second;
-            Y_VERIFY(spg);
+            Y_ABORT_UNLESS(spg);
             bool granuleHasDataForSnaphsot = false;
 
             for (const auto& [_, keyPortions] : spg->GroupOrderedPortionsByPK()) {
@@ -693,7 +693,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                     if (!portionInfo->IsVisible(snapshot)) {
                         continue;
                     }
-                    Y_VERIFY(portionInfo->Produced());
+                    Y_ABORT_UNLESS(portionInfo->Produced());
                     const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo, VersionedIndex.GetLastSchema()->GetIndexInfo());
                     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")
                         ("granule", granule)("portion", portionInfo->DebugString());

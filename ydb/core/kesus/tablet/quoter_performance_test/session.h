@@ -85,7 +85,7 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        Y_VERIFY(ev->Get()->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(ev->Get()->Status == NKikimrProto::OK);
     }
 
 private:

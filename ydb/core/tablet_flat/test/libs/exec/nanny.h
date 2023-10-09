@@ -28,13 +28,13 @@ namespace NFake {
 
         ~TFuncTx()
         {
-            Y_VERIFY(Completed, "Destroying incomplted transaction");
+            Y_ABORT_UNLESS(Completed, "Destroying incomplted transaction");
         }
 
     private:
         bool Execute(TTransactionContext &txc, const TActorContext&) override
         {
-            Y_VERIFY(!Completed, "TFuncTx is already completed");
+            Y_ABORT_UNLESS(!Completed, "TFuncTx is already completed");
 
             Local.SetDb(&txc.DB);
 
@@ -50,7 +50,7 @@ namespace NFake {
 
         void Complete(const TActorContext &ctx) override
         {
-            Y_VERIFY(Completed, "Finalizing incomplteted transaction");
+            Y_ABORT_UNLESS(Completed, "Finalizing incomplteted transaction");
 
             ctx.Send(Owner, new NFake::TEvResult);
             Local.SetDb(nullptr);
@@ -153,14 +153,14 @@ namespace NFake {
 
         void Handle(NFake::TEvResult&) noexcept
         {
-            Y_VERIFY(TxInFlight-- > 0, "Tx counter is underflowed");
+            Y_ABORT_UNLESS(TxInFlight-- > 0, "Tx counter is underflowed");
 
             if (State == EDo::More) State = Run();
 
             if (TxInFlight > 0) {
                 /* Should wait for pending tx completion before tablet kill */
             } else if (State == EDo::Born) {
-                Y_VERIFY(Tablet, "Tabled has been already restarted");
+                Y_ABORT_UNLESS(Tablet, "Tabled has been already restarted");
 
                 Send(std::exchange(Tablet, { }), new TEvents::TEvPoison);
             } else if (State == EDo::Stop) {

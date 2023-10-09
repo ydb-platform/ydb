@@ -15,7 +15,7 @@ public:
         , PathId(pathId)
         , Worker(worker)
     {
-        Y_VERIFY(SchemeShardId && PathId);
+        Y_ABORT_UNLESS(SchemeShardId && PathId);
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
@@ -71,7 +71,7 @@ public:
 
             Tenant->DomainId = TDomainId(SchemeShardId, PathId);
 
-            Y_VERIFY(!Self->TenantIdToName.contains(Tenant->DomainId));
+            Y_ABORT_UNLESS(!Self->TenantIdToName.contains(Tenant->DomainId));
             Self->TenantIdToName[Tenant->DomainId] = Tenant->Path;
 
             if (Tenant->Worker == Worker)

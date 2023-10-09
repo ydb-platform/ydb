@@ -18,7 +18,7 @@ class TDedicatedPipePool {
 
 public:
     void Create(const TEntityId& entityId, TTabletId dst, THolder<IEventBase> message, const TActorContext& ctx) {
-        Y_VERIFY(!Pipes[entityId].contains(dst));
+        Y_ABORT_UNLESS(!Pipes[entityId].contains(dst));
         using namespace NTabletPipe;
 
         const auto clientId = ctx.ExecutorThread.RegisterActor(CreateClient(ctx.SelfID, ui64(dst), TClientRetryPolicy {
@@ -90,13 +90,13 @@ public:
 
     const TEntityId& GetOwnerId(const TActorId& clientId) const {
         auto it = Owners.find(clientId);
-        Y_VERIFY(it != Owners.end());
+        Y_ABORT_UNLESS(it != Owners.end());
         return it->second.first;
     }
 
     TTabletId GetTabletId(const TActorId& clientId) const {
         auto it = Owners.find(clientId);
-        Y_VERIFY(it != Owners.end());
+        Y_ABORT_UNLESS(it != Owners.end());
         return it->second.second;
     }
 };

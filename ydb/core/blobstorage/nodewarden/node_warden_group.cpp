@@ -14,7 +14,7 @@ namespace NKikimr::NStorage {
             return nullptr;
         } else if (group.EncryptionParams.GetEncryptionMode() == TBlobStorageGroupInfo::EEM_NONE) {
             // no encryption required, group info relevant
-            Y_VERIFY(group.EncryptionParams.HasEncryptionMode());
+            Y_ABORT_UNLESS(group.EncryptionParams.HasEncryptionMode());
             return info;
         } else {
             // encryption required, check key's life cycle phase
@@ -26,7 +26,7 @@ namespace NKikimr::NStorage {
                         ProposeKey(groupId, mainKey, group.EncryptionParams);
                         return nullptr;
                     } else {
-                        Y_VERIFY(!info->GetCypherKey()->GetIsKeySet()); // ensure no key loaded
+                        Y_ABORT_UNLESS(!info->GetCypherKey()->GetIsKeySet()); // ensure no key loaded
                         return info;
                     }
 
@@ -37,7 +37,7 @@ namespace NKikimr::NStorage {
 
                 case TBlobStorageGroupInfo::ELCP_IN_USE:
                     // key is in use and loaded, return the group
-                    Y_VERIFY(info->GetCypherKey()->GetIsKeySet());
+                    Y_ABORT_UNLESS(info->GetCypherKey()->GetIsKeySet());
                     return info;
 
                 case TBlobStorageGroupInfo::ELCP_PROPOSE:
@@ -46,7 +46,7 @@ namespace NKikimr::NStorage {
                 case TBlobStorageGroupInfo::ELCP_KEY_ID_ERROR:
                 case TBlobStorageGroupInfo::ELCP_KEY_NOT_LOADED:
                     // run proxy in limited mode
-                    Y_VERIFY(!info->GetCypherKey()->GetIsKeySet()); // ensure no key loaded
+                    Y_ABORT_UNLESS(!info->GetCypherKey()->GetIsKeySet()); // ensure no key loaded
                     return info;
             }
         }
@@ -67,13 +67,13 @@ namespace NKikimr::NStorage {
 
         TStreamCypher cypher;
         bool isKeySet = cypher.SetKey(static_cast<const TCypherKey&>(mainKey));
-        Y_VERIFY(isKeySet);
+        Y_ABORT_UNLESS(isKeySet);
         cypher.StartMessage(groupKeyNonce, 0);
         cypher.Encrypt(destination, keyBytes, keySizeBytes);
         destination += keySizeBytes;
         cypher.Encrypt(destination, &h, sizeof(h));
 
-        Y_VERIFY(encryptedGroupKey.size() == groupKey.GetKeySizeBytes() + sizeof(ui32));
+        Y_ABORT_UNLESS(encryptedGroupKey.size() == groupKey.GetKeySizeBytes() + sizeof(ui32));
 
         // Send the request
         STLOG(PRI_DEBUG, BS_NODE, NW68, "ConfigureLocalProxy propose", (GroupId, groupId), (MainKey, mainKey));
@@ -95,7 +95,7 @@ namespace NKikimr::NStorage {
         }
 
         // some basic consistency checks
-        Y_VERIFY(!newGroup || (newGroup->GetGroupID() == groupId && newGroup->GetGroupGeneration() == generation));
+        Y_ABORT_UNLESS(!newGroup || (newGroup->GetGroupID() == groupId && newGroup->GetGroupGeneration() == generation));
 
         // log if from resolver
         if (fromResolver) {
@@ -129,7 +129,7 @@ namespace NKikimr::NStorage {
             TString before;
             if (currentGroup) {
                 const bool success = currentGroup->SerializeToString(&before);
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
             }
 
             // apply basic protobuf changes
@@ -161,10 +161,10 @@ namespace NKikimr::NStorage {
                 }
             } else if (newGroup->GetLifeCyclePhase() == TBlobStorageGroupInfo::ELCP_IN_USE) {
                 // validate encryption parameters -- they cannot change
-                Y_VERIFY(ep.GetMainKeyId() == newGroup->GetMainKeyId());
-                Y_VERIFY(ep.GetEncryptedGroupKey() == newGroup->GetEncryptedGroupKey());
-                Y_VERIFY(ep.GetGroupKeyNonce() == newGroup->GetGroupKeyNonce());
-                Y_VERIFY(ep.GetMainKeyVersion() == newGroup->GetMainKeyVersion());
+                Y_ABORT_UNLESS(ep.GetMainKeyId() == newGroup->GetMainKeyId());
+                Y_ABORT_UNLESS(ep.GetEncryptedGroupKey() == newGroup->GetEncryptedGroupKey());
+                Y_ABORT_UNLESS(ep.GetGroupKeyNonce() == newGroup->GetGroupKeyNonce());
+                Y_ABORT_UNLESS(ep.GetMainKeyVersion() == newGroup->GetMainKeyVersion());
             }
 
             // put encryption parameters overlay over the group proto
@@ -172,9 +172,9 @@ namespace NKikimr::NStorage {
 
             // check if group content has changed
             TString after;
-            Y_VERIFY(currentGroup);
+            Y_ABORT_UNLESS(currentGroup);
             const bool success = currentGroup->SerializeToString(&after);
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
             groupChanged = before != after;
 
             if (groupChanged && Cfg->IsCacheEnabled() && TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic) {
@@ -197,7 +197,7 @@ namespace NKikimr::NStorage {
             auto& mainKey = GetGroupMainKey(groupId);
             TStringStream err;
             group.Info = TBlobStorageGroupInfo::Parse(*currentGroup, &mainKey, &err);
-            Y_VERIFY(group.EncryptionParams.HasEncryptionMode());
+            Y_ABORT_UNLESS(group.EncryptionParams.HasEncryptionMode());
             if (const TString& s = err.Str()) {
                 STLOG(PRI_ERROR, BS_NODE, NW19, "error while parsing group", (GroupId, groupId), (Err, s));
             }
@@ -236,9 +236,9 @@ namespace NKikimr::NStorage {
         if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static) {
             // do nothing, configs arrive through distributed configuration
         } else if (group.GetGroupRequestPending) {
-            Y_VERIFY(group.GroupResolver);
+            Y_ABORT_UNLESS(group.GroupResolver);
         } else {
-            Y_VERIFY(!group.GroupResolver);
+            Y_ABORT_UNLESS(!group.GroupResolver);
             SendToController(std::make_unique<TEvBlobStorage::TEvControllerGetGroup>(LocalNodeId, &groupId, &groupId + 1));
             group.GroupResolver = RegisterWithSameMailbox(CreateGroupResolverActor(groupId));
             group.GetGroupRequestPending = true;

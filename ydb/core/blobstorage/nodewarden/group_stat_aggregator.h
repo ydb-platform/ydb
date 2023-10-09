@@ -47,10 +47,10 @@ namespace NKikimr {
     }
 
     inline TActorId MakeGroupStatAggregatorId(const TActorId& vdiskServiceId) {
-        Y_VERIFY(vdiskServiceId.IsService());
+        Y_ABORT_UNLESS(vdiskServiceId.IsService());
         char x[12];
         TStringBuf serviceId = vdiskServiceId.ServiceId();
-        Y_VERIFY(serviceId[0] == 'b' && serviceId[1] == 's' && serviceId[2] == 'v' && serviceId[3] == 'd');
+        Y_ABORT_UNLESS(serviceId[0] == 'b' && serviceId[1] == 's' && serviceId[2] == 'v' && serviceId[3] == 'd');
         memcpy(x, serviceId.data(), serviceId.size());
         x[0] = 'b';
         x[1] = 's';

@@ -12,7 +12,7 @@ namespace NKikimr::NEvWrite {
         , LongTxActorId(longTxActorId)
         , LongTxId(longTxId)
     {
-        Y_VERIFY(writesCount);
+        Y_ABORT_UNLESS(writesCount);
         WriteIds.resize(WritesCount.Val());
     }
 
@@ -55,7 +55,7 @@ namespace NKikimr::NEvWrite {
 
     void TShardWriter::Handle(TEvWriteResult::TPtr& ev) {
         const auto* msg = ev->Get();
-        Y_VERIFY(msg->Record.GetOrigin() == ShardId);
+        Y_ABORT_UNLESS(msg->Record.GetOrigin() == ShardId);
 
         const auto ydbStatus = msg->GetYdbStatus();
         if (ydbStatus == Ydb::StatusIds::OVERLOADED) {
@@ -78,7 +78,7 @@ namespace NKikimr::NEvWrite {
     void TShardWriter::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "DeliveryProblem");
         const auto* msg = ev->Get();
-        Y_VERIFY(msg->TabletId == ShardId);
+        Y_ABORT_UNLESS(msg->TabletId == ShardId);
 
         if (RetryWriteRequest()) {
             return;

@@ -192,7 +192,7 @@ namespace NKikimr {
     }
 
     void TSyncNeighbors::OldParse(const TString &data) {
-        Y_VERIFY(!data.empty());
+        Y_ABORT_UNLESS(!data.empty());
         TStringInput str(data);
         OldParse(str);
     }
@@ -203,7 +203,7 @@ namespace NKikimr {
     }
 
     void TSyncNeighbors::Parse(const TString &data) {
-        Y_VERIFY(!data.empty());
+        Y_ABORT_UNLESS(!data.empty());
         TStringInput str(data);
         Parse(str);
     }
@@ -267,7 +267,7 @@ namespace NKikimr {
         if (!serProto.empty()) {
             NKikimrVDiskData::TSyncerEntryPoint proto;
             auto status = proto.ParseFromString(serProto);
-            Y_VERIFY(status);
+            Y_ABORT_UNLESS(status);
             LocalSyncerState.Parse(proto.GetLocalGuidInfo());
             Neighbors->Parse(proto);
 

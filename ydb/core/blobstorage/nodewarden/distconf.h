@@ -414,7 +414,7 @@ namespace NKikimr::NStorage {
                 return;
             }
             auto& [ok, err] = status[TNodeLocation(it->second->GetLocation()).GetDataCenterId()];
-            Y_VERIFY(err);
+            Y_ABORT_UNLESS(err);
             ++ok;
             --err;
         });
@@ -449,7 +449,7 @@ namespace NKikimr::NStorage {
                 return;
             }
             auto& [ok, err] = status[TNodeLocation(it->second->GetLocation()).GetDataCenterId()];
-            Y_VERIFY(err);
+            Y_ABORT_UNLESS(err);
             ++ok;
             --err;
         });

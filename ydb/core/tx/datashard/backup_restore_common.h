@@ -60,7 +60,7 @@ private:
 
     void PersistResult(TOperation::TPtr op, TTransactionContext& txc) {
         auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId());
-        Y_VERIFY(schemeOp);
+        Y_ABORT_UNLESS(schemeOp);
 
         NIceDb::TNiceDb db(txc.DB);
         DataShard.PersistSchemeTxResult(db, *schemeOp);

@@ -10,7 +10,7 @@ TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstP
     , ReadMetadata(readMetadata)
 {
     IndexedData = ReadMetadata->BuildReader(context, ReadMetadata);
-    Y_VERIFY(ReadMetadata->IsSorted());
+    Y_ABORT_UNLESS(ReadMetadata->IsSorted());
 
     if (ReadMetadata->Empty()) {
         IndexedData->Abort();
@@ -31,7 +31,7 @@ void TColumnShardScanIterator::FillReadyResults() {
     i64 limitLeft = ReadMetadata->Limit == 0 ? INT64_MAX : ReadMetadata->Limit - ItemsRead;
     for (size_t i = 0; i < ready.size() && limitLeft; ++i) {
         if (ready[i].GetResultBatch().num_rows() == 0 && !ready[i].GetLastReadKey()) {
-            Y_VERIFY(i + 1 == ready.size(), "Only last batch can be empty!");
+            Y_ABORT_UNLESS(i + 1 == ready.size(), "Only last batch can be empty!");
             break;
         }
 
@@ -55,7 +55,7 @@ TColumnShardScanIterator::~TColumnShardScanIterator() {
 
 void TColumnShardScanIterator::Apply(IDataTasksProcessor::ITask::TPtr task) {
     if (!IndexedData->IsFinished()) {
-        Y_VERIFY(task->Apply(*IndexedData));
+        Y_ABORT_UNLESS(task->Apply(*IndexedData));
     }
 }
 

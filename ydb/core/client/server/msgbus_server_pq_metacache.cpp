@@ -281,7 +281,7 @@ private:
 
         const auto& record = ev->Get()->Record.GetRef();
 
-        Y_VERIFY(record.GetResponse().GetResults().size() == 1);
+        Y_ABORT_UNLESS(record.GetResponse().GetResults().size() == 1);
         const auto& rr = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
         ui64 newVersion = rr.ListSize() == 0 ? 0 : rr.GetList(0).GetStruct(0).GetOptional().GetInt64();
 
@@ -300,7 +300,7 @@ private:
 
         const auto& record = ev->Get()->Record.GetRef();
 
-        Y_VERIFY(record.GetResponse().GetResults().size() == 1);
+        Y_ABORT_UNLESS(record.GetResponse().GetResults().size() == 1);
         TString path, dc;
         const auto& rr = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
         for (const auto& row : rr.GetList()) {
@@ -371,18 +371,18 @@ private:
 
         bool ApplyResult(std::shared_ptr<TSchemeCacheNavigate>& result) {
             if (FirstRequestDone) {
-                Y_VERIFY(Result != nullptr);
-                Y_VERIFY(!SecondTryTopics.empty());
+                Y_ABORT_UNLESS(Result != nullptr);
+                Y_ABORT_UNLESS(!SecondTryTopics.empty());
                 ui64 i = 0;
-                Y_VERIFY(result->ResultSet.size() == SecondTryTopics.size());
+                Y_ABORT_UNLESS(result->ResultSet.size() == SecondTryTopics.size());
                 for (ui64 index : SecondTryTopics) {
-                    Y_VERIFY(Result->ResultSet[index].Status != TSchemeCacheNavigate::EStatus::Ok);
+                    Y_ABORT_UNLESS(Result->ResultSet[index].Status != TSchemeCacheNavigate::EStatus::Ok);
                     Result->ResultSet[index] = result->ResultSet[i++];
                 }
                 return true;
             }
-            Y_VERIFY(Topics.size() == result->ResultSet.size());
-            Y_VERIFY(Result == nullptr);
+            Y_ABORT_UNLESS(Topics.size() == result->ResultSet.size());
+            Y_ABORT_UNLESS(Result == nullptr);
             FirstRequestDone = true;
             ui64 index = 0;
             Result = std::move(result);
@@ -409,7 +409,7 @@ private:
             return SecondTryTopics.empty(); //ToDo - second try topics
         }
         std::shared_ptr<TSchemeCacheNavigate>& GetResult() {
-            Y_VERIFY(Result != nullptr);
+            Y_ABORT_UNLESS(Result != nullptr);
             return Result;
         };
 
@@ -455,7 +455,7 @@ private:
         const auto& msg = *ev->Get();
 
         for (auto& t : ev->Get()->Topics) {
-            Y_VERIFY(t != nullptr);
+            Y_ABORT_UNLESS(t != nullptr);
         }
         SendSchemeCacheRequest(
                 std::make_shared<TWaiter>(ev->Sender, DbRoot, msg.SyncVersion, msg.ShowPrivate, ev->Get()->Topics,
@@ -516,11 +516,11 @@ private:
         auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>(reqId);
 
         auto inserted = DescribeTopicsWaiters.insert(std::make_pair(reqId, waiter)).second;
-        Y_VERIFY(inserted);
+        Y_ABORT_UNLESS(inserted);
 
         for (const auto& [path, database] : waiter->GetTopics()) {
             auto split = NKikimr::SplitPath(path);
-            Y_VERIFY(!split.empty());
+            Y_ABORT_UNLESS(!split.empty());
             TSchemeCacheNavigate::TEntry entry;
             entry.Path.insert(entry.Path.end(), split.begin(), split.end());
 
@@ -540,7 +540,7 @@ private:
         std::shared_ptr<TSchemeCacheNavigate> result(ev->Get()->Request.Release());
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Handle SchemeCache response" << ": result# " << result->ToString(*AppData()->TypeRegistry));
         auto waiterIter = DescribeTopicsWaiters.find(result->Instant);
-        Y_VERIFY(!waiterIter.IsEnd());
+        Y_ABORT_UNLESS(!waiterIter.IsEnd());
         auto waiter = waiterIter->second; //copy shared ptr
         auto res = waiter->ApplyResult(result);
         DescribeTopicsWaiters.erase(waiterIter);
@@ -551,7 +551,7 @@ private:
         } else if (waiter->Type == EWaiterType::DescribeAllTopics) {
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Got describe all topics SC response");
 
-            Y_VERIFY(HaveDescribeAllTopicsInflight);
+            Y_ABORT_UNLESS(HaveDescribeAllTopicsInflight);
             FullTopicsCacheOutdated = false;
             HaveDescribeAllTopicsInflight = false;
             for (const auto& entry : waiter->Result->ResultSet) {
@@ -583,7 +583,7 @@ private:
                 }
             }
 
-            Y_VERIFY(CurrentTopicsFullConverters.size() == FullTopicsCache->ResultSet.size());
+            Y_ABORT_UNLESS(CurrentTopicsFullConverters.size() == FullTopicsCache->ResultSet.size());
 
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Updated topics cache with " << FullTopicsCache->ResultSet.size());
             while (!DescribeAllTopicsWaiters.empty()) {
@@ -593,10 +593,10 @@ private:
         } else {
             auto& navigate = waiter->GetResult();
 
-            Y_VERIFY(waiter->Topics.size() == navigate->ResultSet.size());
+            Y_ABORT_UNLESS(waiter->Topics.size() == navigate->ResultSet.size());
             for (auto& entry : navigate->ResultSet) {
                 if (entry.Status == TSchemeCacheNavigate::EStatus::Ok && entry.Kind == TSchemeCacheNavigate::KindTopic) {
-                    Y_VERIFY(entry.PQGroupInfo);
+                    Y_ABORT_UNLESS(entry.PQGroupInfo);
                 }
             }
             CheckEntrySetHasTopicPath(navigate.get());
@@ -717,7 +717,7 @@ private:
 
     void ProcessNodesInfoWaitersQueue(bool status, const TActorContext& ctx) {
         if (DynamicNodesMapping == nullptr) {
-            Y_VERIFY(!status);
+            Y_ABORT_UNLESS(!status);
             DynamicNodesMapping.reset(new THashMap<ui32, ui32>); 
         }
         while(!NodesMappingWaiters.empty()) {
@@ -732,7 +732,7 @@ private:
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Start topics rescan");
             RunQuery(EQueryType::EGetTopics, ctx);
         } else {
-            Y_VERIFY(NewTopicsVersion == CurrentTopicsVersion);
+            Y_ABORT_UNLESS(NewTopicsVersion == CurrentTopicsVersion);
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Check version rescan");
             RunQuery(EQueryType::ECheckVersion, ctx);
         }

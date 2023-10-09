@@ -15,7 +15,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
-    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild);
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild);
 
     auto config = tx.GetApplyIndexBuild();
     TString tablePath = config.GetTablePath();
@@ -66,7 +66,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
 }
 
 TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
-    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild);
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild);
 
     auto config = tx.GetCancelIndexBuild();
     TString tablePath = config.GetTablePath();
@@ -103,10 +103,10 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
 
     if (!indexName.empty()) {
         TPath index = table.Child(indexName);
-        Y_VERIFY(index.Base()->GetChildren().size() == 1);
+        Y_ABORT_UNLESS(index.Base()->GetChildren().size() == 1);
         for (auto& indexChildItems: index.Base()->GetChildren()) {
             const TString& implTableName = indexChildItems.first;
-            Y_VERIFY(implTableName == "indexImplTable", "unexpected name %s", implTableName.c_str());
+            Y_ABORT_UNLESS(implTableName == "indexImplTable", "unexpected name %s", implTableName.c_str());
 
             TPath implTable = index.Child(implTableName);
             {
@@ -123,7 +123,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
                     return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
                 }
             }
-            Y_VERIFY(implTable.Base()->PathId == indexChildItems.second);
+            Y_ABORT_UNLESS(implTable.Base()->PathId == indexChildItems.second);
 
             {
                 auto implTableDropping = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);

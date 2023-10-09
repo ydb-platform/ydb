@@ -13,8 +13,8 @@ bool TAssembleFilter::DoExecute() {
     TPortionInfo::TPreparedBatchData::TAssembleOptions options;
     options.IncludedColumnIds = FilterColumnIds;
     auto batch = BatchConstructor.Assemble(options);
-    Y_VERIFY(batch);
-    Y_VERIFY(batch->num_rows());
+    Y_ABORT_UNLESS(batch);
+    Y_ABORT_UNLESS(batch->num_rows());
     OriginalCount = batch->num_rows();
     AppliedFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::FilterPortion(batch, *ReadMetadata));
     if (!AppliedFilter->Apply(batch)) {
@@ -38,9 +38,9 @@ bool TAssembleFilter::DoExecute() {
         TPortionInfo::TPreparedBatchData::TAssembleOptions options;
         options.ExcludedColumnIds = FilterColumnIds;
         auto addBatch = BatchConstructor.Assemble(options);
-        Y_VERIFY(addBatch);
-        Y_VERIFY(AppliedFilter->Apply(addBatch));
-        Y_VERIFY(NArrow::MergeBatchColumns({ batch, addBatch }, batch, BatchConstructor.GetSchemaColumnNames(), true));
+        Y_ABORT_UNLESS(addBatch);
+        Y_ABORT_UNLESS(AppliedFilter->Apply(addBatch));
+        Y_ABORT_UNLESS(NArrow::MergeBatchColumns({ batch, addBatch }, batch, BatchConstructor.GetSchemaColumnNames(), true));
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "not_skip_data")
         ("original_count", OriginalCount)("filtered_count", batch->num_rows())("columns_count", BatchConstructor.GetColumnsCount())("allow_early", AllowEarlyFilter)

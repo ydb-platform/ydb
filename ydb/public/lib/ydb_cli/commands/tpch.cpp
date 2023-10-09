@@ -40,7 +40,7 @@ TVector<TString> TTpchCommandRun::GetQueries() const {
         });
     for (auto&& queryFileName : queriesList) {
         const TString expectedFileName = "q" + ::ToString(getQueryNumber(queries.size())) + ".sql";
-        Y_VERIFY(queryFileName == expectedFileName, "incorrect files naming. have to be q<number>.sql where number in [1, N], where N is requests count");
+        Y_ABORT_UNLESS(queryFileName == expectedFileName, "incorrect files naming. have to be q<number>.sql where number in [1, N], where N is requests count");
         TFileInput fInput(ExternalQueriesDir + "/" + expectedFileName);
         auto query = fInput.ReadAll();
         SubstGlobal(query, "{path}", TablesPath);
@@ -116,7 +116,7 @@ bool TTpchCommandRun::RunBench(TConfig& config)
         }
 
         auto [inserted, success] = QueryRuns.emplace(queryN, TTestInfo(std::move(clientTimings), std::move(serverTimings)));
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
         auto& testInfo = inserted->second;
 
         report << Sprintf("|   %02u    | %8.3f | %7.3f | %7.3f | %8.3f | %7.3f |", getQueryNumber(queryN),

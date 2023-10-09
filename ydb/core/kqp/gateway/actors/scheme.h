@@ -50,7 +50,7 @@ public:
             case TEvTxUserProxy::TResultStatus::ExecInProgress: {
                 ui64 schemeShardTabletId = response.GetSchemeShardTabletId();
                 IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, schemeShardTabletId);
-                Y_VERIFY(pipeActor);
+                Y_ABORT_UNLESS(pipeActor);
                 ShemePipeActorId = ctx.ExecutorThread.RegisterActor(pipeActor);
 
                 auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();

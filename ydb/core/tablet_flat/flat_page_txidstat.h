@@ -43,14 +43,14 @@ namespace NPage {
         {
             const auto got = NPage::TLabelWrapper().Read(Raw, EPage::TxIdStats);
 
-            Y_VERIFY(got == ECodec::Plain && got.Version == 0);
+            Y_ABORT_UNLESS(got == ECodec::Plain && got.Version == 0);
 
-            Y_VERIFY(sizeof(THeader) <= got.Page.size(),
+            Y_ABORT_UNLESS(sizeof(THeader) <= got.Page.size(),
                     "NPage::TTxIdStatsPage header is out of page bounds");
 
             auto* header = TDeref<THeader>::At(got.Page.data(), 0);
 
-            Y_VERIFY(sizeof(THeader) + header->ItemCount * sizeof(TItem) <= got.Page.size(),
+            Y_ABORT_UNLESS(sizeof(THeader) + header->ItemCount * sizeof(TItem) <= got.Page.size(),
                     "NPage::TTxIdStatsPage items are out of page bounds");
 
             auto* ptr = TDeref<TItem>::At(got.Page.data(), sizeof(THeader));
@@ -128,7 +128,7 @@ namespace NPage {
                 item->Bytes_ = stats.Bytes;
             }
 
-            Y_VERIFY(*out == buf.mutable_end());
+            Y_ABORT_UNLESS(*out == buf.mutable_end());
             NSan::CheckMemIsInitialized(buf.data(), buf.size());
 
             return buf;

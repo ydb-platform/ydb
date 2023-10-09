@@ -83,7 +83,7 @@ namespace NKikimr {
                 const TActorId actorId = ctx.Register(CreateRecoveryScanActor(chunkIdx, true, chunk->ChunkSerNum,
                     static_cast<ui64>(EScanCookie::Recovery), Keeper.State));
                 const bool added = Keeper.State.ChildActors.insert(actorId).second;
-                Y_VERIFY(added);
+                Y_ABORT_UNLESS(added);
 
                 // remember this actor
                 ScannerMap.emplace(actorId, TScanInfo{it, chunkIdx, *chunk});
@@ -104,7 +104,7 @@ namespace NKikimr {
 
             // find deleted items snapshot for this chunk
             auto delIt = item.DeletedItemsMap.find(chunkIdx);
-            Y_VERIFY(delIt != item.DeletedItemsMap.end());
+            Y_ABORT_UNLESS(delIt != item.DeletedItemsMap.end());
             TDynBitMap& deletedItems = delIt->second;
 
             // traverse index and extract required items
@@ -141,22 +141,22 @@ namespace NKikimr {
 
         void TRecovery::ApplyYardInit(NKikimrProto::EReplyStatus status, NPDisk::TLogRecord *chunks,
                 NPDisk::TLogRecord *deletes, const TActorContext& ctx) {
-            Y_VERIFY(status == NKikimrProto::OK);
+            Y_ABORT_UNLESS(status == NKikimrProto::OK);
 
             static const TMaybe<ui64> none;
             const TActorId actorId = ctx.Register(CreateRecoveryReadLogActor(Keeper.State.Settings.PDiskActorId,
                     Keeper.State.PDiskParams->Owner, Keeper.State.PDiskParams->OwnerRound, chunks ? chunks->Lsn : none,
                     deletes ? deletes->Lsn : none));
             const bool added = Keeper.State.ChildActors.insert(actorId).second;
-            Y_VERIFY(added);
+            Y_ABORT_UNLESS(added);
             IHLOG_INFO(ctx, "[IncrHugeKeeper PDisk# %09" PRIu32 "] starting ReadLog", Keeper.State.Settings.PDiskId);
         }
 
         void TRecovery::ApplyReadLog(const TActorId& sender, TEvIncrHugeReadLogResult& msg, const TActorContext& ctx) {
             const size_t num = Keeper.State.ChildActors.erase(sender);
-            Y_VERIFY(num == 1);
+            Y_ABORT_UNLESS(num == 1);
 
-            Y_VERIFY(msg.Status == NKikimrProto::OK);
+            Y_ABORT_UNLESS(msg.Status == NKikimrProto::OK);
 
             IHLOG_INFO(ctx, "[IncrHugeKeeper PDisk# %09" PRIu32 "] finished ReadLog", Keeper.State.Settings.PDiskId);
 
@@ -212,7 +212,7 @@ namespace NKikimr {
             TMap<TChunkSerNum, TScanQueueItem> scanQueue;
             THashMap<TChunkSerNum, TChunkInfo *> serNumToChunk;
             for (const auto& chunk : msg.Chunks.GetChunks()) {
-                Y_VERIFY(chunk.HasChunkIdx() && chunk.HasChunkSerNum() && chunk.HasState());
+                Y_ABORT_UNLESS(chunk.HasChunkIdx() && chunk.HasChunkSerNum() && chunk.HasState());
 
                 EChunkState newState;
                 bool indexOnly;
@@ -263,7 +263,7 @@ namespace NKikimr {
             // apply deletes
             for (const auto& chunk : msg.Deletes.GetChunks()) {
                 // extract chunk's serial number
-                Y_VERIFY(chunk.HasChunkSerNum());
+                Y_ABORT_UNLESS(chunk.HasChunkSerNum());
                 const TChunkSerNum chunkSerNum(chunk.GetChunkSerNum());
 
                 // find chunk with such serial number
@@ -280,7 +280,7 @@ namespace NKikimr {
 
             // apply deletes' owners
             for (const auto& owner : msg.Deletes.GetOwners()) {
-                Y_VERIFY(owner.HasOwner() && owner.HasSeqNo());
+                Y_ABORT_UNLESS(owner.HasOwner() && owner.HasSeqNo());
                 Keeper.Deleter.InsertOwnerOnRecovery(owner.GetOwner(), owner.GetSeqNo());
             }
 
@@ -289,11 +289,11 @@ namespace NKikimr {
 
         void TRecovery::ApplyScan(const TActorId& sender, TEvIncrHugeScanResult& msg, const TActorContext& ctx) {
             const size_t num = Keeper.State.ChildActors.erase(sender);
-            Y_VERIFY(num == 1);
+            Y_ABORT_UNLESS(num == 1);
 
             const ui32 bytes = msg.IndexOnly ? Keeper.State.BlocksInIndexSection * Keeper.State.BlockSize :
                 Keeper.State.PDiskParams->ChunkSize;
-            Y_VERIFY(ScanBytesInFlight >= bytes);
+            Y_ABORT_UNLESS(ScanBytesInFlight >= bytes);
             ScanBytesInFlight -= bytes;
 
             // try to find actor in scanner map
@@ -316,7 +316,7 @@ namespace NKikimr {
 
             // ensure that we still have chunk serial numbers to process; they are stored in ascending order, so we
             // process chunks starting from the oldest one
-            Y_VERIFY(ChunkSerNumQueue);
+            Y_ABORT_UNLESS(ChunkSerNumQueue);
 
             // if we can process this message right now, do it; otherwise store it for deferred execution
             if (msg.ChunkSerNum == ChunkSerNumQueue.front()) {
@@ -350,7 +350,7 @@ namespace NKikimr {
 
             if (scanResult.Status == NKikimrProto::NODATA) {
                 // this is really empty chunk, put it to write intent queue
-                Y_VERIFY(!scanResult.IndexOnly);
+                Y_ABORT_UNLESS(!scanResult.IndexOnly);
                 chunk.State = EChunkState::WriteIntent;
                 Keeper.State.WriteIntentQueue.push(scanResult.ChunkIdx);
             } else if (scanResult.Status == NKikimrProto::OK) {
@@ -383,7 +383,7 @@ namespace NKikimr {
                             // find existing chunk; it should exist just because we have created it recently during
                             // recovery
                             auto existingIt = Keeper.State.Chunks.find(existing->ChunkIdx);
-                            Y_VERIFY(existingIt != Keeper.State.Chunks.end());
+                            Y_ABORT_UNLESS(existingIt != Keeper.State.Chunks.end());
                             TChunkInfo& existingChunk = existingIt->second;
 
                             // create delete locator for one of records (existing or new one)
@@ -419,7 +419,7 @@ namespace NKikimr {
                         // we found existing locator, but newer record has delete flag set -- it means that this blob
                         // was found in defragmented chunk and should be deleted
                         auto it = Keeper.State.Chunks.find(existing.ChunkIdx);
-                        Y_VERIFY(it != Keeper.State.Chunks.end());
+                        Y_ABORT_UNLESS(it != Keeper.State.Chunks.end());
                         TChunkInfo& chunk = it->second;
                         deleteLocators.push_back(TBlobDeleteLocator{existing.ChunkIdx, chunk.ChunkSerNum, {},
                                 existing.IndexInsideChunk, sizeInBlocks});
@@ -463,7 +463,7 @@ namespace NKikimr {
             const TActorId actorId = ctx.Register(CreateRecoveryScanActor(item.ChunkIdx, item.IndexOnly,
                     item.ChunkSerNum, static_cast<ui64>(EScanCookie::Recovery), Keeper.State));
             const bool added = Keeper.State.ChildActors.insert(actorId).second;
-            Y_VERIFY(added);
+            Y_ABORT_UNLESS(added);
             IHLOG_DEBUG(ctx, "[IncrHugeKeeper PDisk# %09" PRIu32 "] scan ChunkIdx# %" PRIu32
                     " IndexOnly# %s", Keeper.State.Settings.PDiskId, item.ChunkIdx, item.IndexOnly ? "true" : "false");
             ScanBytesInFlight += bytes;
@@ -476,7 +476,7 @@ namespace NKikimr {
             }
             if (!ScanQueue && !ScanBytesInFlight) {
                 // check that we have actually processed all the scans and there are no hanging results
-                Y_VERIFY(!ChunkSerNumQueue && !PendingResults);
+                Y_ABORT_UNLESS(!ChunkSerNumQueue && !PendingResults);
 
                 // apply incomplete chunks in order of write intent queue
                 for (auto& pair : IncompleteChunks) {
@@ -485,7 +485,7 @@ namespace NKikimr {
                     // check if there is a current chunk already set, then set up writer to write out index
                     if (Keeper.State.CurrentChunk) {
                         Keeper.Writer.FinishCurrentChunk(ctx);
-                        Y_VERIFY(!Keeper.State.CurrentChunk);
+                        Y_ABORT_UNLESS(!Keeper.State.CurrentChunk);
                     }
 
                     // set up new current chunk

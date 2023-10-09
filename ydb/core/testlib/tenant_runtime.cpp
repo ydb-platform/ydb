@@ -728,7 +728,7 @@ struct TWaitTenantSlotBrokerInitialization {
         : PoolCount(poolCount)
         , NodeInfoCount(0)
     {
-        Y_VERIFY(PoolCount);
+        Y_ABORT_UNLESS(PoolCount);
     }
 
     bool operator()(IEventHandle &ev) {
@@ -937,7 +937,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
                     UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), 1);
                 }
             }
-            Y_VERIFY(domain.Subdomains.empty(), "Pre-initialized subdomains are not supported for real SchemeShard");
+            Y_ABORT_UNLESS(domain.Subdomains.empty(), "Pre-initialized subdomains are not supported for real SchemeShard");
         }
     }
 
@@ -1011,7 +1011,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     }
 
     // Create Tenant Slot Pools
-    Y_VERIFY(GetNodeCount() >= Config.Nodes.size());
+    Y_ABORT_UNLESS(GetNodeCount() >= Config.Nodes.size());
     TMultiSet<std::pair<TString, TEvLocal::TEvTenantStatus::EStatus>> statuses;
 
     if (createTenantPools) {

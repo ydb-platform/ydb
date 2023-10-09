@@ -160,7 +160,7 @@ public:
     void OpenPipe(const TActorContext &ctx)
     {
         auto domains = AppData(ctx)->DomainsInfo;
-        Y_VERIFY(domains->Domains.size() == 1, "multiple domains are not supported by TConfigHelper");
+        Y_ABORT_UNLESS(domains->Domains.size() == 1, "multiple domains are not supported by TConfigHelper");
         auto domain = domains->Domains.begin()->second;
         auto group = domains->GetDefaultStateStorageGroup(domain->DomainUid);
         auto console = MakeConsoleID(group);
@@ -174,7 +174,7 @@ public:
     void SendPoolStatusRequest(const TActorContext &ctx)
     {
         auto domains = AppData(ctx)->DomainsInfo;
-        Y_VERIFY(domains->Domains.size() == 1, "multiple domains are not supported by TConfigHelper");
+        Y_ABORT_UNLESS(domains->Domains.size() == 1, "multiple domains are not supported by TConfigHelper");
         auto tenantPool = MakeTenantPoolID(ctx.SelfID.NodeId(), domains->Domains.begin()->second->DomainUid);
         ctx.Send(tenantPool, new TEvTenantPool::TEvGetStatus(true), IEventHandle::FlagTrackDelivery);
     }

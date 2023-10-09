@@ -137,7 +137,7 @@ ISubOperation::TPtr CreateModifyACL(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr CreateModifyACL(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state == TTxState::Invalid);
+    Y_ABORT_UNLESS(state == TTxState::Invalid);
     return MakeSubOperation<TModifyACL>(id);
 }
 

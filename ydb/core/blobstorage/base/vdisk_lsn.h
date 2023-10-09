@@ -23,7 +23,7 @@ namespace NKikimr {
         {}
 
         ui64 Point() const {
-            Y_VERIFY(First == Last);
+            Y_ABORT_UNLESS(First == Last);
             return Last;
         }
 

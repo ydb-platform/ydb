@@ -63,7 +63,7 @@ class TFakeVDisk
             TChunkInfo(TChunkInfo&& other) = default;
 
             TChunkInfo(ui32 numBlocks) {
-                Y_VERIFY(numBlocks > 0);
+                Y_ABORT_UNLESS(numBlocks > 0);
                 UsedBlocks.Reserve(numBlocks);
                 UsedBlocks.Reset(0, numBlocks);
                 Checksums.resize(numBlocks);
@@ -72,12 +72,12 @@ class TFakeVDisk
             TChunkInfo(ui32 numBlocks, const NPDiskFIT::TFakeVDiskState::TChunk& pb)
                 : TChunkInfo(numBlocks)
             {
-                Y_VERIFY(pb.HasCommitState());
+                Y_ABORT_UNLESS(pb.HasCommitState());
                 for (const auto& block : pb.GetBlocks()) {
-                    Y_VERIFY(block.HasIndex());
-                    Y_VERIFY(block.HasChecksum());
+                    Y_ABORT_UNLESS(block.HasIndex());
+                    Y_ABORT_UNLESS(block.HasChecksum());
                     const ui32 index = block.GetIndex();
-                    Y_VERIFY(index < numBlocks);
+                    Y_ABORT_UNLESS(index < numBlocks);
                     UsedBlocks.Set(index);
                     Checksums[index] = block.GetChecksum();
                 }
@@ -86,18 +86,18 @@ class TFakeVDisk
 
             void SetChecksums(ui32 index, const TVector<ui32>& checksums) {
                 const ui32 num = checksums.size();
-                Y_VERIFY(index + num <= Checksums.size() && index + num <= UsedBlocks.Size());
+                Y_ABORT_UNLESS(index + num <= Checksums.size() && index + num <= UsedBlocks.Size());
                 UsedBlocks.Set(index, index + num);
                 std::copy(checksums.begin(), checksums.end(), Checksums.begin() + index);
             }
 
             ui32 GetChecksum(ui32 index) const {
-                Y_VERIFY(index < Checksums.size());
+                Y_ABORT_UNLESS(index < Checksums.size());
                 return Checksums[index];
             }
 
             bool VerifyChecksum(ui32 index, ui32 checksum) const {
-                Y_VERIFY(index < Checksums.size());
+                Y_ABORT_UNLESS(index < Checksums.size());
                 return UsedBlocks[index] && Checksums[index] == checksum;
             }
 
@@ -107,7 +107,7 @@ class TFakeVDisk
 
             void SerializeToProto(NPDiskFIT::TFakeVDiskState::TChunk& pb) const {
                 Y_FOR_EACH_BIT(index, UsedBlocks) {
-                    Y_VERIFY(index < Checksums.size(), "index# %zu +Checksums# %zu UsedBlocks# %zu", index, Checksums.size(),
+                    Y_ABORT_UNLESS(index < Checksums.size(), "index# %zu +Checksums# %zu UsedBlocks# %zu", index, Checksums.size(),
                             UsedBlocks.Size());
                     auto& block = *pb.AddBlocks();
                     block.SetIndex(index);
@@ -192,13 +192,13 @@ class TFakeVDisk
 
         TChunkInfo& GetChunk(TChunkIdx chunkIdx) {
             auto it = Chunks.find(chunkIdx);
-            Y_VERIFY(it != Chunks.end());
+            Y_ABORT_UNLESS(it != Chunks.end());
             return it->second;
         }
 
         const TChunkInfo& GetChunk(TChunkIdx chunkIdx) const {
             auto it = Chunks.find(chunkIdx);
-            Y_VERIFY(it != Chunks.end());
+            Y_ABORT_UNLESS(it != Chunks.end());
             return it->second;
         }
 
@@ -241,19 +241,19 @@ class TFakeVDisk
             FirstLsnToKeep = pb.GetFirstLsnToKeep();
 
             // extract number of blocks per single chunk
-            Y_VERIFY(pb.HasBlocksInChunk());
+            Y_ABORT_UNLESS(pb.HasBlocksInChunk());
             BlocksInChunk = pb.GetBlocksInChunk();
 
             for (const auto& pbItem : pb.GetChunks()) {
-                Y_VERIFY(pbItem.HasChunkIdx());
+                Y_ABORT_UNLESS(pbItem.HasChunkIdx());
                 const TChunkIdx chunkIdx = pbItem.GetChunkIdx();
                 Chunks.emplace(chunkIdx, TChunkInfo(BlocksInChunk, pbItem));
             }
             for (const auto& pbItem : pb.GetWritesInFlight()) {
-                Y_VERIFY(pbItem.HasChunkIdx());
-                Y_VERIFY(pbItem.HasOffsetInBlocks());
-                Y_VERIFY(pbItem.HasSizeInBlocks());
-                Y_VERIFY(pbItem.ChecksumsSize() == pbItem.GetSizeInBlocks());
+                Y_ABORT_UNLESS(pbItem.HasChunkIdx());
+                Y_ABORT_UNLESS(pbItem.HasOffsetInBlocks());
+                Y_ABORT_UNLESS(pbItem.HasSizeInBlocks());
+                Y_ABORT_UNLESS(pbItem.ChecksumsSize() == pbItem.GetSizeInBlocks());
                 TWriteRecord write;
                 write.ChunkIdx = pbItem.GetChunkIdx();
                 write.OffsetInBlocks = pbItem.GetOffsetInBlocks();
@@ -278,10 +278,10 @@ class TFakeVDisk
         }
 
         static void Deserialize(const NPDiskFIT::TFakeVDiskState::TLogItem& pbItem, TLogRecord& item) {
-            Y_VERIFY(pbItem.HasLsn());
-            Y_VERIFY(pbItem.HasSignature());
-            Y_VERIFY(pbItem.HasDataLen());
-            Y_VERIFY(pbItem.HasChecksum());
+            Y_ABORT_UNLESS(pbItem.HasLsn());
+            Y_ABORT_UNLESS(pbItem.HasSignature());
+            Y_ABORT_UNLESS(pbItem.HasDataLen());
+            Y_ABORT_UNLESS(pbItem.HasChecksum());
             item.Lsn = pbItem.GetLsn();
             item.Signature = pbItem.GetSignature();
             item.DataLen = pbItem.GetDataLen();
@@ -337,7 +337,7 @@ public:
         if (TString state = GetState()) {
             NPDiskFIT::TFakeVDiskState pb;
             bool status = pb.ParseFromString(state);
-            Y_VERIFY(status);
+            Y_ABORT_UNLESS(status);
             recovered.DeserializeFromProto(pb);
         }
 
@@ -366,7 +366,7 @@ public:
 
     void Handle(NPDisk::TEvYardInitResult::TPtr& ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
-        Y_VERIFY(msg->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
         PDiskParams = msg->PDiskParams;
         State.BlocksInChunk = PDiskParams->ChunkSize / PDiskParams->AppendBlockSize;
 
@@ -393,7 +393,7 @@ public:
                     << " Recovered# " << Recovered.ToString());
 
             auto& info = it->second;
-            Y_VERIFY(info.GetCommitState() == ECommitState::COMMIT_IN_PROGRESS ||
+            Y_ABORT_UNLESS(info.GetCommitState() == ECommitState::COMMIT_IN_PROGRESS ||
                 info.GetCommitState() == ECommitState::DELETE_IN_PROGRESS);
         }
     }
@@ -404,11 +404,11 @@ public:
 
     void Handle(NPDisk::TEvReadLogResult::TPtr& ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
-        Y_VERIFY(msg->Status == NKikimrProto::OK);
-        Y_VERIFY(msg->Position == ReadLogPosition);
+        Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(msg->Position == ReadLogPosition);
 
         for (const auto& item : msg->Results) {
-            Y_VERIFY(Lsn < item.Lsn);
+            Y_ABORT_UNLESS(Lsn < item.Lsn);
             Lsn = item.Lsn;
 
             TStringStream str;
@@ -432,10 +432,10 @@ public:
 
     void ProcessItem(const TLogRecord *current, const TLogRecord *prev) {
         if (current && prev) {
-            Y_VERIFY(current->Lsn == prev->Lsn);
-            Y_VERIFY(current->Signature == prev->Signature);
-            Y_VERIFY(current->DataLen == prev->DataLen);
-            Y_VERIFY(current->Checksum == prev->Checksum);
+            Y_ABORT_UNLESS(current->Lsn == prev->Lsn);
+            Y_ABORT_UNLESS(current->Signature == prev->Signature);
+            Y_ABORT_UNLESS(current->DataLen == prev->DataLen);
+            Y_ABORT_UNLESS(current->Checksum == prev->Checksum);
         } else if (current) {
             // there is a record in current set (recovered from PDisk), but not in previous set (stored state); there
             // may be an item in flight?
@@ -628,7 +628,7 @@ public:
             TLsnSeg(lsn, lsn), info), [&] {
                 State.InFlight.insert(*info);
                 if (cr.FirstLsnToKeep) {
-                    Y_VERIFY(cr.FirstLsnToKeep >= State.FirstLsnToKeep);
+                    Y_ABORT_UNLESS(cr.FirstLsnToKeep >= State.FirstLsnToKeep);
                     State.FirstLsnToKeep = cr.FirstLsnToKeep;
                 }
             });
@@ -639,16 +639,16 @@ public:
 
     void Handle(NPDisk::TEvLogResult::TPtr& ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
-        Y_VERIFY(msg->Results, "No results in TEvLogResult, Owner# %" PRIu32 " Status# %s",
+        Y_ABORT_UNLESS(msg->Results, "No results in TEvLogResult, Owner# %" PRIu32 " Status# %s",
                 (ui32)PDiskParams->Owner, NKikimrProto::EReplyStatus_Name(msg->Status).c_str());
         InFlightLog -= msg->Results.size();
         for (const auto& result : msg->Results) {
             std::unique_ptr<TLogRecord> info(static_cast<TLogRecord *>(result.Cookie));
-            Y_VERIFY(info);
+            Y_ABORT_UNLESS(info);
 
             StateManager->ExecuteConsistentAction([&] {
                 auto it = State.InFlight.find(*info);
-                Y_VERIFY(it != State.InFlight.end());
+                Y_ABORT_UNLESS(it != State.InFlight.end());
                 State.InFlight.erase(it);
 
                 const bool success = msg->Status == NKikimrProto::OK;
@@ -667,7 +667,7 @@ public:
                 // apply chunk deletes
                 for (TChunkIdx chunkIdx : info->DeleteChunks) {
                     auto it = State.Chunks.find(chunkIdx);
-                    Y_VERIFY(it != State.Chunks.end());
+                    Y_ABORT_UNLESS(it != State.Chunks.end());
                     TState::TChunkInfo& chunk = it->second;
                     chunk.SetCommitState(success ? ECommitState::DELETED : ECommitState::COMMITTED);
                     if (chunk.GetCommitState() == ECommitState::DELETED) {
@@ -692,11 +692,11 @@ public:
 
     void Handle(NPDisk::TEvChunkReserveResult::TPtr& ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
-        Y_VERIFY(msg->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 
         StateManager->ExecuteConsistentAction([&] {
             for (TChunkIdx chunk : msg->ChunkIds) {
-                Y_VERIFY(State.Chunks.count(chunk) == 0);
+                Y_ABORT_UNLESS(State.Chunks.count(chunk) == 0);
                 State.Chunks.emplace(chunk, TState::TChunkInfo(State.BlocksInChunk));
             }
         });
@@ -801,7 +801,7 @@ public:
             return Activity(ctx); // ignore this write result
         }
 
-        Y_VERIFY(msg->Status == NKikimrProto::OK);
+        Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 
         StateManager->ExecuteConsistentAction([&] {
             // find write in flight record
@@ -811,9 +811,9 @@ public:
                     break;
                 }
             }
-            Y_VERIFY(it != State.WritesInFlight.end());
-            Y_VERIFY(it->ChunkIdx == msg->ChunkIdx);
-            Y_VERIFY(it->Checksums.size() == it->SizeInBlocks);
+            Y_ABORT_UNLESS(it != State.WritesInFlight.end());
+            Y_ABORT_UNLESS(it->ChunkIdx == msg->ChunkIdx);
+            Y_ABORT_UNLESS(it->Checksums.size() == it->SizeInBlocks);
 
             TStringStream s;
             s << "TEvChunkWriteResult ChunkIdx# " << it->ChunkIdx << " OffsetInBlocks# " << it->OffsetInBlocks
@@ -822,7 +822,7 @@ public:
 
             // move data into confirmed state -- set used blocks bits and fill in actual checksums
             TState::TChunkInfo& chunk = State.GetChunk(it->ChunkIdx);
-            Y_VERIFY(it->OffsetInBlocks + it->SizeInBlocks <= State.BlocksInChunk);
+            Y_ABORT_UNLESS(it->OffsetInBlocks + it->SizeInBlocks <= State.BlocksInChunk);
             chunk.SetChecksums(it->OffsetInBlocks, it->Checksums);
 
             // drop write in flight record
@@ -854,10 +854,10 @@ public:
 
         if (msg->Status != NKikimrProto::OK) {
             // this chunk can't be read at all; this means that we don't own it
-            Y_VERIFY(chunk.GetCommitState() != ECommitState::COMMITTED);
+            Y_ABORT_UNLESS(chunk.GetCommitState() != ECommitState::COMMITTED);
         } else {
             // this chunk is readable, so it is committed somehow
-            Y_VERIFY(chunk.GetCommitState() == ECommitState::COMMITTED
+            Y_ABORT_UNLESS(chunk.GetCommitState() == ECommitState::COMMITTED
                     || chunk.GetCommitState() == ECommitState::COMMIT_IN_PROGRESS
                     || chunk.GetCommitState() == ECommitState::DELETE_IN_PROGRESS,
                     "ChunkIdx# %" PRIu32 " CommitState# %" PRIu32, msg->ChunkIdx,
@@ -891,13 +891,13 @@ public:
                             break;
                         }
                     }
-                    Y_VERIFY(it != Recovered.WritesInFlight.end() || chunk.VerifyChecksum(i, checksum) || wasDeleteInProgress,
+                    Y_ABORT_UNLESS(it != Recovered.WritesInFlight.end() || chunk.VerifyChecksum(i, checksum) || wasDeleteInProgress,
                             "inconsistent chunk data ChunkIdx# %" PRIu32 " OffsetInBlocks# %" PRIu32 " Used# %s"
                             " Checksum# %08" PRIx32 " StoredChecksum# %08" PRIx32 " WritesInFlight# %s", msg->ChunkIdx, i,
                             chunk.IsUsed(i) ? "true" : "false", checksum, chunk.GetChecksum(i), s.Str().data());
                     chunk.SetChecksums(i, {checksum});
                 } else {
-                    Y_VERIFY(!chunk.IsUsed(i), "unexpected data ChunkIdx# %" PRIu32 " OffsetInBlocks# %" PRIu32,
+                    Y_ABORT_UNLESS(!chunk.IsUsed(i), "unexpected data ChunkIdx# %" PRIu32 " OffsetInBlocks# %" PRIu32,
                             msg->ChunkIdx, i);
                 }
             }
@@ -918,7 +918,7 @@ public:
         (StateVerified ? State : Recovered).SerializeToProto(pb);
         TString data;
         bool status = pb.SerializeToString(&data);
-        Y_VERIFY(status);
+        Y_ABORT_UNLESS(status);
         return data;
     }
 

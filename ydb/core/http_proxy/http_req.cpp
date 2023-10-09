@@ -151,7 +151,7 @@ namespace NKikimr::NHttpProxy {
         };
 
         if constexpr (has_stream_name) {
-            Y_VERIFY(req.stream_name().StartsWith(databasePath));
+            Y_ABORT_UNLESS(req.stream_name().StartsWith(databasePath));
             return req.stream_name().substr(databasePath.size(), -1);
         }
         return ExtractStreamNameWithoutProtoField<TProto>(req).substr(databasePath.size(), -1);
@@ -242,7 +242,7 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendYdbDriverRequest(const TActorContext& ctx) {
-                Y_VERIFY(HttpContext.Driver);
+                Y_ABORT_UNLESS(HttpContext.Driver);
 
                 RequestState = StateAuthorization;
 
@@ -268,7 +268,7 @@ namespace NKikimr::NHttpProxy {
                 if (!HttpContext.DatabasePath.empty() && !HttpContext.ServiceConfig.GetTestMode()) {
                     clientSettings.Database(HttpContext.DatabasePath);
                 }
-                Y_VERIFY(!Client);
+                Y_ABORT_UNLESS(!Client);
                 Client.Reset(new TDataStreamsClient(*HttpContext.Driver, clientSettings));
                 DiscoveryFuture = MakeHolder<NThreading::TFuture<void>>(Client->DiscoveryCompleted());
                 DiscoveryFuture->Subscribe(
@@ -294,7 +294,7 @@ namespace NKikimr::NHttpProxy {
                                     (const NThreading::TFuture<TProtoResponse>& future) {
                     auto& response = future.GetValueSync();
                     auto result = MakeHolder<TEvServerlessProxy::TEvGrpcRequestResult>();
-                    Y_VERIFY(response.operation().ready());
+                    Y_ABORT_UNLESS(response.operation().ready());
                     if (response.operation().status() == Ydb::StatusIds::SUCCESS) {
                         TProtoResult rs;
                         response.operation().result().UnpackTo(&rs);
@@ -316,8 +316,8 @@ namespace NKikimr::NHttpProxy {
                               "' database: '" << HttpContext.DatabasePath <<
                               "' iam token size: " << HttpContext.IamToken.size());
 
-                Y_VERIFY(Client);
-                Y_VERIFY(DiscoveryFuture->HasValue());
+                Y_ABORT_UNLESS(Client);
+                Y_ABORT_UNLESS(DiscoveryFuture->HasValue());
 
                 TProtoResponse response;
 
@@ -949,7 +949,7 @@ namespace NKikimr::NHttpProxy {
                     NYds::EErrorCodes::NOT_FOUND
                 );
             }
-            Y_VERIFY(navigate->ResultSet.size() == 1);
+            Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
             if (navigate->ResultSet.front().PQGroupInfo) {
                 const auto& description = navigate->ResultSet.front().PQGroupInfo->Description;
                 FolderId = description.GetPQTabletConfig().GetYcFolderId();
@@ -1131,7 +1131,7 @@ namespace NKikimr::NHttpProxy {
             }
             RetryCounter.Void();
 
-            Y_VERIFY(!ev->Get()->Response.iam_token().empty());
+            Y_ABORT_UNLESS(!ev->Get()->Response.iam_token().empty());
 
             ctx.Send(Sender,
                      new TEvServerlessProxy::TEvToken(ServiceAccountId, ev->Get()->Response.iam_token(), "", {}));

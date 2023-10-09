@@ -113,17 +113,17 @@ public:
     }
 
     void Handle(NKikimr::TEvQuota::TEvRequest::TPtr& ev) {
-        Y_VERIFY(ev->Get()->Deadline == TDuration::Max(), "Unimplemented");
-        Y_VERIFY(ev->Get()->Operator == NKikimr::TEvQuota::EResourceOperator::And, "Unimplemented");
-        Y_VERIFY(ev->Get()->Reqs.size() == 1, "Unimplemented");
-        Y_VERIFY(ev->Get()->Reqs[0].IsUsedAmount, "Unimplemented");
-        Y_VERIFY(!ev->Get()->Reqs[0].QuoterId, "Unimplemented");
-        Y_VERIFY(!ev->Get()->Reqs[0].ResourceId, "Unimplemented");
+        Y_ABORT_UNLESS(ev->Get()->Deadline == TDuration::Max(), "Unimplemented");
+        Y_ABORT_UNLESS(ev->Get()->Operator == NKikimr::TEvQuota::EResourceOperator::And, "Unimplemented");
+        Y_ABORT_UNLESS(ev->Get()->Reqs.size() == 1, "Unimplemented");
+        Y_ABORT_UNLESS(ev->Get()->Reqs[0].IsUsedAmount, "Unimplemented");
+        Y_ABORT_UNLESS(!ev->Get()->Reqs[0].QuoterId, "Unimplemented");
+        Y_ABORT_UNLESS(!ev->Get()->Reqs[0].ResourceId, "Unimplemented");
 
         const TString quoter = NKikimr::CanonizePath(ev->Get()->Reqs[0].Quoter);
         const TString& resource = ev->Get()->Reqs[0].Resource;
-        Y_VERIFY(quoter, "Quoter is unspecified");
-        Y_VERIFY(resource, "Resource is unspecified");
+        Y_ABORT_UNLESS(quoter, "Quoter is unspecified");
+        Y_ABORT_UNLESS(resource, "Resource is unspecified");
 
         const TResourceKey key(quoter, resource);
         if (const auto senderToResourceIt = SenderToResource.find(ev->Sender); senderToResourceIt == SenderToResource.end()) {
@@ -157,7 +157,7 @@ public:
             proc.RequiredAmount -= proc.Requests.front()->Get()->Reqs[0].Amount;
             proc.Requests.pop_front();
         }
-        Y_VERIFY(!proc.Requests.empty() || proc.RequiredAmount == 0); // Requests.empty() => RequiredAmount == 0
+        Y_ABORT_UNLESS(!proc.Requests.empty() || proc.RequiredAmount == 0); // Requests.empty() => RequiredAmount == 0
         if (proc.RateLimiterRequests.size() < MaxInflight && !proc.Requests.empty() && proc.RequestedAmount + proc.AvailableAmount < proc.RequiredAmount) {
             const ui64 rateLimiterRequestCookie = RateLimiterNextRequestCookie++;
             const ui64 amountToRequest = proc.RequiredAmount - proc.AvailableAmount - proc.RequestedAmount;
@@ -173,7 +173,7 @@ public:
             proc.RequiredAmount -= proc.Requests.front()->Get()->Reqs[0].Amount;
             proc.Requests.pop_front();
         }
-        Y_VERIFY(!proc.Requests.empty() || proc.RequiredAmount == 0); // Requests.empty() => RequiredAmount == 0
+        Y_ABORT_UNLESS(!proc.Requests.empty() || proc.RequiredAmount == 0); // Requests.empty() => RequiredAmount == 0
     }
 
     static ERetryErrorClass RetryClass(const NYdb::TStatus& status) {
@@ -244,7 +244,7 @@ public:
     }
 
     void Handle(NKikimr::TEvQuota::TEvCancelRequest::TPtr& ev) {
-        Y_VERIFY(!ev->Cookie, "Unimplemented");
+        Y_ABORT_UNLESS(!ev->Cookie, "Unimplemented");
         if (const auto resIt = SenderToResource.find(ev->Sender); resIt != SenderToResource.end()) {
             if (const auto procIt = Resources.find(resIt->second); procIt != Resources.end()) {
                 auto& proc = procIt->second;

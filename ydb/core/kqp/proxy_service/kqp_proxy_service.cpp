@@ -867,7 +867,7 @@ public:
             return;
         }
 
-        Y_VERIFY(SelfDataCenterId);
+        Y_ABORT_UNLESS(SelfDataCenterId);
         PeerProxyNodeResources.resize(boardInfo->InfoEntries.size());
         size_t idx = 0;
         auto getDataCenterId = [](const auto& entry) {
@@ -916,7 +916,7 @@ public:
             return;
         }
 
-        Y_VERIFY(SelfDataCenterId);
+        Y_ABORT_UNLESS(SelfDataCenterId);
         PeerProxyNodeResources = std::move(proxyResources);
         LocalDatacenterProxies = std::move(localDatacenterProxies);
 
@@ -971,7 +971,7 @@ public:
         const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
         const std::pair<bool, ui32> settings = GetBalancerEnableSettings();
 
-        Y_VERIFY(PeerStats);
+        Y_ABORT_UNLESS(PeerStats);
 
         bool isReasonableToKick = false;
 

@@ -55,7 +55,7 @@ namespace NKikimr::NBlobDepot {
                 }
                 auto& info = it->second;
 
-                Y_VERIFY(info.InFlightDeliveries);
+                Y_ABORT_UNLESS(info.InFlightDeliveries);
                 --info.InFlightDeliveries;
 
                 // return original event type
@@ -83,7 +83,7 @@ namespace NKikimr::NBlobDepot {
                     (PostponeQ.size, info.PostponeQ.size()), (InFlightDeliveries, info.InFlightDeliveries),
                     (ReadyForAgentQueries, ReadyForAgentQueries()), (Type, ev->Type));
 
-                Y_VERIFY(ev->Type == ev->GetTypeRewrite());
+                Y_ABORT_UNLESS(ev->Type == ev->GetTypeRewrite());
                 ev->Rewrite(TEvPrivate::EvDeliver, ev->GetRecipientRewrite());
 
                 if (!ReadyForAgentQueries()) { // we can't handle agent queries now -- enqueue this message
@@ -155,7 +155,7 @@ namespace NKikimr::NBlobDepot {
         TTabletStorageInfo *info = Info();
         const ui32 generation = Executor()->Generation();
 
-        Y_VERIFY(Channels.empty());
+        Y_ABORT_UNLESS(Channels.empty());
 
         ui32 channel = 0;
         for (const auto& profile : Config.GetChannelProfiles()) {
@@ -197,11 +197,11 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::InvalidateGroupForAllocation(ui32 groupId) {
         const auto groupIt = Groups.find(groupId);
-        Y_VERIFY(groupIt != Groups.end());
+        Y_ABORT_UNLESS(groupIt != Groups.end());
         const auto& group = groupIt->second;
         for (const auto& [kind, channels] : group.Channels) {
             const auto kindIt = ChannelKinds.find(kind);
-            Y_VERIFY(kindIt != ChannelKinds.end());
+            Y_ABORT_UNLESS(kindIt != ChannelKinds.end());
             auto& kindv = kindIt->second;
             kindv.GroupAccumWeights.clear(); // invalidate
         }
@@ -209,7 +209,7 @@ namespace NKikimr::NBlobDepot {
 
     bool TBlobDepot::PickChannels(NKikimrBlobDepot::TChannelKind::E kind, std::vector<ui8>& channels) {
         const auto kindIt = ChannelKinds.find(kind);
-        Y_VERIFY(kindIt != ChannelKinds.end());
+        Y_ABORT_UNLESS(kindIt != ChannelKinds.end());
         auto& kindv = kindIt->second;
 
         if (kindv.GroupAccumWeights.empty()) {
@@ -239,15 +239,15 @@ namespace NKikimr::NBlobDepot {
             const ui64 random = RandomNumber(accum);
             const auto comp = [](ui64 x, const auto& y) { return x < std::get<1>(y); };
             const auto it = std::upper_bound(kindv.GroupAccumWeights.begin(), kindv.GroupAccumWeights.end(), random, comp);
-            Y_VERIFY(it != kindv.GroupAccumWeights.end());
+            Y_ABORT_UNLESS(it != kindv.GroupAccumWeights.end());
             const auto [groupId, _] = *it;
 
             const auto groupIt = Groups.find(groupId);
-            Y_VERIFY(groupIt != Groups.end());
+            Y_ABORT_UNLESS(groupIt != Groups.end());
             auto& group = groupIt->second;
 
             const auto channelsIt = group.Channels.find(kind);
-            Y_VERIFY(channelsIt != group.Channels.end());
+            Y_ABORT_UNLESS(channelsIt != group.Channels.end());
             const auto& channels = channelsIt->second;
 
             const size_t channelIndex = RandomNumber(channels.size());

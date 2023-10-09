@@ -49,8 +49,8 @@ public:
                                << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxFinalizeBuildIndex);
-        Y_VERIFY(txState->BuildIndexId);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxFinalizeBuildIndex);
+        Y_ABORT_UNLESS(txState->BuildIndexId);
 
         TPathId pathId = txState->TargetPathId;
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
@@ -140,7 +140,7 @@ public:
                                << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxFinalizeBuildIndex);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxFinalizeBuildIndex);
 
         NIceDb::TNiceDb db(context.GetDB());
         TPathId tableId = txState->TargetPathId;
@@ -176,8 +176,8 @@ public:
                                << " at tablet: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxFinalizeBuildIndex);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxFinalizeBuildIndex);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -212,7 +212,7 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
+        Y_ABORT_UNLESS(txState);
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
@@ -378,7 +378,7 @@ public:
         context.SS->PersistTxState(db, OperationId);
 
         TTableInfo::TPtr table = context.SS->Tables.at(tablePathId);
-        Y_VERIFY(table->GetSplitOpsInFlight().empty());
+        Y_ABORT_UNLESS(table->GetSplitOpsInFlight().empty());
 
         context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
         context.OnComplete.ActivateTx(OperationId);
@@ -411,7 +411,7 @@ ISubOperation::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, const TTx
 }
 
 ISubOperation::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TFinalizeBuildIndex>(id, state);
 }
 

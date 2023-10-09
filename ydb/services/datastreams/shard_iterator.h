@@ -78,7 +78,7 @@ static TShardIterator Cdc(const TString& streamName, const TString& streamArn,
 TString Serialize() const {
     TString data;
     bool result = Proto.SerializeToString(&data);
-    Y_VERIFY(result);
+    Y_ABORT_UNLESS(result);
     TString encoded;
     Base64Encode(data, encoded);
     return encoded;

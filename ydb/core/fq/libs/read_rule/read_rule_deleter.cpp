@@ -195,7 +195,7 @@ public:
         , Credentials(std::move(credentials))
         , MaxRetries(maxRetries)
     {
-        Y_VERIFY(!Topics.empty());
+        Y_ABORT_UNLESS(!Topics.empty());
         Results.resize(Topics.size());
     }
 
@@ -214,7 +214,7 @@ public:
 
     void Handle(TEvPrivate::TEvSingleReadRuleDeleterResult::TPtr& ev) {
         const ui64 index = ev->Cookie;
-        Y_VERIFY(!Results[index]);
+        Y_ABORT_UNLESS(!Results[index]);
         if (ev->Get()->Issues) {
             Ok = false;
         }
@@ -231,7 +231,7 @@ public:
     }
 
     void SendResultsAndPassAwayIfDone() {
-        Y_VERIFY(ResultsGot <= Topics.size());
+        Y_ABORT_UNLESS(ResultsGot <= Topics.size());
         if (ResultsGot == Topics.size()) {
             NYql::TIssues issues;
             if (!Ok) {

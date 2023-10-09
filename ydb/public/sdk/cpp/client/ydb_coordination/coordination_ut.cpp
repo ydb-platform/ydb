@@ -27,7 +27,7 @@ namespace {
             Cerr << "ListEndpoints: " << request->ShortDebugString() << Endl;
 
             const auto* result = MockResults.FindPtr(request->database());
-            Y_VERIFY(result, "Mock service doesn't have a result for database '%s'", request->database().c_str());
+            Y_ABORT_UNLESS(result, "Mock service doesn't have a result for database '%s'", request->database().c_str());
 
             auto* op = response->mutable_operation();
             op->set_ready(true);
@@ -61,7 +61,7 @@ namespace {
                     return grpc::Status::OK;
                 }
                 Cerr << "Session request: " << request.ShortDebugString() << Endl;
-                Y_VERIFY(request.has_session_start(), "Expected session start");
+                Y_ABORT_UNLESS(request.has_session_start(), "Expected session start");
                 auto& start = request.session_start();
                 uint64_t sessionId = start.session_id();
                 if (!sessionId) {
@@ -78,7 +78,7 @@ namespace {
             size_t pings_received = 0;
             while (stream->Read(&request)) {
                 Cerr << "Session request: " << request.ShortDebugString() << Endl;
-                Y_VERIFY(request.has_ping(), "Only ping requests are supported");
+                Y_ABORT_UNLESS(request.has_ping(), "Only ping requests are supported");
                 if (++pings_received <= 2) {
                     // Only reply to the first 2 ping requests
                     Ydb::Coordination::SessionResponse response;
@@ -117,9 +117,9 @@ Y_UNIT_TEST_SUITE(Coordination) {
         {
             TSockAddrInet6 addr("::", fakeEndpointPort);
             SetReuseAddressAndPort(fakeEndpointSocket);
-            Y_VERIFY(fakeEndpointSocket.Bind(&addr) == 0,
+            Y_ABORT_UNLESS(fakeEndpointSocket.Bind(&addr) == 0,
                 "Failed to bind to port %" PRIu16, fakeEndpointPort);
-            Y_VERIFY(fakeEndpointSocket.Listen(1) == 0,
+            Y_ABORT_UNLESS(fakeEndpointSocket.Listen(1) == 0,
                 "Failed to listen on port %" PRIu16, fakeEndpointPort);
         }
 

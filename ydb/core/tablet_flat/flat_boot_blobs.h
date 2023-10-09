@@ -23,7 +23,7 @@ namespace NBoot {
 
         ~TLoadBlobs()
         {
-            Y_VERIFY(!RefCount(), "TLoadBlobs is still referenced somewhere");
+            Y_ABORT_UNLESS(!RefCount(), "TLoadBlobs is still referenced somewhere");
         }
 
         void Start() noexcept override { }

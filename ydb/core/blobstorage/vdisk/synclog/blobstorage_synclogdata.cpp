@@ -126,7 +126,7 @@ namespace NKikimr {
             if (!MemSnapPtr->Empty()) {
                 ui64 memFirstLsn = MemSnapPtr->GetFirstLsn();
                 ui64 memLastLsn = MemSnapPtr->GetLastLsn();
-                Y_VERIFY(memFirstLsn <= memLastLsn, "%s", BoundariesToString().data());
+                Y_ABORT_UNLESS(memFirstLsn <= memLastLsn, "%s", BoundariesToString().data());
                 // For paranoid mode we can check memory snapshot
                 // consistency by calling "MemSnapPtr->CheckSnapshotConsistency()",
                 // but it's heavy, turned off by default
@@ -135,7 +135,7 @@ namespace NKikimr {
             if (!DiskSnapPtr->Empty()) {
                 ui64 diskFirstLsn = DiskSnapPtr->GetFirstLsn();
                 ui64 diskLastLsn = DiskSnapPtr->GetLastLsn();
-                Y_VERIFY(diskFirstLsn <= diskLastLsn, "%s", BoundariesToString().data());
+                Y_ABORT_UNLESS(diskFirstLsn <= diskLastLsn, "%s", BoundariesToString().data());
             }
         }
 
@@ -335,7 +335,7 @@ namespace NKikimr {
         {
             TVector<ui32> chunks;
             ui64 sLsn = DiskRecLog.DeleteChunks(numChunksToDel, std::move(notifier), chunks);
-            Y_VERIFY(LogStartLsn <= sLsn, "sLsn# %" PRIu64 " %s", sLsn, BoundariesToString().data());
+            Y_ABORT_UNLESS(LogStartLsn <= sLsn, "sLsn# %" PRIu64 " %s", sLsn, BoundariesToString().data());
             LogStartLsn = sLsn;
             return chunks;
         }
@@ -409,7 +409,7 @@ namespace NKikimr {
 
         ui64 TSyncLog::CalculateLastLsnOfIndexRecord() const {
             // we call this function after reading entry point, so MemRecLog MUST be empty
-            Y_VERIFY(MemRecLog.Empty());
+            Y_ABORT_UNLESS(MemRecLog.Empty());
 
             if (DiskRecLog.Empty()) {
                 return LogStartLsn > 0 ? LogStartLsn - 1 : 0;
@@ -480,7 +480,7 @@ namespace NKikimr {
                 s.Write(&TSyncLogHeader::SyncLogPbSignature, sizeof(ui32));
                 // pb payload
                 bool success = pb.SerializeToArcadiaStream(&s);
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
                 return s.Str();
             }
         }
@@ -595,7 +595,7 @@ namespace NKikimr {
                 size_t size,
                 TString &explanation)
         {
-            Y_VERIFY(size != 0);
+            Y_ABORT_UNLESS(size != 0);
             // Data Format
             // data ::= [TSyncLogHeader] [LogStartLsn=8b] ChunksToDelete DiskRecLogData
             // ChunksToDelete ::= [size=4b] [chunkIdx=4b]*

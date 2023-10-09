@@ -24,22 +24,22 @@ namespace NKikimr::NBlobDepot {
         }
 
         void EndWithSuccess(TQuery *query) {
-            Y_VERIFY(!Terminated);
-            Y_VERIFY(Buffer.IsMonolith());
-            Y_VERIFY(Buffer.GetMonolith().size() == Size);
+            Y_ABORT_UNLESS(!Terminated);
+            Y_ABORT_UNLESS(Buffer.IsMonolith());
+            Y_ABORT_UNLESS(Buffer.GetMonolith().size() == Size);
             query->OnRead(ReadArg.Tag, TReadOutcome{TReadOutcome::TOk{Buffer.GetMonolith()}});
             Abort();
         }
 
         void EndWithError(TQuery *query, NKikimrProto::EReplyStatus status, TString errorReason) {
-            Y_VERIFY(!Terminated);
-            Y_VERIFY(status != NKikimrProto::NODATA && status != NKikimrProto::OK);
+            Y_ABORT_UNLESS(!Terminated);
+            Y_ABORT_UNLESS(status != NKikimrProto::NODATA && status != NKikimrProto::OK);
             query->OnRead(ReadArg.Tag, TReadOutcome{TReadOutcome::TError{status, std::move(errorReason)}});
             Abort();
         }
 
         void EndWithNoData(TQuery *query) {
-            Y_VERIFY(!Terminated);
+            Y_ABORT_UNLESS(!Terminated);
             query->OnRead(ReadArg.Tag, TReadOutcome{TReadOutcome::TNodata{}});
             Abort();
         }
@@ -101,7 +101,7 @@ namespace NKikimr::NBlobDepot {
 
             // adjust it to fit size and offset
             partLen = Min(size ? size : Max<ui64>(), partLen - offset);
-            Y_VERIFY(partLen);
+            Y_ABORT_UNLESS(partLen);
 
             items.push_back(TReadItem{groupId, blobId, ui32(offset + begin), ui32(partLen), outputOffset});
 
@@ -156,7 +156,7 @@ namespace NKikimr::NBlobDepot {
             ++context->NumPartsPending;
         }
 
-        Y_VERIFY(context->NumPartsPending);
+        Y_ABORT_UNLESS(context->NumPartsPending);
 
         return true;
     }
@@ -171,7 +171,7 @@ namespace NKikimr::NBlobDepot {
             return; // just ignore this read
         }
 
-        Y_VERIFY(msg.ResponseSz == partContext.Offsets.size());
+        Y_ABORT_UNLESS(msg.ResponseSz == partContext.Offsets.size());
 
         for (ui32 i = 0; i < msg.ResponseSz; ++i) {
             auto& blob = msg.Responses[i];
@@ -191,7 +191,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             const ui64 offset = partContext.Offsets[i];
-            Y_VERIFY(offset < readContext.Size && blob.Buffer.size() <= readContext.Size - offset);
+            Y_ABORT_UNLESS(offset < readContext.Size && blob.Buffer.size() <= readContext.Size - offset);
             readContext.Buffer.Write(offset, std::move(blob.Buffer));
         }
 
@@ -229,7 +229,7 @@ namespace NKikimr::NBlobDepot {
                     << readContext.BlobWithoutData << ": data seems to be lost");
             }
         } else {
-            Y_VERIFY(!msg.Record.ResolvedKeysSize());
+            Y_ABORT_UNLESS(!msg.Record.ResolvedKeysSize());
             readContext.EndWithNoData(this);
         }
     }

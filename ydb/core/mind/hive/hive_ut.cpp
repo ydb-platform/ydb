@@ -319,7 +319,7 @@ namespace {
         boxConfig.SetBoxId(1);
 
         ui32 nodeId = runtime.GetNodeId(nodeIndex);
-        Y_VERIFY(nodesInfo->Nodes[0].NodeId == nodeId);
+        Y_ABORT_UNLESS(nodesInfo->Nodes[0].NodeId == nodeId);
         auto& nodeInfo = nodesInfo->Nodes[0];
 
         NKikimrBlobStorage::TDefineHostConfig hostConfig;

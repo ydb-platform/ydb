@@ -60,7 +60,7 @@ public:
         if (ValuesPushed++ % 1000 == 0) {
             ReestimateRowBytes(value);
         }
-        Y_VERIFY(EstimatedRowBytes > 0);
+        Y_ABORT_UNLESS(EstimatedRowBytes > 0);
         Values.emplace_back(std::move(value), EstimatedRowBytes);
         EstimatedStoredBytes += EstimatedRowBytes;
 
@@ -116,7 +116,7 @@ public:
             batch.emplace_back(std::move(std::get<NUdf::TUnboxedValue>(Values.front().Value)));
             Values.pop_front();
         }
-        Y_VERIFY(EstimatedStoredBytes >= usedBytes);
+        Y_ABORT_UNLESS(EstimatedStoredBytes >= usedBytes);
         EstimatedStoredBytes -= usedBytes;
 
         ReportChunkOut(batch.RowCount(), usedBytes);
@@ -128,7 +128,7 @@ public:
         if (!Values.empty() && std::holds_alternative<NDqProto::TWatermark>(Values.front().Value)) {
             watermark = std::move(std::get<NDqProto::TWatermark>(Values.front().Value));
             const auto size = Values.front().EstimatedSize;
-            Y_VERIFY(EstimatedStoredBytes >= size);
+            Y_ABORT_UNLESS(EstimatedStoredBytes >= size);
             EstimatedStoredBytes -= size;
             Values.pop_front();
 
@@ -143,7 +143,7 @@ public:
         if (!Values.empty() && std::holds_alternative<NDqProto::TCheckpoint>(Values.front().Value)) {
             checkpoint = std::move(std::get<NDqProto::TCheckpoint>(Values.front().Value));
             const auto size = Values.front().EstimatedSize;
-            Y_VERIFY(EstimatedStoredBytes >= size);
+            Y_ABORT_UNLESS(EstimatedStoredBytes >= size);
             EstimatedStoredBytes -= size;
             Values.pop_front();
 

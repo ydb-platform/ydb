@@ -88,7 +88,7 @@ namespace NKikimr {
         }
 
         ui8 *RawDataPtr(ui32 offset, ui32 len) {
-            Y_VERIFY(offset + len <= Data.size(), "Buffer has size# %zu less then requested offset# %" PRIu32
+            Y_ABORT_UNLESS(offset + len <= Data.size(), "Buffer has size# %zu less then requested offset# %" PRIu32
                     " len# %" PRIu32, Data.size(), offset, len);
             IsCommited = false;
             return reinterpret_cast<ui8 *>(Data.GetDataMut() + offset);
@@ -99,12 +99,12 @@ namespace NKikimr {
         }
 
         bool IsReadable() const {
-            Y_VERIFY(IsCommited, "returned data was not commited");
+            Y_ABORT_UNLESS(IsCommited, "returned data was not commited");
             return Gaps.empty();
         }
 
         bool IsReadable(ui32 offset, ui32 len) const {
-            Y_VERIFY(IsCommited, "returned data was not commited");
+            Y_ABORT_UNLESS(IsCommited, "returned data was not commited");
             if (offset + len > Data.size()) {
                 return false;
             }

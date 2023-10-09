@@ -168,7 +168,7 @@ private:
             Queries = WorkloadQueryGen->GetWorkload(WorkloadType);
         }
 
-        Y_VERIFY(!Queries.empty());
+        Y_ABORT_UNLESS(!Queries.empty());
         auto q = std::move(Queries.front());
         Queries.pop_front();
 
@@ -522,7 +522,7 @@ private:
     // table initialization
 
     void InsertInitData(const TActorContext& ctx) {
-        Y_VERIFY(!InitData.empty());
+        Y_ABORT_UNLESS(!InitData.empty());
         auto q = std::move(InitData.front());
         InitData.pop_front();
 

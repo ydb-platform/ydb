@@ -123,7 +123,7 @@ namespace NKikimr {
                         queueId = NKikimrBlobStorage::PutUserData;
                         break;
                 }
-                Y_VERIFY(queueId != NKikimrBlobStorage::Unknown);
+                Y_ABORT_UNLESS(queueId != NKikimrBlobStorage::Unknown);
 
                 TIntrusivePtr<TFlowRecord> flowRecord(new TFlowRecord);
                 QueueActorId = ctx.Register(CreateVDiskBackpressureClient(
@@ -197,7 +197,7 @@ namespace NKikimr {
             }
 
             void HandleTryToIssuePuts(const TActorContext& ctx) {
-                Y_VERIFY(EvTryToIssuePutsScheduled);
+                Y_ABORT_UNLESS(EvTryToIssuePutsScheduled);
                 EvTryToIssuePutsScheduled = false;
                 TryToIssuePuts(ctx);
             }
@@ -207,7 +207,7 @@ namespace NKikimr {
                 const auto& record = msg->Record;
 
                 auto it = InFlightRequests.find(record.GetCookie());
-                Y_VERIFY(it != InFlightRequests.end());
+                Y_ABORT_UNLESS(it != InFlightRequests.end());
                 const ui32 size = it->second;
                 InFlightRequests.erase(it);
 
@@ -248,12 +248,12 @@ namespace NKikimr {
             }
 
             void HandleTryToCollect(const TActorContext& ctx) {
-                Y_VERIFY(EvTryToCollectScheduled);
+                Y_ABORT_UNLESS(EvTryToCollectScheduled);
                 TryToCollect(ctx);
             }
 
             void Handle(TEvBlobStorage::TEvVCollectGarbageResult::TPtr& /*ev*/, const TActorContext& ctx) {
-                Y_VERIFY(EvTryToCollectScheduled);
+                Y_ABORT_UNLESS(EvTryToCollectScheduled);
                 EvTryToCollectScheduled = false;
                 TryToCollect(ctx);
             }

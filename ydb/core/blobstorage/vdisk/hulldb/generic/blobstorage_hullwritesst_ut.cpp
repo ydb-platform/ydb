@@ -181,7 +181,7 @@ namespace NKikimr {
                     WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena);
                     pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
-                    Y_VERIFY(pushRes);
+                    Y_ABORT_UNLESS(pushRes);
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
                     Apply(msg);
@@ -223,7 +223,7 @@ namespace NKikimr {
                     WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena);
                     pushRes = WriterPtr->Push(key, merger.GetMemRec(), merger.GetDataMerger());
-                    Y_VERIFY(pushRes);
+                    Y_ABORT_UNLESS(pushRes);
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
                     Apply(msg);
@@ -252,7 +252,7 @@ namespace NKikimr {
                     WriterPtr = std::make_unique<TWriterBlock>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena);
                     pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
-                    Y_VERIFY(pushRes);
+                    Y_ABORT_UNLESS(pushRes);
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
                     Apply(msg);

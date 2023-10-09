@@ -175,7 +175,7 @@ namespace {
 
         void CheckPrechargeByKeys(ui32 lower, ui32 upper, ui64 items, TPageIdFlags flags, const TMap<TGroupId, TArr>& shouldPrecharge, bool reverse, TSet<std::pair<TGroupId, TPageId>> sticky) const
         {
-            Y_VERIFY(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
+            Y_ABORT_UNLESS(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
             bool fail(flags & TPageIdFlags::IfFail);
             TTouchEnv env(fail, sticky);
@@ -206,7 +206,7 @@ namespace {
 
         void CheckPrechargeByRows(TPageId row1, TPageId row2, ui64 items, bool fail, TMap<TGroupId, TArr> shouldPrecharge) const
         {
-            Y_VERIFY(row1 <= row2 && row2 < 3 * 9);
+            Y_ABORT_UNLESS(row1 <= row2 && row2 < 3 * 9);
 
             auto sticky = GetIndexPages();
             TTouchEnv env(fail, sticky);
@@ -234,7 +234,7 @@ namespace {
 
         void CheckIterByKeys(ui32 lower, ui32 upper, ui64 items, const TMap<TGroupId, TArr>& precharged) const
         {
-            Y_VERIFY(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
+            Y_ABORT_UNLESS(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
             auto sticky = GetIndexPages();
             NTest::TCheckIt wrap(Eggs, { new TTouchEnv(false, sticky) });
@@ -270,7 +270,7 @@ namespace {
 
         void CheckIterByKeysReverse(ui32 lower, ui32 upper, ui64 items, const TMap<TGroupId, TArr>& precharged) const
         {
-            Y_VERIFY(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
+            Y_ABORT_UNLESS(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
             auto sticky = GetIndexPages();
             NTest::TCheckReverseIt wrap(Eggs, { new TTouchEnv(false, sticky) });
@@ -338,7 +338,7 @@ namespace {
                 for (size_t i = 0; ; i++) {
                     auto ready = i == 0 ? groupIndex.Seek(0) : groupIndex.Next();
                     if (ready != EReady::Data) {
-                        Y_VERIFY(ready != EReady::Page);
+                        Y_ABORT_UNLESS(ready != EReady::Page);
                         break;
                     }
                     absoluteId[absoluteId.size()] = groupIndex.GetPageId();

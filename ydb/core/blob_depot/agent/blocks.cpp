@@ -53,10 +53,10 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA02, "TEvQueryBlocksResult", (AgentId, Agent.LogId),
             (Msg, msg), (TabletId, queryBlockContext.TabletId));
         auto& block = Blocks[queryBlockContext.TabletId];
-        Y_VERIFY(block.RefreshId);
-        Y_VERIFY(msg.BlockedGenerationsSize() == 1);
+        Y_ABORT_UNLESS(block.RefreshId);
+        Y_ABORT_UNLESS(msg.BlockedGenerationsSize() == 1);
         const ui32 newBlockedGeneration = msg.GetBlockedGenerations(0);
-        Y_VERIFY(block.BlockedGeneration <= newBlockedGeneration);
+        Y_ABORT_UNLESS(block.BlockedGeneration <= newBlockedGeneration);
         block.BlockedGeneration = newBlockedGeneration;
         block.TimeToLive = TDuration::MilliSeconds(msg.GetTimeToLiveMs());
         block.ExpirationTimestamp = queryBlockContext.Timestamp + block.TimeToLive;
@@ -81,7 +81,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TBlocksManager::SetBlockForTablet(ui64 tabletId, ui32 blockedGeneration, TMonotonic timestamp, TDuration timeToLive) {
         auto& block = Blocks[tabletId];
-        Y_VERIFY(block.BlockedGeneration <= blockedGeneration);
+        Y_ABORT_UNLESS(block.BlockedGeneration <= blockedGeneration);
         block.BlockedGeneration = blockedGeneration;
         block.TimeToLive = timeToLive;
         block.ExpirationTimestamp = timestamp + timeToLive;

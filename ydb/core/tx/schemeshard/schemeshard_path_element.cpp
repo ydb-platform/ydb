@@ -22,7 +22,7 @@ void UpdateSpaceCommit(TSpaceLimits& limits, ui64 newValue, ui64 oldValue) {
 
     // Space decrease is handled at tx commit
     const ui64 diff = oldValue - newValue;
-    Y_VERIFY(limits.Allocated >= diff);
+    Y_ABORT_UNLESS(limits.Allocated >= diff);
     limits.Allocated -= diff;
 }
 
@@ -68,21 +68,21 @@ ui64 TPathElement::GetBackupChildren() const {
 }
 
 void TPathElement::IncAliveChildren(ui64 delta, bool isBackup) {
-    Y_VERIFY(Max<ui64>() - AliveChildrenCount >= delta);
+    Y_ABORT_UNLESS(Max<ui64>() - AliveChildrenCount >= delta);
     AliveChildrenCount += delta;
 
     if (isBackup) {
-        Y_VERIFY(Max<ui64>() - BackupChildrenCount >= delta);
+        Y_ABORT_UNLESS(Max<ui64>() - BackupChildrenCount >= delta);
         BackupChildrenCount += delta;
     }
 }
 
 void TPathElement::DecAliveChildren(ui64 delta, bool isBackup) {
-    Y_VERIFY(AliveChildrenCount >= delta);
+    Y_ABORT_UNLESS(AliveChildrenCount >= delta);
     AliveChildrenCount -= delta;
 
     if (isBackup) {
-        Y_VERIFY(BackupChildrenCount >= delta);
+        Y_ABORT_UNLESS(BackupChildrenCount >= delta);
         BackupChildrenCount -= delta;
     }
 }
@@ -96,12 +96,12 @@ void TPathElement::SetShardsInside(ui64 val) {
 }
 
 void TPathElement::IncShardsInside(ui64 delta) {
-    Y_VERIFY(Max<ui64>() - ShardsInsideCount >= delta);
+    Y_ABORT_UNLESS(Max<ui64>() - ShardsInsideCount >= delta);
     ShardsInsideCount += delta;
 }
 
 void TPathElement::DecShardsInside(ui64 delta) {
-    Y_VERIFY(ShardsInsideCount >= delta);
+    Y_ABORT_UNLESS(ShardsInsideCount >= delta);
     ShardsInsideCount -= delta;
 }
 

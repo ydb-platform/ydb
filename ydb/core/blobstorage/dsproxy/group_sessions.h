@@ -43,11 +43,11 @@ namespace NKikimr {
 
                 template<typename T>
                 static NKikimrBlobStorage::EVDiskQueueId VDiskQueueId(const T& event) {
-                    Y_VERIFY(event.Record.HasMsgQoS());
+                    Y_ABORT_UNLESS(event.Record.HasMsgQoS());
                     auto &msgQoS = event.Record.GetMsgQoS();
-                    Y_VERIFY(msgQoS.HasExtQueueId());
+                    Y_ABORT_UNLESS(msgQoS.HasExtQueueId());
                     NKikimrBlobStorage::EVDiskQueueId queueId = msgQoS.GetExtQueueId();
-                    Y_VERIFY(queueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
+                    Y_ABORT_UNLESS(queueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
                     return queueId;
                 }
 
@@ -86,12 +86,12 @@ namespace NKikimr {
                 {}
 
                 static void ValidateEvent(TQueue& queue, const TEvBlobStorage::TEvVPut& event) {
-                    Y_VERIFY(!event.Record.ExtraBlockChecksSize() || queue.ExtraBlockChecksSupport.value_or(true));
+                    Y_ABORT_UNLESS(!event.Record.ExtraBlockChecksSize() || queue.ExtraBlockChecksSupport.value_or(true));
                 }
 
                 static void ValidateEvent(TQueue& queue, const TEvBlobStorage::TEvVMultiPut& event) {
                     for (const auto& item : event.Record.GetItems()) {
-                        Y_VERIFY(!item.ExtraBlockChecksSize() || queue.ExtraBlockChecksSupport.value_or(true));
+                        Y_ABORT_UNLESS(!item.ExtraBlockChecksSize() || queue.ExtraBlockChecksSupport.value_or(true));
                     }
                 }
 

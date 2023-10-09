@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             auto reply = runtime->GrabEdgeEventsRethrow<TEvKqp::TEvQueryResponse, TEvKqp::TEvProcessResponse>(handle);
 
             TEvKqp::TEvQueryResponse* queryResponse = std::get<TEvKqp::TEvQueryResponse*>(reply);
-            Y_VERIFY(queryResponse);
+            Y_ABORT_UNLESS(queryResponse);
             UNIT_ASSERT_VALUES_EQUAL(queryResponse->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         }
     }

@@ -38,12 +38,12 @@ TFilteredSnapshotSchema::TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalS
 }
 
 TColumnSaver TFilteredSnapshotSchema::GetColumnSaver(const ui32 columnId, const TSaverContext& context) const {
-    Y_VERIFY(ColumnIds.contains(columnId));
+    Y_ABORT_UNLESS(ColumnIds.contains(columnId));
     return OriginalSnapshot->GetColumnSaver(columnId, context);
 }
 
 std::shared_ptr<TColumnLoader> TFilteredSnapshotSchema::GetColumnLoader(const ui32 columnId) const {
-    Y_VERIFY(ColumnIds.contains(columnId));
+    Y_ABORT_UNLESS(ColumnIds.contains(columnId));
     return OriginalSnapshot->GetColumnLoader(columnId);
 }
 

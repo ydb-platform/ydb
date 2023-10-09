@@ -45,7 +45,7 @@ namespace NKikimr {
             }
 
             bool KeepItem() const {
-                Y_VERIFY(KeepIndex >= KeepData);
+                Y_ABORT_UNLESS(KeepIndex >= KeepData);
                 return KeepIndex;
             }
 

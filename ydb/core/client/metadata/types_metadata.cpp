@@ -23,7 +23,7 @@ void DeserializeMetadata(TStringBuf buffer, NScheme::TTypeMetadataRegistry* regi
     using TTypeMetadata = NScheme::TTypeMetadataRegistry::TTypeMetadata;
 
     NKikimrSchemeTypeMetadata::TMetadata metadata;
-    Y_VERIFY(metadata.ParseFromArray(buffer.data(), buffer.size()));
+    Y_ABORT_UNLESS(metadata.ParseFromArray(buffer.data(), buffer.size()));
 
     TVector<TTypeMetadata> deserializedMetadata;
     deserializedMetadata.reserve(metadata.TypeSize());

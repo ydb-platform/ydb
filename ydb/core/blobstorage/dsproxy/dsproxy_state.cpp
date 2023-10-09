@@ -6,11 +6,11 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::Handle5min(TAutoPtr<IEventHandle> ev) {
         if (ev->Cookie == Cookie5min) {
             if (CurrentStateFunc() == &TBlobStorageGroupProxy::StateEstablishingSessionsTimeout) {
-                Y_VERIFY(!InEstablishingSessionsTimeout5min);
+                Y_ABORT_UNLESS(!InEstablishingSessionsTimeout5min);
                 ++*NodeMon->EstablishingSessionsTimeout5min;
                 InEstablishingSessionsTimeout5min = true;
             } else if (CurrentStateFunc() == &TBlobStorageGroupProxy::StateUnconfiguredTimeout) {
-                Y_VERIFY(!InUnconfiguredTimeout5min);
+                Y_ABORT_UNLESS(!InUnconfiguredTimeout5min);
                 ++*NodeMon->UnconfiguredTimeout5min;
                 InUnconfiguredTimeout5min = true;
             }
@@ -101,10 +101,10 @@ namespace NKikimr {
         NodeLayoutInfo = nullptr;
         Send(MonActor, new TEvBlobStorage::TEvConfigureProxy(Info));
         if (Info) {
-            Y_VERIFY(!EncryptionMode || *EncryptionMode == Info->GetEncryptionMode());
-            Y_VERIFY(!LifeCyclePhase || *LifeCyclePhase == Info->GetLifeCyclePhase());
-            Y_VERIFY(!GroupKeyNonce || *GroupKeyNonce == Info->GetGroupKeyNonce());
-            Y_VERIFY(!CypherKey || *CypherKey == *Info->GetCypherKey());
+            Y_ABORT_UNLESS(!EncryptionMode || *EncryptionMode == Info->GetEncryptionMode());
+            Y_ABORT_UNLESS(!LifeCyclePhase || *LifeCyclePhase == Info->GetLifeCyclePhase());
+            Y_ABORT_UNLESS(!GroupKeyNonce || *GroupKeyNonce == Info->GetGroupKeyNonce());
+            Y_ABORT_UNLESS(!CypherKey || *CypherKey == *Info->GetCypherKey());
             EncryptionMode = Info->GetEncryptionMode();
             LifeCyclePhase = Info->GetLifeCyclePhase();
             GroupKeyNonce = Info->GetGroupKeyNonce();
@@ -172,7 +172,7 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::SwitchToWorkWhenGoodToGo() {
-        Y_VERIFY(Sessions);
+        Y_ABORT_UNLESS(Sessions);
         if (Sessions->GoodToGo(*Topology, ForceWaitAllDrives)) {
             LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
                     << " -> StateWork" << " Marker# DSP11");
@@ -202,9 +202,9 @@ namespace NKikimr {
                 << " Handle TEvProxyQueueState# "<< ev->Get()->ToString()
                 << " Duration# " << establishingSessionsDuration
                 << " Marker# DSP04");
-        Y_VERIFY(Sessions);
+        Y_ABORT_UNLESS(Sessions);
         auto *msg = ev->Get();
-        Y_VERIFY(Topology);
+        Y_ABORT_UNLESS(Topology);
         Sessions->QueueConnectUpdate(Topology->GetOrderNumber(msg->VDiskId), msg->QueueId, msg->IsConnected,
             msg->ExtraBlockChecksSupport, msg->CostModel, *Topology);
         MinREALHugeBlobInBytes = Sessions->GetMinREALHugeBlobInBytes();

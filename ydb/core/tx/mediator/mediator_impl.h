@@ -35,7 +35,7 @@ namespace NTxMediator {
             , TxId(txid)
             , AckTo() // must be updated before commit
         {
-            Y_VERIFY(TxId != 0);
+            Y_ABORT_UNLESS(TxId != 0);
         }
 
         struct TCmpOrderId {

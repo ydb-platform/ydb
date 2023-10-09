@@ -53,7 +53,7 @@ NKikimrProto::EReplyStatus TIntermediate::TRead::CumulativeStatus() const {
 
 TRope TIntermediate::TRead::BuildRope() {
     TRope rope = Value ? Value.GetMonolith() : TRope();
-    Y_VERIFY(!Value || rope.size() == ValueSize);
+    Y_ABORT_UNLESS(!Value || rope.size() == ValueSize);
     return rope;
 }
 

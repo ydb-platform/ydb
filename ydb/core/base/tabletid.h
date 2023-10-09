@@ -45,7 +45,7 @@ namespace NKikimr {
 
     // 8 + 12 + 44
     inline ui64 MakeTabletID(ui64 stateStorageGroup, ui64 hiveUid, ui64 uniqPart) {
-        Y_VERIFY(stateStorageGroup < (1ull << 8ull) && hiveUid < (1ull << 12ull) && uniqPart < (1ull << 44ull));
+        Y_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull) && hiveUid < (1ull << 12ull) && uniqPart < (1ull << 44ull));
         return (stateStorageGroup << 56ull) | (hiveUid << 44ull) | uniqPart;
     }
 

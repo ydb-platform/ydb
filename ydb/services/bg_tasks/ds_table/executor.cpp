@@ -53,7 +53,7 @@ void TExecutor::Handle(TEvTaskFetched::TPtr& ev) {
 
 void TExecutor::Handle(TEvTaskExecutorFinished::TPtr& ev) {
     ALS_DEBUG(NKikimrServices::BG_TASKS) << "task executor finished";
-    Y_VERIFY(CurrentTaskIds.contains(ev->Get()->GetTaskId()));
+    Y_ABORT_UNLESS(CurrentTaskIds.contains(ev->Get()->GetTaskId()));
     CurrentTaskIds.erase(ev->Get()->GetTaskId());
     Sender<TEvStartAssign>().SendTo(SelfId());
 }
@@ -85,7 +85,7 @@ void TExecutor::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr& /*ev*/) {
 
 void TExecutor::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     auto snapshot = ev->Get()->GetValidatedSnapshotAs<NMetadata::NInitializer::TSnapshot>();
-    Y_VERIFY(snapshot, "incorrect initialization snapshot from metadata service");
+    Y_ABORT_UNLESS(snapshot, "incorrect initialization snapshot from metadata service");
     if (snapshot->HasComponent("bg_tasks")) {
         CheckActivity();
     }
@@ -95,7 +95,7 @@ void TExecutor::Bootstrap() {
     InternalController = std::make_shared<TExecutorController>(SelfId(), Config);
     Become(&TExecutor::StateMain);
     auto manager = std::make_shared<NMetadata::NInitializer::TFetcher>();
-    Y_VERIFY(NMetadata::NProvider::TServiceOperator::IsEnabled(), "metadata service not active");
+    Y_ABORT_UNLESS(NMetadata::NProvider::TServiceOperator::IsEnabled(), "metadata service not active");
     Sender<NMetadata::NProvider::TEvSubscribeExternal>(manager).SendTo(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()));
 }
 

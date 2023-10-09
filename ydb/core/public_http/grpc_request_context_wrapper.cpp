@@ -30,14 +30,14 @@ namespace NKikimr::NPublicHttp {
     void TGrpcRequestContextWrapper::Reply(NProtoBuf::Message* resp, ui32 status) {
         Y_UNUSED(resp);
         Y_UNUSED(status);
-        Y_VERIFY(resp);
+        Y_ABORT_UNLESS(resp);
         ReplySender(RequestContext, JsonSettings, resp, status);
     }
 
     void TGrpcRequestContextWrapper::Reply(grpc::ByteBuffer* resp, ui32 status) {
         Y_UNUSED(resp);
         Y_UNUSED(status);
-        Y_VERIFY(false, "TGrpcRequestContextWrapper::Reply");
+        Y_ABORT_UNLESS(false, "TGrpcRequestContextWrapper::Reply");
     }
 
     void TGrpcRequestContextWrapper::ReplyUnauthenticated(const TString& in) {

@@ -97,7 +97,7 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
     void Handle(TEvTabletBase::TEvBlockBlobStorageResult::TPtr &ev) {
         auto *msg = ev->Get();
         auto it = Find(ReqActors, ev->Sender);
-        Y_VERIFY(it != ReqActors.end(), "must not get response from unknown actor");
+        Y_ABORT_UNLESS(it != ReqActors.end(), "must not get response from unknown actor");
         *it = TActorId();
 
         switch (msg->Status) {

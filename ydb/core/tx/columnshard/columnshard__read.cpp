@@ -48,8 +48,8 @@ private:
 
 
 bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    Y_VERIFY(Ev);
-    Y_VERIFY(Self->TablesManager.HasPrimaryIndex());
+    Y_ABORT_UNLESS(Ev);
+    Y_ABORT_UNLESS(Self->TablesManager.HasPrimaryIndex());
     Y_UNUSED(txc);
     LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
 
@@ -84,7 +84,7 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
         toPredicate = std::make_shared<NOlap::TPredicate>(
             proto.GetInclusive() ? NArrow::EOperation::LessEqual : NArrow::EOperation::Less, proto.GetRow(), schema);
     }
-    Y_VERIFY(read.PKRangesFilter.Add(fromPredicate, toPredicate, &indexInfo));
+    Y_ABORT_UNLESS(read.PKRangesFilter.Add(fromPredicate, toPredicate, &indexInfo));
 
     bool parseResult = ParseProgram(record.GetOlapProgramType(), record.GetOlapProgram(), read,
         TIndexColumnResolver(indexInfo));
@@ -114,8 +114,8 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
 }
 
 void TTxRead::Complete(const TActorContext& ctx) {
-    Y_VERIFY(Ev);
-    Y_VERIFY(Result);
+    Y_ABORT_UNLESS(Ev);
+    Y_ABORT_UNLESS(Result);
 
     bool noData = !ReadMetadata || ReadMetadata->Empty();
     bool success = (Proto(Result.get()).GetStatus() == NKikimrTxColumnShard::EResultStatus::SUCCESS);

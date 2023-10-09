@@ -17,7 +17,7 @@ public:
     }
 
     const TPKRangeFilter& Front() const {
-        Y_VERIFY(Size());
+        Y_ABORT_UNLESS(Size());
         return SortedRanges.front();
     }
 

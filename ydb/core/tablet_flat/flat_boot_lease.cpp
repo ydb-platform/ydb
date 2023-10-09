@@ -63,8 +63,8 @@ public:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         auto* msg = ev->Get();
-        Y_VERIFY(ev->Sender == LeaseHolder);
-        Y_VERIFY(msg->SourceType == TEvTablet::TEvDropLease::EventType);
+        Y_ABORT_UNLESS(ev->Sender == LeaseHolder);
+        Y_ABORT_UNLESS(msg->SourceType == TEvTablet::TEvDropLease::EventType);
         if (msg->Reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
             // We have proved lease holder no longer exists
             return Finish();

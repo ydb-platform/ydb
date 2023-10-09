@@ -340,13 +340,13 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         auto builders = NArrow::MakeBuilders(batchSchema, rowsCount);
 
         for (size_t i = 0; i < rowsCount; ++i) {
-            Y_VERIFY(NArrow::Append<arrow::UInt32Type>(*builders[0], i));
-            Y_VERIFY(NArrow::Append<arrow::Int64Type>(*builders[1], i));
-            Y_VERIFY(NArrow::Append<arrow::Int32Type>(*builders[2], i));
-            Y_VERIFY(NArrow::Append<arrow::Int32Type>(*builders[3], i));
-            Y_VERIFY(NArrow::Append<arrow::UInt16Type>(*builders[4], i));
-            Y_VERIFY(NArrow::Append<arrow::StringType>(*builders[5], std::to_string(i)));
-            Y_VERIFY(NArrow::Append<arrow::BinaryType>(*builders[6], std::to_string(i)));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::UInt32Type>(*builders[0], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::Int64Type>(*builders[1], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::Int32Type>(*builders[2], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::Int32Type>(*builders[3], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::UInt16Type>(*builders[4], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[5], std::to_string(i)));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::BinaryType>(*builders[6], std::to_string(i)));
         }
 
         auto srcBatch = arrow::RecordBatch::Make(batchSchema, rowsCount, NArrow::Finish(std::move(builders)));

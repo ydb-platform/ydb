@@ -25,7 +25,7 @@ public:
         NUdf::TUnboxedValue* itemsPtr = nullptr;
         const auto result = Cache.NewArray(ctx, Representations.size() - 1U, itemsPtr);
         if (Representations.size() > 1) {
-            Y_VERIFY(itemsPtr);
+            Y_ABORT_UNLESS(itemsPtr);
             if (const auto ptr = baseStruct.GetElements()) {
                 for (ui32 i = 0; i < Index; ++i) {
                     *itemsPtr++ = ptr[i];

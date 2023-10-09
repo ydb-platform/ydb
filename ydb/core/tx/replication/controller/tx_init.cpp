@@ -88,7 +88,7 @@ class TController::TTxInit: public TTxBase {
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
 
             auto* target = replication->AddTarget(tid, kind, srcPath, dstPath);
-            Y_VERIFY(target);
+            Y_ABORT_UNLESS(target);
 
             target->SetDstState(dstState);
             target->SetDstPathId(dstPathId);

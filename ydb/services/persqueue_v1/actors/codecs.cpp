@@ -15,7 +15,7 @@ namespace NKikimr::NGRpcProxy {
             const auto& ids = pqTabletConfig.codecs().ids();
             if (!ids.empty() && Find(ids, codecID) == ids.end()) {
                 const auto& names = pqTabletConfig.codecs().codecs();
-                Y_VERIFY(ids.size() == names.size(), "PQ tabled supported codecs configuration is invalid");
+                Y_ABORT_UNLESS(ids.size() == names.size(), "PQ tabled supported codecs configuration is invalid");
                 TStringBuilder errorBuilder;
                 errorBuilder << "given codec (id " << static_cast<i32>(codecID) << ") is not configured for the topic. Configured codecs are " << names[0] << " (id " << ids[0] << ")";
                 for (i32 i = 1; i != ids.size(); ++i) {

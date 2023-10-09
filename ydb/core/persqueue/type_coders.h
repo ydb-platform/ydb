@@ -88,7 +88,7 @@ public:
 
 protected:
     void DoAddData(const char* data, size_t size) override {
-        Y_VERIFY(size == Size, "Size mismatch.");
+        Y_ABORT_UNLESS(size == Size, "Size mismatch.");
         Mask.AddNonNull();
         DataSize += Size;
         Output.Append(data, size);
@@ -217,7 +217,7 @@ public:
 
 protected:
     void DoAddData(const char* data, size_t size) override {
-        Y_VERIFY(size == sizeof(TType));
+        Y_ABORT_UNLESS(size == sizeof(TType));
         Mask.AddNonNull();
         DataSize += ValueCoder.Save(Output, ReadUnaligned<TType>(data));
     }
@@ -301,7 +301,7 @@ protected:
     }
 
     void DoAddNull() override {
-        Y_VERIFY(IsNullable, "Null values are not supported.");
+        Y_ABORT_UNLESS(IsNullable, "Null values are not supported.");
         Mask.Append(0, 2);
     }
 

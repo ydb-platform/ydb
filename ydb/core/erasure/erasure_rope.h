@@ -100,7 +100,7 @@ public:
     static ui32 GetCrc32c(Iterator begin, size_t size) {
         ui32 hash = 0;
         while (size) {
-            Y_VERIFY(begin.Valid());
+            Y_ABORT_UNLESS(begin.Valid());
             size_t len = std::min(size, begin.ContiguousSize());
             hash = Crc32cExtend(hash, begin.ContiguousData(), len);
             begin += len;
@@ -185,7 +185,7 @@ public:
             } else {
                 Current += (Boost + pos) - Current.ContiguousData();
             }
-            Y_VERIFY(Current.ContiguousData() == Boost + pos);
+            Y_ABORT_UNLESS(Current.ContiguousData() == Boost + pos);
             return Current;
         }
 
@@ -198,7 +198,7 @@ public:
                     BlockBeginIndx = BlockEndIndx;
                     BlockEndIndx += Current.ContiguousSize();
                 }
-                Y_VERIFY(BlockBeginIndx <= pos && pos < BlockEndIndx);
+                Y_ABORT_UNLESS(BlockBeginIndx <= pos && pos < BlockEndIndx);
                 BlockData = const_cast<char*>(Current.ContiguousData());
                 Boost = BlockData - BlockBeginIndx - Offset;
                 return BlockData + (pos - BlockBeginIndx);
@@ -217,11 +217,11 @@ public:
             }
 
             ui64 offset = Current.ContiguousData() - BlockData;
-            Y_VERIFY(pos >= offset);
+            Y_ABORT_UNLESS(pos >= offset);
             BlockBeginIndx = pos - offset;
             BlockEndIndx = pos + Current.ContiguousSize();
             Boost = BlockData - BlockBeginIndx - Offset;
-            Y_VERIFY(pos >= BlockBeginIndx && pos < BlockEndIndx);
+            Y_ABORT_UNLESS(pos >= BlockBeginIndx && pos < BlockEndIndx);
 
             return BlockData + (pos - BlockBeginIndx);
         }
@@ -301,9 +301,9 @@ struct TPartFragment {
         OwnedRope = piece;
         FastViewer = TRopeHelpers::TRopeFastView(OwnedRope);
         Offset = offset;
-        Y_VERIFY(size <= piece.GetSize());
+        Y_ABORT_UNLESS(size <= piece.GetSize());
         Size = size;
-        Y_VERIFY(offset + size <= partSize);
+        Y_ABORT_UNLESS(offset + size <= partSize);
         PartSize = partSize;
         FastViewer.SetOffset(Offset);
     }
@@ -470,7 +470,7 @@ struct TRopeErasureType {
     }
 
     TString ToString() const {
-        Y_VERIFY((ui64)ErasureSpecies < ErasureSpeciesCount);
+        Y_ABORT_UNLESS((ui64)ErasureSpecies < ErasureSpeciesCount);
         return ErasureName[ErasureSpecies];
     }
 

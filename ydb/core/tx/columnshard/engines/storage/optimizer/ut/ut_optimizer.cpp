@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         Cerr << planner.GetDescription() << Endl;
         NKikimr::NOlap::TCompactionLimits limits;
         auto task = planner.GetOptimizationTask(limits, nullptr);
-        Y_VERIFY(!task);
+        Y_ABORT_UNLESS(!task);
     }
 
     Y_UNIT_TEST(MergeSmall) {
@@ -52,8 +52,8 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         Cerr << planner.GetDescription() << Endl;
         NKikimr::NOlap::TCompactionLimits limits;
         auto task = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTask(limits, nullptr));
-        Y_VERIFY(task);
-        Y_VERIFY(task->SwitchedPortions.size() == 2);
+        Y_ABORT_UNLESS(task);
+        Y_ABORT_UNLESS(task->SwitchedPortions.size() == 2);
     }
 
     Y_UNIT_TEST(MergeSmall1) {
@@ -66,8 +66,8 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         Cerr << planner.GetDescription() << Endl;
         NKikimr::NOlap::TCompactionLimits limits;
         auto task = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTask(limits, nullptr));
-        Y_VERIFY(task);
-        Y_VERIFY(task->SwitchedPortions.size() == 4);
+        Y_ABORT_UNLESS(task);
+        Y_ABORT_UNLESS(task->SwitchedPortions.size() == 4);
     }
 
     Y_UNIT_TEST(MergeSmall2) {
@@ -81,10 +81,10 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         Cerr << planner.GetDescription() << Endl;
         NKikimr::NOlap::TCompactionLimits limits;
         auto task = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTask(limits, nullptr));
-        Y_VERIFY(task);
-        Y_VERIFY(task->SwitchedPortions.size() == 2);
-        Y_VERIFY(task->SwitchedPortions[0].GetPortion() == 1);
-        Y_VERIFY(task->SwitchedPortions[1].GetPortion() == 2);
+        Y_ABORT_UNLESS(task);
+        Y_ABORT_UNLESS(task->SwitchedPortions.size() == 2);
+        Y_ABORT_UNLESS(task->SwitchedPortions[0].GetPortion() == 1);
+        Y_ABORT_UNLESS(task->SwitchedPortions[1].GetPortion() == 2);
     }
 
 };

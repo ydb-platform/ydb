@@ -1518,7 +1518,7 @@ namespace NSchemeShardUT_Private {
         TString err;
 
         TString serialized;
-        Y_VERIFY(databaseQuotas.SerializeToString(&serialized));
+        Y_ABORT_UNLESS(databaseQuotas.SerializeToString(&serialized));
         TString prog = Sprintf(R"(
                                    (
                                         (let key '('('PathId (Uint64 '%lu)))) # RootPathId
@@ -2133,7 +2133,7 @@ namespace NSchemeShardUT_Private {
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> TFakeDataReq::TTablePartitioningInfo::ResolveKey(
         const TTableRange& range) const
     {
-        Y_VERIFY(!Partitioning.empty());
+        Y_ABORT_UNLESS(!Partitioning.empty());
 
         auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
 
@@ -2150,7 +2150,7 @@ namespace NSchemeShardUT_Private {
             return (compares < 0);
         });
 
-        Y_VERIFY(low != Partitioning.end(), "last key must be (inf)");
+        Y_ABORT_UNLESS(low != Partitioning.end(), "last key must be (inf)");
         do {
             partitions->push_back(TKeyDesc::TPartitionInfo(low->Datashard));
 

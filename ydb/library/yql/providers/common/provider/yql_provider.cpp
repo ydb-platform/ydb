@@ -567,7 +567,7 @@ TWriteObjectSettings ParseWriteObjectSettings(TExprList node, TExprContext& ctx)
                 mode = tuple.Value().Cast<TCoAtom>();
             } else if (name == "features") {
                 auto maybeFeatures = tuple.Value().Maybe<NNodes::TCoNameValueTupleList>();
-                Y_VERIFY(maybeFeatures);
+                Y_ABORT_UNLESS(maybeFeatures);
                 kvFeatures = maybeFeatures.Cast();
             }
         }

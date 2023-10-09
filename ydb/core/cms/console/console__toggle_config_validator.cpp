@@ -96,7 +96,7 @@ public:
             }
         }
 
-        Y_VERIFY(Response);
+        Y_ABORT_UNLESS(Response);
         LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
                     "Send: " << Response->ToString());
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);

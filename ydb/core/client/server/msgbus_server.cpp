@@ -164,12 +164,12 @@ public:
     }
 
     void SendReply(NBus::TBusMessage *resp) {
-        Y_VERIFY(RequestContext);
+        Y_ABORT_UNLESS(RequestContext);
         switch (const ui32 type = resp->GetHeader()->Type) {
 #define REPLY_OPTION(TYPE) \
             case TYPE::MessageType: { \
                 auto *msg = dynamic_cast<TYPE *>(resp); \
-                Y_VERIFY(msg); \
+                Y_ABORT_UNLESS(msg); \
                 RequestContext->Reply(msg->Record); \
                 break; \
             }
@@ -223,17 +223,17 @@ TBusMessageContext& TBusMessageContext::operator =(TBusMessageContext other) {
 }
 
 NBus::TBusMessage *TBusMessageContext::GetMessage() {
-    Y_VERIFY(Impl);
+    Y_ABORT_UNLESS(Impl);
     return Impl->GetMessage();
 }
 
 NBus::TBusMessage *TBusMessageContext::ReleaseMessage() {
-    Y_VERIFY(Impl);
+    Y_ABORT_UNLESS(Impl);
     return Impl->ReleaseMessage();
 }
 
 void TBusMessageContext::SendReplyMove(NBus::TBusMessageAutoPtr response) {
-    Y_VERIFY(Impl);
+    Y_ABORT_UNLESS(Impl);
     Impl->SendReplyMove(response);
 }
 
@@ -244,7 +244,7 @@ void TBusMessageContext::Swap(TBusMessageContext &msg) {
 TVector<TStringBuf> TBusMessageContext::FindClientCert() const { return Impl->FindClientCert(); }
 
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::CreateSessionIdentHolder() {
-    Y_VERIFY(Impl);
+    Y_ABORT_UNLESS(Impl);
     return Impl->CreateSessionIdentHolder();
 }
 
@@ -324,14 +324,14 @@ public:
     }
 
     void SendReply(NBus::TBusMessage *resp) override {
-        Y_VERIFY(Context);
+        Y_ABORT_UNLESS(Context);
         Context->SendReply(resp);
 
         auto context = std::move(Context);
     }
 
     void SendReplyMove(NBus::TBusMessageAutoPtr resp) override {
-        Y_VERIFY(Context);
+        Y_ABORT_UNLESS(Context);
         Context->SendReplyMove(resp);
 
         auto context = std::move(Context);
@@ -366,17 +366,17 @@ void TMessageBusSessionIdentHolder::InitSession(TBusMessageContext &msg) {
 }
 
 ui64 TMessageBusSessionIdentHolder::GetTotalTimeout() const {
-    Y_VERIFY(Impl);
+    Y_ABORT_UNLESS(Impl);
     return Impl->GetTotalTimeout();
 }
 
 void TMessageBusSessionIdentHolder::SendReply(NBus::TBusMessage *resp) {
-    Y_VERIFY(Impl);
+    Y_ABORT_UNLESS(Impl);
     Impl->SendReply(resp);
 }
 
 void TMessageBusSessionIdentHolder::SendReplyMove(NBus::TBusMessageAutoPtr resp) {
-    Y_VERIFY(Impl);
+    Y_ABORT_UNLESS(Impl);
     Impl->SendReplyMove(resp);
 }
 

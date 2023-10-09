@@ -122,7 +122,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
 
         void PushDataFromMessage(const NKikimrBlobStorage::TEvVAssimilateResult& msg,
                 const TBlobStorageGroupAssimilateRequest& self, TBlobStorageGroupType gtype) {
-            Y_VERIFY(Blocks.empty() && Barriers.empty() && Blobs.empty());
+            Y_ABORT_UNLESS(Blocks.empty() && Barriers.empty() && Blobs.empty());
 
             std::array<ui64, 3> context = {0, 0, 0};
 
@@ -159,7 +159,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
             auto processItems = [&](const auto& items, auto& lastProcessed, auto& field, const auto& skipUpTo) {
                 for (const auto& item : items) {
                     const auto key = getKey(item);
-                    Y_VERIFY(lastProcessed < key);
+                    Y_ABORT_UNLESS(lastProcessed < key);
                     lastProcessed.emplace(key);
                     if (skipUpTo < key) {
                         field.emplace_back(key, item, gtype);
@@ -311,7 +311,7 @@ public:
 
     void Request(ui32 orderNumber) {
         TPerVDiskInfo& info = PerVDiskInfo[orderNumber];
-        Y_VERIFY(!info.Finished());
+        Y_ABORT_UNLESS(!info.Finished());
 
         auto maxOpt = [](const auto& x, const auto& y) { return !x ? y : !y ? x : *x < *y ? y : x; };
 
@@ -331,7 +331,7 @@ public:
         const auto& record = ev->Get()->Record;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const ui32 orderNumber = Info->GetTopology().GetOrderNumber(vdiskId);
-        Y_VERIFY(orderNumber < PerVDiskInfo.size());
+        Y_ABORT_UNLESS(orderNumber < PerVDiskInfo.size());
 
         A_LOG_DEBUG_S("BPA02", "Handle TEvVAssimilateResult"
                 << " Status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus())
@@ -342,11 +342,11 @@ public:
                 << " Blobs# " << record.BlobsSize()
                 << " RequestsInFlight# " << RequestsInFlight);
 
-        Y_VERIFY(RequestsInFlight);
+        Y_ABORT_UNLESS(RequestsInFlight);
         --RequestsInFlight;
 
         auto& info = PerVDiskInfo[orderNumber];
-        Y_VERIFY(!info.HasItemsToMerge());
+        Y_ABORT_UNLESS(!info.HasItemsToMerge());
         if (record.GetStatus() == NKikimrProto::OK) {
             info.PushDataFromMessage(record, *this, Info->Type);
             if (info.HasItemsToMerge()) {

@@ -38,7 +38,7 @@ struct TKqpSettings {
     {
         auto defaultSettingsData = NResource::Find("kqp_default_settings.txt");
         TStringInput defaultSettingsStream(defaultSettingsData);
-        Y_VERIFY(TryParseFromTextFormat(defaultSettingsStream, DefaultSettings));
+        Y_ABORT_UNLESS(TryParseFromTextFormat(defaultSettingsStream, DefaultSettings));
     }
 
     TKqpSettings()
@@ -46,7 +46,7 @@ struct TKqpSettings {
     {
         auto defaultSettingsData = NResource::Find("kqp_default_settings.txt");
         TStringInput defaultSettingsStream(defaultSettingsData);
-        Y_VERIFY(TryParseFromTextFormat(defaultSettingsStream, DefaultSettings));
+        Y_ABORT_UNLESS(TryParseFromTextFormat(defaultSettingsStream, DefaultSettings));
     }
 
     NKikimrKqp::TKqpDefaultSettings DefaultSettings;

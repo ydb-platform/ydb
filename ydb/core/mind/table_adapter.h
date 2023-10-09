@@ -50,7 +50,7 @@ namespace NKikimr {
 
             template<typename TTuple, typename TKey>
             static void MapKey(TTuple *tuple, TKey &key) {
-                Y_VERIFY(key.size() == Index);
+                Y_ABORT_UNLESS(key.size() == Index);
 
                 auto &maybe = std::get<Index>(*tuple);
                 key.push_back(NIceDb::TConvertTypeValue<TColumn::ColumnType>(

@@ -659,7 +659,7 @@ private:
     }
 
     void UninitCurl() {
-        Y_VERIFY(Handle);
+        Y_ABORT_UNLESS(Handle);
         const CURLMcode multiCleanupResult = curl_multi_cleanup(Handle);
         if (multiCleanupResult != CURLM_OK) {
             Cerr << "curl_multi_cleanup error " << int(multiCleanupResult) << ": " << curl_multi_strerror(multiCleanupResult) << Endl;

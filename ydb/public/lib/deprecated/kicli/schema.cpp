@@ -147,7 +147,7 @@ TSchemaObject TSchemaObject::MakeDirectory(const TString& name) {
 
     const NKikimrClient::TResponse& response = result.GetResult<NKikimrClient::TResponse>();
     ui64 pathId = response.GetFlatTxId().GetPathId();
-    Y_VERIFY(pathId);
+    Y_ABORT_UNLESS(pathId);
     return TSchemaObject(Kikimr, Path, name, pathId, EPathType::Directory);
 }
 
@@ -170,7 +170,7 @@ TSchemaObject TSchemaObject::DoCreateTable(const TString& name, const TVector<TC
 
     const NKikimrClient::TResponse& response = result.GetResult<NKikimrClient::TResponse>();
     ui64 pathId = response.GetFlatTxId().GetPathId();
-    Y_VERIFY(pathId);
+    Y_ABORT_UNLESS(pathId);
     return TSchemaObject(Kikimr, Path, name, pathId, EPathType::Table);
 }
 
@@ -244,7 +244,7 @@ TVector<TColumn> TSchemaObject::GetColumns() const {
     TResult result = future.GetValue(TDuration::Max());
     result.GetError().Throw();
     const NKikimrClient::TResponse& objects = result.GetResult<NKikimrClient::TResponse>();
-    Y_VERIFY(objects.GetPathDescription().HasTable());
+    Y_ABORT_UNLESS(objects.GetPathDescription().HasTable());
     const auto& table = objects.GetPathDescription().GetTable();
 
     TMap<ui32, NKikimrSchemeOp::TColumnDescription> columnsMap;
@@ -256,7 +256,7 @@ TVector<TColumn> TSchemaObject::GetColumns() const {
     columns.reserve(table.ColumnsSize());
     for (ui32 keyColumnId : table.GetKeyColumnIds()) {
         auto column = columnsMap.FindPtr(keyColumnId);
-        Y_VERIFY(column);
+        Y_ABORT_UNLESS(column);
         columns.push_back(TKeyColumn(column->GetName(), TType(column->GetType(), column->GetTypeId())));
         columnsMap.erase(keyColumnId);
     }
@@ -273,7 +273,7 @@ TSchemaObjectStats TSchemaObject::GetStats() const {
     TResult result = future.GetValue(TDuration::Max());
     result.GetError().Throw();
     const NKikimrClient::TResponse& objects = result.GetResult<NKikimrClient::TResponse>();
-    Y_VERIFY(objects.GetPathDescription().HasTable());
+    Y_ABORT_UNLESS(objects.GetPathDescription().HasTable());
     TSchemaObjectStats stats;
     stats.PartitionsCount = objects.GetPathDescription().TablePartitionsSize();
     return stats;

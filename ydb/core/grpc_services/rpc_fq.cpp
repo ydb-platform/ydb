@@ -53,10 +53,10 @@ public:
         auto requestCtx = Request_.get();
 
         auto request = dynamic_cast<RpcRequestType*>(requestCtx);
-        Y_VERIFY(request);
+        Y_ABORT_UNLESS(request);
 
         auto proxyCtx = dynamic_cast<IRequestProxyCtx*>(requestCtx);
-        Y_VERIFY(proxyCtx);
+        Y_ABORT_UNLESS(proxyCtx);
 
         PeerName = Request_->GetPeerName();
         UserAgent = Request_->GetPeerMetaValues("user-agent").GetOrElse("empty");

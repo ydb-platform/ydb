@@ -51,7 +51,7 @@ namespace NKikimr::NBlobDepot {
             : Token(self->Token)
             , Self(self)
         {
-            Y_VERIFY(Self->Config.HasVirtualGroupId());
+            Y_ABORT_UNLESS(Self->Config.HasVirtualGroupId());
         }
 
         void Bootstrap();

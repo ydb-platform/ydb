@@ -16,12 +16,12 @@ private:
     bool PackModificationFlag = false;
     THashMap<ui64, const TGranuleMeta*> PackModifiedGranules;
     void StartModificationImpl() {
-        Y_VERIFY(!PackModificationFlag);
+        Y_ABORT_UNLESS(!PackModificationFlag);
         PackModificationFlag = true;
     }
 
     void FinishModificationImpl() {
-        Y_VERIFY(PackModificationFlag);
+        Y_ABORT_UNLESS(PackModificationFlag);
         PackModificationFlag = false;
         for (auto&& i : PackModifiedGranules) {
             UpdateGranuleInfo(*i.second);

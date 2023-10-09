@@ -34,7 +34,7 @@ public:
     using TBase::TBase;
 
     THelper& SetShardingMethod(const TString& value) {
-        Y_VERIFY(value == "HASH_FUNCTION_CLOUD_LOGS" || value == "HASH_FUNCTION_MODULO_N");
+        Y_ABORT_UNLESS(value == "HASH_FUNCTION_CLOUD_LOGS" || value == "HASH_FUNCTION_MODULO_N");
         ShardingMethod = value;
         return *this;
     }

@@ -467,7 +467,7 @@ void DoExecuteQuery(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&
     ui64 inflightLimitBytes = f.GetAppConfig()->GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
 
     auto* req = dynamic_cast<TEvExecuteQueryRequest*>(p.release());
-    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
     f.RegisterActor(new TExecuteQueryRPC(req, inflightLimitBytes));
 }
 

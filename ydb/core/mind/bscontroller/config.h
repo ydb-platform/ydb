@@ -143,11 +143,11 @@ namespace NKikimr {
                 , SerialManagementStage(&controller.SerialManagementStage)
                 , StoragePoolStat(*controller.StoragePoolStat)
             {
-                Y_VERIFY(HostRecords);
+                Y_ABORT_UNLESS(HostRecords);
             }
 
             void Commit() {
-                Y_VERIFY(!Fit);
+                Y_ABORT_UNLESS(!Fit);
 
                 HostConfigs.Commit();
                 Boxes.Commit();
@@ -245,17 +245,17 @@ namespace NKikimr {
 
             void DeleteExistingGroup(TGroupId groupId) {
                 const TGroupInfo *group = Groups.Find(groupId);
-                Y_VERIFY(group);
+                Y_ABORT_UNLESS(group);
                 if (group->VirtualGroupState) { // this was a BlobDepot-based group, enqueue BlobDepot for deletion
                     // parse blob depot config to figure out whether hive was contacted; if not, skip the HiveId field
-                    Y_VERIFY(group->BlobDepotConfig);
+                    Y_ABORT_UNLESS(group->BlobDepotConfig);
                     NKikimrBlobDepot::TBlobDepotConfig config;
                     const bool success = config.ParseFromString(*group->BlobDepotConfig);
-                    Y_VERIFY(success);
+                    Y_ABORT_UNLESS(success);
                     if (config.GetHiveContacted()) {
                         const auto [it, inserted] = BlobDepotDeleteQueue.Unshare().try_emplace(groupId, group->HiveId,
                             config.HasTabletId() ? MakeMaybe(config.GetTabletId()) : Nothing());
-                        Y_VERIFY(inserted);
+                        Y_ABORT_UNLESS(inserted);
                     }
                 }
                 Groups.DeleteExistingEntry(groupId);

@@ -403,7 +403,7 @@ private:
         this->template ReplyBatch<TEvSysView::TEvGetQueryStatsResponse, TEntry, TExtractorsMap, true>(ev);
 
         if (!record.GetLastBatch()) {
-            Y_VERIFY(record.HasNext());
+            Y_ABORT_UNLESS(record.HasNext());
             Request.MutableFrom()->CopyFrom(record.GetNext());
             Request.SetInclusiveFrom(true);
         }

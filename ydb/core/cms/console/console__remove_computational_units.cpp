@@ -19,7 +19,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
                     "TTxRemoveComputationalUnits Execute " << Tenant->Path);
 
-        Y_VERIFY(Tenant->State == TTenant::REMOVING_SUBDOMAIN);
+        Y_ABORT_UNLESS(Tenant->State == TTenant::REMOVING_SUBDOMAIN);
 
         Self->DbUpdateTenantState(Tenant, TTenant::REMOVING_UNITS, txc, ctx);
         Self->DbRemoveComputationalUnits(Tenant, txc, ctx);

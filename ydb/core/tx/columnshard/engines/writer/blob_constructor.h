@@ -28,7 +28,7 @@ private:
     TBlobWriteInfo(const TString& data, const std::shared_ptr<IBlobsWritingAction>& writeOperator)
         : Data(data)
         , WriteOperator(writeOperator) {
-        Y_VERIFY(WriteOperator);
+        Y_ABORT_UNLESS(WriteOperator);
         BlobId = WriteOperator->AddDataForWrite(data);
     }
 public:

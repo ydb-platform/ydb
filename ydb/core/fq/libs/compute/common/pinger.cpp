@@ -132,7 +132,7 @@ class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
             : Proto(config)
         {
             if (Proto.GetPingPeriod()) {
-                Y_VERIFY(TDuration::TryParse(Proto.GetPingPeriod(), PingPeriod));
+                Y_ABORT_UNLESS(TDuration::TryParse(Proto.GetPingPeriod(), PingPeriod));
             }
         }
     };
@@ -228,15 +228,15 @@ private:
     }
 
     void WakeupRetryForwardPingRequest() {
-        Y_VERIFY(!ForwardRequests.empty());
+        Y_ABORT_UNLESS(!ForwardRequests.empty());
         auto& reqInfo = ForwardRequests.front();
-        Y_VERIFY(!reqInfo.Requested);
+        Y_ABORT_UNLESS(!reqInfo.Requested);
         ForwardPing(true);
     }
 
     void Handle(TEvents::TEvForwardPingRequest::TPtr& ev) {
-        Y_VERIFY(ev->Cookie != ContinueLeaseRequestCookie);
-        Y_VERIFY(!Finishing);
+        Y_ABORT_UNLESS(ev->Cookie != ContinueLeaseRequestCookie);
+        Y_ABORT_UNLESS(!Finishing);
         if (ev->Get()->Final) {
             Finishing = true;
             SchedulerCookieHolder.Reset(nullptr);
@@ -305,21 +305,21 @@ private:
 
         const bool continueLeaseRequest = ev->Cookie == ContinueLeaseRequestCookie;
         TRetryState* retryState = nullptr;
-        Y_VERIFY(continueLeaseRequest || !ForwardRequests.empty());
+        Y_ABORT_UNLESS(continueLeaseRequest || !ForwardRequests.empty());
         if (retryable) {
             if (continueLeaseRequest) {
                 retryState = &RetryState;
             } else {
                 retryState = &ForwardRequests.front().RetryState;
             }
-            Y_VERIFY(*retryState); // Initialized
+            Y_ABORT_UNLESS(*retryState); // Initialized
         }
 
         if (continueLeaseRequest) {
-            Y_VERIFY(Requested);
+            Y_ABORT_UNLESS(Requested);
             Requested = false;
         } else {
-            Y_VERIFY(ForwardRequests.front().Requested);
+            Y_ABORT_UNLESS(ForwardRequests.front().Requested);
             ForwardRequests.front().Requested = false;
         }
 
@@ -377,11 +377,11 @@ private:
     }
 
     void ForwardPing(bool retry = false) {
-        Y_VERIFY(!ForwardRequests.empty());
+        Y_ABORT_UNLESS(!ForwardRequests.empty());
         auto& reqInfo = ForwardRequests.front();
         if (!reqInfo.Requested && (retry || !reqInfo.RetryState)) {
             reqInfo.Requested = true;
-            Y_VERIFY(!retry || reqInfo.RetryState);
+            Y_ABORT_UNLESS(!retry || reqInfo.RetryState);
             if (!retry && !reqInfo.RetryState) {
                 reqInfo.RetryState.Init(TActivationContext::Now(), StartLeaseTime, Config.PingPeriod);
             }
@@ -394,7 +394,7 @@ private:
     void Ping(bool retry = false) {
         LOG_T((retry ? "Retry request" : "Request") << " Private::PingTask");
 
-        Y_VERIFY(!Requested);
+        Y_ABORT_UNLESS(!Requested);
         Requested = true;
 
         if (!retry) {

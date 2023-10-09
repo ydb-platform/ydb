@@ -345,8 +345,8 @@ public:
     }
 
     static void SendReply(const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
-        Y_VERIFY(resp);
-        Y_VERIFY(resp->GetArena());
+        Y_ABORT_UNLESS(resp);
+        Y_ABORT_UNLESS(resp->GetArena());
         Y_UNUSED(status);
         auto* typedResponse = static_cast<TGrpcProtoResponseType*>(resp);
         if (!typedResponse->operation().result().template Is<TGrpcProtoResultType>()) {

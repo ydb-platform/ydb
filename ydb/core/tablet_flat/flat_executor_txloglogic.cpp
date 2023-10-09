@@ -112,7 +112,7 @@ void TLogicRedo::FlushBatchedLog()
         CommitManager->Commit(commit);
     }
 
-    Y_VERIFY(Batch->Commit == nullptr, "Batch still has acquired commit");
+    Y_ABORT_UNLESS(Batch->Commit == nullptr, "Batch still has acquired commit");
 }
 
 TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
@@ -120,7 +120,7 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
 {
     seat->CommitTimer.Reset();
 
-    Y_VERIFY(force || !(change.Scheme || change.Annex));
+    Y_ABORT_UNLESS(force || !(change.Scheme || change.Annex));
 
     const TTxType txType = seat->Self->GetTxType();
 
@@ -174,7 +174,7 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
             that emplace always happens.
          */
 
-        Y_VERIFY(was + change.Annex.size() == commit->GcDelta.Created.size());
+        Y_ABORT_UNLESS(was + change.Annex.size() == commit->GcDelta.Created.size());
 
         return { commit, false };
     } else {
@@ -223,11 +223,11 @@ void TLogicRedo::MakeLogEntry(TLogCommit &commit, TString redo, TArrayRef<const 
 }
 
 ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ownerId) {
-    Y_VERIFY(!CompletionQueue.empty(), "t: %" PRIu64
+    Y_ABORT_UNLESS(!CompletionQueue.empty(), "t: %" PRIu64
         " non-expected confirmation %" PRIu32
         ", prev %" PRIu32, Cookies->Tablet, step, PrevConfirmedStep);
 
-    Y_VERIFY(CompletionQueue[0].Step == step, "t: %" PRIu64
+    Y_ABORT_UNLESS(CompletionQueue[0].Step == step, "t: %" PRIu64
         " inconsistent confirmation head: %" PRIu32
         ", step: %" PRIu32
         ", queue size: %" PRISZT
@@ -288,7 +288,7 @@ ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ow
 
 void TLogicRedo::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap)
 {
-    Y_VERIFY(Batch->Commit == nullptr);
+    Y_ABORT_UNLESS(Batch->Commit == nullptr);
 
     Queue->Flush(snap);
 

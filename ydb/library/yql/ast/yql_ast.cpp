@@ -56,7 +56,7 @@ namespace {
         }
 
         inline char Peek() const {
-            Y_VERIFY(!AtEnd());
+            Y_ABORT_UNLESS(!AtEnd());
             return Str_[Offset_];
         }
 
@@ -65,7 +65,7 @@ namespace {
         }
 
         inline char Next() {
-            Y_VERIFY(!AtEnd());
+            Y_ABORT_UNLESS(!AtEnd());
             char ch = Str_[Offset_];
             if (ch == '\n') {
                 ++Position_.Row;
@@ -86,7 +86,7 @@ namespace {
         }
 
         inline TStringBuf GetToken(ui32 begin, ui32 end) {
-            Y_VERIFY(end >= begin);
+            Y_ABORT_UNLESS(end >= begin);
             return Str_.SubString(begin, end - begin);
         }
 

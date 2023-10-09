@@ -509,7 +509,7 @@ public:
 
     template <typename T>
     TShardIdx RegisterShardInfo(const TShardIdx& shardIdx, T&& shardInfo) {
-        Y_VERIFY(shardIdx.GetOwnerId() == TabletID());
+        Y_ABORT_UNLESS(shardIdx.GetOwnerId() == TabletID());
         const auto localId = ui64(shardIdx.GetLocalId());
         Y_VERIFY_S(localId < NextLocalShardIdx, "shardIdx: " << shardIdx << " NextLocalShardIdx: " << NextLocalShardIdx);
         Y_VERIFY_S(!ShardInfos.contains(shardIdx), "shardIdx: " << shardIdx << " already registered");

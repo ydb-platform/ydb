@@ -71,7 +71,7 @@ namespace {
         template<typename TCallback>
         void Reply(ui64 cookie, TCallback&& callback) {
             const auto it = RequestsInFlight.find(cookie);
-            Y_VERIFY(it != RequestsInFlight.end());
+            Y_ABORT_UNLESS(it != RequestsInFlight.end());
             const auto& [sender, senderCookie, subRequestId] = it->second;
             TStringStream out;
             callback(out);

@@ -30,7 +30,7 @@ namespace NFake {
         TWarden(ui32 groups)
             : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TWarden::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
         {
-             Y_VERIFY(groups < State.size(), "Too many groups requested");
+             Y_ABORT_UNLESS(groups < State.size(), "Too many groups requested");
 
              for (auto group: xrange(groups))
                 State[group] = EState::Allow;
@@ -62,7 +62,7 @@ namespace NFake {
                 } else if (State[group] == EState::Allow) {
                     State[group] = EState::Fired;
 
-                    Y_VERIFY(++Alive <= State.size(), "Out of group states");
+                    Y_ABORT_UNLESS(++Alive <= State.size(), "Out of group states");
 
                     StartGroup(group);
 

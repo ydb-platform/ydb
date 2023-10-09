@@ -55,8 +55,8 @@ namespace NKikimr::NTestShard {
         }
 
         void Handle(NMon::TEvRemoteJsonInfoRes::TPtr ev) {
-            Y_VERIFY(ev->Cookie == ECookie::LOAD_ACTOR);
-            Y_VERIFY(RepliesPending == 1);
+            Y_ABORT_UNLESS(ev->Cookie == ECookie::LOAD_ACTOR);
+            Y_ABORT_UNLESS(RepliesPending == 1);
             --RepliesPending;
             Send(Sender, ev->Release().Release(), 0, Cookie);
             Sender = {};

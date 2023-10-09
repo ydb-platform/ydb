@@ -9,7 +9,7 @@ THyperLogCounter::THyperLogCounter()
 THyperLogCounter::THyperLogCounter(ui8 value)
     : Value(value)
 {
-    Y_VERIFY(value < 64);
+    Y_ABORT_UNLESS(value < 64);
 }
 
 ui8 THyperLogCounter::GetValue() const {
@@ -92,7 +92,7 @@ THybridLogCounter::THybridLogCounter(ui8 value)
     : Value(value)
 {
     if (Value & IsHyperLog) {
-        Y_VERIFY((value & DataMask) < 64);
+        Y_ABORT_UNLESS((value & DataMask) < 64);
     }
 }
 

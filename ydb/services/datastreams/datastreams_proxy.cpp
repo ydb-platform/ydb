@@ -625,7 +625,7 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TDescribeStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic
+        Y_ABORT_UNLESS(result->ResultSet.size() == 1); // describe only one topic
         const auto& response = result->ResultSet.front();
         const TString path = JoinSeq("/", response.Path);
 
@@ -633,7 +633,7 @@ namespace NKikimr::NDataStreams::V1 {
             return;
         }
 
-        Y_VERIFY(response.PQGroupInfo);
+        Y_ABORT_UNLESS(response.PQGroupInfo);
 
         PQGroup = response.PQGroupInfo->Description;
         SelfInfo = response.Self->Info;
@@ -973,7 +973,7 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TListStreamConsumersActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic
+        Y_ABORT_UNLESS(result->ResultSet.size() == 1); // describe only one topic
 
         if (ReplyIfNotTopic(ev)) {
             return;
@@ -1469,7 +1469,7 @@ namespace NKikimr::NDataStreams::V1 {
                         Result.set_millis_behind_latest(0);
 
                         if (IsQuotaRequired()) {
-                            Y_VERIFY(MaybeRequestQuota(1, EWakeupTag::RlAllowed, ctx));
+                            Y_ABORT_UNLESS(MaybeRequestQuota(1, EWakeupTag::RlAllowed, ctx));
                         } else {
                             SendResponse(ctx);
                         }
@@ -1513,7 +1513,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         if (IsQuotaRequired()) {
             const auto ru = 1 + CalcRuConsumption(GetPayloadSize());
-            Y_VERIFY(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
+            Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
         } else {
             SendResponse(ctx);
         }
@@ -1896,9 +1896,9 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic
+        Y_ABORT_UNLESS(result->ResultSet.size() == 1); // describe only one topic
         const auto& response = result->ResultSet.front();
-        Y_VERIFY(response.PQGroupInfo);
+        Y_ABORT_UNLESS(response.PQGroupInfo);
         const TString path = JoinSeq("/", response.Path);
 
         PQGroup = response.PQGroupInfo->Description;
@@ -2009,7 +2009,7 @@ DECLARE_RPC_NI(StopStreamEncryption);
 
 void DoDataStreamsDecreaseStreamRetentionPeriodRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     auto* req = dynamic_cast<TEvDataStreamsDecreaseStreamRetentionPeriodRequest*>(p.release());
-    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
     TActivationContext::AsActorContext().Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsDecreaseStreamRetentionPeriodRequest>(req, false));
 }
 template<>
@@ -2019,7 +2019,7 @@ IActor* TEvDataStreamsDecreaseStreamRetentionPeriodRequest::CreateRpcActor(NKiki
 
 void DoDataStreamsIncreaseStreamRetentionPeriodRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     auto* req = dynamic_cast<TEvDataStreamsIncreaseStreamRetentionPeriodRequest*>(p.release());
-    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
     TActivationContext::AsActorContext().Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsIncreaseStreamRetentionPeriodRequest>(req, true));
 }
 template<>

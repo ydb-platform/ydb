@@ -77,7 +77,7 @@ class TBlobStorageQueue {
         }
 
         ~TItem() {
-            Y_VERIFY(Queue == EItemQueue::NotSet, "Queue# %" PRIu32, ui32(Queue));
+            Y_ABORT_UNLESS(Queue == EItemQueue::NotSet, "Queue# %" PRIu32, ui32(Queue));
         }
 
         ui32 GetByteSize() const {
@@ -163,7 +163,7 @@ public:
     }
 
     void SetMessageId(const NBackpressure::TMessageId& msgId) {
-        Y_VERIFY(!InFlightCount());
+        Y_ABORT_UNLESS(!InFlightCount());
         NextMsgId = msgId.MsgId;
         CurrentSequenceId = msgId.SequenceId;
     }

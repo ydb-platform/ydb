@@ -156,7 +156,7 @@ namespace NKikimr {
 
         void SetMemBlob(ui64 id, ui32 size) {
             Type = TBlobType::MemBlob;
-            Y_VERIFY(id < (ui64(1) << 62));
+            Y_ABORT_UNLESS(id < (ui64(1) << 62));
             Id = id >> 32;
             Offset = id;
             Size = size;
@@ -176,7 +176,7 @@ namespace NKikimr {
             if (t == TBlobType::DiskBlob || t == TBlobType::HugeBlob) {
                 extr->Set(t, TDiskPart(Id, Offset, Size));
             } else {
-                Y_VERIFY(t == TBlobType::ManyHugeBlobs && outbound);
+                Y_ABORT_UNLESS(t == TBlobType::ManyHugeBlobs && outbound);
                 const TDiskPart *begin = &(outbound[Id]);
                 extr->Set(TBlobType::ManyHugeBlobs, begin, begin + Offset);
             }

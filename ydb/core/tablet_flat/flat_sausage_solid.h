@@ -28,8 +28,8 @@ namespace NPageCollection {
             , Bytes(bytes)
             , Lead(lead)
         {
-            //Y_VERIFY(Group != InvalidGroup, "Invalid TLargeGlobId storage group");
-            Y_VERIFY(Lead && Lead.BlobSize() && Lead.BlobSize() <= Bytes);
+            //Y_ABORT_UNLESS(Group != InvalidGroup, "Invalid TLargeGlobId storage group");
+            Y_ABORT_UNLESS(Lead && Lead.BlobSize() && Lead.BlobSize() <= Bytes);
         }
 
         void Describe(IOutputStream &out) const noexcept
@@ -239,9 +239,9 @@ namespace NPageCollection {
                 if (Blobs[idx] != id) {
                     continue;
                 }
-                Y_VERIFY(!Bodies[idx],
+                Y_ABORT_UNLESS(!Bodies[idx],
                     "Apply blob %s multiple times", id.ToString().c_str());
-                Y_VERIFY(id.BlobSize() == body.size(),
+                Y_ABORT_UNLESS(id.BlobSize() == body.size(),
                     "Apply blob %s and body size mismatch", id.ToString().c_str());
                 // N.B. we store individual bodies to minimize upfront memory requirements
                 BytesLoaded += body.size();

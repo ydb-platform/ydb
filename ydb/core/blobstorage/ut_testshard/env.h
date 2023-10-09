@@ -50,7 +50,7 @@ struct TEnvironmentSetup {
     TEnvironmentSetup(TSettings&& settings)
         : Settings(std::move(settings))
     {
-        Y_VERIFY(!Env);
+        Y_ABORT_UNLESS(!Env);
         Env = this;
 
         struct TSetupEnv { TSetupEnv() { TEnvironmentSetup::SetupEnv(); } };
@@ -60,7 +60,7 @@ struct TEnvironmentSetup {
 
     ~TEnvironmentSetup() {
         Cleanup();
-        Y_VERIFY(Env == this);
+        Y_ABORT_UNLESS(Env == this);
         Env = nullptr;
     }
 

@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(DonorMode) {
                     if (r->GetTypeRewrite() == TEvents::TSystem::Undelivered) {
                         break;
                     } else {
-                        Y_VERIFY(r->GetTypeRewrite() == TEvBlobStorage::EvVStatusResult);
+                        Y_ABORT_UNLESS(r->GetTypeRewrite() == TEvBlobStorage::EvVStatusResult);
                     }
                 }
             }

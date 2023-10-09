@@ -34,7 +34,7 @@ bool TCdcStreamScanManager::Load(NIceDb::TNiceDb& db) {
             rowset.GetValue<Schema::CdcStreamScans::StreamPathId>()
         );
 
-        Y_VERIFY(!Scans.contains(streamPathId));
+        Y_ABORT_UNLESS(!Scans.contains(streamPathId));
         auto& info = Scans[streamPathId];
 
         info.SnapshotVersion = TRowVersion(
@@ -44,7 +44,7 @@ bool TCdcStreamScanManager::Load(NIceDb::TNiceDb& db) {
 
         if (rowset.HaveValue<Schema::CdcStreamScans::LastKey>()) {
             info.LastKey.ConstructInPlace();
-            Y_VERIFY(TSerializedCellVec::TryParse(rowset.GetValue<Schema::CdcStreamScans::LastKey>(), *info.LastKey));
+            Y_ABORT_UNLESS(TSerializedCellVec::TryParse(rowset.GetValue<Schema::CdcStreamScans::LastKey>(), *info.LastKey));
         }
 
         info.Stats.RowsProcessed = rowset.GetValueOrDefault<Schema::CdcStreamScans::RowsProcessed>(0);
@@ -61,7 +61,7 @@ bool TCdcStreamScanManager::Load(NIceDb::TNiceDb& db) {
 void TCdcStreamScanManager::Add(NTable::TDatabase& db, const TPathId& tablePathId, const TPathId& streamPathId,
         const TRowVersion& snapshotVersion)
 {
-    Y_VERIFY(!Scans.contains(streamPathId));
+    Y_ABORT_UNLESS(!Scans.contains(streamPathId));
     auto& info = Scans[streamPathId];
     info.SnapshotVersion = snapshotVersion;
 
@@ -75,7 +75,7 @@ void TCdcStreamScanManager::Forget(NTable::TDatabase& db, const TPathId& tablePa
 }
 
 void TCdcStreamScanManager::Enqueue(const TPathId& streamPathId, ui64 txId, ui64 scanId) {
-    Y_VERIFY(Scans.contains(streamPathId));
+    Y_ABORT_UNLESS(Scans.contains(streamPathId));
     auto& info = Scans.at(streamPathId);
     info.TxId = txId;
     info.ScanId = scanId;
@@ -83,7 +83,7 @@ void TCdcStreamScanManager::Enqueue(const TPathId& streamPathId, ui64 txId, ui64
 }
 
 void TCdcStreamScanManager::Register(ui64 txId, const TActorId& actorId) {
-    Y_VERIFY(TxIdToPathId.contains(txId));
+    Y_ABORT_UNLESS(TxIdToPathId.contains(txId));
     Scans[TxIdToPathId.at(txId)].ActorId = actorId;
 }
 
@@ -98,7 +98,7 @@ void TCdcStreamScanManager::Complete(const TPathId& streamPathId) {
 }
 
 void TCdcStreamScanManager::Complete(ui64 txId) {
-    Y_VERIFY(TxIdToPathId.contains(txId));
+    Y_ABORT_UNLESS(TxIdToPathId.contains(txId));
     Complete(TxIdToPathId.at(txId));
 }
 
@@ -168,7 +168,7 @@ class TDataShard::TTxCdcStreamScanProgress
     static TVector<TRawTypeValue> MakeKey(TArrayRef<const TCell> cells, TUserTable::TCPtr table) {
         TVector<TRawTypeValue> key(Reserve(cells.size()));
 
-        Y_VERIFY(cells.size() == table->KeyColumnTypes.size());
+        Y_ABORT_UNLESS(cells.size() == table->KeyColumnTypes.size());
         for (TPos pos = 0; pos < cells.size(); ++pos) {
             key.emplace_back(cells.at(pos).AsRef(), table->KeyColumnTypes.at(pos));
         }
@@ -179,11 +179,11 @@ class TDataShard::TTxCdcStreamScanProgress
     static TVector<TUpdateOp> MakeUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, TUserTable::TCPtr table) {
         TVector<TUpdateOp> updates(Reserve(cells.size()));
 
-        Y_VERIFY(cells.size() == tags.size());
+        Y_ABORT_UNLESS(cells.size() == tags.size());
         for (TPos pos = 0; pos < cells.size(); ++pos) {
             const auto tag = tags.at(pos);
             auto it = table->Columns.find(tag);
-            Y_VERIFY(it != table->Columns.end());
+            Y_ABORT_UNLESS(it != table->Columns.end());
             updates.emplace_back(tag, ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), it->second.Type));
         }
 
@@ -315,7 +315,7 @@ public:
             const auto& [key, _] = ev.Rows.back();
 
             auto* info = Self->CdcStreamScanManager.Get(streamPathId);
-            Y_VERIFY(info);
+            Y_ABORT_UNLESS(info);
 
             info->LastKey = key;
             info->Stats = ev.Stats;
@@ -468,7 +468,7 @@ public:
     IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
         TlsActivationContext->AsActorContext().RegisterWithSameMailbox(this);
         Driver = driver;
-        Y_VERIFY(!LastKey || LastKey->GetCells().size() == scheme->Tags(true).size());
+        Y_ABORT_UNLESS(!LastKey || LastKey->GetCells().size() == scheme->Tags(true).size());
         return {EScan::Feed, {}};
     }
 
@@ -649,17 +649,17 @@ public:
         }
 
         const auto* info = Self->CdcStreamScanManager.Get(streamPathId);
-        Y_VERIFY(info);
+        Y_ABORT_UNLESS(info);
 
         auto* appData = AppData(ctx);
         const auto& taskName = appData->DataShardConfig.GetCdcInitialScanTaskName();
         const auto taskPrio = appData->DataShardConfig.GetCdcInitialScanTaskPriority();
 
         const auto snapshotVersion = TRowVersion(snapshotKey.Step, snapshotKey.TxId);
-        Y_VERIFY(info->SnapshotVersion == snapshotVersion);
+        Y_ABORT_UNLESS(info->SnapshotVersion == snapshotVersion);
 
         // Note: cdc stream is added with a schema transaction and those wait for volatile txs
-        Y_VERIFY(!Self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(snapshotVersion));
+        Y_ABORT_UNLESS(!Self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(snapshotVersion));
 
         const ui64 localTxId = Self->NextTieBreakerIndex++;
         auto scan = MakeHolder<TCdcStreamScan>(Self, Request->Sender, localTxId,

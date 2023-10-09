@@ -30,14 +30,14 @@ public:
 
     void StartWriting(const TUnifiedBlobId& id, const TString& data) {
         TGuard<TMutex> g(Mutex);
-        Y_VERIFY(DataWriting.emplace(id, data).second);
+        Y_ABORT_UNLESS(DataWriting.emplace(id, data).second);
     }
 
     void CommitWriting(const TUnifiedBlobId& id) {
         TGuard<TMutex> g(Mutex);
         auto it = DataWriting.find(id);
-        Y_VERIFY(it != DataWriting.end());
-        Y_VERIFY(Data.emplace(id, it->second).second);
+        Y_ABORT_UNLESS(it != DataWriting.end());
+        Y_ABORT_UNLESS(Data.emplace(id, it->second).second);
         DataWriting.erase(it);
     }
 
@@ -56,7 +56,7 @@ protected:
     }
 
     virtual void DoOnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) override {
-        Y_VERIFY(status == NKikimrProto::EReplyStatus::OK);
+        Y_ABORT_UNLESS(status == NKikimrProto::EReplyStatus::OK);
         Storage->CommitWriting(blobId);
     }
 
@@ -131,7 +131,7 @@ protected:
                     TActorContext::AsActorContext().Send(TActorContext::AsActorContext().SelfID,
                         new NBlobCache::TEvBlobCache::TEvReadBlobRangeResult(r, NKikimrProto::EReplyStatus::NODATA, ""));
                 } else {
-                    Y_VERIFY(r.Offset + r.Size <= data->size());
+                    Y_ABORT_UNLESS(r.Offset + r.Size <= data->size());
                     TActorContext::AsActorContext().Send(TActorContext::AsActorContext().SelfID,
                         new NBlobCache::TEvBlobCache::TEvReadBlobRangeResult(r, NKikimrProto::EReplyStatus::OK, data->substr(r.Offset, r.Size)));
                 }

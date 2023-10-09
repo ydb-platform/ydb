@@ -236,7 +236,7 @@ public:
 
         auto tableInfo = context.SS->ColumnTables.TakeVerified(pathId);
         TColumnTableInfo::TPtr alterData = tableInfo->AlterData;
-        Y_VERIFY(alterData);
+        Y_ABORT_UNLESS(alterData);
 
         TOlapStoreInfo::TPtr storeInfo;
         if (auto olapStorePath = path.FindOlapStore()) {
@@ -255,15 +255,15 @@ public:
             alter->SetPathId(pathId.LocalPathId);
             *alter->MutableAlterBody() = *alterData->AlterBody;
             if (alterData->Description.HasSchema()) {
-              Y_VERIFY(!storeInfo,
+              Y_ABORT_UNLESS(!storeInfo,
                        "Unexpected olap store with schema specified");
               *alter->MutableSchema() = alterData->Description.GetSchema();
             }
             if (alterData->Description.HasSchemaPresetId()) {
               const ui32 presetId = alterData->Description.GetSchemaPresetId();
-              Y_VERIFY(storeInfo,
+              Y_ABORT_UNLESS(storeInfo,
                        "Unexpected schema preset without olap store");
-              Y_VERIFY(storeInfo->SchemaPresets.contains(presetId),
+              Y_ABORT_UNLESS(storeInfo->SchemaPresets.contains(presetId),
                        "Failed to find schema preset %" PRIu32
                        " in an olap store",
                        presetId);
@@ -281,7 +281,7 @@ public:
                   alterData->Description.GetSchemaPresetVersionAdj());
             }
 
-            Y_VERIFY(tx.SerializeToString(&columnShardTxBody));
+            Y_ABORT_UNLESS(tx.SerializeToString(&columnShardTxBody));
         }
 
         for (auto& shard : txState->Shards) {
@@ -413,7 +413,7 @@ public:
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
-        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
 
         txState->ShardsInProgress.erase(shardIdx);
         return txState->ShardsInProgress.empty();
@@ -556,7 +556,7 @@ public:
                 }
             }
 
-            Y_VERIFY(context.SS->OlapStores.contains(storePathId));
+            Y_ABORT_UNLESS(context.SS->OlapStores.contains(storePathId));
             storeInfo = context.SS->OlapStores.at(storePathId);
         }
 
@@ -597,7 +597,7 @@ public:
             auto& storePathId = *tableInfo->OlapStorePathId;
             TPath storePath = TPath::Init(storePathId, context.SS);
 
-            Y_VERIFY(storeInfo->ColumnTables.contains(path->PathId));
+            Y_ABORT_UNLESS(storeInfo->ColumnTables.contains(path->PathId));
             storeInfo->ColumnTablesUnderOperation.insert(path->PathId);
 
             // Sequentially chain operations in the same olap store
@@ -641,7 +641,7 @@ ISubOperation::TPtr CreateAlterColumnTable(TOperationId id, const TTxTransaction
 }
 
 ISubOperation::TPtr CreateAlterColumnTable(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TAlterColumnTable>(id, state);
 }
 

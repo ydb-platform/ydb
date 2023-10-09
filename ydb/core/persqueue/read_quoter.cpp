@@ -224,12 +224,12 @@ ui64 TReadQuoter::GetTotalPartitionReadBurst(const TActorContext& ctx) const {
 }
 
 TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consumerStr, const TActorContext& ctx) {
-    Y_VERIFY(!consumerStr.empty());
+    Y_ABORT_UNLESS(!consumerStr.empty());
     auto it = ConsumerQuotas.find(consumerStr);
     if (it == ConsumerQuotas.end()) {
         TConsumerReadQuota consumer(CreateAccountQuotaTracker(consumerStr), GetConsumerReadBurst(ctx), GetConsumerReadSpeed(ctx));
         auto result = ConsumerQuotas.emplace(consumerStr, std::move(consumer));
-        Y_VERIFY(result.second);
+        Y_ABORT_UNLESS(result.second);
         Send(PartitionActor, new NReadQuoterEvents::TEvQuotaUpdated({{consumerStr, consumer.PartitionPerConsumerQuotaTracker.GetTotalSpeed()}}, PartitionTotalQuotaTracker.GetTotalSpeed()));
         return &result.first->second;
     }

@@ -28,7 +28,7 @@ namespace NTabletPipe {
             , Leader(true)
             , Connected(false)
         {
-            Y_VERIFY(tabletId != 0);
+            Y_ABORT_UNLESS(tabletId != 0);
         }
 
     private:
@@ -66,7 +66,7 @@ namespace NTabletPipe {
         void Handle(TEvTabletPipe::TEvPush::TPtr& ev, const TActorContext& ctx) {
             const auto& msg = *ev->Get();
             const auto& record = msg.Record;
-            Y_VERIFY(record.GetTabletId() == TabletId);
+            Y_ABORT_UNLESS(record.GetTabletId() == TabletId);
             const TActorId sender = ActorIdFromProto(record.GetSender());
             LOG_DEBUG_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Push Sender# " << sender << " EventType# " << record.GetType()
@@ -75,7 +75,7 @@ namespace NTabletPipe {
                 return;
             }
 
-            Y_VERIFY(!msg.GetPayloadCount() || (msg.GetPayloadCount() == 1 && !record.HasBuffer()));
+            Y_ABORT_UNLESS(!msg.GetPayloadCount() || (msg.GetPayloadCount() == 1 && !record.HasBuffer()));
             TEventSerializationInfo serializationInfo{
                 .IsExtendedFormat = record.GetExtendedFormat(),
             };
@@ -178,7 +178,7 @@ namespace NTabletPipe {
         }
 
         void Handle(TEvTabletPipe::TEvPeerClosed::TPtr& ev, const TActorContext& ctx) {
-            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
+            Y_ABORT_UNLESS(ev->Get()->Record.GetTabletId() == TabletId);
             LOG_DEBUG_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Got PeerClosed from# " << ev->Sender);
             Reset(ctx);
@@ -197,8 +197,8 @@ namespace NTabletPipe {
             RecipientId = ev->Get()->RecipientId;
             Leader = ev->Get()->Leader;
             Generation = ev->Get()->Generation;
-            Y_VERIFY(OwnerId);
-            Y_VERIFY(RecipientId);
+            Y_ABORT_UNLESS(OwnerId);
+            Y_ABORT_UNLESS(RecipientId);
             if (InterconnectSession) {
                 NeedUnsubscribe = true;
                 ctx.Send(InterconnectSession, new TEvents::TEvSubscribe(), IEventHandle::FlagTrackDelivery);
@@ -277,7 +277,7 @@ namespace NTabletPipe {
         }
 
         TActorId Accept(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, TActorId recipientId, bool leader, ui64 generation) override {
-            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
+            Y_ABORT_UNLESS(ev->Get()->Record.GetTabletId() == TabletId);
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
             IActor* server = CreateServer(TabletId, clientId, ev->InterconnectSession, ev->Get()->Record.GetFeatures(), ev->Cookie);
             TActorId serverId = TActivationContext::Register(server);
@@ -289,7 +289,7 @@ namespace NTabletPipe {
         }
 
         void Reject(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, NKikimrProto::EReplyStatus status, bool leader) override {
-            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
+            Y_ABORT_UNLESS(ev->Get()->Record.GetTabletId() == TabletId);
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Reject Connect Originator# " << ev->Sender);
@@ -317,7 +317,7 @@ namespace NTabletPipe {
 
         TActorId Enqueue(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner) override {
             Y_UNUSED(owner);
-            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
+            Y_ABORT_UNLESS(ev->Get()->Record.GetTabletId() == TabletId);
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
             IActor* server = CreateServer(TabletId, clientId, ev->InterconnectSession, ev->Get()->Record.GetFeatures(), ev->Cookie);
             TActorId serverId = TActivationContext::Register(server);

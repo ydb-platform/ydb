@@ -71,8 +71,8 @@ private:
             , PoolId(poolId)
             , Filter(filter)
         {
-            Y_VERIFY(KeyColumns.InitPosition(GetFirstPosition()));
-            Y_VERIFY(VersionColumns.InitPosition(GetFirstPosition()));
+            Y_ABORT_UNLESS(KeyColumns.InitPosition(GetFirstPosition()));
+            Y_ABORT_UNLESS(VersionColumns.InitPosition(GetFirstPosition()));
             if (Filter) {
                 FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetIterator(reverseSort, RecordsCount));
             }
@@ -92,7 +92,7 @@ private:
         bool Next() {
             const bool result = KeyColumns.NextPosition(ReverseSortKff) && VersionColumns.NextPosition(ReverseSortKff);
             if (FilterIterator) {
-                Y_VERIFY(result == FilterIterator->Next(1));
+                Y_ABORT_UNLESS(result == FilterIterator->Next(1));
             }
             return result;
         }
@@ -155,7 +155,7 @@ private:
             SortHeap.pop_back();
         } else {
             auto it = BatchPools.find(SortHeap.back().GetPoolIdUnsafe());
-            Y_VERIFY(it->second.size());
+            Y_ABORT_UNLESS(it->second.size());
             if (it->second.size() == 1) {
                 BatchPools.erase(it);
                 SortHeap.pop_back();
@@ -187,9 +187,9 @@ public:
         : SortSchema(sortSchema)
         , DataSchema(dataSchema)
         , Reverse(reverse) {
-        Y_VERIFY(SortSchema);
-        Y_VERIFY(SortSchema->num_fields());
-        Y_VERIFY(!DataSchema || DataSchema->num_fields());
+        Y_ABORT_UNLESS(SortSchema);
+        Y_ABORT_UNLESS(SortSchema->num_fields());
+        Y_ABORT_UNLESS(!DataSchema || DataSchema->num_fields());
     }
 
     bool IsValid() const {
@@ -257,7 +257,7 @@ public:
 
     TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow::Field>>& fields)
         : Fields(fields) {
-        Y_VERIFY(Fields.size());
+        Y_ABORT_UNLESS(Fields.size());
         for (auto&& f : fields) {
             Builders.emplace_back(NArrow::MakeBuilder(f));
         }

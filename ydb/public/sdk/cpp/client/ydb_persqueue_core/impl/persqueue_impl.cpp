@@ -66,7 +66,7 @@ std::shared_ptr<ISimpleBlockingWriteSession> TPersQueueClient::TImpl::CreateSimp
 
 std::shared_ptr<TPersQueueClient::TImpl> TPersQueueClient::TImpl::GetClientForEndpoint(const TString& clusterEndoint) {
     with_lock (Lock) {
-        Y_VERIFY(!CustomEndpoint);
+        Y_ABORT_UNLESS(!CustomEndpoint);
         std::shared_ptr<TImpl>& client = Subclients[clusterEndoint];
         if (!client) {
             client = std::make_shared<TImpl>(clusterEndoint, Connections_, Settings);

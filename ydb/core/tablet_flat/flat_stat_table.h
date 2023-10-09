@@ -19,7 +19,7 @@ public:
     {}
 
     void Add(THolder<TScreenedPartIndexIterator> pi) {
-        Y_VERIFY(pi->IsValid());
+        Y_ABORT_UNLESS(pi->IsValid());
         Iterators.PushBack(std::move(pi));
         TScreenedPartIndexIterator* it = Iterators.back();
         Heap.push(it);
@@ -66,7 +66,7 @@ public:
     }
 
     TDbTupleRef GetCurrentKey() const {
-        Y_VERIFY(!Heap.empty());
+        Y_ABORT_UNLESS(!Heap.empty());
         return Heap.top()->GetCurrentKey();
     }
 
@@ -156,7 +156,7 @@ public:
 
         TString old = Sample[idx].first;
         auto oit = KeyRefCount.find(old);
-        Y_VERIFY(oit != KeyRefCount.end());
+        Y_ABORT_UNLESS(oit != KeyRefCount.end());
         --oit->second;
 
         // Delete the key if this was the last reference

@@ -10,7 +10,7 @@ TStorageGroupInfo::TStorageGroupInfo(const TStoragePoolInfo& storagePool, TStora
 {}
 
 bool TStorageGroupInfo::AcquireAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel) {
-    Y_VERIFY(tablet->BoundChannels.size() > channel);
+    Y_ABORT_UNLESS(tablet->BoundChannels.size() > channel);
     bool acquired = Units.insert({tablet, channel}).second;
     if (acquired) {
         AcquiredIOPS += tablet->BoundChannels[channel].GetIOPS();
@@ -21,7 +21,7 @@ bool TStorageGroupInfo::AcquireAllocationUnit(const TLeaderTabletInfo* tablet, u
 }
 
 bool TStorageGroupInfo::ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel) {
-    Y_VERIFY(tablet->BoundChannels.size() > channel);
+    Y_ABORT_UNLESS(tablet->BoundChannels.size() > channel);
     bool released = Units.erase({tablet, channel}) != 0;
     if (released) {
         AcquiredIOPS -= tablet->BoundChannels[channel].GetIOPS();

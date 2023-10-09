@@ -43,7 +43,7 @@ namespace NKikimr {
             , RunHandoff(runHandoff)
             , LevelIndex(std::move(levelIndex))
         {
-            Y_VERIFY(LsnMngr && PDiskCtx && LevelIndex);
+            Y_ABORT_UNLESS(LsnMngr && PDiskCtx && LevelIndex);
         }
 
         void CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg) {
@@ -64,7 +64,7 @@ namespace NKikimr {
         }
 
         TActorId GetLogNotifierActorId() const {
-            Y_VERIFY(LogNotifierActorId);
+            Y_ABORT_UNLESS(LogNotifierActorId);
             return LogNotifierActorId;
         }
     };

@@ -32,7 +32,7 @@ public:
 
     void FillTenantResponse()
     {
-        Y_VERIFY(Tenant);
+        Y_ABORT_UNLESS(Tenant);
         Ydb::TOperationId id = Self->MakeOperationId(Tenant, TTenant::REMOVE);
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(false);
@@ -88,7 +88,7 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         LOG_DEBUG(ctx, NKikimrServices::CMS_TENANTS, "TTxRemoveTenant Complete");
 
-        Y_VERIFY(Response);
+        Y_ABORT_UNLESS(Response);
         if (Response->Record.GetResponse().operation().status())
             Self->Counters.Inc(Response->Record.GetResponse().operation().status(),
                                COUNTER_REMOVE_RESPONSES);

@@ -20,7 +20,7 @@ std::vector<NScheme::TTypeInfo> ExtractTypes(const std::vector<std::pair<TString
 }
 
 TString FromCells(const TConstArrayRef<TCell>& cells, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
-    Y_VERIFY(cells.size() == columns.size());
+    Y_ABORT_UNLESS(cells.size() == columns.size());
     if (cells.empty()) {
         return {};
     }
@@ -30,14 +30,14 @@ TString FromCells(const TConstArrayRef<TCell>& cells, const std::vector<std::pai
     NArrow::TArrowBatchBuilder batchBuilder;
     batchBuilder.Reserve(1);
     bool ok = batchBuilder.Start(columns);
-    Y_VERIFY(ok);
+    Y_ABORT_UNLESS(ok);
 
     batchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(types.data(), cells.data(), cells.size()));
 
     auto batch = batchBuilder.FlushBatch(false);
-    Y_VERIFY(batch);
-    Y_VERIFY(batch->num_columns() == (int)cells.size());
-    Y_VERIFY(batch->num_rows() == 1);
+    Y_ABORT_UNLESS(batch);
+    Y_ABORT_UNLESS(batch->num_columns() == (int)cells.size());
+    Y_ABORT_UNLESS(batch->num_rows() == 1);
     return NArrow::SerializeBatchNoCompression(batch);
 }
 }

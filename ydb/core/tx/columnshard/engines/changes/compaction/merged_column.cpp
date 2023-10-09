@@ -6,7 +6,7 @@ void TMergedColumn::AppendBlob(const TString& data, const TColumnRecord& columnC
     RecordsCount += columnChunk.GetMeta().GetNumRowsVerified();
     auto remained = Portions.back().AppendBlob(data, columnChunk);
     while (remained) {
-        Y_VERIFY(Portions.back().IsFullPortion());
+        Y_ABORT_UNLESS(Portions.back().IsFullPortion());
         NewPortion();
         remained = Portions.back().AppendSlice(remained);
     }
@@ -17,11 +17,11 @@ void TMergedColumn::AppendBlob(const TString& data, const TColumnRecord& columnC
 
 void TMergedColumn::AppendSlice(const std::shared_ptr<arrow::RecordBatch>& data) {
     RecordsCount += data->num_rows();
-    Y_VERIFY(data);
-    Y_VERIFY(data->num_columns() == 1);
+    Y_ABORT_UNLESS(data);
+    Y_ABORT_UNLESS(data->num_columns() == 1);
     auto remained = data->column(0);
     while (remained = Portions.back().AppendSlice(remained)) {
-        Y_VERIFY(Portions.back().IsFullPortion());
+        Y_ABORT_UNLESS(Portions.back().IsFullPortion());
         NewPortion();
     }
     if (Portions.back().IsFullPortion()) {
@@ -31,10 +31,10 @@ void TMergedColumn::AppendSlice(const std::shared_ptr<arrow::RecordBatch>& data)
 
 void TMergedColumn::AppendSlice(const std::shared_ptr<arrow::Array>& data) {
     RecordsCount += data->length();
-    Y_VERIFY(data);
+    Y_ABORT_UNLESS(data);
     auto remained = data;
     while (remained = Portions.back().AppendSlice(remained)) {
-        Y_VERIFY(Portions.back().IsFullPortion());
+        Y_ABORT_UNLESS(Portions.back().IsFullPortion());
         NewPortion();
     }
     if (Portions.back().IsFullPortion()) {

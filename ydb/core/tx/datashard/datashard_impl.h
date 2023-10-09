@@ -1147,7 +1147,7 @@ class TDataShard
             return false;
         if (rowset.IsValid()) {
             ui64 val = rowset.GetValue<Schema::Sys::Uint64>();
-            Y_VERIFY(val <= std::numeric_limits<ui32>::max());
+            Y_ABORT_UNLESS(val <= std::numeric_limits<ui32>::max());
             value = static_cast<ui32>(val);
         }
         return true;
@@ -1159,7 +1159,7 @@ class TDataShard
             return false;
         if (rowset.IsValid()) {
             ui64 val = rowset.GetValue<Schema::Sys::Uint64>();
-            Y_VERIFY(val <= 1, "Unexpected bool value %" PRIu64, val);
+            Y_ABORT_UNLESS(val <= 1, "Unexpected bool value %" PRIu64, val);
             value = (val != 0);
         }
         return true;
@@ -1517,7 +1517,7 @@ public:
     }
 
     bool CanDrop() const {
-        Y_VERIFY(State != TShardState::Offline, "Unexpexted repeated drop");
+        Y_ABORT_UNLESS(State != TShardState::Offline, "Unexpexted repeated drop");
         // FIXME: why are we waiting for OutReadSets.Empty()?
         return (TxInFly() == 1) && OutReadSets.Empty() && (State != TShardState::PreOffline);
     }
@@ -1572,13 +1572,13 @@ public:
     const THashMap<ui64, TUserTable::TCPtr> &GetUserTables() const { return TableInfos; }
 
     ui64 GetLocalTableId(const TTableId& tableId) const {
-        Y_VERIFY(!TSysTables::IsSystemTable(tableId));
+        Y_ABORT_UNLESS(!TSysTables::IsSystemTable(tableId));
         auto it = TableInfos.find(tableId.PathId.LocalPathId);
         return it == TableInfos.end() ? 0 : it->second->LocalTid;
     }
 
     ui64 GetShadowTableId(const TTableId& tableId) const {
-        Y_VERIFY(!TSysTables::IsSystemTable(tableId));
+        Y_ABORT_UNLESS(!TSysTables::IsSystemTable(tableId));
         auto it = TableInfos.find(tableId.PathId.LocalPathId);
         return it == TableInfos.end() ? 0 : it->second->ShadowTid;
     }
@@ -2023,7 +2023,7 @@ private:
             for (const auto& partMeta : partMetaVec) {
                 auto it = LoanOwners.find(partMeta);
                 if (it != LoanOwners.end()) {
-                    Y_VERIFY(it->second == ownerTabletId,
+                    Y_ABORT_UNLESS(it->second == ownerTabletId,
                         "Part is already registered with a different owner");
                 } else {
                     LoanOwners[partMeta] = ownerTabletId;
@@ -2108,12 +2108,12 @@ private:
         }
 
         void SaveSnapshotForSending(ui64 dstTabletId, TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot> snapshot) {
-            Y_VERIFY(Dst.contains(dstTabletId));
+            Y_ABORT_UNLESS(Dst.contains(dstTabletId));
             DataToSend[dstTabletId] = snapshot;
         }
 
         void DoSend(const TActorContext &ctx) {
-            Y_VERIFY(Dst.size() == DataToSend.size());
+            Y_ABORT_UNLESS(Dst.size() == DataToSend.size());
             for (const auto& ds : DataToSend) {
                 ui64 dstTablet = ds.first;
                 DoSend(dstTablet, ctx);
@@ -2121,7 +2121,7 @@ private:
         }
 
         void DoSend(ui64 dstTabletId, const TActorContext &ctx) {
-            Y_VERIFY(Dst.contains(dstTabletId));
+            Y_ABORT_UNLESS(Dst.contains(dstTabletId));
             NTabletPipe::TClientConfig clientConfig;
             PipesToDstShards[dstTabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, dstTabletId, clientConfig));
 
@@ -2202,7 +2202,7 @@ private:
         }
 
         void DoSend(ui64 dstTabletId, const TActorContext& ctx) {
-            Y_VERIFY(Dst.contains(dstTabletId));
+            Y_ABORT_UNLESS(Dst.contains(dstTabletId));
             NTabletPipe::TClientConfig clientConfig;
             clientConfig.CheckAliveness = true;
             clientConfig.RetryPolicy = PipeRetryPolicy;
@@ -2287,7 +2287,7 @@ private:
         }
 
         void DoSplit(const TActorContext& ctx) {
-            Y_VERIFY(DstTabletIds);
+            Y_ABORT_UNLESS(DstTabletIds);
             Worker = ctx.Register(CreateChangeExchangeSplit(Self, TVector<ui64>(DstTabletIds.begin(), DstTabletIds.end())));
             Acked = false;
         }
@@ -2400,7 +2400,7 @@ private:
             const ui64 txId = first->Event->Get()->GetTxId();
 
             auto it = TxIds.find(txId);
-            Y_VERIFY(it != TxIds.end() && it->second.First == first,
+            Y_ABORT_UNLESS(it != TxIds.end() && it->second.First == first,
                 "Consistency check: proposed txId %" PRIu64 " in deque, but not in hashmap", txId);
 
             // N.B. there should almost always be exactly one propose per txId
@@ -2997,14 +2997,14 @@ protected:
         UnsubscribeReadIteratorSessions(ctx);
 
         LoanReturnTracker.Shutdown(ctx);
-        Y_VERIFY(LoanReturnTracker.Empty());
+        Y_ABORT_UNLESS(LoanReturnTracker.Empty());
         SplitSrcSnapshotSender.Shutdown(ctx);
         return IActor::Die(ctx);
     }
 
     void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {
-        Y_VERIFY(tabletId);
-        Y_VERIFY(CurrentSchemeShardId == tabletId);
+        Y_ABORT_UNLESS(tabletId);
+        Y_ABORT_UNLESS(CurrentSchemeShardId == tabletId);
 
         if (!SchemeShardPipe) {
             NTabletPipe::TClientConfig clientConfig;
@@ -3016,7 +3016,7 @@ protected:
     void ReportState(const TActorContext &ctx, ui32 state) {
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " Reporting state " << DatashardStateName(State)
                     << " to schemeshard " << CurrentSchemeShardId);
-        Y_VERIFY(state != TShardState::Offline || !HasSharedBlobs(),
+        Y_ABORT_UNLESS(state != TShardState::Offline || !HasSharedBlobs(),
                  "Datashard %" PRIu64 " tried to go offline while having shared blobs", TabletID());
         if (!StateReportPipe) {
             NTabletPipe::TClientConfig clientConfig;

@@ -39,7 +39,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
 
-        Y_VERIFY(Kind == TReplication::ETargetKind::Table);
+        Y_ABORT_UNLESS(Kind == TReplication::ETargetKind::Table);
         const auto& result = ev->Get()->Result;
 
         if (!result.IsSuccess()) {
@@ -333,7 +333,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Success() {
-        Y_VERIFY(DstPathId);
+        Y_ABORT_UNLESS(DstPathId);
         LOG_I("Success"
             << ": dstPathId# " << DstPathId);
 

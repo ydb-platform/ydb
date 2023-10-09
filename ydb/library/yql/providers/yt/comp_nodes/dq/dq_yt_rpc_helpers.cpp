@@ -58,7 +58,7 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
     }
 
     auto client = DynamicPointerCast<NYT::NApi::NRpcProxy::TClient>(connection->CreateClient(clientOptions));
-    Y_VERIFY(client);
+    Y_ABORT_UNLESS(client);
     auto apiServiceProxy = client->CreateApiServiceProxy();
 
     TVector<NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>> waitFor;

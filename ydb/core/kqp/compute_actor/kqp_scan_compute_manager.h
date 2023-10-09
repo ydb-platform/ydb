@@ -100,7 +100,7 @@ public:
         if (ComputeActorsWaitShard.empty()) {
             return false;
         } else {
-            Y_VERIFY(ShardsWaitingIds.erase(ShardsWaiting.front().GetShardState()->TabletId));
+            Y_ABORT_UNLESS(ShardsWaitingIds.erase(ShardsWaiting.front().GetShardState()->TabletId));
             std::pop_heap(ShardsWaiting.begin(), ShardsWaiting.end());
             result = std::move(ShardsWaiting.back());
             ShardsWaiting.pop_back();
@@ -110,7 +110,7 @@ public:
 
     TFreeComputeActor OnDataReceived(const ui64 tabletId, const bool readRequestedSpaceLimit) {
         auto it = ComputeActorsWaitData.find(tabletId);
-        Y_VERIFY(it != ComputeActorsWaitData.end());
+        Y_ABORT_UNLESS(it != ComputeActorsWaitData.end());
         if (readRequestedSpaceLimit) {
             TFreeComputeActor computeActorInfo = std::move(it->second);
             ComputeActorsWaitData.erase(it);
@@ -132,7 +132,7 @@ public:
     }
 
     bool ReturnShardInPool(TShardState::TPtr state) {
-        Y_VERIFY(ShardsWaitingIds.emplace(state->TabletId).second);
+        Y_ABORT_UNLESS(ShardsWaitingIds.emplace(state->TabletId).second);
         ShardsWaiting.emplace_back(TWaitingShard(state));
         std::push_heap(ShardsWaiting.begin(), ShardsWaiting.end());
         return true;
@@ -140,14 +140,14 @@ public:
 
     bool PrepareShardAck(TShardState::TPtr state, ui64& freeSpace) {
         if (ComputeActorsWaitShard.empty()) {
-            Y_VERIFY(ShardsWaitingIds.emplace(state->TabletId).second);
+            Y_ABORT_UNLESS(ShardsWaitingIds.emplace(state->TabletId).second);
             ShardsWaiting.emplace_back(TWaitingShard(state));
             std::push_heap(ShardsWaiting.begin(), ShardsWaiting.end());
             return false;
         }
         std::pop_heap(ComputeActorsWaitShard.begin(), ComputeActorsWaitShard.end());
         freeSpace = ComputeActorsWaitShard.back().GetFreeSpace();
-        Y_VERIFY(ComputeActorsWaitData.emplace(state->TabletId, std::move(ComputeActorsWaitShard.back())).second);
+        Y_ABORT_UNLESS(ComputeActorsWaitData.emplace(state->TabletId, std::move(ComputeActorsWaitShard.back())).second);
         ComputeActorsWaitShard.pop_back();
         return true;
     }
@@ -183,7 +183,7 @@ public:
         return IsActiveFlag;
     }
     void Stop() {
-        Y_VERIFY(GetAvailableTasks() == 0);
+        Y_ABORT_UNLESS(GetAvailableTasks() == 0);
         IsActiveFlag = false;
     }
     void ClearAll();
@@ -205,12 +205,12 @@ public:
     }
 
     void AckSent(TShardState::TPtr state) {
-        Y_VERIFY(StatesByIndex.contains(state->ScannerIdx));
+        Y_ABORT_UNLESS(StatesByIndex.contains(state->ScannerIdx));
         NeedAckStates.erase(state->ScannerIdx);
     }
 
     void NeedAck(TShardState::TPtr state) {
-        Y_VERIFY(StatesByIndex.contains(state->ScannerIdx));
+        Y_ABORT_UNLESS(StatesByIndex.contains(state->ScannerIdx));
         NeedAckStates.emplace(state->ScannerIdx, state);
         AffectedShards.emplace(state->TabletId);
     }

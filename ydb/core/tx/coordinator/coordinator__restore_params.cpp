@@ -106,7 +106,7 @@ private:
 
 bool TTxCoordinator::IsTabletInStaticDomain(TAppData* appData) {
     const ui32 selfDomain = appData->DomainsInfo->GetDomainUidByTabletId(TabletID());
-    Y_VERIFY(selfDomain != appData->DomainsInfo->BadDomainId);
+    Y_ABORT_UNLESS(selfDomain != appData->DomainsInfo->BadDomainId);
     const auto& domain = appData->DomainsInfo->GetDomain(selfDomain);
 
     for (auto domainCoordinatorId: domain.Coordinators) {

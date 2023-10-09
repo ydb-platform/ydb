@@ -20,7 +20,7 @@ void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIn
     for (auto& portionInfo : AppendedPortions) {
         switch (portionInfo.GetPortionInfo().GetMeta().Produced) {
             case NOlap::TPortionMeta::EProduced::UNSPECIFIED:
-                Y_VERIFY(false); // unexpected
+                Y_ABORT_UNLESS(false); // unexpected
             case NOlap::TPortionMeta::EProduced::INSERTED:
                 self.IncCounter(NColumnShard::COUNTER_INDEXING_PORTIONS_WRITTEN);
                 break;
@@ -72,7 +72,7 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
 
     for (auto& portionInfoWithBlobs : AppendedPortions) {
         auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
-        Y_VERIFY(!portionInfo.Empty());
+        Y_ABORT_UNLESS(!portionInfo.Empty());
         auto it = remapGranules.find(portionInfo.GetGranule());
         if (it != remapGranules.end()) {
             portionInfo.SetGranule(it->second);
@@ -85,8 +85,8 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
 
     auto g = self.GranulesStorage->StartPackModification();
     for (auto& [_, portionInfo] : PortionsToRemove) {
-        Y_VERIFY(!portionInfo.Empty());
-        Y_VERIFY(portionInfo.HasRemoveSnapshot());
+        Y_ABORT_UNLESS(!portionInfo.Empty());
+        Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
 
         const ui64 granule = portionInfo.GetGranule();
         const ui64 portion = portionInfo.GetPortion();
@@ -121,7 +121,7 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
 
 std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch,
     const ui64 granule, const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const {
-    Y_VERIFY(batch->num_rows());
+    Y_ABORT_UNLESS(batch->num_rows());
 
     auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
     std::vector<TPortionInfoWithBlobs> out;

@@ -67,7 +67,7 @@ public:
 
         for (const auto& change : msg.GetChanges()) {
             if (!ApplyChange(txc, fullTableId, userTable, source, change)) {
-                Y_VERIFY(Result);
+                Y_ABORT_UNLESS(Result);
                 break;
             }
         }
@@ -87,7 +87,7 @@ public:
     TReplicationSourceState& EnsureSource(TTransactionContext& txc, const TPathId& pathId, const TString& sourceName) {
         TReplicationSourceOffsetsDb rdb(txc);
         auto* table = Self->EnsureReplicatedTable(pathId);
-        Y_VERIFY(table);
+        Y_ABORT_UNLESS(table);
         return table->EnsureSource(rdb, sourceName);
     }
 
@@ -95,7 +95,7 @@ public:
             TTransactionContext& txc, const TTableId& tableId, const TUserTable& userTable,
             TReplicationSourceState& source, const NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& change)
     {
-        Y_VERIFY(userTable.IsReplicated());
+        Y_ABORT_UNLESS(userTable.IsReplicated());
 
         // TODO: check source and offset, persist new values
         i64 sourceOffset = change.GetSourceOffset();
@@ -233,8 +233,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        Y_VERIFY(Ev);
-        Y_VERIFY(Result);
+        Y_ABORT_UNLESS(Ev);
+        Y_ABORT_UNLESS(Result);
 
         if (MvccReadWriteVersion) {
             Pipeline.RemoveCommittingOp(*MvccReadWriteVersion);

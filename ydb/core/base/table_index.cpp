@@ -19,7 +19,7 @@ namespace NTableIndex {
 TTableColumns CalcTableImplDescription(const TTableColumns& table, const TIndexColumns& index) {
     {
         TString explain;
-        Y_VERIFY(IsCompatibleIndex(table, index, explain), "explain is %s", explain.c_str());
+        Y_ABORT_UNLESS(IsCompatibleIndex(table, index, explain), "explain is %s", explain.c_str());
     }
 
     TTableColumns result;

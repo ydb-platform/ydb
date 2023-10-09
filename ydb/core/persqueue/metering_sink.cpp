@@ -288,7 +288,7 @@ void TMeteringSink::Flush(TInstant now, bool force) {
         break;
 
         default:
-            Y_VERIFY(false);
+            Y_ABORT_UNLESS(false);
         }
     }
 }

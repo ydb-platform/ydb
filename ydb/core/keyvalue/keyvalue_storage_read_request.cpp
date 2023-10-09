@@ -307,7 +307,7 @@ public:
                 hasErrorResponses = true;
             }
 
-            Y_VERIFY(response.Status != NKikimrProto::UNKNOWN);
+            Y_ABORT_UNLESS(response.Status != NKikimrProto::UNKNOWN);
             readItem.Status = response.Status;
             readItem.InFlight = false;
         }
@@ -362,7 +362,7 @@ public:
         if (IsRead()) {
             auto response = CreateReadResponse(status, ErrorDescription);
             auto &cmd = GetCommand();
-            Y_VERIFY(std::holds_alternative<TIntermediate::TRead>(cmd));
+            Y_ABORT_UNLESS(std::holds_alternative<TIntermediate::TRead>(cmd));
             auto& intermediateRead = std::get<TIntermediate::TRead>(cmd);
             response->Record.set_requested_key(intermediateRead.Key);
             response->Record.set_requested_offset(intermediateRead.Offset);
@@ -394,7 +394,7 @@ public:
 
     std::unique_ptr<TEvKeyValue::TEvReadResponse> MakeReadResponse(NKikimrKeyValue::Statuses::ReplyStatus status) {
         auto &cmd = GetCommand();
-        Y_VERIFY(std::holds_alternative<TIntermediate::TRead>(cmd));
+        Y_ABORT_UNLESS(std::holds_alternative<TIntermediate::TRead>(cmd));
         TIntermediate::TRead &interRead = std::get<TIntermediate::TRead>(cmd);
 
         TString errorMsg = MakeErrorMsg(interRead.Message);
@@ -427,7 +427,7 @@ public:
 
     std::unique_ptr<TEvKeyValue::TEvReadRangeResponse> MakeReadRangeResponse(NKikimrKeyValue::Statuses::ReplyStatus status) {
         auto &cmd = GetCommand();
-        Y_VERIFY(std::holds_alternative<TIntermediate::TRangeRead>(cmd));
+        Y_ABORT_UNLESS(std::holds_alternative<TIntermediate::TRangeRead>(cmd));
         TIntermediate::TRangeRead &interRange = std::get<TIntermediate::TRangeRead>(cmd);
 
         TStringBuilder msgBuilder;

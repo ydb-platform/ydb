@@ -105,7 +105,7 @@ namespace NTable {
 
         const TGroupInfo& GetLayout(NPage::TGroupId groupId) const noexcept
         {
-            Y_VERIFY(groupId.Index < Groups.size(), "Group is out of range");
+            Y_ABORT_UNLESS(groupId.Index < Groups.size(), "Group is out of range");
 
             if (groupId.Index == 0) {
                 return groupId.Historic ? HistoryGroup : Groups[0];

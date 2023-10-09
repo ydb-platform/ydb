@@ -70,8 +70,8 @@ public:
     }
 
     void emplace_back(const ui64 objectId, const std::shared_ptr<NBlobOperations::NRead::ITask>& task) {
-        Y_VERIFY(!StoppedFlag);
-        Y_VERIFY(task);
+        Y_ABORT_UNLESS(!StoppedFlag);
+        Y_ABORT_UNLESS(task);
         IteratorBlobsSequential.emplace_back(objectId, task);
     }
 

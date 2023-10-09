@@ -40,7 +40,7 @@ public:
         ctx.ExprNodes.erase(zombies, ctx.ExprNodes.cend());
         const auto liveSize = ctx.ExprNodes.size();
 
-        Y_VERIFY(liveSize >= ctx.UniqueNodes.size());
+        Y_ABORT_UNLESS(liveSize >= ctx.UniqueNodes.size());
 
         // Update statistic.
         ++ctx.GcConfig.Statistics.CollectCount;

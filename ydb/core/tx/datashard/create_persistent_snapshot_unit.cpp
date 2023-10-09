@@ -16,7 +16,7 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext&) override {
-        Y_VERIFY(op->IsSchemeTx());
+        Y_ABORT_UNLESS(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
@@ -32,7 +32,7 @@ public:
         ui64 pathId = params.GetPathId();
         ui64 step = tx->GetStep();
         ui64 txId = tx->GetTxId();
-        Y_VERIFY(step != 0);
+        Y_ABORT_UNLESS(step != 0);
 
         const TSnapshotKey key(ownerId, pathId, step, txId);
 

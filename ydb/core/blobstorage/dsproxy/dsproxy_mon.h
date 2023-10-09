@@ -283,7 +283,7 @@ public:
         ++*EventPut;
         *EventPutBytes += size;
         auto bucketIt = EventPutBytesBuckets.upper_bound(size);
-        Y_VERIFY(bucketIt != EventPutBytesBuckets.begin());
+        Y_ABORT_UNLESS(bucketIt != EventPutBytesBuckets.begin());
         ++*std::prev(bucketIt)->second;
     }
 

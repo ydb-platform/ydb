@@ -100,7 +100,7 @@ public:
             TSubgroupPartLayout temp(parts);
             temp.AddItem(idxInSubgroup, part, type);
             const ui32 newEffectiveReplicas = temp.CountEffectiveReplicas(type);
-            Y_VERIFY(newEffectiveReplicas == effectiveReplicas || newEffectiveReplicas == effectiveReplicas + 1);
+            Y_ABORT_UNLESS(newEffectiveReplicas == effectiveReplicas || newEffectiveReplicas == effectiveReplicas + 1);
             return newEffectiveReplicas > effectiveReplicas;
         };
         if (idxInSubgroup < type.TotalPartCount()) {
@@ -734,11 +734,11 @@ bool TBlobStorageGroupInfo::DecryptGroupKey(TBlobStorageGroupInfo::EEncryptionMo
 
                 TStreamCypher cypher;
                 bool isKeySet = cypher.SetKey(tenantKey);
-                Y_VERIFY(isKeySet);
+                Y_ABORT_UNLESS(isKeySet);
                 cypher.StartMessage(groupKeyNonce, 0);
 
                 ui32 h = 0;
-                Y_VERIFY(encryptedGroupKey.size() == keySize + sizeof(h),
+                Y_ABORT_UNLESS(encryptedGroupKey.size() == keySize + sizeof(h),
                         "Unexpected encryptedGroupKeySize# %" PRIu32 " keySize# %" PRIu32 " sizeof(h)# %" PRIu32
                         " groupId# %" PRIu32 " encryptedGroupKey# \"%s\"",
                         (ui32)encryptedGroupKey.size(), (ui32)keySize, (ui32)sizeof(h), (ui32)groupId,
@@ -774,7 +774,7 @@ TString TBlobStorageGroupInfo::BlobStateToString(EBlobState state) {
         case EBS_FULL:
             return "EBS_FULL";
         default:
-            Y_VERIFY(false, "Unexpected state# %" PRIu64, (ui64)state);
+            Y_ABORT_UNLESS(false, "Unexpected state# %" PRIu64, (ui64)state);
     }
 }
 

@@ -5,13 +5,13 @@ namespace NKikimr::NSchemeShard {
 
 template <typename I, typename C, typename H>
 static void GrabNew(const I& id, const C& cont, H& holder) {
-    Y_VERIFY(!cont.contains(id));
+    Y_ABORT_UNLESS(!cont.contains(id));
     holder.emplace(id, nullptr);
 }
 
 template <typename T, typename I, typename C, typename H>
 static void Grab(const I& id, const C& cont, H& holder) {
-    Y_VERIFY(cont.contains(id));
+    Y_ABORT_UNLESS(cont.contains(id));
     holder.emplace(id, new T(*cont.at(id)));
 }
 
@@ -40,7 +40,7 @@ void TMemoryChanges::GrabNewShard(TSchemeShard*, const TShardIdx& shardId) {
 }
 
 void TMemoryChanges::GrabShard(TSchemeShard *ss, const TShardIdx &shardId) {
-    Y_VERIFY(ss->ShardInfos.contains(shardId));
+    Y_ABORT_UNLESS(ss->ShardInfos.contains(shardId));
 
     const auto& shard = ss->ShardInfos.at(shardId);
     Shards.emplace(shardId, MakeHolder<TShardInfo>(shard));
@@ -67,18 +67,18 @@ void TMemoryChanges::GrabCdcStream(TSchemeShard* ss, const TPathId& pathId) {
 }
 
 void TMemoryChanges::GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId) {
-    Y_VERIFY(!ss->TablesWithSnapshots.contains(pathId));
+    Y_ABORT_UNLESS(!ss->TablesWithSnapshots.contains(pathId));
     TablesWithSnapshots.emplace(pathId, snapshotTxId);
 }
 
 void TMemoryChanges::GrabNewLongLock(TSchemeShard* ss, const TPathId& pathId) {
-    Y_VERIFY(!ss->LockedPaths.contains(pathId));
+    Y_ABORT_UNLESS(!ss->LockedPaths.contains(pathId));
     LockedPaths.emplace(pathId, InvalidTxId); // will be removed on UnDo()
 }
 
 void TMemoryChanges::GrabLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId lockTxId) {
-    Y_VERIFY(ss->LockedPaths.contains(pathId));
-    Y_VERIFY(ss->LockedPaths.at(pathId) == lockTxId);
+    Y_ABORT_UNLESS(ss->LockedPaths.contains(pathId));
+    Y_ABORT_UNLESS(ss->LockedPaths.at(pathId) == lockTxId);
     LockedPaths.emplace(pathId, lockTxId); // will be restored on UnDo()
 }
 

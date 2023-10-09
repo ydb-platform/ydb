@@ -414,7 +414,7 @@ void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, con
 void TDynamicNameserver::Handle(TEvNodeBroker::TEvNodesInfo::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->GetRecord();
-    Y_VERIFY(rec.HasDomain());
+    Y_ABORT_UNLESS(rec.HasDomain());
     ui32 domain = rec.GetDomain();
 
     if (rec.GetEpoch().GetVersion() != DynamicConfigs[domain]->Epoch.Version)

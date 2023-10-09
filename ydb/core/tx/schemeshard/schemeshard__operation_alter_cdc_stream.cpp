@@ -28,8 +28,8 @@ public:
         LOG_I(DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterCdcStream);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterCdcStream);
 
         // TODO(KIKIMR-12278): shards
 
@@ -44,14 +44,14 @@ public:
             << ": step# " << step);
 
         const auto* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterCdcStream);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterCdcStream);
         const auto& pathId = txState->TargetPathId;
 
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         auto path = context.SS->PathsById.at(pathId);
 
-        Y_VERIFY(context.SS->CdcStreams.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->CdcStreams.contains(pathId));
         auto stream = context.SS->CdcStreams.at(pathId);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -148,7 +148,7 @@ public:
             }
         }
 
-        Y_VERIFY(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
         auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
 
         TCdcStreamInfo::EState requiredState = TCdcStreamInfo::EState::ECdcStreamStateInvalid;
@@ -191,10 +191,10 @@ public:
         context.DbChanges.PersistTxState(OperationId);
 
         auto streamAlter = stream->CreateNextVersion();
-        Y_VERIFY(streamAlter);
+        Y_ABORT_UNLESS(streamAlter);
         streamAlter->State = newState;
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterCdcStream, streamPath.Base()->PathId);
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);
@@ -225,10 +225,10 @@ public:
 class TConfigurePartsAtTable: public NCdcStreamState::TConfigurePartsAtTable {
 protected:
     void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
-        Y_VERIFY(context.SS->PathsById.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         auto path = context.SS->PathsById.at(pathId);
 
-        Y_VERIFY(context.SS->Tables.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         auto table = context.SS->Tables.at(pathId);
 
         auto& notice = *tx.MutableAlterCdcStreamNotice();
@@ -237,14 +237,14 @@ protected:
 
         bool found = false;
         for (const auto& [childName, childPathId] : path->GetChildren()) {
-            Y_VERIFY(context.SS->PathsById.contains(childPathId));
+            Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
             auto childPath = context.SS->PathsById.at(childPathId);
 
             if (!childPath->IsCdcStream() || childPath->Dropped() || childPath->NormalState()) {
                 continue;
             }
 
-            Y_VERIFY(context.SS->CdcStreams.contains(childPathId));
+            Y_ABORT_UNLESS(context.SS->CdcStreams.contains(childPathId));
             auto stream = context.SS->CdcStreams.at(childPathId);
 
             Y_VERIFY_S(!found, "Too many cdc streams are planned to alter"
@@ -252,7 +252,7 @@ protected:
                 << ", another# " << childPathId);
             found = true;
 
-            Y_VERIFY(stream->AlterData);
+            Y_ABORT_UNLESS(stream->AlterData);
             context.SS->DescribeCdcStream(childPathId, childName, stream->AlterData, *notice.MutableStreamDescription());
         }
     }
@@ -267,13 +267,13 @@ protected:
     void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
         TConfigurePartsAtTable::FillNotice(pathId, tx, context);
 
-        Y_VERIFY(context.SS->TablesWithSnapshots.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->TablesWithSnapshots.contains(pathId));
         const auto snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
 
-        Y_VERIFY(context.SS->SnapshotsStepIds.contains(snapshotTxId));
+        Y_ABORT_UNLESS(context.SS->SnapshotsStepIds.contains(snapshotTxId));
         const auto snapshotStep = context.SS->SnapshotsStepIds.at(snapshotTxId);
 
-        Y_VERIFY(tx.HasAlterCdcStreamNotice());
+        Y_ABORT_UNLESS(tx.HasAlterCdcStreamNotice());
         auto& notice = *tx.MutableAlterCdcStreamNotice();
 
         notice.MutableDropSnapshot()->SetStep(ui64(snapshotStep));
@@ -419,23 +419,23 @@ public:
         context.DbChanges.PersistPath(tablePath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        Y_VERIFY(context.SS->Tables.contains(tablePath.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
-        Y_VERIFY(table->AlterVersion != 0);
-        Y_VERIFY(!table->AlterData);
+        Y_ABORT_UNLESS(table->AlterVersion != 0);
+        Y_ABORT_UNLESS(!table->AlterData);
 
-        Y_VERIFY(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
+        Y_ABORT_UNLESS(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
         auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
 
-        Y_VERIFY(stream->AlterVersion != 0);
-        Y_VERIFY(stream->AlterData);
+        Y_ABORT_UNLESS(stream->AlterVersion != 0);
+        Y_ABORT_UNLESS(stream->AlterData);
 
         const auto txType = DropSnapshot
             ? TTxState::TxAlterCdcStreamAtTableDropSnapshot
             : TTxState::TxAlterCdcStreamAtTable;
 
-        Y_VERIFY(!context.SS->FindTx(OperationId));
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
 
@@ -488,7 +488,7 @@ ISubOperation::TPtr CreateAlterCdcStreamAtTable(TOperationId id, TTxState::ETxSt
 }
 
 TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream);
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream);
 
     LOG_D("CreateAlterCdcStream"
         << ": opId# " << opId

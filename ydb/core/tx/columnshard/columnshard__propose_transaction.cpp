@@ -36,7 +36,7 @@ private:
 
 
 bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    Y_VERIFY(Ev);
+    Y_ABORT_UNLESS(Ev);
     LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
 
     txc.DB.NoMoreReadsForTx();
@@ -78,12 +78,12 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                 break;
             }
 
-            Y_VERIFY(record.HasSchemeShardId());
+            Y_ABORT_UNLESS(record.HasSchemeShardId());
             if (Self->CurrentSchemeShardId == 0) {
                 Self->CurrentSchemeShardId = record.GetSchemeShardId();
                 Schema::SaveSpecialValue(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
             } else {
-                Y_VERIFY(Self->CurrentSchemeShardId == record.GetSchemeShardId());
+                Y_ABORT_UNLESS(Self->CurrentSchemeShardId == record.GetSchemeShardId());
             }
 
             auto seqNo = SeqNoFromProto(meta.Body.GetSeqNo());
@@ -132,7 +132,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                 LOG_S_DEBUG(TxPrefix() << "CommitTx (retry) TxId " << txId << TxSuffix());
 
                 auto txInfoPtr = Self->ProgressTxController->GetTxInfo(txId);
-                Y_VERIFY(txInfoPtr);
+                Y_ABORT_UNLESS(txInfoPtr);
 
                 if (txInfoPtr->Source != Ev->Get()->GetSource() || txInfoPtr->Cookie != Ev->Cookie) {
                     statusMessage = TStringBuilder()
@@ -291,8 +291,8 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
 }
 
 void TTxProposeTransaction::Complete(const TActorContext& ctx) {
-    Y_VERIFY(Ev);
-    Y_VERIFY(Result);
+    Y_ABORT_UNLESS(Ev);
+    Y_ABORT_UNLESS(Result);
     LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
 
     ctx.Send(Ev->Get()->GetSource(), Result.release());

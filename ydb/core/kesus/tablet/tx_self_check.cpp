@@ -20,7 +20,7 @@ struct TKesusTablet::TTxSelfCheck : public TTxBase {
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::KESUS_TABLET, "[%lu] TTxSelfCheck::Execute", Self->TabletID());
-        Y_VERIFY(Self->SelfCheckPending);
+        Y_ABORT_UNLESS(Self->SelfCheckPending);
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistSysParam(db, Schema::SysParam_SelfCheckCounter, ToString(++Self->SelfCheckCounter));
@@ -29,7 +29,7 @@ struct TKesusTablet::TTxSelfCheck : public TTxBase {
 
     void Complete(const TActorContext& ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::KESUS_TABLET, "[%lu] TTxSelfCheck::Complete", Self->TabletID());
-        Y_VERIFY(Self->SelfCheckPending);
+        Y_ABORT_UNLESS(Self->SelfCheckPending);
         Cookie.Detach();
         Self->SelfCheckPending = false;
         Self->ScheduleSelfCheck(ctx);
@@ -53,7 +53,7 @@ bool TKesusTablet::ScheduleSelfCheck(const TActorContext& ctx) {
 
 void TKesusTablet::Handle(TEvPrivate::TEvSelfCheckStart::TPtr& ev) {
     auto* msg = ev->Get();
-    Y_VERIFY(SelfCheckPending);
+    Y_ABORT_UNLESS(SelfCheckPending);
     const auto& ctx = TActivationContext::AsActorContext();
     TSchedulerCookieHolder cookie(ISchedulerCookie::Make3Way());
     TInstant now = ctx.Now();

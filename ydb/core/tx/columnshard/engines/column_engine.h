@@ -106,7 +106,7 @@ public:
         template <class T>
         T SumVerifiedPositive(const T v1, const T v2) const {
             T result = v1 + v2;
-            Y_VERIFY(result >= 0);
+            Y_ABORT_UNLESS(result >= 0);
             return result;
         }
     public:
@@ -316,7 +316,7 @@ public:
 
     ISnapshotSchema::TPtr GetSchemaUnsafe(const ui64 version) const {
         auto it = SnapshotByVersion.find(version);
-        Y_VERIFY(it != SnapshotByVersion.end());
+        Y_ABORT_UNLESS(it != SnapshotByVersion.end());
         return it->second;
     }
 
@@ -326,13 +326,13 @@ public:
                 return it->second;
             }
         }
-        Y_VERIFY(!Snapshots.empty());
-        Y_VERIFY(version.IsZero());
+        Y_ABORT_UNLESS(!Snapshots.empty());
+        Y_ABORT_UNLESS(version.IsZero());
         return Snapshots.begin()->second; // For old compaction logic compatibility
     }
 
     ISnapshotSchema::TPtr GetLastSchema() const {
-        Y_VERIFY(!Snapshots.empty());
+        Y_ABORT_UNLESS(!Snapshots.empty());
         return Snapshots.rbegin()->second;
     }
 
@@ -344,10 +344,10 @@ public:
         if (Snapshots.empty()) {
             IndexKey = indexInfo.GetIndexKey();
         } else {
-            Y_VERIFY(IndexKey->Equals(indexInfo.GetIndexKey()));
+            Y_ABORT_UNLESS(IndexKey->Equals(indexInfo.GetIndexKey()));
         }
         auto it = Snapshots.emplace(version, std::make_shared<TSnapshotSchema>(std::move(indexInfo), version));
-        Y_VERIFY(it.second);
+        Y_ABORT_UNLESS(it.second);
         auto newVersion = it.first->second->GetVersion();
 
         if (SnapshotByVersion.contains(newVersion)) {

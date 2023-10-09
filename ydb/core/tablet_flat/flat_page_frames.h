@@ -39,7 +39,7 @@ namespace NPage {
 
             ui32 AbsRef(const ui32 page) const noexcept
             {
-                Y_VERIFY(Refer < 0 || page >= ui32(Refer));
+                Y_ABORT_UNLESS(Refer < 0 || page >= ui32(Refer));
 
                 return page - Refer;
             }
@@ -72,12 +72,12 @@ namespace NPage {
             : Raw(std::move(raw))
             , End({ Max<TRowId>(), Max<ui16>(), 0, 0 })
         {
-            Y_VERIFY(uintptr_t(Raw.data()) % alignof(TEntry) == 0);
+            Y_ABORT_UNLESS(uintptr_t(Raw.data()) % alignof(TEntry) == 0);
 
             auto got = NPage::TLabelWrapper().Read(Raw, EPage::Frames);
 
-            Y_VERIFY(got == ECodec::Plain && got.Version == 0);
-            Y_VERIFY(got.Page.size() > sizeof(THeader), "Damaged page");
+            Y_ABORT_UNLESS(got == ECodec::Plain && got.Version == 0);
+            Y_ABORT_UNLESS(got.Page.size() > sizeof(THeader), "Damaged page");
 
             auto * const ptr = got.Page.data();
             auto hdr = TDeref<THeader>::At(ptr, 0);

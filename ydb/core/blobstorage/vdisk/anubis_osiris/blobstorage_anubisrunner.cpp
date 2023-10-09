@@ -96,7 +96,7 @@ namespace NKikimr {
             , AnubisId(anubisId)
             , CurRunnerState(curRunnerState)
         {
-            Y_VERIFY(Ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
+            Y_ABORT_UNLESS(Ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
         }
     };
 
@@ -220,7 +220,7 @@ namespace NKikimr {
                 ctx.Send(AnubisId, new TEvents::TEvPoisonPill());
                 AnubisId = TActorId();
                 RunAnubis(ctx);
-                Y_VERIFY(AnubisId != TActorId());
+                Y_ABORT_UNLESS(AnubisId != TActorId());
             }
         }
 
@@ -254,7 +254,7 @@ namespace NKikimr {
         // Handle TEvHttpInfo
         ////////////////////////////////////////////////////////////////////////
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY(ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
+            Y_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
             // save current local state
             TString s = QuorumTracker.ToString();
             // create an actor to handle request

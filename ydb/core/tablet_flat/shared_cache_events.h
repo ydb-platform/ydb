@@ -68,7 +68,7 @@ namespace NSharedCache {
             : PageCollection(std::move(pageCollection))
             , Owner(owner)
         {
-            Y_VERIFY(Owner, "Cannot send request with empty owner");
+            Y_ABORT_UNLESS(Owner, "Cannot send request with empty owner");
         }
     };
 
@@ -82,7 +82,7 @@ namespace NSharedCache {
             , Fetch(fetch)
             , Owner(owner)
         {
-            Y_VERIFY(Owner, "Cannot sent request with empty owner");
+            Y_ABORT_UNLESS(Owner, "Cannot sent request with empty owner");
         }
     };
 

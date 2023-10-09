@@ -74,7 +74,7 @@ namespace NKikimr::NBlobDepot {
                                 TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId,
                                 TLogoBlobID::MaxCrcMode);
 
-                        Y_VERIFY(minId <= maxId);
+                        Y_ABORT_UNLESS(minId <= maxId);
 
                         if (Self->Data->LastAssimilatedBlobId < maxId) {
                             // adjust minId to skip already assimilated items in range query
@@ -185,7 +185,7 @@ namespace NKikimr::NBlobDepot {
                 return FinishWithError(NLog::PRI_NOTICE, err);
             }
 
-            Y_VERIFY(RangesInFlight);
+            Y_ABORT_UNLESS(RangesInFlight);
             --RangesInFlight;
             CheckIfDone();
         }
@@ -245,8 +245,8 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            Y_VERIFY(GetsInFlight);
-            Y_VERIFY(GetBytesInFlight >= ev->Cookie);
+            Y_ABORT_UNLESS(GetsInFlight);
+            Y_ABORT_UNLESS(GetBytesInFlight >= ev->Cookie);
             --GetsInFlight;
             GetBytesInFlight -= ev->Cookie;
 
@@ -269,9 +269,9 @@ namespace NKikimr::NBlobDepot {
                 SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(id, TRcBuf(buffer), TInstant::Max()),
                     (ui64)keep | (ui64)doNotKeep << 1);
                 const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
                 const bool inserted1 = IdToKey.try_emplace(id, std::move(key)).second;
-                Y_VERIFY(inserted1);
+                Y_ABORT_UNLESS(inserted1);
                 ++PutsInFlight;
             } else { // we couldn't restore this blob -- there was no place to write it to
                 ResolutionErrors.insert(key.GetBlobId());
@@ -282,7 +282,7 @@ namespace NKikimr::NBlobDepot {
             auto& msg = *ev->Get();
 
             const auto it = IdToKey.find(msg.Id);
-            Y_VERIFY(it != IdToKey.end());
+            Y_ABORT_UNLESS(it != IdToKey.end());
             TKey key = std::move(it->second);
             IdToKey.erase(it);
 
@@ -298,7 +298,7 @@ namespace NKikimr::NBlobDepot {
                 ResolutionErrors.insert(key.GetBlobId());
             }
 
-            Y_VERIFY(PutsInFlight);
+            Y_ABORT_UNLESS(PutsInFlight);
             --PutsInFlight;
 
             Self->Data->ExecuteTxCommitAssimilatedBlob(msg.Status, TBlobSeqId::FromLogoBlobId(msg.Id), std::move(key),
@@ -311,7 +311,7 @@ namespace NKikimr::NBlobDepot {
                 (Cookie, Ev->Cookie), (GetsInFlight, GetsInFlight), (RangesInFlight, RangesInFlight),
                 (TxInFlight, TxInFlight), (PutsInFlight, PutsInFlight), (GetQ.size, GetQ.size()));
 
-            Y_VERIFY(TxInFlight);
+            Y_ABORT_UNLESS(TxInFlight);
             --TxInFlight;
             CheckIfDone();
         }
@@ -323,7 +323,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void FinishWithSuccess() {
-            Y_VERIFY(!Finished);
+            Y_ABORT_UNLESS(!Finished);
             Finished = true;
 
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT92, "request succeeded", (Id, Self->GetLogId()), (Sender, Ev->Sender),
@@ -351,7 +351,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void FinishWithError(NLog::EPriority prio, TString errorReason) {
-            Y_VERIFY(!Finished);
+            Y_ABORT_UNLESS(!Finished);
             Finished = true;
 
             STLOG(prio, BLOB_DEPOT, BDT89, "request failed", (Id, Self->GetLogId()), (Sender, Ev->Sender),

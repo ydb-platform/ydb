@@ -104,7 +104,7 @@ protected:
         const NYdb::TAsyncStatus& statusWithDbAnswer,
         const std::function<typename TPrepareResponseResultType<TResponseEvent, typename TResponseEvent::TProto>::Type()>& prepare)
     {
-        Y_VERIFY(statusWithDbAnswer.HasValue() || statusWithDbAnswer.HasException()); // ready
+        Y_ABORT_UNLESS(statusWithDbAnswer.HasValue() || statusWithDbAnswer.HasException()); // ready
         NYql::TIssues internalIssues;
         NYql::TIssues issues;
         typename TResponseEvent::TProto result;

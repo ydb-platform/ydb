@@ -222,7 +222,7 @@ public:
     }
 
     bool TasteIt() {
-        Y_VERIFY(!ExtractIt);
+        Y_ABORT_UNLESS(!ExtractIt);
         bool isNew = false;
         auto itInsert = States.Insert(Tongue, isNew);
         if (isNew) {

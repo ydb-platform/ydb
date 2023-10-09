@@ -163,15 +163,15 @@ namespace NOps {
             void Handle(TEvPrivate::TEvBlobLoaded::TPtr& ev) {
                 auto* msg = ev->Get();
                 ui64 slot = ev->Cookie;
-                Y_VERIFY(slot < PageCollections.size());
-                Y_VERIFY(slot < PageCollectionLoaders.size());
-                Y_VERIFY(!PageCollections[slot]);
+                Y_ABORT_UNLESS(slot < PageCollections.size());
+                Y_ABORT_UNLESS(slot < PageCollectionLoaders.size());
+                Y_ABORT_UNLESS(!PageCollections[slot]);
                 auto& loader = PageCollectionLoaders[slot];
                 if (loader.Apply(msg->BlobId, std::move(msg->Body))) {
                     TIntrusiveConstPtr<NPageCollection::IPageCollection> pack =
                         new NPageCollection::TPageCollection(Part->LargeGlobIds[slot], loader.ExtractSharedData());
                     PageCollections[slot] = new TPrivatePageCache::TInfo(std::move(pack));
-                    Y_VERIFY(PageCollectionsLeft > 0);
+                    Y_ABORT_UNLESS(PageCollectionsLeft > 0);
                     if (0 == --PageCollectionsLeft) {
                         PageCollectionLoaders.clear();
                         StartLoader();
@@ -181,7 +181,7 @@ namespace NOps {
 
         private:
             void StartLoader() {
-                Y_VERIFY(!Loader);
+                Y_ABORT_UNLESS(!Loader);
                 Loader.emplace(
                     std::move(PageCollections),
                     Part->Legacy,
@@ -218,10 +218,10 @@ namespace NOps {
                     return PassAway();
                 }
 
-                Y_VERIFY(ReadsLeft > 0);
+                Y_ABORT_UNLESS(ReadsLeft > 0);
                 --ReadsLeft;
 
-                Y_VERIFY(Loader);
+                Y_ABORT_UNLESS(Loader);
                 Loader->Save(msg->Cookie, msg->Loaded);
 
                 if (ReadsLeft == 0) {
@@ -319,7 +319,7 @@ namespace NOps {
 
         void Touch(EScan scan) noexcept override
         {
-            Y_VERIFY(Depth == 0, "Touch(..) is used from invalid context");
+            Y_ABORT_UNLESS(Depth == 0, "Touch(..) is used from invalid context");
 
             switch (scan) {
                 case EScan::Feed:
@@ -369,7 +369,7 @@ namespace NOps {
 
         void Bootstrap() noexcept
         {
-            Y_VERIFY(!Spent, "Talble scan actor bootstrapped twice");
+            Y_ABORT_UNLESS(!Spent, "Talble scan actor bootstrapped twice");
 
             Spent = new TSpent(TAppData::TimeProvider.Get());
 
@@ -445,7 +445,7 @@ namespace NOps {
             TGuard<ui64, NUtil::TIncDecOps<ui64>> guard(Depth);
 
             Y_VERIFY_DEBUG(MayProgress(), "React called with non-ready cache");
-            Y_VERIFY(Scan, "Table scan op has been finalized");
+            Y_ABORT_UNLESS(Scan, "Table scan op has been finalized");
 
             TStatState stat(Seen, Skipped);
             ui64 processed = 0;
@@ -517,7 +517,7 @@ namespace NOps {
 
         void Handle(TEvContinue::TPtr&) noexcept
         {
-            Y_VERIFY(ContinueInFly);
+            Y_ABORT_UNLESS(ContinueInFly);
 
             ContinueInFly = false;
 
@@ -528,7 +528,7 @@ namespace NOps {
 
         void Handle(TEvPrivate::TEvLoadBlob::TPtr& ev) noexcept
         {
-            Y_VERIFY(ev->Sender);
+            Y_ABORT_UNLESS(ev->Sender);
             auto* msg = ev->Get();
 
             auto& req = BlobQueueRequests.emplace_back();
@@ -551,11 +551,11 @@ namespace NOps {
 
         void OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) noexcept override
         {
-            Y_VERIFY(cookie >= BlobQueueRequestsOffset);
+            Y_ABORT_UNLESS(cookie >= BlobQueueRequestsOffset);
             size_t idx = cookie - BlobQueueRequestsOffset;
-            Y_VERIFY(idx < BlobQueueRequests.size());
+            Y_ABORT_UNLESS(idx < BlobQueueRequests.size());
             auto& req = BlobQueueRequests[idx];
-            Y_VERIFY(req.Sender);
+            Y_ABORT_UNLESS(req.Sender);
             Send(req.Sender, new TEvPrivate::TEvBlobLoaded(id, std::move(body)), 0, req.Cookie);
             req.Sender = {};
             while (!BlobQueueRequests.empty() && !BlobQueueRequests.front().Sender) {
@@ -592,7 +592,7 @@ namespace NOps {
             partView = std::move(msg->Part);
 
             auto* partStore = partView.As<TPartStore>();
-            Y_VERIFY(partStore);
+            Y_ABORT_UNLESS(partStore);
 
             for (auto& cache : partStore->PageCollections) {
                 PrivateCollections.insert(cache->Id);
@@ -678,7 +678,7 @@ namespace NOps {
 
             /* Each Flatten should have its trace on the same position */
 
-            Y_VERIFY(!trace || trace->Sieve.size() == Subset.Flatten.size() + 1);
+            Y_ABORT_UNLESS(!trace || trace->Sieve.size() == Subset.Flatten.size() + 1);
 
             /* After invocation of Finish(...) scan object is left on its
                 own and it has to handle self deletion if required. */

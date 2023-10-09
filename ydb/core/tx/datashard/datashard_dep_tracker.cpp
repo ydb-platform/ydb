@@ -74,7 +74,7 @@ void TDependencyTracker::ClearTmpWrite() noexcept {
 void TDependencyTracker::AddPlannedReads(const TOperation::TPtr& op, const TKeys& reads) noexcept {
     for (const auto& read : reads) {
         auto it = Tables.find(read.TableId);
-        Y_VERIFY(it != Tables.end());
+        Y_ABORT_UNLESS(it != Tables.end());
         auto ownedRange = MakeOwnedRange(read.Key);
         it->second.PlannedReads.AddRange(std::move(ownedRange), op);
     }
@@ -83,7 +83,7 @@ void TDependencyTracker::AddPlannedReads(const TOperation::TPtr& op, const TKeys
 void TDependencyTracker::AddPlannedWrites(const TOperation::TPtr& op, const TKeys& writes) noexcept {
     for (const auto& write : writes) {
         auto it = Tables.find(write.TableId);
-        Y_VERIFY(it != Tables.end());
+        Y_ABORT_UNLESS(it != Tables.end());
         auto ownedRange = MakeOwnedRange(write.Key);
         it->second.PlannedWrites.AddRange(std::move(ownedRange), op);
     }
@@ -92,7 +92,7 @@ void TDependencyTracker::AddPlannedWrites(const TOperation::TPtr& op, const TKey
 void TDependencyTracker::AddImmediateReads(const TOperation::TPtr& op, const TKeys& reads) noexcept {
     for (const auto& read : reads) {
         auto it = Tables.find(read.TableId);
-        Y_VERIFY(it != Tables.end());
+        Y_ABORT_UNLESS(it != Tables.end());
         auto ownedRange = MakeOwnedRange(read.Key);
         it->second.ImmediateReads.AddRange(std::move(ownedRange), op);
     }
@@ -101,7 +101,7 @@ void TDependencyTracker::AddImmediateReads(const TOperation::TPtr& op, const TKe
 void TDependencyTracker::AddImmediateWrites(const TOperation::TPtr& op, const TKeys& writes) noexcept {
     for (const auto& write : writes) {
         auto it = Tables.find(write.TableId);
-        Y_VERIFY(it != Tables.end());
+        Y_ABORT_UNLESS(it != Tables.end());
         auto ownedRange = MakeOwnedRange(write.Key);
         it->second.ImmediateWrites.AddRange(std::move(ownedRange), op);
     }
@@ -209,7 +209,7 @@ void TDependencyTracker::TDefaultDependencyTrackingLogic::AddOperation(const TOp
                     }
                 }
             } else if (TSysTables::IsLocksTable(k.TableId)) {
-                Y_VERIFY(k.Range.Point, "Unexpected non-point read from the locks table");
+                Y_ABORT_UNLESS(k.Range.Point, "Unexpected non-point read from the locks table");
                 const ui64 lockTxId = Parent.Self->SysLocksTable().ExtractLockTxId(k.Range.From);
 
                 // Add hard dependency on all operations that worked with the same lock
@@ -654,7 +654,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
                     }
                 }
             } else if (TSysTables::IsLocksTable(k.TableId)) {
-                Y_VERIFY(k.Range.Point, "Unexpected non-point read from the locks table");
+                Y_ABORT_UNLESS(k.Range.Point, "Unexpected non-point read from the locks table");
                 const ui64 lockTxId = Parent.Self->SysLocksTable().ExtractLockTxId(k.Range.From);
 
                 // Add hard dependency on all operations that worked with the same lock
@@ -794,7 +794,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
     }
 
     auto onImmediateConflict = [&](TOperation& conflict) {
-        Y_VERIFY(!conflict.IsImmediate());
+        Y_ABORT_UNLESS(!conflict.IsImmediate());
         if (snapshot.IsMax()) {
             conflict.AddImmediateConflict(op);
         } else if (snapshotRepeatable ? IsLessEqual(conflict, snapshot) : IsLess(conflict, snapshot)) {

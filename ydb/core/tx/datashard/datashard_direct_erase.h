@@ -50,7 +50,7 @@ class TDirectTxErase : public IDirectTx {
 
         explicit operator bool() const {
             if (!Tx || !Txc) {
-                Y_VERIFY(!Tx && !Txc);
+                Y_ABORT_UNLESS(!Tx && !Txc);
                 return false;
             }
 

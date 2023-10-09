@@ -46,7 +46,7 @@ public:
             hFunc(NInitializer::TEvInitializationFinished, Handle);
             hFunc(TEvStartRegistration, Handle);
             default:
-                Y_VERIFY(false);
+                Y_ABORT_UNLESS(false);
         }
     }
 };

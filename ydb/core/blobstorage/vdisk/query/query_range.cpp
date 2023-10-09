@@ -128,7 +128,7 @@ namespace NKikimr {
                 const TIngress &ingress = merger.GetMemRec().GetIngress();
                 ui64 ingr = ingress.Raw();
                 ui64 *pingr = (ShowInternals ? &ingr : nullptr);
-                Y_VERIFY(logoBlobId.PartId() == 0); // Index-only response must contain a single record for the blob
+                Y_ABORT_UNLESS(logoBlobId.PartId() == 0); // Index-only response must contain a single record for the blob
                 const NMatrix::TVectorType local = ingress.LocalParts(QueryCtx->HullCtx->VCtx->Top->GType);
 
                 const int mode = ingress.GetCollectMode(TIngress::IngressMode(QueryCtx->HullCtx->VCtx->Top->GType));

@@ -277,13 +277,13 @@ public:
 
     NThreading::TPromise<void> ExtractPromise() {
         NThreading::TPromise<void> promise;
-        Y_VERIFY(!promise.Initialized());
+        Y_ABORT_UNLESS(!promise.Initialized());
         std::swap(Promise, promise);
         return promise;
     }
 
     NThreading::TFuture<void> GetFuture() {
-        Y_VERIFY(Future.Initialized());
+        Y_ABORT_UNLESS(Future.Initialized());
         return Future;
     }
 
@@ -397,7 +397,7 @@ public:
             if (HasEventsImpl()) {
                 return NThreading::MakeFuture(); // Signalled
             } else {
-                Y_VERIFY(Waiter.Valid());
+                Y_ABORT_UNLESS(Waiter.Valid());
                 auto res = Waiter.GetFuture();
                 return res;
             }

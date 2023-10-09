@@ -23,7 +23,7 @@ struct TBackup {
 
     static void ProposeTx(const TOperationId& opId, TTxState& txState, TOperationContext& context, TVirtualTimestamp snapshotTime) {
         const auto& pathId = txState.TargetPathId;
-        Y_VERIFY(context.SS->Tables.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         NKikimrSchemeOp::TBackupTask backup = table->BackupSettings;
         backup.SetSnapshotStep(snapshotTime.Step);
@@ -58,10 +58,10 @@ struct TBackup {
             return;
         }
 
-        Y_VERIFY(TAppData::TimeProvider.Get() != nullptr);
+        Y_ABORT_UNLESS(TAppData::TimeProvider.Get() != nullptr);
         const ui64 ts = TAppData::TimeProvider->Now().Seconds();
 
-        Y_VERIFY(context.SS->Tables.contains(txState.TargetPathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
         TTableInfo::TPtr table = context.SS->Tables[txState.TargetPathId];
 
         auto& backupInfo = table->BackupHistory[opId.GetTxId()];
@@ -80,7 +80,7 @@ struct TBackup {
     }
 
     static void PersistTask(const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {
-        Y_VERIFY(context.SS->Tables.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
 
         table->BackupSettings = tx.GetBackup();
@@ -95,7 +95,7 @@ struct TBackup {
     }
 
     static bool NeedToBill(const TPathId& pathId, TOperationContext& context) {
-        Y_VERIFY(context.SS->Tables.contains(pathId));
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         auto table = context.SS->Tables.at(pathId);
         return table->BackupSettings.GetNeedToBill();
     }
@@ -108,7 +108,7 @@ ISubOperation::TPtr CreateBackup(TOperationId id, const TTxTransaction& tx) {
 }
 
 ISubOperation::TPtr CreateBackup(TOperationId id, TTxState::ETxState state) {
-    Y_VERIFY(state != TTxState::Invalid);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return new TBackupRestoreOperationBase<TBackup, TEvDataShard::TEvCancelBackup>(
         TTxState::TxBackup, TPathElement::EPathState::EPathStateBackup, id, state
     );

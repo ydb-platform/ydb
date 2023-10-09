@@ -71,7 +71,7 @@ private:
         }
 
         ui64 Allocate() {
-            Y_VERIFY(Capacity() >= 1);
+            Y_ABORT_UNLESS(Capacity() >= 1);
             return ++Begin;
         }
     };

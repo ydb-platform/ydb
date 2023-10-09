@@ -52,7 +52,7 @@ public:
         return AppendedPortions.size();
     }
     virtual TPortionInfoWithBlobs* GetWritePortionInfo(const ui32 index) override {
-        Y_VERIFY(index < AppendedPortions.size());
+        Y_ABORT_UNLESS(index < AppendedPortions.size());
         return &AppendedPortions[index];
     }
     virtual bool NeedWritePortion(const ui32 /*index*/) const override {

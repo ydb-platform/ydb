@@ -30,7 +30,7 @@ private:
     }
  
     void HandleNodesInfo(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        Y_VERIFY(InfoRequested);
+        Y_ABORT_UNLESS(InfoRequested);
         InfoRequested = false;
         NodesCache.reset(new TNodeInfoVector(ev->Get()->Nodes));
         NextUpdate = TActivationContext::Now() + CacheUpdateInterval;

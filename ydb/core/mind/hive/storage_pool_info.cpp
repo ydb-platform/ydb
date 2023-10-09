@@ -38,19 +38,19 @@ void TStoragePoolInfo::DeleteStorageGroup(TStorageGroupId groupId) {
 
 template <>
 size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN>(const TVector<double>& groupCandidateUsages) {
-    Y_VERIFY(!groupCandidateUsages.empty());
+    Y_ABORT_UNLESS(!groupCandidateUsages.empty());
     return RoundRobinPos++ % groupCandidateUsages.size();
 }
 
 template <>
 size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM>(const TVector<double>& groupCandidateUsages) {
-    Y_VERIFY(!groupCandidateUsages.empty());
+    Y_ABORT_UNLESS(!groupCandidateUsages.empty());
     return TAppData::RandomProvider->GenRand() % groupCandidateUsages.size();
 }
 
 template <>
 size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM>(const TVector<double>& groupCandidateUsages) {
-    Y_VERIFY(!groupCandidateUsages.empty());
+    Y_ABORT_UNLESS(!groupCandidateUsages.empty());
     double sumUsage = 0;
     double maxUsage = 0;
     for (double usage : groupCandidateUsages) {
@@ -75,7 +75,7 @@ size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SE
 
 template <>
 size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_EXACT_MIN>(const TVector<double>& groupCandidateUsages) {
-    Y_VERIFY(!groupCandidateUsages.empty());
+    Y_ABORT_UNLESS(!groupCandidateUsages.empty());
     auto itMin = std::min_element(
                 groupCandidateUsages.begin(),
                 groupCandidateUsages.end()
@@ -85,7 +85,7 @@ size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SE
 
 template <>
 size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_RANDOM_MIN_7P>(const TVector<double>& groupCandidateUsages) {
-    Y_VERIFY(!groupCandidateUsages.empty());
+    Y_ABORT_UNLESS(!groupCandidateUsages.empty());
     TVector<size_t> groupIndices(groupCandidateUsages.size());
     std::iota(groupIndices.begin(), groupIndices.end(), 0);
     auto itGroup = groupIndices.begin();

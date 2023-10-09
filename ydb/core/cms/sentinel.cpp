@@ -203,7 +203,7 @@ TClusterMap::TClusterMap(TSentinelState::TPtr state)
 }
 
 void TClusterMap::AddPDisk(const TPDiskID& id) {
-    Y_VERIFY(State->Nodes.contains(id.NodeId));
+    Y_ABORT_UNLESS(State->Nodes.contains(id.NodeId));
     const auto& location = State->Nodes[id.NodeId].Location;
 
     ByDataCenter[location.HasKey(TNodeLocation::TKeys::DataCenter) ? location.GetDataCenterId() : ""].insert(id);
@@ -237,7 +237,7 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
             << ", affected pdisks# " << JoinSeq(", ", kv.second) << Endl
 
     for (const auto& kv : ByDataCenter) {
-        Y_VERIFY(all.ByDataCenter.contains(kv.first));
+        Y_ABORT_UNLESS(all.ByDataCenter.contains(kv.first));
 
         if (!kv.first || CheckRatio(kv, all.ByDataCenter, DataCenterRatio)) {
             result.insert(kv.second.begin(), kv.second.end());
@@ -250,7 +250,7 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
     }
 
     for (const auto& kv : ByRoom) {
-        Y_VERIFY(all.ByRoom.contains(kv.first));
+        Y_ABORT_UNLESS(all.ByRoom.contains(kv.first));
 
         if (kv.first && !CheckRatio(kv, all.ByRoom, RoomRatio)) {
             LOG_IGNORED(Room);
@@ -264,7 +264,7 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
     }
 
     for (const auto& kv : ByRack) {
-        Y_VERIFY(all.ByRack.contains(kv.first));
+        Y_ABORT_UNLESS(all.ByRack.contains(kv.first));
         // ignore check if there is only one node in a rack
         auto it = NodeByRack.find(kv.first);
         if (it != NodeByRack.end() && it->second.size() == 1) {
@@ -552,7 +552,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
                 continue;
             }
 
-            Y_VERIFY(!it->second->IsTouched());
+            Y_ABORT_UNLESS(!it->second->IsTouched());
             it->second->AddState(state);
             ++it;
         }
@@ -794,7 +794,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     }
 
     void EnsureAllTouched() const {
-        Y_VERIFY(AllOf(SentinelState->PDisks, [](const auto& kv) {
+        Y_ABORT_UNLESS(AllOf(SentinelState->PDisks, [](const auto& kv) {
             return kv.second->IsTouched();
         }));
     }
@@ -808,7 +808,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         action.SetCurrentStatus(status);
         action.SetRequiredStatus(requiredStatus);
 
-        Y_VERIFY(SentinelState->Nodes.contains(id.NodeId));
+        Y_ABORT_UNLESS(SentinelState->Nodes.contains(id.NodeId));
         action.SetHost(SentinelState->Nodes[id.NodeId].Host);
 
         if (reason) {
@@ -890,7 +890,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         SentinelState->ChangeRequests.clear();
 
         for (const auto& id : allowed) {
-            Y_VERIFY(SentinelState->PDisks.contains(id));
+            Y_ABORT_UNLESS(SentinelState->PDisks.contains(id));
             TPDiskInfo::TPtr info = SentinelState->PDisks.at(id);
 
             info->IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;
@@ -920,7 +920,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         for (const auto& [id, reason] : disallowed) {
-            Y_VERIFY(SentinelState->PDisks.contains(id));
+            Y_ABORT_UNLESS(SentinelState->PDisks.contains(id));
             auto& pdisk = SentinelState->PDisks.at(id);
             pdisk->DisallowChanging();
             pdisk->IgnoreReason = reason;
@@ -1089,7 +1089,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         };
 
         if (!response.GetSuccess() || !response.StatusSize() || !response.GetStatus(0).GetSuccess()) {
-            Y_VERIFY(SentinelState->ChangeRequests.size() == response.StatusSize());
+            Y_ABORT_UNLESS(SentinelState->ChangeRequests.size() == response.StatusSize());
             auto it = SentinelState->ChangeRequests.begin();
             for (const auto& status : response.GetStatus()) {
                 if (!status.GetSuccess()) {

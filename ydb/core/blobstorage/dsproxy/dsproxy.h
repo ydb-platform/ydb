@@ -191,7 +191,7 @@ public:
             .Attribute("GroupId", Info->GroupID)
             .Attribute("RestartCounter", RestartCounter);
 
-        Y_VERIFY(CostModel);
+        Y_ABORT_UNLESS(CostModel);
     }
 
     void Registered(TActorSystem *as, const TActorId& parentId) override {
@@ -389,14 +389,14 @@ public:
 
     template<typename TPtr>
     void ProcessReplyFromQueue(const TPtr& /*ev*/) {
-        Y_VERIFY(RequestsInFlight);
+        Y_ABORT_UNLESS(RequestsInFlight);
         --RequestsInFlight;
         CheckPostponedQueue();
     }
 
     void SendToQueues(TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &vGets, bool timeStatsEnabled) {
         for (auto& request : vGets) {
-            Y_VERIFY(request->Record.HasCookie());
+            Y_ABORT_UNLESS(request->Record.HasCookie());
             ui64 messageCookie = request->Record.GetCookie();
             CountEvent(*request);
             const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
@@ -406,34 +406,34 @@ public:
     }
 
     TLogoBlobID GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVPut> &ev) {
-        Y_VERIFY(ev->Record.HasBlobID());
+        Y_ABORT_UNLESS(ev->Record.HasBlobID());
         return LogoBlobIDFromLogoBlobID(ev->Record.GetBlobID());
     }
 
     TLogoBlobID GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVMultiPut> &ev) {
-        Y_VERIFY(ev->Record.ItemsSize());
+        Y_ABORT_UNLESS(ev->Record.ItemsSize());
         return LogoBlobIDFromLogoBlobID(ev->Record.GetItems(0).GetBlobID());
     }
 
     TLogoBlobID GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVMovedPatch> &ev) {
-        Y_VERIFY(ev->Record.HasPatchedBlobId());
+        Y_ABORT_UNLESS(ev->Record.HasPatchedBlobId());
         return LogoBlobIDFromLogoBlobID(ev->Record.GetPatchedBlobId());
     }
 
     TLogoBlobID GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVPatchStart> &ev) {
-        Y_VERIFY(ev->Record.HasOriginalBlobId());
+        Y_ABORT_UNLESS(ev->Record.HasOriginalBlobId());
         return LogoBlobIDFromLogoBlobID(ev->Record.GetOriginalBlobId());
     }
 
     TLogoBlobID GetBlobId(std::unique_ptr<TEvBlobStorage::TEvVPatchDiff> &ev) {
-        Y_VERIFY(ev->Record.HasPatchedPartBlobId());
+        Y_ABORT_UNLESS(ev->Record.HasPatchedPartBlobId());
         return LogoBlobIDFromLogoBlobID(ev->Record.GetPatchedPartBlobId());
     }
 
     template <typename TEvent>
     void SendToQueues(TDeque<std::unique_ptr<TEvent>> &events, bool timeStatsEnabled) {
         for (auto& request : events) {
-            Y_VERIFY(request->Record.HasCookie());
+            Y_ABORT_UNLESS(request->Record.HasCookie());
             ui64 messageCookie = request->Record.GetCookie();
             CountEvent(*request);
             const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
@@ -465,7 +465,7 @@ public:
         Y_VERIFY_DEBUG_S(!ExecutionRelay, LogCtx.RequestPrefix << " actor died without properly sending response");
 
         // ensure that we are dying for the first time
-        Y_VERIFY(!std::exchange(Dead, true));
+        Y_ABORT_UNLESS(!std::exchange(Dead, true));
         TDerived::ActiveCounter(Mon)->Dec();
         SendToProxy(std::make_unique<TEvDeathNote>(Responsiveness));
         TActorBootstrapped<TDerived>::PassAway();
@@ -506,11 +506,11 @@ public:
             SetExecutionRelay(*ev, std::exchange(ExecutionRelay, {}));
             ExecutionRelayUsed = true;
         } else {
-            Y_VERIFY(!ExecutionRelayUsed);
+            Y_ABORT_UNLESS(!ExecutionRelayUsed);
         }
 
         // ensure that we are dying for the first time
-        Y_VERIFY(!Dead);
+        Y_ABORT_UNLESS(!Dead);
         if (RequestHandleClass && PoolCounters) {
             PoolCounters->GetItem(*RequestHandleClass, RequestBytes).Register(
                 RequestBytes, GeneratedSubrequests, GeneratedSubrequestBytes, Timer.Passed());

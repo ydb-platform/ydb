@@ -22,7 +22,7 @@ public:
     TString GetColumnName(ui32 id, bool required) const override {
         auto it = PrimaryIndexStatsSchema.Columns.find(id);
         if (it == PrimaryIndexStatsSchema.Columns.end()) {
-            Y_VERIFY(!required, "No column '%" PRIu32 "' in primary_index_stats", id);
+            Y_ABORT_UNLESS(!required, "No column '%" PRIu32 "' in primary_index_stats", id);
             return {};
         }
         return it->second.Name;

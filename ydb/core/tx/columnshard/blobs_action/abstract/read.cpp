@@ -29,8 +29,8 @@ void IBlobsReadingAction::ExtractBlobsDataTo(THashMap<TBlobRange, TString>& resu
 }
 
 void IBlobsReadingAction::Start(const THashSet<TBlobRange>& rangesInProgress) {
-    Y_VERIFY(!Started);
-    Y_VERIFY(RangesForRead.size() + RangesForResult.size());
+    Y_ABORT_UNLESS(!Started);
+    Y_ABORT_UNLESS(RangesForRead.size() + RangesForResult.size());
     for (auto&& i : RangesForRead) {
         for (auto&& r : i.second) {
             WaitingRanges.emplace(r, TMonotonic::Now());
@@ -60,7 +60,7 @@ void IBlobsReadingAction::Start(const THashSet<TBlobRange>& rangesInProgress) {
 void IBlobsReadingAction::OnReadResult(const TBlobRange& range, const TString& data) {
     AFL_VERIFY(Counters);
     auto it = WaitingRanges.find(range);
-    Y_VERIFY(it != WaitingRanges.end());
+    Y_ABORT_UNLESS(it != WaitingRanges.end());
     Counters->OnReply(range.Size, TMonotonic::Now() - it->second);
     WaitingRanges.erase(it);
     Replies.emplace(range, data);
@@ -69,18 +69,18 @@ void IBlobsReadingAction::OnReadResult(const TBlobRange& range, const TString& d
 void IBlobsReadingAction::OnReadError(const TBlobRange& range, const TErrorStatus& replyStatus) {
     AFL_VERIFY(Counters);
     auto it = WaitingRanges.find(range);
-    Y_VERIFY(it != WaitingRanges.end());
+    Y_ABORT_UNLESS(it != WaitingRanges.end());
     Counters->OnFail(range.Size, TMonotonic::Now() - it->second);
     WaitingRanges.erase(it);
     Fails.emplace(range, replyStatus);
 }
 
 void IBlobsReadingAction::AddRange(const TBlobRange& range, const TString& result /*= Default<TString>()*/) {
-    Y_VERIFY(!Started);
+    Y_ABORT_UNLESS(!Started);
     if (!result) {
-        Y_VERIFY(RangesForRead[range.BlobId].emplace(range).second);
+        Y_ABORT_UNLESS(RangesForRead[range.BlobId].emplace(range).second);
     } else {
-        Y_VERIFY(RangesForResult.emplace(range, result).second);
+        Y_ABORT_UNLESS(RangesForResult.emplace(range, result).second);
     }
 }
 

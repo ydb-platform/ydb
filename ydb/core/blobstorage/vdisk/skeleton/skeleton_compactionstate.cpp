@@ -20,7 +20,7 @@ namespace NKikimr {
         ui64 requestId = ++RequestIdCounter;
         const auto mode = cReq.Mode;
         auto insRes = Requests.insert({requestId, std::move(cReq)});
-        Y_VERIFY(insRes.second);
+        Y_ABORT_UNLESS(insRes.second);
         auto &req = insRes.first->second;
 
         if (req.CompactLogoBlobs) {
@@ -35,7 +35,7 @@ namespace NKikimr {
     }
 
     void TVDiskCompactionState::Setup(const TActorContext &ctx, std::optional<ui64> lsn, TCompactionReq cReq) {
-        Y_VERIFY(!cReq.AllDone());
+        Y_ABORT_UNLESS(!cReq.AllDone());
         if (lsn) {
             Triggered = true;
             LsnToCommit = *lsn;
@@ -56,7 +56,7 @@ namespace NKikimr {
             i64 reqId,
             EHullDbType dbType) {
         auto it = Requests.find(reqId);
-        Y_VERIFY(it != Requests.end());
+        Y_ABORT_UNLESS(it != Requests.end());
         auto &req = it->second;
 
         switch (dbType) {

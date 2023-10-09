@@ -305,6 +305,8 @@ void TPrivatePageCache::TPrivatePageCache::TryShareBody(TPage *page) {
 }
 
 const TSharedData* TPrivatePageCache::Lookup(ui32 pageId, TInfo *info) {
+    using EPage = NTable::NPage::EPage;
+
     TPage *page = info->EnsurePage(pageId);
     
     TryLoad(page);
@@ -319,6 +321,12 @@ const TSharedData* TPrivatePageCache::Lookup(ui32 pageId, TInfo *info) {
 
     if (page->Empty()) {
         ToLoad.PushBack(page);
+
+        // Note: for now we mark index pages sticky before we load them
+        if (!page->Sticky && EPage(info->PageCollection->Page(page->Id).Type) == EPage::Index) {
+            MarkSticky(page->Id, info);
+        }
+
         Stats.CurrentCacheMisses++;
     }
     return nullptr;
@@ -519,8 +527,6 @@ void TPrivatePageCache::DropSharedBody(TInfo *info, ui32 pageId) {
 TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock(
         NSharedCache::TEvResult::TLoaded&& loaded, TInfo *info)
 {
-    using EPage = NTable::NPage::EPage;
-
     Y_VERIFY_DEBUG(loaded.Page && loaded.Page.IsUsed());
     TPage *page = info->EnsurePage(loaded.PageId);
 
@@ -535,11 +541,6 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock(
         Stats.TotalExclusive -= page->Size;
     if (Y_UNLIKELY(page->SharedPending))
         Stats.TotalSharedPending -= page->Size;
-
-    // Note: for now we mark index pages sticky after we load them
-    if (!page->Sticky && EPage(info->PageCollection->Page(page->Id).Type) == EPage::Index) {
-        MarkSticky(page->Id, info);
-    }
 
     // Note: we must be careful not to accidentally drop the sticky bit
     page->Fill(std::move(loaded.Page), page->Sticky);

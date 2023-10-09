@@ -5048,6 +5048,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         env.SendSync(new NFake::TEvExecute(new NTestSuiteTFlatTableExecutorResourceProfile::TTxSetResourceProfile("zero")));
         env.SendSync(new NFake::TEvExecute{ new TTxPrechargeAndSeek() });
 
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // should have the same behaviour
+        env.SendSync(new NFake::TEvExecute{ new TTxPrechargeAndSeek() }, true);
+
         // If we didn't crash, then assume the test succeeded
         env.SendSync(new TEvents::TEvPoison, false, true);
     }

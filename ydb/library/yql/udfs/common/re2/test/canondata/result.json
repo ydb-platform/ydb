@@ -19,6 +19,11 @@
             "uri": "file://test.test_DefOptions_/results.txt"
         }
     ],
+    "test.test[MultipleCaptureGroups]": [
+        {
+            "uri": "file://test.test_MultipleCaptureGroups_/extracted"
+        }
+    ],
     "test.test[MutableLambda]": [
         {
             "uri": "file://test.test_MutableLambda_/results.txt"

@@ -457,6 +457,7 @@ namespace {
                 const auto& groupNames = regexp.CapturingGroupNames();
                 int groupCount = regexp.NumberOfCapturingGroups();
                 if (groupCount >= 0) {
+                    std::unordered_set<std::string_view> groupNamesSet;
                     int unnamedCount = 0;
                     ++groupCount;
                     groups.Indexes.resize(groupCount);
@@ -465,6 +466,11 @@ namespace {
                         TString fieldName;
                         auto it = groupNames.find(i);
                         if (it != groupNames.end()) {
+                            if (!groupNamesSet.insert(it->second).second) {
+                                builder.SetError(
+                                    TStringBuilder() << "Regexp contains duplicate capturing group name: " << it->second);
+                                return;
+                            }
                             fieldName = it->second;
                         } else {
                             fieldName = "_" + ToString(unnamedCount);

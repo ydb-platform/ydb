@@ -107,6 +107,22 @@ std::optional<NTable::ECollectQueryStatsMode> TryParseCollectStatsMode(const std
     return statsMode;
 }
 
+void ParseSetCommand(const std::vector<Token> & tokens, InteractiveCLIState & interactiveCLIState) {
+    if (tokens.size() == 1) {
+        Cerr << "Missing internal variable name for \"SET\" special command." << Endl;
+    } else if (tokens.size() == 2 || tokens[2].data != "=") {
+        Cerr << "Missing \"=\" symbol for \"SET\" special command." << Endl;
+    } else if (tokens.size() == 3) {
+        Cerr << "Missing internal variable value for \"SET\" special command." << Endl;
+    } else if (ToLower(tokens[1].data) == "stats") {
+        if (auto statsMode = TryParseCollectStatsMode(tokens)) {
+            interactiveCLIState.CollectStatsMode = *statsMode;
+        }
+    } else {
+        Cerr << "Unknown internal variable name \"" << tokens[1].data << "\" for \"SET\" special command." << Endl;
+    }
+}
+
 }
 
 TInteractiveCLI::TInteractiveCLI(TClientCommand::TConfig & config, std::string prompt)
@@ -144,19 +160,7 @@ void TInteractiveCLI::Run() {
             }
 
             if (ToLower(tokens[0].data) == "set") {
-                if (tokens.size() == 1) {
-                    Cerr << "Missing internal variable name for \"SET\" special command." << Endl;
-                } else if (tokens.size() == 2 || tokens[2].data != "=") {
-                    Cerr << "Missing \"=\" symbol for \"SET\" special command." << Endl;
-                } else if (tokensSize == 3) {
-                    Cerr << "Missing internal variable value for \"SET\" special command." << Endl;
-                } else if (ToLower(tokens[1].data) == "stats") {
-                    if (auto statsMode = TryParseCollectStatsMode(tokens)) {
-                        interactiveCLIState.CollectStatsMode = *statsMode;
-                    }
-                } else {
-                    Cerr << "Unknown internal variable name \"" << tokens[1].data << "\" for \"SET\" special command." << Endl;
-                }
+                ParseSetCommand(tokens, interactiveCLIState);
                 continue;
             }
 

@@ -54,7 +54,7 @@ namespace NBus {
         }
 
         TRemoteConnection::~TRemoteConnection() {
-            Y_VERIFY(ReplyQueue.IsEmpty());
+            Y_ABORT_UNLESS(ReplyQueue.IsEmpty());
         }
 
         TRemoteConnection::TWriterData::TWriterData()
@@ -67,8 +67,8 @@ namespace NBus {
         }
 
         TRemoteConnection::TWriterData::~TWriterData() {
-            Y_VERIFY(AtomicGet(Down));
-            Y_VERIFY(SendQueue.Empty());
+            Y_ABORT_UNLESS(AtomicGet(Down));
+            Y_ABORT_UNLESS(SendQueue.Empty());
         }
 
         bool TRemoteConnection::TReaderData::HasBytesInBuf(size_t bytes) noexcept {
@@ -78,15 +78,15 @@ namespace NBus {
         }
 
         void TRemoteConnection::TWriterData::SetChannel(NEventLoop::TChannelPtr channel) {
-            Y_VERIFY(!Channel, "must not have channel");
-            Y_VERIFY(Buffer.GetBuffer().Empty() && Buffer.LeftSize() == 0, "buffer must be empty");
-            Y_VERIFY(State == WRITER_FILLING, "state must be initial");
+            Y_ABORT_UNLESS(!Channel, "must not have channel");
+            Y_ABORT_UNLESS(Buffer.GetBuffer().Empty() && Buffer.LeftSize() == 0, "buffer must be empty");
+            Y_ABORT_UNLESS(State == WRITER_FILLING, "state must be initial");
             Channel = channel;
         }
 
         void TRemoteConnection::TReaderData::SetChannel(NEventLoop::TChannelPtr channel) {
-            Y_VERIFY(!Channel, "must not have channel");
-            Y_VERIFY(Buffer.Empty(), "buffer must be empty");
+            Y_ABORT_UNLESS(!Channel, "must not have channel");
+            Y_ABORT_UNLESS(Buffer.Empty(), "buffer must be empty");
             Channel = channel;
         }
 
@@ -119,7 +119,7 @@ namespace NBus {
         }
 
         TRemoteConnection::TReaderData::~TReaderData() {
-            Y_VERIFY(AtomicGet(Down));
+            Y_ABORT_UNLESS(AtomicGet(Down));
         }
 
         void TRemoteConnection::Send(TNonDestroyingAutoPtr<TBusMessage> msg) {
@@ -197,13 +197,13 @@ namespace NBus {
         }
 
         void TRemoteConnection::ProcessItem(TWriterTag, TReconnectTag, ui32 socketVersion) {
-            Y_VERIFY(socketVersion <= WriterData.SocketVersion, "something weird");
+            Y_ABORT_UNLESS(socketVersion <= WriterData.SocketVersion, "something weird");
 
             if (WriterData.SocketVersion != socketVersion) {
                 return;
             }
-            Y_VERIFY(WriterData.Status.Connected, "must be connected at this point");
-            Y_VERIFY(!!WriterData.Channel, "must have channel at this point");
+            Y_ABORT_UNLESS(WriterData.Status.Connected, "must be connected at this point");
+            Y_ABORT_UNLESS(!!WriterData.Channel, "must have channel at this point");
 
             WriterData.Status.Connected = false;
             WriterData.DropChannel();
@@ -670,7 +670,7 @@ namespace NBus {
         void TRemoteConnection::CallSerialize(TBusMessage* msg, TBuffer& buffer) const {
             size_t posForAssertion = buffer.Size();
             Proto->Serialize(msg, buffer);
-            Y_VERIFY(buffer.Size() >= posForAssertion,
+            Y_ABORT_UNLESS(buffer.Size() >= posForAssertion,
                      "incorrect Serialize implementation, pos before serialize: %d, pos after serialize: %d",
                      int(posForAssertion), int(buffer.Size()));
         }
@@ -808,7 +808,7 @@ namespace NBus {
             TBusMessage* r = DeserializeMessage(readDataRef, &header, &ReaderData.Status.Incremental.MessageCounter, &deserializeFailureStatus);
 
             if (!r) {
-                Y_VERIFY(deserializeFailureStatus != MESSAGE_OK, "state check");
+                Y_ABORT_UNLESS(deserializeFailureStatus != MESSAGE_OK, "state check");
                 LWPROBE(Error, ToString(deserializeFailureStatus), ToString(PeerAddr), "");
                 ReaderData.Status.Incremental.StatusCounter[deserializeFailureStatus] += 1;
                 ScheduleShutdownOnServerOrReconnectOnClient(deserializeFailureStatus, false);
@@ -960,7 +960,7 @@ namespace NBus {
         }
 
         void TRemoteConnection::FireClientConnectionEvent(TClientConnectionEvent::EType type) {
-            Y_VERIFY(Session->IsSource_, "state check");
+            Y_ABORT_UNLESS(Session->IsSource_, "state check");
             TClientConnectionEvent event(type, ConnectionId, PeerAddr);
             TRemoteClientSession* session = CheckedCast<TRemoteClientSession*>(Session.Get());
             session->ClientHandler->OnClientConnectionEvent(event);

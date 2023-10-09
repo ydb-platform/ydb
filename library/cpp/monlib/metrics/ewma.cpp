@@ -19,7 +19,7 @@ namespace {
             , Alpha_{alpha}
             , Interval_{interval.Seconds()}
         {
-            Y_VERIFY(metric != nullptr, "Passing nullptr metric is not allowed");
+            Y_ABORT_UNLESS(metric != nullptr, "Passing nullptr metric is not allowed");
         }
 
         ~TExpMovingAverage() override = default;

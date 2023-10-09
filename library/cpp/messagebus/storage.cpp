@@ -8,7 +8,7 @@ namespace NBus {
         }
 
         TTimedMessages::~TTimedMessages() {
-            Y_VERIFY(Items.empty());
+            Y_ABORT_UNLESS(Items.empty());
         }
 
         void TTimedMessages::PushBack(TNonDestroyingAutoPtr<TBusMessage> m) {
@@ -64,8 +64,8 @@ namespace NBus {
         }
 
         TSyncAckMessages::~TSyncAckMessages() {
-            Y_VERIFY(KeyToMessage.empty());
-            Y_VERIFY(TimedItems.empty());
+            Y_ABORT_UNLESS(KeyToMessage.empty());
+            Y_ABORT_UNLESS(TimedItems.empty());
         }
 
         void TSyncAckMessages::Push(TBusMessagePtrAndHeader& m) {
@@ -77,7 +77,7 @@ namespace NBus {
             TValue value = {m.MessagePtr.Release()};
 
             std::pair<TKeyToMessage::iterator, bool> p = KeyToMessage.insert(TKeyToMessage::value_type(m.Header.Id, value));
-            Y_VERIFY(p.second, "non-unique id; %s", value.Message->Describe().data());
+            Y_ABORT_UNLESS(p.second, "non-unique id; %s", value.Message->Describe().data());
 
             TTimedItem item = {m.Header.Id, m.Header.SendTime};
             TimedItems.push_back(item);
@@ -147,7 +147,7 @@ namespace NBus {
         void TSyncAckMessages::RemoveAll(const TMessagesPtrs& messages) {
             for (auto message : messages) {
                 TKeyToMessage::iterator it = KeyToMessage.find(message->GetHeader()->Id);
-                Y_VERIFY(it != KeyToMessage.end(), "delete non-existent message");
+                Y_ABORT_UNLESS(it != KeyToMessage.end(), "delete non-existent message");
                 KeyToMessage.erase(it);
             }
         }

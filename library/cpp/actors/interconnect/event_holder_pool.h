@@ -17,12 +17,12 @@ namespace NActors {
         ~TEvFreeItems() {
             if (Counter) {
                 TAtomicBase res = Counter->fetch_sub(NumBytes) - NumBytes;
-                Y_VERIFY(res >= 0);
+                Y_ABORT_UNLESS(res >= 0);
             }
         }
 
         bool GetInLineForDestruction(const TIntrusivePtr<TInterconnectProxyCommon>& common) {
-            Y_VERIFY(!Counter);
+            Y_ABORT_UNLESS(!Counter);
             const auto& counter = common->DestructorQueueSize;
             const auto& max = common->MaxDestructorQueueSize;
             if (counter && (TAtomicBase)(counter->fetch_add(NumBytes) + NumBytes) > max) {

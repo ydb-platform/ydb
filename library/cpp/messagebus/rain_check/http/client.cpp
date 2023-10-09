@@ -19,7 +19,7 @@ namespace NRainCheck {
         THttpCallback(NRainCheck::THttpFuture* future)
             : Future(future)
         {
-            Y_VERIFY(!!future, "future is NULL");
+            Y_ABORT_UNLESS(!!future, "future is NULL");
         }
 
         void OnRecv(NNeh::THandle& handle) override {
@@ -57,15 +57,15 @@ namespace NRainCheck {
         : GetProtocol(NNeh::ProtocolFactory()->Protocol("http"))
         , FullProtocol(NNeh::ProtocolFactory()->Protocol("full"))
     {
-        Y_VERIFY(!!GetProtocol, "GET protocol is NULL.");
-        Y_VERIFY(!!FullProtocol, "POST protocol is NULL.");
+        Y_ABORT_UNLESS(!!GetProtocol, "GET protocol is NULL.");
+        Y_ABORT_UNLESS(!!FullProtocol, "POST protocol is NULL.");
     }
 
     THttpClientService::~THttpClientService() {
     }
 
     void THttpClientService::SendPost(TString addr, const TString& data, const THttpHeaders& headers, THttpFuture* future) {
-        Y_VERIFY(!!future, "future is NULL.");
+        Y_ABORT_UNLESS(!!future, "future is NULL.");
 
         TTaskRunnerBase* current = TTaskRunnerBase::CurrentTask();
         future->SetRunning(current);
@@ -88,7 +88,7 @@ namespace NRainCheck {
     }
 
     void THttpClientService::Send(const TString& request, THttpFuture* future) {
-        Y_VERIFY(!!future, "future is NULL.");
+        Y_ABORT_UNLESS(!!future, "future is NULL.");
 
         TTaskRunnerBase* current = TTaskRunnerBase::CurrentTask();
         future->SetRunning(current);

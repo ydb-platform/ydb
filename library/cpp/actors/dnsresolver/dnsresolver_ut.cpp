@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(DnsResolver) {
         TSilentUdpServer() {
             TSockAddrInet addr("127.0.0.1", 0);
             int err = Socket.Bind(&addr);
-            Y_VERIFY(err == 0, "Cannot bind a udp socket");
+            Y_ABORT_UNLESS(err == 0, "Cannot bind a udp socket");
             Port = addr.GetPort();
         }
     };

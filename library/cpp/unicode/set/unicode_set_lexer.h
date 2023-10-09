@@ -40,7 +40,7 @@ namespace NUnicode {
             }
 
             inline void PushBack() {
-                Y_VERIFY(!UseLast, "Double TUnicodeSetLexer::PushBack()");
+                Y_ABORT_UNLESS(!UseLast, "Double TUnicodeSetLexer::PushBack()");
                 UseLast = true;
             }
         };

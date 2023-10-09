@@ -50,7 +50,7 @@ namespace NActors {
         }
 
         explicit TActorId(ui32 nodeId, const TStringBuf& x) noexcept {
-            Y_VERIFY(x.size() <= MaxServiceIDLength, "service id is too long");
+            Y_ABORT_UNLESS(x.size() <= MaxServiceIDLength, "service id is too long");
             Raw.N.LocalId = 0;
             Raw.N.Hint = 0;
             Raw.N.NodeId = nodeId | ServiceMask;

@@ -59,14 +59,14 @@ namespace NActors {
         for (int i = 0, count = descriptor->field_count(); i < count; ++i) {
             const NProtoBuf::FieldDescriptor *field = descriptor->field(i);
             if (reflection->HasField(*locp, field)) {
-                Y_VERIFY(field->type() == NProtoBuf::FieldDescriptor::TYPE_STRING, "Location# %s", makeString().data());
+                Y_ABORT_UNLESS(field->type() == NProtoBuf::FieldDescriptor::TYPE_STRING, "Location# %s", makeString().data());
                 Items.emplace_back(TKeys::E(field->number()), reflection->GetString(*locp, field));
             }
         }
         const NProtoBuf::UnknownFieldSet& unknown = locp->unknown_fields();
         for (int i = 0, count = unknown.field_count(); i < count; ++i) {
             const NProtoBuf::UnknownField& field = unknown.field(i);
-            Y_VERIFY(field.type() == NProtoBuf::UnknownField::TYPE_LENGTH_DELIMITED, "Location# %s", makeString().data());
+            Y_ABORT_UNLESS(field.type() == NProtoBuf::UnknownField::TYPE_LENGTH_DELIMITED, "Location# %s", makeString().data());
             Items.emplace_back(TKeys::E(field.number()), field.length_delimited());
         }
         std::sort(Items.begin(), Items.end());
@@ -86,7 +86,7 @@ namespace NActors {
     NActorsInterconnect::TNodeLocation TNodeLocation::ParseLocation(const TString& s) {
         NActorsInterconnect::TNodeLocation res;
         const bool success = res.ParseFromString(s);
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
         return res;
     }
 
@@ -134,7 +134,7 @@ namespace NActors {
         Serialize(&pb, false);
         TString s;
         const bool success = pb.SerializeToString(&s);
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
         return s;
     }
 
@@ -153,7 +153,7 @@ namespace NActors {
 
                 case TKeys::Module: {
                     const bool success = TryFromString(value, moduleId);
-                    Y_VERIFY(success);
+                    Y_ABORT_UNLESS(success);
                     break;
                 }
 
@@ -166,7 +166,7 @@ namespace NActors {
 
                 case TKeys::Unit: {
                     const bool success = TryFromString(value, unitId);
-                    Y_VERIFY(success);
+                    Y_ABORT_UNLESS(success);
                     break;
                 }
 

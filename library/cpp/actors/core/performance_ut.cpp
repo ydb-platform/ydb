@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(ActorSystemPerformance) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEventLocalDolbilkaOld, Handle);
                 default:
-                    Y_VERIFY(false);
+                    Y_ABORT_UNLESS(false);
             }
         }
 
@@ -162,13 +162,13 @@ Y_UNIT_TEST_SUITE(ActorSystemPerformance) {
         while (dNew->GetDurationInProgress() < TDuration::Seconds(1000) && !dNew->IsFinished()) {
             Sleep(TDuration::Seconds(1));
         }
-        Y_VERIFY(dNew->IsFinished());
+        Y_ABORT_UNLESS(dNew->IsFinished());
         TDolbilkaOld* dOld = new TDolbilkaOld;
         runtime->Register(dOld);
         while (dOld->GetDurationInProgress() < TDuration::Seconds(1000) && !dOld->IsFinished()) {
             Sleep(TDuration::Seconds(1));
         }
-        Y_VERIFY(dOld->IsFinished());
+        Y_ABORT_UNLESS(dOld->IsFinished());
         std::unique_ptr<TDolbilkaSimple> dSimple(new TDolbilkaSimple);
         IDolbilkaSimple* dSimpleIface = dSimple.get();
         while (dSimpleIface->ProcessEvent()) {

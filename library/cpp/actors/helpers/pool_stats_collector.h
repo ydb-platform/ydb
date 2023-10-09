@@ -62,7 +62,7 @@ private:
 
         void Set(const TExecutorThreadStats& stats) {
             for (ui32 i : xrange(stats.MaxActivityType())) {
-                Y_VERIFY(i < GetActivityTypeCount());
+                Y_ABORT_UNLESS(i < GetActivityTypeCount());
                 ui64 ticks = stats.ElapsedTicksByActivity[i];
                 ui64 events = stats.ReceivedEventsByActivity[i];
                 ui64 actors = stats.ActorsAliveByActivity[i];
@@ -91,7 +91,7 @@ private:
 
     private:
         void InitCountersForActivity(ui32 activityType) {
-            Y_VERIFY(activityType < GetActivityTypeCount());
+            Y_ABORT_UNLESS(activityType < GetActivityTypeCount());
 
             auto bucketName = TString(GetActivityTypeName(activityType));
 

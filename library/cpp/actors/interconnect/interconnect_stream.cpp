@@ -97,7 +97,7 @@ namespace NInterconnect {
         const SOCKET res = ::socket(domain, SOCK_STREAM | SOCK_NONBLOCK, 0);
         if (res == -1) {
             const int err = LastSocketError();
-            Y_VERIFY(err != EMFILE && err != ENFILE);
+            Y_ABORT_UNLESS(err != EMFILE && err != ENFILE);
             if (error) {
                 *error = err;
             }
@@ -224,7 +224,7 @@ namespace NInterconnect {
         const SOCKET res = ::socket(domain, SOCK_DGRAM, 0);
         if (res == -1) {
             const int err = LastSocketError();
-            Y_VERIFY(err != EMFILE && err != ENFILE);
+            Y_ABORT_UNLESS(err != EMFILE && err != ENFILE);
         }
         return std::make_shared<TDatagramSocket>(res);
     }
@@ -283,14 +283,14 @@ namespace NInterconnect {
             InitOpenSSL();
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
             Ctx.reset(SSL_CTX_new(TLSv1_2_method()));
-            Y_VERIFY(Ctx, "SSL_CTX_new() failed");
+            Y_ABORT_UNLESS(Ctx, "SSL_CTX_new() failed");
 #else
             Ctx.reset(SSL_CTX_new(TLS_method()));
-            Y_VERIFY(Ctx, "SSL_CTX_new() failed");
+            Y_ABORT_UNLESS(Ctx, "SSL_CTX_new() failed");
             ret = SSL_CTX_set_min_proto_version(Ctx.get(), TLS1_2_VERSION);
-            Y_VERIFY(ret == 1, "failed to set min proto version");
+            Y_ABORT_UNLESS(ret == 1, "failed to set min proto version");
             ret = SSL_CTX_set_max_proto_version(Ctx.get(), TLS1_2_VERSION);
-            Y_VERIFY(ret == 1, "failed to set max proto version");
+            Y_ABORT_UNLESS(ret == 1, "failed to set max proto version");
 #endif
             SSL_CTX_set_verify(Ctx.get(), SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, &Verify);
             SSL_CTX_set_mode(*this, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
@@ -298,13 +298,13 @@ namespace NInterconnect {
             // apply certificates in SSL context
             if (certificate) {
                 std::unique_ptr<BIO, TDeleter> bio(BIO_new_mem_buf(certificate.data(), certificate.size()));
-                Y_VERIFY(bio);
+                Y_ABORT_UNLESS(bio);
 
                 // first certificate in the chain is expected to be a leaf
                 std::unique_ptr<X509, TDeleter> cert(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
-                Y_VERIFY(cert, "failed to parse certificate");
+                Y_ABORT_UNLESS(cert, "failed to parse certificate");
                 ret = SSL_CTX_use_certificate(Ctx.get(), cert.get());
-                Y_VERIFY(ret == 1);
+                Y_ABORT_UNLESS(ret == 1);
 
                 // loading additional certificates in the chain, if any
                 while(true) {
@@ -313,25 +313,25 @@ namespace NInterconnect {
                         break;
                     }
                     ret = SSL_CTX_add0_chain_cert(Ctx.get(), ca);
-                    Y_VERIFY(ret == 1);
+                    Y_ABORT_UNLESS(ret == 1);
                     // we must not free memory if certificate was added successfully by SSL_CTX_add0_chain_cert
                 }
             }
             if (privateKey) {
                 std::unique_ptr<BIO, TDeleter> bio(BIO_new_mem_buf(privateKey.data(), privateKey.size()));
-                Y_VERIFY(bio);
+                Y_ABORT_UNLESS(bio);
                 std::unique_ptr<RSA, TDeleter> pkey(PEM_read_bio_RSAPrivateKey(bio.get(), nullptr, nullptr, nullptr));
-                Y_VERIFY(pkey);
+                Y_ABORT_UNLESS(pkey);
                 ret = SSL_CTX_use_RSAPrivateKey(Ctx.get(), pkey.get());
-                Y_VERIFY(ret == 1);
+                Y_ABORT_UNLESS(ret == 1);
             }
             if (caFilePath) {
                 ret = SSL_CTX_load_verify_locations(Ctx.get(), caFilePath.data(), nullptr);
-                Y_VERIFY(ret == 1);
+                Y_ABORT_UNLESS(ret == 1);
             }
 
             int success = SSL_CTX_set_cipher_list(Ctx.get(), ciphers ? ciphers.data() : "AES128-GCM-SHA256");
-            Y_VERIFY(success, "failed to set cipher list");
+            Y_ABORT_UNLESS(success, "failed to set cipher list");
         }
 
         operator SSL_CTX*() const {
@@ -386,7 +386,7 @@ namespace NInterconnect {
         TImpl(SSL_CTX *ctx, int fd)
             : Ssl(SSL_new(ctx))
         {
-            Y_VERIFY(Ssl, "SSL_new() failed");
+            Y_ABORT_UNLESS(Ssl, "SSL_new() failed");
             SSL_set_fd(Ssl, fd);
             SSL_set_ex_data(Ssl, TSecureSocketContext::TImpl::GetExIndex(), &ErrorDescription);
         }
@@ -490,7 +490,7 @@ namespace NInterconnect {
             if (BlockedSend && BlockedSend->first == msg && BlockedSend->second < len) {
                 len = BlockedSend->second;
             }
-            Y_VERIFY(!BlockedSend || *BlockedSend == std::make_pair(msg, len));
+            Y_ABORT_UNLESS(!BlockedSend || *BlockedSend == std::make_pair(msg, len));
             const ssize_t res = Operate(msg, len, &SSL_write_ex, err);
             if (res == -EAGAIN) {
                 BlockedSend.emplace(msg, len);
@@ -510,7 +510,7 @@ namespace NInterconnect {
             if (BlockedReceive && BlockedReceive->first == msg && BlockedReceive->second < len) {
                 len = BlockedReceive->second;
             }
-            Y_VERIFY(!BlockedReceive || *BlockedReceive == std::make_pair(msg, len));
+            Y_ABORT_UNLESS(!BlockedReceive || *BlockedReceive == std::make_pair(msg, len));
             const ssize_t res = Operate(msg, len, &SSL_read_ex, err);
             if (res == -EAGAIN) {
                 BlockedReceive.emplace(msg, len);

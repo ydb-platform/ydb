@@ -24,7 +24,7 @@ private:
 public:
     void SetResult(const T& result) {
         TGuard<TMutex> guard(Mutex);
-        Y_VERIFY(!Result, "cannot set result twice");
+        Y_ABORT_UNLESS(!Result, "cannot set result twice");
         Result = result;
         CondVar.BroadCast();
 

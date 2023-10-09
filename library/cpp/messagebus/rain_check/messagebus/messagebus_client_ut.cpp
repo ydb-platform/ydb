@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(RainCheckMessageBusClient) {
 
         TContinueFunc GotReplies() {
             for (unsigned i = 0; i < Requests.size(); ++i) {
-                Y_VERIFY(Requests[i]->GetStatus() == MESSAGE_OK);
+                Y_ABORT_UNLESS(Requests[i]->GetStatus() == MESSAGE_OK);
                 VerifyDynamicCast<TExampleResponse*>(Requests[i]->GetResponse());
             }
             Env->TestSync.CheckAndIncrement(0);
@@ -124,8 +124,8 @@ Y_UNIT_TEST_SUITE(RainCheckMessageBusClient) {
 
         TContinueFunc GotReplies() {
             for (unsigned i = 0; i < Requests.size(); ++i) {
-                Y_VERIFY(Requests[i]->GetStatus() == MESSAGE_OK);
-                Y_VERIFY(!Requests[i]->GetResponse());
+                Y_ABORT_UNLESS(Requests[i]->GetStatus() == MESSAGE_OK);
+                Y_ABORT_UNLESS(!Requests[i]->GetResponse());
             }
             Env->TestSync.WaitForAndIncrement(2);
             return nullptr;

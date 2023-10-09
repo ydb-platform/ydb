@@ -137,7 +137,7 @@ namespace NDnsResolver {
 
         void Handle(TEvDns::TEvGetHostByNameResult::TPtr& ev) {
             auto waitingIt = WaitingRequests.find(ev->Cookie);
-            Y_VERIFY(waitingIt != WaitingRequests.end(), "Unexpected reply, reqId=%" PRIu64, ev->Cookie);
+            Y_ABORT_UNLESS(waitingIt != WaitingRequests.end(), "Unexpected reply, reqId=%" PRIu64, ev->Cookie);
             auto waitingInfo = waitingIt->second;
             WaitingRequests.erase(waitingIt);
 
@@ -161,7 +161,7 @@ namespace NDnsResolver {
             switch (ev->Get()->SourceType) {
                 case TEvDns::TEvGetHostByName::EventType: {
                     auto waitingIt = WaitingRequests.find(ev->Cookie);
-                    Y_VERIFY(waitingIt != WaitingRequests.end(), "Unexpected TEvUndelivered, reqId=%" PRIu64, ev->Cookie);
+                    Y_ABORT_UNLESS(waitingIt != WaitingRequests.end(), "Unexpected TEvUndelivered, reqId=%" PRIu64, ev->Cookie);
                     auto waitingInfo = waitingIt->second;
                     WaitingRequests.erase(waitingIt);
 
@@ -253,7 +253,7 @@ namespace NDnsResolver {
             EnsureRequest(state, req->Name, family, now);
 
             if (state.IsHardExpired(now)) {
-                Y_VERIFY(state.Waiting);
+                Y_ABORT_UNLESS(state.Waiting);
                 if (MonCounters) {
                     ++*MonCounters->CacheMisses;
                 }
@@ -396,7 +396,7 @@ namespace NDnsResolver {
             auto& req = WaitingRequests[reqId];
             req.Position = NameToState.find(name);
             req.Family = family;
-            Y_VERIFY(req.Position != NameToState.end());
+            Y_ABORT_UNLESS(req.Position != NameToState.end());
 
             Send(Upstream, new TEvDns::TEvGetHostByName(name, family), IEventHandle::FlagTrackDelivery, reqId);
             state.Waiting = true;
@@ -484,7 +484,7 @@ namespace NDnsResolver {
             }
 
             auto& state = it->second.StateByFamily(family);
-            Y_VERIFY(state.Waiting, "Got error for a state we are not waiting");
+            Y_ABORT_UNLESS(state.Waiting, "Got error for a state we are not waiting");
             state.Waiting = false;
 
             // When we have a cached positive reply, don't overwrite it with spurious errors
@@ -532,7 +532,7 @@ namespace NDnsResolver {
             }
 
             auto& state = it->second.StateByFamily(family);
-            Y_VERIFY(state.Waiting, "Got reply for a state we are not waiting");
+            Y_ABORT_UNLESS(state.Waiting, "Got reply for a state we are not waiting");
             state.Waiting = false;
 
             state.Status = ARES_SUCCESS;
@@ -567,7 +567,7 @@ namespace NDnsResolver {
                 }
 
                 bool& flag = family.*FamilyToFlag;
-                Y_VERIFY(flag);
+                Y_ABORT_UNLESS(flag);
                 heap.pop();
                 flag = false;
 

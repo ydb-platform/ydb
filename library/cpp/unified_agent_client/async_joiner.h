@@ -13,13 +13,13 @@ namespace NUnifiedAgent {
 
         inline i64 Ref(i64 count = 1) noexcept {
             const auto result = Refs.fetch_add(count);
-            Y_VERIFY(result >= 1, "already joined");
+            Y_ABORT_UNLESS(result >= 1, "already joined");
             return result;
         }
 
         inline i64 UnRef() noexcept {
             const auto prev = Refs.fetch_sub(1);
-            Y_VERIFY(prev >= 1);
+            Y_ABORT_UNLESS(prev >= 1);
             if (prev == 1) {
                 auto p = Promise;
                 p.SetValue();

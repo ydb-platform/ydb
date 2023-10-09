@@ -81,7 +81,7 @@ public:
 
     void PopValidator()
     {
-        Y_VERIFY(!ValidatorStack_.empty());
+        Y_ABORT_UNLESS(!ValidatorStack_.empty());
         ValidatorStack_.pop();
         if (!ValidatorStack_.empty()) {
             ValidatorStack_.top()->OnChildDone(this);
@@ -97,7 +97,7 @@ public:
 
     IValidatorNode* Top() const
     {
-        Y_VERIFY(!ValidatorStack_.empty());
+        Y_ABORT_UNLESS(!ValidatorStack_.empty());
         return ValidatorStack_.top();
     }
 

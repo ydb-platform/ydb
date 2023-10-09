@@ -106,7 +106,7 @@ public:
     {}
 
     void Bootstrap() {
-        Y_VERIFY(Config->Replicas.size() > 0);
+        Y_ABORT_UNLESS(Config->Replicas.size() > 0);
 
         TotalReplicas = Config->Replicas.size();
         RequestActors.reserve(TotalReplicas);

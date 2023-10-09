@@ -76,10 +76,10 @@ namespace {
             copy.ConnectTimeout = copy.SendTimeout;
         }
 
-        Y_VERIFY(copy.SendTimeout > 0, "SendTimeout must be > 0");
-        Y_VERIFY(copy.TotalTimeout > 0, "TotalTimeout must be > 0");
-        Y_VERIFY(copy.ConnectTimeout > 0, "ConnectTimeout must be > 0");
-        Y_VERIFY(copy.TotalTimeout >= copy.SendTimeout, "TotalTimeout must be >= SendTimeout");
+        Y_ABORT_UNLESS(copy.SendTimeout > 0, "SendTimeout must be > 0");
+        Y_ABORT_UNLESS(copy.TotalTimeout > 0, "TotalTimeout must be > 0");
+        Y_ABORT_UNLESS(copy.ConnectTimeout > 0, "ConnectTimeout must be > 0");
+        Y_ABORT_UNLESS(copy.TotalTimeout >= copy.SendTimeout, "TotalTimeout must be >= SendTimeout");
 
         if (!copy.Name) {
             copy.Name = name;
@@ -117,10 +117,10 @@ TBusSessionImpl::TBusSessionImpl(bool isSource, TBusMessageQueue* queue, TBusPro
 }
 
 TBusSessionImpl::~TBusSessionImpl() {
-    Y_VERIFY(Down);
-    Y_VERIFY(ShutdownCompleteEvent.WaitT(TDuration::Zero()));
-    Y_VERIFY(!WriteEventLoop.IsRunning());
-    Y_VERIFY(!ReadEventLoop.IsRunning());
+    Y_ABORT_UNLESS(Down);
+    Y_ABORT_UNLESS(ShutdownCompleteEvent.WaitT(TDuration::Zero()));
+    Y_ABORT_UNLESS(!WriteEventLoop.IsRunning());
+    Y_ABORT_UNLESS(!ReadEventLoop.IsRunning());
 }
 
 TBusSessionStatus::TBusSessionStatus()
@@ -136,7 +136,7 @@ void TBusSessionImpl::Shutdown() {
         return;
     }
 
-    Y_VERIFY(Queue->IsRunning(), "Session must be shut down prior to queue shutdown");
+    Y_ABORT_UNLESS(Queue->IsRunning(), "Session must be shut down prior to queue shutdown");
 
     TUseAfterFreeCheckerGuard handlerAliveCheckedGuard(ErrorHandler->UseAfterFreeChecker);
 
@@ -205,7 +205,7 @@ size_t TBusSessionImpl::GetInFlightImpl(const TNetAddr& addr) const {
 }
 
 void TBusSessionImpl::GetInFlightBulk(TArrayRef<const TNetAddr> addrs, TArrayRef<size_t> results) const {
-    Y_VERIFY(addrs.size() == results.size(), "input.size != output.size");
+    Y_ABORT_UNLESS(addrs.size() == results.size(), "input.size != output.size");
     for (size_t i = 0; i < addrs.size(); ++i) {
         results[i] = GetInFlightImpl(addrs[i]);
     }
@@ -221,7 +221,7 @@ size_t TBusSessionImpl::GetConnectSyscallsNumForTestImpl(const TNetAddr& addr) c
 }
 
 void TBusSessionImpl::GetConnectSyscallsNumBulkForTest(TArrayRef<const TNetAddr> addrs, TArrayRef<size_t> results) const {
-    Y_VERIFY(addrs.size() == results.size(), "input.size != output.size");
+    Y_ABORT_UNLESS(addrs.size() == results.size(), "input.size != output.size");
     for (size_t i = 0; i < addrs.size(); ++i) {
         results[i] = GetConnectSyscallsNumForTestImpl(addrs[i]);
     }
@@ -232,7 +232,7 @@ void TBusSessionImpl::FillStatus() {
 
 TSessionDumpStatus TBusSessionImpl::GetStatusRecordInternal() {
     // Probably useless, because it returns cached info now
-    Y_VERIFY(!Queue->GetExecutor()->IsInExecutorThread(),
+    Y_ABORT_UNLESS(!Queue->GetExecutor()->IsInExecutorThread(),
              "GetStatus must not be called from executor thread");
 
     TGuard<TMutex> guard(StatusData.StatusDumpCachedMutex);
@@ -248,7 +248,7 @@ TString TBusSessionImpl::GetStatus(ui16 flags) {
 }
 
 TConnectionStatusMonRecord TBusSessionImpl::GetStatusProtobuf() {
-    Y_VERIFY(!Queue->GetExecutor()->IsInExecutorThread(),
+    Y_ABORT_UNLESS(!Queue->GetExecutor()->IsInExecutorThread(),
              "GetStatus must not be called from executor thread");
 
     TGuard<TMutex> guard(StatusData.StatusDumpCachedMutex);
@@ -471,8 +471,8 @@ void TBusSessionImpl::Act(TConnectionTag) {
 
     EShutdownState shutdownState = ConnectionsData.ShutdownState.State.Get();
     if (shutdownState == SS_SHUTDOWN_COMPLETE) {
-        Y_VERIFY(GetRemoveConnectionQueue()->IsEmpty());
-        Y_VERIFY(GetOnAcceptQueue()->IsEmpty());
+        Y_ABORT_UNLESS(GetRemoveConnectionQueue()->IsEmpty());
+        Y_ABORT_UNLESS(GetOnAcceptQueue()->IsEmpty());
     }
 
     GetRemoveConnectionQueue()->DequeueAllLikelyEmpty();
@@ -495,7 +495,7 @@ void TBusSessionImpl::Listen(const TVector<TBindResult>& bindTo, TBusMessageQueu
         if (actualPort == -1) {
             actualPort = br.Addr.GetPort();
         } else {
-            Y_VERIFY(actualPort == br.Addr.GetPort(), "state check");
+            Y_ABORT_UNLESS(actualPort == br.Addr.GetPort(), "state check");
         }
         if (Config.SocketToS >= 0) {
             SetSocketToS(*br.Socket, &(br.Addr), Config.SocketToS);
@@ -531,7 +531,7 @@ void TBusSessionImpl::InsertConnectionLockAcquired(TRemoteConnection* connection
     // after reconnect, if previous connections wasn't shutdown yet
 
     bool inserted2 = ConnectionsById.insert(std::make_pair(connection->ConnectionId, connection)).second;
-    Y_VERIFY(inserted2, "state check: must be inserted (2)");
+    Y_ABORT_UNLESS(inserted2, "state check: must be inserted (2)");
 
     SendSnapshotToStatusActor();
 }
@@ -614,7 +614,7 @@ TRemoteConnectionPtr TBusSessionImpl::GetConnection(const TBusSocketAddr& addr, 
         return TRemoteConnectionPtr();
     }
 
-    Y_VERIFY(IsSource_, "must be source");
+    Y_ABORT_UNLESS(IsSource_, "must be source");
 
     TRemoteConnectionPtr c(new TRemoteClientConnection(VerifyDynamicCast<TRemoteClientSession*>(this), ++LastConnectionId, addr.ToNetAddr()));
     InsertConnectionLockAcquired(c.Get());

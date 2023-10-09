@@ -33,7 +33,7 @@ public:
     // Outputs a line to opened file
     // Can be called from DoExecute() and must be thread-safe
     void Output(const TString& line) {
-        Y_VERIFY(File);
+        Y_ABORT_UNLESS(File);
         TGuard<TMutex> g(Mutex); // Because DoExecute() call can come from any thread
         *File << line << Endl;
     }

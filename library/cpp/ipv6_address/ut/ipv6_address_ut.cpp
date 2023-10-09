@@ -22,7 +22,7 @@ TResult IpRes(TString Ip, TIpPort Port) {
     bool Ok;
     THostAddressAndPort HostAddressAndPort;
     HostAddressAndPort.Ip = TIpv6Address::FromString(Ip, Ok);
-    Y_VERIFY(Ok);
+    Y_ABORT_UNLESS(Ok);
     HostAddressAndPort.Port = Port;
     return TResult(HostAddressAndPort, {}, {});
 }

@@ -23,7 +23,7 @@ namespace NCalculator {
         }
 
         void OnReply(TAutoPtr<TBusMessage> request, TAutoPtr<TBusMessage> response0) override {
-            Y_VERIFY(response0->GetHeader()->Type == TResponse::MessageType, "wrong response");
+            Y_ABORT_UNLESS(response0->GetHeader()->Type == TResponse::MessageType, "wrong response");
             TResponse* response = VerifyDynamicCast<TResponse*>(response0.Get());
             if (request->GetHeader()->Type == TRequestSum::MessageType) {
                 TRequestSum* requestSum = VerifyDynamicCast<TRequestSum*>(request.Get());

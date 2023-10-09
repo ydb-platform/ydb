@@ -13,7 +13,7 @@ namespace NActors {
             : TPollerThreadBase(actorSystem)
         {
             EpollDescriptor = epoll_create1(EPOLL_CLOEXEC);
-            Y_VERIFY(EpollDescriptor != -1, "epoll_create1() failed with %s", strerror(errno));
+            Y_ABORT_UNLESS(EpollDescriptor != -1, "epoll_create1() failed with %s", strerror(errno));
 
             epoll_event event;
             event.data.ptr = nullptr;

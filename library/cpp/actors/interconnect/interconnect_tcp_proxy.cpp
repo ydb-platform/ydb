@@ -28,10 +28,10 @@ namespace NActors {
         , SecureContext(new NInterconnect::TSecureSocketContext(Common->Settings.Certificate, Common->Settings.PrivateKey,
                 Common->Settings.CaFilePath, Common->Settings.CipherList))
     {
-        Y_VERIFY(Common);
-        Y_VERIFY(Common->NameserviceId);
+        Y_ABORT_UNLESS(Common);
+        Y_ABORT_UNLESS(Common->NameserviceId);
         if (DynamicPtr) {
-            Y_VERIFY(!*DynamicPtr);
+            Y_ABORT_UNLESS(!*DynamicPtr);
             *DynamicPtr = this;
         }
     }
@@ -63,7 +63,7 @@ namespace NActors {
     void TInterconnectProxyTCP::RequestNodeInfo(STATEFN_SIG) {
         ICPROXY_PROFILED;
 
-        Y_VERIFY(!IncomingHandshakeActor && !OutgoingHandshakeActor && !PendingIncomingHandshakeEvents && !PendingSessionEvents);
+        Y_ABORT_UNLESS(!IncomingHandshakeActor && !OutgoingHandshakeActor && !PendingIncomingHandshakeEvents && !PendingSessionEvents);
         EnqueueSessionEvent(ev);
         StartConfiguring();
     }
@@ -72,7 +72,7 @@ namespace NActors {
         ICPROXY_PROFILED;
 
         if (!Terminated) {
-            Y_VERIFY(!IncomingHandshakeActor && !OutgoingHandshakeActor && !PendingIncomingHandshakeEvents && !PendingSessionEvents);
+            Y_ABORT_UNLESS(!IncomingHandshakeActor && !OutgoingHandshakeActor && !PendingIncomingHandshakeEvents && !PendingSessionEvents);
             EnqueueIncomingHandshakeEvent(ev);
             StartConfiguring();
         }
@@ -85,7 +85,7 @@ namespace NActors {
     void TInterconnectProxyTCP::StartConfiguring() {
         ICPROXY_PROFILED;
 
-        Y_VERIFY(!IncomingHandshakeActor && !OutgoingHandshakeActor);
+        Y_ABORT_UNLESS(!IncomingHandshakeActor && !OutgoingHandshakeActor);
 
         // issue node info request
         Send(Common->NameserviceId, new TEvInterconnect::TEvGetNode(PeerNodeId));
@@ -99,7 +99,7 @@ namespace NActors {
     void TInterconnectProxyTCP::Configure(TEvInterconnect::TEvNodeInfo::TPtr& ev) {
         ICPROXY_PROFILED;
 
-        Y_VERIFY(!IncomingHandshakeActor && !OutgoingHandshakeActor && !Session);
+        Y_ABORT_UNLESS(!IncomingHandshakeActor && !OutgoingHandshakeActor && !Session);
 
         if (!ev->Get()->Node) {
             TransitToErrorState("cannot get node info");
@@ -170,11 +170,11 @@ namespace NActors {
         DropOutgoingHandshake();
 
         // ensure that we have session
-        Y_VERIFY(Session);
+        Y_ABORT_UNLESS(Session);
 
         // ensure that we have both virtual ids
-        Y_VERIFY(SessionVirtualId);
-        Y_VERIFY(RemoteSessionVirtualId);
+        Y_ABORT_UNLESS(SessionVirtualId);
+        Y_ABORT_UNLESS(RemoteSessionVirtualId);
 
         // create and register handshake actor
         OutgoingHandshakeActor = Register(CreateOutgoingHandshakeActor(Common, SessionVirtualId,
@@ -187,10 +187,10 @@ namespace NActors {
             THolder<IEventBase> event) {
         ICPROXY_PROFILED;
 
-        Y_VERIFY(!IncomingHandshakeActor);
+        Y_ABORT_UNLESS(!IncomingHandshakeActor);
         IncomingHandshakeActor = handshakeId;
         IncomingHandshakeActorFilledIn = TActivationContext::Now();
-        Y_VERIFY(!LastSerialFromIncomingHandshake || *LastSerialFromIncomingHandshake <= peerLocalId);
+        Y_ABORT_UNLESS(!LastSerialFromIncomingHandshake || *LastSerialFromIncomingHandshake <= peerLocalId);
         LastSerialFromIncomingHandshake = peerLocalId;
 
         if (OutgoingHandshakeActor && SelfId().NodeId() < PeerNodeId) {
@@ -201,12 +201,12 @@ namespace NActors {
 
             // Check that we are in one of acceptable states that would properly handle handshake statuses.
             const auto state = CurrentStateFunc();
-            Y_VERIFY(state == &TThis::PendingConnection || state == &TThis::StateWork, "invalid handshake request in state# %s", State);
+            Y_ABORT_UNLESS(state == &TThis::PendingConnection || state == &TThis::StateWork, "invalid handshake request in state# %s", State);
         } else {
             LOG_DEBUG_IC("ICP07", "issued incoming handshake reply");
 
             // No race, so we can send reply immediately.
-            Y_VERIFY(!HeldHandshakeReply);
+            Y_ABORT_UNLESS(!HeldHandshakeReply);
             Send(IncomingHandshakeActor, event.Release());
 
             // Start waiting for handshake reply, if not yet started; also, if session is already created, then we don't
@@ -215,7 +215,7 @@ namespace NActors {
                 LOG_INFO_IC("ICP08", "No active sessions, becoming PendingConnection");
                 SwitchToState(__LINE__, "PendingConnection", &TThis::PendingConnection);
             } else {
-                Y_VERIFY(CurrentStateFunc() == &TThis::StateWork);
+                Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWork);
             }
         }
     }
@@ -342,15 +342,15 @@ namespace NActors {
         // drop any pending XDC subscriptions
         ConnectionSubscriptions.clear();
 
-        Y_VERIFY(!IncomingHandshakeActor && !OutgoingHandshakeActor);
+        Y_ABORT_UNLESS(!IncomingHandshakeActor && !OutgoingHandshakeActor);
         SwitchToState(__LINE__, "StateWork", &TThis::StateWork);
 
         if (Session) {
             // this is continuation request, check that virtual ids match
-            Y_VERIFY(SessionVirtualId == msg->Self && RemoteSessionVirtualId == msg->Peer);
+            Y_ABORT_UNLESS(SessionVirtualId == msg->Self && RemoteSessionVirtualId == msg->Peer);
         } else {
             // this is initial request, check that we have virtual ids not filled in
-            Y_VERIFY(!SessionVirtualId && !RemoteSessionVirtualId);
+            Y_ABORT_UNLESS(!SessionVirtualId && !RemoteSessionVirtualId);
         }
 
         auto error = [&](const char* description) {
@@ -374,7 +374,7 @@ namespace NActors {
         }
 
         // ensure that we have session local/peer virtual ids
-        Y_VERIFY(Session && SessionVirtualId && RemoteSessionVirtualId);
+        Y_ABORT_UNLESS(Session && SessionVirtualId && RemoteSessionVirtualId);
 
         // Set up new connection for the session.
         IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::SetNewConnection, ev);
@@ -405,7 +405,7 @@ namespace NActors {
             DropOutgoingHandshake(false);
 
             if (IEventBase* reply = HeldHandshakeReply.Release()) {
-                Y_VERIFY(IncomingHandshakeActor);
+                Y_ABORT_UNLESS(IncomingHandshakeActor);
                 LOG_DEBUG_IC("ICP26", "sent held handshake reply to %s", IncomingHandshakeActor.ToString().data());
                 Send(IncomingHandshakeActor, reply);
             }
@@ -532,7 +532,7 @@ namespace NActors {
     void TInterconnectProxyTCP::UnregisterSession(TInterconnectSessionTCP* session) {
         ICPROXY_PROFILED;
 
-        Y_VERIFY(Session && Session == session && SessionID);
+        Y_ABORT_UNLESS(Session && Session == session && SessionID);
 
         LOG_INFO_IC("ICP30", "unregister session Session# %s VirtualId# %s", SessionID.ToString().data(),
             SessionVirtualId.ToString().data());
@@ -606,7 +606,7 @@ namespace NActors {
     void TInterconnectProxyTCP::ForwardSessionEventToSession(STATEFN_SIG) {
         ICPROXY_PROFILED;
 
-        Y_VERIFY(Session && SessionID);
+        Y_ABORT_UNLESS(Session && SessionID);
         ValidateEvent(ev, "ForwardSessionEventToSession");
         InvokeOtherActor(*Session, &TInterconnectSessionTCP::Receive, ev);
     }
@@ -753,8 +753,8 @@ namespace NActors {
             UpdateErrorStateLog(TActivationContext::Now(), "permanent conclusive", explanation);
         }
 
-        Y_VERIFY(Session == nullptr);
-        Y_VERIFY(!SessionID);
+        Y_ABORT_UNLESS(Session == nullptr);
+        Y_ABORT_UNLESS(!SessionID);
 
         // recalculate wakeup timeout -- if this is the first failure, then we sleep for default timeout; otherwise we
         // sleep N times longer than the previous try, but not longer than desired number of seconds
@@ -825,7 +825,7 @@ namespace NActors {
     void TInterconnectProxyTCP::HandleCleanupEventQueue() {
         ICPROXY_PROFILED;
 
-        Y_VERIFY(CleanupEventQueueScheduled);
+        Y_ABORT_UNLESS(CleanupEventQueueScheduled);
         CleanupEventQueueScheduled = false;
         CleanupEventQueue();
         ScheduleCleanupEventQueue();
@@ -935,7 +935,7 @@ namespace NActors {
             IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate, TDisconnectReason());
         }
         if (DynamicPtr) {
-            Y_VERIFY(*DynamicPtr == this);
+            Y_ABORT_UNLESS(*DynamicPtr == this);
             *DynamicPtr = nullptr;
         }
         // TODO: unregister actor mon page

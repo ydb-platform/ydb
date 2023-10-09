@@ -14,7 +14,7 @@ namespace NActors {
     public:
         void Insert(const TActorId &aid) {
             bool inserted = insert(aid).second;
-            Y_VERIFY(inserted);
+            Y_ABORT_UNLESS(inserted);
         }
 
         void Insert(const TActiveActors &moreActors) {
@@ -25,7 +25,7 @@ namespace NActors {
 
         void Erase(const TActorId &aid) {
             auto num = erase(aid);
-            Y_VERIFY(num == 1);
+            Y_ABORT_UNLESS(num == 1);
         }
 
         size_t KillAndClear(const TActorContext &ctx) {

@@ -15,7 +15,7 @@ namespace NActors {
     }
 
     void TRopeStream::BackUp(int count) {
-        Y_VERIFY(count <= TotalByteCount);
+        Y_ABORT_UNLESS(count <= TotalByteCount);
         Iter -= count;
         TotalByteCount -= count;
     }
@@ -39,7 +39,7 @@ namespace NActors {
     TCoroutineChunkSerializer::~TCoroutineChunkSerializer() {
         CancelFlag = true;
         Resume();
-        Y_VERIFY(Finished);
+        Y_ABORT_UNLESS(Finished);
     }
 
     bool TCoroutineChunkSerializer::AllowsAliasing() const {
@@ -47,7 +47,7 @@ namespace NActors {
     }
 
     void TCoroutineChunkSerializer::Produce(const void *data, size_t size) {
-        Y_VERIFY(size <= SizeRemain);
+        Y_ABORT_UNLESS(size <= SizeRemain);
         SizeRemain -= size;
         TotalSerializedDataSize += size;
 
@@ -63,9 +63,9 @@ namespace NActors {
     }
 
     bool TCoroutineChunkSerializer::WriteAliasedRaw(const void* data, int size) {
-        Y_VERIFY(!CancelFlag);
-        Y_VERIFY(!AbortFlag);
-        Y_VERIFY(size >= 0);
+        Y_ABORT_UNLESS(!CancelFlag);
+        Y_ABORT_UNLESS(!AbortFlag);
+        Y_ABORT_UNLESS(size >= 0);
         while (size) {
             if (const size_t bytesToAppend = Min<size_t>(size, SizeRemain)) {
                 const void *produce = data;
@@ -89,15 +89,15 @@ namespace NActors {
     }
 
     bool TCoroutineChunkSerializer::Next(void** data, int* size) {
-        Y_VERIFY(!CancelFlag);
-        Y_VERIFY(!AbortFlag);
+        Y_ABORT_UNLESS(!CancelFlag);
+        Y_ABORT_UNLESS(!AbortFlag);
         if (!SizeRemain) {
             InnerContext.SwitchTo(BufFeedContext);
             if (CancelFlag || AbortFlag) {
                 return false;
             }
         }
-        Y_VERIFY(SizeRemain);
+        Y_ABORT_UNLESS(SizeRemain);
         *data = BufferPtr;
         *size = SizeRemain;
         BufferPtr += SizeRemain;
@@ -109,11 +109,11 @@ namespace NActors {
         if (!count) {
             return;
         }
-        Y_VERIFY(count > 0);
-        Y_VERIFY(!Chunks.empty());
+        Y_ABORT_UNLESS(count > 0);
+        Y_ABORT_UNLESS(!Chunks.empty());
         TChunk& buf = Chunks.back();
-        Y_VERIFY((size_t)count <= buf.second);
-        Y_VERIFY(buf.first + buf.second == BufferPtr, "buf# %p:%zu BufferPtr# %p SizeRemain# %zu NumChunks# %zu",
+        Y_ABORT_UNLESS((size_t)count <= buf.second);
+        Y_ABORT_UNLESS(buf.first + buf.second == BufferPtr, "buf# %p:%zu BufferPtr# %p SizeRemain# %zu NumChunks# %zu",
             buf.first, buf.second, BufferPtr, SizeRemain, Chunks.size());
         buf.second -= count;
         if (!buf.second) {
@@ -151,7 +151,7 @@ namespace NActors {
         Y_VERIFY_DEBUG(size);
 
         // transfer control to the coroutine
-        Y_VERIFY(Event);
+        Y_ABORT_UNLESS(Event);
         Chunks.clear();
         Resume();
 
@@ -159,21 +159,21 @@ namespace NActors {
     }
 
     void TCoroutineChunkSerializer::SetSerializingEvent(const IEventBase *event) {
-        Y_VERIFY(Event == nullptr);
+        Y_ABORT_UNLESS(Event == nullptr);
         Event = event;
         TotalSerializedDataSize = 0;
         AbortFlag = false;
     }
 
     void TCoroutineChunkSerializer::Abort() {
-        Y_VERIFY(Event);
+        Y_ABORT_UNLESS(Event);
         AbortFlag = true;
         Resume();
     }
 
     void TCoroutineChunkSerializer::DoRun() {
         while (!CancelFlag) {
-            Y_VERIFY(Event);
+            Y_ABORT_UNLESS(Event);
             SerializationSuccess = !AbortFlag && Event->SerializeToArcadiaStream(this);
             Event = nullptr;
             if (!CancelFlag) { // cancel flag may have been received during serialization
@@ -208,7 +208,7 @@ namespace NActors {
     }
 
     bool TAllocChunkSerializer::WriteAliasedRaw(const void*, int) {
-        Y_VERIFY(false);
+        Y_ABORT_UNLESS(false);
         return false;
     }
 

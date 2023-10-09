@@ -222,7 +222,7 @@ protected:
         while (CurrentResponse != nullptr) {
             size_t size = CurrentResponse->Size();
             if (size == 0) {
-                Y_VERIFY(Requests.front() == CurrentResponse->GetRequest());
+                Y_ABORT_UNLESS(Requests.front() == CurrentResponse->GetRequest());
                 bool close = CurrentResponse->IsConnectionClose();
                 Requests.pop_front();
                 CleanupResponse(CurrentResponse);

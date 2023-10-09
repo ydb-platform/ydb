@@ -66,7 +66,7 @@ namespace NBus {
     TNetAddr::TNetAddr(TAutoPtr<IRemoteAddr> addr)
         : Ptr(addr)
     {
-        Y_VERIFY(!!Ptr);
+        Y_ABORT_UNLESS(!!Ptr);
     }
 
     namespace {

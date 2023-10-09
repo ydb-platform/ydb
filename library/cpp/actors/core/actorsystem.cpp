@@ -106,7 +106,7 @@ namespace NActors {
         if (recpNodeId != NodeId && recpNodeId != 0) {
             // if recipient is not local one - rewrite with forward instruction
             Y_VERIFY_DEBUG(!ev->HasEvent() || ev->GetBase()->IsSerializable());
-            Y_VERIFY(ev->Recipient == recipient,
+            Y_ABORT_UNLESS(ev->Recipient == recipient,
                 "Event rewrite from %s to %s would be lost via interconnect",
                 ev->Recipient.ToString().c_str(),
                 recipient.ToString().c_str());
@@ -255,7 +255,7 @@ namespace NActors {
     }
 
     void TActorSystem::Start() {
-        Y_VERIFY(StartExecuted == false);
+        Y_ABORT_UNLESS(StartExecuted == false);
         StartExecuted = true;
 
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
@@ -273,7 +273,7 @@ namespace NActors {
                 TActorSetupCmd& x = setup.ProxyActors[i];
                 if (x.Actor) {
                     Interconnect[i] = Register(x.Actor.release(), x.MailboxType, x.PoolId, i);
-                    Y_VERIFY(!!Interconnect[i]);
+                    Y_ABORT_UNLESS(!!Interconnect[i]);
                 }
             }
             ProxyWrapperFactory = std::move(SystemSetup->Interconnect.ProxyWrapperFactory);
@@ -284,7 +284,7 @@ namespace NActors {
             for (ui32 i = 0, e = (ui32)SystemSetup->LocalServices.size(); i != e; ++i) {
                 std::pair<TActorId, TActorSetupCmd>& x = SystemSetup->LocalServices[i];
                 const TActorId xid = Register(x.second.Actor.release(), x.second.MailboxType, x.second.PoolId, i);
-                Y_VERIFY(!!xid);
+                Y_ABORT_UNLESS(!!xid);
                 if (!!x.first)
                     RegisterLocalService(x.first, xid);
             }

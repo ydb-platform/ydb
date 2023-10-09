@@ -210,8 +210,8 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
             : Params(params)
             , ActiveEventRegistry_(activeEventRegistry)
         {
-            Y_VERIFY(!Params.Container.empty());
-            Y_VERIFY(Params.Right - Params.Left + 1 <= static_cast<i32>(Params.Container.size()),
+            Y_ABORT_UNLESS(!Params.Container.empty());
+            Y_ABORT_UNLESS(Params.Right - Params.Left + 1 <= static_cast<i32>(Params.Container.size()),
                 "left: %d, right: %d, cont.size: %d", Params.Left, Params.Right, static_cast<i32>(Params.Container.size()));
             ActiveEventRegistry_.SetActive(this);
         }
@@ -242,7 +242,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvQuickSort, Handle);
                 default:
-                    Y_VERIFY(false);
+                    Y_ABORT_UNLESS(false);
             }
         }
 
@@ -373,7 +373,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
 
             BENCH_START(thread);
 
-            Y_VERIFY(threadPool.AddAndOwn(THolder(new TQuickSortTask(params, activeThreadRegistry))));
+            Y_ABORT_UNLESS(threadPool.AddAndOwn(THolder(new TQuickSortTask(params, activeThreadRegistry))));
             UNIT_ASSERT_C(activeThreadRegistry.WaitForAllInactive(60s), "timeout");
 
             threaPoolSortDurationTotal += std::chrono::duration_cast<std::chrono::microseconds>(BENCH_END(thread));
@@ -491,7 +491,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKvSendRequests, Handle);
                 default:
-                    Y_VERIFY(false);
+                    Y_ABORT_UNLESS(false);
             }
         }
 
@@ -529,7 +529,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKvSearch, Handle);
                 default:
-                    Y_VERIFY(false);
+                    Y_ABORT_UNLESS(false);
             }
         }
 
@@ -587,7 +587,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
             }
         }
 
-        Y_VERIFY(keys.size() >= requestsNumber);
+        Y_ABORT_UNLESS(keys.size() >= requestsNumber);
 
         std::random_shuffle(keys.begin(), keys.end());
         keys.resize(requestsNumber);
@@ -709,7 +709,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
             BENCH_START(kvSearch);
 
             for (auto& key : keysToSearch) {
-                Y_VERIFY(threadPool.AddAndOwn(THolder(new TKvSearchTask(key, dict))));
+                Y_ABORT_UNLESS(threadPool.AddAndOwn(THolder(new TKvSearchTask(key, dict))));
             }
 
             // CondVar logic gives too much of overhead (2-10 times more than just sleep_for)
@@ -897,7 +897,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
                 hFunc(TEvSumSendRequests, HandleRequest);
                 hFunc(TEvSumVectorResult, HandleResult);
                 default:
-                    Y_VERIFY(false);
+                    Y_ABORT_UNLESS(false);
             }
         }
 
@@ -974,7 +974,7 @@ Y_UNIT_TEST_SUITE(ActorSystemBenchmark) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvSumVector, Handle);
                 default:
-                    Y_VERIFY(false);
+                    Y_ABORT_UNLESS(false);
             }
         }
 

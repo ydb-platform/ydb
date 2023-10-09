@@ -279,7 +279,7 @@ private:
 public:
     template <typename T>
     ui64 MaxLatencyIncreaseWithOneLessCpu(T **threadLoads, ui32 threadCount, ui64 timeNs, ui64 periodNs) {
-        Y_VERIFY(threadCount > 0);
+        Y_ABORT_UNLESS(threadCount > 0);
 
         struct TTimeSlotData {
             typename T::TimeSlotType Load;
@@ -329,7 +329,7 @@ public:
                         auto timeSlotShiftCount = slotIndex - firstThreadLoadData.Index;
                         maxTimeSlotShiftCount = std::max(maxTimeSlotShiftCount, timeSlotShiftCount);
                         auto res = firstThreadLoadDataQueue.pop();
-                        Y_VERIFY(res);
+                        Y_ABORT_UNLESS(res);
                     }
                 }
 
@@ -347,7 +347,7 @@ public:
                     // The current load of the first thread can be later
                     // processed by the following time slots of other threads
                     auto res = firstThreadLoadDataQueue.push({firstThreadTimeSlotValue, slotIndex});
-                    Y_VERIFY(res);
+                    Y_ABORT_UNLESS(res);
                 }
             }
         }

@@ -12,12 +12,12 @@ TRemoteClientSessionSemaphore::TRemoteClientSessionSemaphore(TAtomicBase limit, 
     , Current(0)
     , StopSignal(0)
 {
-    Y_VERIFY(limit > 0, "limit must be > 0");
+    Y_ABORT_UNLESS(limit > 0, "limit must be > 0");
     Y_UNUSED(Name);
 }
 
 TRemoteClientSessionSemaphore::~TRemoteClientSessionSemaphore() {
-    Y_VERIFY(AtomicGet(Current) == 0);
+    Y_ABORT_UNLESS(AtomicGet(Current) == 0);
 }
 
 bool TRemoteClientSessionSemaphore::TryAcquire() {

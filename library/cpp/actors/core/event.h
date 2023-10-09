@@ -139,8 +139,8 @@ namespace NActors {
         }
 
         static ui32 MakeFlags(ui32 channel, TEventFlags flags) {
-            Y_VERIFY(channel < (1 << ChannelBits));
-            Y_VERIFY(flags < (1 << ChannelShift));
+            Y_ABORT_UNLESS(channel < (1 << ChannelBits));
+            Y_ABORT_UNLESS(flags < (1 << ChannelShift));
             return (flags | (channel << ChannelShift));
         }
 

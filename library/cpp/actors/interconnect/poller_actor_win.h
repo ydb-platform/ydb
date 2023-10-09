@@ -97,7 +97,7 @@ namespace NActors {
         void Request(const TIntrusivePtr<TSocketRecord>& record, bool read, bool write) {
             with_lock (Mutex) {
                 const auto it = Descriptors.find(record->Socket->GetDescriptor());
-                Y_VERIFY(it != Descriptors.end());
+                Y_ABORT_UNLESS(it != Descriptors.end());
                 it->second->Flags |= (read ? READ : 0) | (write ? WRITE : 0);
             }
             ExecuteSyncOperation(TPollerWakeup());

@@ -10,7 +10,7 @@
 extern Y_POD_THREAD(IOutputStream*) HtmlOutputStreamPtr;
 
 static IOutputStream& HtmlOutputStream() {
-    Y_VERIFY(!!HtmlOutputStreamPtr);
+    Y_ABORT_UNLESS(!!HtmlOutputStreamPtr);
     return *HtmlOutputStreamPtr;
 }
 

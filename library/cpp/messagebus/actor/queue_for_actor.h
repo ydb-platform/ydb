@@ -21,7 +21,7 @@ namespace NActor {
 
     public:
         ~TQueueForActor() {
-            Y_VERIFY(Queue.IsEmpty());
+            Y_ABORT_UNLESS(Queue.IsEmpty());
         }
 
         bool IsEmpty() {

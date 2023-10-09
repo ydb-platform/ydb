@@ -117,7 +117,7 @@ namespace NActors {
 
         ui32 GetThreads(ui32 poolId) const {
             auto result = GetThreadsOptional(poolId);
-            Y_VERIFY(result, "undefined pool id: %" PRIu32, (ui32)poolId);
+            Y_ABORT_UNLESS(result, "undefined pool id: %" PRIu32, (ui32)poolId);
             return *result;
         }
 

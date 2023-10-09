@@ -45,7 +45,7 @@ namespace NActors {
         const ui32 sx = TMailbox::AlignedSize();
         for (ui8* x = begin; x + sx <= end; x += sx) {
             TMailbox* mailbox = reinterpret_cast<TMailbox*>(x);
-            Y_VERIFY(IsGoodForCleanup(mailbox));
+            Y_ABORT_UNLESS(IsGoodForCleanup(mailbox));
             mailbox->ExecutionState = Max<ui32>();
             mailbox->~TMailbox();
         }
@@ -57,7 +57,7 @@ namespace NActors {
         bool done = true;
         for (ui8* x = begin; x + sx <= end; x += sx) {
             TMailbox* mailbox = reinterpret_cast<TMailbox*>(x);
-            Y_VERIFY(IsGoodForCleanup(mailbox));
+            Y_ABORT_UNLESS(IsGoodForCleanup(mailbox));
             done &= mailbox->CleanupActors() && mailbox->CleanupEvents();
         }
         return done;
@@ -138,7 +138,7 @@ namespace NActors {
         const ui32 lineIndex = (hint & LineIndexMask) >> LineIndexShift;
         const ui32 lineHint = hint & LineHintMask;
 
-        Y_VERIFY((lineIndex < MaxLines) && (lineHint < LineSize / 64));
+        Y_ABORT_UNLESS((lineIndex < MaxLines) && (lineHint < LineSize / 64));
         if (lineHint == 0)
             return nullptr;
 
@@ -172,7 +172,7 @@ namespace NActors {
         const ui32 lineIndex = (hint & LineIndexMask) >> LineIndexShift;
         const ui32 lineHint = hint & LineHintMask;
 
-        Y_VERIFY((lineIndex < MaxLines) && (lineHint < LineSize / 64));
+        Y_ABORT_UNLESS((lineIndex < MaxLines) && (lineHint < LineSize / 64));
         if (lineHint == 0)
             return false;
 

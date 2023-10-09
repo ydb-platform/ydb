@@ -121,7 +121,7 @@ void TDynamicCounters::RemoveSubgroupChain(const std::vector<std::pair<TString, 
         const auto& [name, value] = chain[i];
         auto& base = basePointers.back();
         basePointers.push_back(base->GetSubgroup(name, value));
-        Y_VERIFY(basePointers.back());
+        Y_ABORT_UNLESS(basePointers.back());
     }
     for (size_t i = chain.size(); i-- && basePointers[i]->RemoveSubgroup(chain[i].first, chain[i].second); ) {}
 }
@@ -158,16 +158,16 @@ bool TDynamicCounters::RemoveSubgroup(const TString& name, const TString& value)
 void TDynamicCounters::ReplaceSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup) {
     auto g = LockForUpdate("ReplaceSubgroup", name, value);
     const auto it = Counters.find({name, value});
-    Y_VERIFY(it != Counters.end() && AsDynamicCounters(it->second));
+    Y_ABORT_UNLESS(it != Counters.end() && AsDynamicCounters(it->second));
     it->second = std::move(subgroup);
 }
 
 void TDynamicCounters::MergeWithSubgroup(const TString& name, const TString& value) {
     auto g = LockForUpdate("MergeWithSubgroup", name, value);
     auto it = Counters.find({name, value});
-    Y_VERIFY(it != Counters.end());
+    Y_ABORT_UNLESS(it != Counters.end());
     TIntrusivePtr<TDynamicCounters> subgroup = AsDynamicCounters(it->second);
-    Y_VERIFY(subgroup);
+    Y_ABORT_UNLESS(subgroup);
     Counters.erase(it);
     Counters.merge(subgroup->Resign());
     AtomicAdd(ExpiringCount, AtomicSwap(&subgroup->ExpiringCount, 0));
@@ -187,10 +187,10 @@ void TDynamicCounters::ResetCounters(bool derivOnly) {
 }
 
 void TDynamicCounters::RegisterCountable(const TString& name, const TString& value, TCountablePtr countable) {
-    Y_VERIFY(countable);
+    Y_ABORT_UNLESS(countable);
     auto g = LockForUpdate("RegisterCountable", name, value);
     const bool inserted = Counters.emplace(TChildId(name, value), std::move(countable)).second;
-    Y_VERIFY(inserted);
+    Y_ABORT_UNLESS(inserted);
 }
 
 void TDynamicCounters::RegisterSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup) {

@@ -109,13 +109,13 @@ Y_UNIT_TEST_SUITE(Task) {
         }
 
         void Resume(T result) {
-            Y_VERIFY(Next && !Next.done());
+            Y_ABORT_UNLESS(Next && !Next.done());
             NextResult = result;
             std::exchange(Next, {}).resume();
         }
 
         void Cancel() {
-            Y_VERIFY(Next && !Next.done());
+            Y_ABORT_UNLESS(Next && !Next.done());
             NextResult.reset();
             std::exchange(Next, {}).resume();
         }

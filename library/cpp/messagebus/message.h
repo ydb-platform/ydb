@@ -93,7 +93,7 @@ namespace NBus {
 
         void SetMessageType(const std::type_info& messageTypeInfo) {
 #ifndef NDEBUG
-            Y_VERIFY(!MessageType, "state check");
+            Y_ABORT_UNLESS(!MessageType, "state check");
             MessageType = TypeName(messageTypeInfo);
 #else
             Y_UNUSED(messageTypeInfo);

@@ -76,7 +76,7 @@ public:
 
 private:
     void SignalResult(TBusSyncMessageData* data, TBusMessage* pReply, EMessageStatus status) const {
-        Y_VERIFY(data, "Message data is set to NULL.");
+        Y_ABORT_UNLESS(data, "Message data is set to NULL.");
         TGuard<TMutex> G(data->ReplyLock);
         data->Reply = pReply;
         data->ReplyStatus = status;
@@ -115,7 +115,7 @@ namespace NBus {
             }
 
             TBusMessage* SendSyncMessage(TBusMessage* pMessage, EMessageStatus& status, const TNetAddr* addr = nullptr) {
-                Y_VERIFY(!Queue->GetExecutor()->IsInExecutorThread(),
+                Y_ABORT_UNLESS(!Queue->GetExecutor()->IsInExecutorThread(),
                          "SendSyncMessage must not be called from executor thread");
 
                 TBusMessage* reply = nullptr;
@@ -134,7 +134,7 @@ namespace NBus {
                     if (status == MESSAGE_OK) {
                         data->ReplyEvent.Wait(data->ReplyLock);
                         TBusSyncMessageData* rdata = static_cast<TBusSyncMessageData*>(pMessage->Data);
-                        Y_VERIFY(rdata == data.Get(), "Message data pointer should not be modified.");
+                        Y_ABORT_UNLESS(rdata == data.Get(), "Message data pointer should not be modified.");
                         reply = rdata->Reply;
                         status = rdata->ReplyStatus;
                     }

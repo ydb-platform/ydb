@@ -10,5 +10,5 @@
             Sleep(TDuration::MilliSeconds(1));                                       \
         }                                                                            \
         /* TODO: use UNIT_ASSERT if in unittest thread */                            \
-        Y_VERIFY(condition, "condition failed after 10 seconds wait");               \
+        Y_ABORT_UNLESS(condition, "condition failed after 10 seconds wait");               \
     } while (0)

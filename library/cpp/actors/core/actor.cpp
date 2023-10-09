@@ -18,7 +18,7 @@ namespace NActors {
             ui64 count = value >> T::TimestampBits;
 
             count += Increment;
-            Y_VERIFY((count & ~T::CountMask) == 0);
+            Y_ABORT_UNLESS((count & ~T::CountMask) == 0);
 
             ui64 timestamp = value;
             if (Increment == 1 && count == 1) {
@@ -53,7 +53,7 @@ namespace NActors {
             used += (static_cast<ui64>(time) - value) & TimestampMask;
         }
 
-        Y_VERIFY(LastUsageTimestamp <= time);
+        Y_ABORT_UNLESS(LastUsageTimestamp <= time);
         ui64 passed = time - LastUsageTimestamp;
         LastUsageTimestamp = time;
 
@@ -188,7 +188,7 @@ namespace NActors {
 
     void IActor::Die(const TActorContext& ctx) {
         if (ctx.SelfID)
-            Y_VERIFY(ctx.SelfID == SelfActorId);
+            Y_ABORT_UNLESS(ctx.SelfID == SelfActorId);
         PassAway();
     }
 
@@ -206,7 +206,7 @@ namespace NActors {
     }
 
     void TActorVirtualBehaviour::Receive(IActor* actor, std::unique_ptr<IEventHandle> ev) {
-        Y_VERIFY(!!ev && ev->GetBase());
+        Y_ABORT_UNLESS(!!ev && ev->GetBase());
         ev->GetBase()->Execute(actor, std::move(ev));
     }
 

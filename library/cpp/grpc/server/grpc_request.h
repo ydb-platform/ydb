@@ -76,7 +76,7 @@ public:
     {
         AuthState_ = Server_->NeedAuth() ? TAuthState(true) : TAuthState(false);
         Request_ = google::protobuf::Arena::CreateMessage<TIn>(&Arena_);
-        Y_VERIFY(Request_);
+        Y_ABORT_UNLESS(Request_);
         GRPC_LOG_DEBUG(Logger_, "[%p] created request Name# %s", this, Name_);
         FinishPromise_ = NThreading::NewPromise<EFinishStatus>();
     }
@@ -104,7 +104,7 @@ public:
     {
         AuthState_ = Server_->NeedAuth() ? TAuthState(true) : TAuthState(false);
         Request_ = google::protobuf::Arena::CreateMessage<TIn>(&Arena_);
-        Y_VERIFY(Request_);
+        Y_ABORT_UNLESS(Request_);
         GRPC_LOG_DEBUG(Logger_, "[%p] created streaming request Name# %s", this, Name_);
         FinishPromise_ = NThreading::NewPromise<EFinishStatus>();
         StreamAdaptor_ = CreateStreamAdaptor();
@@ -157,7 +157,7 @@ public:
     }
 
     void DestroyRequest() override {
-        Y_VERIFY(!CallInProgress_, "Unexpected DestroyRequest while another grpc call is still in progress");
+        Y_ABORT_UNLESS(!CallInProgress_, "Unexpected DestroyRequest while another grpc call is still in progress");
         RequestDestroyed_ = true;
         if (RequestRegistered_) {
             Server_->DeregisterRequestCtx(this);
@@ -262,16 +262,16 @@ private:
     }
 
     void OnBeforeCall() {
-        Y_VERIFY(!RequestDestroyed_, "Cannot start grpc calls after request is already destroyed");
-        Y_VERIFY(!Finished_, "Cannot start grpc calls after request is finished");
+        Y_ABORT_UNLESS(!RequestDestroyed_, "Cannot start grpc calls after request is already destroyed");
+        Y_ABORT_UNLESS(!Finished_, "Cannot start grpc calls after request is finished");
         bool wasInProgress = std::exchange(CallInProgress_, true);
-        Y_VERIFY(!wasInProgress, "Another grpc call is already in progress");
+        Y_ABORT_UNLESS(!wasInProgress, "Another grpc call is already in progress");
     }
 
     void OnAfterCall() {
-        Y_VERIFY(!RequestDestroyed_, "Finished grpc call after request is already destroyed");
+        Y_ABORT_UNLESS(!RequestDestroyed_, "Finished grpc call after request is already destroyed");
         bool wasInProgress = std::exchange(CallInProgress_, false);
-        Y_VERIFY(wasInProgress, "Finished grpc call that was not in progress");
+        Y_ABORT_UNLESS(wasInProgress, "Finished grpc call that was not in progress");
     }
 
     void WriteDataOk(NProtoBuf::Message* resp, ui32 status) {
@@ -290,7 +290,7 @@ private:
             StateFunc_ = &TThis::SetFinishDone;
             ResponseSize = sz;
             ResponseStatus = status;
-            Y_VERIFY(this->Context.c_call());
+            Y_ABORT_UNLESS(this->Context.c_call());
             OnBeforeCall();
             Finished_ = true;
             Writer_->Finish(TUniversalResponseRef<TOut>(resp), grpc::Status::OK, GetGRpcTag());
@@ -346,7 +346,7 @@ private:
     }
 
     void FinishGrpcStatus(grpc::StatusCode code, const TString& msg, const TString& details, bool urgent) {
-        Y_VERIFY(code != grpc::OK);
+        Y_ABORT_UNLESS(code != grpc::OK);
         if (code == grpc::StatusCode::UNAUTHENTICATED) {
             Counters_->CountNotAuthenticated();
         } else if (code == grpc::StatusCode::RESOURCE_EXHAUSTED) {
@@ -395,7 +395,7 @@ private:
             ok ? "true" : "false", makeRequestString().data(), this->Context.peer().c_str());
 
         if (this->Context.c_call() == nullptr) {
-            Y_VERIFY(!ok);
+            Y_ABORT_UNLESS(!ok);
             // One ref by OnFinishTag, grpc will not call this tag if no request received
             UnRef();
         } else if (!(RequestRegistered_ = Server_->RegisterRequestCtx(this))) {

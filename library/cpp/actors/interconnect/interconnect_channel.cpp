@@ -20,7 +20,7 @@ namespace NActors {
         auto traceId = event.Span.GetTraceId();
         event.Span.EndOk();
 
-        Y_VERIFY(SerializationInfo);
+        Y_ABORT_UNLESS(SerializationInfo);
         const ui32 flags = (event.Descr.Flags & ~IEventHandle::FlagForwardOnNondelivery) |
             (SerializationInfo->IsExtendedFormat ? IEventHandle::FlagExtendedFormat : 0);
 
@@ -65,7 +65,7 @@ namespace NActors {
 
     bool TEventOutputChannel::FeedBuf(TTcpPacketOutTask& task, ui64 serial, ui64 *weightConsumed) {
         for (;;) {
-            Y_VERIFY(!Queue.empty());
+            Y_ABORT_UNLESS(!Queue.empty());
             TEventHolder& event = Queue.front();
 
             switch (State) {
@@ -125,7 +125,7 @@ namespace NActors {
                         for (const auto& section : SerializationInfo->Sections) {
                             totalSectionSize += section.Size;
                         }
-                        Y_VERIFY(totalSectionSize == event.EventSerializedSize);
+                        Y_ABORT_UNLESS(totalSectionSize == event.EventSerializedSize);
                     }
 
                     while (SectionIndex != SerializationInfo->Sections.size()) {
@@ -142,7 +142,7 @@ namespace NActors {
                         if (section.IsInline && Params.UseXdcShuffle) {
                             type = static_cast<ui8>(EXdcCommand::DECLARE_SECTION_INLINE);
                         }
-                        Y_VERIFY(p <= std::end(sectionInfo));
+                        Y_ABORT_UNLESS(p <= std::end(sectionInfo));
 
                         const size_t declareLen = p - sectionInfo;
                         if (sizeof(TChannelPart) + XdcData.size() + declareLen <= task.GetInternalFreeAmount() &&
@@ -209,7 +209,7 @@ namespace NActors {
                 }
                 complete = Chunker.IsComplete();
                 if (complete) {
-                    Y_VERIFY(Chunker.IsSuccessfull());
+                    Y_ABORT_UNLESS(Chunker.IsSuccessfull());
                 }
             }
         } else if (event.Buffer) {
@@ -223,7 +223,7 @@ namespace NActors {
         } else {
             Y_FAIL();
         }
-        Y_VERIFY(!complete || event.EventActuallySerialized == event.EventSerializedSize,
+        Y_ABORT_UNLESS(!complete || event.EventActuallySerialized == event.EventSerializedSize,
             "EventActuallySerialized# %" PRIu32 " EventSerializedSize# %" PRIu32 " Type# 0x%08" PRIx32,
             event.EventActuallySerialized, event.EventSerializedSize, event.Descr.Type);
 
@@ -244,7 +244,7 @@ namespace NActors {
                     IsPartInline = false;
                     PartLenRemain = Max<size_t>();
                 } else {
-                    Y_VERIFY(SectionIndex < sections.size());
+                    Y_ABORT_UNLESS(SectionIndex < sections.size());
                     IsPartInline = sections[SectionIndex].IsInline;
                     while (SectionIndex < sections.size() && IsPartInline == sections[SectionIndex].IsInline) {
                         PartLenRemain += sections[SectionIndex].Size;
@@ -276,7 +276,7 @@ namespace NActors {
         const bool complete = SerializeEvent<false>(task, event, &bytesSerialized);
 
         Y_VERIFY_DEBUG(bytesSerialized);
-        Y_VERIFY(bytesSerialized <= Max<ui16>());
+        Y_ABORT_UNLESS(bytesSerialized <= Max<ui16>());
 
         TChannelPart part{
             .ChannelFlags = ChannelId,
@@ -304,7 +304,7 @@ namespace NActors {
         size_t bytesSerialized = 0;
         const bool complete = SerializeEvent<true>(task, event, &bytesSerialized);
 
-        Y_VERIFY(0 < bytesSerialized && bytesSerialized <= Max<ui16>());
+        Y_ABORT_UNLESS(0 < bytesSerialized && bytesSerialized <= Max<ui16>());
 
         char buffer[partSize];
         TChannelPart *part = reinterpret_cast<TChannelPart*>(buffer);
@@ -338,12 +338,12 @@ namespace NActors {
     void TEventOutputChannel::NotifyUndelivered() {
         LOG_DEBUG_IC_SESSION("ICOCH89", "Notyfying about Undelivered messages! NotYetConfirmed size: %zu, Queue size: %zu", NotYetConfirmed.size(), Queue.size());
         if (State == EState::BODY && Queue.front().Event) {
-            Y_VERIFY(!Chunker.IsComplete()); // chunk must have an event being serialized
-            Y_VERIFY(!Queue.empty()); // this event must be the first event in queue
+            Y_ABORT_UNLESS(!Chunker.IsComplete()); // chunk must have an event being serialized
+            Y_ABORT_UNLESS(!Queue.empty()); // this event must be the first event in queue
             TEventHolder& event = Queue.front();
-            Y_VERIFY(Chunker.GetCurrentEvent() == event.Event.Get()); // ensure the event is valid
+            Y_ABORT_UNLESS(Chunker.GetCurrentEvent() == event.Event.Get()); // ensure the event is valid
             Chunker.Abort(); // stop serializing current event
-            Y_VERIFY(Chunker.IsComplete());
+            Y_ABORT_UNLESS(Chunker.IsComplete());
         }
         for (auto& item : NotYetConfirmed) {
             if (item.Descr.Flags & IEventHandle::FlagGenerateUnsureUndelivered) { // notify only when unsure flag is set

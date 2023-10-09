@@ -238,10 +238,10 @@ namespace NActors {
         // register our socket in poller actor
         LOG_DEBUG_IC_SESSION("ICS11", "registering socket in PollerActor");
         const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
         if (XdcSocket) {
             const bool success = Send(MakePollerActorId(), new TEvPollerRegister(XdcSocket, ReceiverId, SelfId()));
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
         }
 
         LostConnectionWatchdog.Disarm();
@@ -273,7 +273,7 @@ namespace NActors {
         ForcedWriteLength = 0;
 
         const ui64 serial = OutputCounter - SendQueue.size() + 1;
-        Y_VERIFY(serial > LastConfirmed, "%s serial# %" PRIu64 " LastConfirmed# %" PRIu64, LogPrefix.data(), serial, LastConfirmed);
+        Y_ABORT_UNLESS(serial > LastConfirmed, "%s serial# %" PRIu64 " LastConfirmed# %" PRIu64, LogPrefix.data(), serial, LastConfirmed);
         LOG_DEBUG_IC_SESSION("ICS06", "rewind SendQueue size# %zu LastConfirmed# %" PRIu64 " NextSerial# %" PRIu64,
             SendQueue.size(), LastConfirmed, serial);
 
@@ -677,7 +677,7 @@ namespace NActors {
             TStackVec<TConstIoVec, iovLimit> wbuffers;
 
             stream.ProduceIoVec(wbuffers, maxElementsInIOV, maxBytes);
-            Y_VERIFY(!wbuffers.empty());
+            Y_ABORT_UNLESS(!wbuffers.empty());
 
             TString err;
             ssize_t r = 0;
@@ -784,11 +784,11 @@ namespace NActors {
             serial = ++OutputCounter;
 
             // fill the data packet
-            Y_VERIFY(NumEventsInQueue);
+            Y_ABORT_UNLESS(NumEventsInQueue);
             LWPROBE_IF_TOO_LONG(SlowICFillSendingBuffer, Proxy->PeerNodeId, ms) {
                 FillSendingBuffer(packet, serial);
             }
-            Y_VERIFY(!packet.IsEmpty());
+            Y_ABORT_UNLESS(!packet.IsEmpty());
 
             InflightDataAmount += packet.GetDataSize();
             Proxy->Metrics->AddInflightDataAmount(packet.GetDataSize());
@@ -818,7 +818,7 @@ namespace NActors {
         const size_t outgoingStreamSizeAfter = stream.CalculateOutgoingSize();
         const size_t xdcStreamSizeAfter = XdcStream.CalculateOutgoingSize();
 
-        Y_VERIFY(outgoingStreamSizeAfter == outgoingStreamSizeBefore + packetSize &&
+        Y_ABORT_UNLESS(outgoingStreamSizeAfter == outgoingStreamSizeBefore + packetSize &&
             xdcStreamSizeAfter == xdcStreamSizeBefore + packet.GetExternalSize(),
             "outgoingStreamSizeBefore# %zu outgoingStreamSizeAfter# %zu packetSize# %zu"
             " xdcStreamSizeBefore# %zu xdcStreamSizeAfter# %zu externalSize# %" PRIu32,
@@ -848,7 +848,7 @@ namespace NActors {
     void TInterconnectSessionTCP::DropConfirmed(ui64 confirm) {
         LOG_DEBUG_IC_SESSION("ICS23", "confirm count: %" PRIu64, confirm);
 
-        Y_VERIFY(LastConfirmed <= confirm && confirm <= OutputCounter,
+        Y_ABORT_UNLESS(LastConfirmed <= confirm && confirm <= OutputCounter,
             "%s confirm# %" PRIu64 " LastConfirmed# %" PRIu64 " OutputCounter# %" PRIu64,
             LogPrefix.data(), confirm, LastConfirmed, OutputCounter);
         LastConfirmed = confirm;
@@ -907,7 +907,7 @@ namespace NActors {
     void TInterconnectSessionTCP::FillSendingBuffer(TTcpPacketOutTask& task, ui64 serial) {
         ui32 bytesGenerated = 0;
 
-        Y_VERIFY(NumEventsInQueue);
+        Y_ABORT_UNLESS(NumEventsInQueue);
         while (NumEventsInQueue) {
             TEventOutputChannel *channel = ChannelScheduler->PickChannelWithLeastConsumedWeight();
             Y_VERIFY_DEBUG(!channel->IsEmpty());
@@ -934,7 +934,7 @@ namespace NActors {
             if (eventDone) {
                 ++MessagesWrittenToBuffer;
 
-                Y_VERIFY(NumEventsInQueue);
+                Y_ABORT_UNLESS(NumEventsInQueue);
                 --NumEventsInQueue;
 
                 if (!NumEventsInQueue) {
@@ -947,7 +947,7 @@ namespace NActors {
             }
         }
 
-        Y_VERIFY(bytesGenerated); // ensure we are not stalled in serialization
+        Y_ABORT_UNLESS(bytesGenerated); // ensure we are not stalled in serialization
     }
 
     ui32 TInterconnectSessionTCP::CalculateQueueUtilization() {

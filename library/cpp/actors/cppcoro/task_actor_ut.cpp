@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(TaskActor) {
     TTask<void> SimpleResponder() {
         for (;;) {
             auto ev = co_await TTaskActor::NextEvent;
-            Y_VERIFY(ev->GetTypeRewrite() == TEvRequest::EventType);
+            Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvRequest::EventType);
             auto* msg = ev->Get<TEvRequest>();
             Y_UNUSED(msg);
             TTaskActor::SelfId().Send(ev->Sender, new TEvResponse);

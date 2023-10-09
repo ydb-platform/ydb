@@ -31,7 +31,7 @@ void OnTerminate(int) {
 }
 
 THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId, ui32 threads, NMonitoring::TDynamicCounters &counters) {
-    Y_VERIFY(threads > 0 && threads < 100);
+    Y_ABORT_UNLESS(threads > 0 && threads < 100);
 
     auto setup = MakeHolder<TActorSystemSetup>();
 

@@ -298,7 +298,7 @@ namespace NActors {
 
         template<typename T>
         void AppendToLogSettings(NLog::EComponent minVal, NLog::EComponent maxVal, T func) {
-            Y_VERIFY(!IsInitialized);
+            Y_ABORT_UNLESS(!IsInitialized);
 
             for (const auto& pair : Nodes) {
                 pair.second->LogSettings->Append(minVal, maxVal, func);
@@ -332,7 +332,7 @@ namespace NActors {
             }, {}, simTimeout);
 
             if (simTimeout == TDuration::Max())
-                Y_VERIFY(handle);
+                Y_ABORT_UNLESS(handle);
 
             if (handle) {
                 return handle->Get<TEvent>();
@@ -364,7 +364,7 @@ namespace NActors {
             }, edgeFilter, simTimeout);
 
             if (simTimeout == TDuration::Max())
-                Y_VERIFY(handle);
+                Y_ABORT_UNLESS(handle);
 
             return handle;
         }
@@ -419,7 +419,7 @@ namespace NActors {
                 return true;
             }, {}, simTimeout);
             if (simTimeout == TDuration::Max())
-                Y_VERIFY(handle);
+                Y_ABORT_UNLESS(handle);
             if (handle) {
                 return std::make_tuple(handle->Type == TEvents::EventType
                                        ? handle->Get<TEvents>()

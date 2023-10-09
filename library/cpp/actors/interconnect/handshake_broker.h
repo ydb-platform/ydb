@@ -77,7 +77,7 @@ namespace NActors {
                 }
 
                 const size_t n = WaiterLookup.erase(waiter);
-                Y_VERIFY(n == 1);
+                Y_ABORT_UNLESS(n == 1);
 
                 Send(waiter, new TEvHandshakeBrokerPermit());
                 PermittedLeases.insert(waiter);
@@ -105,7 +105,7 @@ namespace NActors {
             } else {
                 const auto [it, inserted] = WaiterLookup.try_emplace(sender,
                         Waiters.insert(Waiters.end(), sender));
-                Y_VERIFY(inserted);
+                Y_ABORT_UNLESS(inserted);
             }
         }
 
@@ -114,7 +114,7 @@ namespace NActors {
             if (!PermittedLeases.erase(sender)) {
                 // Lease was not permitted yet, remove sender from Waiters queue
                 const auto it = WaiterLookup.find(sender);
-                Y_VERIFY(it != WaiterLookup.end());
+                Y_ABORT_UNLESS(it != WaiterLookup.end());
                 Waiters.erase(it->second);
                 WaiterLookup.erase(it);
             }

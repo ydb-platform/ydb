@@ -13,7 +13,7 @@ namespace NActors {
             do {
                 rc = kevent(KqDescriptor, ev, size, nullptr, 0, nullptr);
             } while (rc == -1 && errno == EINTR);
-            Y_VERIFY(rc != -1, "kevent() failed with %s", strerror(errno));
+            Y_ABORT_UNLESS(rc != -1, "kevent() failed with %s", strerror(errno));
         }
 
     public:
@@ -22,14 +22,14 @@ namespace NActors {
         {
             // create kqueue
             KqDescriptor = kqueue();
-            Y_VERIFY(KqDescriptor != -1, "kqueue() failed with %s", strerror(errno));
+            Y_ABORT_UNLESS(KqDescriptor != -1, "kqueue() failed with %s", strerror(errno));
 
             // set close-on-exit flag
             {
                 int flags = fcntl(KqDescriptor, F_GETFD);
-                Y_VERIFY(flags >= 0, "fcntl(F_GETFD) failed with %s", strerror(errno));
+                Y_ABORT_UNLESS(flags >= 0, "fcntl(F_GETFD) failed with %s", strerror(errno));
                 int rc = fcntl(KqDescriptor, F_SETFD, flags | FD_CLOEXEC);
-                Y_VERIFY(rc != -1, "fcntl(F_SETFD, +FD_CLOEXEC) failed with %s", strerror(errno));
+                Y_ABORT_UNLESS(rc != -1, "fcntl(F_SETFD, +FD_CLOEXEC) failed with %s", strerror(errno));
             }
 
             // register pipe's read end in poller

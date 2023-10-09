@@ -51,8 +51,8 @@ namespace NActors {
         }
 
         void TSettings::Append(EComponent minVal, EComponent maxVal, EComponentToStringFunc func) {
-            Y_VERIFY(minVal >= 0, "NLog::TSettings: minVal must be non-negative");
-            Y_VERIFY(maxVal > minVal, "NLog::TSettings: maxVal must be greater than minVal");
+            Y_ABORT_UNLESS(minVal >= 0, "NLog::TSettings: minVal must be non-negative");
+            Y_ABORT_UNLESS(maxVal > minVal, "NLog::TSettings: maxVal must be greater than minVal");
 
             // update bounds
             if (!MaxVal || minVal < MinVal) {
@@ -83,7 +83,7 @@ namespace NActors {
 
             // assign new names but validate if newly added members were not used before
             for (int i = minVal; i <= maxVal; i++) {
-                Y_VERIFY(!ComponentNames[i], "component name at %d already set: %s",
+                Y_ABORT_UNLESS(!ComponentNames[i], "component name at %d already set: %s",
                     i, ComponentNames[i].data());
                 ComponentNames[i] = func(i);
             }

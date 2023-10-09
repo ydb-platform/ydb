@@ -38,7 +38,7 @@ namespace {
         TVector<std::pair<TString, TValuePtr>> Entries;
 
         TValuePtr FindByName(TStringBuf name) {
-            Y_VERIFY(!!name);
+            Y_ABORT_UNLESS(!!name);
 
             for (unsigned i = 0; i < Entries.size(); ++i) {
                 if (Entries[i].first == name) {
@@ -49,7 +49,7 @@ namespace {
         }
 
         TString FindNameByPtr(TValuePtr value) {
-            Y_VERIFY(!!value);
+            Y_ABORT_UNLESS(!!value);
 
             for (unsigned i = 0; i < Entries.size(); ++i) {
                 if (Entries[i].second.Get() == value.Get()) {
@@ -61,7 +61,7 @@ namespace {
         }
 
         void Add(TValuePtr p) {
-            Y_VERIFY(!!p);
+            Y_ABORT_UNLESS(!!p);
 
             // Do not add twice
             for (unsigned i = 0; i < Entries.size(); ++i) {
@@ -175,27 +175,27 @@ struct TBusWww::TImpl {
     TMutex Mutex;
 
     void RegisterClientSession(TBusClientSessionPtr s) {
-        Y_VERIFY(!!s);
+        Y_ABORT_UNLESS(!!s);
         TGuard<TMutex> g(Mutex);
         ClientSessions.Add(s.Get());
         Queues.Add(s->GetQueue());
     }
 
     void RegisterServerSession(TBusServerSessionPtr s) {
-        Y_VERIFY(!!s);
+        Y_ABORT_UNLESS(!!s);
         TGuard<TMutex> g(Mutex);
         ServerSessions.Add(s.Get());
         Queues.Add(s->GetQueue());
     }
 
     void RegisterQueue(TBusMessageQueuePtr q) {
-        Y_VERIFY(!!q);
+        Y_ABORT_UNLESS(!!q);
         TGuard<TMutex> g(Mutex);
         Queues.Add(q);
     }
 
     void RegisterModule(TBusModule* module) {
-        Y_VERIFY(!!module);
+        Y_ABORT_UNLESS(!!module);
         TGuard<TMutex> g(Mutex);
 
         {
@@ -227,7 +227,7 @@ struct TBusWww::TImpl {
             serverSession = ServerSessions.FindByName(sessionName);
             session = serverSession.Get();
         }
-        Y_VERIFY(!!session);
+        Y_ABORT_UNLESS(!!session);
         return Queues.FindNameByPtr(session->GetQueue());
     }
 
@@ -831,7 +831,7 @@ struct TBusWwwHttpServer::TImpl: public THttpServer::ICallBack {
     THttpServer HttpServer;
 
     static THttpServer::TOptions MakeHttpServerOptions(unsigned port) {
-        Y_VERIFY(port > 0);
+        Y_ABORT_UNLESS(port > 0);
         THttpServer::TOptions r;
         r.Port = port;
         return r;

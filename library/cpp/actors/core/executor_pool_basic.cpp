@@ -162,7 +162,7 @@ namespace NActors {
 #endif
 
         TAtomic state = AtomicLoad(&threadCtx.WaitingFlag);
-        Y_VERIFY(state == TThreadCtx::WS_NONE, "WaitingFlag# %d", int(state));
+        Y_ABORT_UNLESS(state == TThreadCtx::WS_NONE, "WaitingFlag# %d", int(state));
 
         if (SpinThreshold > 0 && !needToBlock) {
             // spin configured period

@@ -1698,7 +1698,7 @@ namespace NTi {
     }
 
     const TPrimitiveType* TType::AsPrimitiveRaw() const noexcept {
-        Y_VERIFY(IsPrimitive());
+        Y_ABORT_UNLESS(IsPrimitive());
         return static_cast<const TPrimitiveType*>(this);
     }
 
@@ -1711,7 +1711,7 @@ namespace NTi {
     }
 
     const TVoidType* TType::AsVoidRaw() const noexcept {
-        Y_VERIFY(IsVoid());
+        Y_ABORT_UNLESS(IsVoid());
         return static_cast<const TVoidType*>(this);
     }
 
@@ -1724,7 +1724,7 @@ namespace NTi {
     }
 
     const TNullType* TType::AsNullRaw() const noexcept {
-        Y_VERIFY(IsNull());
+        Y_ABORT_UNLESS(IsNull());
         return static_cast<const TNullType*>(this);
     }
 
@@ -1737,7 +1737,7 @@ namespace NTi {
     }
 
     const TBoolType* TType::AsBoolRaw() const noexcept {
-        Y_VERIFY(IsBool());
+        Y_ABORT_UNLESS(IsBool());
         return static_cast<const TBoolType*>(this);
     }
 
@@ -1750,7 +1750,7 @@ namespace NTi {
     }
 
     const TInt8Type* TType::AsInt8Raw() const noexcept {
-        Y_VERIFY(IsInt8());
+        Y_ABORT_UNLESS(IsInt8());
         return static_cast<const TInt8Type*>(this);
     }
 
@@ -1763,7 +1763,7 @@ namespace NTi {
     }
 
     const TInt16Type* TType::AsInt16Raw() const noexcept {
-        Y_VERIFY(IsInt16());
+        Y_ABORT_UNLESS(IsInt16());
         return static_cast<const TInt16Type*>(this);
     }
 
@@ -1776,7 +1776,7 @@ namespace NTi {
     }
 
     const TInt32Type* TType::AsInt32Raw() const noexcept {
-        Y_VERIFY(IsInt32());
+        Y_ABORT_UNLESS(IsInt32());
         return static_cast<const TInt32Type*>(this);
     }
 
@@ -1789,7 +1789,7 @@ namespace NTi {
     }
 
     const TInt64Type* TType::AsInt64Raw() const noexcept {
-        Y_VERIFY(IsInt64());
+        Y_ABORT_UNLESS(IsInt64());
         return static_cast<const TInt64Type*>(this);
     }
 
@@ -1802,7 +1802,7 @@ namespace NTi {
     }
 
     const TUint8Type* TType::AsUint8Raw() const noexcept {
-        Y_VERIFY(IsUint8());
+        Y_ABORT_UNLESS(IsUint8());
         return static_cast<const TUint8Type*>(this);
     }
 
@@ -1815,7 +1815,7 @@ namespace NTi {
     }
 
     const TUint16Type* TType::AsUint16Raw() const noexcept {
-        Y_VERIFY(IsUint16());
+        Y_ABORT_UNLESS(IsUint16());
         return static_cast<const TUint16Type*>(this);
     }
 
@@ -1828,7 +1828,7 @@ namespace NTi {
     }
 
     const TUint32Type* TType::AsUint32Raw() const noexcept {
-        Y_VERIFY(IsUint32());
+        Y_ABORT_UNLESS(IsUint32());
         return static_cast<const TUint32Type*>(this);
     }
 
@@ -1841,7 +1841,7 @@ namespace NTi {
     }
 
     const TUint64Type* TType::AsUint64Raw() const noexcept {
-        Y_VERIFY(IsUint64());
+        Y_ABORT_UNLESS(IsUint64());
         return static_cast<const TUint64Type*>(this);
     }
 
@@ -1854,7 +1854,7 @@ namespace NTi {
     }
 
     const TFloatType* TType::AsFloatRaw() const noexcept {
-        Y_VERIFY(IsFloat());
+        Y_ABORT_UNLESS(IsFloat());
         return static_cast<const TFloatType*>(this);
     }
 
@@ -1867,7 +1867,7 @@ namespace NTi {
     }
 
     const TDoubleType* TType::AsDoubleRaw() const noexcept {
-        Y_VERIFY(IsDouble());
+        Y_ABORT_UNLESS(IsDouble());
         return static_cast<const TDoubleType*>(this);
     }
 
@@ -1880,7 +1880,7 @@ namespace NTi {
     }
 
     const TStringType* TType::AsStringRaw() const noexcept {
-        Y_VERIFY(IsString());
+        Y_ABORT_UNLESS(IsString());
         return static_cast<const TStringType*>(this);
     }
 
@@ -1893,7 +1893,7 @@ namespace NTi {
     }
 
     const TUtf8Type* TType::AsUtf8Raw() const noexcept {
-        Y_VERIFY(IsUtf8());
+        Y_ABORT_UNLESS(IsUtf8());
         return static_cast<const TUtf8Type*>(this);
     }
 
@@ -1906,7 +1906,7 @@ namespace NTi {
     }
 
     const TDateType* TType::AsDateRaw() const noexcept {
-        Y_VERIFY(IsDate());
+        Y_ABORT_UNLESS(IsDate());
         return static_cast<const TDateType*>(this);
     }
 
@@ -1919,7 +1919,7 @@ namespace NTi {
     }
 
     const TDatetimeType* TType::AsDatetimeRaw() const noexcept {
-        Y_VERIFY(IsDatetime());
+        Y_ABORT_UNLESS(IsDatetime());
         return static_cast<const TDatetimeType*>(this);
     }
 
@@ -1932,7 +1932,7 @@ namespace NTi {
     }
 
     const TTimestampType* TType::AsTimestampRaw() const noexcept {
-        Y_VERIFY(IsTimestamp());
+        Y_ABORT_UNLESS(IsTimestamp());
         return static_cast<const TTimestampType*>(this);
     }
 
@@ -1945,7 +1945,7 @@ namespace NTi {
     }
 
     const TTzDateType* TType::AsTzDateRaw() const noexcept {
-        Y_VERIFY(IsTzDate());
+        Y_ABORT_UNLESS(IsTzDate());
         return static_cast<const TTzDateType*>(this);
     }
 
@@ -1958,7 +1958,7 @@ namespace NTi {
     }
 
     const TTzDatetimeType* TType::AsTzDatetimeRaw() const noexcept {
-        Y_VERIFY(IsTzDatetime());
+        Y_ABORT_UNLESS(IsTzDatetime());
         return static_cast<const TTzDatetimeType*>(this);
     }
 
@@ -1971,7 +1971,7 @@ namespace NTi {
     }
 
     const TTzTimestampType* TType::AsTzTimestampRaw() const noexcept {
-        Y_VERIFY(IsTzTimestamp());
+        Y_ABORT_UNLESS(IsTzTimestamp());
         return static_cast<const TTzTimestampType*>(this);
     }
 
@@ -1984,7 +1984,7 @@ namespace NTi {
     }
 
     const TIntervalType* TType::AsIntervalRaw() const noexcept {
-        Y_VERIFY(IsInterval());
+        Y_ABORT_UNLESS(IsInterval());
         return static_cast<const TIntervalType*>(this);
     }
 
@@ -1997,7 +1997,7 @@ namespace NTi {
     }
 
     const TDecimalType* TType::AsDecimalRaw() const noexcept {
-        Y_VERIFY(IsDecimal());
+        Y_ABORT_UNLESS(IsDecimal());
         return static_cast<const TDecimalType*>(this);
     }
 
@@ -2010,7 +2010,7 @@ namespace NTi {
     }
 
     const TJsonType* TType::AsJsonRaw() const noexcept {
-        Y_VERIFY(IsJson());
+        Y_ABORT_UNLESS(IsJson());
         return static_cast<const TJsonType*>(this);
     }
 
@@ -2023,7 +2023,7 @@ namespace NTi {
     }
 
     const TYsonType* TType::AsYsonRaw() const noexcept {
-        Y_VERIFY(IsYson());
+        Y_ABORT_UNLESS(IsYson());
         return static_cast<const TYsonType*>(this);
     }
 
@@ -2036,7 +2036,7 @@ namespace NTi {
     }
 
     const TUuidType* TType::AsUuidRaw() const noexcept {
-        Y_VERIFY(IsUuid());
+        Y_ABORT_UNLESS(IsUuid());
         return static_cast<const TUuidType*>(this);
     }
 
@@ -2049,7 +2049,7 @@ namespace NTi {
     }
 
     const TOptionalType* TType::AsOptionalRaw() const noexcept {
-        Y_VERIFY(IsOptional());
+        Y_ABORT_UNLESS(IsOptional());
         return static_cast<const TOptionalType*>(this);
     }
 
@@ -2062,7 +2062,7 @@ namespace NTi {
     }
 
     const TListType* TType::AsListRaw() const noexcept {
-        Y_VERIFY(IsList());
+        Y_ABORT_UNLESS(IsList());
         return static_cast<const TListType*>(this);
     }
 
@@ -2075,7 +2075,7 @@ namespace NTi {
     }
 
     const TDictType* TType::AsDictRaw() const noexcept {
-        Y_VERIFY(IsDict());
+        Y_ABORT_UNLESS(IsDict());
         return static_cast<const TDictType*>(this);
     }
 
@@ -2088,7 +2088,7 @@ namespace NTi {
     }
 
     const TStructType* TType::AsStructRaw() const noexcept {
-        Y_VERIFY(IsStruct());
+        Y_ABORT_UNLESS(IsStruct());
         return static_cast<const TStructType*>(this);
     }
 
@@ -2101,7 +2101,7 @@ namespace NTi {
     }
 
     const TTupleType* TType::AsTupleRaw() const noexcept {
-        Y_VERIFY(IsTuple());
+        Y_ABORT_UNLESS(IsTuple());
         return static_cast<const TTupleType*>(this);
     }
 
@@ -2114,7 +2114,7 @@ namespace NTi {
     }
 
     const TVariantType* TType::AsVariantRaw() const noexcept {
-        Y_VERIFY(IsVariant());
+        Y_ABORT_UNLESS(IsVariant());
         return static_cast<const TVariantType*>(this);
     }
 
@@ -2127,7 +2127,7 @@ namespace NTi {
     }
 
     const TTaggedType* TType::AsTaggedRaw() const noexcept {
-        Y_VERIFY(IsTagged());
+        Y_ABORT_UNLESS(IsTagged());
         return static_cast<const TTaggedType*>(this);
     }
 

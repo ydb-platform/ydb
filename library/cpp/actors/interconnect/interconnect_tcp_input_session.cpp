@@ -18,7 +18,7 @@ namespace NActors {
 
     void TReceiveContext::TPerChannelContext::ApplyCatchBuffer() {
         if (auto buffer = std::exchange(XdcCatchBuffer, {})) {
-            Y_VERIFY(XdcCatchBytesRead >= buffer.size());
+            Y_ABORT_UNLESS(XdcCatchBytesRead >= buffer.size());
 
             const size_t offset = XdcCatchBytesRead % buffer.size();
             const char *begin = buffer.data();
@@ -109,10 +109,10 @@ namespace NActors {
         , Metrics(std::move(metrics))
         , DeadPeerTimeout(deadPeerTimeout)
     {
-        Y_VERIFY(Context);
-        Y_VERIFY(Socket);
-        Y_VERIFY(SessionId);
-        Y_VERIFY(!Params.UseExternalDataChannel == !XdcSocket);
+        Y_ABORT_UNLESS(Context);
+        Y_ABORT_UNLESS(Socket);
+        Y_ABORT_UNLESS(SessionId);
+        Y_ABORT_UNLESS(!Params.UseExternalDataChannel == !XdcSocket);
 
         Metrics->SetClockSkewMicrosec(0);
 
@@ -120,7 +120,7 @@ namespace NActors {
 
         // ensure that we do not spawn new session while the previous one is still alive
         TAtomicBase sessions = AtomicIncrement(Context->NumInputSessions);
-        Y_VERIFY(sessions == 1, "sessions# %" PRIu64, ui64(sessions));
+        Y_ABORT_UNLESS(sessions == 1, "sessions# %" PRIu64, ui64(sessions));
 
         // calculate number of bytes to catch
         for (auto& context : Context->ChannelArray) {
@@ -270,7 +270,7 @@ namespace NActors {
         if (!UpdateFromInputSession) {
             UpdateFromInputSession = MakeHolder<TEvUpdateFromInputSession>(ConfirmedByInput, numDataBytes, ping);
         } else {
-            Y_VERIFY(ConfirmedByInput >= UpdateFromInputSession->ConfirmedByInput);
+            Y_ABORT_UNLESS(ConfirmedByInput >= UpdateFromInputSession->ConfirmedByInput);
             UpdateFromInputSession->ConfirmedByInput = ConfirmedByInput;
             UpdateFromInputSession->NumDataBytes += numDataBytes;
             UpdateFromInputSession->Ping = Min(UpdateFromInputSession->Ping, ping);
@@ -303,7 +303,7 @@ namespace NActors {
                         break;
 
                     case EUpdateState::INFLIGHT_AND_PENDING:
-                        Y_VERIFY(UpdateFromInputSession);
+                        Y_ABORT_UNLESS(UpdateFromInputSession);
                         break;
 
                     default:
@@ -328,7 +328,7 @@ namespace NActors {
     void TInputSessionTCP::ProcessHeader() {
         TTcpPacketHeader_v2 header;
         const bool success = IncomingData.ExtractFrontPlain(&header, sizeof(header));
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
         PayloadSize = header.PayloadLength;
         const ui64 serial = header.Serial;
         const ui64 confirm = header.Confirm;
@@ -444,7 +444,7 @@ namespace NActors {
             if (part.IsXdc()) { // external data channel command packet
                 XdcCommands.resize(part.Size);
                 const bool success = Payload.ExtractFrontPlain(XdcCommands.data(), XdcCommands.size());
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
                 ProcessXdcCommand(channel, context);
             } else if (IgnorePayload) { // throw payload out
                 Payload.EraseFront(part.Size);
@@ -459,7 +459,7 @@ namespace NActors {
                 }
 
                 const bool success = Payload.ExtractFrontPlain(&v2, sizeof(v2));
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
 
                 pendingEvent.EventData = TEventData{
                     v2.Type,
@@ -511,7 +511,7 @@ namespace NActors {
             numXdcBytesRead -= n;
 
             if (front.XdcUnreadBytes) { // we haven't finished this packet yet
-                Y_VERIFY(!numXdcBytesRead);
+                Y_ABORT_UNLESS(!numXdcBytesRead);
                 break;
             }
 
@@ -548,7 +548,7 @@ namespace NActors {
                         pendingEvent.SerializationInfo.Sections.push_back(TEventSectionInfo{headroom, size, tailroom,
                             alignment, isInline});
 
-                        Y_VERIFY(!isInline || Params.UseXdcShuffle);
+                        Y_ABORT_UNLESS(!isInline || Params.UseXdcShuffle);
                         if (!isInline) {
                             // allocate buffer and push it into the payload
                             auto buffer = TRcBuf::Uninitialized(size, headroom, tailroom);
@@ -653,7 +653,7 @@ namespace NActors {
                 rope.ExtractFront(rope.size(), &payload);
             }
             // and ensure there is no unprocessed external payload
-            Y_VERIFY(!pendingEvent.ExternalPayload);
+            Y_ABORT_UNLESS(!pendingEvent.ExternalPayload);
 
 #if IC_FORCE_HARDENED_PACKET_CHECKS
             if (descr.Len != payload.GetSize()) {
@@ -703,7 +703,7 @@ namespace NActors {
                     return;
 
                 case EUpdateState::CONFIRMING:
-                    Y_VERIFY(UpdateFromInputSession);
+                    Y_ABORT_UNLESS(UpdateFromInputSession);
                     if (Context->UpdateState.compare_exchange_weak(state, EUpdateState::INFLIGHT)) {
                         Send(SessionId, UpdateFromInputSession.Release());
                         return;
@@ -776,14 +776,14 @@ namespace NActors {
             return false;
         }
 
-        Y_VERIFY(recvres > 0);
+        Y_ABORT_UNLESS(recvres > 0);
         Metrics->AddTotalBytesRead(recvres);
         BytesReadFromSocket += recvres;
 
         size_t numBuffersCovered = 0;
 
         while (recvres) {
-            Y_VERIFY(!Buffers.empty());
+            Y_ABORT_UNLESS(!Buffers.empty());
             auto& buffer = Buffers.front();
             const size_t bytes = Min<size_t>(recvres, buffer.size());
             recvres -= bytes;
@@ -949,14 +949,14 @@ namespace NActors {
             }
         }
 
-        Y_VERIFY(recvres > 0);
+        Y_ABORT_UNLESS(recvres > 0);
         Metrics->AddTotalBytesRead(recvres);
         *numDataBytes += recvres;
         BytesReadFromXdcSocket += recvres;
 
         // cut the XdcInputQ deque
         for (size_t bytesToCut = recvres; bytesToCut; ) {
-            Y_VERIFY(!XdcInputQ.empty());
+            Y_ABORT_UNLESS(!XdcInputQ.empty());
             auto& [channel, span] = XdcInputQ.front();
             size_t n = Min(bytesToCut, span.size());
             bytesToCut -= n;
@@ -964,7 +964,7 @@ namespace NActors {
                 XdcInputQ.pop_front();
             } else {
                 span = span.SubSpan(n, Max<size_t>());
-                Y_VERIFY(!bytesToCut);
+                Y_ABORT_UNLESS(!bytesToCut);
             }
 
             Y_VERIFY_DEBUG(n);

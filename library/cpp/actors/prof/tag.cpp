@@ -30,21 +30,21 @@ namespace NProfiling {
         }
 
         ui32 MakeTag(const char* s) {
-            Y_VERIFY(s);
+            Y_ABORT_UNLESS(s);
             with_lock (Mutex) {
                 return Tags.string_to_atom(s);
             }
         }
 
         ui32 MakeTags(const TVector<const char*>& ss) {
-            Y_VERIFY(ss);
+            Y_ABORT_UNLESS(ss);
             with_lock (Mutex) {
                 ui32 baseTag = Tags.string_to_atom(ss[0]);
                 ui32 nextTag = baseTag + 1;
                 for (auto i = ss.begin() + 1; i != ss.end(); ++i, ++nextTag) {
-                    Y_VERIFY(*i);
+                    Y_ABORT_UNLESS(*i);
                     ui32 ctag = Tags.string_to_atom(*i);
-                    Y_VERIFY(ctag == nextTag);
+                    Y_ABORT_UNLESS(ctag == nextTag);
                 }
                 return baseTag;
             }

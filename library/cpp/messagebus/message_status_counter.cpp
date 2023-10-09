@@ -28,7 +28,7 @@ TString TMessageStatusCounter::PrintToString() const {
     bool hasZeros = false;
     for (size_t i = 0; i < MESSAGE_STATUS_COUNT; ++i) {
         if (i == MESSAGE_OK) {
-            Y_VERIFY(Counts[i] == 0);
+            Y_ABORT_UNLESS(Counts[i] == 0);
             continue;
         }
         if (Counts[i] != 0) {
@@ -59,7 +59,7 @@ void TMessageStatusCounter::FillErrorsProtobuf(TConnectionStatusMonRecord* statu
     status->clear_errorcountbystatus();
     for (size_t i = 0; i < MESSAGE_STATUS_COUNT; ++i) {
         if (i == MESSAGE_OK) {
-            Y_VERIFY(Counts[i] == 0);
+            Y_ABORT_UNLESS(Counts[i] == 0);
             continue;
         }
         if (Counts[i] != 0) {

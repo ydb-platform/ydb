@@ -2,13 +2,13 @@
 
 namespace NUnifiedAgent {
     void TClock::Configure() {
-        Y_VERIFY(!Configured_);
+        Y_ABORT_UNLESS(!Configured_);
 
         Configured_ = true;
     }
 
     void TClock::SetBase(TInstant value) {
-        Y_VERIFY(Configured_);
+        Y_ABORT_UNLESS(Configured_);
 
         Base_.store(value.GetValue());
     }
@@ -18,13 +18,13 @@ namespace NUnifiedAgent {
     }
 
     void TClock::ResetBaseWithShift() {
-        Y_VERIFY(Configured_);
+        Y_ABORT_UNLESS(Configured_);
 
         Shift_.store(static_cast<i64>(Base_.exchange(0)) - static_cast<i64>(::Now().GetValue()));
     }
 
     void TClock::SetShift(TDuration value) {
-        Y_VERIFY(Configured_);
+        Y_ABORT_UNLESS(Configured_);
 
         Shift_.fetch_add(value.GetValue());
     }

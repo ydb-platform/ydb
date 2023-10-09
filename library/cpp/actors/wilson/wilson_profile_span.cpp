@@ -148,9 +148,9 @@ TProfileSpan::TGuard::~TGuard() {
     if (!Owner.Enabled) {
         return;
     }
-    Y_VERIFY(CurrentNodeDuration->IsDouble());
+    Y_ABORT_UNLESS(CurrentNodeDuration->IsDouble());
     CurrentNodeDuration->SetValue((Now() - Start).MicroSeconds() * 0.000001 + CurrentNodeDuration->GetDoubleRobust());
-    Y_VERIFY(Owner.CurrentJsonPath.size());
+    Y_ABORT_UNLESS(Owner.CurrentJsonPath.size());
     Owner.CurrentJsonPath.pop_back();
     if (Owner.CurrentJsonPath.empty()) {
         Owner.LastNoGuards = Now();

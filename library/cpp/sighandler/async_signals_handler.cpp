@@ -33,7 +33,7 @@ namespace {
         while (totalBytesWritten != bufsize) {
             const ssize_t result = write(fd, (const char*)buf + totalBytesWritten, bufsize - totalBytesWritten);
 
-            Y_VERIFY(result >= 0 || (result == -1 && errno == EINTR), "write failed: %s (errno = %d)", strerror(errno), errno);
+            Y_ABORT_UNLESS(result >= 0 || (result == -1 && errno == EINTR), "write failed: %s (errno = %d)", strerror(errno), errno);
             totalBytesWritten += static_cast<size_t>(result);
         }
     }
@@ -72,7 +72,7 @@ namespace {
                 ui8 signum;
                 const ssize_t bytesRead = read(SignalPipeReadFd, &signum, 1);
 
-                Y_VERIFY(bytesRead >= 0 || (bytesRead == -1 && errno == EINTR), "read failed: %s (errno = %d)", strerror(errno), errno);
+                Y_ABORT_UNLESS(bytesRead >= 0 || (bytesRead == -1 && errno == EINTR), "read failed: %s (errno = %d)", strerror(errno), errno);
 
                 if (AtomicAdd(ShouldDie, 0) != 0) {
                     DieEvent.Signal();
@@ -90,7 +90,7 @@ namespace {
                     TReadGuard dnd(HandlersLock);
 
                     const TEventHandlerPtr* handler = Handlers.FindPtr(signum);
-                    Y_VERIFY(handler && handler->Get(), "Async signal handler is not set, it's a bug!");
+                    Y_ABORT_UNLESS(handler && handler->Get(), "Async signal handler is not set, it's a bug!");
                     handler->Get()->Handle(signum);
                 }
             }
@@ -127,16 +127,16 @@ namespace {
 
             if (result != 0 && errno == ENOSYS) { // linux older than 2.6.27 returns "not implemented"
 #endif
-                Y_VERIFY(pipe(filedes) == 0, "pipe failed: %s (errno = %d)", strerror(errno), errno);
+                Y_ABORT_UNLESS(pipe(filedes) == 0, "pipe failed: %s (errno = %d)", strerror(errno), errno);
 
                 SignalPipeReadFd = filedes[0];
                 SIGNAL_PIPE_WRITE_FD = filedes[1];
 
-                Y_VERIFY(fcntl(SignalPipeReadFd, F_SETFD, FD_CLOEXEC) == 0, "fcntl failed: %s (errno = %d)", strerror(errno), errno);
-                Y_VERIFY(fcntl(SIGNAL_PIPE_WRITE_FD, F_SETFD, FD_CLOEXEC) == 0, "fcntl failed: %s (errno = %d)", strerror(errno), errno);
+                Y_ABORT_UNLESS(fcntl(SignalPipeReadFd, F_SETFD, FD_CLOEXEC) == 0, "fcntl failed: %s (errno = %d)", strerror(errno), errno);
+                Y_ABORT_UNLESS(fcntl(SIGNAL_PIPE_WRITE_FD, F_SETFD, FD_CLOEXEC) == 0, "fcntl failed: %s (errno = %d)", strerror(errno), errno);
 #ifdef _linux_
             } else {
-                Y_VERIFY(result == 0, "pipe2 failed: %s (errno = %d)", strerror(errno), errno);
+                Y_ABORT_UNLESS(result == 0, "pipe2 failed: %s (errno = %d)", strerror(errno), errno);
                 SignalPipeReadFd = filedes[0];
                 SIGNAL_PIPE_WRITE_FD = filedes[1];
             }
@@ -177,7 +177,7 @@ namespace {
                 a.sa_sigaction = PipeWriterSignalHandler;
                 a.sa_flags = SA_SIGINFO | SA_RESTART;
 
-                Y_VERIFY(!sigaction(signum, &a, nullptr), "sigaction failed: %s (errno = %d)", strerror(errno), errno);
+                Y_ABORT_UNLESS(!sigaction(signum, &a, nullptr), "sigaction failed: %s (errno = %d)", strerror(errno), errno);
             }
         }
     };

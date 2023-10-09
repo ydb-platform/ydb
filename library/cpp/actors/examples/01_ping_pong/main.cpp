@@ -81,8 +81,8 @@ public:
 };
 
 THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 threads, ui32 pools) {
-    Y_VERIFY(threads > 0 && threads < 100);
-    Y_VERIFY(pools > 0 && pools < 10);
+    Y_ABORT_UNLESS(threads > 0 && threads < 100);
+    Y_ABORT_UNLESS(pools > 0 && pools < 10);
 
     auto setup = MakeHolder<TActorSystemSetup>();
 

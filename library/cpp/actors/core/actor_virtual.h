@@ -21,7 +21,7 @@ public:
     {
         Y_VERIFY_DEBUG(dynamic_cast<TEvent*>(Handle->GetBase()));
         Event = static_cast<TEvent*>(Handle->GetBase());
-        Y_VERIFY(Event);
+        Y_ABORT_UNLESS(Event);
     }
 };
 

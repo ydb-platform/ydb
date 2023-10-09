@@ -52,21 +52,21 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
                     SendMessage(ctx);
                 }
             } else {
-                Y_VERIFY(record != InFly.end());
+                Y_ABORT_UNLESS(record != InFly.end());
             }
         }
 
         void Handle(TEvTestResponse::TPtr& ev, const TActorContext& ctx) override {
-            Y_VERIFY(InFly);
+            Y_ABORT_UNLESS(InFly);
             const NInterconnectTest::TEvTestResponse& record = ev->Get()->Record;
-            Y_VERIFY(record.HasConfirmedSequenceNumber());
+            Y_ABORT_UNLESS(record.HasConfirmedSequenceNumber());
             if (!(SendFlags & IEventHandle::FlagGenerateUnsureUndelivered)) {
                 while (record.GetConfirmedSequenceNumber() != InFly.front()) {
                     InFly.pop_front();
                     --InFlySize;
                 }
             }
-            Y_VERIFY(record.GetConfirmedSequenceNumber() == InFly.front(), "got# %" PRIu64 " expected# %" PRIu64,
+            Y_ABORT_UNLESS(record.GetConfirmedSequenceNumber() == InFly.front(), "got# %" PRIu64 " expected# %" PRIu64,
                      record.GetConfirmedSequenceNumber(), InFly.front());
             InFly.pop_front();
             --InFlySize;
@@ -87,8 +87,8 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
 
         void Handle(TEvTest::TPtr& ev, const TActorContext& /*ctx*/) override {
             const NInterconnectTest::TEvTest& m = ev->Get()->Record;
-            Y_VERIFY(m.HasSequenceNumber());
-            Y_VERIFY(m.GetSequenceNumber() >= ReceivedCount, "got #%" PRIu64 " expected at least #%" PRIu64,
+            Y_ABORT_UNLESS(m.HasSequenceNumber());
+            Y_ABORT_UNLESS(m.GetSequenceNumber() >= ReceivedCount, "got #%" PRIu64 " expected at least #%" PRIu64,
                      m.GetSequenceNumber(), ReceivedCount);
             ++ReceivedCount;
             SenderNode->Send(ev->Sender, new TEvTestResponse(m.GetSequenceNumber()));

@@ -146,7 +146,7 @@ namespace NActors {
 
         ui32 GetThreads(ui32 poolId) const {
             auto result = GetThreadsOptional(poolId);
-            Y_VERIFY(result, "undefined pool id: %" PRIu32, (ui32)poolId);
+            Y_ABORT_UNLESS(result, "undefined pool id: %" PRIu32, (ui32)poolId);
             return *result;
         }
     };
@@ -218,7 +218,7 @@ namespace NActors {
 
         TCpuAllocationConfig(const TCpuMask& available, const TCpuManagerConfig& cfg) {
             for (const TUnitedExecutorPoolConfig& pool : cfg.United) {
-                Y_VERIFY(pool.PoolId < MaxPools, "wrong PoolId of united executor pool: %s(%d)",
+                Y_ABORT_UNLESS(pool.PoolId < MaxPools, "wrong PoolId of united executor pool: %s(%d)",
                     pool.PoolName.c_str(), (pool.PoolId));
             }
             ui32 allocated[MaxPools] = {0};
@@ -240,7 +240,7 @@ namespace NActors {
                 }
             }
             for (const TUnitedExecutorPoolConfig& pool : cfg.United) {
-                Y_VERIFY(allocated[pool.PoolId] > 0, "unable to allocate cpu for united executor pool: %s(%d)",
+                Y_ABORT_UNLESS(allocated[pool.PoolId] > 0, "unable to allocate cpu for united executor pool: %s(%d)",
                     pool.PoolName.c_str(), (pool.PoolId));
             }
         }

@@ -13,7 +13,7 @@ namespace NUnifiedAgent {
             TEnumNames* result = new TEnumNames(names.size());
             size_t index = 0;
             for (const auto& p: names) {
-                Y_VERIFY(static_cast<size_t>(p.first) == index);
+                Y_ABORT_UNLESS(static_cast<size_t>(p.first) == index);
                 (*result)[index++] = &p.second;
             }
             return result;

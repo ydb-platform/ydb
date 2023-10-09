@@ -48,7 +48,7 @@ namespace {
 }
 
 TString TDurationHistogram::LabelBefore(unsigned i) {
-    Y_VERIFY(i < Buckets);
+    Y_ABORT_UNLESS(i < Buckets);
 
     TDuration d = Singleton<TMarks>()->Marks[i];
 

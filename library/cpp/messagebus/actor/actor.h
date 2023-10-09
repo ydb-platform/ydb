@@ -82,14 +82,14 @@ namespace NActor {
         void ScheduleHereAtMostOnce() {
             if (Tasks.AddTask()) {
                 bool fetched = Tasks.FetchTask();
-                Y_VERIFY(fetched, "happens");
+                Y_ABORT_UNLESS(fetched, "happens");
 
                 DoAct();
 
                 // if someone added more tasks, schedule them
                 if (Tasks.FetchTask()) {
                     bool added = Tasks.AddTask();
-                    Y_VERIFY(!added, "happens");
+                    Y_ABORT_UNLESS(!added, "happens");
                     EnqueueWork();
                 }
             }

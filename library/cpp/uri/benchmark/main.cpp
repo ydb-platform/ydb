@@ -28,7 +28,7 @@ Y_CPU_BENCHMARK(Parsing, iface) {
             NUri::TUri uri;
             auto parseResult = uri.Parse(url, uri.FeaturesAll);
             Y_DO_NOT_OPTIMIZE_AWAY(parseResult);
-            Y_VERIFY(parseResult == NUri::TState::ParsedOK, "cannot parse %s: %d", url.c_str(), static_cast<ui32>(parseResult));
+            Y_ABORT_UNLESS(parseResult == NUri::TState::ParsedOK, "cannot parse %s: %d", url.c_str(), static_cast<ui32>(parseResult));
         }
     }
 }
@@ -38,7 +38,7 @@ Y_CPU_BENCHMARK(ParsingAndCopying, iface) {
         for (auto&& url : URLS) {
             NUri::TUri uri;
             auto parseResult = uri.Parse(url, uri.FeaturesAll);
-            Y_VERIFY(parseResult == NUri::TState::ParsedOK, "cannot parse %s: %d", url.c_str(), static_cast<ui32>(parseResult));
+            Y_ABORT_UNLESS(parseResult == NUri::TState::ParsedOK, "cannot parse %s: %d", url.c_str(), static_cast<ui32>(parseResult));
             auto copy = uri;
             Y_DO_NOT_OPTIMIZE_AWAY(copy);
         }

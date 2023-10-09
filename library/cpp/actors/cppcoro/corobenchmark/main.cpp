@@ -62,7 +62,7 @@ Y_CPU_BENCHMARK(TaskCalls, iface) {
     AwaitThenCallback(IterateTaskValues(iface.Iterations()), [&]{
         finished = true;
     });
-    Y_VERIFY(finished);
+    Y_ABORT_UNLESS(finished);
 }
 
 Y_CPU_BENCHMARK(CoroAwaits, iface) {

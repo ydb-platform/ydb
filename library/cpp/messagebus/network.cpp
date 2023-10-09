@@ -11,7 +11,7 @@ using namespace NBus::NPrivate;
 
 namespace {
     TBindResult BindOnPortProto(int port, int af, bool reusePort) {
-        Y_VERIFY(af == AF_INET || af == AF_INET6, "wrong af");
+        Y_ABORT_UNLESS(af == AF_INET || af == AF_INET6, "wrong af");
 
         SOCKET fd = ::socket(af, SOCK_STREAM, 0);
         if (fd == INVALID_SOCKET) {
@@ -82,7 +82,7 @@ namespace {
     }
 
     std::pair<unsigned, TVector<TBindResult>> AggregateBindResults(TBindResult&& r1, TBindResult&& r2) {
-        Y_VERIFY(r1.Addr.GetPort() == r2.Addr.GetPort(), "internal");
+        Y_ABORT_UNLESS(r1.Addr.GetPort() == r2.Addr.GetPort(), "internal");
         std::pair<unsigned, TVector<TBindResult>> r;
         r.second.reserve(2);
 
@@ -138,7 +138,7 @@ ssize_t NBus::NPrivate::SocketSend(SOCKET s, TArrayRef<const char> data) {
 #endif
     ssize_t r = ::send(s, data.data(), data.size(), flags);
     if (r < 0) {
-        Y_VERIFY(LastSystemError() != EBADF, "bad fd");
+        Y_ABORT_UNLESS(LastSystemError() != EBADF, "bad fd");
     }
     return r;
 }
@@ -150,7 +150,7 @@ ssize_t NBus::NPrivate::SocketRecv(SOCKET s, TArrayRef<char> buffer) {
 #endif
     ssize_t r = ::recv(s, buffer.data(), buffer.size(), flags);
     if (r < 0) {
-        Y_VERIFY(LastSystemError() != EBADF, "bad fd");
+        Y_ABORT_UNLESS(LastSystemError() != EBADF, "bad fd");
     }
     return r;
 }

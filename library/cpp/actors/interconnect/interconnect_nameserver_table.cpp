@@ -21,7 +21,7 @@ namespace NActors {
             : TInterconnectNameserverBase<TInterconnectNameserverTable>(&TInterconnectNameserverTable::StateFunc, setup->StaticNodeTable)
             , Config(setup)
         {
-            Y_VERIFY(Config->IsEntriesUnique());
+            Y_ABORT_UNLESS(Config->IsEntriesUnique());
         }
 
         STFUNC(StateFunc) {

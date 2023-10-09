@@ -150,7 +150,7 @@ TAutoPtr<TBusMessage> NewRequest() {
 void CheckRequest(TPerftestRequest* request) {
     const TString& data = request->Record.GetData();
     for (size_t i = 0; i != data.size(); ++i) {
-        Y_VERIFY(data.at(i) == '?', "must be question mark");
+        Y_ABORT_UNLESS(data.at(i) == '?', "must be question mark");
     }
 }
 
@@ -164,7 +164,7 @@ TAutoPtr<TPerftestResponse> NewResponse(TPerftestRequest* request) {
 void CheckResponse(TPerftestResponse* response) {
     const TString& data = response->Record.GetData();
     for (size_t i = 0; i != data.size(); ++i) {
-        Y_VERIFY(data.at(i) == '.', "must be dot");
+        Y_ABORT_UNLESS(data.at(i) == '.', "must be dot");
     }
 }
 
@@ -416,8 +416,8 @@ public:
         : TPerftestServerCommon("server")
         , TBusModule("fast")
     {
-        Y_VERIFY(CreatePrivateSessions(Bus.Get()), "failed to initialize dupdetect module");
-        Y_VERIFY(StartInput(), "failed to start input");
+        Y_ABORT_UNLESS(CreatePrivateSessions(Bus.Get()), "failed to initialize dupdetect module");
+        Y_ABORT_UNLESS(StartInput(), "failed to start input");
     }
 
     ~TPerftestUsingModule() override {
@@ -479,7 +479,7 @@ TVector<TNetAddr> ParseNodes(const TString nodes) {
 
     for (int i = 0; i < int(numh); i++) {
         const TNetworkAddress& networkAddress = ParseNetworkAddress(hosts[i].data());
-        Y_VERIFY(networkAddress.Begin() != networkAddress.End(), "no addresses");
+        Y_ABORT_UNLESS(networkAddress.Begin() != networkAddress.End(), "no addresses");
         r.push_back(TNetAddr(networkAddress, &*networkAddress.Begin()));
     }
 

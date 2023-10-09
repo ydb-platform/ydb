@@ -205,7 +205,7 @@ namespace NLWTrace {
 
         void AddShuttle(const TShuttlePtr& shuttle) {
             NotConcurrent([&] (TShuttlePtr& head) {
-                Y_VERIFY(!shuttle->GetNext());
+                Y_ABORT_UNLESS(!shuttle->GetNext());
                 shuttle->SetNext(head);
                 head = shuttle;
             });

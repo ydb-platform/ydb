@@ -475,7 +475,7 @@ namespace NActors {
                 }
 
                 ~TRecurseContext() {
-                    Y_VERIFY(TlsActivationContext == this, "TlsActivationContext mismatch; probably InvokeOtherActor was invoked from a coroutine");
+                    Y_ABORT_UNLESS(TlsActivationContext == this, "TlsActivationContext mismatch; probably InvokeOtherActor was invoked from a coroutine");
                     TlsActivationContext = Prev;
                 }
             } context(actor.SelfId());
@@ -902,7 +902,7 @@ namespace NActors {
 
     template <ESendingType SendingType>
     TActorId IActor::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId) const noexcept {
-        Y_VERIFY(actor);
+        Y_ABORT_UNLESS(actor);
         return TlsActivationContext->ExecutorThread.RegisterActor<SendingType>(actor, mailboxType, poolId, SelfActorId);
     }
 
@@ -910,8 +910,8 @@ namespace NActors {
     template <ESendingType SendingType>
     TActorId TActorSystem::Register(IActor* actor, TMailboxType::EType mailboxType, ui32 executorPool,
                         ui64 revolvingCounter, const TActorId& parentId) {
-        Y_VERIFY(actor);
-        Y_VERIFY(executorPool < ExecutorPoolCount, "executorPool# %" PRIu32 ", ExecutorPoolCount# %" PRIu32,
+        Y_ABORT_UNLESS(actor);
+        Y_ABORT_UNLESS(executorPool < ExecutorPoolCount, "executorPool# %" PRIu32 ", ExecutorPoolCount# %" PRIu32,
                 (ui32)executorPool, (ui32)ExecutorPoolCount);
         if constexpr (SendingType == ESendingType::Common) {
             return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);

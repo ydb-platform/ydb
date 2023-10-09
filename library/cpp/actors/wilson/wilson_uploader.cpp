@@ -172,7 +172,7 @@ namespace NWilson {
             }
 
             void HandleWakeup() {
-                Y_VERIFY(WakeupScheduled);
+                Y_ABORT_UNLESS(WakeupScheduled);
                 WakeupScheduled = false;
                 CheckIfDone();
                 TryToSend();

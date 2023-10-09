@@ -21,7 +21,7 @@ namespace NActors {
         TTimerDescriptor()
             : Descriptor(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK))
         {
-            Y_VERIFY(Descriptor != -1, "timerfd_create() failed with %s", strerror(errno));
+            Y_ABORT_UNLESS(Descriptor != -1, "timerfd_create() failed with %s", strerror(errno));
         }
 
         ~TTimerDescriptor() override {
@@ -92,9 +92,9 @@ namespace NActors {
             new_time.it_value.tv_nsec = Cfg.ResolutionMicroseconds * 1000;
             new_time.it_interval.tv_nsec = Cfg.ResolutionMicroseconds * 1000;
             int ret = timerfd_settime(TimerDescriptor->GetDescriptor(), 0, &new_time, NULL);
-            Y_VERIFY(ret != -1, "timerfd_settime() failed with %s", strerror(errno));
+            Y_ABORT_UNLESS(ret != -1, "timerfd_settime() failed with %s", strerror(errno));
             const bool success = ctx.Send(PollerActor, new TEvPollerRegister(TimerDescriptor, SelfId(), {}));
-            Y_VERIFY(success);
+            Y_ABORT_UNLESS(success);
 
             RealTime = RelaxedLoad(CurrentTimestamp);
             MonotonicTime = RelaxedLoad(CurrentMonotonic);
@@ -141,7 +141,7 @@ namespace NActors {
                         continue;
                     }
                 }
-                Y_VERIFY(bytesRead == sizeof(expired), "Error while reading from timerfd, strerror# %s", strerror(errno));
+                Y_ABORT_UNLESS(bytesRead == sizeof(expired), "Error while reading from timerfd, strerror# %s", strerror(errno));
                 UpdateTime();
 
                 ui32 eventsGottenFromQueues = 0;

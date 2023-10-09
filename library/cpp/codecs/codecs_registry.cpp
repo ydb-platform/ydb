@@ -24,7 +24,7 @@ namespace NCodecs {
         void TCodecRegistry::RegisterFactory(TFactoryPtr fac) {
             TVector<TString> names = fac->ListNames();
             for (const auto& name : names) {
-                Y_VERIFY(!Registry.contains(name), "already has %s", name.data());
+                Y_ABORT_UNLESS(!Registry.contains(name), "already has %s", name.data());
                 Registry[name] = fac;
             }
         }

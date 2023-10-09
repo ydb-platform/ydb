@@ -15,7 +15,7 @@ namespace NInterconnect {
 
     TAddress::TAddress(NAddr::IRemoteAddr& addr) {
         socklen_t len = addr.Len();
-        Y_VERIFY(len <= sizeof(Addr));
+        Y_ABORT_UNLESS(len <= sizeof(Addr));
         memcpy(&Addr.Generic, addr.Addr(), len);
     }
 

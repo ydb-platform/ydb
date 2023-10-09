@@ -57,10 +57,10 @@ Y_UNIT_TEST_SUITE(LargeMessage) {
             const auto& record = ev->Get()->Record;
             Cerr << "RECEIVED TEvTest\n";
             if (record.GetSequenceNumber() == 1) {
-                Y_VERIFY(!SessionId);
+                Y_ABORT_UNLESS(!SessionId);
                 SessionId = ev->InterconnectSession;
             } else if (record.GetSequenceNumber() == 3) {
-                Y_VERIFY(SessionId != ev->InterconnectSession);
+                Y_ABORT_UNLESS(SessionId != ev->InterconnectSession);
                 Done.Signal();
             } else {
                 Y_FAIL("incorrect sequence number");

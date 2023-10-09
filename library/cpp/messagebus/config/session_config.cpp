@@ -31,12 +31,12 @@ static int ParseToSForMessageBus(const char* option) {
     TStringBuf str(option);
     if (str.StartsWith("0x")) {
         str = str.Tail(2);
-        Y_VERIFY(str.length() == 2, "ToS must be a number between 0x00 and 0xFF");
+        Y_ABORT_UNLESS(str.length() == 2, "ToS must be a number between 0x00 and 0xFF");
         tos = String2Byte(str.data());
     } else {
         tos = FromString<int>(option);
     }
-    Y_VERIFY(tos >= 0 && tos <= 255, "ToS must be between 0x00 and 0xFF");
+    Y_ABORT_UNLESS(tos >= 0 && tos <= 255, "ToS must be between 0x00 and 0xFF");
     return tos;
 }
 

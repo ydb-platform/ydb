@@ -27,7 +27,7 @@ public:
 
     void Subscribe() {
         Cerr << (TStringBuilder() << "Subscribe" << Endl);
-        Y_VERIFY(!SubscribeInFlight);
+        Y_ABORT_UNLESS(!SubscribeInFlight);
         SubscribeInFlight = true;
         Send(TActivationContext::InterconnectProxy(Recipient.NodeId()), new TEvents::TEvSubscribe);
     }
@@ -57,11 +57,11 @@ public:
 //        Cerr << (TStringBuilder() << "Receive# " << ev->Cookie << Endl);
         if (const auto it = InFlight.find(ev->Cookie); it != InFlight.end()) {
             auto& [s2cIt, hash] = it->second;
-            Y_VERIFY(hash == ev->GetChainBuffer()->GetString());
+            Y_ABORT_UNLESS(hash == ev->GetChainBuffer()->GetString());
             SessionToCookie.erase(s2cIt);
             InFlight.erase(it);
         } else if (const auto it = Tentative.find(ev->Cookie); it != Tentative.end()) {
-            Y_VERIFY(it->second == ev->GetChainBuffer()->GetString());
+            Y_ABORT_UNLESS(it->second == ev->GetChainBuffer()->GetString());
             Tentative.erase(it);
         } else {
             Y_FAIL("Cookie# %" PRIu64, ev->Cookie);
@@ -71,9 +71,9 @@ public:
 
     void Handle(TEvInterconnect::TEvNodeConnected::TPtr ev) {
         Cerr << (TStringBuilder() << "TEvNodeConnected" << Endl);
-        Y_VERIFY(SubscribeInFlight);
+        Y_ABORT_UNLESS(SubscribeInFlight);
         SubscribeInFlight = false;
-        Y_VERIFY(!SessionId);
+        Y_ABORT_UNLESS(!SessionId);
         SessionId = ev->Sender;
         IssueQueries();
     }
@@ -82,11 +82,11 @@ public:
         Cerr << (TStringBuilder() << "TEvNodeDisconnected" << Endl);
         SubscribeInFlight = false;
         if (SessionId) {
-            Y_VERIFY(SessionId == ev->Sender);
+            Y_ABORT_UNLESS(SessionId == ev->Sender);
             auto r = SessionToCookie.equal_range(SessionId);
             for (auto it = r.first; it != r.second; ++it) {
                 const auto inFlightIt = InFlight.find(it->second);
-                Y_VERIFY(inFlightIt != InFlight.end());
+                Y_ABORT_UNLESS(inFlightIt != InFlight.end());
                 Tentative.emplace(inFlightIt->first, inFlightIt->second.second);
                 InFlight.erase(it->second);
             }

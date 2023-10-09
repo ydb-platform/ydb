@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TDynamicCountersContentionTest) {
                 // acts like a coroutine
                 Ev.Wait();
                 auto ctr = Counters->GetSubgroup("label", "value")->GetCounter("name");
-                Y_VERIFY(*ctr == 42);
+                Y_ABORT_UNLESS(*ctr == 42);
                 Response.Signal();
             }
         };

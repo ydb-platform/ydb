@@ -50,7 +50,7 @@ namespace NActors {
                 if constexpr (std::is_same_v<TArg, std::exception_ptr>) {
                     std::rethrow_exception(arg);
                 } else if constexpr (std::is_void_v<T>) {
-                    Y_VERIFY(!arg.has_value());
+                    Y_ABORT_UNLESS(!arg.has_value());
                 } else if (auto *value = std::any_cast<T>(&arg)) {
                     return std::move(*value);
                 } else {
@@ -122,7 +122,7 @@ namespace NActors {
         }
 
         void StateFunc(STFUNC_SIG) {
-            Y_VERIFY(ev->GetTypeRewrite() == TEvents::TSystem::Wakeup);
+            Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvents::TSystem::Wakeup);
             auto g = TBase::PassAwayGuard();
             Executor();
         }

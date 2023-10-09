@@ -154,13 +154,13 @@ namespace NActors {
             }
 
             void RegisterInPoller() {
-                Y_VERIFY(!PollerToken);
+                Y_ABORT_UNLESS(!PollerToken);
                 const bool success = Actor->Send(MakePollerActorId(), new TEvPollerRegister(Socket, Actor->SelfActorId, Actor->SelfActorId));
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
                 auto result = Actor->WaitForSpecificEvent<TEvPollerRegisterResult>("RegisterPoller");
                 PollerToken = std::move(result->Get()->PollerToken);
-                Y_VERIFY(PollerToken);
-                Y_VERIFY(PollerToken->RefCount() == 1); // ensure exclusive ownership
+                Y_ABORT_UNLESS(PollerToken);
+                Y_ABORT_UNLESS(PollerToken->RefCount() == 1); // ensure exclusive ownership
             }
 
             void WaitPoller(bool read, bool write, TString state) {
@@ -170,7 +170,7 @@ namespace NActors {
 
             template <typename TDataPtr, typename TSendRecvFunc>
             void Process(TDataPtr buffer, size_t len, TSendRecvFunc&& sendRecv, bool read, bool write, TString state) {
-                Y_VERIFY(Socket);
+                Y_ABORT_UNLESS(Socket);
                 NInterconnect::TStreamSocket* sock = Socket.Get();
                 ssize_t (NInterconnect::TStreamSocket::*pfn)(TDataPtr, size_t, TString*) const = sendRecv;
                 size_t processed = 0;
@@ -208,7 +208,7 @@ namespace NActors {
 
             void ResetPollerToken() {
                 if (PollerToken) {
-                    Y_VERIFY(PollerToken->RefCount() == 1);
+                    Y_ABORT_UNLESS(PollerToken->RefCount() == 1);
                     PollerToken.Reset(); // ensure we are going to destroy poller token here as we will re-register the socket within other actor
                 }
             }
@@ -255,9 +255,9 @@ namespace NActors {
             , HandshakeKind("outgoing handshake")
             , Params(std::move(params))
         {
-            Y_VERIFY(SelfVirtualId);
-            Y_VERIFY(SelfVirtualId.NodeId());
-            Y_VERIFY(PeerNodeId);
+            Y_ABORT_UNLESS(SelfVirtualId);
+            Y_ABORT_UNLESS(SelfVirtualId.NodeId());
+            Y_ABORT_UNLESS(PeerNodeId);
             HandshakeBroker = MakeHandshakeBrokerOutId();
 
             // generate random handshake id
@@ -272,7 +272,7 @@ namespace NActors {
             , ExternalDataChannel(this, nullptr)
             , HandshakeKind("incoming handshake")
         {
-            Y_VERIFY(MainChannel);
+            Y_ABORT_UNLESS(MainChannel);
             PeerAddr = TString::Uninitialized(1024);
             if (GetRemoteAddr(*MainChannel.GetSocketRef(), PeerAddr.Detach(), PeerAddr.size())) {
                 PeerAddr.resize(strlen(PeerAddr.data()));
@@ -342,7 +342,7 @@ namespace NActors {
                 if (ProgramInfo) {
                     if (Params.UseExternalDataChannel) {
                         if (incoming) {
-                            Y_VERIFY(SubscribedForConnection);
+                            Y_ABORT_UNLESS(SubscribedForConnection);
                             auto ev = WaitForSpecificEvent<TEvReportConnection>("WaitInboundXdcStream");
                             SubscribedForConnection = false;
                             if (ev->Get()->HandshakeId != *HandshakeId) {
@@ -370,10 +370,10 @@ namespace NActors {
 
             if (ProgramInfo) {
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH04", NLog::PRI_INFO, "handshake succeeded");
-                Y_VERIFY(NextPacketFromPeer);
+                Y_ABORT_UNLESS(NextPacketFromPeer);
                 MainChannel.ResetPollerToken();
                 ExternalDataChannel.ResetPollerToken();
-                Y_VERIFY(!ExternalDataChannel == !Params.UseExternalDataChannel);
+                Y_ABORT_UNLESS(!ExternalDataChannel == !Params.UseExternalDataChannel);
                 SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(MainChannel.GetSocketRef()), PeerVirtualId, SelfVirtualId,
                     *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params), std::move(ExternalDataChannel.GetSocketRef())));
             }
@@ -837,7 +837,7 @@ namespace NActors {
                 }
                 addresses.emplace_back(r.GetAddress(), static_cast<ui16>(r.GetPort()));
             } else {
-                Y_VERIFY(ev->GetTypeRewrite() == ui32(ENetwork::ResolveError));
+                Y_ABORT_UNLESS(ev->GetTypeRewrite() == ui32(ENetwork::ResolveError));
                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: " + ev->Get<TEvResolveError>()->Explain
                     + ", Unresolved host# " + ev->Get<TEvResolveError>()->Host, true);
             }
@@ -1072,7 +1072,7 @@ namespace NActors {
                 if (auto ev = reply->CastAsLocal<TEvHandshakeReplyOK>()) {
                     // issue successful reply to the peer
                     auto& record = ev->Record;
-                    Y_VERIFY(record.HasSuccess());
+                    Y_ABORT_UNLESS(record.HasSuccess());
                     auto& success = *record.MutableSuccess();
                     SetupClusterUUID(success);
                     SetupCompatibilityInfo(success);
@@ -1106,7 +1106,7 @@ namespace NActors {
         void SendExBlock(TConnection& connection, const T& proto, const char* what) {
             TString data;
             Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&data);
-            Y_VERIFY(data.size() <= TExHeader::MaxSize);
+            Y_ABORT_UNLESS(data.size() <= TExHeader::MaxSize);
 
             ReportProto(proto, Sprintf("SendExBlock %s", what).data());
 
@@ -1137,7 +1137,7 @@ namespace NActors {
 
     private:
         void SendToProxy(THolder<IEventBase> ev) {
-            Y_VERIFY(PeerNodeId);
+            Y_ABORT_UNLESS(PeerNodeId);
             Send(GetActorSystem()->InterconnectProxy(PeerNodeId), ev.Release());
         }
 
@@ -1204,7 +1204,7 @@ namespace NActors {
         }
 
         THolder<TEvInterconnect::TNodeInfo> GetPeerNodeInfo() {
-            Y_VERIFY(PeerNodeId);
+            Y_ABORT_UNLESS(PeerNodeId);
             Send(Common->NameserviceId, new TEvInterconnect::TEvGetNode(PeerNodeId, TActivationContext::Now() +
                 (Deadline - TActivationContext::Monotonic())));
             auto response = WaitForSpecificEvent<TEvInterconnect::TEvNodeInfo>("GetPeerNodeInfo");

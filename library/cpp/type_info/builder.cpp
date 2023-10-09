@@ -139,7 +139,7 @@ namespace NTi {
     }
 
     TStructBuilderRaw& TStructBuilderRaw::AddMember() & noexcept {
-        Y_VERIFY(CanAddMember());
+        Y_ABORT_UNLESS(CanAddMember());
         Members_.emplace_back(*PendingMemberName_, *PendingMemberType_);
         DiscardMember();
         return *this;
@@ -311,7 +311,7 @@ namespace NTi {
     }
 
     TTupleBuilderRaw& TTupleBuilderRaw::AddElement() & noexcept {
-        Y_VERIFY(CanAddElement());
+        Y_ABORT_UNLESS(CanAddElement());
         Elements_.emplace_back(*PendingElementType_);
         DiscardElement();
         return *this;
@@ -452,7 +452,7 @@ namespace NTi {
     }
 
     const TTaggedType* TTaggedBuilderRaw::BuildRaw() {
-        Y_VERIFY(CanBuild());
+        Y_ABORT_UNLESS(CanBuild());
         return Factory_->New<TTaggedType>(Nothing(), *Item_, *Tag_);
     }
 }

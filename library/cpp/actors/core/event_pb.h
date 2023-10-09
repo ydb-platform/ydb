@@ -303,7 +303,7 @@ namespace NActors {
         }
 
         const TRope& GetPayload(ui32 id) const {
-            Y_VERIFY(id < Payload.size());
+            Y_ABORT_UNLESS(id < Payload.size());
             return Payload[id];
         }
 
@@ -352,7 +352,7 @@ namespace NActors {
                     total += section.Size;
                 }
                 size_t serialized = CalculateSerializedSize();
-                Y_VERIFY(total == serialized, "total# %zu serialized# %zu byteSize# %zd Payload.size# %zu", total,
+                Y_ABORT_UNLESS(total == serialized, "total# %zu serialized# %zu byteSize# %zd Payload.size# %zu", total,
                     serialized, byteSize, Payload.size());
 #endif
             }

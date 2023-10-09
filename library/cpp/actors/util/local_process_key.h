@@ -40,7 +40,7 @@ public:
     }
 
     TStringBuf GetNameByIndex(size_t index) const {
-        Y_VERIFY(index < Names.size());
+        Y_ABORT_UNLESS(index < Names.size());
         return Names[index];
     }
 
@@ -64,7 +64,7 @@ public:
         const ui32 index = TLocalProcessKeyStateIndexConstructor<T>::BuildCurrentIndex(name, Names.size());
         auto x = Map.emplace(name, index);
         if (x.second) {
-            Y_VERIFY(index < Names.size(), "a lot of actors or tags for memory monitoring");
+            Y_ABORT_UNLESS(index < Names.size(), "a lot of actors or tags for memory monitoring");
             Names[index] = name;
         }
 
@@ -131,7 +131,7 @@ public:
 
     static size_t GetIndex(const EnumT key) {
         ui32 index = static_cast<ui32>(key);
-        Y_VERIFY(index < Enum2Index.size());
+        Y_ABORT_UNLESS(index < Enum2Index.size());
         return Enum2Index[index];
     }
 

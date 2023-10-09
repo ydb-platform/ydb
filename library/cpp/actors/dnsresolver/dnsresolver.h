@@ -70,13 +70,13 @@ namespace NDnsResolver {
 
             const TIPv6Addr& GetAddrV6() const {
                 const TIPv6Addr* p = std::get_if<TIPv6Addr>(&Addr);
-                Y_VERIFY(p, "Result is not an ipv6 address");
+                Y_ABORT_UNLESS(p, "Result is not an ipv6 address");
                 return *p;
             }
 
             const TIPv4Addr& GetAddrV4() const {
                 const TIPv4Addr* p = std::get_if<TIPv4Addr>(&Addr);
-                Y_VERIFY(p, "Result is not an ipv4 address");
+                Y_ABORT_UNLESS(p, "Result is not an ipv4 address");
                 return *p;
             }
         };

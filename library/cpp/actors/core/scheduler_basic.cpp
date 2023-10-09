@@ -43,11 +43,11 @@ namespace NActors {
         , StopFlag(false)
         , ScheduleMap(3600)
     {
-        Y_VERIFY(!Config.UseSchedulerActor, "Cannot create scheduler thread because Config.UseSchedulerActor# true");
+        Y_ABORT_UNLESS(!Config.UseSchedulerActor, "Cannot create scheduler thread because Config.UseSchedulerActor# true");
     }
 
     TBasicSchedulerThread::~TBasicSchedulerThread() {
-        Y_VERIFY(!MainCycle);
+        Y_ABORT_UNLESS(!MainCycle);
     }
 
     void TBasicSchedulerThread::CycleFunc() {
@@ -220,7 +220,7 @@ namespace NActors {
     }
 
     void TBasicSchedulerThread::PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) {
-        Y_VERIFY(scheduleReadersCount > 0);
+        Y_ABORT_UNLESS(scheduleReadersCount > 0);
         TotalReaders = scheduleReadersCount;
         Readers.Reset(new NSchedulerQueue::TReader*[scheduleReadersCount]);
         Copy(readers, readers + scheduleReadersCount, Readers.Get());

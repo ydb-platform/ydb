@@ -39,19 +39,19 @@ public:
 
         const V& GetUnsafe(const K& key) const {
             typename TActualMap::const_iterator it = Map.find(key);
-            Y_VERIFY(it != Map.end(), "not found by key");
+            Y_ABORT_UNLESS(it != Map.end(), "not found by key");
             return it->second;
         }
 
         V& GetUnsafe(const K& key) {
             typename TActualMap::iterator it = Map.find(key);
-            Y_VERIFY(it != Map.end(), "not found by key");
+            Y_ABORT_UNLESS(it != Map.end(), "not found by key");
             return it->second;
         }
 
         V RemoveUnsafe(const K& key) {
             typename TActualMap::iterator it = Map.find(key);
-            Y_VERIFY(it != Map.end(), "removing non-existent key");
+            Y_ABORT_UNLESS(it != Map.end(), "removing non-existent key");
             V r = std::move(it->second);
             Map.erase(it);
             return r;

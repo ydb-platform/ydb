@@ -445,7 +445,7 @@ TString TDnsCache::THost::AddrsV6ToString() const {
 TDnsCache::TAresLibInit::TAresLibInit() {
 #ifdef _win_
     const auto res = ares_library_init(ARES_LIB_INIT_ALL);
-    Y_VERIFY(res == 0);
+    Y_ABORT_UNLESS(res == 0);
 #endif
 }
 

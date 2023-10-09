@@ -67,7 +67,7 @@ namespace NActors {
         TString Format() const {
             TDeque<TItem>::iterator it = Items.begin();
             TString res = FormatLevel(it);
-            Y_VERIFY(it == Items.end());
+            Y_ABORT_UNLESS(it == Items.end());
             return res;
         }
 
@@ -85,13 +85,13 @@ namespace NActors {
             TVector<TRecord> records;
 
             while (it != Items.end() && it->Type != EType::EXIT) {
-                Y_VERIFY(it->Type == EType::ENTRY);
+                Y_ABORT_UNLESS(it->Type == EType::ENTRY);
                 const TString marker = Sprintf("%s:%d", it->Marker, it->Line);
                 const ui64 begin = it->Timestamp;
                 ++it;
                 const TString interior = FormatLevel(it);
-                Y_VERIFY(it != Items.end());
-                Y_VERIFY(it->Type == EType::EXIT);
+                Y_ABORT_UNLESS(it != Items.end());
+                Y_ABORT_UNLESS(it->Type == EType::EXIT);
                 const ui64 end = it->Timestamp;
                 records.push_back(TRecord{marker, end - begin, interior});
                 ++it;

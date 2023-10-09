@@ -44,7 +44,7 @@ TGRpcServer::TGRpcServer(const TServerOptions& opts)
     {}
 
 TGRpcServer::~TGRpcServer() {
-    Y_VERIFY(Ts.empty());
+    Y_ABORT_UNLESS(Ts.empty());
     Services_.clear();
 }
 
@@ -193,7 +193,7 @@ void TGRpcServer::Stop() {
 
     if (Server_) {
         i64 sec = Options_.GRpcShutdownDeadline.Seconds();
-        Y_VERIFY(Options_.GRpcShutdownDeadline.NanoSecondsOfSecond() <= Max<i32>());
+        Y_ABORT_UNLESS(Options_.GRpcShutdownDeadline.NanoSecondsOfSecond() <= Max<i32>());
         i32 nanosecOfSec =  Options_.GRpcShutdownDeadline.NanoSecondsOfSecond();
         Server_->Shutdown(gpr_timespec{sec, nanosecOfSec, GPR_TIMESPAN});
     }

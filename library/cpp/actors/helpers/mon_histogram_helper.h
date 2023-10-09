@@ -37,7 +37,7 @@ namespace NActors {
             void Add(ui64 val) {
                 Y_ASSERT(FirstBucketVal != 0);
                 Y_ASSERT(BucketCount != 0);
-                Y_VERIFY(val <= (1ULL << 63ULL));
+                Y_ABORT_UNLESS(val <= (1ULL << 63ULL));
                 size_t ind = 0;
                 if (val > FirstBucketVal) {
                     ind = GetValueBitCount((2 * val - 1) / FirstBucketVal) - 1;

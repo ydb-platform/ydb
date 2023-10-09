@@ -21,14 +21,14 @@ Y_UNIT_TEST_SUITE(CachingDnsResolver) {
         TString operator()(const struct in6_addr& addr) const {
             char dst[INET6_ADDRSTRLEN];
             auto res = ares_inet_ntop(AF_INET6, &addr, dst, INET6_ADDRSTRLEN);
-            Y_VERIFY(res, "Cannot convert ipv6 address");
+            Y_ABORT_UNLESS(res, "Cannot convert ipv6 address");
             return dst;
         }
 
         TString operator()(const struct in_addr& addr) const {
             char dst[INET_ADDRSTRLEN];
             auto res = ares_inet_ntop(AF_INET, &addr, dst, INET_ADDRSTRLEN);
-            Y_VERIFY(res, "Cannot convert ipv4 address");
+            Y_ABORT_UNLESS(res, "Cannot convert ipv4 address");
             return dst;
         }
     };
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(CachingDnsResolver) {
         TVector<struct in_addr> AddrsV4;
 
         static TMockReply Error(int status, TDuration delay = DefaultDelay) {
-            Y_VERIFY(status != 0);
+            Y_ABORT_UNLESS(status != 0);
             TMockReply reply;
             reply.Status = status;
             reply.Delay = delay;
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(CachingDnsResolver) {
             for (const TString& addr : addrs) {
                 void* dst = &reply.AddrsV6.emplace_back();
                 int status = ares_inet_pton(AF_INET6, addr.c_str(), dst);
-                Y_VERIFY(status == 1, "Invalid ipv6 address: %s", addr.c_str());
+                Y_ABORT_UNLESS(status == 1, "Invalid ipv6 address: %s", addr.c_str());
             }
             return reply;
         }
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(CachingDnsResolver) {
             for (const TString& addr : addrs) {
                 void* dst = &reply.AddrsV4.emplace_back();
                 int status = ares_inet_pton(AF_INET, addr.c_str(), dst);
-                Y_VERIFY(status == 1, "Invalid ipv4 address: %s", addr.c_str());
+                Y_ABORT_UNLESS(status == 1, "Invalid ipv4 address: %s", addr.c_str());
             }
             return reply;
         }
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(CachingDnsResolver) {
         }
 
         friend TMockReply operator+(const TMockReply& a, const TMockReply& b) {
-            Y_VERIFY(a.Status == b.Status);
+            Y_ABORT_UNLESS(a.Status == b.Status);
             TMockReply result;
             result.Status = a.Status;
             result.Delay = Max(a.Delay, b.Delay);

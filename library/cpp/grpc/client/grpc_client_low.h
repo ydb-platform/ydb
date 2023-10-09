@@ -555,7 +555,7 @@ public:
     explicit TStreamRequestReadProcessor(TReaderCallback&& callback)
         : Callback(std::move(callback))
     {
-        Y_VERIFY(Callback, "Missing connected callback");
+        Y_ABORT_UNLESS(Callback, "Missing connected callback");
     }
 
     void Cancel() override {
@@ -580,7 +580,7 @@ public:
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            Y_VERIFY(!ReadActive, "Multiple Read/Finish calls detected");
+            Y_ABORT_UNLESS(!ReadActive, "Multiple Read/Finish calls detected");
             if (!Finished && !HasInitialMetadata) {
                 ReadActive = true;
                 ReadCallback = std::move(callback);
@@ -609,7 +609,7 @@ public:
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            Y_VERIFY(!ReadActive, "Multiple Read/Finish calls detected");
+            Y_ABORT_UNLESS(!ReadActive, "Multiple Read/Finish calls detected");
             if (!Finished) {
                 ReadActive = true;
                 ReadCallback = std::move(callback);
@@ -637,7 +637,7 @@ public:
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            Y_VERIFY(!ReadActive, "Multiple Read/Finish calls detected");
+            Y_ABORT_UNLESS(!ReadActive, "Multiple Read/Finish calls detected");
             if (!Finished) {
                 ReadActive = true;
                 FinishCallback = std::move(callback);
@@ -658,7 +658,7 @@ public:
     }
 
     void AddFinishedCallback(TReadCallback callback) override {
-        Y_VERIFY(callback, "Unexpected empty callback");
+        Y_ABORT_UNLESS(callback, "Unexpected empty callback");
 
         TGrpcStatus status;
 
@@ -709,8 +709,8 @@ private:
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            Y_VERIFY(ReadActive, "Unexpected Read done callback");
-            Y_VERIFY(!ReadFinished, "Unexpected ReadFinished flag");
+            Y_ABORT_UNLESS(ReadActive, "Unexpected Read done callback");
+            Y_ABORT_UNLESS(!ReadFinished, "Unexpected ReadFinished flag");
 
             if (!ok || Cancelled) {
                 ReadFinished = true;
@@ -781,7 +781,7 @@ private:
             finishedCallbacks.swap(FinishedCallbacks);
 
             if (Callback) {
-                Y_VERIFY(!ReadActive);
+                Y_ABORT_UNLESS(!ReadActive);
                 startCallback = std::move(Callback);
                 Callback = nullptr;
             } else if (ReadActive) {
@@ -857,7 +857,7 @@ public:
     explicit TStreamRequestReadWriteProcessor(TConnectedCallback&& callback)
         : ConnectedCallback(std::move(callback))
     {
-        Y_VERIFY(ConnectedCallback, "Missing connected callback");
+        Y_ABORT_UNLESS(ConnectedCallback, "Missing connected callback");
     }
 
     void Cancel() override {
@@ -908,7 +908,7 @@ public:
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            Y_VERIFY(!ReadActive, "Multiple Read/Finish calls detected");
+            Y_ABORT_UNLESS(!ReadActive, "Multiple Read/Finish calls detected");
             if (!Finished && !HasInitialMetadata) {
                 ReadActive = true;
                 ReadCallback = std::move(callback);
@@ -937,7 +937,7 @@ public:
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            Y_VERIFY(!ReadActive, "Multiple Read/Finish calls detected");
+            Y_ABORT_UNLESS(!ReadActive, "Multiple Read/Finish calls detected");
             if (!Finished) {
                 ReadActive = true;
                 ReadCallback = std::move(callback);
@@ -965,7 +965,7 @@ public:
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            Y_VERIFY(!ReadActive, "Multiple Read/Finish calls detected");
+            Y_ABORT_UNLESS(!ReadActive, "Multiple Read/Finish calls detected");
             if (!Finished) {
                 ReadActive = true;
                 FinishCallback = std::move(callback);
@@ -991,7 +991,7 @@ public:
     }
 
     void AddFinishedCallback(TReadCallback callback) override {
-        Y_VERIFY(callback, "Unexpected empty callback");
+        Y_ABORT_UNLESS(callback, "Unexpected empty callback");
 
         TGrpcStatus status;
 
@@ -1065,8 +1065,8 @@ private:
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            Y_VERIFY(ReadActive, "Unexpected Read done callback");
-            Y_VERIFY(!ReadFinished, "Unexpected ReadFinished flag");
+            Y_ABORT_UNLESS(ReadActive, "Unexpected Read done callback");
+            Y_ABORT_UNLESS(!ReadFinished, "Unexpected ReadFinished flag");
 
             if (!ok || Cancelled || WriteFinished) {
                 ReadFinished = true;
@@ -1103,8 +1103,8 @@ private:
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            Y_VERIFY(WriteActive, "Unexpected Write done callback");
-            Y_VERIFY(!WriteFinished, "Unexpected WriteFinished flag");
+            Y_ABORT_UNLESS(WriteActive, "Unexpected Write done callback");
+            Y_ABORT_UNLESS(!WriteFinished, "Unexpected WriteFinished flag");
 
             if (ok) {
                 okCallback.swap(WriteCallback);
@@ -1167,7 +1167,7 @@ private:
             finishedCallbacks.swap(FinishedCallbacks);
 
             if (ConnectedCallback) {
-                Y_VERIFY(!ReadActive);
+                Y_ABORT_UNLESS(!ReadActive);
                 connectedCallback = std::move(ConnectedCallback);
                 ConnectedCallback = nullptr;
             } else if (ReadActive) {
@@ -1320,7 +1320,7 @@ private:
         : Stub_(TGRpcService::NewStub(ci))
         , Provider_(provider)
     {
-        Y_VERIFY(Provider_, "Connection does not have a queue provider");
+        Y_ABORT_UNLESS(Provider_, "Connection does not have a queue provider");
     }
 
     TServiceConnection(TStubsHolder& holder,
@@ -1328,7 +1328,7 @@ private:
         : Stub_(holder.GetOrCreateStub<TStub>())
         , Provider_(provider)
     {
-        Y_VERIFY(Provider_, "Connection does not have a queue provider");
+        Y_ABORT_UNLESS(Provider_, "Connection does not have a queue provider");
     }
 
     std::shared_ptr<TStub> Stub_;

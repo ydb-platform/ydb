@@ -57,7 +57,7 @@ namespace NActors {
         }
 
         // ensure we have no unprocessed event and return back to actor system to receive one
-        Y_VERIFY(!Finished);
+        Y_ABORT_UNLESS(!Finished);
 
         // obtain pending event and ensure we've got one
         while (THolder<IEventHandle> event = ReturnToActorSystem()) {
@@ -72,7 +72,7 @@ namespace NActors {
 
     bool TActorCoroImpl::ProcessEvent(THolder<IEventHandle> ev) {
         if (!SelfActorId) { // process bootstrap message, extract actor ids
-            Y_VERIFY(ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap);
+            Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap);
             SelfActorId = ev->Recipient;
             ParentActorId = ev->Sender;
             ev.Reset();
@@ -97,7 +97,7 @@ namespace NActors {
     void TActorCoroImpl::Resume(THolder<IEventHandle> ev) {
         BeforeResume();
 
-        Y_VERIFY(!PendingEvent);
+        Y_ABORT_UNLESS(!PendingEvent);
         PendingEvent.Swap(ev);
 
 #if CORO_THROUGH_THREADS
@@ -106,7 +106,7 @@ namespace NActors {
         OutEvent.Wait();
 #else
         // save caller context for a later return
-        Y_VERIFY(!ActorSystemContext);
+        Y_ABORT_UNLESS(!ActorSystemContext);
         TExceptionSafeContext actorSystemContext;
         ActorSystemContext = &actorSystemContext;
 
@@ -114,7 +114,7 @@ namespace NActors {
         ActorSystemContext->SwitchTo(&FiberContext);
 #endif
 
-        Y_VERIFY(!PendingEvent);
+        Y_ABORT_UNLESS(!PendingEvent);
     }
 
     void TActorCoroImpl::DoRun() {
@@ -150,7 +150,7 @@ namespace NActors {
         }
 #else
         TExceptionSafeContext* returnContext = std::exchange(ActorSystemContext, nullptr);
-        Y_VERIFY(returnContext);
+        Y_ABORT_UNLESS(returnContext);
         if (StoreTlsState) {
             StoreTlsState(this);
         }
@@ -165,7 +165,7 @@ namespace NActors {
         } else {
             // we have returned from the actor system and it kindly asks us to terminate the coroutine as it is being
             // stopped
-            Y_VERIFY(InvokedFromDtor);
+            Y_ABORT_UNLESS(InvokedFromDtor);
             throw TDtorException();
         }
     }

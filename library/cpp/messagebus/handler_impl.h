@@ -15,8 +15,8 @@ namespace NBus {
     }
 
     inline void TOnMessageContext::AckMessage(TBusIdentity& ident) {
-        Y_VERIFY(Ident.LocalFlags == NPrivate::MESSAGE_IN_WORK);
-        Y_VERIFY(ident.LocalFlags == 0);
+        Y_ABORT_UNLESS(Ident.LocalFlags == NPrivate::MESSAGE_IN_WORK);
+        Y_ABORT_UNLESS(ident.LocalFlags == 0);
         Ident.Swap(ident);
     }
 

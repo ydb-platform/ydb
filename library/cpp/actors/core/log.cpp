@@ -529,7 +529,7 @@ namespace NActors {
         struct tm localTime;
         time.LocalTime(&localTime);
         int r = strftime(buf, TimeBufSize, "%Y-%m-%d-%H-%M-%S", &localTime);
-        Y_VERIFY(r != 0);
+        Y_ABORT_UNLESS(r != 0);
         return buf;
     }
 
@@ -671,7 +671,7 @@ namespace NActors {
         }
 
         void Pop(const TLogContextGuard& context) {
-            Y_VERIFY(Stack.size() && Stack.back().GetId() == context.GetId());
+            Y_ABORT_UNLESS(Stack.size() && Stack.back().GetId() == context.GetId());
             Stack.pop_back();
         }
 

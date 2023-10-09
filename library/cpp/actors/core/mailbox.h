@@ -222,7 +222,7 @@ namespace NActors {
 
             switch (ActorPack) {
                 case TMailboxActorPack::Simple: {
-                    Y_VERIFY(ActorsInfo.Simple.ActorId == localActorId);
+                    Y_ABORT_UNLESS(ActorsInfo.Simple.ActorId == localActorId);
                     actorToDestruct = ActorsInfo.Simple.Actor;
 
                     ActorsInfo.Simple.ActorId = 0;
@@ -231,7 +231,7 @@ namespace NActors {
                 }
                 case TMailboxActorPack::Map: {
                     TActorMap::iterator it = ActorsInfo.Map.ActorsMap->find(localActorId);
-                    Y_VERIFY(it != ActorsInfo.Map.ActorsMap->end());
+                    Y_ABORT_UNLESS(it != ActorsInfo.Map.ActorsMap->end());
 
                     actorToDestruct = it->second;
                     ActorsInfo.Map.ActorsMap->erase(it);
@@ -260,7 +260,7 @@ namespace NActors {
                             break;
                         }
                     }
-                    Y_VERIFY(found);
+                    Y_ABORT_UNLESS(found);
 
                     if (ActorsInfo.Array.ActorsCount == 1) {
                         const TActorPair Actor = ActorsInfo.Array.ActorsArray->Actors[0];

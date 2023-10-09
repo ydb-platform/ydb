@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(ModuleServerTests) {
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
             WaitTwoRequestsLatch.CountDown();
-            Y_VERIFY(WaitTwoRequestsLatch.Await(TDuration::Seconds(5)), "oops");
+            Y_ABORT_UNLESS(WaitTwoRequestsLatch.Await(TDuration::Seconds(5)), "oops");
 
             VerifyDynamicCast<TExampleRequest*>(mess);
 
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(ModuleServerTests) {
 
             MessageReceivedEvent.Signal();
 
-            Y_VERIFY(ClientDiedEvent.WaitT(TDuration::Seconds(5)), "oops");
+            Y_ABORT_UNLESS(ClientDiedEvent.WaitT(TDuration::Seconds(5)), "oops");
 
             job->SendReply(new TExampleResponse(&Proto.ResponseCount));
             return nullptr;

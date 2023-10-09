@@ -86,8 +86,8 @@ public:
     {
         SetReuseAddressAndPort(ListenSocket);
         TSockAddrInet6 addr(Address.data(), listenPort);
-        Y_VERIFY(ListenSocket.Bind(&addr) == 0);
-        Y_VERIFY(ListenSocket.Listen(5) == 0);
+        Y_ABORT_UNLESS(ListenSocket.Bind(&addr) == 0);
+        Y_ABORT_UNLESS(ListenSocket.Listen(5) == 0);
 
         DelayTraffic = (Bandwidth == 0.0) ? false : true;
 

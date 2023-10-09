@@ -58,7 +58,7 @@ void TBusBufferProtocol::Serialize(const TBusMessage* mess, TBuffer& data) {
     data.Reserve(data.Size() + size);
 
     char* after = (char*)bmess->GetRecord()->SerializeWithCachedSizesToArray((ui8*)data.Pos());
-    Y_VERIFY(after - data.Pos() == size);
+    Y_ABORT_UNLESS(after - data.Pos() == size);
 
     data.Advance(size);
 }

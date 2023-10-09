@@ -46,7 +46,7 @@ namespace NActors {
             void Attach(ui32 nodeId, TActorSystem *as, const TActorId& actorId) {
                 TPeerInfo *peer = GetPeer(nodeId);
                 auto guard = TWriteGuard(peer->Mutex);
-                Y_VERIFY(!peer->ActorSystem);
+                Y_ABORT_UNLESS(!peer->ActorSystem);
                 peer->ActorSystem = as;
                 peer->ProxyId = actorId;
                 as->DeferPreStop([peer] {
@@ -119,7 +119,7 @@ namespace NActors {
                     for (const auto& kv : Subscribers) {
                         Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second);
                     }
-                    Y_VERIFY(Proxy->Session == this);
+                    Y_ABORT_UNLESS(Proxy->Session == this);
                     Proxy->Session = nullptr;
                     PassAway();
                 }
@@ -242,7 +242,7 @@ namespace NActors {
                 }
 
                 void HandleNodeInfo(TEvInterconnect::TEvNodeInfo::TPtr ev) {
-                    Y_VERIFY(IsWaitingForNodeInfo);
+                    Y_ABORT_UNLESS(IsWaitingForNodeInfo);
                     if (!ev->Get()->Node) {
                         PeerNodeStatus = EPeerNodeStatus::MISSING;
                     } else {
@@ -339,7 +339,7 @@ namespace NActors {
             }
 
             void PeerInject(std::deque<std::unique_ptr<IEventHandle>>&& messages) {
-                Y_VERIFY(Session);
+                Y_ABORT_UNLESS(Session);
                 return State.Inject(PeerNodeId, std::move(messages), Common->LocalScopeId, Session->SessionId);
             }
 
@@ -362,9 +362,9 @@ namespace NActors {
 
     public:
         IActor *CreateProxyMock(ui32 nodeId, ui32 peerNodeId, TInterconnectProxyCommon::TPtr common) {
-            Y_VERIFY(nodeId != peerNodeId);
-            Y_VERIFY(nodeId);
-            Y_VERIFY(peerNodeId);
+            Y_ABORT_UNLESS(nodeId != peerNodeId);
+            Y_ABORT_UNLESS(nodeId);
+            Y_ABORT_UNLESS(peerNodeId);
             const ui64 key = std::min(nodeId, peerNodeId) | ui64(std::max(nodeId, peerNodeId)) << 32;
             auto it = States.try_emplace(key, key).first;
             return new TProxyMockActor(nodeId, peerNodeId, it->second, std::move(common));

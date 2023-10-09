@@ -78,7 +78,7 @@ private:
         Y_UNUSED(ev);
         Action();
         TAtomicBase count = AtomicDecrement(Counter);
-        Y_VERIFY(count != Max<TAtomicBase>());
+        Y_ABORT_UNLESS(count != Max<TAtomicBase>());
         if (count) {
             Send(Receiver, new TEvMsg());
         }

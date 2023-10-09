@@ -30,7 +30,7 @@ namespace NActors {
                     if (Mock) {
                         Proxy = actor;
                     }
-                    Y_VERIFY(Proxy);
+                    Y_ABORT_UNLESS(Proxy);
                 }
                 InvokeOtherActor(*Proxy, &IActor::Receive, ev);
             }

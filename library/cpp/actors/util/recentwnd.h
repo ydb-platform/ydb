@@ -53,7 +53,7 @@ public:
     }
 
     void ResetWnd(ui32 wndSize) {
-        Y_VERIFY(wndSize != 0);
+        Y_ABORT_UNLESS(wndSize != 0);
         MaxWndSize_ = wndSize;
         if (Window_.size() > MaxWndSize_) {
             Window_.erase(Window_.begin(),

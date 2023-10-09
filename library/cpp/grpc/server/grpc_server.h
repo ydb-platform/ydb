@@ -155,7 +155,7 @@ public:
         i64 prev;
         do {
             prev = AtomicGet(CurInFlightReqs_);
-            Y_VERIFY(prev >= 0);
+            Y_ABORT_UNLESS(prev >= 0);
             if (Limit_ && prev > Limit_) {
                 return false;
             }
@@ -166,7 +166,7 @@ public:
 
     void Dec() {
         i64 newVal = AtomicDecrement(CurInFlightReqs_);
-        Y_VERIFY(newVal >= 0);
+        Y_ABORT_UNLESS(newVal >= 0);
     }
 
     i64 GetCurrentInFlight() const {
@@ -334,18 +334,18 @@ public:
             }
 
             auto r = shard.Requests_.emplace(req);
-            Y_VERIFY(r.second, "Ctx already registered");
+            Y_ABORT_UNLESS(r.second, "Ctx already registered");
         }
 
         return true;
     }
 
     void DeregisterRequestCtx(ICancelableContext* req) {
-        Y_VERIFY(req->ShardIndex != size_t(-1), "Ctx does not have an assigned shard index");
+        Y_ABORT_UNLESS(req->ShardIndex != size_t(-1), "Ctx does not have an assigned shard index");
 
         auto& shard = Shards_[req->ShardIndex];
         with_lock(shard.Lock_) {
-            Y_VERIFY(shard.Requests_.erase(req), "Ctx is not registered");
+            Y_ABORT_UNLESS(shard.Requests_.erase(req), "Ctx is not registered");
         }
     }
 

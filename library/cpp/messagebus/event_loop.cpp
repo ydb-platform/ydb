@@ -280,7 +280,7 @@ TEventLoop::TImpl::TImpl(const char* name)
 
 void TEventLoop::TImpl::Run() {
     bool res = AtomicCas(&RunningState, EVENT_LOOP_RUNNING, EVENT_LOOP_CREATED);
-    Y_VERIFY(res, "Invalid mbus event loop state");
+    Y_ABORT_UNLESS(res, "Invalid mbus event loop state");
 
     if (!!Name) {
         SetCurrentThreadName(Name);
@@ -308,7 +308,7 @@ void TEventLoop::TImpl::Run() {
         SOCKET socket = -1;
         while (SocketsToRemove.Dequeue(&socket)) {
             TGuard<TMutex> guard(Mutex);
-            Y_VERIFY(Data.erase(socket) == 1, "must be removed once");
+            Y_ABORT_UNLESS(Data.erase(socket) == 1, "must be removed once");
         }
     }
 
@@ -324,7 +324,7 @@ void TEventLoop::TImpl::Run() {
 
     res = AtomicCas(&RunningState, EVENT_LOOP_STOPPED, EVENT_LOOP_RUNNING);
 
-    Y_VERIFY(res);
+    Y_ABORT_UNLESS(res);
 
     StoppedEvent.Signal();
 }
@@ -340,13 +340,13 @@ void TEventLoop::TImpl::Stop() {
 }
 
 TChannelPtr TEventLoop::TImpl::Register(TSocket socket, TEventHandlerPtr eventHandler, void* cookie) {
-    Y_VERIFY(socket != INVALID_SOCKET, "must be a valid socket");
+    Y_ABORT_UNLESS(socket != INVALID_SOCKET, "must be a valid socket");
 
     TChannelPtr channel = new TChannel(new TChannel::TImpl(this, socket, eventHandler, cookie));
 
     TGuard<TMutex> guard(Mutex);
 
-    Y_VERIFY(Data.insert(std::make_pair(socket, channel)).second, "must not be already inserted");
+    Y_ABORT_UNLESS(Data.insert(std::make_pair(socket, channel)).second, "must not be already inserted");
 
     return channel;
 }

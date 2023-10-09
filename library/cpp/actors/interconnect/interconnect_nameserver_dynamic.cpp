@@ -96,7 +96,7 @@ namespace NActors {
             , NodeTable(setup->StaticNodeTable)
             , PendingPeriod(pendingPeriod)
         {
-            Y_VERIFY(setup->IsEntriesUnique());
+            Y_ABORT_UNLESS(setup->IsEntriesUnique());
         }
 
         STFUNC(StateFunc) {

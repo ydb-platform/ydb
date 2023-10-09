@@ -85,7 +85,7 @@ namespace NActors {
             callback(Port, TlsActivationContext->ExecutorThread.ActorSystem);
         }
         const bool success = ctx.Send(MakePollerActorId(), new TEvPollerRegister(Listener, SelfId(), {}));
-        Y_VERIFY(success);
+        Y_ABORT_UNLESS(success);
         Become(&TThis::Listen);
     }
 
@@ -104,7 +104,7 @@ namespace NActors {
                 ctx.Register(CreateIncomingHandshakeActor(ProxyCommonCtx, std::move(socket)));
                 continue;
             } else if (-r != EAGAIN && -r != EWOULDBLOCK) {
-                Y_VERIFY(-r != ENFILE && -r != EMFILE && !ExternalSocket);
+                Y_ABORT_UNLESS(-r != ENFILE && -r != EMFILE && !ExternalSocket);
                 LOG_ERROR_IC("ICL06", "Listen failed: %s (%s:%u)", strerror(-r), Address.data(), Port);
                 Listener.Reset();
                 PollerToken.Reset();

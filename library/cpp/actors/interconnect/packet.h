@@ -224,7 +224,7 @@ struct TTcpPacketOutTask : TNonCopyable {
     }
 
     void Finish(ui64 serial, ui64 confirm) {
-        Y_VERIFY(InternalSize <= Max<ui16>());
+        Y_ABORT_UNLESS(InternalSize <= Max<ui16>());
 
         TTcpPacketHeader_v2 header{
             confirm,

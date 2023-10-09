@@ -26,7 +26,7 @@ namespace {
         TString script = TUnbufferedFileInput(path).ReadAll();
         TQuery query;
         bool ok = google::protobuf::TextFormat::ParseFromString(script, &query);
-        Y_VERIFY(ok, "failed to parse protobuf");
+        Y_ABORT_UNLESS(ok, "failed to parse protobuf");
         Singleton<TTraceManagerHolder>()->TraceManager.New("env", query);
     }
 

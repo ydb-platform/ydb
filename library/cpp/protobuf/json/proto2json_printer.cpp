@@ -211,7 +211,7 @@ namespace NProtobufJson {
                                               const FieldDescriptor& field,
                                               IJsonOutput& json,
                                               TStringBuf key) {
-        Y_VERIFY(!field.is_repeated(), "field is repeated.");
+        Y_ABORT_UNLESS(!field.is_repeated(), "field is repeated.");
 
         if (!key) {
             key = MakeKey(field);
@@ -303,7 +303,7 @@ namespace NProtobufJson {
                                                 const FieldDescriptor& field,
                                                 IJsonOutput& json,
                                                 TStringBuf key) {
-        Y_VERIFY(field.is_repeated(), "field isn't repeated.");
+        Y_ABORT_UNLESS(field.is_repeated(), "field isn't repeated.");
 
         const bool isMap = field.is_map() && GetConfig().MapAsObject;
         if (!key) {
@@ -405,10 +405,10 @@ namespace NProtobufJson {
     void TProto2JsonPrinter::PrintKeyValue(const NProtoBuf::Message& proto,
                                            IJsonOutput& json) {
         const FieldDescriptor* keyField = proto.GetDescriptor()->FindFieldByName("key");
-        Y_VERIFY(keyField, "Map entry key field not found.");
+        Y_ABORT_UNLESS(keyField, "Map entry key field not found.");
         TString key = MakeKey(proto, *keyField);
         const FieldDescriptor* valueField = proto.GetDescriptor()->FindFieldByName("value");
-        Y_VERIFY(valueField, "Map entry value field not found.");
+        Y_ABORT_UNLESS(valueField, "Map entry value field not found.");
         PrintField(proto, *valueField, json, key);
     }
 

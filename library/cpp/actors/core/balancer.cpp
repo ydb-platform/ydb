@@ -51,11 +51,11 @@ namespace NActors {
             ui64 idle = std::clamp<i64>(1024 - cpuIdle * 512, 0, 1023);
             ui64 scale = std::clamp<i64>(1024 - scaleFactor * 32, 0, 1023);
 
-            Y_VERIFY(ui64(load)     < (1ull << 2ull));
-            Y_VERIFY(ui64(priority) < (1ull << 8ull));
-            Y_VERIFY(ui64(scale)    < (1ull << 10ull));
-            Y_VERIFY(ui64(idle)     < (1ull << 10ull));
-            Y_VERIFY(ui64(poolId)   < (1ull << 6ull));
+            Y_ABORT_UNLESS(ui64(load)     < (1ull << 2ull));
+            Y_ABORT_UNLESS(ui64(priority) < (1ull << 8ull));
+            Y_ABORT_UNLESS(ui64(scale)    < (1ull << 10ull));
+            Y_ABORT_UNLESS(ui64(idle)     < (1ull << 10ull));
+            Y_ABORT_UNLESS(ui64(poolId)   < (1ull << 6ull));
 
             static_assert(ui64(MaxPools) <= (1ull << 6ull));
 
@@ -135,7 +135,7 @@ namespace NActors {
                 Config.MinCpus = std::clamp<ui32>(Config.MinCpus, 1, Config.Cpus);
                 Config.MaxCpus = Max<ui32>(Config.MaxCpus, Config.Cpus);
             } else {
-                Y_VERIFY(Config.Cpus == 0,
+                Y_ABORT_UNLESS(Config.Cpus == 0,
                         "Unexpected negative Config.Cpus# %" PRIi64,
                         (i64)Config.Cpus);
                 Config.MinCpus = 0;
@@ -205,7 +205,7 @@ namespace NActors {
     }
 
     void TBalancer::SetPoolStats(TPoolId pool, const TBalancerStats& stats) {
-        Y_VERIFY(pool < MaxPools);
+        Y_ABORT_UNLESS(pool < MaxPools);
         TPool& p = Pools[pool];
         p.Prev = p.Next;
         p.Next = stats;

@@ -50,11 +50,11 @@ public:
         for (const auto& [queueId, st] : state) {
             ui32 expected = 0;
             for (const ui32 index : st.Ok) {
-                Y_VERIFY(index == expected);
+                Y_ABORT_UNLESS(index == expected);
                 ++expected;
             }
             for (const ui32 index : st.Error) {
-                Y_VERIFY(index == expected);
+                Y_ABORT_UNLESS(index == expected);
                 ++expected;
             }
             if (st.Error.size()) {
@@ -158,7 +158,7 @@ void RaceTestIter(ui32 numThreads, ui32 count) {
     }
 
     for (THPTimer timer; !arriveQueue.Done(); TDuration::MilliSeconds(10)) {
-        Y_VERIFY(timer.Passed() < 10);
+        Y_ABORT_UNLESS(timer.Passed() < 10);
     }
 
     nodes.clear();

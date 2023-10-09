@@ -40,7 +40,7 @@ size_t TBigInteger::NumBytes() const noexcept {
 size_t TBigInteger::ToRegion(void* to) const noexcept {
     const auto ret = BN_bn2bin(Impl_, (unsigned char*)to);
 
-    Y_VERIFY(ret >= 0, "it happens");
+    Y_ABORT_UNLESS(ret >= 0, "it happens");
 
     return ret;
 }

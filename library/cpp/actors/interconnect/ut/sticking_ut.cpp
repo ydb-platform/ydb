@@ -71,7 +71,7 @@ public:
         if (MaxRTT < rtt) {
             MaxRTT = rtt;
             Cerr << "Updated MaxRTT# " << MaxRTT << Endl;
-            Y_VERIFY(MaxRTT <= TDuration::MilliSeconds(500));
+            Y_ABORT_UNLESS(MaxRTT <= TDuration::MilliSeconds(500));
         }
         --PingInFlight;
         Action();

@@ -312,7 +312,7 @@ namespace {
         }
 
         const TOutputChannel& GetOutputChannel(ui16 index) const {
-            Y_VERIFY(Initialized);
+            Y_ABORT_UNLESS(Initialized);
             const auto it = OutputChannels.find(index);
             return it != OutputChannels.end() ? it->second : OtherOutputChannel;
         }
@@ -642,7 +642,7 @@ namespace {
         }
 
         const TOutputChannel& GetOutputChannel(ui16 index) const {
-            Y_VERIFY(Initialized_);
+            Y_ABORT_UNLESS(Initialized_);
             const auto it = OutputChannels_.find(index);
             return it != OutputChannels_.end() ? it->second : OtherOutputChannel_;
         }

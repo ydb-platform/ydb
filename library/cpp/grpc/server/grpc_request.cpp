@@ -13,7 +13,7 @@ public:
     void Enqueue(std::function<void()>&& fn, bool urgent) override {
         with_lock(Mtx_) {
             if (!UrgentQueue_.empty() || !NormalQueue_.empty()) {
-                Y_VERIFY(!StreamIsReady_);
+                Y_ABORT_UNLESS(!StreamIsReady_);
             }
             auto& queue = urgent ? UrgentQueue_ : NormalQueue_;
             if (StreamIsReady_ && queue.empty()) {
@@ -30,7 +30,7 @@ public:
         size_t left = 0;
         std::function<void()> fn;
         with_lock(Mtx_) {
-            Y_VERIFY(!StreamIsReady_);
+            Y_ABORT_UNLESS(!StreamIsReady_);
             auto& queue = UrgentQueue_.empty() ? NormalQueue_ : UrgentQueue_;
             if (queue.empty()) {
                 // Both queues are empty

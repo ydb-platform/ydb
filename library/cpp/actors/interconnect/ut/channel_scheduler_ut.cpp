@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
                 ui64 weightConsumed = 0;
                 numEvents -= channel->FeedBuf(task, 0, &weightConsumed);
                 ui32 after = task.GetDataSize();
-                Y_VERIFY(after >= before);
+                Y_ABORT_UNLESS(after >= before);
                 scheduler.FinishPick(weightConsumed, 0);
                 const ui32 bytesAdded = after - before;
                 if (!bytesAdded) {

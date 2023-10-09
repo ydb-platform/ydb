@@ -199,7 +199,7 @@ void TTaskRunnerBase::AssertInThisThread() const {
 }
 
 TTaskRunnerBase* TTaskRunnerBase::CurrentTask() {
-    Y_VERIFY(!!ThreadCurrentTask);
+    Y_ABORT_UNLESS(!!ThreadCurrentTask);
     return ThreadCurrentTask;
 }
 

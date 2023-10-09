@@ -77,8 +77,8 @@ namespace NActors {
                         // Continuation may wake up on another thread
                         return std::noop_coroutine();
                     }
-                    Y_VERIFY(currentValue != (void*)MarkerAwaiting, "TaskGroup is suspending with an awaiting marker");
-                    Y_VERIFY(currentValue != (void*)MarkerDetached, "TaskGroup is suspending with a detached marker");
+                    Y_ABORT_UNLESS(currentValue != (void*)MarkerAwaiting, "TaskGroup is suspending with an awaiting marker");
+                    Y_ABORT_UNLESS(currentValue != (void*)MarkerDetached, "TaskGroup is suspending with a detached marker");
                     // Race: ready queue is not actually empty
                     Continuation = {};
                     return h;
@@ -89,9 +89,9 @@ namespace NActors {
                 std::unique_ptr<TTaskGroupResult<T>> result;
                 if (ReadyQueue == nullptr) {
                     void* headValue = LastReady.exchange(nullptr, std::memory_order_acq_rel);
-                    Y_VERIFY(headValue != (void*)MarkerAwaiting, "TaskGroup is resuming with an awaiting marker");
-                    Y_VERIFY(headValue != (void*)MarkerDetached, "TaskGroup is resuming with a detached marker");
-                    Y_VERIFY(headValue, "TaskGroup is resuming with an empty queue");
+                    Y_ABORT_UNLESS(headValue != (void*)MarkerAwaiting, "TaskGroup is resuming with an awaiting marker");
+                    Y_ABORT_UNLESS(headValue != (void*)MarkerDetached, "TaskGroup is resuming with a detached marker");
+                    Y_ABORT_UNLESS(headValue, "TaskGroup is resuming with an empty queue");
                     TTaskGroupResult<T>* head = reinterpret_cast<TTaskGroupResult<T>*>(headValue);
                     while (head) {
                         auto* next = std::exchange(head->Next, nullptr);
@@ -100,7 +100,7 @@ namespace NActors {
                         head = next;
                     }
                 }
-                Y_VERIFY(ReadyQueue != nullptr);
+                Y_ABORT_UNLESS(ReadyQueue != nullptr);
                 result.reset(ReadyQueue);
                 ReadyQueue = std::exchange(result->Next, nullptr);
                 return result;
@@ -122,8 +122,8 @@ namespace NActors {
             void Detach() noexcept {
                 // After this exchange all new results will be discarded
                 void* headValue = LastReady.exchange((void*)MarkerDetached, std::memory_order_acq_rel);
-                Y_VERIFY(headValue != (void*)MarkerAwaiting, "TaskGroup is detaching with an awaiting marker");
-                Y_VERIFY(headValue != (void*)MarkerDetached, "TaskGroup is detaching with a detached marker");
+                Y_ABORT_UNLESS(headValue != (void*)MarkerAwaiting, "TaskGroup is detaching with an awaiting marker");
+                Y_ABORT_UNLESS(headValue != (void*)MarkerDetached, "TaskGroup is detaching with a detached marker");
                 if (headValue) {
                     Dispose(reinterpret_cast<TTaskGroupResult<T>*>(headValue));
                 }
@@ -270,7 +270,7 @@ namespace NActors {
             {}
 
             bool await_ready() const noexcept {
-                Y_VERIFY(TaskGroup_.TaskCount_ > 0, "Not enough tasks to await");
+                Y_ABORT_UNLESS(TaskGroup_.TaskCount_ > 0, "Not enough tasks to await");
                 --TaskGroup_.TaskCount_;
                 return TaskGroup_.Sink_->Ready();
             }

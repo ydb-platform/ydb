@@ -153,15 +153,15 @@ namespace NActors {
         void Ignore(TEvHandshakeDone::TPtr& ev) {
             ICPROXY_PROFILED;
 
-            Y_VERIFY(ev->Sender != IncomingHandshakeActor);
-            Y_VERIFY(ev->Sender != OutgoingHandshakeActor);
+            Y_ABORT_UNLESS(ev->Sender != IncomingHandshakeActor);
+            Y_ABORT_UNLESS(ev->Sender != OutgoingHandshakeActor);
         }
 
         void Ignore(TEvHandshakeFail::TPtr& ev) {
             ICPROXY_PROFILED;
 
-            Y_VERIFY(ev->Sender != IncomingHandshakeActor);
-            Y_VERIFY(ev->Sender != OutgoingHandshakeActor);
+            Y_ABORT_UNLESS(ev->Sender != IncomingHandshakeActor);
+            Y_ABORT_UNLESS(ev->Sender != OutgoingHandshakeActor);
             LogHandshakeFail(ev, true);
         }
 
@@ -176,7 +176,7 @@ namespace NActors {
             State = name;
             StateSwitchTime = TActivationContext::Now();
             Become(std::forward<TArgs>(args)...);
-            Y_VERIFY(!Terminated || CurrentStateFunc() == &TThis::HoldByError); // ensure we never escape this state
+            Y_ABORT_UNLESS(!Terminated || CurrentStateFunc() == &TThis::HoldByError); // ensure we never escape this state
             if (CurrentStateFunc() != &TThis::PendingActivation) {
                 PassAwayTimestamp = TMonotonic::Max();
             } else if (DynamicPtr) {
@@ -195,14 +195,14 @@ namespace NActors {
         void SwitchToInitialState() {
             ICPROXY_PROFILED;
 
-            Y_VERIFY(!PendingSessionEvents && !PendingIncomingHandshakeEvents, "%s PendingSessionEvents# %zu"
+            Y_ABORT_UNLESS(!PendingSessionEvents && !PendingIncomingHandshakeEvents, "%s PendingSessionEvents# %zu"
                 " PendingIncomingHandshakeEvents# %zu State# %s", LogPrefix.data(), PendingSessionEvents.size(),
                 PendingIncomingHandshakeEvents.size(), State);
             SwitchToState(__LINE__, "PendingActivation", &TThis::PendingActivation);
         }
 
         void HandlePassAwayIfNeeded() {
-            Y_VERIFY(PassAwayScheduled);
+            Y_ABORT_UNLESS(PassAwayScheduled);
             const TMonotonic now = TActivationContext::Monotonic();
             if (now >= PassAwayTimestamp) {
                 PassAway();
@@ -367,7 +367,7 @@ namespace NActors {
                 Y_VERIFY_DEBUG(false, "%s", msg.data());
             }
 
-            Y_VERIFY(ev->GetTypeRewrite() != TEvInterconnect::EvForward || ev->Recipient.NodeId() == PeerNodeId,
+            Y_ABORT_UNLESS(ev->GetTypeRewrite() != TEvInterconnect::EvForward || ev->Recipient.NodeId() == PeerNodeId,
                 "Recipient/Proxy NodeId mismatch Recipient# %s Type# 0x%08" PRIx32 " PeerNodeId# %" PRIu32 " Func# %s",
                 ev->Recipient.ToString().data(), ev->Type, PeerNodeId, func);
         }
@@ -482,7 +482,7 @@ namespace NActors {
             }
 
             // ensure we have no current session
-            Y_VERIFY(!Session);
+            Y_ABORT_UNLESS(!Session);
 
             // switch to pending connection state -- we wait for handshakes, we want more handshakes!
             SwitchToState(__LINE__, "PendingConnection", &TThis::PendingConnection);

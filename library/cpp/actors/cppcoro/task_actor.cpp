@@ -11,7 +11,7 @@ namespace NActors {
 
     struct TCurrentTaskActorGuard {
         TCurrentTaskActorGuard(TTaskActorImpl* current) noexcept {
-            Y_VERIFY(TlsCurrentTaskActor == nullptr);
+            Y_ABORT_UNLESS(TlsCurrentTaskActor == nullptr);
             TlsCurrentTaskActor = current;
         }
 
@@ -56,7 +56,7 @@ namespace NActors {
             : TActor(&TThis::StateBoot)
             , Task(std::move(task))
         {
-            Y_VERIFY(Task);
+            Y_ABORT_UNLESS(Task);
         }
 
         ~TTaskActorImpl() {
@@ -74,7 +74,7 @@ namespace NActors {
         }
 
         STATEFN(StateBoot) {
-            Y_VERIFY(ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap, "Expected bootstrap event");
+            Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap, "Expected bootstrap event");
             TCurrentTaskActorGuard guard(this);
             Become(&TThis::StateWork);
             AwaitThenCallback(std::move(Task).WhenDone(),
@@ -94,7 +94,7 @@ namespace NActors {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvResumeTask, Handle);
             default:
-                Y_VERIFY(EventAwaiter);
+                Y_ABORT_UNLESS(EventAwaiter);
                 Event.reset(ev.Release());
                 std::exchange(EventAwaiter, {}).resume();
             }
@@ -109,17 +109,17 @@ namespace NActors {
 
         bool Check() {
             if (Result->Finished) {
-                Y_VERIFY(!EventAwaiter, "Task terminated while waiting for the next event");
+                Y_ABORT_UNLESS(!EventAwaiter, "Task terminated while waiting for the next event");
                 PassAway();
                 return false;
             }
 
-            Y_VERIFY(EventAwaiter, "Task suspended without waiting for the next event");
+            Y_ABORT_UNLESS(EventAwaiter, "Task suspended without waiting for the next event");
             return true;
         }
 
         void WaitForEvent(std::coroutine_handle<> h) noexcept {
-            Y_VERIFY(!EventAwaiter, "Task cannot have multiple awaiters for the next event");
+            Y_ABORT_UNLESS(!EventAwaiter, "Task cannot have multiple awaiters for the next event");
             EventAwaiter = h;
         }
 
@@ -127,7 +127,7 @@ namespace NActors {
             if (Stopped) {
                 throw TTaskCancelled();
             }
-            Y_VERIFY(Event, "Task does not have current event");
+            Y_ABORT_UNLESS(Event, "Task does not have current event");
             return std::move(Event);
         }
 
@@ -141,12 +141,12 @@ namespace NActors {
     };
 
     void TTaskActorNextEvent::await_suspend(std::coroutine_handle<> h) noexcept {
-        Y_VERIFY(TlsCurrentTaskActor, "Not in a task actor context");
+        Y_ABORT_UNLESS(TlsCurrentTaskActor, "Not in a task actor context");
         TlsCurrentTaskActor->WaitForEvent(h);
     }
 
     std::unique_ptr<IEventHandle> TTaskActorNextEvent::await_resume() {
-        Y_VERIFY(TlsCurrentTaskActor, "Not in a task actor context");
+        Y_ABORT_UNLESS(TlsCurrentTaskActor, "Not in a task actor context");
         return TlsCurrentTaskActor->FinishWaitForEvent();
     }
 
@@ -155,17 +155,17 @@ namespace NActors {
     }
 
     TActorIdentity TTaskActor::SelfId() noexcept {
-        Y_VERIFY(TlsCurrentTaskActor, "Not in a task actor context");
+        Y_ABORT_UNLESS(TlsCurrentTaskActor, "Not in a task actor context");
         return TlsCurrentTaskActor->SelfId();
     }
 
     TActorId TTaskActor::ParentId() noexcept {
-        Y_VERIFY(TlsCurrentTaskActor, "Not in a task actor context");
+        Y_ABORT_UNLESS(TlsCurrentTaskActor, "Not in a task actor context");
         return TlsCurrentTaskActor->ParentId;
     }
 
     void TAfterAwaiter::await_suspend(std::coroutine_handle<> h) noexcept {
-        Y_VERIFY(TlsCurrentTaskActor, "Not in a task actor context");
+        Y_ABORT_UNLESS(TlsCurrentTaskActor, "Not in a task actor context");
         TlsCurrentTaskActor->Schedule(Duration, new TEvResumeTask(h, &Result));
     }
 

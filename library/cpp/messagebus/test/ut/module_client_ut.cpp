@@ -120,13 +120,13 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         void ReplyHandler(TBusJob*, EMessageStatus status, TBusMessage* mess, TBusMessage* reply) {
             Y_UNUSED(mess);
             Y_UNUSED(reply);
-            Y_VERIFY(status == MESSAGE_OK, "failed to get reply: %s", ToCString(status));
+            Y_ABORT_UNLESS(status == MESSAGE_OK, "failed to get reply: %s", ToCString(status));
         }
 
         TJobHandler HandleReplies(TBusJob* job, TBusMessage* mess) {
             Y_UNUSED(mess);
             RepliesLatch.CountDown();
-            Y_VERIFY(RepliesLatch.Await(TDuration::Seconds(10)), "failed to get answers");
+            Y_ABORT_UNLESS(RepliesLatch.Await(TDuration::Seconds(10)), "failed to get answers");
             job->Cancel(MESSAGE_UNKNOWN);
             return nullptr;
         }
@@ -178,9 +178,9 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         }
 
         void ReplyHandler(TBusJob*, EMessageStatus status, TBusMessage* req, TBusMessage* resp) {
-            Y_VERIFY(status == MESSAGE_CONNECT_FAILED || status == MESSAGE_TIMEOUT, "got wrong status: %s", ToString(status).data());
-            Y_VERIFY(req == SentMessage, "checking request");
-            Y_VERIFY(resp == nullptr, "checking response");
+            Y_ABORT_UNLESS(status == MESSAGE_CONNECT_FAILED || status == MESSAGE_TIMEOUT, "got wrong status: %s", ToString(status).data());
+            Y_ABORT_UNLESS(req == SentMessage, "checking request");
+            Y_ABORT_UNLESS(resp == nullptr, "checking response");
             GotReplyLatch.CountDown();
         }
 
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         void ReplyHandler(TBusJob* job, EMessageStatus status, TBusMessage* mess, TBusMessage* reply) {
             Y_UNUSED(mess);
             Y_UNUSED(reply);
-            Y_VERIFY(status == MESSAGE_OK, "failed to get reply");
+            Y_ABORT_UNLESS(status == MESSAGE_OK, "failed to get reply");
             if (AtomicIncrement(ReplyCount) == 1) {
                 TestSync->WaitForAndIncrement(1);
                 job->SendReply(new TExampleResponse(&Proto.ResponseCount));
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         }
 
         void HandleReply(TBusJob*, EMessageStatus status, TBusMessage*, TBusMessage*) {
-            Y_VERIFY(status == MESSAGE_SHUTDOWN, "got %s", ToCString(status));
+            Y_ABORT_UNLESS(status == MESSAGE_SHUTDOWN, "got %s", ToCString(status));
             TestSync.CheckAndIncrement(1);
         }
 

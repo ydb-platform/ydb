@@ -36,10 +36,10 @@ namespace NUnifiedAgent {
         grpc_core::ApplicationCallbackExecCtx callbackExecCtx;
         grpc_core::ExecCtx execCtx;
         IOCallback->Ref();
-        Y_VERIFY(grpc_cq_begin_op(CompletionQueue.cq(), this));
+        Y_ABORT_UNLESS(grpc_cq_begin_op(CompletionQueue.cq(), this));
         grpc_cq_end_op(CompletionQueue.cq(), this, y_absl::OkStatus(),
                        [](void* self, grpc_cq_completion*) {
-                           Y_VERIFY(static_cast<TGrpcNotification*>(self)->InQueue.exchange(false));
+                           Y_ABORT_UNLESS(static_cast<TGrpcNotification*>(self)->InQueue.exchange(false));
                        },
                        this, Completion.Get());
     }
@@ -81,7 +81,7 @@ namespace NUnifiedAgent {
     }
 
     void TGrpcTimer::OnIOCompleted(EIOStatus status) {
-        Y_VERIFY(AlarmIsSet);
+        Y_ABORT_UNLESS(AlarmIsSet);
         if (NextTriggerTime) {
             Alarm.Set(&CompletionQueue, InstantToTimespec(*NextTriggerTime), this);
             NextTriggerTime.Clear();

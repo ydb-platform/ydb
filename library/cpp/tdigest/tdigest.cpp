@@ -23,7 +23,7 @@ TDigest::TDigest(TStringBuf serializedDigest)
     : N(0)
 {
     NTDigest::TDigest digest;
-    Y_VERIFY(digest.ParseFromArray(serializedDigest.data(), serializedDigest.size()));
+    Y_ABORT_UNLESS(digest.ParseFromArray(serializedDigest.data(), serializedDigest.size()));
     Delta = digest.GetDelta();
     K = digest.GetK();
     for (int i = 0; i < digest.centroids_size(); ++i) {

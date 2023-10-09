@@ -9,7 +9,7 @@
 #endif
 
 void TMemoryLog::TMMapArea::MMap(size_t amount) {
-    Y_VERIFY(amount > 0);
+    Y_ABORT_UNLESS(amount > 0);
 
 #if defined(_unix_)
     constexpr int mmapProt = PROT_READ | PROT_WRITE;
@@ -46,14 +46,14 @@ void TMemoryLog::TMMapArea::MUnmap() {
 
 #if defined(_unix_)
     int result = ::munmap(BufPtr, Size);
-    Y_VERIFY(result == 0);
+    Y_ABORT_UNLESS(result == 0);
 
 #elif defined(_win_)
     BOOL result = ::UnmapViewOfFile(BufPtr);
-    Y_VERIFY(result != 0);
+    Y_ABORT_UNLESS(result != 0);
 
     result = ::CloseHandle(Mapping);
-    Y_VERIFY(result != 0);
+    Y_ABORT_UNLESS(result != 0);
 
     Mapping = 0;
 #endif

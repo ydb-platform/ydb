@@ -201,6 +201,6 @@ void TRemoteServerSession::PauseInput(bool pause) {
 }
 
 unsigned TRemoteServerSession::GetActualListenPort() {
-    Y_VERIFY(Config.ListenPort > 0, "state check");
+    Y_ABORT_UNLESS(Config.ListenPort > 0, "state check");
     return Config.ListenPort;
 }

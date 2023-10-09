@@ -176,7 +176,7 @@ void TChannelPool::DeleteExpiredStubsHolders() {
 void TChannelPool::EraseFromQueueByTime(const TInstant& lastUseTime, const TString& channelId) {
     auto [begin, end] = LastUsedQueue_.equal_range(lastUseTime);
     auto pos = std::find_if(begin, end, [&](auto a){return a.second == channelId;});
-    Y_VERIFY(pos != LastUsedQueue_.end(), "data corruption at TChannelPool");
+    Y_ABORT_UNLESS(pos != LastUsedQueue_.end(), "data corruption at TChannelPool");
     LastUsedQueue_.erase(pos);
 }
 
@@ -209,7 +209,7 @@ class TGRpcClientLow::TContextImpl final
 
 public:
     ~TContextImpl() override {
-        Y_VERIFY(CountChildren() == 0,
+        Y_ABORT_UNLESS(CountChildren() == 0,
                 "Destructor called with non-empty children");
 
         if (Parent) {
@@ -239,7 +239,7 @@ public:
         std::unique_lock<std::mutex> guard(Mutex);
 
         auto removed = RemoveChild(child);
-        Y_VERIFY(removed, "Unexpected ForgetContext(%p)", child);
+        Y_ABORT_UNLESS(removed, "Unexpected ForgetContext(%p)", child);
     }
 
     IQueueClientContextPtr CreateContext() override {
@@ -266,7 +266,7 @@ public:
     }
 
     grpc::CompletionQueue* CompletionQueue() override {
-        Y_VERIFY(Owner, "Uninitialized context");
+        Y_ABORT_UNLESS(Owner, "Uninitialized context");
         return CQ;
     }
 
@@ -326,7 +326,7 @@ public:
     }
 
     void SubscribeCancel(TCallback callback) override {
-        Y_VERIFY(callback, "SubscribeCancel called with an empty callback");
+        Y_ABORT_UNLESS(callback, "SubscribeCancel called with an empty callback");
 
         {
             std::unique_lock<std::mutex> guard(Mutex);

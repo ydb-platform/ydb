@@ -19,7 +19,7 @@ namespace NDnsResolver {
     protected:
         TAresLibraryInitBase() noexcept {
             int status = ares_library_init(ARES_LIB_INIT_ALL);
-            Y_VERIFY(status == ARES_SUCCESS, "Unexpected failure to initialize c-ares library");
+            Y_ABORT_UNLESS(status == ARES_SUCCESS, "Unexpected failure to initialize c-ares library");
         }
 
         ~TAresLibraryInitBase() noexcept {
@@ -31,7 +31,7 @@ namespace NDnsResolver {
     protected:
         TCallbackQueueBase() noexcept {
             int err = SocketPair(Sockets, false, true);
-            Y_VERIFY(err == 0, "Unexpected failure to create a socket pair");
+            Y_ABORT_UNLESS(err == 0, "Unexpected failure to create a socket pair");
             SetNonBlock(Sockets[0]);
             SetNonBlock(Sockets[1]);
         }
@@ -46,7 +46,7 @@ namespace NDnsResolver {
         using TCallbackQueue = NThreading::THTSwapQueue<TCallback>;
 
         void PushCallback(TCallback callback) {
-            Y_VERIFY(callback, "Cannot push an empty callback");
+            Y_ABORT_UNLESS(callback, "Cannot push an empty callback");
             CallbackQueue.Push(std::move(callback)); // this is a lockfree queue
 
             // Wake up worker thread on the first activation
@@ -56,7 +56,7 @@ namespace NDnsResolver {
 #ifdef _win_
                 ret = send(SignalSock(), &ch, 1, 0);
                 if (ret == -1) {
-                    Y_VERIFY(WSAGetLastError() == WSAEWOULDBLOCK, "Unexpected send error");
+                    Y_ABORT_UNLESS(WSAGetLastError() == WSAEWOULDBLOCK, "Unexpected send error");
                     return;
                 }
 #else
@@ -64,11 +64,11 @@ namespace NDnsResolver {
                     ret = send(SignalSock(), &ch, 1, 0);
                 } while (ret == -1 && errno == EINTR);
                 if (ret == -1) {
-                    Y_VERIFY(errno == EAGAIN || errno == EWOULDBLOCK, "Unexpected send error");
+                    Y_ABORT_UNLESS(errno == EAGAIN || errno == EWOULDBLOCK, "Unexpected send error");
                     return;
                 }
 #endif
-                Y_VERIFY(ret == 1, "Unexpected send result");
+                Y_ABORT_UNLESS(ret == 1, "Unexpected send result");
             }
         }
 
@@ -96,7 +96,7 @@ namespace NDnsResolver {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     break;
                 }
-                Y_VERIFY(errno == EINTR, "Unexpected recv error");
+                Y_ABORT_UNLESS(errno == EINTR, "Unexpected recv error");
 #endif
             }
 
@@ -105,7 +105,7 @@ namespace NDnsResolver {
                 // It's impossible to get signalled while Activations == 0
                 // We must set Activations = 0 to receive new signals
                 size_t count = Activations.exchange(0, std::memory_order_acq_rel);
-                Y_VERIFY(count != 0);
+                Y_ABORT_UNLESS(count != 0);
 
                 // N.B. due to the way HTSwap works we may not be able to pop
                 // all callbacks on this activation, however we expect a new
@@ -190,7 +190,7 @@ namespace NDnsResolver {
             }
 
             int err = ares_init_options(&AresChannel, &options, optmask);
-            Y_VERIFY(err == 0, "Unexpected failure to initialize c-ares channel");
+            Y_ABORT_UNLESS(err == 0, "Unexpected failure to initialize c-ares channel");
 
             if (Options.Servers) {
                 TStringBuilder csv;
@@ -201,7 +201,7 @@ namespace NDnsResolver {
                     csv << server;
                 }
                 err = ares_set_servers_ports_csv(AresChannel, csv.c_str());
-                Y_VERIFY(err == 0, "Unexpected failure to set a list of dns servers: %s", ares_strerror(err));
+                Y_ABORT_UNLESS(err == 0, "Unexpected failure to set a list of dns servers: %s", ares_strerror(err));
             }
         }
 
@@ -219,7 +219,7 @@ namespace NDnsResolver {
         })
 
         void Handle(TEvents::TEvPoison::TPtr&) {
-            Y_VERIFY(!Stopped);
+            Y_ABORT_UNLESS(!Stopped);
 
             PushCallback([this] {
                 // Cancel all current ares requests (will send notifications)

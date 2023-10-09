@@ -718,7 +718,7 @@ class TRcBuf {
     explicit TRcBuf(TInternalBackend s, const char *data, size_t size)
         : Backend(std::move(s))
     {
-        Y_VERIFY(Backend.GetData().data() == nullptr ||
+        Y_ABORT_UNLESS(Backend.GetData().data() == nullptr ||
                  (Backend.GetCookies() && Backend.GetCookies()->Begin == data && Backend.GetCookies()->End == data + size));
         Begin = data;
         End = data + size;
@@ -735,9 +735,9 @@ class TRcBuf {
     TRcBuf(TOwnedPiece, const char *data, size_t size, const TRcBuf& from)
         : TRcBuf(from.Backend, {data, size})
     {
-        Y_VERIFY(data >= from.GetData());
-        Y_VERIFY(data < from.GetData() + from.GetSize());
-        Y_VERIFY(data + size <= from.GetData() + from.GetSize());
+        Y_ABORT_UNLESS(data >= from.GetData());
+        Y_ABORT_UNLESS(data < from.GetData() + from.GetSize());
+        Y_ABORT_UNLESS(data + size <= from.GetData() + from.GetSize());
         Backend.UpdateCookiesUnsafe(Begin, End);
     }
 
@@ -794,9 +794,9 @@ public:
     TRcBuf(TPiece, const char *data, size_t size, const TRcBuf& from)
         : TRcBuf(from.Backend, {data, size})
     {
-        Y_VERIFY(data >= from.GetData());
-        Y_VERIFY(data < from.GetData() + from.GetSize());
-        Y_VERIFY(data + size <= from.GetData() + from.GetSize());
+        Y_ABORT_UNLESS(data >= from.GetData());
+        Y_ABORT_UNLESS(data < from.GetData() + from.GetSize());
+        Y_ABORT_UNLESS(data + size <= from.GetData() + from.GetSize());
     }
 
     TRcBuf(TPiece, const char *begin, const char *end, const TRcBuf& from)
@@ -1068,12 +1068,12 @@ public:
     }
 
     void TrimBack(size_t size) {
-        Y_VERIFY(size <= GetSize());
+        Y_ABORT_UNLESS(size <= GetSize());
         End = End - (GetSize() - size);
     }
 
     void TrimFront(size_t size) {
-        Y_VERIFY(size <= GetSize());
+        Y_ABORT_UNLESS(size <= GetSize());
         Begin = Begin + (GetSize() - size);
     }
 

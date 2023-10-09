@@ -233,7 +233,7 @@ namespace NSc::NUt {
     public:
         template <class T>
         bool SetArg(TMaybe<T> arg) {
-            Y_VERIFY(CurrArg < Y_ARRAY_SIZE(Arg));
+            Y_ABORT_UNLESS(CurrArg < Y_ARRAY_SIZE(Arg));
             if (arg) {
                 Arg[CurrArg++] = *arg;
                 return true;

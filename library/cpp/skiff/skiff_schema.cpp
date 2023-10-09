@@ -127,7 +127,7 @@ const TSkiffSchemaList& TSkiffSchema::GetChildren() const
 TSimpleTypeSchema::TSimpleTypeSchema(EWireType type)
     : TSkiffSchema(type)
 {
-    Y_VERIFY(IsSimpleType(type));
+    Y_ABORT_UNLESS(IsSimpleType(type));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

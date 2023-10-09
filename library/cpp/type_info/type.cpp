@@ -228,14 +228,14 @@ namespace NTi {
             factory.SaveCache(result);
         }
 
-        Y_VERIFY(result->GetTypeName() == type->GetTypeName());
+        Y_ABORT_UNLESS(result->GetTypeName() == type->GetTypeName());
         Y_VERIFY_DEBUG(result->GetHash() == type->GetHash());
         return static_cast<const T*>(result);
     }
 
     bool operator==(const TType& lhs, const TType& rhs) {
-        Y_VERIFY(&lhs);
-        Y_VERIFY(&rhs);
+        Y_ABORT_UNLESS(&lhs);
+        Y_ABORT_UNLESS(&rhs);
         return NEq::TStrictlyEqual().IgnoreHash(&lhs, &rhs);
     }
 
@@ -1019,7 +1019,7 @@ namespace NTi {
     }
 
     void TStructType::MakeSortedMembers(TStructType::TMembers members, TArrayRef<size_t> sortedItems) {
-        Y_VERIFY(members.size() == sortedItems.size());
+        Y_ABORT_UNLESS(members.size() == sortedItems.size());
 
         for (size_t i = 0; i < members.size(); ++i) {
             sortedItems[i] = i;

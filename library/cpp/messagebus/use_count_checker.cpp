@@ -8,7 +8,7 @@ TUseCountChecker::TUseCountChecker() {
 
 TUseCountChecker::~TUseCountChecker() {
     auto count = Counter.Val();
-    Y_VERIFY(count == 0, "must not release when count is not zero: %ld", (long)count);
+    Y_ABORT_UNLESS(count == 0, "must not release when count is not zero: %ld", (long)count);
 }
 
 void TUseCountChecker::Inc() {

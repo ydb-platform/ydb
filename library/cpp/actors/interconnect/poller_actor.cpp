@@ -137,7 +137,7 @@ namespace NActors {
                             Y_FAIL("WriteEnd.Write() failed with %s", strerror(err));
                         }
                     } else {
-                        Y_VERIFY(nwritten);
+                        Y_ABORT_UNLESS(nwritten);
                         break;
                     }
                 }
@@ -160,13 +160,13 @@ namespace NActors {
                         Y_FAIL("read() failed with %s", strerror(errno));
                     }
                 } else {
-                    Y_VERIFY(n);
+                    Y_ABORT_UNLESS(n);
                 }
             }
         }
 
         bool ProcessSyncOpQueue() {
-            Y_VERIFY(!SyncOperationsQ.IsEmpty());
+            Y_ABORT_UNLESS(!SyncOperationsQ.IsEmpty());
             do {
                 TPollerSyncOperationWrapper *op = SyncOperationsQ.Top();
                 if (auto *unregister = std::get_if<TPollerUnregisterSocket>(&op->Operation)) {

@@ -43,7 +43,7 @@ namespace NActors {
         }
 
         TEventOutputChannel *PickChannelWithLeastConsumedWeight() {
-            Y_VERIFY(!Heap.empty());
+            Y_ABORT_UNLESS(!Heap.empty());
             return Heap.front().Channel;
         }
 

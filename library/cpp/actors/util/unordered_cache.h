@@ -127,7 +127,7 @@ public:
     }
 
     ~TUnorderedCache() {
-        Y_VERIFY(!Pop(0));
+        Y_ABORT_UNLESS(!Pop(0));
 
         for (ui64 i = 0; i < Concurrency; ++i) {
             if (ReadSlots[i].ReadFrom) {

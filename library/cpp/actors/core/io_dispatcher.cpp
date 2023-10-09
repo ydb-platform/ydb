@@ -79,7 +79,7 @@ namespace NActors {
             void StopOne() {
                 with_lock (Mutex) {
                     ++NumThreadsToStop;
-                    Y_VERIFY(NumThreadsToStop);
+                    Y_ABORT_UNLESS(NumThreadsToStop);
                 }
                 CondVar.Signal();
             }
@@ -144,7 +144,7 @@ namespace NActors {
         }
 
         void StopThread() {
-            Y_VERIFY(Threads.size());
+            Y_ABORT_UNLESS(Threads.size());
             TaskQueue.StopOne();
             *NumThreads = --NumRunningThreads;
             ++*ThreadsStopped;
@@ -185,7 +185,7 @@ namespace NActors {
 
         void HandleThreadStopped(TAutoPtr<IEventHandle> ev) {
             auto it = Threads.find(ev->Cookie);
-            Y_VERIFY(it != Threads.end());
+            Y_ABORT_UNLESS(it != Threads.end());
             it->second->Join();
             Threads.erase(it);
         }

@@ -19,7 +19,7 @@ namespace NActors {
 
     void EnableActorCallstack() {
         if (ActorBackTraceEnableCounter == 0) {
-            Y_VERIFY(PreviousFormatBackTrace == 0);
+            Y_ABORT_UNLESS(PreviousFormatBackTrace == 0);
             PreviousFormatBackTrace = SetFormatBackTraceFn(ActorFormatBackTrace);
         }
 
@@ -30,7 +30,7 @@ namespace NActors {
         --ActorBackTraceEnableCounter;
 
         if (ActorBackTraceEnableCounter == 0) {
-            Y_VERIFY(PreviousFormatBackTrace);
+            Y_ABORT_UNLESS(PreviousFormatBackTrace);
             SetFormatBackTraceFn(PreviousFormatBackTrace);
             PreviousFormatBackTrace = 0;
         }

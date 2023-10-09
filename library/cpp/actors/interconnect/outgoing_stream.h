@@ -57,7 +57,7 @@ namespace NInterconnect {
             for (auto it = SendQueue.begin() + SendQueuePos; it != SendQueue.end(); ++it) {
                 res += it->Span.size();
             }
-            Y_VERIFY(UnsentBytes == res - SendOffset);
+            Y_ABORT_UNLESS(UnsentBytes == res - SendOffset);
 #endif
             return UnsentBytes;
         }
@@ -70,7 +70,7 @@ namespace NInterconnect {
             if (maxLen && AppendOffset == BufferSize) { // we have no free buffer, allocate one
                 Buffers.emplace_back(static_cast<TBuffer*>(malloc(sizeof(TBuffer))));
                 AppendBuffer = Buffers.back().get();
-                Y_VERIFY(AppendBuffer);
+                Y_ABORT_UNLESS(AppendBuffer);
                 AppendBuffer->RefCount = 1; // through AppendBuffer pointer
                 AppendBuffer->Index = Buffers.size() - 1;
                 AppendOffset = 0;

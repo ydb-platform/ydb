@@ -59,7 +59,7 @@ bool TryParseMeta(const TString& s, THashMap<TString, TString>& meta) {
 
 bool TryParseLine(const TString& line, TVector<TString>& lineItems) {
     lineItems = StringSplitter(line).Split('|').ToList<TString>();
-    Y_VERIFY(lineItems.size() >= 1);
+    Y_ABORT_UNLESS(lineItems.size() >= 1);
     if (lineItems.size() > 2) {
         Cout << "invalid line format, expected 'k1=v1,k2=v2|payload' or just 'payload'" << Endl;
         return false;

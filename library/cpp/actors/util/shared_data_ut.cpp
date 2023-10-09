@@ -83,12 +83,12 @@ namespace NActors {
                 header->RefCount = 1;
                 header->Owner = this;
                 char* data = raw + sizeof(THeader);
-                Y_VERIFY(Allocated_.insert(data).second);
+                Y_ABORT_UNLESS(Allocated_.insert(data).second);
                 return TSharedData::AttachUnsafe(data, size);
             }
 
             void Deallocate(char* data) noexcept {
-                Y_VERIFY(Allocated_.erase(data) > 0);
+                Y_ABORT_UNLESS(Allocated_.erase(data) > 0);
                 char* raw = data - sizeof(THeader);
                 y_deallocate(raw);
                 Deallocated_.push_back(data);

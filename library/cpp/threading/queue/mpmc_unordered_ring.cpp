@@ -2,7 +2,7 @@
 
 namespace NThreading {
     TMPMCUnorderedRing::TMPMCUnorderedRing(size_t size) {
-        Y_VERIFY(size > 0);
+        Y_ABORT_UNLESS(size > 0);
         RingSize = size;
         RingBuffer.Reset(new void*[size]);
         memset(&RingBuffer[0], 0, sizeof(void*) * size);

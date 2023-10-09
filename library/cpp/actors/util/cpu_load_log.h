@@ -147,7 +147,7 @@ struct TMinusOneCpuEstimator {
     ui64 Delay[BitsSize];
 
     ui64 MaxLatencyIncreaseWithOneLessCpu(TCpuLoadLog<DataSize>** logs, i64 logCount, ui64 timeNs, ui64 periodNs) {
-        Y_VERIFY(logCount > 0);
+        Y_ABORT_UNLESS(logCount > 0);
         ui64 endTimeNs = timeNs;
 
         ui64 lastTimeNs = timeNs;

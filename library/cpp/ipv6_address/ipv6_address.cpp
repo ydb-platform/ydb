@@ -17,7 +17,7 @@
 namespace {
     // reinterpret_cast from memory, where most significant bit is first
     inline ui128 FromMemMSF(const char* memPtr) {
-        Y_VERIFY(memPtr, " ");
+        Y_ABORT_UNLESS(memPtr, " ");
         return ui128{
             *reinterpret_cast<const ui64*>(memPtr),
             *(reinterpret_cast<const ui64*>(memPtr) + 1)
@@ -174,20 +174,20 @@ void TIpv6Address::ToSockaddrAndSocklen(sockaddr_in& sockAddrIPv4,
         sockAddrSize = sizeof(sockAddrIPv6);
         sockAddrPtr = reinterpret_cast<sockaddr*>(&sockAddrIPv6);
     } else
-        Y_VERIFY(false);
+        Y_ABORT_UNLESS(false);
 }
 
 void TIpv6Address::ToInAddr(in_addr& Addr4) const {
-    Y_VERIFY(Type_ == TIpv6Address::Ipv4);
+    Y_ABORT_UNLESS(Type_ == TIpv6Address::Ipv4);
 
     Zero(Addr4);
     ui32 Value = GetLow(Ip);
-    Y_VERIFY(Value == GetLow(Ip), " ");
-    Y_VERIFY(GetHigh(Ip) == 0, " ");
+    Y_ABORT_UNLESS(Value == GetLow(Ip), " ");
+    Y_ABORT_UNLESS(GetHigh(Ip) == 0, " ");
     Addr4.s_addr = SwapBytes(Value);
 }
 void TIpv6Address::ToIn6Addr(in6_addr& Addr6) const {
-    Y_VERIFY(Type_ == TIpv6Address::Ipv6);
+    Y_ABORT_UNLESS(Type_ == TIpv6Address::Ipv6);
 
     Zero(Addr6);
     ui64 Raw[2] = {GetHigh(Ip), GetLow(Ip)};
@@ -242,7 +242,7 @@ TIpv6Address TIpv6Address::Normalized() const noexcept {
         return *this;
 
     TIpv6Address Result = TryToExtractIpv4From6();
-    Y_VERIFY(Result.IsNull() == false);
+    Y_ABORT_UNLESS(Result.IsNull() == false);
     return Result;
 }
 

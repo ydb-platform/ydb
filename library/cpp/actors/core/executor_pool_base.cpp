@@ -39,8 +39,8 @@ namespace NActors {
         }
 
         auto accountUsage = [&](ui32 activityType, double usage) {
-            Y_VERIFY(0 <= usage);
-            Y_VERIFY(usage <= 1);
+            Y_ABORT_UNLESS(0 <= usage);
+            Y_ABORT_UNLESS(usage <= 1);
             int bin = Min<int>(9, usage * 10);
             ++stats.UsageByActivity[activityType][bin];
         };
@@ -50,7 +50,7 @@ namespace NActors {
         with_lock (StuckObserverMutex) {
             for (size_t i = 0; i < Actors.size(); ++i) {
                 IActor *actor = Actors[i];
-                Y_VERIFY(actor->StuckIndex == i);
+                Y_ABORT_UNLESS(actor->StuckIndex == i);
                 const TDuration delta = now - actor->LastReceiveTimestamp;
                 if (delta > TDuration::Seconds(30)) {
                     ++stats.StuckActorsByActivity[actor->GetActivityType()];
@@ -137,7 +137,7 @@ namespace NActors {
         Y_VERIFY_DEBUG(at < Stats.ActorsAliveByActivity.size());
         if (at >= Stats.MaxActivityType()) {
             at = TActorTypeOperator::GetActorActivityIncorrectIndex();
-            Y_VERIFY(at < Stats.ActorsAliveByActivity.size());
+            Y_ABORT_UNLESS(at < Stats.ActorsAliveByActivity.size());
         }
         AtomicIncrement(Stats.ActorsAliveByActivity[at]);
 #endif
@@ -179,7 +179,7 @@ namespace NActors {
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         if (ActorSystem->MonitorStuckActors()) {
             with_lock (StuckObserverMutex) {
-                Y_VERIFY(actor->StuckIndex == Max<size_t>());
+                Y_ABORT_UNLESS(actor->StuckIndex == Max<size_t>());
                 actor->StuckIndex = Actors.size();
                 Actors.push_back(actor);
             }
@@ -236,7 +236,7 @@ namespace NActors {
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         if (ActorSystem->MonitorStuckActors()) {
             with_lock (StuckObserverMutex) {
-                Y_VERIFY(actor->StuckIndex == Max<size_t>());
+                Y_ABORT_UNLESS(actor->StuckIndex == Max<size_t>());
                 actor->StuckIndex = Actors.size();
                 Actors.push_back(actor);
             }

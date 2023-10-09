@@ -66,7 +66,7 @@ unsigned TMemoryLog::GetSelfCpu() noexcept {
     unsigned cpu;
     if (Y_LIKELY(FastGetCpu != nullptr)) {
         auto result = FastGetCpu(&cpu, nullptr, nullptr);
-        Y_VERIFY(result == 0);
+        Y_ABORT_UNLESS(result == 0);
         return cpu;
     } else {
         return 0;
@@ -110,7 +110,7 @@ TMemoryLog::TMemoryLog(size_t totalSize, size_t grainSize)
     , FreeGrains(DEFAULT_TOTAL_SIZE / DEFAULT_GRAIN_SIZE * 2)
     , Buf(totalSize)
 {
-    Y_VERIFY(DEFAULT_TOTAL_SIZE % DEFAULT_GRAIN_SIZE == 0);
+    Y_ABORT_UNLESS(DEFAULT_TOTAL_SIZE % DEFAULT_GRAIN_SIZE == 0);
     NumberOfGrains = DEFAULT_TOTAL_SIZE / DEFAULT_GRAIN_SIZE;
 
     for (size_t i = 0; i < NumberOfGrains; ++i) {
@@ -118,7 +118,7 @@ TMemoryLog::TMemoryLog(size_t totalSize, size_t grainSize)
     }
 
     NumberOfCpus = NSystemInfo::NumberOfCpus();
-    Y_VERIFY(NumberOfGrains > NumberOfCpus);
+    Y_ABORT_UNLESS(NumberOfGrains > NumberOfCpus);
     ActiveGrains.Reset(new TGrain*[NumberOfCpus]);
     for (size_t i = 0; i < NumberOfCpus; ++i) {
         ActiveGrains[i] = GetGrain(i);
@@ -267,7 +267,7 @@ bool MemLogWrite(const char* begin, size_t msgSize, bool addLF) noexcept {
     // check for format for snprintf
     constexpr size_t prologSize = 48;
     alignas(TMemoryLog::MemcpyAlignment) char prolog[prologSize + 1];
-    Y_VERIFY(AlignDown(&prolog, TMemoryLog::MemcpyAlignment) == &prolog);
+    Y_ABORT_UNLESS(AlignDown(&prolog, TMemoryLog::MemcpyAlignment) == &prolog);
 
     int snprintfResult = snprintf(prolog, prologSize + 1,
                                   "TS %020" PRIu64 " TI %020" PRIu64 " ", GetCycleCountFast(), threadId);
@@ -275,7 +275,7 @@ bool MemLogWrite(const char* begin, size_t msgSize, bool addLF) noexcept {
     if (snprintfResult < 0) {
         return false;
     }
-    Y_VERIFY(snprintfResult == prologSize);
+    Y_ABORT_UNLESS(snprintfResult == prologSize);
 
     amount += prologSize;
     if (addLF) {
@@ -336,7 +336,7 @@ bool MemLogVPrintF(const char* format, va_list params) noexcept {
 
     // alignment required by NoCacheMemcpy
     alignas(TMemoryLog::MemcpyAlignment) char buf[TMemoryLog::MAX_MESSAGE_SIZE];
-    Y_VERIFY(AlignDown(&buf, TMemoryLog::MemcpyAlignment) == &buf);
+    Y_ABORT_UNLESS(AlignDown(&buf, TMemoryLog::MemcpyAlignment) == &buf);
 
     int prologSize = snprintf(buf,
                               TMemoryLog::MAX_MESSAGE_SIZE - 2,
@@ -347,7 +347,7 @@ bool MemLogVPrintF(const char* format, va_list params) noexcept {
     if (Y_UNLIKELY(prologSize < 0)) {
         return false;
     }
-    Y_VERIFY((ui32)prologSize <= TMemoryLog::MAX_MESSAGE_SIZE);
+    Y_ABORT_UNLESS((ui32)prologSize <= TMemoryLog::MAX_MESSAGE_SIZE);
 
     int add = vsnprintf(
         &buf[prologSize],
@@ -357,11 +357,11 @@ bool MemLogVPrintF(const char* format, va_list params) noexcept {
     if (Y_UNLIKELY(add < 0)) {
         return false;
     }
-    Y_VERIFY(add >= 0);
+    Y_ABORT_UNLESS(add >= 0);
     auto totalSize = prologSize + add;
 
     buf[totalSize++] = '\n';
-    Y_VERIFY((ui32)totalSize <= TMemoryLog::MAX_MESSAGE_SIZE);
+    Y_ABORT_UNLESS((ui32)totalSize <= TMemoryLog::MAX_MESSAGE_SIZE);
 
     return BareMemLogWrite(buf, totalSize) != nullptr;
 }

@@ -30,7 +30,7 @@ class TRopeAlignedBuffer : public IContiguousChunk {
         , Capacity(size)
         , Offset((Alignment - reinterpret_cast<uintptr_t>(Data)) & (Alignment - 1))
     {
-        Y_VERIFY(Offset <= Alignment - MallocAlignment);
+        Y_ABORT_UNLESS(Offset <= Alignment - MallocAlignment);
     }
 
 public:
@@ -153,8 +153,8 @@ private:
 
         void CheckValid() const {
 #ifndef NDEBUG
-            Y_VERIFY(ValidityToken == Rope->GetValidityToken());
-            Y_VERIFY(Iter == Rope->Chain.end() || Iter->Backend);
+            Y_ABORT_UNLESS(ValidityToken == Rope->GetValidityToken());
+            Y_ABORT_UNLESS(Iter == Rope->Chain.end() || Iter->Backend);
 #endif
         }
 
@@ -505,7 +505,7 @@ public:
     }
 
     void ExtractFront(size_t num, TRope *dest) {
-        Y_VERIFY(Size >= num);
+        Y_ABORT_UNLESS(Size >= num);
         if (num == Size && !*dest) {
             *dest = std::move(*this);
             return;

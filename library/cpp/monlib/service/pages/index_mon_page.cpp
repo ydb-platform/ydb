@@ -20,7 +20,7 @@ void TIndexMonPage::Output(IMonHttpRequest& request) {
         return;
     }
 
-    Y_VERIFY(pathInfo.StartsWith('/'));
+    Y_ABORT_UNLESS(pathInfo.StartsWith('/'));
 
     TMonPagePtr found;
     // analogous to CGI PATH_INFO
@@ -31,11 +31,11 @@ void TIndexMonPage::Output(IMonHttpRequest& request) {
             if (TPagesByPath::iterator i = PagesByPath.find(pathTmp); i != PagesByPath.end()) {
                 found = *i->second;
                 pathInfo = request.GetPathInfo().substr(pathTmp.size());
-                Y_VERIFY(pathInfo.empty() || pathInfo.StartsWith('/'));
+                Y_ABORT_UNLESS(pathInfo.empty() || pathInfo.StartsWith('/'));
                 break;
             }
             size_t slash = pathTmp.find_last_of('/');
-            Y_VERIFY(slash != TString::npos);
+            Y_ABORT_UNLESS(slash != TString::npos);
             pathTmp = pathTmp.substr(0, slash);
             if (!pathTmp) {
                 break;

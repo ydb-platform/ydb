@@ -258,7 +258,7 @@ namespace NActors {
 
             // Set specified pool as current, it requires scan
             for (Current = 0; Current < Size && pool != Items[Current].GetPoolId(); Current++) {}
-            Y_VERIFY(Current < Size);
+            Y_ABORT_UNLESS(Current < Size);
         }
 
         // Account currently running pool till now (ts)
@@ -266,7 +266,7 @@ namespace NActors {
             // Skip time slice for the first run and when time goes backwards (e.g. rdtsc is reset to zero on cpu reset)
             if (Y_LIKELY(Ts > 0 && Ts <= ts)) {
                 TPoolId pool = CurrentPool();
-                Y_VERIFY(pool < MaxPools);
+                Y_ABORT_UNLESS(pool < MaxPools);
                 Items[Current].Account(MinVRunTs, (ts - Ts) * InvWeights[pool]);
             }
             Ts = ts; // propagate time
@@ -370,7 +370,7 @@ namespace NActors {
 
             // Select pool to execute
             wctx.PoolId = United->AssignedPool(wctx);
-            Y_VERIFY(wctx.PoolId != CpuShared);
+            Y_ABORT_UNLESS(wctx.PoolId != CpuShared);
             if (United->TryAcquireToken(wctx.PoolId)) {
                 return true;
             }
@@ -1123,7 +1123,7 @@ namespace NActors {
         // NOTE: leave gaps for not united pools (default-initialized)
         for (const TUnitedExecutorPoolConfig& cfg : unitedPools) {
             TPool& pool = Pools[cfg.PoolId];
-            Y_VERIFY(cfg.PoolId < MaxPools);
+            Y_ABORT_UNLESS(cfg.PoolId < MaxPools);
             pool.PoolId = cfg.PoolId;
             pool.Concurrency = cfg.Concurrency ? cfg.Concurrency : Config.CpuCount;
             pool.ExecutorPool = nullptr; // should be set later using SetupPool()
@@ -1173,7 +1173,7 @@ namespace NActors {
                     cpu.LocalManager->AddWorker(workerId);
 
                     // Setup worker
-                    Y_VERIFY(workerId < WorkerCount);
+                    Y_ABORT_UNLESS(workerId < WorkerCount);
                     Workers[workerId].Thread.Reset(new TExecutorThread(
                         workerId,
                         cpu.CpuId,

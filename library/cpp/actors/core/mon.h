@@ -96,7 +96,7 @@ namespace NActors {
             static TString MakeSerializedQuery(const NActorsProto::TRemoteHttpInfo& info) {
                 TString s(1, '\0');
                 const bool success = info.AppendToString(&s);
-                Y_VERIFY(success);
+                Y_ABORT_UNLESS(success);
                 return s;
             }
 
@@ -158,7 +158,7 @@ namespace NActors {
                     res->Query = s;
                     res->ExtendedQuery.emplace();
                     const bool success = res->ExtendedQuery->ParseFromZeroCopyStream(&stream);
-                    Y_VERIFY(success);
+                    Y_ABORT_UNLESS(success);
                     return res.release();
                 } else {
                     return new TEvRemoteHttpInfo(s);

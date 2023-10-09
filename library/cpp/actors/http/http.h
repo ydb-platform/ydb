@@ -647,7 +647,7 @@ public:
             Stage = ERenderStage::Error;
             break;
         }
-        Y_VERIFY(size == BufferType::Size());
+        Y_ABORT_UNLESS(size == BufferType::Size());
     }
 
     TStringBuf GetRawData() const {

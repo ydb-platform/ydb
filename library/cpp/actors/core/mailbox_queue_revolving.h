@@ -173,7 +173,7 @@ namespace NActors {
             }
 
             bool TryPush(T x) {
-                Y_VERIFY(x != 0);
+                Y_ABORT_UNLESS(x != 0);
 
                 for (ui32 i = 0; i != TWriteConcurrency; ++i) {
                     if (RelaxedLoad(&WriteTo[i]) != nullptr) {

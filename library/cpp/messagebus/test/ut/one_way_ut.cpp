@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
         void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
             Y_UNUSED(mess);
 
-            Y_VERIFY(status == MESSAGE_MESSAGE_TOO_LARGE, "wrong status: %s", ToCString(status));
+            Y_ABORT_UNLESS(status == MESSAGE_MESSAGE_TOO_LARGE, "wrong status: %s", ToCString(status));
 
             GotTooLarge.Signal();
         }

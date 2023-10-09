@@ -23,7 +23,7 @@ ui64 TZeroCopyOutputStreamWriter::RemainingBytes() const
 
 void TZeroCopyOutputStreamWriter::Advance(size_t bytes)
 {
-    Y_VERIFY(bytes <= RemainingBytes_);
+    Y_ABORT_UNLESS(bytes <= RemainingBytes_);
     Current_ += bytes;
     RemainingBytes_ -= bytes;
 }

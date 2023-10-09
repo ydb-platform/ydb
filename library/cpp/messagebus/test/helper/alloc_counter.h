@@ -16,6 +16,6 @@ public:
     }
 
     ~TAllocCounter() {
-        Y_VERIFY(AtomicDecrement(*CountPtr) >= 0, "released too many");
+        Y_ABORT_UNLESS(AtomicDecrement(*CountPtr) >= 0, "released too many");
     }
 };

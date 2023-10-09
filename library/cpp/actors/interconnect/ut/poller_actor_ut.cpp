@@ -36,7 +36,7 @@ std::pair<TTestSocketPtr, TTestSocketPtr> NonBlockSockets() {
 std::pair<TTestSocketPtr, TTestSocketPtr> TcpSockets() {
     // create server (listening) socket
     SOCKET server = socket(AF_INET, SOCK_STREAM, 0);
-    Y_VERIFY(server != -1, "socket() failed with %s", strerror(errno));
+    Y_ABORT_UNLESS(server != -1, "socket() failed with %s", strerror(errno));
 
     // bind it to local address with automatically picked port
     sockaddr_in addr;
@@ -57,7 +57,7 @@ std::pair<TTestSocketPtr, TTestSocketPtr> TcpSockets() {
 
     // create client socket
     SOCKET client = socket(AF_INET, SOCK_STREAM, 0);
-    Y_VERIFY(client != -1, "socket() failed with %s", strerror(errno));
+    Y_ABORT_UNLESS(client != -1, "socket() failed with %s", strerror(errno));
 
     // connect to server
     if (connect(client, (sockaddr*)&addr, len) == -1) {
@@ -66,7 +66,7 @@ std::pair<TTestSocketPtr, TTestSocketPtr> TcpSockets() {
 
     // accept connection from the other side
     SOCKET accepted = accept(server, nullptr, nullptr);
-    Y_VERIFY(accepted != -1, "accept() failed with %s", strerror(errno));
+    Y_ABORT_UNLESS(accepted != -1, "accept() failed with %s", strerror(errno));
 
     // close server socket
     closesocket(server);

@@ -17,7 +17,7 @@ namespace NActors {
             Executors.Reset(setup->Executors.Release());
             for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
                 IExecutorPool* pool = Executors[excIdx].Get();
-                Y_VERIFY(dynamic_cast<TUnitedExecutorPool*>(pool) == nullptr,
+                Y_ABORT_UNLESS(dynamic_cast<TUnitedExecutorPool*>(pool) == nullptr,
                     "united executor pool is prohibited in explicit mode of NActors::TCpuManager");
             }
         } else {
@@ -103,7 +103,7 @@ namespace NActors {
 
     void TCpuManager::Cleanup() {
         for (ui32 round = 0, done = 0; done < ExecutorPoolCount; ++round) {
-            Y_VERIFY(round < 10, "actorsystem cleanup could not be completed in 10 rounds");
+            Y_ABORT_UNLESS(round < 10, "actorsystem cleanup could not be completed in 10 rounds");
             done = 0;
             for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
                 if (Executors[excIdx]->Cleanup()) {

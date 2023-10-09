@@ -19,7 +19,7 @@ void TRemoteServerConnection::Init(SOCKET socket, TInstant now) {
     WriterData.Status.ConnectTime = now;
     WriterData.Status.Connected = true;
 
-    Y_VERIFY(socket != INVALID_SOCKET, "must be a valid socket");
+    Y_ABORT_UNLESS(socket != INVALID_SOCKET, "must be a valid socket");
 
     TSocket readSocket(socket);
     TSocket writeSocket = readSocket;

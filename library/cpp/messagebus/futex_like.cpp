@@ -31,7 +31,7 @@ void TFutexLike::Wake(size_t count) {
         count = Max<int>();
     }
     int r = futex(&Value, FUTEX_WAKE, count, nullptr, nullptr, 0);
-    Y_VERIFY(r >= 0, "futex_wake failed: %s", strerror(errno));
+    Y_ABORT_UNLESS(r >= 0, "futex_wake failed: %s", strerror(errno));
 #else
     TGuard<TMutex> guard(Mutex);
     if (count == 1) {
@@ -45,7 +45,7 @@ void TFutexLike::Wake(size_t count) {
 void TFutexLike::Wait(int expected) {
 #ifdef _linux_
     int r = futex(&Value, FUTEX_WAIT, expected, nullptr, nullptr, 0);
-    Y_VERIFY(r >= 0 || errno == EWOULDBLOCK, "futex_wait failed: %s", strerror(errno));
+    Y_ABORT_UNLESS(r >= 0 || errno == EWOULDBLOCK, "futex_wait failed: %s", strerror(errno));
 #else
     TGuard<TMutex> guard(Mutex);
     if (expected == Get()) {

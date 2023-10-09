@@ -34,8 +34,8 @@ namespace NWilson {
             if (timeToLive == Max<ui32>()) {
                 timeToLive = 4095;
             }
-            Y_VERIFY(verbosity <= 15);
-            Y_VERIFY(timeToLive <= 4095);
+            Y_ABORT_UNLESS(verbosity <= 15);
+            Y_ABORT_UNLESS(timeToLive <= 4095);
             SpanId = spanId;
             Verbosity = verbosity;
             TimeToLive = timeToLive;

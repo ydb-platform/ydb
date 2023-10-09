@@ -149,7 +149,7 @@ namespace NKiwiAggr {
             histo.GetType() == HT_ADAPTIVE_WARD_HISTOGRAM ||
             histo.GetType() == HT_ADAPTIVE_HISTOGRAM)
         {
-            Y_VERIFY(histo.FreqSize() == histo.PositionSize(), "Corrupted histo");
+            Y_ABORT_UNLESS(histo.FreqSize() == histo.PositionSize(), "Corrupted histo");
             for (size_t j = 0; j < histo.FreqSize(); ++j) {
                 double value = histo.GetPosition(j);
                 double weight = histo.GetFreq(j);
@@ -204,7 +204,7 @@ namespace NKiwiAggr {
     }
 
     void TBlockHistogram::FromProto(const THistogram& histo) {
-        Y_VERIFY(histo.HasType(), "Attempt to parse TBlockHistogram from THistogram protobuf with no Type field set");
+        Y_ABORT_UNLESS(histo.HasType(), "Attempt to parse TBlockHistogram from THistogram protobuf with no Type field set");
         ;
         switch (histo.GetType()) { // check that histogram type is correct
             case HT_ADAPTIVE_DISTANCE_HISTOGRAM:
@@ -286,7 +286,7 @@ namespace NKiwiAggr {
     }
 
     void TBlockHistogram::SortAndShrink(size_t intervals, bool final) {
-        Y_VERIFY(intervals > 0);
+        Y_ABORT_UNLESS(intervals > 0);
 
         if (Bins.size() <= intervals) {
             return;
@@ -382,7 +382,7 @@ namespace NKiwiAggr {
             ui32 a = (ui32)(bins[b].Prev() - bins);
             ui32 c = (ui32)(bins[b].Next() - bins);
             ui32 d = (ui32)(bins[b].Next()->Next() - bins);
-            Y_VERIFY(Bins[c].second != -1);
+            Y_ABORT_UNLESS(Bins[c].second != -1);
 
             double mass = Bins[b].second + Bins[c].second;
             Bins[c].first = (Bins[b].first * Bins[b].second + Bins[c].first * Bins[c].second) / mass;
@@ -411,7 +411,7 @@ namespace NKiwiAggr {
 
         Bins.resize(pos);
         PrevSize = pos;
-        Y_VERIFY(pos == intervals);
+        Y_ABORT_UNLESS(pos == intervals);
     }
 
     double TBlockHistogram::GetSumInRange(double leftBound, double rightBound) {
@@ -528,7 +528,7 @@ namespace NKiwiAggr {
     }
 
     void TBlockWardHistogram::FastGreedyShrink(size_t intervals) {
-        Y_VERIFY(intervals > 0);
+        Y_ABORT_UNLESS(intervals > 0);
 
         if (Bins.size() <= intervals) {
             return;

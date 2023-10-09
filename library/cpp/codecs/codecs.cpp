@@ -12,7 +12,7 @@ namespace NCodecs {
 
         Y_ENSURE_EX(p->AlreadyTrained(), TCodecException() << "untrained codec " << p->GetName());
         const TString& n = p->GetName();
-        Y_VERIFY(n.size() <= Max<ui16>());
+        Y_ABORT_UNLESS(n.size() <= Max<ui16>());
         ::Save(out, (ui16)n.size());
         out->Write(n.data(), n.size());
         p->Save(out);

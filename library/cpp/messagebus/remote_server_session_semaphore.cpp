@@ -16,14 +16,14 @@ TRemoteServerSessionSemaphore::TRemoteServerSessionSemaphore(
     , PausedByUser(0)
     , StopSignal(0)
 {
-    Y_VERIFY(limitCount > 0, "limit must be > 0");
+    Y_ABORT_UNLESS(limitCount > 0, "limit must be > 0");
     Y_UNUSED(Name);
 }
 
 TRemoteServerSessionSemaphore::~TRemoteServerSessionSemaphore() {
-    Y_VERIFY(AtomicGet(CurrentCount) == 0);
+    Y_ABORT_UNLESS(AtomicGet(CurrentCount) == 0);
     // TODO: fix spider and enable
-    //Y_VERIFY(AtomicGet(CurrentSize) == 0);
+    //Y_ABORT_UNLESS(AtomicGet(CurrentSize) == 0);
 }
 
 bool TRemoteServerSessionSemaphore::TryWait() {

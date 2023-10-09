@@ -169,7 +169,7 @@ void TBusMessageQueue::Add(TIntrusivePtr<TBusSessionImpl> session) {
 void TBusMessageQueue::Remove(TBusSession* session) {
     TGuard<TMutex> scope(Lock);
     TList<TIntrusivePtr<TBusSessionImpl>>::iterator it = std::find(Sessions.begin(), Sessions.end(), session);
-    Y_VERIFY(it != Sessions.end(), "do not destroy session twice");
+    Y_ABORT_UNLESS(it != Sessions.end(), "do not destroy session twice");
     Sessions.erase(it);
 }
 
@@ -185,7 +185,7 @@ void TBusMessageQueue::DestroyAllSessions() {
     }
 
     for (auto& session : sessions) {
-        Y_VERIFY(session->IsDown(), "Session must be shut down prior to queue shutdown");
+        Y_ABORT_UNLESS(session->IsDown(), "Session must be shut down prior to queue shutdown");
     }
 }
 

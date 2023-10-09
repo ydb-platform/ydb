@@ -87,6 +87,7 @@ namespace NKikimr {
                     const TDiskPart& p = rec.OldDiskPart;
                     auto msg = std::make_unique<NPDisk::TEvChunkRead>(DCtx->PDiskCtx->Dsk->Owner,
                         DCtx->PDiskCtx->Dsk->OwnerRound, p.ChunkIdx, p.Offset, p.Size, NPriRead::HullComp, nullptr);
+                    DCtx->VCtx->CountDefragCost(*msg);
                     ctx.Send(DCtx->PDiskCtx->PDiskId, msg.release());
                     DCtx->DefragMonGroup.DefragBytesRewritten() += p.Size;
                     RewrittenBytes += p.Size;

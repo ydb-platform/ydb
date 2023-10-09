@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "memusage.h"
 #include "vdisk_config.h"
+#include "vdisk_costmodel.h"
 #include "vdisk_log.h"
 #include "vdisk_pdisk_error.h"
 #include "vdisk_outofspace.h"
@@ -12,6 +13,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
+    class TCostModel;
 
     /////////////////////////////////////////////////////////////////////////////////////////
     // TBSProxyContext
@@ -64,6 +66,8 @@ namespace NKikimr {
         // diagnostics
         TString LocalRecoveryErrorStr;
 
+        std::unique_ptr<TCostModel> CostModel;
+
     private:
         // Managing disk space
         TOutOfSpaceState OutOfSpaceState;
@@ -72,6 +76,8 @@ namespace NKikimr {
         // Tracks PDisk errors
         TPDiskErrorState PDiskErrorState;
         friend class TDskSpaceTrackerActor;
+
+        NMonGroup::TCostGroup CostMonGroup;
 
     public:
         TLogger Logger;
@@ -159,6 +165,27 @@ namespace NKikimr {
 
         THugeHeapFragmentation &GetHugeHeapFragmentation() {
             return HugeHeapFragmentation;
+        }
+
+        template<class TEvent>
+        void CountDefragCost(const TEvent& ev) {
+            if (CostModel) {
+                CostMonGroup.DefragCostNs() += CostModel->GetCost(ev);
+            }
+        }
+
+        template<class TEvent>
+        void CountScrubCost(const TEvent& ev) {
+            if (CostModel) {
+                CostMonGroup.ScrubCostNs() += CostModel->GetCost(ev);
+            }
+        }
+
+        template<class TEvent>
+        void CountCompactionCost(const TEvent& ev) {
+            if (CostModel) {
+                CostMonGroup.CompactionCostNs() += CostModel->GetCost(ev);
+            }
         }
 
     private:

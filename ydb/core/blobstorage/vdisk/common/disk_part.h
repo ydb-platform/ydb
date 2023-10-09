@@ -1,7 +1,6 @@
 #pragma once
 
 #include "defs.h"
-#include "vdisk_context.h"
 #include <util/generic/vector.h>
 #include <util/generic/buffer.h>
 #include <util/stream/output.h>

@@ -7,6 +7,7 @@ namespace NKikimr {
         Y_VERIFY(part.Size);
         auto msg = std::make_unique<NPDisk::TEvChunkRead>(ScrubCtx->PDiskCtx->Dsk->Owner,
             ScrubCtx->PDiskCtx->Dsk->OwnerRound, part.ChunkIdx, part.Offset, part.Size, NPriRead::HullLow, nullptr);
+        ScrubCtx->VCtx->CountScrubCost(*msg);
         Send(ScrubCtx->PDiskCtx->PDiskId, msg.release());
         CurrentState = TStringBuilder() << "reading data from " << part.ToString();
         auto res = WaitForPDiskEvent<NPDisk::TEvChunkReadResult>();
@@ -36,6 +37,7 @@ namespace NKikimr {
             nullptr,
             true,
             NPriWrite::HullComp);
+        ScrubCtx->VCtx->CountScrubCost(*msg);
         Send(ScrubCtx->PDiskCtx->PDiskId, msg.release());
         CurrentState = TStringBuilder() << "writing index to " << part.ToString();
         auto res = WaitForPDiskEvent<NPDisk::TEvChunkWriteResult>();

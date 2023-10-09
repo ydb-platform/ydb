@@ -4,6 +4,7 @@
 #include "vdisk_events.h"
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
 
@@ -25,96 +26,27 @@ namespace NKikimr {
             NKikimrBlobStorage::EPutHandleClass HandleClass = NKikimrBlobStorage::TabletLog;
 
         public:
-            TMessageCostEssence(const TEvBlobStorage::TEvVGet& ev) {
-                const auto &record = ev.Record;
+            TMessageCostEssence(const TEvBlobStorage::TEvVGet& ev);
 
-                // range query
-                if (record.HasRangeQuery()) {
-                    if (record.GetIndexOnly()) {
-                        // in-memory only
-                        BaseCost += InMemReadCost();
-                    } else {
-                        // we don't know cost of the query, it depends on number of elements and their size
-                        BaseCost += 10000000; // let's assume it's 10 ms
-                    }
-                }
+            TMessageCostEssence(const TEvBlobStorage::TEvVGetBlock& /*ev*/);
 
-                // extreme queries
-                ReadSizes.reserve(record.GetExtremeQueries().size());
-                for (const auto &x : record.GetExtremeQueries()) {
-                    ui64 size = 0;
-                    if (x.HasSize())
-                        size = x.GetSize();
-                    else {
-                        TLogoBlobID id(LogoBlobIDFromLogoBlobID(x.GetId()));
-                        size = id.BlobSize();
-                    }
+            TMessageCostEssence(const TEvBlobStorage::TEvVGetBarrier& /*ev*/);
 
-                    ReadSizes.push_back(size);
-                }
-            }
+            TMessageCostEssence(const TEvBlobStorage::TEvVBlock& ev);
 
-            TMessageCostEssence(const TEvBlobStorage::TEvVGetBlock& /*ev*/)
-                : BaseCost(TCostModel::InMemReadCost(EInMemType::Read))
-            {}
+            TMessageCostEssence(const TEvBlobStorage::TEvVCollectGarbage& ev);
 
-            TMessageCostEssence(const TEvBlobStorage::TEvVGetBarrier& /*ev*/)
-                : BaseCost(TCostModel::InMemReadCost(EInMemType::Read))
-            {}
+            TMessageCostEssence(const TEvBlobStorage::TEvVMovedPatch& ev);
 
-            TMessageCostEssence(const TEvBlobStorage::TEvVBlock& ev)
-                : SmallWriteSize(ev.GetCachedByteSize())
-            {}
+            TMessageCostEssence(const TEvBlobStorage::TEvVPatchStart&);
 
-            TMessageCostEssence(const TEvBlobStorage::TEvVCollectGarbage& ev)
-                : SmallWriteSize(ev.GetCachedByteSize())
-            {}
+            TMessageCostEssence(const TEvBlobStorage::TEvVPatchDiff& ev);
 
-            TMessageCostEssence(const TEvBlobStorage::TEvVMovedPatch& ev)
-                : HandleClass(NKikimrBlobStorage::EPutHandleClass::AsyncBlob)
-            {
-                TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev.Record.GetOriginalBlobId());
-                MovedPatchBlobSize = id.BlobSize();
-            }
+            TMessageCostEssence(const TEvBlobStorage::TEvVPatchXorDiff& ev);
 
-            TMessageCostEssence(const TEvBlobStorage::TEvVPatchStart&)
-                : BaseCost(TCostModel::InMemReadCost(EInMemType::Read))
-                , HandleClass(NKikimrBlobStorage::EPutHandleClass::AsyncBlob)
-            {
-            }
+            TMessageCostEssence(const TEvBlobStorage::TEvVPut& ev);
 
-            TMessageCostEssence(const TEvBlobStorage::TEvVPatchDiff& ev)
-                : HandleClass(NKikimrBlobStorage::EPutHandleClass::AsyncBlob)
-            {
-                // it has range vget subquery for finding parts
-                TLogoBlobID id(LogoBlobIDFromLogoBlobID(ev.Record.GetOriginalPartBlobId()));
-                ReadSizes.push_back(id.BlobSize());
-                PutBufferSizes.push_back(id.BlobSize());
-            }
-
-            TMessageCostEssence(const TEvBlobStorage::TEvVPatchXorDiff& ev)
-                : HandleClass(NKikimrBlobStorage::EPutHandleClass::AsyncBlob)
-            {
-                PutBufferSizes.push_back(ev.DiffSizeSum());
-            }
-
-            TMessageCostEssence(const TEvBlobStorage::TEvVPut& ev)
-                : HandleClass(ev.Record.GetHandleClass())
-            {
-                PutBufferSizes.push_back(ev.Record.HasBuffer() ?
-                        ev.Record.GetBuffer().size() : ev.GetPayload(0).GetSize());
-            }
-
-            TMessageCostEssence(const TEvBlobStorage::TEvVMultiPut& ev)
-                : HandleClass(ev.Record.GetHandleClass())
-            {
-                const NKikimrBlobStorage::TEvVMultiPut &record = ev.Record;
-                const ui64 itemsSize = record.ItemsSize();
-                PutBufferSizes.reserve(itemsSize);
-                for (ui64 idx = 0; idx < itemsSize; ++idx) {
-                    PutBufferSizes.push_back(ev.GetBufferBytes(idx));
-                }
-            }
+            TMessageCostEssence(const TEvBlobStorage::TEvVMultiPut& ev);
         };
 
     public:
@@ -134,35 +66,14 @@ namespace NKikimr {
         void FillInSettings(NKikimrBlobStorage::TVDiskCostSettings &settings) const;
 
         /// READS
-        ui64 GetCost(const TEvBlobStorage::TEvVGet &ev) const {
-            return ReadCost(ev);
-        }
-
-        ui64 GetCost(const TEvBlobStorage::TEvVGetBlock &ev) const {
-            Y_UNUSED(ev);
-            return InMemReadCost(TCostModel::EInMemType::Read);
-        }
-
-        ui64 GetCost(const TEvBlobStorage::TEvVGetBarrier &ev) const {
-            Y_UNUSED(ev);
-            return InMemReadCost(TCostModel::EInMemType::Read);
-        }
+        ui64 GetCost(const TEvBlobStorage::TEvVGet &ev) const;
+        ui64 GetCost(const TEvBlobStorage::TEvVGetBlock &ev) const;
+        ui64 GetCost(const TEvBlobStorage::TEvVGetBarrier &ev) const;
 
         /// WRITES
-        ui64 GetCost(const TEvBlobStorage::TEvVBlock &ev) const {
-            const ui32 recByteSize = ev.GetCachedByteSize();
-            return SmallWriteCost(recByteSize);
-        }
-
-        ui64 GetCost(const TEvBlobStorage::TEvVCollectGarbage &ev) const {
-            const ui32 recByteSize = ev.GetCachedByteSize();
-            return SmallWriteCost(recByteSize);
-        }
-
-        ui64 GetCost(const TEvBlobStorage::TEvVPut &ev) const {
-            bool logPutInternalQueue = true;
-            return GetCost(ev, &logPutInternalQueue);
-        }
+        ui64 GetCost(const TEvBlobStorage::TEvVBlock &ev) const;
+        ui64 GetCost(const TEvBlobStorage::TEvVCollectGarbage &ev) const;
+        ui64 GetCost(const TEvBlobStorage::TEvVPut &ev) const;
 
         ui64 GetCost(const TEvBlobStorage::TEvVPatchStart &ev) const;
         ui64 GetCost(const TEvBlobStorage::TEvVPatchDiff &ev) const;
@@ -170,7 +81,6 @@ namespace NKikimr {
         ui64 GetCost(const TEvBlobStorage::TEvVMovedPatch &ev) const;
 
         ui64 GetCost(const TEvBlobStorage::TEvVPut &ev, bool *logPutInternalQueue) const;
-
         ui64 GetCost(const TEvBlobStorage::TEvVMultiPut &ev, bool *logPutInternalQueue) const;
 
         /// LAZY EVALUATION
@@ -184,6 +94,10 @@ namespace NKikimr {
                 WriteBlockSize != other.WriteBlockSize ||
                 MinREALHugeBlobInBytes != other.MinREALHugeBlobInBytes;
         }
+
+        // PDisk messages cost
+        ui64 GetCost(const NPDisk::TEvChunkRead &ev) const;
+        ui64 GetCost(const NPDisk::TEvChunkWrite &ev) const;
 
     protected:
         ui64 SmallWriteCost(ui64 size) const {

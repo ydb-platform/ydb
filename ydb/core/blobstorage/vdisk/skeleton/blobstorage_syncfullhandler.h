@@ -1,7 +1,9 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hulldefs.h>
 
 namespace NKikimr {
 

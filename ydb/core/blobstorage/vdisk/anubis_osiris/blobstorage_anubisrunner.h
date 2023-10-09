@@ -4,7 +4,7 @@
 #include "blobstorage_anubis.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
-
+#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hulldefs.h>
 
 namespace NKikimr {
 

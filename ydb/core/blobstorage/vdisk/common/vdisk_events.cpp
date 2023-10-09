@@ -1,5 +1,6 @@
 #include "vdisk_events.h"
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 
 namespace NKikimr {
 
@@ -55,5 +56,53 @@ namespace NKikimr {
         } else {
             return GetPayload(itemIdx);
         }
+    }
+
+
+    TEvBlobStorage::TEvVGetBarrier::TEvVGetBarrier(const TVDiskID &vdisk, const TKeyBarrier &from, const TKeyBarrier &to, ui32 *maxResults,
+            bool showInternals)
+    {
+        VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
+        from.Serialize(*Record.MutableFrom());
+        to.Serialize(*Record.MutableTo());
+        if (maxResults)
+            Record.SetMaxResults(*maxResults);
+        if (showInternals)
+            Record.SetShowInternals(true);
+        Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::GetFastRead);
+    }
+
+    TString TEvBlobStorage::TEvVGetBarrier::ToString() const {
+        TStringStream str;
+        str << "{From# " << TKeyBarrier(Record.GetFrom()).ToString()
+            << " To# " << TKeyBarrier(Record.GetTo()).ToString();
+        if (Record.HasMsgQoS()) {
+            TEvBlobStorage::TEvVPut::OutMsgQos(Record.GetMsgQoS(), str);
+        }
+        if (Record.HasShowInternals() && Record.GetShowInternals())
+            str << " ShowInternals";
+        str << "}";
+        return str.Str();
+    }
+
+    void TEvBlobStorage::TEvVGetBarrierResult::AddResult(const TKeyBarrier &key, const TMemRecBarrier &memRec, bool showInternals) {
+        auto k = Record.AddKeys();
+        key.Serialize(*k);
+        auto v = Record.AddValues();
+        memRec.Serialize(*v, showInternals);
+    }
+
+    TEvBlobStorage::TEvVSyncFull::TEvVSyncFull(const TSyncState &syncState, const TVDiskID &sourceVDisk, const TVDiskID &targetVDisk,
+            ui64 cookie, NKikimrBlobStorage::ESyncFullStage stage, const TLogoBlobID &logoBlobFrom,
+            ui64 blockTabletFrom, const TKeyBarrier &barrierFrom)
+    {
+        SyncStateFromSyncState(syncState, Record.MutableSyncState());
+        VDiskIDFromVDiskID(sourceVDisk, Record.MutableSourceVDiskID());
+        VDiskIDFromVDiskID(targetVDisk, Record.MutableTargetVDiskID());
+        Record.SetCookie(cookie);
+        Record.SetStage(stage);
+        LogoBlobIDFromLogoBlobID(logoBlobFrom, Record.MutableLogoBlobFrom());
+        Record.SetBlockTabletFrom(blockTabletFrom);
+        barrierFrom.Serialize(*Record.MutableBarrierFrom());
     }
 } // NKikimr

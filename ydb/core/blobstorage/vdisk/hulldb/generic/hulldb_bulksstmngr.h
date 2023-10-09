@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/common/disk_part.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/base/utility.h>
 
 #include <util/generic/set.h>

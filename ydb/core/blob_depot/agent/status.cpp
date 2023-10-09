@@ -1,4 +1,5 @@
 #include "agent_impl.h"
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 
 namespace NKikimr::NBlobDepot {
 

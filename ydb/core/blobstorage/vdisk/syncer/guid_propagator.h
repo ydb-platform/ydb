@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_vdisk_guids.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimr {

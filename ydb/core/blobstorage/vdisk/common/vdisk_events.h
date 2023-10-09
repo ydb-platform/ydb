@@ -3,11 +3,14 @@
 
 #include <ydb/core/blobstorage/base/blobstorage_syncstate.h>
 #include <ydb/core/blobstorage/base/blobstorage_oos_defs.h>
+#include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
+#include <ydb/core/blobstorage/vdisk/common/disk_part.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_histogram_latency.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mon.h>
+#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress_matrix.h>
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 #include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
 
@@ -2403,6 +2406,9 @@ namespace NKikimr {
         }
     };
 
+    struct TKeyBarrier;
+    struct TMemRecBarrier;
+
     struct TEvBlobStorage::TEvVGetBarrier
         : TEventPB<TEvBlobStorage::TEvVGetBarrier, NKikimrBlobStorage::TEvVGetBarrier, TEvBlobStorage::EvVGetBarrier>
         , TEventWithRelevanceTracker
@@ -2411,30 +2417,9 @@ namespace NKikimr {
         {}
 
         TEvVGetBarrier(const TVDiskID &vdisk, const TKeyBarrier &from, const TKeyBarrier &to, ui32 *maxResults,
-                       bool showInternals)
-        {
-            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            from.Serialize(*Record.MutableFrom());
-            to.Serialize(*Record.MutableTo());
-            if (maxResults)
-                Record.SetMaxResults(*maxResults);
-            if (showInternals)
-                Record.SetShowInternals(true);
-            Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::GetFastRead);
-        }
+                bool showInternals);
 
-        TString ToString() const override {
-            TStringStream str;
-            str << "{From# " << TKeyBarrier(Record.GetFrom()).ToString()
-                << " To# " << TKeyBarrier(Record.GetTo()).ToString();
-            if (Record.HasMsgQoS()) {
-                TEvBlobStorage::TEvVPut::OutMsgQos(Record.GetMsgQoS(), str);
-            }
-            if (Record.HasShowInternals() && Record.GetShowInternals())
-                str << " ShowInternals";
-            str << "}";
-            return str.Str();
-        }
+        TString ToString() const override;
     };
 
     struct TEvBlobStorage::TEvVGetBarrierResult
@@ -2454,12 +2439,7 @@ namespace NKikimr {
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
         }
 
-        void AddResult(const TKeyBarrier &key, const TMemRecBarrier &memRec, bool showInternals) {
-            auto k = Record.AddKeys();
-            key.Serialize(*k);
-            auto v = Record.AddValues();
-            memRec.Serialize(*v, showInternals);
-        }
+        void AddResult(const TKeyBarrier &key, const TMemRecBarrier &memRec, bool showInternals);
 
         void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
                 const NKikimrBlobStorage::TEvVGetBarrier &request) {
@@ -2814,16 +2794,7 @@ namespace NKikimr {
 
         TEvVSyncFull(const TSyncState &syncState, const TVDiskID &sourceVDisk, const TVDiskID &targetVDisk,
                 ui64 cookie, NKikimrBlobStorage::ESyncFullStage stage, const TLogoBlobID &logoBlobFrom,
-                ui64 blockTabletFrom, const TKeyBarrier &barrierFrom) {
-            SyncStateFromSyncState(syncState, Record.MutableSyncState());
-            VDiskIDFromVDiskID(sourceVDisk, Record.MutableSourceVDiskID());
-            VDiskIDFromVDiskID(targetVDisk, Record.MutableTargetVDiskID());
-            Record.SetCookie(cookie);
-            Record.SetStage(stage);
-            LogoBlobIDFromLogoBlobID(logoBlobFrom, Record.MutableLogoBlobFrom());
-            Record.SetBlockTabletFrom(blockTabletFrom);
-            barrierFrom.Serialize(*Record.MutableBarrierFrom());
-        }
+                ui64 blockTabletFrom, const TKeyBarrier &barrierFrom);
 
         bool IsInitial() const {
             return Record.GetCookie() == 0;
@@ -2971,6 +2942,8 @@ namespace NKikimr {
 
     struct TEvBlobStorage::TEvCaptureVDiskLayout : TEventLocal<TEvCaptureVDiskLayout, EvCaptureVDiskLayout>
     {};
+
+    struct TDiskPart;
 
     struct TEvBlobStorage::TEvCaptureVDiskLayoutResult : TEventLocal<TEvCaptureVDiskLayoutResult, EvCaptureVDiskLayoutResult> {
         enum class EDatabase {

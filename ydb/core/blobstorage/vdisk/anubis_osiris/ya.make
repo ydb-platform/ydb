@@ -8,6 +8,7 @@ PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/vdisk/hulldb/barriers
+    ydb/core/blobstorage/vdisk/hulldb/base
     ydb/core/blobstorage/vdisk/hulldb/generic
     ydb/core/protos
 )

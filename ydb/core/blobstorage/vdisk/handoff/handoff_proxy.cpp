@@ -1,6 +1,7 @@
 #include "handoff_proxy.h"
 #include "handoff_delegate.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_log.h>
 
 using namespace NKikimrServices;
 using namespace NKikimr::NHandoff;

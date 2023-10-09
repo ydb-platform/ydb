@@ -166,12 +166,18 @@ public:                                                                         
             GROUP_CONSTRUCTOR(TCostGroup)
             {
                 COUNTER_INIT(DiskTimeAvailableNs, false);
-                COUNTER_INIT(VDiskUserCostNs, true);
-                COUNTER_INIT(VDiskInternalCostNs, true);
+                COUNTER_INIT(SkeletonFrontUserCostNs, true);
+                COUNTER_INIT(SkeletonFrontInternalCostNs, true);
+                COUNTER_INIT(DefragCostNs, true);
+                COUNTER_INIT(CompactionCostNs, true);
+                COUNTER_INIT(ScrubCostNs, true);
             }
             COUNTER_DEF(DiskTimeAvailableNs);
-            COUNTER_DEF(VDiskUserCostNs);
-            COUNTER_DEF(VDiskInternalCostNs);
+            COUNTER_DEF(SkeletonFrontUserCostNs);
+            COUNTER_DEF(SkeletonFrontInternalCostNs);
+            COUNTER_DEF(DefragCostNs);
+            COUNTER_DEF(CompactionCostNs);
+            COUNTER_DEF(ScrubCostNs);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

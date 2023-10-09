@@ -112,7 +112,7 @@ void Test(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* acto
                 GetSubgroup("subsystem", "request")->
                 GetSubgroup("storagePool", env.StoragePoolName)->
                 GetCounter("DSProxyDiskCostNs")->Val();
-        vdiskCost = vdisksTotal("cost", "VDiskUserCostNs");
+        vdiskCost = vdisksTotal("cost", "SkeletonFrontUserCostNs");
     };
 
     updateCounters();

@@ -698,7 +698,6 @@ namespace NKikimr {
         TExtQueueClass ExtQueueTabletLogPuts;
         TExtQueueClass ExtQueueAsyncBlobPuts;
         TExtQueueClass ExtQueueUserDataPuts;
-        std::unique_ptr<TCostModel> CostModel;
         TActiveActors ActiveActors;
         NMonGroup::TReplGroup ReplMonGroup;
         NMonGroup::TSyncerGroup SyncerMonGroup;
@@ -848,7 +847,7 @@ namespace NKikimr {
                     {
                         Become(&TThis::StateSyncGuidRecoveryInProgress);
                         TBlobStorageGroupType type = (GInfo ? GInfo->Type : TErasureType::ErasureNone);
-                        CostModel = std::make_unique<TCostModel>(msg->Dsk->SeekTimeUs, msg->Dsk->ReadSpeedBps,
+                        VCtx->CostModel = std::make_unique<TCostModel>(msg->Dsk->SeekTimeUs, msg->Dsk->ReadSpeedBps,
                             msg->Dsk->WriteSpeedBps, msg->Dsk->ReadBlockSize, msg->Dsk->WriteBlockSize,
                             msg->HugeBlobCtx->MinREALHugeBlobInBytes, type);
                         break;
@@ -1079,7 +1078,7 @@ namespace NKikimr {
 
         template <class TEventPtr>
         inline void CheckEvent(TEventPtr &ev, const char *msgName) {
-            Y_VERIFY_DEBUG(CostModel);
+            Y_VERIFY_DEBUG(VCtx->CostModel);
             Y_VERIFY(ev->Get(), "Incoming message of type %s is null at the VDisk border. This MUST never happens, "
                    "check VDisk clients: bufSize# %u", msgName, unsigned(ev->GetSize()));
         }
@@ -1167,8 +1166,8 @@ namespace NKikimr {
 
         void FillInCostSettingsAndTimestampIfRequired(NKikimrBlobStorage::TMsgQoS *qos, TInstant now) const {
             qos->MutableExecTimeStats()->SetReceivedTimestamp(now.GetValue());
-            if (qos->GetSendMeCostSettings() && CostModel) {
-                CostModel->FillInSettings(*qos->MutableCostSettings());
+            if (qos->GetSendMeCostSettings() && VCtx->CostModel) {
+                VCtx->CostModel->FillInSettings(*qos->MutableCostSettings());
             }
         }
 
@@ -1228,9 +1227,9 @@ namespace NKikimr {
                     // TEvVPatchXorDiff's cost is included in cost of other Patch operations
                 } else {
                     if (clientId.GetType() == NBackpressure::EQueueClientType::DSProxy) {
-                        CostGroup.VDiskUserCostNs() += cost;
+                        CostGroup.SkeletonFrontUserCostNs() += cost;
                     } else {
-                        CostGroup.VDiskInternalCostNs() += cost;
+                        CostGroup.SkeletonFrontInternalCostNs() += cost;
                     }
                 }
             }
@@ -1266,7 +1265,7 @@ namespace NKikimr {
 
         template <typename TEvPtr>
         void HandlePatchEvent(TEvPtr &ev) {
-            const ui64 cost = CostModel->GetCost(*ev->Get());
+            const ui64 cost = VCtx->CostModel->GetCost(*ev->Get());
 
             auto &record = ev->Get()->Record;
 
@@ -1310,7 +1309,7 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx) {
             bool logPutInternalQueue = true;
-            const ui64 cost = CostModel->GetCost(*ev->Get(), &logPutInternalQueue);
+            const ui64 cost = VCtx->CostModel->GetCost(*ev->Get(), &logPutInternalQueue);
 
             const NKikimrBlobStorage::TEvVPut &record = ev->Get()->Record;
             const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(record.GetBlobID());
@@ -1337,7 +1336,7 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) {
             bool logPutInternalQueue = true;
-            const ui64 cost = CostModel->GetCost(*ev->Get(), &logPutInternalQueue);
+            const ui64 cost = VCtx->CostModel->GetCost(*ev->Get(), &logPutInternalQueue);
 
             const NKikimrBlobStorage::TEvVMultiPut &record = ev->Get()->Record;
             LWTRACK(VDiskSkeletonFrontVMultiPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
@@ -1363,7 +1362,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVGet::TPtr &ev, const TActorContext &ctx) {
-            const ui64 cost = CostModel->GetCost(*ev->Get());
+            const ui64 cost = VCtx->CostModel->GetCost(*ev->Get());
             // select correct internal queue
             Y_VERIFY(ev->Get()->Record.HasHandleClass());
             auto cls = ev->Get()->Record.GetHandleClass();
@@ -1389,22 +1388,22 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVBlock::TPtr &ev, const TActorContext &ctx) {
-            const ui64 cost = CostModel->GetCost(*ev->Get());
+            const ui64 cost = VCtx->CostModel->GetCost(*ev->Get());
             HandleRequestWithQoS(ctx, ev, "TEvVBlock", cost, *IntQueueLogPuts);
         }
 
         void Handle(TEvBlobStorage::TEvVGetBlock::TPtr &ev, const TActorContext &ctx) {
-            const ui64 cost = CostModel->GetCost(*ev->Get());
+            const ui64 cost = VCtx->CostModel->GetCost(*ev->Get());
             HandleRequestWithQoS(ctx, ev, "TEvVGetBlock", cost, *IntQueueFastGets);
         }
 
         void Handle(TEvBlobStorage::TEvVCollectGarbage::TPtr &ev, const TActorContext &ctx) {
-            const ui64 cost = CostModel->GetCost(*ev->Get());
+            const ui64 cost = VCtx->CostModel->GetCost(*ev->Get());
             HandleRequestWithQoS(ctx, ev, "TEvVCollectGarbage", cost, *IntQueueLogPuts);
         }
 
         void Handle(TEvBlobStorage::TEvVGetBarrier::TPtr &ev, const TActorContext &ctx) {
-            const ui64 cost = CostModel->GetCost(*ev->Get());
+            const ui64 cost = VCtx->CostModel->GetCost(*ev->Get());
             HandleRequestWithQoS(ctx, ev, "TEvVGetBarrier", cost, *IntQueueFastGets);
         }
 
@@ -1498,8 +1497,8 @@ namespace NKikimr {
             if (expectedMsgId) {
                 expectedMsgId->Serialize(*record.MutableExpectedMsgId());
             }
-            if (CostModel && status == NKikimrProto::OK) {
-                CostModel->FillInSettings(*record.MutableCostSettings());
+            if (VCtx->CostModel && status == NKikimrProto::OK) {
+                VCtx->CostModel->FillInSettings(*record.MutableCostSettings());
             }
             ctx.Send(ev->Sender, res.release(), flags, ev->Cookie);
         }
@@ -2141,7 +2140,6 @@ namespace NKikimr {
                                    Config->SkeletonFrontQueueBackpressureCheckMsgId,
                                    SkeletonFrontGroup,
                                    cfg)
-            , CostModel()
             , ReplMonGroup(VDiskCounters, "subsystem", "repl")
             , SyncerMonGroup(VDiskCounters, "subsystem", "syncer")
             , VDiskMonGroup(VDiskCounters, "subsystem", "state")

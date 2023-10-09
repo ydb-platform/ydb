@@ -4,6 +4,7 @@
 #include "blobstorage_hullhugedefs.h"
 
 #include <util/generic/hash_set.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 
 namespace NKikimr {
 

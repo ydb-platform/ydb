@@ -694,6 +694,7 @@ namespace NKikimr {
             // send new messages until we reach in flight limit
             std::unique_ptr<NPDisk::TEvChunkWrite> msg;
             while (InFlightWrites < MaxInFlightWrites && (msg = WriterPtr->GetPendingMessage())) {
+                HullCtx->VCtx->CountCompactionCost(*msg);
                 Statistics.Update(msg.get());
                 msgsForYard.push_back(std::move(msg));
                 ++InFlightWrites;
@@ -703,6 +704,7 @@ namespace NKikimr {
             std::unique_ptr<NPDisk::TEvChunkRead> readMsg;
             while (InFlightReads < MaxInFlightReads && (readMsg = ReadBatcher.GetPendingMessage(
                             PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, NPriRead::HullComp))) {
+                HullCtx->VCtx->CountCompactionCost(*readMsg);
                 Statistics.Update(readMsg.get());
                 msgsForYard.push_back(std::move(readMsg));
                 ++InFlightReads;

@@ -84,6 +84,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
    * `JSON`: Write data in [JSON](../../../../concepts/cdc#json-record-structure) format.
 {% if audience == "tech" %}
    * `DYNAMODB_STREAMS_JSON`: Write data in the [JSON format compatible with Amazon DynamoDB Streams](../../../../concepts/cdc#dynamodb-streams-json-record-structure).
+   * `DEBEZIUM_JSON`: Write data in the [Debezium-like JSON format](../../../../concepts/cdc#debezium-json-record-structure).
 {% endif %}
 * `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc#virtual-timestamps). Disabled by default.
 * `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).

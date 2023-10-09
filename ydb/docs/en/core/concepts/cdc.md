@@ -154,6 +154,64 @@ The record structure is the same as for [Amazon DynamoDB Streams](https://docs.a
 
 {% endif %}
 
+{% if audience == "tech" %}
+
+### Debezium-compatible JSON format {#debezium-json-record-structure}
+
+A [Debezium](https://debezium.io)-compatible JSON record structure has the following format:
+
+Message body
+```json
+{
+    "payload": {
+        "op": <op>,
+        "before": {<columns>},
+        "after": {<columns>},
+        "ts": [<step>, <txId>],
+        "source": {
+            "version": <version>,
+            "connector": <connector>,
+            "ts_ms": <ts_ms>,
+            "txId": <txId>
+        }
+    }
+}
+```
+
+* `op`: Operation that was performed on a row:
+  * "u" means Update.
+  * "s" means reSet (to not confuse with Read).
+  * "d" means Delete.
+* `before`: Row snapshot before the change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values. Present only if the row existed before the change.
+* `after`: Row snapshot after the change. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values. Present only if the row exists after the change.
+* `ts`: Virtual timestamp. Present if the `VIRTUAL_TIMESTAMPS` setting is enabled. Contains the value of the global coordinator time (`step`) and the unique transaction ID (`txId`). Note that Debezium connectors usually use a single integer `ts_ms` instead.
+* `source`: Source metadata for the event.
+  * `version`: Connector version that was used to generate the record. Current version is `0.0.1`.
+  * `connector`: Connector name. Current name is `ydb_debezium_json`.
+  * `ts_ms`: Approximate time when the change was applied, in milliseconds.
+  * `txId`: Unique transaction ID.
+
+{% note warning %}
+
+Currently debezium json format doesn't have `schema` field. Other Debezium connectors have it.
+
+{% endnote %}
+
+If you use kafka API to read a topic, you will see debezium-compatible kafka key as well, in the following format:
+```json
+{
+    "payload": {
+        <columns>
+    }
+}
+```
+
+* `payload`: Key of a row that was changed. Always present.
+
+You can read more in kafka integration documentation about details on how it is stored and how to access it directly.
+
+{% endif %}
+
 ## Record retention period {#retention-period}
 
 By default, records are stored in the changefeed for 24 hours from the time they are sent. Depending on usage scenarios, the retention period can be reduced or increased up to 30 days.

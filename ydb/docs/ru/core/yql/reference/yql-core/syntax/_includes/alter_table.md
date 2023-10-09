@@ -84,6 +84,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
   * `JSON` — записывать данные в формате [JSON](../../../../concepts/cdc#json-record-structure).
 {% if audience == "tech" %}
   * `DYNAMODB_STREAMS_JSON` — записывать данные в [JSON-формате, совместимом с Amazon DynamoDB Streams](../../../../concepts/cdc#dynamodb-streams-json-record-structure).
+  * `DEBEZIUM_JSON` — записывать данные в [JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc#debezium-json-record-structure).
 {% endif %}
 * `VIRTUAL_TIMESTAMPS` — включение-выключение [виртуальных меток времени](../../../../concepts/cdc#virtual-timestamps). По умолчанию выключено.
 * `RETENTION_PERIOD` — [время хранения записей](../../../../concepts/cdc#retention-period). Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).

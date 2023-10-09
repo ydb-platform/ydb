@@ -383,7 +383,9 @@ public:
         YT_VERIFY(amount >= 0);
 
         auto available = Quota_.Value->load();
-        auto globalAvailable = IsLimited() ? 0 : SharedBucket_->Limit.Value->load();
+        auto globalAvailable = IsLimited()
+            ? 0
+            : std::max<i64>(0, SharedBucket_->Limit.Value->load());
 
         if (amount > available + globalAvailable) {
             return false;
@@ -404,7 +406,9 @@ public:
         YT_VERIFY(amount >= 0);
 
         auto available = Quota_.Value->load();
-        auto globalAvailable = IsLimited() ? 0 : SharedBucket_->Limit.Value->load();
+        auto globalAvailable = IsLimited()
+            ? 0
+            : std::max<i64>(0, SharedBucket_->Limit.Value->load());
 
         auto consumed = std::min(amount, available + globalAvailable);
 
@@ -423,7 +427,10 @@ public:
         YT_VERIFY(amount >= 0);
 
         auto available = Quota_.Value->load();
-        auto globalAvailable = IsLimited() ? 0 : SharedBucket_->Limit.Value->load();
+        // NB: Shared bucket limit can get below zero because resource acquisition is racy.
+        auto globalAvailable = IsLimited()
+            ? 0
+            : std::max<i64>(0, SharedBucket_->Limit.Value->load());
 
         auto globalConsumed = std::clamp<i64>(amount - available, 0, globalAvailable);
         *Quota_.Value -= amount - globalConsumed;

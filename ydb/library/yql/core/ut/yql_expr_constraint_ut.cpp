@@ -233,6 +233,26 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(tuple/1[asc];tuple/0[asc];tuple/2[asc])");
     }
 
+    Y_UNIT_TEST(SortByTupleWithSingleElementAndCopyOfElement) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value '((String 'x))))
+                (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value '((String 'y))))
+                (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value '((String 'z))))
+            ))
+            (let sorted (Sort list (Bool 'False) (lambda '(item) '((Nth (Member item 'value) '0)))))
+            (let map (OrderedMap sorted (lambda '(item) (AsStruct '('tuple (Member item 'value)) '('element (Nth (Member item 'value) '0))))))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(element,tuple[desc])");
+    }
+
     Y_UNIT_TEST(SortByColumnAndExpr) {
         const auto s = R"((
             (let mr_sink (DataSink 'yt (quote plato)))

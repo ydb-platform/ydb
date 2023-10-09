@@ -22,7 +22,6 @@ func ValidateDescribeTableRequest(logger log.Logger, request *api_service_protos
 }
 
 func ValidateListSplitsRequest(logger log.Logger, request *api_service_protos.TListSplitsRequest) error {
-
 	if len(request.Selects) == 0 {
 		return fmt.Errorf("empty select list: %w", utils.ErrInvalidRequest)
 	}

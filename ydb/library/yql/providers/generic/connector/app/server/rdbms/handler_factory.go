@@ -25,7 +25,6 @@ func (hf *HandlerFactory) Make(
 	logger log.Logger,
 	dataSourceType api_common.EDataSourceKind,
 ) (Handler, error) {
-
 	switch dataSourceType {
 	case api_common.EDataSourceKind_CLICKHOUSE:
 		return newHandler[*clickhouse.Connection](logger, &hf.clickhouse), nil

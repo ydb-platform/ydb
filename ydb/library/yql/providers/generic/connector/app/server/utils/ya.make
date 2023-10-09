@@ -6,6 +6,7 @@ SRCS(
     columnar_buffer_factory.go
     connection_manager.go
     converters.go
+    doc.go
     endpoint.go
     errors.go
     logger.go

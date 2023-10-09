@@ -120,6 +120,7 @@ func appendValueToArrowBuilder[IN utils.ValueType, OUT utils.ValueType, AB utils
 ) error {
 	if !valid {
 		builder.AppendNull()
+
 		return nil
 	}
 
@@ -130,6 +131,7 @@ func appendValueToArrowBuilder[IN utils.ValueType, OUT utils.ValueType, AB utils
 		if errors.Is(err, utils.ErrValueOutOfTypeBounds) {
 			// TODO: logger ?
 			builder.AppendNull()
+
 			return nil
 		}
 

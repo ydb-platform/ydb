@@ -83,11 +83,13 @@ func (s *Server) ListSplits(request *api_service_protos.TListSplitsRequest, stre
 	for _, slct := range request.Selects {
 		if err := s.doListSplitsHandleSelect(stream, slct, &totalSplits); err != nil {
 			logger.Error("request handling failed", log.Error(err))
+
 			return err
 		}
 	}
 
 	logger.Info("request handling finished", log.Int("total_splits", totalSplits))
+
 	return nil
 }
 
@@ -105,6 +107,7 @@ func (s *Server) doListSplitsHandleSelect(
 
 	for _, split := range resp.Splits {
 		logger.Debug("responding split", log.Int("split_id", *totalSplits), log.String("split", split.Select.String()))
+
 		*totalSplits++
 	}
 
@@ -126,6 +129,7 @@ func (s *Server) doListSplitsResponse(
 
 	if err := stream.Send(response); err != nil {
 		logger.Error("send channel failed", log.Error(err))
+
 		return err
 	}
 
@@ -143,6 +147,7 @@ func (s *Server) ReadSplits(request *api_service_protos.TReadSplitsRequest, stre
 
 		if err := stream.Send(response); err != nil {
 			logger.Error("send channel failed", log.Error(err))
+
 			return err
 		}
 	}
@@ -160,6 +165,7 @@ func (s *Server) ReadSplits(request *api_service_protos.TReadSplitsRequest, stre
 
 			if err := stream.Send(response); err != nil {
 				logger.Error("send channel failed", log.Error(err))
+
 				return err
 			}
 		}
@@ -245,6 +251,7 @@ func (s *Server) makeOptions() ([]grpc.ServerOption, error) {
 		s.logger.Info("server will use TLS connections")
 
 		s.logger.Info("reading key pair", log.String("cert", s.cfg.Tls.Cert), log.String("key", s.cfg.Tls.Key))
+
 		creds, err := credentials.NewServerTLSFromFile(s.cfg.Tls.Cert, s.cfg.Tls.Key)
 		if err != nil {
 			return nil, fmt.Errorf("new server TLS from file: %w", err)

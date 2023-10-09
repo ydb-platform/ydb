@@ -1,6 +1,7 @@
 GO_LIBRARY()
 
 SRCS(
+    doc.go
     handler.go
     handler_factory.go
     schema_builder.go

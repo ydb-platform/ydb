@@ -15,6 +15,7 @@ import (
 )
 
 // TODO: it's better to do this in GRPC middleware
+
 func AnnotateLogger(logger log.Logger, method string, dsi *api_common.TDataSourceInstance) log.Logger {
 	logger = log.With(logger, log.String("method", method))
 
@@ -85,6 +86,7 @@ type QueryLoggerFactory struct {
 
 func NewQueryLoggerFactory(cfg *config.TLoggerConfig) QueryLoggerFactory {
 	enabled := cfg.GetEnableSqlQueryLogging()
+
 	return QueryLoggerFactory{enableQueryLogging: enabled}
 }
 

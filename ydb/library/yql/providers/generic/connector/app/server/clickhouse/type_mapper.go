@@ -174,7 +174,6 @@ func (tm typeMapper) AddRowToArrowIPCStreaming(ydbTypes []*Ydb.Type, acceptors [
 	}
 
 	for i, ydbType := range ydbTypes {
-
 		switch t := ydbType.Type.(type) {
 		case *Ydb.Type_TypeId:
 			if err := tm.appendValueToBuilder(t.TypeId, acceptors[i], builders[i], false); err != nil {
@@ -203,30 +202,38 @@ func appendValueToArrowBuilder[IN utils.ValueType, OUT utils.ValueType, AB utils
 	optional bool,
 ) error {
 	var value IN
+
 	if optional {
 		cast := acceptor.(**IN)
 		if *cast == nil {
 			builder.AppendNull()
+
 			return nil
 		}
+
 		value = **cast
 	} else {
+		//nolint:forcetypeassert
 		value = *acceptor.(*IN)
 	}
 
 	var converter CONV
+
 	out, err := converter.Convert(value)
 	if err != nil {
 		if errors.Is(err, utils.ErrValueOutOfTypeBounds) {
 			// TODO: write warning to logger
 			builder.AppendNull()
+
 			return nil
 		}
 
 		return fmt.Errorf("convert value %v: %w", value, err)
 	}
 
+	//nolint:forcetypeassert
 	builder.(AB).Append(out)
+
 	return nil
 }
 
@@ -237,6 +244,7 @@ func (typeMapper) appendValueToBuilder(
 	optional bool,
 ) error {
 	var err error
+
 	switch typeID {
 	case Ydb.Type_BOOL:
 		err = appendValueToArrowBuilder[bool, uint8, *array.Uint8Builder, utils.BoolConverter](acceptor, builder, optional)

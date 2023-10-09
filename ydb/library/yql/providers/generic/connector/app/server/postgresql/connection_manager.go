@@ -20,6 +20,7 @@ type rows struct {
 
 func (r rows) Close() error {
 	r.Rows.Close()
+
 	return nil
 }
 
@@ -36,6 +37,7 @@ func (c Connection) Query(ctx context.Context, query string, args ...any) (utils
 	c.logger.Dump(query, args...)
 
 	out, err := c.Conn.Query(ctx, query, args...)
+
 	return rows{Rows: out}, err
 }
 
@@ -74,6 +76,7 @@ func (c *connectionManager) Make(
 	if err != nil {
 		return nil, fmt.Errorf("parse connection config template: %w", err)
 	}
+
 	connCfg.Database = dsi.Database
 	connCfg.Host = dsi.GetEndpoint().GetHost()
 	connCfg.Port = uint16(dsi.GetEndpoint().GetPort())

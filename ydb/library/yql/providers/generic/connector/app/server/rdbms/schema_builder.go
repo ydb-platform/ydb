@@ -35,6 +35,7 @@ func (sb *schemaBuilder) addColumn(columnName, columnType string) error {
 	}
 
 	sb.items = append(sb.items, item)
+
 	return nil
 }
 

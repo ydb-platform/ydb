@@ -1,5 +1,8 @@
 GO_LIBRARY()
 
-SRCS(client.go)
+SRCS(
+    client.go
+    doc.go
+)
 
 END()

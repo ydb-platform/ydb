@@ -23,6 +23,10 @@ func (qm queryExecutor) DescribeTable(ctx context.Context, conn *Connection, req
 		return nil, fmt.Errorf("query: %w", err)
 	}
 
+	if err := out.Err(); err != nil {
+		return nil, fmt.Errorf("rows err: %w", err)
+	}
+
 	return out, nil
 }
 

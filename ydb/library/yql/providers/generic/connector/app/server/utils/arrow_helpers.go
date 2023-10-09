@@ -126,5 +126,6 @@ func primitiveTypeToArrow(typeID Ydb.Type_PrimitiveTypeId, column *Ydb.Column, a
 	default:
 		return arrow.Field{}, nil, fmt.Errorf("register type '%v': %w", typeID, ErrDataTypeNotSupported)
 	}
+
 	return field, builder, nil
 }

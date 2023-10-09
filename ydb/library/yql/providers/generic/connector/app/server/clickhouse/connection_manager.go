@@ -23,7 +23,17 @@ type Connection struct {
 
 func (c Connection) Query(ctx context.Context, query string, args ...any) (utils.Rows, error) {
 	c.logger.Dump(query, args...)
-	return c.DB.QueryContext(ctx, query, args...)
+
+	rows, err := c.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query context: %w", err)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows err: %w", err)
+	}
+
+	return rows, nil
 }
 
 var _ utils.ConnectionManager[*Connection] = (*connectionManager)(nil)
@@ -56,6 +66,7 @@ func (c *connectionManager) Make(
 		},
 		DialContext: func(ctx context.Context, addr string) (net.Conn, error) {
 			var d net.Dialer
+
 			return d.DialContext(ctx, "tcp", addr)
 		},
 		Debug: true,

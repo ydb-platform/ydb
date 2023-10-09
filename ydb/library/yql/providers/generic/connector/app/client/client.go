@@ -144,8 +144,10 @@ func describeTable(
 
 	if utils.IsSuccess(resp.Error) {
 		logger.Debug("DescribeTable", log.String("response", resp.String()))
+
 		return resp.Schema, nil
 	}
+
 	logger.Error("DescribeTable", log.String("response", resp.String()))
 
 	return nil, utils.NewSTDErrorFromAPIError(resp.Error)
@@ -195,6 +197,7 @@ func listSplits(
 
 		if !utils.IsSuccess(resp.Error) {
 			logger.Error("ListSplits", log.String("response", resp.String()))
+
 			return splits, utils.NewSTDErrorFromAPIError(resp.Error)
 		}
 

@@ -189,7 +189,7 @@ protected:
         THttpIncomingRequestPtr request = response->GetRequest();
         response->Finish();
         LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- (" << response->Status << " " << response->Message << ")");
-        if (response->Status != "200" && response->Status != "404") {
+        if (!response->Status.StartsWith('2') && response->Status != "404") {
             static constexpr size_t MAX_LOGGED_SIZE = 1024;
             LOG_DEBUG_S(ctx, HttpLog,
                         "(#"

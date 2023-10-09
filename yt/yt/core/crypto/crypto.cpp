@@ -212,7 +212,7 @@ TString GetSha256HexDigestLowerCase(TStringBuf data)
 
 using TSha256Hmac = std::array<char, 256 / 8>;
 
-TSha256Hmac CreateSha256HmacImpl(const TString& key, const TString& message)
+TSha256Hmac CreateSha256HmacImpl(TStringBuf key, TStringBuf message)
 {
     TSha256Hmac hmac;
     unsigned int opensslIsInsane;
@@ -228,13 +228,13 @@ TSha256Hmac CreateSha256HmacImpl(const TString& key, const TString& message)
     return hmac;
 }
 
-TString CreateSha256Hmac(const TString& key, const TString& message)
+TString CreateSha256Hmac(TStringBuf key, TStringBuf message)
 {
     auto hmac = CreateSha256HmacImpl(key, message);
     return to_lower(HexEncode(hmac.data(), hmac.size()));
 }
 
-TString CreateSha256HmacRaw(const TString& key, const TString& message)
+TString CreateSha256HmacRaw(TStringBuf key, TStringBuf message)
 {
     auto hmac = CreateSha256HmacImpl(key, message);
     return TString(hmac.data(), hmac.size());
@@ -328,4 +328,3 @@ void FromProto(std::optional<NYT::NCrypto::TMD5Hasher>* hasher, const NCrypto::N
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NCrypto
-

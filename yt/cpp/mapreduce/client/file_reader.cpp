@@ -153,7 +153,7 @@ NHttpClient::IHttpResponsePtr TFileReader::Request(const TClientContext& context
     header.SetOutputFormat(TMaybe<TFormat>()); // Binary format
 
     if (EndOffset_) {
-        Y_VERIFY(*EndOffset_ >= currentOffset);
+        Y_ABORT_UNLESS(*EndOffset_ >= currentOffset);
         FileReaderOptions_.Length(*EndOffset_ - currentOffset);
     }
     FileReaderOptions_.Offset(currentOffset);

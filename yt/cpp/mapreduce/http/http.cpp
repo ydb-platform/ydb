@@ -101,9 +101,9 @@ private:
     // if error has happend. This function tries to read error response
     // in such cases.
     void HandleWriteException() {
-        Y_VERIFY(WriteError_ == nullptr);
+        Y_ABORT_UNLESS(WriteError_ == nullptr);
         WriteError_ = std::current_exception();
-        Y_VERIFY(WriteError_ != nullptr);
+        Y_ABORT_UNLESS(WriteError_ != nullptr);
         try {
             HttpRequest_->GetResponseStream();
         } catch (const TErrorResponse &) {
@@ -774,7 +774,7 @@ size_t THttpResponse::DoRead(void* buf, size_t len)
     if (read == 0 && len != 0) {
         // THttpInput MUST return defined (but may be empty)
         // trailers when it is exhausted.
-        Y_VERIFY(HttpInput_.Trailers().Defined(),
+        Y_ABORT_UNLESS(HttpInput_.Trailers().Defined(),
             "trailers MUST be defined for exhausted stream");
         CheckTrailers(HttpInput_.Trailers().GetRef());
         IsExhausted_ = true;
@@ -793,7 +793,7 @@ size_t THttpResponse::DoSkip(size_t len)
     if (skipped == 0 && len != 0) {
         // THttpInput MUST return defined (but may be empty)
         // trailers when it is exhausted.
-        Y_VERIFY(HttpInput_.Trailers().Defined(),
+        Y_ABORT_UNLESS(HttpInput_.Trailers().Defined(),
             "trailers MUST be defined for exhausted stream");
         CheckTrailers(HttpInput_.Trailers().GetRef());
         IsExhausted_ = true;
@@ -964,7 +964,7 @@ THttpResponse* THttpRequest::GetResponseStream()
     if (!Input) {
         SocketInput.Reset(new TSocketInput(*Connection->Socket.Get()));
         if (TConfig::Get()->UseAbortableResponse) {
-            Y_VERIFY(!Url_.empty());
+            Y_ABORT_UNLESS(!Url_.empty());
             Input.Reset(new TAbortableHttpResponse(SocketInput.Get(), RequestId, HostName, Url_));
         } else {
             Input.Reset(new THttpResponse(SocketInput.Get(), RequestId, HostName));

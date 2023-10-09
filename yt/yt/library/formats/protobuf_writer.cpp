@@ -699,7 +699,7 @@ public:
         };
 
         while (parentEmbeddingIndex < std::ssize(embeddings)) {
-            Y_VERIFY(embeddings[parentEmbeddingIndex].ParentEmbeddingIndex == TProtobufWriterEmbeddingDescription::InvalidIndex);
+            Y_ABORT_UNLESS(embeddings[parentEmbeddingIndex].ParentEmbeddingIndex == TProtobufWriterEmbeddingDescription::InvalidIndex);
             parentEmbeddingIndex = EmitMessage(parentEmbeddingIndex);
         }
 

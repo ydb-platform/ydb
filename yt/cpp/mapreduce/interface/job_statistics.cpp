@@ -117,7 +117,7 @@ public:
 
     static void ParseNode(const TNode& node, const TString& curPath, TName2State2TaskName2Data* output)
     {
-        Y_VERIFY(node.IsMap());
+        Y_ABORT_UNLESS(node.IsMap());
 
         for (const auto& [key, value] : node.AsMap()) {
             if (key == "$"sv) {

@@ -316,7 +316,7 @@ TVector<TTableSchema> TJobOperationPreparer::GetOutputSchemas()
     TVector<TTableSchema> result;
     result.reserve(OutputSchemas_.size());
     for (auto& schema : OutputSchemas_) {
-        Y_VERIFY(schema.Defined());
+        Y_ABORT_UNLESS(schema.Defined());
         result.push_back(std::move(*schema));
         schema.Clear();
     }
@@ -455,7 +455,7 @@ IOperationPtr IOperationClient::Map(
     ::TIntrusivePtr<IMapperBase> mapper,
     const TOperationOptions& options)
 {
-    Y_VERIFY(mapper.Get());
+    Y_ABORT_UNLESS(mapper.Get());
 
     return DoMap(
         spec,
@@ -490,7 +490,7 @@ IOperationPtr IOperationClient::Reduce(
     ::TIntrusivePtr<IReducerBase> reducer,
     const TOperationOptions& options)
 {
-    Y_VERIFY(reducer.Get());
+    Y_ABORT_UNLESS(reducer.Get());
 
     return DoReduce(
         spec,
@@ -529,7 +529,7 @@ IOperationPtr IOperationClient::JoinReduce(
     ::TIntrusivePtr<IReducerBase> reducer,
     const TOperationOptions& options)
 {
-    Y_VERIFY(reducer.Get());
+    Y_ABORT_UNLESS(reducer.Get());
 
     return DoJoinReduce(
         spec,
@@ -543,7 +543,7 @@ IOperationPtr IOperationClient::MapReduce(
     ::TIntrusivePtr<IReducerBase> reducer,
     const TOperationOptions& options)
 {
-    Y_VERIFY(reducer.Get());
+    Y_ABORT_UNLESS(reducer.Get());
 
     return DoMapReduce(
         spec,
@@ -560,7 +560,7 @@ IOperationPtr IOperationClient::MapReduce(
     ::TIntrusivePtr<IReducerBase> reducer,
     const TOperationOptions& options)
 {
-    Y_VERIFY(reducer.Get());
+    Y_ABORT_UNLESS(reducer.Get());
 
     return DoMapReduce(
         spec,

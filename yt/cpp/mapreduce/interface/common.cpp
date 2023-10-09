@@ -325,14 +325,14 @@ TColumnSchema TColumnSchema::Type(EValueType type) &&
 
 TColumnSchema& TColumnSchema::Type(const NTi::TTypePtr& type) &
 {
-    Y_VERIFY(type.Get(), "Cannot create column schema with nullptr type");
+    Y_ABORT_UNLESS(type.Get(), "Cannot create column schema with nullptr type");
     TypeV3_ = type;
     return *this;
 }
 
 TColumnSchema TColumnSchema::Type(const NTi::TTypePtr& type) &&
 {
-    Y_VERIFY(type.Get(), "Cannot create column schema with nullptr type");
+    Y_ABORT_UNLESS(type.Get(), "Cannot create column schema with nullptr type");
     TypeV3_ = type;
     return *this;
 }
@@ -526,7 +526,7 @@ TTableSchema CreateTableSchema(
 
 TTableSchema CreateTableSchema(NTi::TTypePtr type)
 {
-    Y_VERIFY(type);
+    Y_ABORT_UNLESS(type);
     TTableSchema schema;
     Deserialize(schema, NodeFromYsonString(NTi::NIo::AsYtSchema(type.Get())));
     return schema;

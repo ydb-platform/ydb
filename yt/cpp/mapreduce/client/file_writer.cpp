@@ -41,7 +41,7 @@ void TFileWriter::DoWrite(const void* buf, size_t len)
     // and server produced one chunk of desired size and one small chunk.
     while (len > 0) {
         const auto retryBlockRemainingSize = RetryfulWriter_.GetRetryBlockRemainingSize();
-        Y_VERIFY(retryBlockRemainingSize > 0);
+        Y_ABORT_UNLESS(retryBlockRemainingSize > 0);
         const auto firstWriteLen = Min(len, retryBlockRemainingSize);
         RetryfulWriter_.Write(buf, firstWriteLen);
         RetryfulWriter_.NotifyRowEnd();

@@ -125,7 +125,7 @@ public:
 private:
     void UpdateOperationStatus(TStringBuf err)
     {
-        Y_VERIFY(Operation_);
+        Y_ABORT_UNLESS(Operation_);
         Operation_->OnStatusUpdated(
             ::TStringBuilder() << "Retriable error during operation start: " << err);
     }
@@ -683,7 +683,7 @@ TMaybe<TString> TJobPreparer::TryUploadWithDeduplication(const IItemToUpload& it
 TString TJobPreparer::UploadToCacheUsingApi(const IItemToUpload& itemToUpload) const
 {
     auto md5Signature = itemToUpload.CalculateMD5();
-    Y_VERIFY(md5Signature.size() == 32);
+    Y_ABORT_UNLESS(md5Signature.size() == 32);
 
     if (auto cachedItemPath = GetItemFromCypressCache(md5Signature, itemToUpload.GetDescription())) {
         return *cachedItemPath;

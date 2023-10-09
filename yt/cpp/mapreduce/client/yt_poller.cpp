@@ -89,7 +89,7 @@ void TYtPoller::WatchLoop()
             if (!Pending_.empty()) {
                 InProgress_.splice(InProgress_.end(), Pending_);
             }
-            Y_VERIFY(!InProgress_.empty());
+            Y_ABORT_UNLESS(!InProgress_.empty());
         }
 
         TRawBatchRequest rawBatchRequest(Context_.Config);

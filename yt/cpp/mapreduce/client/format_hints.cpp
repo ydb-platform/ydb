@@ -34,7 +34,7 @@ static void ApplyEnableTypeConversion(TFormat* format, const TFormatHints& forma
 template <>
 void ApplyFormatHints<TNode>(TFormat* format, const TMaybe<TFormatHints>& formatHints)
 {
-    Y_VERIFY(format);
+    Y_ABORT_UNLESS(format);
     if (!formatHints) {
         return;
     }
@@ -60,7 +60,7 @@ void ApplyFormatHints<TNode>(TFormat* format, const TMaybe<TFormatHints>& format
 template <>
 void ApplyFormatHints<TYaMRRow>(TFormat* format, const TMaybe<TFormatHints>& formatHints)
 {
-    Y_VERIFY(format);
+    Y_ABORT_UNLESS(format);
     if (!formatHints) {
         return;
     }
@@ -71,7 +71,7 @@ void ApplyFormatHints<TYaMRRow>(TFormat* format, const TMaybe<TFormatHints>& for
 template <>
 void ApplyFormatHints<::google::protobuf::Message>(TFormat* format, const TMaybe<TFormatHints>& formatHints)
 {
-    Y_VERIFY(format);
+    Y_ABORT_UNLESS(format);
     if (!formatHints) {
         return;
     }

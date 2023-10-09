@@ -76,7 +76,7 @@ const TVector<TTableSchema>& TOperationPreparationContext::GetInputSchemas() con
             schemaFutures.emplace_back();
             continue;
         }
-        Y_VERIFY(Inputs_[tableIndex]);
+        Y_ABORT_UNLESS(Inputs_[tableIndex]);
         schemaFutures.push_back(batch.Get(TransactionId_, Inputs_[tableIndex]->Path_ + "/@schema", TGetOptions{}));
     }
 
@@ -98,7 +98,7 @@ const TTableSchema& TOperationPreparationContext::GetInputSchema(int index) cons
 {
     auto& schema = InputSchemas_[index];
     if (!InputSchemasLoaded_[index]) {
-        Y_VERIFY(Inputs_[index]);
+        Y_ABORT_UNLESS(Inputs_[index]);
         auto schemaNode = NRawClient::Get(
             RetryPolicy_->CreatePolicyForGenericRequest(),
             Context_,
@@ -111,7 +111,7 @@ const TTableSchema& TOperationPreparationContext::GetInputSchema(int index) cons
 
 TMaybe<TYPath> TOperationPreparationContext::GetInputPath(int index) const
 {
-    Y_VERIFY(index < static_cast<int>(Inputs_.size()));
+    Y_ABORT_UNLESS(index < static_cast<int>(Inputs_.size()));
     if (Inputs_[index]) {
         return Inputs_[index]->Path_;
     }
@@ -120,7 +120,7 @@ TMaybe<TYPath> TOperationPreparationContext::GetInputPath(int index) const
 
 TMaybe<TYPath> TOperationPreparationContext::GetOutputPath(int index) const
 {
-    Y_VERIFY(index < static_cast<int>(Outputs_.size()));
+    Y_ABORT_UNLESS(index < static_cast<int>(Outputs_.size()));
     if (Outputs_[index]) {
         return Outputs_[index]->Path_;
     }
@@ -137,7 +137,7 @@ TSpeculativeOperationPreparationContext::TSpeculativeOperationPreparationContext
     , Inputs_(std::move(inputs))
     , Outputs_(std::move(outputs))
 {
-    Y_VERIFY(Inputs_.size() == previousResult.size());
+    Y_ABORT_UNLESS(Inputs_.size() == previousResult.size());
 }
 
 int TSpeculativeOperationPreparationContext::GetInputCount() const
@@ -157,13 +157,13 @@ const TVector<TTableSchema>& TSpeculativeOperationPreparationContext::GetInputSc
 
 const TTableSchema& TSpeculativeOperationPreparationContext::GetInputSchema(int index) const
 {
-    Y_VERIFY(index < static_cast<int>(InputSchemas_.size()));
+    Y_ABORT_UNLESS(index < static_cast<int>(InputSchemas_.size()));
     return InputSchemas_[index];
 }
 
 TMaybe<TYPath> TSpeculativeOperationPreparationContext::GetInputPath(int index) const
 {
-    Y_VERIFY(index < static_cast<int>(Inputs_.size()));
+    Y_ABORT_UNLESS(index < static_cast<int>(Inputs_.size()));
     if (Inputs_[index].RichYPath) {
         return Inputs_[index].RichYPath->Path_;
     }
@@ -172,7 +172,7 @@ TMaybe<TYPath> TSpeculativeOperationPreparationContext::GetInputPath(int index) 
 
 TMaybe<TYPath> TSpeculativeOperationPreparationContext::GetOutputPath(int index) const
 {
-    Y_VERIFY(index < static_cast<int>(Outputs_.size()));
+    Y_ABORT_UNLESS(index < static_cast<int>(Outputs_.size()));
     if (Outputs_[index].RichYPath) {
         return Outputs_[index].RichYPath->Path_;
     }

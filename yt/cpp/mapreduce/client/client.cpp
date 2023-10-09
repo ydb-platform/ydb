@@ -1102,7 +1102,7 @@ TAuthorizationInfo TClient::WhoAmI()
 
     NJson::TJsonValue jsonValue;
     bool ok = NJson::ReadJsonTree(requestResult.Response, &jsonValue, /* throwOnError = */ true);
-    Y_VERIFY(ok);
+    Y_ABORT_UNLESS(ok);
     result.Login = jsonValue["login"].GetString();
     result.Realm = jsonValue["realm"].GetString();
     return result;

@@ -242,7 +242,7 @@ protected:
     template <typename U, typename TMover, typename TCacheMover>
     void DoMoveRowCached(U* result, TMover mover, TCacheMover cacheMover)
     {
-        Y_VERIFY(result);
+        Y_ABORT_UNLESS(result);
         switch (RowState_) {
             case ERowState::None:
                 mover(result);
@@ -355,7 +355,7 @@ public:
             },
             /* cacheGetter */ [&] {
                 auto result = dynamic_cast<const U*>(CachedRow_.Get());
-                Y_VERIFY(result);
+                Y_ABORT_UNLESS(result);
                 return result;
             });
     }
@@ -372,7 +372,7 @@ public:
             },
             /* cacheMover */ [&] (U* result) {
                 auto cast = dynamic_cast<U*>(CachedRow_.Get());
-                Y_VERIFY(cast);
+                Y_ABORT_UNLESS(cast);
                 result->Swap(cast);
             });
     }
@@ -430,7 +430,7 @@ public:
                 Reader_->ReadRow(result);
             },
             /* cacheMover */ [&] (U* result) {
-                Y_VERIFY((NDetail::TIndexInTuple<U, decltype(CachedRows_)>::Value) == CachedIndex_);
+                Y_ABORT_UNLESS((NDetail::TIndexInTuple<U, decltype(CachedRows_)>::Value) == CachedIndex_);
                 *result = std::move(std::get<U>(CachedRows_));
             });
     }
@@ -531,7 +531,7 @@ public:
                 *result = std::move(std::get<U>(CachedRows_));
             },
             /* cacheMover */ [&] (U* result) {
-                Y_VERIFY((NDetail::TIndexInTuple<U, decltype(CachedRows_)>::Value) == CachedIndex_);
+                Y_ABORT_UNLESS((NDetail::TIndexInTuple<U, decltype(CachedRows_)>::Value) == CachedIndex_);
                 *result = std::move(std::get<U>(CachedRows_));
             });
     }

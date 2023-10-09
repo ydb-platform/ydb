@@ -226,7 +226,7 @@ public:
             CheckErrorResponse(Context_.HostName, Context_.RequestId, Response_);
 
             if (TConfig::Get()->UseAbortableResponse) {
-                Y_VERIFY(!Context_.Url.empty());
+                Y_ABORT_UNLESS(!Context_.Url.empty());
                 Stream_ = std::make_unique<TAbortableCoreHttpResponse>(std::move(stream), Context_.Url);
             } else {
                 Stream_ = std::move(stream);
@@ -423,9 +423,9 @@ private:
         // if error has happend. This function tries to read error response
         // in such cases.
         void HandleWriteException() {
-            Y_VERIFY(WriteError_ == nullptr);
+            Y_ABORT_UNLESS(WriteError_ == nullptr);
             WriteError_ = std::current_exception();
-            Y_VERIFY(WriteError_ != nullptr);
+            Y_ABORT_UNLESS(WriteError_ != nullptr);
             try {
                 HttpRequest_->FinishWithError()->GetResponseStream();
             } catch (const TErrorResponse &) {

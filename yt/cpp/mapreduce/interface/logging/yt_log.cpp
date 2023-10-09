@@ -53,7 +53,7 @@ public:
 
     const TLoggingCategory* GetCategory(TStringBuf categoryName) override
     {
-        Y_VERIFY(categoryName == CategoryName);
+        Y_ABORT_UNLESS(categoryName == CategoryName);
         return &Category_;
     }
 

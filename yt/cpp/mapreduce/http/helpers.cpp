@@ -53,7 +53,7 @@ static TString GetParametersDebugString(const THttpHeader& header)
 
 TString TruncateForLogs(const TString& text, size_t maxSize)
 {
-    Y_VERIFY(maxSize > 10);
+    Y_ABORT_UNLESS(maxSize > 10);
     if (text.empty()) {
         static TString empty = "empty";
         return empty;

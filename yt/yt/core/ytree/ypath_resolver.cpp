@@ -157,7 +157,7 @@ std::optional<TResult> TryParseImpl(TStringBuf yson, const TYPath& path, bool is
                 if (expected != EExpectedItem::BeginAttribute) {
                     return std::nullopt;
                 }
-                Y_VERIFY(literal.has_value());
+                Y_ABORT_UNLESS(literal.has_value());
                 if (!ParseMapOrAttributesUntilKey(&cursor, *literal)) {
                     return std::nullopt;
                 }
@@ -167,7 +167,7 @@ std::optional<TResult> TryParseImpl(TStringBuf yson, const TYPath& path, bool is
                 if (expected != EExpectedItem::BeginMapOrList) {
                     return std::nullopt;
                 }
-                Y_VERIFY(literal.has_value());
+                Y_ABORT_UNLESS(literal.has_value());
                 if (!ParseMapOrAttributesUntilKey(&cursor, *literal)) {
                     return std::nullopt;
                 }
@@ -177,7 +177,7 @@ std::optional<TResult> TryParseImpl(TStringBuf yson, const TYPath& path, bool is
                 if (expected != EExpectedItem::BeginMapOrList) {
                     return std::nullopt;
                 }
-                Y_VERIFY(literal.has_value());
+                Y_ABORT_UNLESS(literal.has_value());
                 int index;
                 if (!TryFromString(*literal, index)) {
                     return std::nullopt;

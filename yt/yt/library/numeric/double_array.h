@@ -390,16 +390,16 @@ constexpr TDerived Div(
 //
 // Example of usage:
 //     TDoubleArray<4> vec1 = {1, 2, 3, 4};
-//     Y_VERIFY(vec1[3] == 4);
-//     Y_VERIFY(TDoubleArray<4>::All(vec1, [] (double x) { return x > 0; }));
-//     Y_VERIFY(MinComponent(vec1) == 1);
+//     Y_ABORT_UNLESS(vec1[3] == 4);
+//     Y_ABORT_UNLESS(TDoubleArray<4>::All(vec1, [] (double x) { return x > 0; }));
+//     Y_ABORT_UNLESS(MinComponent(vec1) == 1);
 //
 //     TDoubleArray<4> vec2 = {4, 3, 2, 1};
-//     Y_VERIFY(vec1 + vec2 == TDoubleArray<4>::FromDouble(5));
+//     Y_ABORT_UNLESS(vec1 + vec2 == TDoubleArray<4>::FromDouble(5));
 //
 //     // |vec1 * vec1| wouldn't work because multiplication is not defined for mathematical vectors.
 //     auto vec1Square = TDoubleArray<4>::Apply(vec1, [] (double x) { return x * x; });
-//     Y_VERIFY(TDoubleArray<4>::All(vec1, vec1Square, [] (double x, double y) { return y == x * x; }));
+//     Y_ABORT_UNLESS(TDoubleArray<4>::All(vec1, vec1Square, [] (double x, double y) { return y == x * x; }));
 template <size_t DimCnt>
 class TDoubleArray final : public TDoubleArrayBase<DimCnt, TDoubleArray<DimCnt>>
 {

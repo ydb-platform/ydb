@@ -1943,7 +1943,7 @@ public:
     /// @brief Get number of output tables.
     i64 GetOutputTableCount() const
     {
-        Y_VERIFY(NDetail::OutputTableCount > 0);
+        Y_ABORT_UNLESS(NDetail::OutputTableCount > 0);
 
         return NDetail::OutputTableCount;
     }

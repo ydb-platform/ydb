@@ -240,7 +240,7 @@ TStructuredJobTableList ApplyProtobufColumnFilters(
             continue;
         }
         auto& table = newTableList[tableIndex];
-        Y_VERIFY(table.RichYPath);
+        Y_ABORT_UNLESS(table.RichYPath);
         if (table.RichYPath->Columns_) {
             continue;
         }
@@ -326,7 +326,7 @@ TSimpleOperationIo CreateSimpleOperationIo(
         &outputs,
         hints);
 
-    Y_VERIFY(outputs.size() == outputSchemas.size());
+    Y_ABORT_UNLESS(outputs.size() == outputSchemas.size());
     for (int i = 0; i < static_cast<int>(outputs.size()); ++i) {
         if (!outputs[i].Schema_ && !outputSchemas[i].Columns().empty()) {
             outputs[i].Schema_ = outputSchemas[i];
@@ -556,7 +556,7 @@ EOperationBriefState CheckOperation(
         TGetOperationOptions().AttributeFilter(TOperationAttributeFilter()
             .Add(EOperationAttribute::State)
             .Add(EOperationAttribute::Result)));
-    Y_VERIFY(attributes.BriefState,
+    Y_ABORT_UNLESS(attributes.BriefState,
         "get_operation for operation %s has not returned \"state\" field",
         GetGuidAsString(operationId).Data());
     if (*attributes.BriefState == EOperationBriefState::Completed) {
@@ -573,7 +573,7 @@ EOperationBriefState CheckOperation(
             operationId,
             TGetFailedJobInfoOptions());
 
-        Y_VERIFY(attributes.Result && attributes.Result->Error);
+        Y_ABORT_UNLESS(attributes.Result && attributes.Result->Error);
         ythrow TOperationFailedError(
             *attributes.BriefState == EOperationBriefState::Aborted
             ? TOperationFailedError::Aborted
@@ -1624,7 +1624,7 @@ void ExecuteMapReduce(
         operationIo.MapperInputFormat = inputFormat;
         operationIo.MapperOutputFormat = outputFormat;
 
-        Y_VERIFY(mapperInferenceResult.size() >= 1);
+        Y_ABORT_UNLESS(mapperInferenceResult.size() >= 1);
         currentInferenceResult = TVector<TTableSchema>{mapperInferenceResult[0]};
         // The first output as it corresponds to the intermediate data.
         TVector<TTableSchema> additionalOutputsInferenceResult(mapperInferenceResult.begin() + 1, mapperInferenceResult.end());
@@ -2051,7 +2051,7 @@ void ExecuteVanilla(
         preparer->GetPreparationId());
 
     auto addTask = [&](TFluentMap fluent, const TVanillaTask& task) {
-        Y_VERIFY(task.Job_.Get());
+        Y_ABORT_UNLESS(task.Job_.Get());
         if (std::holds_alternative<TVoidStructuredRowStream>(task.Job_->GetOutputRowStreamDescription())) {
             Y_ENSURE_EX(task.Outputs_.empty(),
                 TApiUsageError() << "Vanilla task with void IVanillaJob doesn't expect output tables");
@@ -2268,7 +2268,7 @@ public:
                 OperationImpl_->AnalyzeUnrecognizedSpec(*attributes.UnrecognizedSpec);
                 UnrecognizedSpecAnalyzed_ = true;
             }
-            Y_VERIFY(attributes.BriefState,
+            Y_ABORT_UNLESS(attributes.BriefState,
                 "get_operation for operation %s has not returned \"state\" field",
                 GetGuidAsString(OperationImpl_->GetId()).Data());
             if (*attributes.BriefState != EOperationBriefState::InProgress) {
@@ -2315,7 +2315,7 @@ TString TOperation::TOperationImpl::GetWebInterfaceUrl() const
 
 void TOperation::TOperationImpl::OnPrepared()
 {
-    Y_VERIFY(!PreparedPromise_.HasException() && !PreparedPromise_.HasValue());
+    Y_ABORT_UNLESS(!PreparedPromise_.HasException() && !PreparedPromise_.HasValue());
     PreparedPromise_.SetValue();
 }
 
@@ -2361,7 +2361,7 @@ bool TOperation::TOperationImpl::IsStarted() const {
 
 void TOperation::TOperationImpl::OnPreparationException(std::exception_ptr e)
 {
-    Y_VERIFY(!PreparedPromise_.HasValue() && !PreparedPromise_.HasException());
+    Y_ABORT_UNLESS(!PreparedPromise_.HasValue() && !PreparedPromise_.HasException());
     PreparedPromise_.SetException(e);
 }
 
@@ -2437,7 +2437,7 @@ EOperationBriefState TOperation::TOperationImpl::GetBriefState()
     ValidateOperationStarted();
     EOperationBriefState result = EOperationBriefState::InProgress;
     UpdateAttributesAndCall(false, [&] (const TOperationAttributes& attributes) {
-        Y_VERIFY(attributes.BriefState,
+        Y_ABORT_UNLESS(attributes.BriefState,
             "get_operation for operation %s has not returned \"state\" field",
             GetGuidAsString(*Id_).Data());
         result = *attributes.BriefState;
@@ -2450,7 +2450,7 @@ TMaybe<TYtError> TOperation::TOperationImpl::GetError()
     ValidateOperationStarted();
     TMaybe<TYtError> result;
     UpdateAttributesAndCall(false, [&] (const TOperationAttributes& attributes) {
-        Y_VERIFY(attributes.Result);
+        Y_ABORT_UNLESS(attributes.Result);
         result = attributes.Result->Error;
     });
     return result;
@@ -2516,9 +2516,9 @@ void TOperation::TOperationImpl::AnalyzeUnrecognizedSpec(TNode unrecognizedSpec)
         }
     };
 
-    Y_VERIFY(unrecognizedSpec.IsMap());
+    Y_ABORT_UNLESS(unrecognizedSpec.IsMap());
     for (const auto& knownFieldPath : knownUnrecognizedSpecFieldPaths) {
-        Y_VERIFY(!knownFieldPath.empty());
+        Y_ABORT_UNLESS(!knownFieldPath.empty());
         removeByPath(unrecognizedSpec, knownFieldPath.cbegin(), knownFieldPath.cend(), removeByPath);
     }
 
@@ -2534,13 +2534,13 @@ void TOperation::TOperationImpl::AnalyzeUnrecognizedSpec(TNode unrecognizedSpec)
 void TOperation::TOperationImpl::OnStarted(const TOperationId& operationId)
 {
     auto guard = Guard(Lock_);
-    Y_VERIFY(!Id_,
+    Y_ABORT_UNLESS(!Id_,
         "OnStarted() called with operationId = %s for operation with id %s",
         GetGuidAsString(operationId).Data(),
         GetGuidAsString(*Id_).Data());
     Id_ = operationId;
 
-    Y_VERIFY(!StartedPromise_.HasValue() && !StartedPromise_.HasException());
+    Y_ABORT_UNLESS(!StartedPromise_.HasValue() && !StartedPromise_.HasException());
     StartedPromise_.SetValue();
 }
 
@@ -2657,12 +2657,12 @@ void TOperation::TOperationImpl::SyncFinishOperationImpl(const TOperationAttribu
 {
     {
         auto guard = Guard(Lock_);
-        Y_VERIFY(Id_);
+        Y_ABORT_UNLESS(Id_);
     }
-    Y_VERIFY(attributes.BriefState,
+    Y_ABORT_UNLESS(attributes.BriefState,
         "get_operation for operation %s has not returned \"state\" field",
         GetGuidAsString(*Id_).Data());
-    Y_VERIFY(*attributes.BriefState != EOperationBriefState::InProgress);
+    Y_ABORT_UNLESS(*attributes.BriefState != EOperationBriefState::InProgress);
 
     {
         try {
@@ -2681,7 +2681,7 @@ void TOperation::TOperationImpl::SyncFinishOperationImpl(const TOperationAttribu
     if (*attributes.BriefState == EOperationBriefState::Completed) {
         CompletePromise_->SetValue();
     } else if (*attributes.BriefState == EOperationBriefState::Aborted || *attributes.BriefState == EOperationBriefState::Failed) {
-        Y_VERIFY(attributes.Result && attributes.Result->Error);
+        Y_ABORT_UNLESS(attributes.Result && attributes.Result->Error);
         const auto& error = *attributes.Result->Error;
         YT_LOG_ERROR("Operation %v is `%v' with error: %v",
             *Id_,

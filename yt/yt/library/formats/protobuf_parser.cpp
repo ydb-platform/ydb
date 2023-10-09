@@ -379,7 +379,7 @@ private:
                 int embeddedChildIndex = childIndex;
                 if (depth == 0 && childDescription.Type->ProtoType != EProtobufType::EmbeddedMessage) {
                     auto maybeEmbeddedChildIndex = type->FieldNumberToEmbeddedChildIndex(fieldNumber);
-                    Y_VERIFY(maybeEmbeddedChildIndex);
+                    Y_ABORT_UNLESS(maybeEmbeddedChildIndex);
                     embeddedChildIndex = *maybeEmbeddedChildIndex;
                 }
 

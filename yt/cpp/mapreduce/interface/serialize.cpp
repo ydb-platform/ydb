@@ -196,7 +196,7 @@ void Serialize(const TColumnSchema& columnSchema, NYson::IYsonConsumer* consumer
                 if (typeV3.IsString()) {
                     result = typeV3.AsString();
                 } else if (typeV3.IsMap() && typeV3.Size() == 1) {
-                    Y_VERIFY(typeV3["type_name"].IsString(), "invalid type is passed");
+                    Y_ABORT_UNLESS(typeV3["type_name"].IsString(), "invalid type is passed");
                     result = typeV3["type_name"].AsString();
                 }
                 if (result) {

@@ -478,7 +478,7 @@ public:
     [[nodiscard]] TGuard Enter(const Descriptor* descriptor)
     {
         if (ActiveVertices_.contains(descriptor)) {
-            Y_VERIFY(!Stack_.empty());
+            Y_ABORT_UNLESS(!Stack_.empty());
             ythrow TApiUsageError() << "Cyclic reference found for protobuf messages. " <<
                 "Consider removing " << EWrapperFieldFlag::SERIALIZATION_YT << " flag " <<
                 "somewhere on the cycle containing " <<
@@ -627,7 +627,7 @@ TNode MakeMapFieldsConfig(
     const TProtobufFieldOptions& fieldOptions,
     TCycleChecker& cycleChecker)
 {
-    Y_VERIFY(fieldDescriptor->is_map());
+    Y_ABORT_UNLESS(fieldDescriptor->is_map());
     auto message = fieldDescriptor->message_type();
     switch (fieldOptions.MapMode) {
         case EProtobufMapMode::ListOfStructsLegacy:
@@ -1306,7 +1306,7 @@ NTi::TTypePtr TTableSchemaInferrer::GetMessageType(
     const FieldDescriptor& fieldDescriptor,
     TProtobufFieldOptions defaultFieldOptions)
 {
-    Y_VERIFY(fieldDescriptor.message_type());
+    Y_ABORT_UNLESS(fieldDescriptor.message_type());
     const auto& messageDescriptor = *fieldDescriptor.message_type();
     auto members = GetMessageMembers(
         fieldDescriptor.full_name(),
@@ -1320,7 +1320,7 @@ NTi::TTypePtr TTableSchemaInferrer::GetMapType(
     const FieldDescriptor& fieldDescriptor,
     const TProtobufFieldOptions& fieldOptions)
 {
-    Y_VERIFY(fieldDescriptor.is_map());
+    Y_ABORT_UNLESS(fieldDescriptor.is_map());
     switch (fieldOptions.MapMode) {
         case EProtobufMapMode::ListOfStructsLegacy:
         case EProtobufMapMode::ListOfStructs: {
@@ -1340,16 +1340,16 @@ NTi::TTypePtr TTableSchemaInferrer::GetMapType(
         case EProtobufMapMode::Dict:
         case EProtobufMapMode::OptionalDict: {
             auto message = fieldDescriptor.message_type();
-            Y_VERIFY(message->field_count() == 2);
+            Y_ABORT_UNLESS(message->field_count() == 2);
             auto keyVariant = GetScalarFieldType(*message->field(0), TProtobufFieldOptions{});
-            Y_VERIFY(std::holds_alternative<EValueType>(keyVariant));
+            Y_ABORT_UNLESS(std::holds_alternative<EValueType>(keyVariant));
             auto key = std::get<EValueType>(keyVariant);
             TProtobufFieldOptions embeddedOptions;
             embeddedOptions.SerializationMode = EProtobufSerializationMode::Yt;
             auto valueVariant = GetFieldType(*message->field(1), embeddedOptions);
-            Y_VERIFY(std::holds_alternative<NTi::TTypePtr>(valueVariant));
+            Y_ABORT_UNLESS(std::holds_alternative<NTi::TTypePtr>(valueVariant));
             auto value = std::get<NTi::TTypePtr>(valueVariant);
-            Y_VERIFY(value->IsOptional());
+            Y_ABORT_UNLESS(value->IsOptional());
             value = value->AsOptional()->GetItemType();
             auto dict = NTi::Dict(ToTypeV3(key, true), value);
             if (fieldOptions.MapMode == EProtobufMapMode::OptionalDict) {

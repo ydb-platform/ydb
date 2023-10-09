@@ -592,8 +592,8 @@ TFuture<TMultiTablePartitions> TRawBatchRequest::GetTablePartitions(
 
 void TRawBatchRequest::FillParameterList(size_t maxSize, TNode* result, TInstant* nextTry) const
 {
-    Y_VERIFY(result);
-    Y_VERIFY(nextTry);
+    Y_ABORT_UNLESS(result);
+    Y_ABORT_UNLESS(nextTry);
 
     *nextTry = TInstant();
     maxSize = Min(maxSize, BatchItemList_.size());
@@ -626,7 +626,7 @@ void TRawBatchRequest::ParseResponse(
     TRawBatchRequest* retryBatch,
     TInstant now)
 {
-    Y_VERIFY(retryBatch);
+    Y_ABORT_UNLESS(retryBatch);
 
     EnsureType(node, TNode::List);
     auto& responseList = node.AsList();

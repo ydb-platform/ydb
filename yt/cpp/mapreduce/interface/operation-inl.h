@@ -573,10 +573,10 @@ int RunVanillaJob(size_t outputTableCount, IInputStream& jobStateStream)
     job.Load(jobStateStream);
 
     if constexpr (std::is_base_of<IVanillaJob<>, TVanillaJob>::value) {
-        Y_VERIFY(outputTableCount == 0, "Void vanilla job expects zero 'outputTableCount'");
+        Y_ABORT_UNLESS(outputTableCount == 0, "Void vanilla job expects zero 'outputTableCount'");
         job.Do();
     } else {
-        Y_VERIFY(outputTableCount, "Vanilla job with table writer expects nonzero 'outputTableCount'");
+        Y_ABORT_UNLESS(outputTableCount, "Vanilla job with table writer expects nonzero 'outputTableCount'");
         using TOutputRow = typename TVanillaJob::TWriter::TRowType;
 
         THolder<IProxyOutput> rawJobWriter;

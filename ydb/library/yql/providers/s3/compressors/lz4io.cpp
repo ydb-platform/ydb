@@ -179,6 +179,7 @@ public:
         Prefs.frameInfo.blockChecksumFlag = LZ4F_blockChecksum_t(0);
         Prefs.frameInfo.contentSize = 0ULL;
         Prefs.frameInfo.contentChecksumFlag = LZ4F_contentChecksum_t(1);
+        Prefs.frameInfo.dictID = 0;
         Prefs.favorDecSpeed = 0;
 
         LZ4F_errorCode_t const errorCode = LZ4F_createCompressionContext(&Ctx, LZ4F_VERSION);

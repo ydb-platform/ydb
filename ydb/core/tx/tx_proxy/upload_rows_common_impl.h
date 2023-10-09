@@ -204,6 +204,7 @@ protected:
     bool WriteToTableShadow = false;
     bool AllowWriteToPrivateTable = false;
     bool DiskQuotaExceeded = false;
+    bool UpsertIfExists = false;
 
     std::shared_ptr<arrow::RecordBatch> Batch;
     float RuCost = 0.0;
@@ -1045,6 +1046,9 @@ private:
                 }
                 if (WriteToTableShadow) {
                     ev->Record.SetWriteToTableShadow(true);
+                }
+                if (UpsertIfExists) {
+                    ev->Record.SetUpsertIfExists(true);
                 }
                 // Copy protobuf settings without rows
                 retryState->Headers = ev->Record;

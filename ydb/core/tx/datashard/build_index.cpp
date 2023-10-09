@@ -592,11 +592,16 @@ private:
                     "Upload, last key " << DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry)
                                         << " " << Debug());
 
+        auto writeMode = NTxProxy::EUploadRowsMode::WriteToTableShadow;
+        if (ColumnBuildSettings.columnSize() > 0) {
+            writeMode = NTxProxy::EUploadRowsMode::UpsertIfExists;
+        }
+
         auto actor = NTxProxy::CreateUploadRowsInternal(
             SelfId(), TargetTable,
             UploadColumnsTypes,
             WriteBuf.GetRowsData(),
-            NTxProxy::EUploadRowsMode::WriteToTableShadow,
+            writeMode,
             true /*writeToPrivateTable*/);
 
         Uploader = TActivationContext::AsActorContext().MakeFor(SelfId()).Register(actor);

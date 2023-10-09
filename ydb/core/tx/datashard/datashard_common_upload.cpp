@@ -54,6 +54,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         }
     }
 
+    const bool upsertIfExists = record.GetUpsertIfExists();
     const bool writeToTableShadow = record.GetWriteToTableShadow();
     const bool readForTableShadow = writeToTableShadow && !shadowTableId;
     const ui32 writeTableId = writeToTableShadow && shadowTableId ? shadowTableId : localTableId;
@@ -151,6 +152,23 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
         }
 
+        if (upsertIfExists) {
+            rowState.Init(tagsForSelect.size());
+            auto ready = userDb.SelectRow(fullTableId, key, tagsForSelect, rowState);
+            if (ready == NTable::EReady::Page) {
+                pageFault = true;
+            }
+
+            if (pageFault) {
+                continue;
+            }
+
+            if (rowState == NTable::ERowOp::Erase || rowState == NTable::ERowOp::Absent) {
+                // in upsert if exists mode we must be sure that we insert only existing rows.
+                continue;
+            }
+        }
+
         value.clear();
         size_t vi = 0;
         for (const auto& vt : valueCols) {
@@ -179,6 +197,8 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         }
 
         if (!writeToTableShadow) {
+            // note, that for upsertIfExists mode we must break locks, because otherwise we can
+            // produce inconsistency.
             if (BreakLocks) {
                 if (breakWriteConflicts) {
                     if (!self->BreakWriteConflicts(txc.DB, fullTableId, keyCells.GetCells(), volatileDependencies)) {

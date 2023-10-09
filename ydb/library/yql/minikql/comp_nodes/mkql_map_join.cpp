@@ -98,6 +98,13 @@ protected:
         }
     }
 
+    bool IsUnusedInput(const ui32 index) const {
+        for (auto i = 0U; i < LeftRenames.size(); ++++i)
+            if (LeftRenames[i] == index)
+                return false;
+        return true;
+    }
+
     template<class TLeftSideSource>
     std::array<Value*, 2U> GenFillOutput(ui32 idx, const TCodegenContext& ctx, const TLeftSideSource& input, ICodegeneratorInlineWideNode::TGettersList& output) const {
         GenFillLeftStruct(input, output);
@@ -354,6 +361,12 @@ public:
 
             const auto cont = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Contains>(Type::getInt1Ty(context), dict, ctx.Codegen, block, keysPtr);
 
+            if constexpr (!IsTuple) {
+                if (this->IsUnusedInput(this->LeftKeyColumns.front())) {
+                    ValueCleanup(GetValueRepresentation(this->DictType->GetKeyType()), keysPtr, ctx, block);
+                }
+            }
+
             result->addIncoming(ConstantInt::get(resultType, i32(EFetchResult::One)), block);
 
             if constexpr (RightRequired) {
@@ -377,8 +390,14 @@ public:
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Lookup>(lookupPtr, dict, ctx.Codegen, block, keysPtr);
 
             const auto lookup = new LoadInst(valueType, lookupPtr, "lookup", block);
-            const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, lookup, zero, "ok", block);
 
+            if constexpr (!IsTuple) {
+                if (this->IsUnusedInput(this->LeftKeyColumns.front())) {
+                    ValueCleanup(GetValueRepresentation(this->DictType->GetKeyType()), keysPtr, ctx, block);
+                }
+            }
+
+            const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, lookup, zero, "ok", block);
             const auto full = BasicBlock::Create(context, "full", ctx.Func);
 
             if constexpr (RightRequired)
@@ -581,6 +600,12 @@ public:
 
         ValueUnRef(EValueRepresentation::Boxed, itemPtr, ctx, block);
         CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Lookup>(itemPtr, dict, ctx.Codegen, block, keysPtr);
+
+        if constexpr (!IsTuple) {
+            if (this->IsUnusedInput(this->LeftKeyColumns.front())) {
+                ValueCleanup(GetValueRepresentation(this->DictType->GetKeyType()), keysPtr, ctx, block);
+            }
+        }
 
         const auto lookup = new LoadInst(valueType, itemPtr, "lookup", block);
         const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, lookup, zero, "ok", block);

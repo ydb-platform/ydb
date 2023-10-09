@@ -6,7 +6,7 @@ IF (NOT WITH_VALGRIND)
     )
 ENDIF()
 
-IF (SANITIZER_TYPE)
+IF (SANITIZER_TYPE == "thread")
     TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)

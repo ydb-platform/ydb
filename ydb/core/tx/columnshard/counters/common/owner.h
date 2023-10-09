@@ -12,6 +12,7 @@ class TCommonCountersOwner {
 private:
     ::NMonitoring::TDynamicCounterPtr SubGroup;
     const TString ModuleId;
+    std::map<TString, TString> SignalKeys;
     TString NormalizeSignalName(const TString& name) const;
 protected:
     std::shared_ptr<TValueAggregationAgent> GetValueAutoAggregations(const TString& name) const;
@@ -19,20 +20,30 @@ protected:
 
     TCommonCountersOwner(const TCommonCountersOwner& sameAs)
         : SubGroup(sameAs.SubGroup)
-        , ModuleId(sameAs.ModuleId) {
+        , ModuleId(sameAs.ModuleId)
+        , SignalKeys(sameAs.SignalKeys) {
 
     }
 
     TCommonCountersOwner(const TCommonCountersOwner& sameAs, const TString& componentName)
         : SubGroup(sameAs.SubGroup)
         , ModuleId(sameAs.ModuleId)
-    {
+        , SignalKeys(sameAs.SignalKeys) {
         DeepSubGroup("component", componentName);
+    }
+
+    TCommonCountersOwner(const TCommonCountersOwner& sameAs, const TString& deepParamName, const TString& deepParamValue)
+        : SubGroup(sameAs.SubGroup)
+        , ModuleId(sameAs.ModuleId)
+        , SignalKeys(sameAs.SignalKeys) {
+        DeepSubGroup(deepParamName, deepParamValue);
     }
 public:
     const TString& GetModuleId() const {
         return ModuleId;
     }
+
+    TString GetAggregationPathInfo() const;
 
     NMonitoring::TDynamicCounters::TCounterPtr GetAggregationValue(const TString& name) const;
     NMonitoring::TDynamicCounters::TCounterPtr GetValue(const TString& name) const;

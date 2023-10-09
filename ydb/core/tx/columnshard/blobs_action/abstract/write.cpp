@@ -14,6 +14,7 @@ TUnifiedBlobId IBlobsWritingAction::AddDataForWrite(const TString& data) {
 }
 
 void IBlobsWritingAction::OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteBlobResult")("blob_id", blobId.ToStringNew())("status", status);
     AFL_VERIFY(Counters);
     auto it = WritingStart.find(blobId);
     AFL_VERIFY(it != WritingStart.end());
@@ -37,6 +38,7 @@ IBlobsWritingAction::~IBlobsWritingAction() {
 }
 
 void IBlobsWritingAction::SendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "SendWriteBlobRequest")("blob_id", blobId.ToStringNew());
     AFL_VERIFY(Counters);
     Counters->OnRequest(data.size());
     WritingStarted = true;

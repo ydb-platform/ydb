@@ -64,24 +64,7 @@ public:
         return TModificationGuard(*this);
     }
 
-    std::optional<ui64> GetGranuleForCompaction() const {
-        if (!GranuleCompactionPrioritySorting.size()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no_granules_for_compaction");
-            return {};
-        }
-        for (auto it = GranuleCompactionPrioritySorting.rbegin(); it != GranuleCompactionPrioritySorting.rend(); ++it) {
-            if (it->first.GetWeight().IsZero()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "zero_granule_reached");
-                break;
-            }
-            Y_VERIFY(it->second.size());
-            for (auto&& i : it->second) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "test_granule")("granule_stats", it->first.DebugString())("granule_id", i);
-                return i;
-            }
-        }
-        return {};
-    }
+    std::shared_ptr<TGranuleMeta> GetGranuleForCompaction(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules) const;
 
     void UpdateGranuleInfo(const TGranuleMeta& granule);
 

@@ -95,13 +95,13 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     Y_VERIFY(portionInfo.GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
 
     TColumnEngineStats::TPortionsStats& srcStats = exPortionInfo
-        ? (exPortionInfo->IsActive()
-            ? engineStats.StatsByType[exPortionInfo->GetMeta().Produced]
-            : engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE])
+        ? (exPortionInfo->HasRemoveSnapshot()
+            ? engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE]
+            : engineStats.StatsByType[exPortionInfo->GetMeta().Produced])
         : engineStats.StatsByType[portionInfo.GetMeta().Produced];
-    TColumnEngineStats::TPortionsStats& stats = portionInfo.IsActive()
-        ? engineStats.StatsByType[portionInfo.GetMeta().Produced]
-        : engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE];
+    TColumnEngineStats::TPortionsStats& stats = portionInfo.HasRemoveSnapshot()
+        ? engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE]
+        : engineStats.StatsByType[portionInfo.GetMeta().Produced];
 
     const bool isErase = updateType == EStatsUpdateType::ERASE;
     const bool isAdd = updateType == EStatsUpdateType::ADD;
@@ -278,13 +278,12 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
 }
 
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept {
-
-    auto info = Compact(limits);
-    if (!info) {
+    auto granule = GranulesStorage->GetGranuleForCompaction(Granules);
+    if (!granule) {
         return nullptr;
     }
-
-    auto changes = info->GetGranule()->GetOptimizationTask(limits, info->GetGranule(), busyPortions);
+    granule->OnStartCompaction();
+    auto changes = granule->GetOptimizationTask(limits, granule, busyPortions);
     NYDBTest::TControllers::GetColumnShardController()->OnStartCompaction(changes);
     return changes;
 }
@@ -383,7 +382,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
         Y_VERIFY(spg);
 
         for (auto& [portion, info] : spg->GetPortions()) {
-            if (!info->IsActive()) {
+            if (info->HasRemoveSnapshot()) {
                 continue;
             }
             if (context.BusyPortions.contains(info->GetAddress())) {
@@ -714,19 +713,6 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     }
 
     return out;
-}
-
-std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(const TCompactionLimits& /*limits*/) {
-    auto gCompaction = GranulesStorage->GetGranuleForCompaction();
-    if (!gCompaction) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no_granule_for_compaction");
-        SignalCounters.NoCompactGranulesSelection->Add(1);
-        return {};
-    }
-    std::shared_ptr<TGranuleMeta> compactGranule = GetGranulePtrVerified(*gCompaction);
-
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "take_granule")("granule", compactGranule->DebugString());
-    return std::make_unique<TCompactionInfo>(compactGranule);
 }
 
 void TColumnEngineForLogs::OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager, const NColumnShard::TTtl& ttl) {

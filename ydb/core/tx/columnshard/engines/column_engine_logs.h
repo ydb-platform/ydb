@@ -168,7 +168,6 @@ public:
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                         const THashSet<ui32>& columnIds,
                                         const TPKRangesFilter& pkRangesFilter) const override;
-    std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits);
 
     bool IsPortionExists(const ui64 granuleId, const ui64 portionId) const {
         auto it = Granules.find(granuleId);

@@ -45,7 +45,7 @@ private:
 public:
     std::shared_ptr<TValueAggregationAgent> GetAggregation(const TString& signalName, const TCommonCountersOwner& signalsOwner) {
         TGuard<TMutex> g(Mutex);
-        const TString agentId = TFsPath(signalsOwner.GetModuleId() + "/" + signalName).Fix().GetPath();
+        const TString agentId = TFsPath(signalsOwner.GetAggregationPathInfo() + "/" + signalName).Fix().GetPath();
         auto it = Agents.find(agentId);
         if (it == Agents.end()) {
             it = Agents.emplace(agentId, std::make_shared<TValueAggregationAgent>(signalName, signalsOwner)).first;

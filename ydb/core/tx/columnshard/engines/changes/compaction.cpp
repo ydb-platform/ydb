@@ -84,7 +84,7 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits
 
     SwitchedPortions.reserve(portions.size());
     for (const auto& portionInfo : portions) {
-        Y_VERIFY(portionInfo->IsActive());
+        Y_VERIFY(!portionInfo->HasRemoveSnapshot());
         SwitchedPortions.emplace_back(*portionInfo);
         AFL_VERIFY(PortionsToRemove.emplace(portionInfo->GetAddress(), *portionInfo).second);
         Y_VERIFY(portionInfo->GetGranule() == GranuleMeta->GetGranuleId());

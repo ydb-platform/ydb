@@ -77,9 +77,9 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
             blobIdSize[i.BlobRange.BlobId] += i.BlobRange.Size;
         }
         for (auto&& i : blobIdSize) {
-            PortionInfoGuard.OnNewBlob(portionAfter->IsActive() ? portionAfter->GetMeta().Produced : NPortion::EProduced::INACTIVE, i.second);
+            PortionInfoGuard.OnNewBlob(portionAfter->HasRemoveSnapshot() ? NPortion::EProduced::INACTIVE : portionAfter->GetMeta().Produced, i.second);
         }
-        if (portionAfter->IsActive()) {
+        if (!portionAfter->HasRemoveSnapshot()) {
             if (modificationGuard) {
                 modificationGuard->AddPortion(portionAfter);
             } else {
@@ -89,7 +89,7 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
     }
     if (!!AdditiveSummaryCache) {
         auto g = AdditiveSummaryCache->StartEdit(Counters);
-        if (portionAfter && portionAfter->IsActive()) {
+        if (portionAfter && !portionAfter->HasRemoveSnapshot()) {
             g.AddPortion(*portionAfter);
         }
     }
@@ -116,15 +116,15 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
             blobIdSize[i.BlobRange.BlobId] += i.BlobRange.Size;
         }
         for (auto&& i : blobIdSize) {
-            PortionInfoGuard.OnDropBlob(portionBefore->IsActive() ? portionBefore->GetMeta().Produced : NPortion::EProduced::INACTIVE, i.second);
+            PortionInfoGuard.OnDropBlob(portionBefore->HasRemoveSnapshot() ? NPortion::EProduced::INACTIVE : portionBefore->GetMeta().Produced, i.second);
         }
-        if (portionBefore->IsActive()) {
+        if (!portionBefore->HasRemoveSnapshot()) {
             OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
         }
     }
     if (!!AdditiveSummaryCache) {
         auto g = AdditiveSummaryCache->StartEdit(Counters);
-        if (portionBefore && portionBefore->IsActive()) {
+        if (portionBefore && !portionBefore->HasRemoveSnapshot()) {
             g.RemovePortion(*portionBefore);
         }
     }
@@ -155,7 +155,7 @@ void TGranuleMeta::RebuildAdditiveMetrics() const {
     {
         auto g = result.StartEdit(Counters);
         for (auto&& i : Portions) {
-            if (!i.second->IsActive()) {
+            if (i.second->HasRemoveSnapshot()) {
                 continue;
             }
             g.AddPortion(*i.second);

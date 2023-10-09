@@ -70,7 +70,7 @@ public:
 
     void AddPortionToEvict(const TPortionInfo& info, TPortionEvictionFeatures&& features) {
         Y_VERIFY(!info.Empty());
-        Y_VERIFY(info.IsActive());
+        Y_VERIFY(!info.HasRemoveSnapshot());
         PortionsToEvict.emplace_back(info, std::move(features));
     }
 

@@ -107,8 +107,12 @@ public:
 
     TString DebugString() const;
 
+    bool HasRemoveSnapshot() const {
+        return RemoveSnapshot.Valid();
+    }
+
     bool CheckForCleanup(const TSnapshot& snapshot) const {
-        if (!CheckForCleanup()) {
+        if (!HasRemoveSnapshot()) {
             return false;
         }
 
@@ -116,7 +120,7 @@ public:
     }
 
     bool CheckForCleanup() const {
-        return !IsActive();
+        return HasRemoveSnapshot();
     }
 
     bool AllowEarlyFilter() const {
@@ -150,10 +154,6 @@ public:
 
     const TSnapshot& GetRemoveSnapshot() const {
         return RemoveSnapshot;
-    }
-
-    bool IsActive() const {
-        return GetRemoveSnapshot().IsZero();
     }
 
     void SetMinSnapshot(const TSnapshot& snap) {

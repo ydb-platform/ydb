@@ -86,7 +86,7 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
     auto g = self.GranulesStorage->StartPackModification();
     for (auto& [_, portionInfo] : PortionsToRemove) {
         Y_VERIFY(!portionInfo.Empty());
-        Y_VERIFY(!portionInfo.IsActive());
+        Y_VERIFY(portionInfo.HasRemoveSnapshot());
 
         const ui64 granule = portionInfo.GetGranule();
         const ui64 portion = portionInfo.GetPortion();
@@ -113,7 +113,7 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
         i.GetPortionInfo().UpdateRecordsMeta(TPortionMeta::EProduced::INSERTED);
     }
     for (auto& [_, portionInfo] : PortionsToRemove) {
-        if (portionInfo.IsActive()) {
+        if (!portionInfo.HasRemoveSnapshot()) {
             portionInfo.SetRemoveSnapshot(context.GetSnapshot());
         }
     }

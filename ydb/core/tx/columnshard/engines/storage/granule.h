@@ -197,7 +197,12 @@ private:
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
     void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard);
     void OnAdditiveSummaryChange() const;
+    YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 public:
+    void OnStartCompaction() {
+        LastCompactionInstant = TMonotonic::Now();
+    }
+
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> self, const THashSet<TPortionAddress>& busyPortions) const {
         return OptimizerPlanner->GetOptimizationTask(limits, self, busyPortions);
     }

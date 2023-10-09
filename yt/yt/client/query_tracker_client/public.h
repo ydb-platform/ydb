@@ -25,6 +25,7 @@ DEFINE_STRING_SERIALIZABLE_ENUM(EQueryEngine,
     (Yql)
     (Chyt)
     (Mock)
+    (Spyt)
 );
 
 DEFINE_STRING_SERIALIZABLE_ENUM(EQueryState,

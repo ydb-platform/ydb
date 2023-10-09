@@ -66,7 +66,7 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("thread_pool_size", &TThis::ThreadPoolSize)
         .Default(1);
-    registrar.Parameter("encoding_thread_pool_size", &TThis::ThreadPoolSize)
+    registrar.Parameter("encoding_thread_pool_size", &TThis::EncodingThreadPoolSize)
         .Default(1);
 
     registrar.Parameter("convert_counters_to_rate_for_solomon", &TThis::ConvertCountersToRateForSolomon)

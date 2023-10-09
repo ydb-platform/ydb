@@ -56,7 +56,7 @@ public:
         return registeredCallback;
     }
 
-    void Shutdown(const TShutdownOptions& options)
+    void Shutdown(const TShutdownOptions& options = {})
     {
         std::vector<TRegisteredCallback> registeredCallbacks;
 
@@ -123,9 +123,21 @@ public:
         }
     }
 
+    void AutoShutdown()
+    {
+        if (AutoShutdownEnabled_.load()) {
+            Shutdown();
+        }
+    }
+
     bool IsShutdownStarted()
     {
         return ShutdownStarted_.load();
+    }
+
+    void SetAutoShutdownEnabled(bool enabled)
+    {
+        AutoShutdownEnabled_.store(enabled);
     }
 
     void EnableShutdownLoggingToStderr()
@@ -180,6 +192,7 @@ private:
 
     std::unordered_set<TRefCountedRegisteredCallback*> RegisteredCallbacks_;
     std::atomic<bool> ShutdownStarted_ = false;
+    std::atomic<bool> AutoShutdownEnabled_ = true;
     std::atomic<size_t> ShutdownThreadId_ = 0;
 
 
@@ -227,6 +240,11 @@ bool IsShutdownStarted()
     return TShutdownManager::Get()->IsShutdownStarted();
 }
 
+void SetAutoShutdownEnabled(bool enabled)
+{
+    TShutdownManager::Get()->SetAutoShutdownEnabled(enabled);
+}
+
 void EnableShutdownLoggingToStderr()
 {
     TShutdownManager::Get()->EnableShutdownLoggingToStderr();
@@ -258,7 +276,7 @@ static const void* ShutdownGuardInitializer = [] {
             if (auto* logFile = TShutdownManager::Get()->TryGetShutdownLogFile()) {
                 fprintf(logFile, "*** Shutdown guard destructed\n");
             }
-            Shutdown();
+            TShutdownManager::Get()->AutoShutdown();
         }
     };
 

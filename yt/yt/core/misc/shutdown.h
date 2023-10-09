@@ -60,6 +60,9 @@ void Shutdown(const TShutdownOptions& options = {});
 //! (and is possibly already completed).
 bool IsShutdownStarted();
 
+//! Controls if shutdown must be invoked automatically on process teardown.
+void SetAutoShutdownEnabled(bool enabled);
+
 //! Enables logging shutdown messages to stderr.
 void EnableShutdownLoggingToStderr();
 

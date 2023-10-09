@@ -1640,6 +1640,10 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     LWTRACK(TransactionExecuteEnd, seat->Self->Orbit, seat->UniqID, done);
     seat->CPUExecTime += cpuTimer.PassedReset();
 
+    if (done) {
+        Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_COMMIT_REDO_BYTES].IncrementFor(Database->GetCommitRedoBytes());
+    }
+
     bool failed = false;
     TString failureReason;
     if (done && (failed = !Database->ValidateCommit(failureReason))) {

@@ -634,6 +634,12 @@ TKeyRangeCache* TDatabase::DebugGetTableErasedKeysCache(ui32 table) const {
     }
 }
 
+size_t TDatabase::GetCommitRedoBytes() const
+{
+    Y_VERIFY(Redo, "Transaction is not in progress");
+    return Redo->Bytes();
+}
+
 bool TDatabase::ValidateCommit(TString &err)
 {
     if (*Redo && Redo->Bytes() > MAX_REDO_BYTES_PER_COMMIT) {

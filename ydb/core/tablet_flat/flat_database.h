@@ -227,6 +227,7 @@ public:
 
     void RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper);
 
+    size_t GetCommitRedoBytes() const;
     bool ValidateCommit(TString&);
 
     TCompactionStats GetCompactionStats(ui32 table) const;

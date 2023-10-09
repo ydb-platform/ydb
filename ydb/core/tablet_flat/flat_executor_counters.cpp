@@ -61,6 +61,19 @@ namespace NTabletFlatExecutor {
     XX(900000,     "90%") \
     XX(1000000,    "100%")
 
+#define FLAT_EXECUTOR_COMMIT_SIZE(XX) \
+    XX(0ULL, "0") \
+    XX(256ULL, "256") \
+    XX(1024ULL, "1024") \
+    XX(4096ULL, "4096") \
+    XX(65536ULL, "65536") \
+    XX(1048576ULL, "1048576") \
+    XX(4194304ULL, "4194304") \
+    XX(16777216ULL, "16777216") \
+    XX(67108864ULL, "67108864") \
+    XX(268435456ULL, "268435456") \
+    XX(1073741824ULL, "1073741824")
+
 const char* TExecutorCounters::SimpleCounterNames[TExecutorCounters::SIMPLE_COUNTER_SIZE] =
     {FLAT_EXECUTOR_SIMPLE_COUNTERS_MAP(COUNTER_TEXT_ARRAY)};
 const char* TExecutorCounters::CumulativeCounterNames[TExecutorCounters::CUMULATIVE_COUNTER_SIZE] =
@@ -76,6 +89,7 @@ TExecutorCounters::TExecutorCounters()
     static TTabletPercentileCounter::TRangeDef txDataSize[] = { FLAT_EXECUTOR_DATA_SIZE(COUNTER_PERCENTILE_CONFIG_ARRAY) };
     static TTabletPercentileCounter::TRangeDef txDataRate[] = { FLAT_EXECUTOR_DATA_RATE(COUNTER_PERCENTILE_CONFIG_ARRAY) };
     static TTabletPercentileCounter::TRangeDef txConsumedCpu[] = { FLAT_EXECUTOR_CONSUMED_CPU_RANGES(COUNTER_PERCENTILE_CONFIG_ARRAY) };
+    static TTabletPercentileCounter::TRangeDef txCommitSize[] = { FLAT_EXECUTOR_COMMIT_SIZE(COUNTER_PERCENTILE_CONFIG_ARRAY) };
 
     Percentile()[TX_PERCENTILE_LATENCY_RO].Initialize(txLatencyConfig, false);
     Percentile()[TX_PERCENTILE_LATENCY_RW].Initialize(txLatencyConfig, false);
@@ -91,6 +105,7 @@ TExecutorCounters::TExecutorCounters()
     Percentile()[TX_PERCENTILE_TABLET_BYTES_WRITTEN].Initialize(txDataRate, false);
     Percentile()[TX_PERCENTILE_CONSUMED_CPU].Initialize(txConsumedCpu, false);
     Percentile()[TX_PERCENTILE_FOLLOWERSYNC_LATENCY].Initialize(txLatencyConfig, false);
+    Percentile()[TX_PERCENTILE_COMMIT_REDO_BYTES].Initialize(txCommitSize, false);
 }
 
 }}

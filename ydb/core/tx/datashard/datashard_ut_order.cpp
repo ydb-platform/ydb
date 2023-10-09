@@ -1431,7 +1431,8 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, StreamLookup) {
         auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
-            SELECT * FROM `/Root/table-2`)"));
+            SELECT * FROM `/Root/table-2`
+            ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
@@ -1558,7 +1559,8 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
         auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
-            SELECT * FROM `/Root/table-2`)"));
+            SELECT * FROM `/Root/table-2`
+            ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
@@ -1689,7 +1691,8 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, StreamLookup) {
         auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
-            SELECT * FROM `/Root/table-2`)"));
+            SELECT * FROM `/Root/table-2`
+            ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
@@ -1788,7 +1791,8 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, StreamLookup) {
         auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)"));
+            SELECT * FROM `/Root/table-2` WHERE key = 2
+            ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
@@ -2016,7 +2020,8 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, StreamLookup
         auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)"));
+            SELECT * FROM `/Root/table-2` WHERE key = 2
+            ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
@@ -2148,7 +2153,8 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNoBarrierRestartImmediateLongTail, StreamLookup) 
         auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)"));
+            SELECT * FROM `/Root/table-2` WHERE key = 2
+            ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
@@ -2323,7 +2329,8 @@ Y_UNIT_TEST(TestCopyTableNoDeadlock) {
         auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
-            SELECT * FROM `/Root/table-2`)"));
+            SELECT * FROM `/Root/table-2`
+            ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
@@ -2977,7 +2984,8 @@ Y_UNIT_TEST(TestReadTableWriteConflict) {
         auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(
             "SELECT * FROM `/Root/table-1` "
             "UNION ALL "
-            "SELECT * FROM `/Root/table-2`"));
+            "SELECT * FROM `/Root/table-2` "
+            "ORDER BY key"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
              "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
@@ -3742,7 +3750,8 @@ Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, StreamLookup) {
         auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
-            SELECT * FROM `/Root/table-2`)"));
+            SELECT * FROM `/Root/table-2`
+            ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
@@ -3847,7 +3856,8 @@ Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, StreamLookup) {
         auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
-            SELECT * FROM `/Root/table-2`)"));
+            SELECT * FROM `/Root/table-2`
+            ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
@@ -4144,7 +4154,8 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLockOutOfOrder) {
         auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)"));
+            SELECT * FROM `/Root/table-2` WHERE key = 2
+            ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
@@ -4265,7 +4276,8 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
         auto result = KqpSimpleBegin(runtime, sessionIdBlocker, txIdBlocker, Q_(R"(
             SELECT * FROM `/Root/table-1`
             UNION ALL
-            SELECT * FROM `/Root/table-2`)"));
+            SELECT * FROM `/Root/table-2`
+            ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
@@ -4320,7 +4332,8 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
         auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
             SELECT * FROM `/Root/table-1` WHERE key = 1
             UNION ALL
-            SELECT * FROM `/Root/table-2` WHERE key = 2)"));
+            SELECT * FROM `/Root/table-2` WHERE key = 2
+            ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "

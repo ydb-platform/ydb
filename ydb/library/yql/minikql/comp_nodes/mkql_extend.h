@@ -5,6 +5,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 IComputationNode* WrapExtend(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapOrderedExtend(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

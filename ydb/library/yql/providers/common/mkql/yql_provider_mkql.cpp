@@ -602,7 +602,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"AsList", &TProgramBuilder::AsList},
 
         {"Extend", &TProgramBuilder::Extend},
-        {"OrderedExtend", &TProgramBuilder::Extend},
+        {"OrderedExtend", &TProgramBuilder::OrderedExtend},
         {"BlockExtend", &TProgramBuilder::BlockExtend},
 
         {"Zip", &TProgramBuilder::Zip},
@@ -2502,7 +2502,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         auto typeMod1 = typeMod;
-        if (node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "interval" && 
+        if (node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "interval" &&
             node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_interval") {
             typeMod1 = TRuntimeNode();
         }
@@ -2591,7 +2591,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         auto typeMod1 = typeMod;
-        if (node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "interval" && 
+        if (node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "interval" &&
             node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_interval") {
             typeMod1 = TRuntimeNode();
         }

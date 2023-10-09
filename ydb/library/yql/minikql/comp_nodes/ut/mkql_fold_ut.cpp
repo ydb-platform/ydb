@@ -475,7 +475,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         zeroList = pb.Append(zeroList, pb.NewDataLiteral<ui32>(0));
         const ui32 n = 13;
         for (ui32 i = 0; i < n; ++i)
-            zeroList = pb.Extend(zeroList, zeroList);
+            zeroList = pb.Extend({zeroList, zeroList});
 
         auto state = pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Counter",
             pb.NewDataLiteral<ui32>(0)), "NewList",
@@ -513,7 +513,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         zeroList = pb.Append(zeroList, pb.NewDataLiteral<ui32>(0));
         const ui32 n = 13;
         for (ui32 i = 0; i < n; ++i)
-            zeroList = pb.Extend(zeroList, zeroList);
+            zeroList = pb.Extend({zeroList, zeroList});
 
         auto state = pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Counter",
             pb.NewDataLiteral<ui32>(0)), "NewList",
@@ -551,7 +551,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         zeroList = pb.Append(zeroList, pb.NewDataLiteral<ui32>(0));
         const ui32 n = 13;
         for (ui32 i = 0; i < n; ++i)
-            zeroList = pb.Extend(zeroList, zeroList);
+            zeroList = pb.Extend({zeroList, zeroList});
 
         auto state = pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Counter",
             pb.NewDataLiteral<ui32>(0)), "NewList",
@@ -568,7 +568,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
             extList = pb.Append(extList, pb.Increment(oldCounterMul2));
             return pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Counter",
                 pb.Add(oldCounter, pb.NewDataLiteral<ui32>(1))),
-                "NewList", pb.Extend(oldList, extList));
+                "NewList", pb.Extend({oldList, extList}));
         });
 
         auto pgmReturn = pb.Member(fold, "NewList");

@@ -343,8 +343,8 @@ public:
     //-- list functions
     TRuntimeNode Append(TRuntimeNode list, TRuntimeNode item);
     TRuntimeNode Prepend(TRuntimeNode item, TRuntimeNode list);
-    TRuntimeNode Extend(TRuntimeNode list1, TRuntimeNode list2);
     TRuntimeNode Extend(const TArrayRef<const TRuntimeNode>& lists);
+    TRuntimeNode OrderedExtend(const TArrayRef<const TRuntimeNode>& lists);
     // returns list of tuples with items, stops at the shortest list
     TRuntimeNode Zip(const TArrayRef<const TRuntimeNode>& lists);
     // returns list of tuples with optional of items, has length of the longest list
@@ -743,7 +743,7 @@ protected:
     TRuntimeNode BuildMinMax(const std::string_view& callableName, const TRuntimeNode* data, size_t size);
     TRuntimeNode BuildWideSkipTakeBlocks(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode BuildBlockLogical(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second);
-
+    TRuntimeNode BuildExtend(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists);
 private:
     TRuntimeNode BuildWideFilter(const std::string_view& callableName, TRuntimeNode flow, const TNarrowLambda& handler);
 

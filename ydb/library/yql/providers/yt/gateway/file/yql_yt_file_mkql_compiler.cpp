@@ -985,7 +985,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 });
 
                 // prepend with map output
-                values = ctx.ProgramBuilder.Extend(mapDirectOutputs, ToList(values, ctx));
+                values = ctx.ProgramBuilder.Extend({mapDirectOutputs, ToList(values, ctx)});
             }
 
             auto res = BuildTableOutput(values, ctx);

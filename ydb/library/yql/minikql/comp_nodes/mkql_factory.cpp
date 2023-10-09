@@ -146,6 +146,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"Append", &WrapAppend},
         {"Prepend", &WrapPrepend},
         {"Extend", &WrapExtend},
+        {"OrderedExtend", &WrapOrderedExtend},
         {"Arg", &WrapArg},
         {"Null", &WrapNull},
         {"Fold", &WrapFold},

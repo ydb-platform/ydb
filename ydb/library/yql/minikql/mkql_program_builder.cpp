@@ -2187,13 +2187,8 @@ TRuntimeNode TProgramBuilder::Prepend(TRuntimeNode item, TRuntimeNode list) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::Extend(TRuntimeNode list1, TRuntimeNode list2) {
-    std::array<TRuntimeNode, 2> lists = {{ list1, list2 }};
-    return Extend(lists);
-}
-
-TRuntimeNode TProgramBuilder::Extend(const TArrayRef<const TRuntimeNode>& lists) {
-    MKQL_ENSURE(lists.size() > 0, "Expected at least 1 list/stream");
+TRuntimeNode TProgramBuilder::BuildExtend(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists) {
+    MKQL_ENSURE(lists.size() > 0, "Expected at least 1 list or flow");
     if (lists.size() == 1) {
         return lists.front();
     }
@@ -2207,12 +2202,20 @@ TRuntimeNode TProgramBuilder::Extend(const TArrayRef<const TRuntimeNode>& lists)
             PrintNode(listType2, true));
     }
 
-    TCallableBuilder callableBuilder(Env, __func__, listType);
+    TCallableBuilder callableBuilder(Env, callableName, listType);
     for (auto list : lists) {
         callableBuilder.Add(list);
     }
 
     return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::Extend(const TArrayRef<const TRuntimeNode>& lists) {
+    return BuildExtend(__func__, lists);
+}
+
+TRuntimeNode TProgramBuilder::OrderedExtend(const TArrayRef<const TRuntimeNode>& lists) {
+    return BuildExtend(__func__, lists);
 }
 
 template<>

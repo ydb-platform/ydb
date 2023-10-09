@@ -1472,11 +1472,13 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
+            SELECT Key FROM (
             (SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1)
             UNION ALL
             (SELECT Key FROM `/Root/EightShard` ORDER BY Key LIMIT 1)
             UNION ALL
-            (SELECT Key FROM `/Root/TwoShard` ORDER BY Key DESC LIMIT 1);
+            (SELECT Key FROM `/Root/TwoShard` ORDER BY Key DESC LIMIT 1)
+            ) ORDER BY Key;
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());

@@ -85,7 +85,7 @@ jobs:
       sanitizer: ${{ inputs.sanitizer }}
       run_build: ${{ inputs.run_build }}
       run_tests: ${{ inputs.run_tests }}
-      log_suffix: ya-x86-64${{ inputs.sanitizer != 'none' && format('-{1}', inputs.sanitizer) }}
+      log_suffix: ya-x86-64${{ inputs.sanitizer != 'none' && format('-{1}', inputs.sanitizer) || '' }}
     secrets: inherit
 
   release-runner:

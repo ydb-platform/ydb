@@ -54,21 +54,21 @@ class YTestReportTrace:
         self.traces = {}
 
     def load(self, subdir):
-        test_results_dir = f'{subdir}/test-results/'
+        test_results_dir = f"{subdir}/test-results/"
         for folder in os.listdir(os.path.join(self.out_root, test_results_dir)):
-            fn = os.path.join(self.out_root, test_results_dir, folder, 'ytest.report.trace')
+            fn = os.path.join(self.out_root, test_results_dir, folder, "ytest.report.trace")
 
             if not os.path.isfile(fn):
                 continue
 
-            with open(fn, 'r') as fp:
+            with open(fn, "r") as fp:
                 for line in fp:
                     event = json.loads(line.strip())
-                    if event['name'] == 'subtest-finished':
-                        event = event['value']
-                        cls = event['class']
-                        subtest = event['subtest']
-                        cls = cls.replace('::', '.')
+                    if event["name"] == "subtest-finished":
+                        event = event["value"]
+                        cls = event["class"]
+                        subtest = event["subtest"]
+                        cls = cls.replace("::", ".")
                         self.traces[(cls, subtest)] = event
 
     def has(self, cls, name):
@@ -80,14 +80,14 @@ class YTestReportTrace:
         if not trace:
             return {}
 
-        logs = trace['logs']
+        logs = trace["logs"]
 
         result = {}
         for k, path in logs.items():
-            if k == 'logsdir':
+            if k == "logsdir":
                 continue
 
-            result[k] = path.replace('$(BUILD_ROOT)', self.out_root)
+            result[k] = path.replace("$(BUILD_ROOT)", self.out_root)
 
         return result
 
@@ -114,10 +114,10 @@ def save_log(build_root, fn, out_dir, log_url_prefix, trunc_size):
             os.makedirs(out_fn_dir, 0o700)
 
         if trunc_size and fsize > trunc_size:
-            with open(fn, 'rb') as in_fp:
+            with open(fn, "rb") as in_fp:
                 in_fp.seek(fsize - trunc_size)
                 log_print(f"truncate {out_fn} to {trunc_size}")
-                with open(out_fn, 'wb') as out_fp:
+                with open(out_fn, "wb") as out_fp:
                     while 1:
                         buf = in_fp.read(8192)
                         if not buf:
@@ -126,7 +126,7 @@ def save_log(build_root, fn, out_dir, log_url_prefix, trunc_size):
         else:
             os.symlink(fn, out_fn)
 
-    return f'{log_url_prefix}{fpath}'
+    return f"{log_url_prefix}{fpath}"
 
 
 def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_prefix, log_out_dir, log_trunc_size):
@@ -148,8 +148,8 @@ def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_pre
                 log_print("mute", suite_name, test_name)
                 mute_target(case)
 
-            if is_fail and '.' in test_name:
-                test_cls, test_method = test_name.rsplit('.', maxsplit=1)
+            if is_fail and "." in test_name:
+                test_cls, test_method = test_name.rsplit(".", maxsplit=1)
                 logs = filter_empty_logs(traces.get_logs(test_cls, test_method))
 
                 if logs:
@@ -167,13 +167,20 @@ def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_pre
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", action="store_true", dest="save_inplace", default=False, help="modify input file in-place")
+    parser.add_argument(
+        "-i", action="store_true", dest="save_inplace", default=False, help="modify input file in-place"
+    )
     parser.add_argument("--mu", help="unittest mute config")
     parser.add_argument("--mf", help="functional test mute config")
-    parser.add_argument('--log-url-prefix', default='./', help='url prefix for logs')
-    parser.add_argument('--log-out-dir', help='symlink logs to specific directory')
-    parser.add_argument('--log-truncate-size', dest="log_trunc_size", type=int, default=134217728,
-                        help='truncate log after specific size, 0 disables truncation')
+    parser.add_argument("--log-url-prefix", default="./", help="url prefix for logs")
+    parser.add_argument("--log-out-dir", help="symlink logs to specific directory")
+    parser.add_argument(
+        "--log-truncate-size",
+        dest="log_trunc_size",
+        type=int,
+        default=134217728,
+        help="truncate log after specific size, 0 disables truncation",
+    )
     parser.add_argument("--ya-out", help="ya make output dir (for searching logs and artifacts)")
     parser.add_argument("in_file", type=argparse.FileType("r"))
 
@@ -187,8 +194,15 @@ def main():
     if args.mf:
         mute_check.add_functest(args.mf)
 
-    transform(args.in_file, mute_check, args.ya_out, args.save_inplace,
-              args.log_url_prefix, args.log_out_dir, args.log_trunc_size)
+    transform(
+        args.in_file,
+        mute_check,
+        args.ya_out,
+        args.save_inplace,
+        args.log_url_prefix,
+        args.log_out_dir,
+        args.log_trunc_size,
+    )
 
 
 if __name__ == "__main__":

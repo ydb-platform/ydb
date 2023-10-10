@@ -252,7 +252,6 @@ migrations:
     - yabs/server/test/ft/BSDEV-85352
     - yabs/server/test/ft/BSDEV-86239
     - yabs/server/test/ft/BSEFFECTIVE-427
-    - yabs/server/test/ft/BSSERVER-14121
     - yabs/server/test/ft/BSSERVER-15483
     - yabs/server/test/ft/BSSERVER-15755
     - yabs/server/test/ft/BSSERVER-15830
@@ -263,7 +262,6 @@ migrations:
     - yabs/server/test/ft/BSSERVER-21248
     - yabs/server/test/ft/BSSERVER-21283
     - yabs/server/test/ft/BSSERVER-21794
-    - yabs/server/test/ft/BSSERVER-2189
     - yabs/server/test/ft/BSSERVER-22115/test_disable_sub_designs
     - yabs/server/test/ft/BSSERVER-2214
     - yabs/server/test/ft/BSSERVER-22647
@@ -434,7 +432,6 @@ migrations:
     - billing/log_tariffication/py/tests/integration/core_tariff
     - billing/log_tariffication/py/tests/integration/partner_tariff
     - captcha/metrics/leftover_images
-    - catboost/yandex_specific/tools/pool_storage_ops/lib
     - cloud/analytics/scripts/sb_timeout_analyze
     - cloud/blockstore/public/sdk/python/client/ut
     - cloud/iam/resource_reaper_tools/autodelete
@@ -971,11 +968,9 @@ migrations:
     - yabs/server/test/ft/BSSERVER-12495
     - yabs/server/test/ft/BSSERVER-13562
     - yabs/server/test/ft/BSSERVER-15417
-    - yabs/server/test/ft/BSSERVER-15477
     - yabs/server/test/ft/BSSERVER-17702
     - yabs/server/test/ft/BSSERVER-18972
     - yabs/server/test/ft/BSSERVER-20717
-    - yabs/server/test/ft/BSSERVER-2189
     - yabs/server/test/ft/BSSERVER-2977
     - yabs/server/test/ft/BSSERVER-3108
     - yabs/server/test/ft/BSSERVER-3143
@@ -1101,8 +1096,6 @@ migrations:
     - billing/log_tariffication/py/tests/integration/core_acts
     - billing/log_tariffication/py/tests/integration/core_tariff
     - billing/log_tariffication/py/tests/integration/partner_tariff
-    - catboost/pytest
-    - catboost/pytest/lib
     - cloud/support/tools/quotactl-l2/quota
     - cloud/support/tools/websaint/app/saint
     - cv/imageproc/ocr/tools/database_extraction/nirvana/imgaug/src/external
@@ -1795,12 +1788,10 @@ migrations:
     - yabs/server/test/ft/BSSERVER-16347
     - yabs/server/test/ft/BSSERVER-18008
     - yabs/server/test/ft/BSSERVER-18463
-    - yabs/server/test/ft/BSSERVER-18561
     - yabs/server/test/ft/BSSERVER-19137
     - yabs/server/test/ft/BSSERVER-19352
     - yabs/server/test/ft/BSSERVER-20427
     - yabs/server/test/ft/BSSERVER-21779
-    - yabs/server/test/ft/BSSERVER-2189
     - yabs/server/test/ft/BSSERVER-22647
     - yabs/server/test/ft/BSSERVER-22790
     - yabs/server/test/ft/BSSERVER-23371
@@ -1934,7 +1925,6 @@ migrations:
     - autocheck/tests/check_config_content
     - billing/dwh/src/dwh/grocery
     - captcha/tools/ocr_blacklist_filter
-    - catboost/yandex_specific/python-package/ut_no_windows/medium
     - cloud/blockstore/public/sdk/python/client/ut
     - cloud/blockstore/tests/python/lib
     - cloud/blockstore/tools/cms/config
@@ -2320,9 +2310,6 @@ migrations:
     - captcha/tools/kikimr_uploader
     - captcha/tools/make_fallback_archive
     - captcha/tools/make_sharded_session_table
-    - catboost/yandex_specific/github_issues/1855
-    - catboost/yandex_specific/model_ops/test
-    - catboost/yandex_specific/tools/performance_evaluation/bin
     - cloud/blockstore/tools/analytics/billing-metrics
     - cloud/blockstore/tools/analytics/tablets-for-prune
     - cloud/bootstrap/api/src/backend/core
@@ -3381,7 +3368,6 @@ migrations:
     - billing/dcs/dcs/temporary/butils
     - billing/dcs/dcs/temporary/butils/mputils
     - billing/dwh/src/dwh/settings
-    - catboost/yandex_specific/tools/performance_evaluation/lib
     - cloud/analytics/nirvana/vh/utils/reactor
     - cloud/extservicesintegration/pq/reader
     - cloud/extservicesintegration/pq/writer
@@ -6152,7 +6138,6 @@ migrations:
     - quasar/infra/tasklets/logfeller_usage_to_solomon/impl
     - quasar/manifest_scripts/manifestlib
     - razladki/monq/monq
-    - regulargeo/v2/clustering/ut
     - robot/blrt/tools/difftool/lib
     - robot/blrt/tools/viewer
     - robot/favicon/python
@@ -6413,7 +6398,6 @@ migrations:
     - balancer/test/configs/lib/locations_test
     - balancer/test/functional/openssl
     - balancer/test/util/dnsfake
-    - catboost/yandex_specific/python-package/ut_no_windows/medium
     - cloud/blockstore/tools/analytics/top-disks
     - cloud/blockstore/tools/cms/lib
     - cloud/kms/client/python
@@ -6941,7 +6925,6 @@ migrations:
     - yabs/server/test/ft/BSSERVER-10571
     - yabs/server/test/ft/BSSERVER-22790
     - yabs/server/test/ft/BSSERVER-2454
-    - yabs/server/test/ft/BSSERVER-4005
     - yabs/server/test/ft/BSSERVER-4506
     - yabs/server/test/ft/BSSERVER-4669
     - yabs/server/test/ft/BSSERVER-587
@@ -8295,7 +8278,6 @@ migrations:
     - search/plutonium/deploy/instance_syncer
     - yabs/server/test/ft/BSSERVER-11310
     - yabs/server/test/ft/BSSERVER-13708
-    - yabs/server/test/ft/BSSERVER-2189
     - yabs/server/test/ft/BSSERVER-6062
     - ydo/tools/dispatch/dispatch_tester/lib
     - ydo/tools/snippet_feed/lib
@@ -8487,8 +8469,6 @@ migrations:
     - ads/libs/py_mapreduce/yabs-mapreduce-modules/py-modules/yabs
     - ads/libs/py_mapreduce/yabs-mapreduce-modules/py-modules/yabs/tabtools
     - billing/monthclosing/operations/monograph_builder/lib
-    - catboost/libs/model/model_export/ut
-    - catboost/yandex_specific/pytest_conda
     - cloud/dwh/nirvana/operations/exec_python_script
     - crm/infra/pymonitor/pymonitor/monitors
     - datalens/backend/lib/bi_app_tools/bi_app_tools

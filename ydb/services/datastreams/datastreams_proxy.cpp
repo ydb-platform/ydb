@@ -695,7 +695,7 @@ namespace NKikimr::NDataStreams::V1 {
         description.set_has_more_shards(false);
 
         description.set_owner(SelfInfo.GetOwner());
-        description.set_stream_creation_timestamp(TInstant::MilliSeconds(SelfInfo.GetCreateStep()).Seconds());
+        description.set_stream_creation_timestamp(SelfInfo.GetCreateStep());
 
         int limit = GetProtoRequest()->limit() == 0 ? 100 : GetProtoRequest()->limit();
 
@@ -758,7 +758,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
     private:
-        static constexpr ui32 MAX_IN_FLIGHT = 5;
+        static constexpr ui32 MAX_IN_FLIGHT = 100;
 
         ui32 RequestsInFlight = 0;
         std::vector<std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet>> WaitingList;

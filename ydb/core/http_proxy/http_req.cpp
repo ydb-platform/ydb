@@ -617,6 +617,7 @@ namespace NKikimr::NHttpProxy {
         DECLARE_PROCESSOR(CreateStream);
         DECLARE_PROCESSOR(ListStreams);
         DECLARE_PROCESSOR(DeleteStream);
+        DECLARE_PROCESSOR(UpdateStream);
         DECLARE_PROCESSOR(DescribeStream);
         DECLARE_PROCESSOR(ListShards);
         DECLARE_PROCESSOR(PutRecord);

@@ -58,6 +58,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     , TopicStats_(Proto_.topic_stats())
 {
     Owner_ = Proto_.self().owner();
+    CreationTimestamp_ = NScheme::TVirtualTimestamp(Proto_.self().created_at());
     PermissionToSchemeEntry(Proto_.self().permissions(), &Permissions_);
     PermissionToSchemeEntry(Proto_.self().effective_permissions(), &EffectivePermissions_);
 
@@ -198,6 +199,10 @@ const Ydb::Topic::DescribePartitionResult& TPartitionDescription::GetProto() con
 
 const TString& TTopicDescription::GetOwner() const {
     return Owner_;
+}
+
+const NScheme::TVirtualTimestamp& TTopicDescription::GetCreationTimestamp() const {
+    return CreationTimestamp_;
 }
 
 const TTopicStats& TTopicDescription::GetTopicStats() const {

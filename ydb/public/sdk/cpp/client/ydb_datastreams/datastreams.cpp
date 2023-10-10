@@ -607,6 +607,18 @@ namespace NYdb::NDataStreams::V1 {
                         TProtoRequestSettings settings
                 );
 
+    template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::UpdateStreamResult>> TDataStreamsClient::DoProtoRequest
+                <
+                    Ydb::DataStreams::V1::UpdateStreamRequest,
+                    Ydb::DataStreams::V1::UpdateStreamResponse,
+                    Ydb::DataStreams::V1::UpdateStreamResult,
+                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStream)
+                >(
+                        const Ydb::DataStreams::V1::UpdateStreamRequest& request,
+                        decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateStream) method,
+                        TProtoRequestSettings settings
+                );
+
     template NThreading::TFuture<TProtoResultWrapper<Ydb::DataStreams::V1::DeleteStreamResult>> TDataStreamsClient::DoProtoRequest
                 <
                     Ydb::DataStreams::V1::DeleteStreamRequest,

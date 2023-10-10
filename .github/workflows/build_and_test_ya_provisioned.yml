@@ -1,0 +1,45 @@
+name: Ya-Build-and-Test-Provisioned
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_target:
+        type: string
+        default: "ydb/"
+        description: "limit build and test to specific target"
+      sanitizer:
+        type: choice
+        default: "none"
+        description: "sanitizer type"
+        options:
+          - none
+          - address
+          - memory
+          - thread
+          - undefined
+          - leak
+      runner_label:
+        type: string
+        default: "linux"
+        description: "runner label"
+      run_build:
+        type: boolean
+        default: true
+        description: "run build"
+      run_tests:
+        type: boolean
+        default: true
+        description: "run tests"
+
+jobs:
+  main:
+    uses: ./.github/workflows/build_and_test_ya.yml
+    with:
+      runner_kind: provisioned
+      runner_label: ${{ inputs.runner_label }}
+      build_target: ${{ inputs.build_target }}
+      sanitizer: ${{ inputs.sanitizer }}
+      run_build: ${{ inputs.run_build }}
+      run_tests: ${{ inputs.run_tests }}
+      log_suffix: ya-${{ inputs.sanitizer != 'none' && format('{0}-{1}', inputs.runner_label, inputs.sanitizer) || inputs.runner_label }}
+    secrets: inherit

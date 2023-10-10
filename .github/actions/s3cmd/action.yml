@@ -1,0 +1,39 @@
+name: configure s3cmd
+description: configure s3cmd
+inputs:
+  s3_key_id:
+    required: true
+    description: "s3 key id"
+  s3_key_secret:
+    required: true
+    description: "s3 key secret"
+  s3_bucket:
+    required: true
+    description: "s3 bucket"
+  s3_endpoint:
+    required: true
+    description: "s3 endpoint"
+  log_suffix:
+    required: true
+    description: "log suffix"
+runs:
+  using: "composite"
+  steps:
+    - name: configure s3cmd
+      shell: bash
+      run: |
+        export S3CMD_CONFIG=$(mktemp)
+        echo "S3CMD_CONFIG=$S3CMD_CONFIG" >> $GITHUB_ENV
+        cat <<EOF > $S3CMD_CONFIG
+        [default]
+        access_key = ${s3_key_id}
+        secret_key = ${s3_secret_access_key}
+        bucket_location = ru-central1
+        host_base = storage.yandexcloud.net
+        host_bucket = %(bucket)s.storage.yandexcloud.net
+        EOF
+        echo "S3_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}" >> $GITHUB_ENV
+        echo "S3_URL_PREFIX=${{inputs.s3_endpoint}}/${{inputs.s3_bucket}}/${{ github.repository }}/${{github.workflow}}/${{github.run_id}}/${{inputs.log_suffix}}" >> $GITHUB_ENV
+      env:
+        s3_key_id: ${{ inputs.s3_key_id }}
+        s3_secret_access_key: ${{ inputs.s3_key_secret }}

@@ -19,8 +19,10 @@ public:
         return {};
     }
 
-    void Acquire(i64 /*size*/) override
-    { }
+    bool Acquire(i64 /*size*/) override
+    {
+        return false;
+    }
 
     void Release(i64 /*size*/) override
     { }

@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         return ev;
     }
 
-    TVector<ui64> Prepare(TTestActorRuntime& runtime, const TString& mainTablePath) {
+    TVector<ui64> Prepare(TTestActorRuntime& runtime, const TString& mainTablePath, const TVector<ui32>& recordIds, bool block = false) {
         ui64 mainTableId = 0;
         TVector<ui64> mainTabletIds;
         TVector<std::pair<TString, TString>> rows;
@@ -94,14 +94,19 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
             }
         }
 
-        for (ui32 i = 0; i < 3; ++i) {
-            auto key = TVector<TCell>{TCell::Make(1 << i)};
+        for (ui32 i : recordIds) {
+            auto key = TVector<TCell>{TCell::Make(i)};
             auto value = TVector<TCell>{TCell::Make(i)};
             rows.emplace_back(TSerializedCellVec::Serialize(key), TSerializedCellVec::Serialize(value));
         }
 
+        const auto sender = runtime.AllocateEdgeActor();
         auto ev = MakeUploadRows(mainTableId, {1}, {2}, std::move(rows));
-        ForwardToTablet(runtime, mainTabletIds[0], runtime.AllocateEdgeActor(), ev.Release());
+        ForwardToTablet(runtime, mainTabletIds[0], sender, ev.Release());
+
+        if (block) {
+            runtime.GrabEdgeEvent<TEvDataShard::TEvUploadRowsResponse>(sender);
+        }
 
         return mainTabletIds;
     }
@@ -132,19 +137,29 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         TString Path;
         TVector<TString> Key;
         TVector<TString> Columns;
+        ui32 ExpectedRecords;
     };
 
-    void CheckWrittenToIndex(TTestActorRuntime& runtime, const TTableTraits& mainTable, const TTableTraits& indexTable) {
+    template <typename C>
+    ui32 CountRows(TTestActorRuntime& runtime, const TTableTraits& table, const C& partitions) {
+        ui32 rows = 0;
+
+        for (const auto& x : partitions) {
+            auto result = ReadTable(runtime, x.GetDatashardId(), SplitPath(table.Path).back(), table.Key, table.Columns);
+            auto value = NClient::TValue::Create(result);
+            rows += value["Result"]["List"].Size();
+        }
+
+        return rows;
+    }
+
+    bool CheckWrittenToIndex(TTestActorRuntime& runtime, const TTableTraits& mainTable, const TTableTraits& indexTable) {
         bool writtenToMainTable = false;
         {
             auto tableDesc = DescribePath(runtime, mainTable.Path, true, true);
             const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
             UNIT_ASSERT(!tablePartitions.empty());
-
-            auto result = ReadTable(runtime, tablePartitions[0].GetDatashardId(), SplitPath(mainTable.Path).back(),
-                mainTable.Key, mainTable.Columns);
-            auto value = NClient::TValue::Create(result);
-            writtenToMainTable = value["Result"]["List"].Size() == 3;
+            writtenToMainTable = mainTable.ExpectedRecords == CountRows(runtime, mainTable, tablePartitions);
         }
 
         if (writtenToMainTable) {
@@ -155,110 +170,190 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
             int i = 0;
             while (++i < 10) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
-
-                auto result = ReadTable(runtime, tablePartitions[0].GetDatashardId(), SplitPath(indexTable.Path).back(),
-                    indexTable.Key, indexTable.Columns);
-                auto value = NClient::TValue::Create(result);
-                if (value["Result"]["List"].Size() == 3) {
+                if (indexTable.ExpectedRecords == CountRows(runtime, indexTable, tablePartitions)) {
                     break;
                 }
             }
 
             UNIT_ASSERT(i < 10);
         }
+
+        return writtenToMainTable;
     }
 
-    Y_UNIT_TEST(SplitWithReboots) {
+    void SplitWithReboots(
+            const std::function<void(TTestWithReboots&, TTestActorRuntime&)>& init,
+            const std::function<void(TTestWithReboots&, TTestActorRuntime&, const TVector<ui64>& tablets)>& split)
+    {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<ui64> mainTabletIds;
-
             {
                 TInactiveZone inactive(activeZone);
 
-                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
-                    TableDescription {
-                      Name: "Table"
-                      Columns { Name: "key" Type: "Uint32" }
-                      Columns { Name: "indexed" Type: "Uint32" }
-                      KeyColumnNames: ["key"]
-                    }
-                    IndexDescription {
-                      Name: "UserDefinedIndex"
-                      KeyColumnNames: ["indexed"]
-                      Type: EIndexTypeGlobalAsync
-                    }
-                )");
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
-
-                mainTabletIds = Prepare(runtime, "/MyRoot/Table");
-                UNIT_ASSERT_VALUES_EQUAL(mainTabletIds.size(), 1);
+                init(t, runtime);
+                mainTabletIds = Prepare(runtime, "/MyRoot/Table", {1, 10, 100});
             }
 
-            TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
-                SourceTabletId: %lu
-                SplitBoundary {
-                    KeyPrefix {
-                        Tuple { Optional { Uint32: 100 } }
-                    }
-                }
-            )", mainTabletIds[0]));
-            t.TestEnv->TestWaitNotification(runtime, t.TxId);
-
+            split(t, runtime, mainTabletIds);
             {
                 TInactiveZone inactive(activeZone);
-                CheckWrittenToIndex(runtime,
-                    {"/MyRoot/Table", {"key"}, {"key", "indexed"}},
-                    {"/MyRoot/Table/UserDefinedIndex/indexImplTable", {"indexed", "key"}, {"key", "indexed"}});
+
+                bool written = CheckWrittenToIndex(runtime,
+                    {"/MyRoot/Table", {"key"}, {"key", "indexed"}, 3},
+                    {"/MyRoot/Table/UserDefinedIndex/indexImplTable", {"indexed", "key"}, {"key", "indexed"}, 3});
+
+                if (written) {
+                    Prepare(runtime, "/MyRoot/Table", {2, 20, 200}, true);
+
+                    written = CheckWrittenToIndex(runtime,
+                        {"/MyRoot/Table", {"key"}, {"key", "indexed"}, 6},
+                        {"/MyRoot/Table/UserDefinedIndex/indexImplTable", {"indexed", "key"}, {"key", "indexed"}, 6});
+                    UNIT_ASSERT(written);
+                }
             }
         });
     }
 
-    Y_UNIT_TEST(MergeWithReboots) {
-        TTestWithReboots t;
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            TVector<ui64> mainTabletIds;
+    void SplitWithReboots(const std::function<void(TTestWithReboots&, TTestActorRuntime&)>& init) {
+        SplitWithReboots(init, [](TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<ui64>& tablets) {
+            UNIT_ASSERT_VALUES_EQUAL(tablets.size(), 1);
+            TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary {
+                  KeyPrefix {
+                    Tuple { Optional { Uint32: 50 } }
+                  }
+                }
+            )", tablets[0]));
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+        });
+    }
 
-            {
-                TInactiveZone inactive(activeZone);
+    Y_UNIT_TEST(SplitWithReboots) {
+        SplitWithReboots([](TTestWithReboots& t, TTestActorRuntime& runtime) {
+            TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                TableDescription {
+                  Name: "Table"
+                  Columns { Name: "key" Type: "Uint32" }
+                  Columns { Name: "indexed" Type: "Uint32" }
+                  KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndex"
+                  KeyColumnNames: ["indexed"]
+                  Type: EIndexTypeGlobalAsync
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+        });
+    }
 
-                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
-                    TableDescription {
-                      Name: "Table"
-                      Columns { Name: "key" Type: "Uint32" }
-                      Columns { Name: "indexed" Type: "Uint32" }
-                      KeyColumnNames: ["key"]
-                      UniformPartitionsCount: 2
-                      PartitionConfig {
-                        PartitioningPolicy {
-                          MinPartitionsCount: 1
-                        }
-                      }
-                    }
-                    IndexDescription {
-                      Name: "UserDefinedIndex"
-                      KeyColumnNames: ["indexed"]
-                      Type: EIndexTypeGlobalAsync
-                    }
-                )");
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+    Y_UNIT_TEST(CdcAndSplitWithReboots) {
+        SplitWithReboots([](TTestWithReboots& t, TTestActorRuntime& runtime) {
+            TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                TableDescription {
+                  Name: "Table"
+                  Columns { Name: "key" Type: "Uint32" }
+                  Columns { Name: "indexed" Type: "Uint32" }
+                  KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndex"
+                  KeyColumnNames: ["indexed"]
+                  Type: EIndexTypeGlobalAsync
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                mainTabletIds = Prepare(runtime, "/MyRoot/Table");
-                UNIT_ASSERT_VALUES_EQUAL(mainTabletIds.size(), 2);
-            }
+            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+        });
+    }
 
+    void MergeWithReboots(const std::function<void(TTestWithReboots&, TTestActorRuntime&)>& init) {
+        SplitWithReboots(init, [](TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<ui64>& tablets) {
+            UNIT_ASSERT_VALUES_EQUAL(tablets.size(), 2);
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
                 SourceTabletId: %lu
                 SourceTabletId: %lu
-            )", mainTabletIds[0], mainTabletIds[1]));
+            )", tablets[0], tablets[1]));
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+        });
+    }
+
+    Y_UNIT_TEST(MergeWithReboots) {
+        MergeWithReboots([](TTestWithReboots& t, TTestActorRuntime& runtime) {
+            TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                TableDescription {
+                  Name: "Table"
+                  Columns { Name: "key" Type: "Uint32" }
+                  Columns { Name: "indexed" Type: "Uint32" }
+                  KeyColumnNames: ["key"]
+                  SplitBoundary {
+                    KeyPrefix {
+                      Tuple { Optional { Uint32: 50 } }
+                    }
+                  }
+                  PartitionConfig {
+                    PartitioningPolicy {
+                      MinPartitionsCount: 1
+                    }
+                  }
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndex"
+                  KeyColumnNames: ["indexed"]
+                  Type: EIndexTypeGlobalAsync
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+        });
+    }
+
+    Y_UNIT_TEST(CdcAndMergeWithReboots) {
+        MergeWithReboots([](TTestWithReboots& t, TTestActorRuntime& runtime) {
+            TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                TableDescription {
+                  Name: "Table"
+                  Columns { Name: "key" Type: "Uint32" }
+                  Columns { Name: "indexed" Type: "Uint32" }
+                  KeyColumnNames: ["key"]
+                  SplitBoundary {
+                    KeyPrefix {
+                      Tuple { Optional { Uint32: 50 } }
+                    }
+                  }
+                  PartitionConfig {
+                    PartitioningPolicy {
+                      MinPartitionsCount: 1
+                    }
+                  }
+                }
+                IndexDescription {
+                  Name: "UserDefinedIndex"
+                  KeyColumnNames: ["indexed"]
+                  Type: EIndexTypeGlobalAsync
+                }
+            )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            {
-                TInactiveZone inactive(activeZone);
-                CheckWrittenToIndex(runtime,
-                    {"/MyRoot/Table", {"key"}, {"key", "indexed"}},
-                    {"/MyRoot/Table/UserDefinedIndex/indexImplTable", {"indexed", "key"}, {"key", "indexed"}});
-            }
+            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
         });
     }
 }

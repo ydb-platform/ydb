@@ -184,7 +184,11 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             const auto& cfg = Props.GetHierarchicalDRRResourceConfig();
             const double speed = cfg.GetMaxUnitsPerSecond();
             const double prefetch = cfg.GetPrefetchCoefficient() ? cfg.GetPrefetchCoefficient() : NKesus::NQuoter::PREFETCH_COEFFICIENT_DEFAULT;
-            const double watermark = std::clamp(cfg.GetPrefetchWatermark() ? cfg.GetPrefetchWatermark() : NKesus::NQuoter::PREFETCH_WATERMARK_DEFAULT, 0.0, 1.0);
+            double watermark = std::clamp(cfg.GetPrefetchWatermark() ? cfg.GetPrefetchWatermark() : NKesus::NQuoter::PREFETCH_WATERMARK_DEFAULT, 0.0, 1.0);
+
+            if (Props.GetHierarchicalDRRResourceConfig().HasReplicatedBucket()) {
+                watermark = 0.999;
+            }
 
             const double prevBucketMaxSize = ResourceBucketMaxSize;
             ResourceBucketMaxSize = Max(0.0, speed * prefetch);

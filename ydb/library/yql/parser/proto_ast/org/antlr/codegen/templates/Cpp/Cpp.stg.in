@@ -1597,7 +1597,7 @@ positiveClosureBlock(alts,decls,decision,enclosingBlockLevel,blockLevel,decision
     }
     loop<decisionNumber>: ;    /* Jump to here if this rule does not match */
     <if(PARSER)>
-    Y_VERIFY(parentBlock<enclosingBlockLevel>, "parentBlock is null");
+    Y_ABORT_UNLESS(parentBlock<enclosingBlockLevel>, "parentBlock is null");
     if (!parentBlock<enclosingBlockLevel>->Block<elemId>Size()) {
         <ruleBacktrackFailure()>
         <earlyExitEx()>
@@ -1711,7 +1711,7 @@ alt(elements,altNum,description,autoAST,outerAlt,treeLevel,rew) ::= <<
     <@initializations()>
     <if(PARSER)>
     <if(!ruleDescriptor.isSynPred)>
-    Y_VERIFY(parent, "Parent is null");
+    Y_ABORT_UNLESS(parent, "Parent is null");
     parent->SetDescr("<description>");
     <endif>
     <endif>
@@ -1739,7 +1739,7 @@ tokenRef(token,label,elementIndex,terminalOptions) ::= <<
     auto token = matchToken(TOKEN_<token>, &FOLLOW_<token>_in_<ruleName><elementIndex>);
     if (token) {
         <if(!ruleDescriptor.isSynPred)>
-        Y_VERIFY(parent, "Parent is null");
+        Y_ABORT_UNLESS(parent, "Parent is null");
         parent->MutableToken<elemId>()->SetId(token->get_type());
         parent->MutableToken<elemId>()->SetLine(token->get_line());
         parent->MutableToken<elemId>()->SetColumn(token->get_charPositionInLine());
@@ -1797,7 +1797,7 @@ matchSet(s,label,elementIndex,terminalOptions,postmatchCode="") ::= <<
         <if(PARSER)>
         if (token) {
             <if(!ruleDescriptor.isSynPred)>
-            Y_VERIFY(parent, "Parent is null");
+            Y_ABORT_UNLESS(parent, "Parent is null");
             parent->MutableToken<elemId>()->SetId(token->get_type());
             parent->MutableToken<elemId>()->SetLine(token->get_line());
             parent->MutableToken<elemId>()->SetColumn(token->get_charPositionInLine());
@@ -1919,7 +1919,7 @@ Y_ASSERT(dynamic_cast\<@ANTLR_PACKAGE_NAME@::TRule_<rule.name>* >(res));
 
 ruleResult() ::= <<
 <if(!ruleDescriptor.isSynPred)>
-Y_VERIFY(parent, "Parent is null");
+Y_ABORT_UNLESS(parent, "Parent is null");
 parent->unsafe_arena_set_allocated_rule_<rule.name><elemId>(static_cast\<@ANTLR_PACKAGE_NAME@::TRule_<rule.name>* >(res));
 <endif>
 >>

@@ -209,7 +209,7 @@ TWriteSessionActor<UseMigrationProtocol>::TWriteSessionActor(
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Bootstrap(const TActorContext& ctx) {
 
-    Y_VERIFY(Request);
+    Y_ABORT_UNLESS(Request);
     //ToDo !! - Set proper table paths.
     const auto& pqConfig = AppData(ctx)->PQConfig;
     SrcIdTableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
@@ -351,11 +351,11 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDone::TPtr&
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::CheckACL(const TActorContext& ctx) {
-    //Y_VERIFY(ACLCheckInProgress);
+    //Y_ABORT_UNLESS(ACLCheckInProgress);
 
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
 
-    Y_VERIFY(ACL);
+    Y_ABORT_UNLESS(ACL);
     if (ACL->CheckAccess(rights, *Token)) {
         ACLCheckInProgress = false;
         if (FirstACLCheck) {
@@ -502,7 +502,7 @@ void TWriteSessionActor<UseMigrationProtocol>::InitAfterDiscovery(const TActorCo
             return;
         }
     } else {
-        Y_VERIFY(!UseDeduplication);
+        Y_ABORT_UNLESS(!UseDeduplication);
     }
 
     InitMeta = GetInitialDataChunk(InitRequest, FullConverter->GetClientsideName(), PeerName); // ToDo[migration] - check?
@@ -582,7 +582,7 @@ void TWriteSessionActor<UseMigrationProtocol>::InitCheckSchema(const TActorConte
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
     auto& res = ev->Get()->Result;
-    Y_VERIFY(res->ResultSet.size() == 1);
+    Y_ABORT_UNLESS(res->ResultSet.size() == 1);
 
     auto& entry = res->ResultSet[0];
     TString errorReason;
@@ -591,10 +591,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
         CloseSession(processResult.Reason, processResult.ErrorCode, ctx);
         return;
     }
-    Y_VERIFY(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
+    Y_ABORT_UNLESS(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
     const auto& description = entry.PQGroupInfo->Description;
-    Y_VERIFY(description.PartitionsSize() > 0);
-    Y_VERIFY(description.HasPQTabletConfig());
+    Y_ABORT_UNLESS(description.PartitionsSize() > 0);
+    Y_ABORT_UNLESS(description.HasPQTabletConfig());
     InitialPQTabletConfig = description.GetPQTabletConfig();
     if (!DiscoveryConverter->IsValid()) {
         errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", DiscoveryConverter->GetPrintableString().c_str());
@@ -627,7 +627,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
         SetupCounters();
     }
 
-    Y_VERIFY(entry.SecurityObject);
+    Y_ABORT_UNLESS(entry.SecurityObject);
     ACL.Reset(new TAclWrapper(entry.SecurityObject));
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " describe result for acl check");
 
@@ -644,16 +644,16 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
             Die(ctx);
             return;
         }
-        Y_VERIFY(FirstACLCheck);
+        Y_ABORT_UNLESS(FirstACLCheck);
         FirstACLCheck = false;
         DiscoverPartition(ctx);
     } else {
-        Y_VERIFY(Request->GetYdbToken());
+        Y_ABORT_UNLESS(Request->GetYdbToken());
         Auth = *Request->GetYdbToken();
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
 
         if (FirstACLCheck && IsQuotaRequired()) {
-            Y_VERIFY(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
+            Y_ABORT_UNLESS(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
         } else {
             CheckACL(ctx);
         }
@@ -725,7 +725,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr &ev, const NActors::TActorContext& ctx)
 {
-    Y_VERIFY(State == ES_WAIT_SESSION || State == ES_DYING);
+    Y_ABORT_UNLESS(State == ES_WAIT_SESSION || State == ES_DYING);
     const auto& record = ev->Get()->Record;
     KqpSessionId = record.GetResponse().GetSessionId();
 
@@ -745,14 +745,14 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvCreateSes
         return;
     }
 
-    Y_VERIFY(!KqpSessionId.empty());
+    Y_ABORT_UNLESS(!KqpSessionId.empty());
 
     SendSelectPartitionRequest(FullConverter->GetClientsideName(), ctx);
 }
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::SendSelectPartitionRequest(const TString& topic, const NActors::TActorContext& ctx) {
-    Y_VERIFY(UseDeduplication);
+    Y_ABORT_UNLESS(UseDeduplication);
     //read from DS
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
@@ -798,19 +798,19 @@ void TWriteSessionActor<UseMigrationProtocol>::UpdateOrProceedPartition(const TA
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::UpdatePartition(const TActorContext& ctx) {
-    Y_VERIFY(State == ES_WAIT_TABLE_REQUEST_1 || State == ES_WAIT_NEXT_PARTITION);
-    Y_VERIFY(UseDeduplication);
+    Y_ABORT_UNLESS(State == ES_WAIT_TABLE_REQUEST_1 || State == ES_WAIT_NEXT_PARTITION);
+    Y_ABORT_UNLESS(UseDeduplication);
     SendUpdateSrcIdsRequests(ctx);
     State = ES_WAIT_TABLE_REQUEST_2;
 }
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::RequestNextPartition(const TActorContext& ctx) {
-    Y_VERIFY(State == ES_WAIT_TABLE_REQUEST_1);
+    Y_ABORT_UNLESS(State == ES_WAIT_TABLE_REQUEST_1);
     State = ES_WAIT_NEXT_PARTITION;
     THolder<TEvPersQueue::TEvGetPartitionIdForWrite> x(new TEvPersQueue::TEvGetPartitionIdForWrite);
-    Y_VERIFY(!PipeToBalancer);
-    Y_VERIFY(BalancerTabletId);
+    Y_ABORT_UNLESS(!PipeToBalancer);
+    Y_ABORT_UNLESS(BalancerTabletId);
     NTabletPipe::TClientConfig clientConfig;
     clientConfig.RetryPolicy = {
         .RetryLimitCount = 6,
@@ -826,7 +826,7 @@ void TWriteSessionActor<UseMigrationProtocol>::RequestNextPartition(const TActor
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx) {
-    Y_VERIFY(State == ES_WAIT_NEXT_PARTITION);
+    Y_ABORT_UNLESS(State == ES_WAIT_NEXT_PARTITION);
     Partition = ev->Get()->Record.GetPartitionId();
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie
                                                       << ". Got next partition from server: " << Partition);
@@ -836,7 +836,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvGetPartit
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::GetOrProcessPartition(const TActorContext& ctx) {
     if (!UseDeduplication) {
-        Y_VERIFY(!PartitionFound);
+        Y_ABORT_UNLESS(!PartitionFound);
     }
     if (!PartitionFound) {
         const auto& pqConfig = AppData(ctx)->PQConfig;
@@ -887,7 +887,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvQueryResp
         auto& t = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
 
         TxId = record.GetResponse().GetTxMeta().id();
-        Y_VERIFY(!TxId.empty());
+        Y_ABORT_UNLESS(!TxId.empty());
 
         if (t.ListSize() != 0) {
             auto& tt = t.GetList(0).GetStruct(0);
@@ -1142,7 +1142,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     const auto& result = *ev->Get();
 
     auto writer = FindPartitionWriter(result.SessionId, result.TxId);
-    Y_VERIFY(writer != nullptr);
+    Y_ABORT_UNLESS(writer != nullptr);
 
     if (!result.SessionId && !result.TxId) {
         if (State != ES_WAIT_WRITER_INIT) {
@@ -1167,7 +1167,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
 
     const auto& maxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo();
     if (!UseDeduplication) {
-        Y_VERIFY(maxSeqNo == 0);
+        Y_ABORT_UNLESS(maxSeqNo == 0);
     }
 
     if (!result.SessionId && !result.TxId) {
@@ -1183,9 +1183,9 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     }
 
     auto* writer = FindPartitionWriter(ev->Get()->SessionId, ev->Get()->TxId);
-    Y_VERIFY(writer != nullptr);
+    Y_ABORT_UNLESS(writer != nullptr);
 
-    Y_VERIFY(!writer->SentRequests.empty());
+    Y_ABORT_UNLESS(!writer->SentRequests.empty());
     auto writeRequest = std::move(writer->SentRequests.front());
 
     if (ev->Get()->Cookie != writeRequest->Cookie) {
@@ -1235,7 +1235,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
         batchWriteResponse->add_sequence_numbers(res.GetSeqNo());
         batchWriteResponse->add_offsets(res.GetOffset());
         if (!UseDeduplication) {
-            Y_VERIFY(!res.GetAlreadyWritten());
+            Y_ABORT_UNLESS(!res.GetAlreadyWritten());
         }
         batchWriteResponse->add_already_written(res.GetAlreadyWritten());
         stat->set_queued_in_partition_duration_ms(
@@ -1254,7 +1254,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
         // TODO (ildar-khisam@): validate res before filling ack fields
         ack->set_seq_no(res.GetSeqNo());
         if (res.GetAlreadyWritten()) {
-            Y_VERIFY(UseDeduplication);
+            Y_ABORT_UNLESS(UseDeduplication);
             ack->mutable_skipped()->set_reason(Topic::StreamWriteMessage::WriteResponse::WriteAck::Skipped::REASON_ALREADY_WRITTEN);
         } else {
             ack->mutable_written()->set_offset(res.GetOffset());
@@ -1371,7 +1371,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     }
 
     auto* writer = FindPartitionWriter(result.SessionId, result.TxId);
-    Y_VERIFY(writer != nullptr);
+    Y_ABORT_UNLESS(writer != nullptr);
 
     if (writer->AcceptedRequests.empty()) {
         CloseSession("got too many replies from server, internal error", PersQueue::ErrorCode::ERROR, ctx);
@@ -1423,7 +1423,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     if (PendingRequests.empty()) {
         PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie));
     } else if constexpr (!UseMigrationProtocol) {
-        Y_VERIFY(!PendingRequests.back()->UserWriteRequests.empty());
+        Y_ABORT_UNLESS(!PendingRequests.back()->UserWriteRequests.empty());
 
         auto& last = PendingRequests.back()->UserWriteRequests.back()->Request.write_request();
 
@@ -1533,12 +1533,12 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     } else {
         TPartitionWriter* writer = nullptr;
         if constexpr (UseMigrationProtocol) {
-            Y_VERIFY(Writers.size() == 1);
+            Y_ABORT_UNLESS(Writers.size() == 1);
             writer = &Writers.begin()->second;
         } else {
             const auto& [sessionId, txId] = pendingRequest->GetTransactionId();
             writer = FindPartitionWriter(sessionId, txId);
-            Y_VERIFY(writer != nullptr);
+            Y_ABORT_UNLESS(writer != nullptr);
         }
 
         if (!PendingQuotaRequest && writer->SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
@@ -1550,14 +1550,14 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::SendRequest(TPartitionWriter& writer, typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx) {
-    Y_VERIFY(request->PartitionWriteRequest);
+    Y_ABORT_UNLESS(request->PartitionWriteRequest);
 
     i64 diff = 0;
     for (const auto& w : request->UserWriteRequests) {
         diff -= w->Request.ByteSize();
     }
 
-    Y_VERIFY(-diff <= (i64)BytesInflight_);
+    Y_ABORT_UNLESS(-diff <= (i64)BytesInflight_);
     diff += request->PartitionWriteRequest->Record.ByteSize();
     BytesInflight_ += diff;
     BytesInflightTotal_ += diff;
@@ -1763,7 +1763,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
     }
 
     if (BytesInflight_ < MAX_BYTES_INFLIGHT) { //allow only one big request to be readed but not sended
-        Y_VERIFY(NextRequestInited);
+        Y_ABORT_UNLESS(NextRequestInited);
         if (!Request->GetStreamCtx()->Read()) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
             Die(ctx);
@@ -1820,7 +1820,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
 
             const auto& [sessionId, txId] = PendingQuotaRequest->GetTransactionId();
             auto* writer = FindPartitionWriter(sessionId, txId);
-            Y_VERIFY(writer != nullptr);
+            Y_ABORT_UNLESS(writer != nullptr);
 
             if (writer->SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
                 SendRequest(*writer, std::move(PendingQuotaRequest), ctx);
@@ -1829,7 +1829,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
             }
 
             if (!PendingRequests.empty()) {
-                Y_VERIFY(MaybeRequestQuota(PendingRequests.front()->RequiredQuota, EWakeupTag::RlAllowed, ctx));
+                Y_ABORT_UNLESS(MaybeRequestQuota(PendingRequests.front()->RequiredQuota, EWakeupTag::RlAllowed, ctx));
                 PendingQuotaRequest = std::move(PendingRequests.front());
                 PendingRequests.pop_front();
             }
@@ -1840,7 +1840,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
         case EWakeupTag::RlNoResource:
         case EWakeupTag::RlInitNoResource:
             if (PendingQuotaRequest) {
-                Y_VERIFY(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx));
+                Y_ABORT_UNLESS(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx));
             } else {
                 return CloseSession("Throughput limit exceeded", PersQueue::ErrorCode::OVERLOAD, ctx);
             }
@@ -1850,7 +1850,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::RecheckACL(const TActorContext& ctx) {
-    Y_VERIFY(State == ES_INITED);
+    Y_ABORT_UNLESS(State == ES_INITED);
     ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()), new TEvents::TEvWakeup(EWakeupTag::RecheckAcl));
     if (Token && !ACLCheckInProgress && RequestNotChecked && (ctx.Now() - LastACLCheckTimestamp > TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()))) {
         RequestNotChecked = false;
@@ -1904,7 +1904,7 @@ void TWriteSessionActor<UseMigrationProtocol>::InitPartitionWriter(const TString
     opts.WithDeduplication(UseDeduplication);
     if constexpr (!UseMigrationProtocol) {
         if (sessionId && txId) {
-            Y_VERIFY(Request->GetDatabaseName());
+            Y_ABORT_UNLESS(Request->GetDatabaseName());
             opts.WithDatabase(*Request->GetDatabaseName());
             opts.WithTopicPath(InitRequest.path());
             opts.WithSessionId(sessionId);

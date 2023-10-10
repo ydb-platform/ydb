@@ -141,7 +141,7 @@ TDuration TEventTimerGuard::GetElapsedTime() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TGaugeHistogram::Add(double value, int count) noexcept
+void TGaugeHistogram::Add(double value, int count) const noexcept
 {
     if (!Histogram_) {
         return;
@@ -150,7 +150,7 @@ void TGaugeHistogram::Add(double value, int count) noexcept
     Histogram_->Add(value, count);
 }
 
-void TGaugeHistogram::Remove(double value, int count) noexcept
+void TGaugeHistogram::Remove(double value, int count) const noexcept
 {
     if (!Histogram_) {
         return;

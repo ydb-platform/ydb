@@ -138,8 +138,8 @@ private:
 class TGaugeHistogram
 {
 public:
-    void Add(double value, int count = 1) noexcept;
-    void Remove(double value, int count = 1) noexcept;
+    void Add(double value, int count = 1) const noexcept;
+    void Remove(double value, int count = 1) const noexcept;
     void Reset() noexcept;
 
     THistogramSnapshot GetSnapshot() const;

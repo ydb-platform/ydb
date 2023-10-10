@@ -74,6 +74,6 @@ NActors::IActor* CreateCreateScriptOperationQueryActor(const TString& executionI
                                                        TDuration operationTtl, TDuration resultsTtl, TDuration leaseDuration = TDuration::Zero());
 
 // Checks lease of execution, finishes execution if its lease is off, returns current status
-NActors::IActor* CreateCheckLeaseStatusActor(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode statusOnExpiredLease = Ydb::StatusIds::ABORTED, ui64 cookie = 0);
+NActors::IActor* CreateCheckLeaseStatusActor(const TString& database, const TString& executionId, ui64 cookie = 0);
 
 } // namespace NKikimr::NKqp::NPrivate

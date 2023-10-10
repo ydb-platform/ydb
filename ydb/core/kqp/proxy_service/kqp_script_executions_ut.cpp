@@ -275,8 +275,8 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         }
 
         auto checkResult2 = ydb.CheckLeaseStatus(executionId);
-        UNIT_ASSERT_VALUES_EQUAL(checkResult2->Get()->OperationStatus, Ydb::StatusIds::ABORTED);
-        ydb.CheckLeaseExistance(executionId, false, Ydb::StatusIds::ABORTED);
+        UNIT_ASSERT_VALUES_EQUAL(checkResult2->Get()->OperationStatus, Ydb::StatusIds::UNAVAILABLE);
+        ydb.CheckLeaseExistance(executionId, false, Ydb::StatusIds::UNAVAILABLE);
     }
 
     Y_UNIT_TEST(UpdatesLeaseAfterExpiring) {
@@ -314,8 +314,8 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         Sleep(TestLeaseDuration);
 
         auto checkResult = ydb.CheckLeaseStatus(executionId);
-        UNIT_ASSERT_VALUES_EQUAL(checkResult->Get()->OperationStatus, Ydb::StatusIds::ABORTED);
-        ydb.CheckLeaseExistance(executionId, false, Ydb::StatusIds::ABORTED);
+        UNIT_ASSERT_VALUES_EQUAL(checkResult->Get()->OperationStatus, Ydb::StatusIds::UNAVAILABLE);
+        ydb.CheckLeaseExistance(executionId, false, Ydb::StatusIds::UNAVAILABLE);
 
         auto updateResponse = ydb.UpdateLease(executionId, TestLeaseDuration);
         UNIT_ASSERT(!updateResponse->ExecutionEntryExists);

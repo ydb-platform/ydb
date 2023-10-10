@@ -793,10 +793,9 @@ private:
 
 class TCheckLeaseStatusActor : public TScriptExecutionFinisherBase {
 public:
-    TCheckLeaseStatusActor(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode statusOnExpiredLease = Ydb::StatusIds::ABORTED, ui64 cookie = 0)
+    TCheckLeaseStatusActor(const TString& database, const TString& executionId, ui64 cookie = 0)
         : Database(database)
         , ExecutionId(executionId)
-        , StatusOnExpiredLease(statusOnExpiredLease)
         , Cookie(cookie)
     {}
 
@@ -876,7 +875,7 @@ public:
                     return;
                 }
                 const auto [operationTtl, resultsTtl] = *ttl;
-                FinishScriptExecution(Database, ExecutionId, StatusOnExpiredLease, Ydb::Query::EXEC_STATUS_ABORTED, operationTtl, resultsTtl);
+                FinishScriptExecution(Database, ExecutionId, Ydb::StatusIds::UNAVAILABLE, Ydb::Query::EXEC_STATUS_ABORTED, operationTtl, resultsTtl);
                 SetQueryResultHandler(&TCheckLeaseStatusActor::OnFinishScriptExecution);
             } else {
                 // OperationStatus is Nothing(): currently running
@@ -899,7 +898,7 @@ public:
     }
 
     void OnFinishScriptExecution() {
-        OperationStatus = StatusOnExpiredLease;
+        OperationStatus = Ydb::StatusIds::UNAVAILABLE;
         ExecutionStatus = Ydb::Query::EXEC_STATUS_ABORTED;
         OperationIssues = LeaseExpiredIssues();
         Finish();
@@ -917,7 +916,6 @@ private:
     const TInstant RunStartTime = TInstant::Now();
     const TString Database;
     const TString ExecutionId;
-    const Ydb::StatusIds::StatusCode StatusOnExpiredLease;
     const ui64 Cookie;
     TMaybe<Ydb::StatusIds::StatusCode> OperationStatus;
     TMaybe<Ydb::Query::ExecStatus> ExecutionStatus;
@@ -1227,7 +1225,7 @@ public:
     }
 
     void OnFinishOperation() {
-        OperationStatus = Ydb::StatusIds::ABORTED;
+        OperationStatus = Ydb::StatusIds::UNAVAILABLE;
         Issues = LeaseExpiredIssues();
         Metadata.set_exec_status(Ydb::Query::EXEC_STATUS_ABORTED);
 
@@ -1537,7 +1535,7 @@ public:
             if (!op.ready()) {
                 Ydb::Query::ExecuteScriptMetadata metadata;
                 op.metadata().UnpackTo(&metadata);
-                Register(new TCheckLeaseStatusActor(Request->Get()->Database, metadata.execution_id(), Ydb::StatusIds::ABORTED, i));
+                Register(new TCheckLeaseStatusActor(Request->Get()->Database, metadata.execution_id(), i));
                 ++OperationsToCheck;
             }
         }
@@ -2187,8 +2185,8 @@ NActors::IActor* CreateCreateScriptOperationQueryActor(const TString& executionI
     return new TCreateScriptOperationQuery(executionId, runScriptActorId, record, operationTtl, resultsTtl, leaseDuration);
 }
 
-NActors::IActor* CreateCheckLeaseStatusActor(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode statusOnExpiredLease, ui64 cookie) {
-    return new TCheckLeaseStatusActor(database, executionId, statusOnExpiredLease, cookie);
+NActors::IActor* CreateCheckLeaseStatusActor(const TString& database, const TString& executionId, ui64 cookie) {
+    return new TCheckLeaseStatusActor(database, executionId, cookie);
 }
 
 } // namespace NPrivate

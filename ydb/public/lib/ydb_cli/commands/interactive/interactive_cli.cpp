@@ -39,7 +39,7 @@ public:
 
     std::optional<Token> GetNextToken();
 
-    static bool IsNextTokenSymbol(char c);
+    static bool IsSeparatedTokenSymbol(char c);
 
 private:
     std::string_view Input;
@@ -61,10 +61,10 @@ std::optional<Token> Lexer::GetNextToken() {
     }
 
     const char * tokenStart = Position;
-    if (IsNextTokenSymbol(*Position)) {
+    if (IsSeparatedTokenSymbol(*Position)) {
         ++Position;
     } else {
-        while (Position < Input.end() && !std::isspace(*Position) && !IsNextTokenSymbol(*Position)) {
+        while (Position < Input.end() && !std::isspace(*Position) && !IsSeparatedTokenSymbol(*Position)) {
             ++Position;
         }
     }
@@ -73,7 +73,7 @@ std::optional<Token> Lexer::GetNextToken() {
     return Token{TokenData};
 }
 
-bool Lexer::IsNextTokenSymbol(char c) {
+bool Lexer::IsSeparatedTokenSymbol(char c) {
     return c == '=' || c == ';';
 }
 

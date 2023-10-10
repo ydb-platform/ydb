@@ -418,7 +418,7 @@ private:
             Send(SelfId(), MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSPECIFIED, response.GetErrorMessage()));
             return;
         }
-        Y_VERIFY (responseType == FINISH || responseType == CONTINUE);
+        Y_ABORT_UNLESS(responseType == FINISH || responseType == CONTINUE);
         if (responseType == FINISH) {
             Send(TaskRunnerActor, new TEvPush(channel.ChannelId));
         } else {

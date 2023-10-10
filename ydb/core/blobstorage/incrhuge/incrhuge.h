@@ -100,7 +100,7 @@ namespace NKikimr {
         };
 
         // TEvIncrHugeRead request is sent from VDisk to read previously written blob. User should provide correct and
-        // existing blob id, otherwise system will crash on Y_VERIFY (because VDisk's database became inconsistent).
+        // existing blob id, otherwise system will crash on Y_ABORT_UNLESS(because VDisk's database became inconsistent).
         // If Size field is zero, then blob is read up to end starting at Offset.
         struct TEvIncrHugeRead : public NActors::TEventLocal<TEvIncrHugeRead, TEvBlobStorage::EvIncrHugeRead> {
             ui8             Owner;  // the owner who wants to read the data

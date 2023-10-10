@@ -13,9 +13,19 @@ private:
     NActors::TActorId Parent;
     THashMap<ui64, std::shared_ptr<ITask>> Tasks;
     ui64 Counter = 0;
+    bool Aborted = false;
+
+    void StartStopping() {
+        Aborted = true;
+        if (Tasks.empty()) {
+            PassAway();
+        }
+    }
+
 public:
     static TAtomicCounter WaitingBlobsCount;
     TActor(ui64 tabletId, const TActorId& parent);
+    ~TActor();
 
     void Handle(TEvStartTask::TPtr& ev);
     void Handle(NKikimr::NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr& ev);
@@ -27,15 +37,13 @@ public:
     STFUNC(StateWait) {
         TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", Parent));
         switch (ev->GetTypeRewrite()) {
-            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+            cFunc(NActors::TEvents::TEvPoison::EventType, StartStopping);
             hFunc(TEvStartTask, Handle);
             hFunc(NKikimr::NResourceBroker::TEvResourceBroker::TEvResourceAllocated, Handle);
             default:
                 break;
         }
     }
-
-    ~TActor() = default;
 };
 
 }

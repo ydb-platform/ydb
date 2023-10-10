@@ -66,6 +66,7 @@ public:
         AddHandler(0, Names({TCoLength::CallableName(), TCoHasItems::CallableName()}), HNDL(Length));
         AddHandler(0, &TCoSort::Match, HNDL(Sort<false>));
         AddHandler(0, &TCoTopSort::Match, HNDL(Sort<true>));
+        AddHandler(0, &TCoTop::Match, HNDL(Sort<true>));
         AddHandler(0, &TYtSort::Match, HNDL(YtSortOverAlreadySorted));
         AddHandler(0, &TCoPartitionByKeyBase::Match, HNDL(PartitionByKey));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(FlatMap));

@@ -506,7 +506,7 @@ private:
     bool SkipCheckConnectRigths_ = false;
     std::vector<std::pair<TString, TString>> Attributes_;
     const IFacilityProvider* FacilityProvider_;
-    bool DmlAuditEnabled_;
+    bool DmlAuditEnabled_ = false;
     std::unordered_set<TString> DmlAuditExpectedSubjects_;
 };
 

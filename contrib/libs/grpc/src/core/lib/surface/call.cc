@@ -1855,7 +1855,7 @@ grpc_call_error FilterStackCall::StartBatch(const grpc_op* ops, size_t nops,
 
   InternalRef("completion");
   if (!is_notify_tag_closure) {
-    Y_VERIFY(grpc_cq_begin_op(cq_, notify_tag));
+    Y_ABORT_UNLESS(grpc_cq_begin_op(cq_, notify_tag));
   }
   bctl->set_pending_ops(pending_ops);
 

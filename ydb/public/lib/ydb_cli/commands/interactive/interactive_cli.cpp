@@ -96,7 +96,7 @@ std::optional<NTable::ECollectQueryStatsMode> TryParseCollectStatsMode(const std
     size_t tokensSize = tokens.size();
 
     if (tokensSize > 4) {
-        Cerr << "Internal variable value for \"SET stats\" special command should contain exactly one token." << Endl;
+        Cerr << "Variable value for \"SET stats\" special command should contain exactly one token." << Endl;
         return {};
     }
 

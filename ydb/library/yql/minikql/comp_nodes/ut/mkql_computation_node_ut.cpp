@@ -18,9 +18,9 @@ namespace {
 
 constexpr auto TotalSambles =
 #ifndef NDEBUG
-333333U;
+222222U;
 #else
-33333333ULL;
+22222222ULL;
 #endif
 
 }

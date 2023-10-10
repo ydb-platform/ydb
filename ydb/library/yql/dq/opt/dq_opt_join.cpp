@@ -1477,8 +1477,9 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                         for (const auto& colName : fullColNames) {
                             parent.List(i)
                                 .Atom(0, colName)
-                                .Arg(1, "output", i++)
+                                .Arg(1, "output", i)
                             .Seal();
+                            i++;
                         }
                         return parent;
                     })

@@ -30,10 +30,6 @@ SRCS(
     comp_factory.cpp
     type_cache.cpp
     pg_aggs.cpp
-    pg_kernels.0.cpp
-    pg_kernels.1.cpp
-    pg_kernels.2.cpp
-    pg_kernels.3.cpp
     recovery.cpp
     superuser.cpp
     config.cpp
@@ -57,11 +53,10 @@ NO_COMPILER_WARNINGS()
 
 INCLUDE(pg_sources.inc)
 
+INCLUDE(pg_kernel_sources.inc)
+
 IF (NOT OPENSOURCE AND NOT OS_WINDOWS AND NOT SANITIZER_TYPE AND NOT BUILD_TYPE == "DEBUG")
-INCLUDE(pg_bc.0.inc)
-INCLUDE(pg_bc.1.inc)
-INCLUDE(pg_bc.2.inc)
-INCLUDE(pg_bc.3.inc)
+INCLUDE(pg_bc.all.inc)
 ELSE()
 CFLAGS(-DUSE_SLOW_PG_KERNELS)
 ENDIF()

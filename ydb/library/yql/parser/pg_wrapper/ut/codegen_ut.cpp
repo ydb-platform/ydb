@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
         }
         case EKernelFlavor::BitCode: {
             codegen = ICodegen::Make(ETarget::Native);
-            auto bitcode = NResource::Find(fixed ? "/llvm_bc/PgFuncs1" : "/llvm_bc/PgFuncs1");
+            auto bitcode = NResource::Find(fixed ? "/llvm_bc/PgFuncs1" : "/llvm_bc/PgFuncs17");
             codegen->LoadBitCode(bitcode, "Funcs");
             auto func = codegen->GetModule().getFunction(std::string("arrow_" + name));
             Y_ENSURE(func);

@@ -31,10 +31,7 @@ extern "C" {
 #ifdef USE_SLOW_PG_KERNELS
 #include "pg_aggs.slow.inc"
 #else
-#include "pg_proc_policies.0.inc"
-#include "pg_proc_policies.1.inc"
-#include "pg_proc_policies.2.inc"
-#include "pg_proc_policies.3.inc"
+#include "pg_proc_policies.all.inc"
 #include "pg_aggs.inc"
 #endif
 

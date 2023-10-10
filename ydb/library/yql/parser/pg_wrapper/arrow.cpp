@@ -47,10 +47,7 @@ bool HasPgKernel(ui32 procOid) {
 TExecs::TExecs()
 {
 #define RegisterExec(oid, func) Table[oid] = func
-#include "pg_kernels_register.0.inc"
-#include "pg_kernels_register.1.inc"
-#include "pg_kernels_register.2.inc"
-#include "pg_kernels_register.3.inc"
+#include "pg_kernels_register.all.inc"
 #undef RegisterExec
 }
 

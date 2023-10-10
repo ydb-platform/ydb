@@ -26,7 +26,7 @@ extern "C" {
 
 namespace NYql {
 
-	extern "C" {
+extern "C" {
 
 #ifdef USE_SLOW_PG_KERNELS
 #include "pg_kernels.slow.3.inc"
@@ -35,7 +35,6 @@ namespace NYql {
 #include "pg_kernels.3.inc"
 #endif
 
-	}
-
 }
 
+}

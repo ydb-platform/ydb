@@ -76,7 +76,7 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("InitializerResponse (failed). Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Status, response.Issues);
+            ResignAndPassAway(response.Issues);
             return;
         }
 
@@ -88,7 +88,7 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("ExecuterResponse (failed). Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Status, response.Issues);
+            ResignAndPassAway(response.Issues);
             return;
         }
         Params.ExecutionId = response.ExecutionId;
@@ -101,7 +101,7 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("StatusTrackerResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Status, response.Issues);
+            ResignAndPassAway(response.Issues);
             return;
         }
         ExecStatus = response.ExecStatus;
@@ -118,7 +118,7 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("ResultWriterResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Status, response.Issues);
+            ResignAndPassAway(response.Issues);
             return;
         }
         LOG_I("ResultWriterResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
@@ -129,7 +129,7 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::UNSUPPORTED) {
             LOG_I("ResourcesCleanerResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Status, response.Issues);
+            ResignAndPassAway(response.Issues);
             return;
         }
         LOG_I("ResourcesCleanerResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
@@ -140,7 +140,7 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("FinalizerResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Status, response.Issues);
+            ResignAndPassAway(response.Issues);
             return;
         }
         LOG_I("FinalizerResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
@@ -159,7 +159,7 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("StopperResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Status, response.Issues);
+            ResignAndPassAway(response.Issues);
             return;
         }
         LOG_I("StopperResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
@@ -199,12 +199,13 @@ public:
         }
     }
 
-    void ResignAndPassAway(NYdb::EStatus status, const NYql::TIssues& issues) {
+    void ResignAndPassAway(const NYql::TIssues& issues) {
         Fq::Private::PingTaskRequest pingTaskRequest;
         NYql::IssuesToMessage(issues, pingTaskRequest.mutable_transient_issues());
         pingTaskRequest.set_resign_query(true);
-        
-        pingTaskRequest.set_status_code(NYql::NDq::YdbStatusToDqStatus(static_cast<Ydb::StatusIds::StatusCode>(status)));
+        // We consider any problems with requests to the external system as unavailability.
+        // This is necessary for correct retries
+        pingTaskRequest.set_status_code(NYql::NDqProto::StatusIds::UNAVAILABLE);
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest, true));
         FinishAndPassAway();
     }

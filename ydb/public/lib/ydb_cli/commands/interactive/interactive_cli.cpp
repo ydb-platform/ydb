@@ -109,17 +109,17 @@ std::optional<NTable::ECollectQueryStatsMode> TryParseCollectStatsMode(const std
 
 void ParseSetCommand(const std::vector<Token> & tokens, InteractiveCLIState & interactiveCLIState) {
     if (tokens.size() == 1) {
-        Cerr << "Missing internal variable name for \"SET\" special command." << Endl;
+        Cerr << "Missing variable name for \"SET\" special command." << Endl;
     } else if (tokens.size() == 2 || tokens[2].data != "=") {
         Cerr << "Missing \"=\" symbol for \"SET\" special command." << Endl;
     } else if (tokens.size() == 3) {
-        Cerr << "Missing internal variable value for \"SET\" special command." << Endl;
+        Cerr << "Missing variable value for \"SET\" special command." << Endl;
     } else if (ToLower(tokens[1].data) == "stats") {
         if (auto statsMode = TryParseCollectStatsMode(tokens)) {
             interactiveCLIState.CollectStatsMode = *statsMode;
         }
     } else {
-        Cerr << "Unknown internal variable name \"" << tokens[1].data << "\" for \"SET\" special command." << Endl;
+        Cerr << "Unknown variable name \"" << tokens[1].data << "\" for \"SET\" special command." << Endl;
     }
 }
 

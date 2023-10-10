@@ -12,11 +12,11 @@ const std::vector<std::shared_ptr<IBlobsReadingAction>>& ITask::GetAgents() cons
 bool ITask::AddError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
     ++BlobErrorsCount;
     if (TaskFinishedWithError || AbortFlag) {
-        ACFL_WARN("event", "SkipError")("blob_range", range)("message", status.GetErrorMessage())("status", status.GetStatus())("external_task_id", ExternalTaskId)
+        ACFL_WARN("event", "SkipError")("blob_range", range)("message", status.GetErrorMessage())("status", status.GetStatus())("external_task_id", ExternalTaskId)("consumer", TaskCustomer)
             ("abort", AbortFlag)("finished_with_error", TaskFinishedWithError);
         return false;
     } else {
-        ACFL_ERROR("event", "NewError")("blob_range", range)("message", status.GetErrorMessage())("status", status.GetStatus())("external_task_id", ExternalTaskId);
+        ACFL_ERROR("event", "NewError")("blob_range", range)("message", status.GetErrorMessage())("status", status.GetStatus())("external_task_id", ExternalTaskId)("consumer", TaskCustomer);
     }
     {
         auto it = BlobsWaiting.find(range);

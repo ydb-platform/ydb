@@ -143,7 +143,7 @@ private:
         --InFlightReads;
         auto g = Stats.MakeGuard("task_result");
         if (ev->Get()->GetErrorMessage()) {
-            ACFL_DEBUG("event", "TEvTaskProcessedResult")("error", ev->Get()->GetErrorMessage());
+            ACFL_ERROR("event", "TEvTaskProcessedResult")("error", ev->Get()->GetErrorMessage());
             SendScanError(ev->Get()->GetErrorMessage());
             Finish();
         } else {

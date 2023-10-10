@@ -41,8 +41,14 @@ std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction() const {
     return gcTask;
 }
 
-void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager& tierManager) {
-    auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(tierManager.GetS3Settings());
+void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* tierManager) {
+    NKikimrSchemeOp::TS3Settings settings;
+    if (tierManager) {
+        settings = tierManager->GetS3Settings();
+    } else {
+        settings.SetEndpoint("nowhere");
+    }
+    auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(settings);
     AFL_VERIFY(extStorageConfig);
     auto extStorageOperator = extStorageConfig->ConstructStorageOperator(false);
     extStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>());
@@ -57,7 +63,7 @@ TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard&
     , TabletId(shard.TabletID())
     , TabletActorId(shard.SelfId())
 {
-    InitNewExternalOperator(shard.GetTierManagerVerified(storageId));
+    InitNewExternalOperator(shard.GetTierManagerPointer(storageId));
 }
 
 void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) {
@@ -65,7 +71,7 @@ void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersMa
     auto* tierManager = tiers->GetManagerOptional(TBase::GetStorageId());
     ui32 cleanCount = ExternalStorageOperators.size() - 1;
     if (tierManager) {
-        InitNewExternalOperator(*tierManager);
+        InitNewExternalOperator(tierManager);
     } else {
         cleanCount = ExternalStorageOperators.size();
     }

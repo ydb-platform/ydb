@@ -49,6 +49,7 @@ void TCommittedColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NReso
 }
 
 bool IFetchTaskConstructor::DoOnError(const TBlobRange& range) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error_on_blob_reading", range.ToString())("scan_actor_id", ScanActorId);
     NActors::TActorContext::AsActorContext().Send(ScanActorId, std::make_unique<NConveyor::TEvExecution::TEvTaskProcessedResult>(TConclusionStatus::Fail("cannot read blob range " + range.ToString())));
     return false;
 }

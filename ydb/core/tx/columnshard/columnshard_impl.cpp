@@ -925,8 +925,7 @@ void TColumnShard::Die(const TActorContext& ctx) {
 
 void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     Y_ABORT_UNLESS(Tiers);
-    ALS_INFO(NKikimrServices::TX_COLUMNSHARD) << "test handle NMetadata::NProvider::TEvRefreshSubscriberData"
-        << ev->Get()->GetSnapshot()->SerializeToString();
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TEvRefreshSubscriberData")("snapshot", ev->Get()->GetSnapshot()->SerializeToString());
     Tiers->TakeConfigs(ev->Get()->GetSnapshot(), nullptr);
 }
 
@@ -952,6 +951,7 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
 }
 
 void TColumnShard::OnTieringModified() {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified");
     StoragesManager->OnTieringModified(Tiers);
     if (TablesManager.HasPrimaryIndex()) {
         TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers, TablesManager.GetTtl());

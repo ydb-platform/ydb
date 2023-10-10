@@ -45,7 +45,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     SignalTabletActive(ctx);
 }
 
-void TColumnShard::OnActivateExecutor(const TActorContext&) {
+void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "OnActivateExecutor");
 
@@ -54,25 +54,24 @@ void TColumnShard::OnActivateExecutor(const TActorContext&) {
     const auto selfActorId = SelfId();
     Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(),
         [selfActorId](const TActorContext& ctx) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering_new_event");
         ctx.Send(selfActorId, new TEvPrivate::TEvTieringModified);
     });
     Tiers->Start(Tiers);
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         Tiers->TakeConfigs(NYDBTest::TControllers::GetColumnShardController()->GetFallbackTiersSnapshot(), nullptr);
     }
+
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
+    auto& icb = *AppData(ctx)->Icb;
+    Limits.RegisterControls(icb);
+    CompactionLimits.RegisterControls(icb);
+    Settings.RegisterControls(icb);
+    Execute(CreateTxInitSchema(), ctx);
 }
 
-void TColumnShard::Handle(TEvPrivate::TEvTieringModified::TPtr& /*ev*/, const TActorContext& ctx) {
+void TColumnShard::Handle(TEvPrivate::TEvTieringModified::TPtr& /*ev*/, const TActorContext& /*ctx*/) {
     OnTieringModified();
-    if (!TiersInitializedFlag) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
-        TiersInitializedFlag = true;
-        auto& icb = *AppData(ctx)->Icb;
-        Limits.RegisterControls(icb);
-        CompactionLimits.RegisterControls(icb);
-        Settings.RegisterControls(icb);
-        Execute(CreateTxInitSchema(), ctx);
-    }
     NYDBTest::TControllers::GetColumnShardController()->OnTieringModified(Tiers);
 }
 

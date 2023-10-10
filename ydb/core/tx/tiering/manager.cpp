@@ -38,6 +38,7 @@ public:
 
     void Bootstrap() {
         Become(&TThis::StateMain);
+        AFL_INFO(NKikimrServices::TX_TIERING)("event", "start_subscribing_metadata");
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(Owner->GetExternalDataManipulation()));
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));
     }
@@ -45,6 +46,7 @@ public:
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
         auto snapshot = ev->Get()->GetSnapshot();
         if (auto configs = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(snapshot)) {
+            AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "TEvRefreshSubscriberData")("snapshot", "configs");
             ConfigsSnapshot = configs;
             if (SecretsSnapshot) {
                 Owner->TakeConfigs(ConfigsSnapshot, SecretsSnapshot);
@@ -52,6 +54,7 @@ public:
                 ALS_DEBUG(NKikimrServices::TX_TIERING) << "Waiting secrets for update at tablet " << Owner->TabletId;
             }
         } else if (auto secrets = std::dynamic_pointer_cast<NMetadata::NSecret::TSnapshot>(snapshot)) {
+            AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "TEvRefreshSubscriberData")("snapshot", "secrets");
             SecretsSnapshot = secrets;
             if (ConfigsSnapshot) {
                 Owner->TakeConfigs(ConfigsSnapshot, SecretsSnapshot);

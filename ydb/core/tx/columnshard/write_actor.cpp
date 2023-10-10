@@ -37,21 +37,19 @@ public:
         }
 
         if (status != NKikimrProto::OK) {
-            LOG_S_ERROR("Unsuccessful TEvPutResult for blob " << msg->Id.ToString() << " status: " << status << " reason: " << msg->ErrorReason);
+            ACFL_ERROR("event", "TEvPutResult")("blob_id", msg->Id.ToString())("status", status)("error", msg->ErrorReason);
             WriteController->Abort();
             return SendResultAndDie(ctx, status);
         }
 
-        LOG_S_TRACE("TEvPutResult for blob " << msg->Id.ToString());
         WriteController->OnBlobWriteResult(*msg);
         if (WriteController->IsBlobActionsReady()) {
             return SendResultAndDie(ctx, NKikimrProto::OK);
         }
     }
 
-    void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        LOG_S_WARN("TEvWakeup: write timeout at tablet " << TabletId << " (write)");
+    void Handle(TEvents::TEvWakeup::TPtr& /*ev*/, const TActorContext& ctx) {
+        ACFL_WARN("event", "wakeup");
         SendResultAndDie(ctx, NKikimrProto::TIMEOUT);
     }
 
@@ -97,6 +95,7 @@ public:
     }
 
     STFUNC(StateWait) {
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId);
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvPutResult, Handle);
             HFunc(TEvents::TEvWakeup, Handle);

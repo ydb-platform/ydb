@@ -31,7 +31,7 @@ NMetadata::NModifications::TOperationParsingResult TTiersManager::DoBuildPatchFr
                 } else if (proto.GetObjectStorage().HasAccessKey()) {
                     auto accessKey = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(proto.GetObjectStorage().GetAccessKey(), defaultUserId);
                     if (!accessKey) {
-                        return TConclusionStatus::Fail("AccessKey is incorrect");
+                        return TConclusionStatus::Fail("AccessKey is incorrect: " + proto.GetObjectStorage().GetAccessKey() + " for userId: " + defaultUserId);
                     }
                     *proto.MutableObjectStorage()->MutableAccessKey() = accessKey->SerializeToString();
                 } else {

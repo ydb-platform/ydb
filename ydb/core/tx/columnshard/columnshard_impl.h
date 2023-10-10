@@ -170,9 +170,9 @@ class TColumnShard
         Y_UNUSED(ctx);
     }
 
-    const NTiers::TManager& GetTierManagerVerified(const TString& tierId) const {
+    const NTiers::TManager* GetTierManagerPointer(const TString& tierId) const {
         Y_ABORT_UNLESS(!!Tiers);
-        return Tiers->GetManagerVerified(tierId);
+        return Tiers->GetManagerOptional(tierId);
     }
 
     void Die(const TActorContext& ctx) override;
@@ -396,7 +396,6 @@ private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     TInFlightReadsTracker InFlightReadsTracker;
     TTablesManager TablesManager;
-    bool TiersInitializedFlag = false;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;
@@ -422,7 +421,6 @@ private:
     THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
     TMultiMap<TRowVersion, TEvColumnShard::TEvRead::TPtr> WaitingReads;
     TMultiMap<TRowVersion, TEvColumnShard::TEvScan::TPtr> WaitingScans;
-    ui32 ActiveEvictions = 0;
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;

@@ -21,7 +21,7 @@ private:
     NWrappers::NExternalStorage::IExternalStorageOperator::TPtr ExternalStorageOperator;
 
     NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetCurrentOperator() const;
-    void InitNewExternalOperator(const NColumnShard::NTiers::TManager& tierManager);
+    void InitNewExternalOperator(const NColumnShard::NTiers::TManager* tierManager);
 
     virtual TString DoDebugString() const override {
         return GetCurrentOperator()->DebugString();

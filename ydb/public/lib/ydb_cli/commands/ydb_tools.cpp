@@ -1,12 +1,16 @@
 #include "ydb_tools.h"
 
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
+#include <ydb/public/lib/ydb_cli/common/pg_dump_parser.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/library/backup/backup.h>
 #include <ydb/library/backup/util.h>
 
 #include <util/stream/format.h>
 #include <util/string/split.h>
+
+#include <algorithm>
+#include <queue>
 
 namespace NYdb::NConsoleClient {
 
@@ -17,6 +21,7 @@ TCommandTools::TCommandTools()
     AddCommand(std::make_unique<TCommandRestore>());
     AddCommand(std::make_unique<TCommandCopy>());
     AddCommand(std::make_unique<TCommandRename>());
+    AddCommand(std::make_unique<TCommandPgConvert>());
 }
 
 TToolsCommand::TToolsCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
@@ -374,6 +379,39 @@ int TCommandRename::Run(TConfig& config) {
             FillSettings(NTable::TRenameTablesSettings())
         ).GetValueSync()
     );
+    return EXIT_SUCCESS;
+}
+
+TCommandPgConvert::TCommandPgConvert()
+    : TToolsCommand("pg-convert", {}, "Convert pg_dump result SQL file to format readable by YDB postgres layer")
+{}
+
+void TCommandPgConvert::Config(TConfig& config) {
+    TToolsCommand::Config(config);
+    config.NeedToConnect = false;
+    config.SetFreeArgsNum(0);
+
+    config.Opts->AddLongOption('i', "input", "Path to input SQL file. Read from stdin if not specified.").StoreResult(&Path);
+}
+
+void TCommandPgConvert::Parse(TConfig& config) {
+    TToolsCommand::Parse(config);
+}
+
+int TCommandPgConvert::Run(TConfig& config) {
+    Y_UNUSED(config);
+    TPgDumpParser parser(Cout);
+    if (Path) {
+        std::unique_ptr<TFileInput> fileInput = std::make_unique<TFileInput>(Path);
+        parser.Prepare(*fileInput);
+        fileInput = std::make_unique<TFileInput>(Path);
+        parser.WritePgDump(*fileInput);
+    } else {
+        TFixedStringStream stream(Cin.ReadAll());
+        parser.Prepare(stream);
+        stream.MovePointer();
+        parser.WritePgDump(stream);
+    }
     return EXIT_SUCCESS;
 }
 

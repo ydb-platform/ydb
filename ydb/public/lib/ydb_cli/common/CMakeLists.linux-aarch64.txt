@@ -54,6 +54,7 @@ target_sources(common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/normalize_path.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/parameter_stream.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/parameters.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/pg_dump_parser.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/pretty_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/print_operation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/print_utils.cpp

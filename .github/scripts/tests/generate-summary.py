@@ -136,6 +136,9 @@ class TestSummary:
         self.is_failed |= line.is_failed
         self.lines.append(line)
 
+    def render_line(self, items):
+        return f"| {' | '.join(items)} |"
+
     def render(self, add_footnote=False):
         github_srv = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
         repo = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
@@ -144,25 +147,38 @@ class TestSummary:
 
         footnote = "[^1]" if add_footnote else f'<sup>[?]({footnote_url} "All mute rules are defined here")</sup>'
 
-        result = [
-            f"|      | TESTS | PASSED | ERRORS | FAILED | SKIPPED | MUTED{footnote} |",
-            "| :--- | ---:  | -----: | -----: | -----: | ------: | ----: |",
+        columns = [
+            "TESTS", "PASSED", "ERRORS", "FAILED", "SKIPPED", f"MUTED{footnote}"
         ]
+
+        need_first_column = len(self.lines) > 1
+
+        if need_first_column:
+            columns.insert(0, "")
+
+        result = [
+            self.render_line(columns),
+        ]
+
+        if need_first_column:
+            result.append(self.render_line([':---'] + ['---:'] * (len(columns) - 1)))
+        else:
+            result.append(self.render_line(['---:'] * len(columns)))
+
         for line in self.lines:
             report_url = line.report_url
-            result.append(
-                " | ".join(
-                    [
-                        line.title,
-                        render_pm(line.test_count, f"{report_url}", 0),
-                        render_pm(line.passed, f"{report_url}#PASS", 0),
-                        render_pm(line.errors, f"{report_url}#ERROR", 0),
-                        render_pm(line.failed, f"{report_url}#FAIL", 0),
-                        render_pm(line.skipped, f"{report_url}#SKIP", 0),
-                        render_pm(line.muted, f"{report_url}#MUTE", 0),
-                    ]
-                )
-            )
+            row = []
+            if need_first_column:
+                row.append(line.title)
+            row.extend([
+                render_pm(line.test_count, f"{report_url}", 0),
+                render_pm(line.passed, f"{report_url}#PASS", 0),
+                render_pm(line.errors, f"{report_url}#ERROR", 0),
+                render_pm(line.failed, f"{report_url}#FAIL", 0),
+                render_pm(line.skipped, f"{report_url}#SKIP", 0),
+                render_pm(line.muted, f"{report_url}#MUTE", 0),
+            ])
+            result.append(self.render_line(row))
 
         if add_footnote:
             result.append("")

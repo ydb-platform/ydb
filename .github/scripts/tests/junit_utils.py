@@ -18,6 +18,13 @@ def add_junit_link_property(testcase, name, url):
 
 def add_junit_property(testcase, name, value):
     props = get_or_create_properties(testcase)
+
+    # remove existing property if exists
+    for item in props.findall("property"):
+        if item.get('name') == name:
+            props.remove(item)
+            break
+
     props.append(ET.Element("property", dict(name=name, value=value)))
 
 
@@ -92,3 +99,7 @@ def iter_xml_files(folder_or_file):
         for suite in suites:
             for case in suite.findall("testcase"):
                 yield fn, suite, case
+
+
+def is_faulty_testcase(testcase):
+    return testcase.find("failure") is not None or testcase.find("error") is not None

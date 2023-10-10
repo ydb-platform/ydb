@@ -1026,7 +1026,7 @@ private:
             // in case they have the same `ReportPeriod`
             Y_ASSERT(res.AccountingReportPeriod < TDuration::Max());
             ui64 periodUs = res.AccountingReportPeriod.MicroSeconds();
-            res.LastAccountingReport = TInstant::MicroSeconds(res.AccountingReportPeriod.MicroSeconds() / periodUs * periodUs);
+            res.LastAccountingReport = TInstant::MicroSeconds(now.MicroSeconds() / periodUs * periodUs);
         }
     }
 

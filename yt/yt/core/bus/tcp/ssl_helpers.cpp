@@ -49,7 +49,7 @@ TString GetLastSslErrorString()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool UseCertificateChain(const TString& certificate, SSL *ssl)
+bool UseCertificateChain(const TString& certificate, SSL* ssl)
 {
     std::unique_ptr<BIO, TDeleter> bio(BIO_new_mem_buf(certificate.data(), certificate.size()));
     if (!bio) {
@@ -79,7 +79,7 @@ bool UseCertificateChain(const TString& certificate, SSL *ssl)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool UsePrivateKey(const TString& privateKey, SSL *ssl)
+bool UsePrivateKey(const TString& privateKey, SSL* ssl)
 {
     std::unique_ptr<BIO, TDeleter> bio(BIO_new_mem_buf(privateKey.data(), privateKey.size()));
     if (!bio) {

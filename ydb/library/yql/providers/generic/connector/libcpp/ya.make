@@ -26,4 +26,5 @@ END()
 
 RECURSE(
     cli
+    ut_helpers
 )

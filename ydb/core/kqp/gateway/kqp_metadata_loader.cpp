@@ -415,7 +415,7 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                 SetError(externalDataSourceMetadata, "identity case is not specified in case of update external data source secrets");
                 return;
             }
-        } 
+        }
     }
 }
 
@@ -452,7 +452,7 @@ NThreading::TFuture<TDescribeSecretsResponse> LoadExternalDataSourceSecretValues
             const TString& awsAccessKeyKeySecretId = authDescription.GetAws().GetAwsSecretAccessKeySecretName();
             auto promise = NewPromise<TDescribeSecretsResponse>();
             actorSystem->Register(new TDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, promise, maximalSecretsSnapshotWaitTime));
-            return promise.GetFuture();            
+            return promise.GetFuture();
         }
 
         case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
@@ -791,7 +791,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     TActorSystem* actorSystem = ActorSystem;
 
-    return future.Apply([actorSystem,table](const TFuture<TTableMetadataResult>& f) {        
+    return future.Apply([actorSystem,table](const TFuture<TTableMetadataResult>& f) {
         auto result = f.GetValue();
         if (!result.Success()) {
             return MakeFuture(result);
@@ -815,7 +815,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
         auto statServiceId = NStat::MakeStatServiceID(actorSystem->NodeId);
 
-        
+
         return SendActorRequest<NStat::TEvStatistics::TEvGetStatistics, NStat::TEvStatistics::TEvGetStatisticsResult, TResult>(
             actorSystem,
             statServiceId,

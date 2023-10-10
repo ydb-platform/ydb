@@ -66,8 +66,13 @@ Y_UNIT_TEST_SUITE(Secret) {
         YDB_ACCESSOR(ui32, ExpectedAccessCount, 1);
         using TKeyCheckers = TMap<NMetadata::NSecret::TSecretId, TJsonChecker>;
         YDB_ACCESSOR_DEF(TKeyCheckers, Checkers);
-    public:
 
+    private:
+        ui64 SecretsCountInLastSnapshot = 0;
+        ui64 AccessCountInLastSnapshot = 0;
+        TString LastSnapshotDebugString;
+
+    public:
         void ResetConditions() {
             FoundFlag = false;
             Checkers.clear();
@@ -106,22 +111,29 @@ Y_UNIT_TEST_SUITE(Secret) {
         void CheckFound(NMetadata::NProvider::TEvRefreshSubscriberData* event) {
             auto snapshot = event->GetSnapshotAs<NMetadata::NSecret::TSnapshot>();
             Y_ABORT_UNLESS(!!snapshot);
+            SecretsCountInLastSnapshot = snapshot->GetSecrets().size();
+            AccessCountInLastSnapshot = snapshot->GetAccess().size();
+            LastSnapshotDebugString = snapshot->SerializeToString();
+            CheckFound();
+        }
+
+        void CheckFound() {
             if (ExpectedSecretsCount) {
-                if (snapshot->GetSecrets().size() != ExpectedSecretsCount) {
-                    Cerr << "snapshot->GetSecrets().size() incorrect: " << snapshot->SerializeToString() << Endl;
+                if (SecretsCountInLastSnapshot != ExpectedSecretsCount) {
+                    Cerr << "snapshot->GetSecrets().size() incorrect: " << LastSnapshotDebugString << Endl;
                     return;
                 }
-            } else if (snapshot->GetSecrets().size()) {
-                Cerr << "snapshot->GetSecrets().size() incorrect (zero expects): " << snapshot->SerializeToString() << Endl;
+            } else if (SecretsCountInLastSnapshot) {
+                Cerr << "snapshot->GetSecrets().size() incorrect (zero expects): " << LastSnapshotDebugString << Endl;
                 return;
             }
             if (ExpectedAccessCount) {
-                if (snapshot->GetAccess().size() != ExpectedAccessCount) {
-                    Cerr << "snapshot->GetAccess().size() incorrect: " << snapshot->SerializeToString() << Endl;
+                if (AccessCountInLastSnapshot != ExpectedAccessCount) {
+                    Cerr << "snapshot->GetAccess().size() incorrect: " << LastSnapshotDebugString << Endl;
                     return;
                 }
-            } else if (snapshot->GetAccess().size()) {
-                Cerr << "snapshot->GetAccess().size() incorrect (zero expects): " << snapshot->SerializeToString() << Endl;
+            } else if (AccessCountInLastSnapshot) {
+                Cerr << "snapshot->GetAccess().size() incorrect (zero expects): " << LastSnapshotDebugString << Endl;
                 return;
             }
             FoundFlag = true;
@@ -182,13 +194,13 @@ Y_UNIT_TEST_SUITE(Secret) {
                 UNIT_ASSERT_EQUAL_C(resultData, "[6u]", resultData);
             }
 
-            emulator->SetExpectedSecretsCount(2).SetExpectedAccessCount(0);
+            emulator->SetExpectedSecretsCount(2).SetExpectedAccessCount(0).CheckFound();
             {
                 const TInstant start = Now();
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
                     runtime.SimulateSleep(TDuration::Seconds(1));
                 }
-                Y_ABORT_UNLESS(emulator->IsFound());
+                UNIT_ASSERT(emulator->IsFound());
             }
 
             lHelper.StartSchemaRequest("ALTER OBJECT secret1 (TYPE SECRET) SET value = `abcde`");
@@ -199,26 +211,26 @@ Y_UNIT_TEST_SUITE(Secret) {
                 UNIT_ASSERT_EQUAL_C(resultData, "[10u]", resultData);
             }
 
-            emulator->SetExpectedSecretsCount(2).SetExpectedAccessCount(1);
+            emulator->SetExpectedSecretsCount(2).SetExpectedAccessCount(1).CheckFound();
             {
                 const TInstant start = Now();
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
                     runtime.SimulateSleep(TDuration::Seconds(1));
                 }
-                Y_ABORT_UNLESS(emulator->IsFound());
+                UNIT_ASSERT(emulator->IsFound());
             }
 
             lHelper.StartSchemaRequest("DROP OBJECT `secret1:test@test1` (TYPE SECRET_ACCESS)");
             lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET)");
             lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initialization/migrations`");
 
-            emulator->SetExpectedSecretsCount(1).SetExpectedAccessCount(0);
+            emulator->SetExpectedSecretsCount(1).SetExpectedAccessCount(0).CheckFound();
             {
                 const TInstant start = Now();
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
                     runtime.SimulateSleep(TDuration::Seconds(1));
                 }
-                Y_ABORT_UNLESS(emulator->IsFound());
+                UNIT_ASSERT(emulator->IsFound());
             }
         }
     }

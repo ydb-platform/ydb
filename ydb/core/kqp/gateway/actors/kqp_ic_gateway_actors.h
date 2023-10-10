@@ -171,7 +171,7 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
     }
 
 public:
-    TDescribeSecretsActor(const TString& ownerUserId, const TVector<TString>& secretIds, NThreading::TPromise<TDescribeSecretsResponse> promise, TDuration maximalSecretsSnapshotWaitTime) 
+    TDescribeSecretsActor(const TString& ownerUserId, const TVector<TString>& secretIds, NThreading::TPromise<TDescribeSecretsResponse> promise, TDuration maximalSecretsSnapshotWaitTime)
         : SecretIds(CreateSecretIds(ownerUserId, secretIds))
         , Promise(promise)
         , LastResponse(Ydb::StatusIds::TIMEOUT, { NYql::TIssue("secrets snapshot fetching timeout") })
@@ -184,7 +184,7 @@ public:
             PassAway();
             return;
         }
-        
+
         this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
         this->Schedule(MaximalSecretsSnapshotWaitTime, new NActors::TEvents::TEvWakeup());
         Become(&TDescribeSecretsActor::StateFunc);

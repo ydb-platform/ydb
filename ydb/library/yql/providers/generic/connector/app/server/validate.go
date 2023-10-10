@@ -52,10 +52,6 @@ func validateSelect(logger log.Logger, slct *api_service_protos.TSelect) error {
 		return fmt.Errorf("validate data source instance: %w", err)
 	}
 
-	if len(slct.GetWhat().GetItems()) == 0 {
-		return fmt.Errorf("empty items: %w", utils.ErrInvalidRequest)
-	}
-
 	return nil
 }
 

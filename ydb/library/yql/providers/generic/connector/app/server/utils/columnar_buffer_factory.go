@@ -40,6 +40,16 @@ func (cbf *ColumnarBufferFactory) MakeBuffer(
 			return nil, fmt.Errorf("convert Select.What to Ydb.Types: %w", err)
 		}
 
+		if len(ydbTypes) == 0 {
+			return &columnarBufferArrowIPCStreamingEmptyColumns{
+				arrowAllocator: cbf.arrowAllocator,
+				schema:         schema,
+				readLimiter:    cbf.readLimiterFactory.MakeReadLimiter(logger),
+				typeMapper:     typeMapper,
+				rowsAdded:      0,
+			}, nil
+		}
+
 		return &columnarBufferArrowIPCStreaming{
 			arrowAllocator: cbf.arrowAllocator,
 			schema:         schema,

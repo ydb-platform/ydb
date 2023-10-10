@@ -29,9 +29,14 @@ namespace NYql {
             }
 
             TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
-                if (const auto maybeRead = node.Cast<TCoLeft>().Input().Maybe<TGenReadTable>())
-                    return TExprBase(ctx.NewWorld(node.Pos()));
-                return node;
+                Y_UNUSED(ctx);
+
+                const auto& maybeRead = node.Cast<TCoLeft>().Input().Maybe<TGenReadTable>();
+                if (!maybeRead) {
+                    return node;
+                }
+
+                return TExprBase(maybeRead.Cast().World().Ptr());
             }
 
             TMaybeNode<TExprBase> ReadZeroColumns(TExprBase node, TExprContext& ctx) const {

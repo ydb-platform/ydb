@@ -1538,11 +1538,6 @@ private:
     }
 
     void Init(EKikimrQueryType queryType) {
-        if ((queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query) && FederatedQuerySetup) {
-            InitS3Provider();
-            InitGenericProvider();
-        }
-
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, *FuncRegistry, TAppData::TimeProvider, TAppData::RandomProvider);
 
         ExprCtx->NodesAllocationLimit = SessionCtx->Config()._KqpExprNodesAllocationLimit.Get().GetRef();
@@ -1568,6 +1563,12 @@ private:
 
         TypesCtx->AddDataSource(providerNames, kikimrDataSource);
         TypesCtx->AddDataSink(providerNames, kikimrDataSink);
+
+        if ((queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query) && FederatedQuerySetup) {
+            InitS3Provider();
+            InitGenericProvider();
+        }
+
         TypesCtx->UdfResolver = CreateSimpleUdfResolver(FuncRegistry);
         TypesCtx->TimeProvider = TAppData::TimeProvider;
         TypesCtx->RandomProvider = TAppData::RandomProvider;

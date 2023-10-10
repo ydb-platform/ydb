@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
@@ -113,21 +114,37 @@ func (h *handlerImpl[CONN]) ReadSplit(
 		return fmt.Errorf("convert Select.What.Items to Ydb.Columns: %w", err)
 	}
 
-	for i, column := range columns {
-		sb.WriteString(column.GetName())
-
-		if i != len(columns)-1 {
-			sb.WriteString(", ")
-		}
+	// for the case of empty column set select some constant for constructing a valid sql statement
+	if len(columns) == 0 {
+		sb.WriteString("0")
 
 		var acceptor any
 
-		acceptor, err = h.typeMapper.YDBTypeToAcceptor(column.GetType())
+		ydbType := Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_INT32}}
+		acceptor, err = h.typeMapper.YDBTypeToAcceptor(&ydbType)
+
 		if err != nil {
 			return fmt.Errorf("map ydb column to acceptor: %w", err)
 		}
 
 		acceptors = append(acceptors, acceptor)
+	} else {
+		for i, column := range columns {
+			sb.WriteString(column.GetName())
+
+			if i != len(columns)-1 {
+				sb.WriteString(", ")
+			}
+
+			var acceptor any
+
+			acceptor, err = h.typeMapper.YDBTypeToAcceptor(column.GetType())
+			if err != nil {
+				return fmt.Errorf("map ydb column to acceptor: %w", err)
+			}
+
+			acceptors = append(acceptors, acceptor)
+		}
 	}
 
 	// SELECT $columns FROM $from

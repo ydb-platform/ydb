@@ -742,7 +742,14 @@ namespace Tests {
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         if (Settings->IsEnableMetadataProvider()) {
-            auto* actor = NMetadata::NProvider::CreateService(NMetadata::NProvider::TConfig());
+            NKikimrConfig::TMetadataProviderConfig cfgProto;
+            cfgProto.SetRefreshPeriodSeconds(1);
+            cfgProto.SetEnabled(true);
+            cfgProto.MutableRequestConfig()->SetRetryPeriodStartSeconds(1);
+            cfgProto.MutableRequestConfig()->SetRetryPeriodFinishSeconds(30);
+            NMetadata::NProvider::TConfig cfg;
+            cfg.DeserializeFromProto(cfgProto);
+            auto* actor = NMetadata::NProvider::CreateService(cfg);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NMetadata::NProvider::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }

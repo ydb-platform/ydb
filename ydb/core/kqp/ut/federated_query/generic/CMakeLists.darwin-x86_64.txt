@@ -24,6 +24,7 @@ target_link_libraries(ydb-core-kqp-ut-federated_query-generic PUBLIC
   contrib-libs-fmt
   kqp-ut-common
   ut-federated_query-common
+  connector-libcpp-ut_helpers
   yql-sql-pg_dummy
 )
 target_link_options(ydb-core-kqp-ut-federated_query-generic PRIVATE
@@ -41,7 +42,7 @@ set_property(
   ydb-core-kqp-ut-federated_query-generic
   PROPERTY
   SPLIT_FACTOR
-  1
+  10
 )
 add_yunittest(
   NAME

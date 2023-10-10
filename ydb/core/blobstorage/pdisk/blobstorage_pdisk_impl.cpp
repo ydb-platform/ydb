@@ -744,6 +744,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                                 << " cutLog# " << cutLog->ToString());
                         ActorSystem->Send(new IEventHandle(OwnerData[chunkOwner].CutLogId, PDiskActor, cutLog.Release(),
                                     IEventHandle::FlagTrackDelivery, 0));
+                        OwnerData[chunkOwner].AskedFreeUpToLsn = lsn;
                         OwnerData[chunkOwner].AskedToCutLogAt = now;
                         // ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[chunkOwner].OperationLog, "System owner asked to cut log, OwnerId# " << chunkOwner);
                     } else {
@@ -788,6 +789,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
                     }
                     ActorSystem->Send(new IEventHandle(OwnerData[ownerFilter].CutLogId, PDiskActor, cutLog.Release(),
                                 IEventHandle::FlagTrackDelivery, 0));
+                    OwnerData[ownerFilter].AskedFreeUpToLsn = lsn;
                     OwnerData[ownerFilter].AskedToCutLogAt = now;
                     // ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[ownerFilter].OperationLog, "User owner asked to cut log, OwnerId# " << ownerFilter);
                 } else {

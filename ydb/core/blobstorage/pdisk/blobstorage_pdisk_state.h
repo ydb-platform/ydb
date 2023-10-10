@@ -68,6 +68,7 @@ struct TOwnerData {
     ui64 LogRecordsConsequentlyRead = 0;
     TOwnerRound OwnerRound = 0;
     TInstant AskedToCutLogAt;
+    ui64 AskedFreeUpToLsn = 0;
     TInstant CutLogAt;
     ui64 LastSeenLsn = 0;
     bool HasAlreadyLoggedThisIncarnation = false;
@@ -157,6 +158,7 @@ struct TOwnerData {
         str << " LogRecordsConsequentlyRead# " << LogRecordsConsequentlyRead;
         str << " OwnerRound# " << OwnerRound;
         str << " AskedToCutLogAt# " << AskedToCutLogAt;
+        str << " AskedFreeUpToLsn# " << AskedFreeUpToLsn;
         str << " CutLogAt# " << CutLogAt;
         str << " LastSeenLsn# " << LastSeenLsn;
         if (HasAlreadyLoggedThisIncarnation) {

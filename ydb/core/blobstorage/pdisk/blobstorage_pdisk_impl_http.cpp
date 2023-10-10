@@ -287,9 +287,12 @@ void TPDisk::OutputHtmlLogChunksDetails(TStringStream &str) {
                         for (ui32 owner : activeOwners) {
                             if (owner < it->OwnerLsnRange.size()) {
                                 const TLogChunkInfo::TLsnRange &range = it->OwnerLsnRange[owner];
+                                const auto askedFreeUpToLsn = OwnerData[owner].AskedFreeUpToLsn;
                                 if (range.IsPresent) {
                                     TABLED() {
-                                        str << "[" << range.FirstLsn << ", " << range.LastLsn << "]";
+                                        str << "<font color=\"" << (range.LastLsn < askedFreeUpToLsn ? "red" : "black") <<"\">"
+                                            << "[" << range.FirstLsn << ", " << range.LastLsn << "]"
+                                            << "</font>";
                                     }
                                 } else {
                                     TABLED() {str << "-";}

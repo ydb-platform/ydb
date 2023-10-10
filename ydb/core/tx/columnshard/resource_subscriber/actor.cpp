@@ -55,7 +55,7 @@ TActor::TActor(ui64 tabletId, const TActorId& parent)
 }
 
 TActor::~TActor() {
-    Y_VERIFY(!NActors::TlsActivationContext || Tasks.empty());
+    Y_ABORT_UNLESS(!NActors::TlsActivationContext || Tasks.empty());
 }
 
 }

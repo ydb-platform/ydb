@@ -19,9 +19,9 @@ union ViewerWhiteboardCookie {
         bits.NodeId = nodeId;
     }
 
-    ViewerWhiteboardCookie(ui64 value) 
-        : cookie(value) 
-    { 
+    ViewerWhiteboardCookie(ui64 value)
+        : cookie(value)
+    {
     }
 
     ui64 ToUi64() const {
@@ -37,7 +37,7 @@ union ViewerWhiteboardCookie {
     }
 };
 
-IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr request);
+IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request);
 
 }
 }

@@ -1,4 +1,4 @@
-PY23_TEST()
+PY3TEST()
 
 PEERDIR(
     contrib/python/six

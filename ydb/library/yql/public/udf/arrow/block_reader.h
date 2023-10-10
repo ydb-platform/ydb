@@ -503,7 +503,7 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
     TPgTypeInspector typePg(typeInfoHelper, type);
     if (typePg) {
         auto desc = typeInfoHelper.FindPgTypeDescription(typePg.GetTypeId());
-        return TTraits::MakePg(*desc, pgBuilder);        
+        return TTraits::MakePg(*desc, pgBuilder);
     }
 
     Y_ENSURE(false, "Unsupported type");

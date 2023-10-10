@@ -166,12 +166,12 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
         state.fncollation = DEFAULT_COLLATION_OID;
         state.Name = name;
         if (fixed) {
-            state.IsCStringResult = false;
+            state.TypeLen = 1;
             state.IsFixedResult = true;
             state.IsFixedArg.push_back(true);
             state.IsFixedArg.push_back(true);
         } else {
-            state.IsCStringResult = true;
+            state.TypeLen = -2;
             state.IsFixedResult = false;
             state.IsFixedArg.push_back(false);
         }

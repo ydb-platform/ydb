@@ -2,7 +2,7 @@ YQL_UDF_YDB(url_udf)
 
 YQL_ABI_VERSION(
     2
-    33
+    35
     0
 )
 

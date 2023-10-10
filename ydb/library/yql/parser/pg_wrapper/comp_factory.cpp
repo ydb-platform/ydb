@@ -89,17 +89,17 @@ struct TMainContext {
 };
 
 NUdf::TUnboxedValue CreatePgString(i32 typeLen, ui32 targetTypeId, TStringBuf data) {
-    // typname => 'cstring', typlen => '-2', the only type with typlen == -2
-    // typname = > 'text', typlen = > '-1'
+    // typname => 'cstring', typlen => '-2'
+    // typname = > 'text', typlen => '-1'
+    // typname => 'name', typlen => NAMEDATALEN
     Y_UNUSED(targetTypeId); // todo: verify typeLen
-    Y_ENSURE(typeLen == -1 || typeLen == -2);
     switch (typeLen) {
     case -1:
         return PointerDatumToPod((Datum)MakeVar(data));
     case -2:
         return PointerDatumToPod((Datum)MakeCString(data));
     default:
-        Y_UNREACHABLE();
+        return PointerDatumToPod((Datum)MakeFixedString(data, typeLen));
     }
 }
 
@@ -664,10 +664,12 @@ private:
                     } else if (RetTypeDesc.TypeLen == -1) {
                         const text* orig = (const text*)datum;
                         return PointerDatumToPod((Datum)MakeVar(GetVarBuf(orig)));
-                    } else {
-                        Y_ENSURE(RetTypeDesc.TypeLen == -2);
+                    } else if(RetTypeDesc.TypeLen == -2) {
                         const char* orig = (const char*)datum;
                         return PointerDatumToPod((Datum)MakeCString(orig));
+                    } else {
+                        const char* orig = (const char*)datum;
+                        return PointerDatumToPod((Datum)MakeFixedString(orig, RetTypeDesc.TypeLen));
                     }
                 }
             }
@@ -1516,14 +1518,15 @@ private:
     bool MultiDims = false;
 };
 
-template <bool PassByValue, bool IsCString>
-class TPgClone : public TMutableComputationNode<TPgClone<PassByValue, IsCString>> {
-    typedef TMutableComputationNode<TPgClone<PassByValue, IsCString>> TBaseComputation;
+template <bool PassByValue>
+class TPgClone : public TMutableComputationNode<TPgClone<PassByValue>> {
+    typedef TMutableComputationNode<TPgClone<PassByValue>> TBaseComputation;
 public:
-    TPgClone(TComputationMutables& mutables, IComputationNode* input, TComputationNodePtrVector&& dependentNodes)
+    TPgClone(TComputationMutables& mutables, IComputationNode* input, TComputationNodePtrVector&& dependentNodes, i32 typeLen)
         : TBaseComputation(mutables)
         , Input(input)
         , DependentNodes(std::move(dependentNodes))
+        , TypeLen(typeLen)
     {
     }
 
@@ -1534,10 +1537,12 @@ public:
         }
 
         auto datum = PointerDatumFromPod(value);
-        if constexpr (IsCString) {
+        if (TypeLen == -1) {
+            return PointerDatumToPod((Datum)MakeVar(GetVarBuf((const text*)datum)));
+        } else if (TypeLen == -2) {
             return PointerDatumToPod((Datum)MakeCString(TStringBuf((const char*)datum)));
         } else {
-            return PointerDatumToPod((Datum)MakeVar(GetVarBuf((const text*)datum)));
+            return PointerDatumToPod((Datum)MakeFixedString(TStringBuf((const char*)datum), TypeLen));
         }
     }
 
@@ -1551,6 +1556,7 @@ private:
 
     IComputationNode* const Input;
     TComputationNodePtrVector DependentNodes;
+    const i32 TypeLen;
 };
 
 struct TFromPgExec {
@@ -1858,7 +1864,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTy
         const auto& retTypeDesc = NPg::LookupType(procDesc.ResultType);
         state->Name = procDesc.Name;
         state->IsFixedResult = retTypeDesc.PassByValue;
-        state->IsCStringResult = NPg::LookupType(procDesc.ResultType).TypeLen == -2;
+        state->TypeLen = retTypeDesc.TypeLen;
         for (const auto& argTypeId : procDesc.ArgTypes) {
             const auto& argTypeDesc = NPg::LookupType(argTypeId);
             state->IsFixedArg.push_back(argTypeDesc.PassByValue);
@@ -2063,11 +2069,11 @@ TComputationNodeFactory GetPgFactory() {
                 auto typeId = AS_TYPE(TPgType, returnType)->GetTypeId();
                 const auto& desc = NPg::LookupType(typeId);
                 if (desc.PassByValue) {
-                    return new TPgClone<true, false>(ctx.Mutables, input, std::move(dependentNodes));
+                    return new TPgClone<true>(ctx.Mutables, input, std::move(dependentNodes), desc.TypeLen);
                 } else if (desc.TypeLen == -1) {
-                    return new TPgClone<false, false>(ctx.Mutables, input, std::move(dependentNodes));
+                    return new TPgClone<false>(ctx.Mutables, input, std::move(dependentNodes), desc.TypeLen);
                 } else {
-                    return new TPgClone<false, true>(ctx.Mutables, input, std::move(dependentNodes));
+                    return new TPgClone<false>(ctx.Mutables, input, std::move(dependentNodes), desc.TypeLen);
                 }
             }
 
@@ -2671,8 +2677,10 @@ arrow::Datum DoMakePgScalar(const NPg::TTypeDesc& desc, arrow::MemoryPool& pool,
         ui32 size;
         if (desc.TypeLen == -1) {
             size = GetCleanVarSize((const text*)ptr) + VARHDRSZ;
-        } else {
+        } else if (desc.TypeLen == -2) {
             size = strlen(ptr) + 1;
+        } else {
+            size = desc.TypeLen;
         }
 
         std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(size + sizeof(void*), &pool)));
@@ -2855,17 +2863,16 @@ namespace NMiniKQL {
 using namespace NYql;
 
 ui64 PgValueSize(const NUdf::TUnboxedValuePod& value, i32 typeLen) {
-    if (typeLen >= 0) {
-        return typeLen;
-    }
-    Y_ENSURE(typeLen == -1 || typeLen == -2);
-    auto datum = PointerDatumFromPod(value);
     if (typeLen == -1) {
+        auto datum = PointerDatumFromPod(value);
         const auto x = (const text*)PointerDatumFromPod(value);
         return GetCleanVarSize(x);
-    } else {
+    } else if (typeLen == -2) {
+        auto datum = PointerDatumFromPod(value);
         const auto x = (const char*)PointerDatumFromPod(value);
         return strlen(x);
+    } else {
+        return typeLen;
     }
 }
 
@@ -3547,6 +3554,11 @@ public:
         char* ret = (char*)palloc(len);
         memcpy(ret, value, len);
         return PointerDatumToPod((Datum)ret);
+    }
+
+    NUdf::TStringRef AsFixedStringBuffer(const NUdf::TUnboxedValue& value, ui32 length) const override {
+        auto x = (const char*)value.AsBoxed().Get() + PallocHdrSize;
+        return { x, length };
     }
 };
 

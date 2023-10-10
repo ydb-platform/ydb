@@ -20,7 +20,7 @@ target_link_libraries(url_udf INTERFACE
 add_global_library_for(url_udf.global url_udf)
 target_compile_options(url_udf.global PRIVATE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=33
+  -DUDF_ABI_VERSION_MINOR=35
   -DUDF_ABI_VERSION_PATCH=0
 )
 target_link_libraries(url_udf.global PUBLIC
@@ -41,7 +41,7 @@ set_property(TARGET url_udf.dyn PROPERTY
 target_compile_options(url_udf.dyn PRIVATE
   -DBUILD_UDF
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=33
+  -DUDF_ABI_VERSION_MINOR=35
   -DUDF_ABI_VERSION_PATCH=0
 )
 target_link_libraries(url_udf.dyn PUBLIC

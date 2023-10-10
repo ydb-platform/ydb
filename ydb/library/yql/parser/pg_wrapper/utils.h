@@ -128,7 +128,7 @@ inline char* MakeFixedStringNotFilled(size_t size) {
 
 inline char* MakeFixedString(TStringBuf s, size_t size) {
     auto ret = MakeFixedStringNotFilled(size);
-    Y_ENSURE(s.Size() + 1 <= size);
+    Y_ENSURE(s.Size() <= size);
     memcpy(ret, s.Data(), s.Size());
     return ret;
 }

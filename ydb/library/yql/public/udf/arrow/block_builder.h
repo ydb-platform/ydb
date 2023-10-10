@@ -488,9 +488,10 @@ public:
         Reserve();
     }
 
-    void SetPgBuilder(const NUdf::IPgBuilder* pgBuilder) {
+    void SetPgBuilder(const NUdf::IPgBuilder* pgBuilder, i32 typeLen) {
         Y_ENSURE(PgString != EPgStringType::None);
         PgBuilder = pgBuilder;
+        TypeLen = typeLen;
     }
 
     void DoAdd(NUdf::TUnboxedValuePod value) final {
@@ -510,6 +511,13 @@ public:
         } else if constexpr (PgString == EPgStringType::Text) {
             static_assert(Nullable);
             auto buf = PgBuilder->AsTextBuffer(value);
+            auto prevCtx = GetMemoryContext(buf.Data());
+            ZeroMemoryContext((char*)buf.Data());
+            DoAdd(TBlockItem(TStringRef(buf.Data() - sizeof(void*), buf.Size() + sizeof(void*))));
+            SetMemoryContext((char*)buf.Data(), prevCtx);
+        } else if constexpr (PgString == EPgStringType::Fixed) {
+            static_assert(Nullable);
+            auto buf = PgBuilder->AsFixedStringBuffer(value, TypeLen);
             auto prevCtx = GetMemoryContext(buf.Data());
             ZeroMemoryContext((char*)buf.Data());
             DoAdd(TBlockItem(TStringRef(buf.Data() - sizeof(void*), buf.Size() + sizeof(void*))));
@@ -782,6 +790,7 @@ private:
     std::deque<std::shared_ptr<arrow::ArrayData>> Chunks;
 
     const IPgBuilder* PgBuilder = nullptr;
+    i32 TypeLen = 0;
 };
 
 template<bool Nullable>
@@ -1136,11 +1145,15 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
         } else {
             if (desc->Typelen == -1) {
                 auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::Text>>(typeInfoHelper, type, pool, maxLen);
-                ret->SetPgBuilder(pgBuilder);
+                ret->SetPgBuilder(pgBuilder, desc->Typelen);
+                return ret;
+            } else if (desc->Typelen == -2) {
+                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::CString>>(typeInfoHelper, type, pool, maxLen);
+                ret->SetPgBuilder(pgBuilder, desc->Typelen);
                 return ret;
             } else {
-                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::CString>>(typeInfoHelper, type, pool, maxLen);
-                ret->SetPgBuilder(pgBuilder);
+                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::Fixed>>(typeInfoHelper, type, pool, maxLen);
+                ret->SetPgBuilder(pgBuilder, desc->Typelen);
                 return ret;
             }
         }

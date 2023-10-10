@@ -16,7 +16,8 @@ namespace NUdf {
 enum class EPgStringType {
     None,
     Text,
-    CString
+    CString,
+    Fixed
 };
 
 std::shared_ptr<arrow::Buffer> AllocateBitmapWithReserve(size_t bitCount, arrow::MemoryPool* pool);

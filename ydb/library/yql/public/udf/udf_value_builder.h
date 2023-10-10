@@ -156,7 +156,20 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 33)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 35)
+class IPgBuilder4: public IPgBuilder3
+{
+public:
+    virtual TStringRef AsFixedStringBuffer(const TUnboxedValue& value, ui32 length) const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 35)
+class IPgBuilder: public IPgBuilder4 {
+protected:
+    IPgBuilder();
+};
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 33)
 class IPgBuilder: public IPgBuilder3 {
 protected:
     IPgBuilder();

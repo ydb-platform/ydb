@@ -343,6 +343,12 @@ public:
         Y_UNUSED(value);
         ythrow yexception() << "TPgDummyBuilder::MakeText does nothing";
     }
+
+    NUdf::TStringRef AsFixedStringBuffer(const NUdf::TUnboxedValue& value, ui32 length) const override {
+        Y_UNUSED(value);
+        Y_UNUSED(length);
+        ythrow yexception() << "TPgDummyBuilder::AsFixedStringBuffer does nothing";
+    }
 };
 
 std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder() {

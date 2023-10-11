@@ -145,12 +145,14 @@ def do(args):
                 request = common.kikimr_bsconfig.TConfigRequest(Rollback=True)
                 inactive = []
                 for pdisk in base_config.PDisk:
-                    disk_is_better = True
                     check_pdisk_id = common.get_pdisk_id(pdisk)
-                    if not healthy_vslots_from_overpopulated_pdisks and pdisk_usage_w_donors[check_pdisk_id] + 1 > pdisk_usage_w_donors[pdisk_id] - 1:
-                        disk_is_better = False
-                    if healthy_vslots_from_overpopulated_pdisks and pdisk_usage_w_donors[check_pdisk_id] + 1 > pdisk_map[pdisk_to].ExpectedSlotCount:
-                        disk_is_better = False
+                    disk_is_better = pdisk_usage_w_donors[check_pdisk_id] + 1 <= pdisk_map[check_pdisk_id].ExpectedSlotCount
+                    if disk_is_better:
+                        if not healthy_vslots_from_overpopulated_pdisks and pdisk_usage[check_pdisk_id] + 1 > pdisk_usage[pdisk_id] - 1:
+                            disk_is_better = False
+                        if healthy_vslots_from_overpopulated_pdisks:
+                            disk_is_better = False
+
                     if not disk_is_better:
                         add_update_drive_status(request, pdisk, common.kikimr_bsconfig.EDriveStatus.INACTIVE)
                         inactive.append(pdisk)

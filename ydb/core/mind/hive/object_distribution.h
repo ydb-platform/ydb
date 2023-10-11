@@ -87,6 +87,7 @@ struct TObjectDistributions {
     std::unordered_map<TObjectId, std::multiset<TObjectDistribution>::iterator> Distributions;
     ui64 ImbalancedObjects = 0;
     std::unordered_set<TNodeId> Nodes;
+    bool Enabled = true;
 
     double GetMaxImbalance() {
         if (SortedDistributions.empty()) {
@@ -103,7 +104,10 @@ struct TObjectDistributions {
     };
 
     TObjectToBalance GetObjectToBalance() {
-        Y_ABORT_UNLESS(!SortedDistributions.empty());
+        Y_DEBUG_ABORT_UNLESS(!SortedDistributions.empty());
+        if (SortedDistributions.empty()) {
+            return TObjectToBalance(0);
+        }
         const auto& dist = *SortedDistributions.rbegin();
         i64 maxCnt = *dist.SortedDistribution.rbegin();
         TObjectToBalance result(dist.Id);
@@ -159,6 +163,9 @@ struct TObjectDistributions {
 
 
     void UpdateCount(TObjectId object, TNodeId node, i64 diff) {
+        if (!Enabled) {
+            return;
+        }
         auto updateFunc = [=](TObjectDistribution& dist) {
             dist.UpdateCount(node, diff);
         };
@@ -176,6 +183,9 @@ struct TObjectDistributions {
     }
 
     void AddNode(TNodeId node) {
+        if (!Enabled) {
+            return;
+        }
         Nodes.insert(node);
         for (const auto& [obj, it] : Distributions) {
             UpdateCount(obj, node, 0);
@@ -183,6 +193,9 @@ struct TObjectDistributions {
     }
 
     void RemoveNode(TNodeId node) {
+        if (!Enabled) {
+            return;
+        }
         Nodes.erase(node);
         auto updateFunc = [=](TObjectDistribution& dist) {
             dist.RemoveNode(node);
@@ -190,6 +203,13 @@ struct TObjectDistributions {
         for (auto it = Distributions.begin(); it != Distributions.end();) {
             UpdateDistribution((it++)->first, updateFunc);
         }
+    }
+
+    void Disable() {
+        Enabled = false;
+        Nodes.clear();
+        SortedDistributions.clear();
+        Distributions.clear();
     }
 };
 

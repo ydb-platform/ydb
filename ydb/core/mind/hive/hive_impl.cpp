@@ -593,6 +593,13 @@ void THive::BuildCurrentConfig() {
         }
     }
     MakeTabletTypeSet(BalancerIgnoreTabletTypes);
+    if (!CurrentConfig.GetSpreadNeighbours()) {
+        // SpreadNeighbours can be turned off anytime, but
+        // cannot be safely turned on without Hive restart
+        // as the in-memory data on neighbours would not be accurate
+        SpreadNeighbours = false;
+        ObjectDistributions.Disable();
+    }
 }
 
 void THive::Cleanup() {
@@ -915,6 +922,7 @@ void THive::OnActivateExecutor(const TActorContext&) {
     ResourceProfiles = AppData()->ResourceProfiles ? AppData()->ResourceProfiles : new TResourceProfiles;
     BuildLocalConfig();
     ClusterConfig = AppData()->HiveConfig;
+    SpreadNeighbours = ClusterConfig.GetSpreadNeighbours();
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(NKikimrConsole::TConfigItem::HiveConfigItem));
     Execute(CreateInitScheme());
@@ -2577,6 +2585,9 @@ TDuration THive::GetBalancerCooldown() const {
 }
 
 void THive::UpdateObjectCount(TObjectId object, TNodeId node, i64 diff) {
+    if (!GetSpreadNeighbours()) {
+        return;
+    }
     ObjectDistributions.UpdateCount(object, node, diff);
     TabletCounters->Simple()[NHive::COUNTER_IMBALANCED_OBJECTS].Set(ObjectDistributions.GetImbalancedObjectsCount());
     TabletCounters->Simple()[NHive::COUNTER_WORST_OBJECT_VARIANCE].Set(ObjectDistributions.GetWorstObjectVariance());

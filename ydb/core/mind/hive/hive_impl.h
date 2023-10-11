@@ -771,7 +771,7 @@ public:
     }
 
     bool GetSpreadNeighbours() const {
-        return CurrentConfig.GetSpreadNeighbours();
+        return SpreadNeighbours;
     }
 
     ui64 GetDefaultUnitIOPS() const {

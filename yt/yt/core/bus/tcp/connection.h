@@ -195,8 +195,8 @@ private:
     const IMessageHandlerPtr Handler_;
     const NConcurrency::IPollerPtr Poller_;
 
-    const NLogging::TLogger Logger;
     const TString LoggingTag_;
+    const NLogging::TLogger Logger;
 
     const TPromise<void> ReadyPromise_ = NewPromise<void>();
 
@@ -276,7 +276,7 @@ private:
     const EEncryptionMode EncryptionMode_;
     const EVerificationMode VerificationMode_;
 
-    size_t MaxFragmentsPerWrite = 256;
+    size_t MaxFragmentsPerWrite_ = 256;
 
     void Open();
     void Close();

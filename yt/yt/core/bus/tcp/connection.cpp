@@ -121,12 +121,12 @@ TTcpConnection::TTcpConnection(
     , UnixDomainSocketPath_(unixDomainSocketPath)
     , Handler_(std::move(handler))
     , Poller_(std::move(poller))
-    , Logger(BusLogger.WithTag("ConnectionId: %v, ConnectionType: %v, RemoteAddress: %v, EncryptionMode: %v",
+    , LoggingTag_(Format("ConnectionId: %v, ConnectionType: %v, RemoteAddress: %v, EncryptionMode: %v",
         Id_,
         ConnectionType_,
         EndpointDescription_,
         Config_->EncryptionMode))
-    , LoggingTag_(Format("ConnectionId: %v", Id_))
+    , Logger(BusLogger.WithTag(LoggingTag_.c_str()))
     , GenerateChecksums_(Config_->GenerateChecksums)
     , Socket_(socket)
     , MultiplexingBand_(multiplexingBand)
@@ -1332,7 +1332,7 @@ bool TTcpConnection::WriteFragments(size_t* bytesWritten)
     size_t bytesAvailable = MaxBatchWriteSize;
 
     while (fragmentIt != fragmentEnd &&
-           SendVector_.size() < MaxFragmentsPerWrite &&
+           SendVector_.size() < MaxFragmentsPerWrite_ &&
            bytesAvailable > 0)
     {
         const auto& fragment = *fragmentIt;
@@ -1446,7 +1446,7 @@ bool TTcpConnection::MaybeEncodeFragments()
         coalescedSize += fragment.Size();
     };
 
-    while (EncodedFragments_.size() < MaxFragmentsPerWrite &&
+    while (EncodedFragments_.size() < MaxFragmentsPerWrite_ &&
            encodedSize <= MaxBatchWriteSize &&
            !QueuedPackets_.empty())
     {
@@ -1867,13 +1867,13 @@ bool TTcpConnection::DoSslHandshake()
     switch (SSL_get_error(Ssl_.get(), result)) {
         case SSL_ERROR_NONE:
             YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_do_handshake (VerificationMode %v)", VerificationMode_);
-            MaxFragmentsPerWrite = 1;
+            MaxFragmentsPerWrite_ = 1;
             SslState_ = ESslState::Established;
             ReadyPromise_.TrySet();
             return false;
         case SSL_ERROR_WANT_READ:
         case SSL_ERROR_WANT_WRITE:
-            MaxFragmentsPerWrite = 1;
+            MaxFragmentsPerWrite_ = 1;
             SslState_ = ESslState::Established;
             // Ssl session establishment will be finished by the following SSL_do_handshake()/SSL_read()/SSL_write() calls.
             // Since SSL handshake is pending, don't set the ReadyPromise_ yet.

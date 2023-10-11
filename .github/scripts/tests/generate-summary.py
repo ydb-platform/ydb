@@ -268,7 +268,7 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths):
     return summary
 
 
-def update_pr_comment(pr: PullRequest, summary: TestSummary):
+def update_pr_comment(pr: PullRequest, summary: TestSummary, test_history_url: str):
     header = f"<!-- status {pr.number} -->"
 
     if summary.is_failed:
@@ -277,6 +277,10 @@ def update_pr_comment(pr: PullRequest, summary: TestSummary):
         result = ":green_circle: All tests passed"
 
     body = [header, f"{result} for commit {pr.head.sha}."]
+
+    if test_history_url:
+        body.append("")
+        body.append(f"[Test history]({test_history_url})")
 
     body.extend(summary.render())
     body = "\n".join(body)
@@ -299,6 +303,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--summary-out-path", required=True)
     parser.add_argument("--summary-url-prefix", required=True)
+    parser.add_argument('--test-history-url', required=False)
     parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
     args = parser.parse_args()
 
@@ -319,7 +324,7 @@ def main():
             event = json.load(fp)
 
         pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-        update_pr_comment(pr, summary)
+        update_pr_comment(pr, summary, args.test_history_url)
 
 
 if __name__ == "__main__":

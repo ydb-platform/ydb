@@ -93,7 +93,7 @@ extern "C" {
 #  if defined(CARES_BUILDING_LIBRARY)
 #    define CARES_EXTERN  __declspec(dllexport)
 #  else
-#    define CARES_EXTERN
+#    define CARES_EXTERN  __declspec(dllimport)
 #  endif
 #elif defined(CARES_BUILDING_LIBRARY) && defined(CARES_SYMBOL_HIDING)
 #  define CARES_EXTERN CARES_SYMBOL_SCOPE_EXTERN

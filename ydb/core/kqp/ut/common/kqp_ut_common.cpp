@@ -738,6 +738,11 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
         auto streamPart = it.ReadNext().GetValueSync();
         if (!streamPart.IsSuccess()) {
             UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+            const auto& meta = streamPart.GetResponseMetadata();
+            auto mit = meta.find("x-ydb-consumed-units");
+            if (mit != meta.end()) {
+                res.ConsumedRuFromHeader = std::stol(mit->second);
+            }
             break;
         }
 

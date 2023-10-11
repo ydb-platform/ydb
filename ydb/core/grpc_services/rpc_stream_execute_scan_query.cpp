@@ -284,6 +284,8 @@ private:
         NYql::IssuesFromMessage(issueMessage, issues);
 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            Request_->SetRuHeader(record.GetConsumedRu());
+
             Ydb::Table::ExecuteScanQueryPartialResponse response;
             TString out;
             auto& kqpResponse = record.GetResponse();
@@ -316,7 +318,6 @@ private:
                 Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
             }
         }
-
         ReplyFinishStream(record.GetYdbStatus(), issues);
     }
 

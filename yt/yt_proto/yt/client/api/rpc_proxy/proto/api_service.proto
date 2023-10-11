@@ -1817,17 +1817,24 @@ message TColumnarStatistics
     optional int64 timestamp_total_weight = 2;
     optional int64 legacy_chunk_data_weight = 3 [default = 0];
 
+    // To fix chunks that were broken by ChunkMerger.
+    reserved 4;
+    reserved 5;
+    reserved 6;
+    reserved 7;
+    reserved 8;
+
     // Per-column approximate minimum values. For more information check comments in NYT::NTableClient::TColumnarStatistics.
-    optional bytes column_min_values = 4;
+    optional bytes column_min_values = 9;
     // Per-column approximate maximum values. For more information check comments in NYT::NTableClient::TColumnarStatistics.
-    optional bytes column_max_values = 5;
+    optional bytes column_max_values = 10;
     // Number of non-null values in each column.
-    repeated int64 column_non_null_value_counts = 6;
+    repeated int64 column_non_null_value_counts = 11;
 
     // Total number of rows in all chunks whose meta contains columnar statistics.
-    optional int64 chunk_row_count = 7;
+    optional int64 chunk_row_count = 12;
     // Total number of rows in legacy chunks whose meta misses columnar statistics.
-    optional int64 legacy_chunk_row_count = 8;
+    optional int64 legacy_chunk_row_count = 13;
 }
 
 message TRspGetColumnarStatistics

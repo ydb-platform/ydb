@@ -72,8 +72,6 @@ struct IPacketTranscoderFactory
         bool verifyChecksum) const = 0;
     virtual std::unique_ptr<IPacketEncoder> CreateEncoder(
         const NLogging::TLogger& logger) const = 0;
-
-    virtual bool SupportsHandshakes() const = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

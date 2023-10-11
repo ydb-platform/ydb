@@ -134,7 +134,6 @@ TTcpConnection::TTcpConnection(
     , ReadStallTimeout_(NProfiling::DurationToCpuDuration(Config_->ReadStallTimeout))
     , Encoder_(packetTranscoderFactory->CreateEncoder(Logger))
     , WriteStallTimeout_(NProfiling::DurationToCpuDuration(Config_->WriteStallTimeout))
-    , SupportsHandshakes_(packetTranscoderFactory->SupportsHandshakes())
     , EncryptionMode_(Config_->EncryptionMode)
     , VerificationMode_(Config_->VerificationMode)
 { }
@@ -196,7 +195,7 @@ void TTcpConnection::Close()
 
 void TTcpConnection::Start()
 {
-    YT_LOG_DEBUG("Starting TCP connection (SupportsHandshakes: %v)", SupportsHandshakes_);
+    YT_LOG_DEBUG("Starting TCP connection");
 
     // Offline in PendingControl_ prevents retrying events until end of Open().
     YT_VERIFY(Any(static_cast<EPollControl>(PendingControl_.load()) & EPollControl::Offline));
@@ -227,11 +226,6 @@ void TTcpConnection::Start()
             SetupNetwork(EndpointNetworkAddress_);
             Open();
             guard.Release();
-
-            if (!SupportsHandshakes_) {
-                // Set the connection ready on the server side.
-                ReadyPromise_.TrySet();
-            }
             break;
         }
 
@@ -288,10 +282,6 @@ const TString& TTcpConnection::GetLoggingTag() const
 
 void TTcpConnection::TryEnqueueHandshake()
 {
-    if (!SupportsHandshakes_) {
-        return;
-    }
-
     if (std::exchange(HandshakeEnqueued_, true)) {
         return;
     }
@@ -625,11 +615,6 @@ void TTcpConnection::OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
         }
 
         Open();
-    }
-
-    if (!SupportsHandshakes_) {
-        // Set the connection ready on the client side.
-        ReadyPromise_.TrySet();
     }
 }
 

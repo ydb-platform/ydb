@@ -280,11 +280,6 @@ struct TPacketTranscoderFactory
     {
         return std::make_unique<TPacketEncoder>();
     }
-
-    bool SupportsHandshakes() const override
-    {
-        return false;
-    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////

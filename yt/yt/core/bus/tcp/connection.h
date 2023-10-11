@@ -256,7 +256,6 @@ private:
 
     i64 LastRetransmitCount_ = 0;
 
-    bool SupportsHandshakes_ = false;
     bool HandshakeEnqueued_ = false;
     bool HandshakeReceived_ = false;
     bool HandshakeSent_ = false;

@@ -27,6 +27,12 @@ public:
         , FailedOnAlreadyExists(failedOnAlreadyExists)
         {}
 
+    TSchemeOpRequestHandler(TRequest* request, NThreading::TPromise<TResult> promise, bool failedOnAlreadyExists, bool successOnNotExist)
+        : TBase(request, promise, {})
+        , FailedOnAlreadyExists(failedOnAlreadyExists)
+        , SuccessOnNotExist(successOnNotExist)
+        {}
+
 
     void Bootstrap(const TActorContext& ctx) {
         TActorId txproxy = MakeTxProxyID();
@@ -79,8 +85,8 @@ public:
                     (!FailedOnAlreadyExists && response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists))
                 {
                     LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request"
-                    << ", TxId: " << response.GetTxId());
-
+                        << ", TxId: " << response.GetTxId());
+                        
                     TResult result;
                     result.SetSuccess();
                     Promise.SetValue(std::move(result));
@@ -98,9 +104,19 @@ public:
             }
 
             case TEvTxUserProxy::TResultStatus::ResolveError: {
-                Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
-                    response.GetSchemeShardReason(), {}));
-                this->Die(ctx);
+                if (response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusPathDoesNotExist
+                    && SuccessOnNotExist) {
+                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request: path does not exist,"
+                        << "SuccessOnNotExist: true, TxId: " << response.GetTxId());
+                    TResult result;
+                    result.SetSuccess();
+                    Promise.SetValue(std::move(result));
+                    this->Die(ctx);
+                } else {
+                    Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
+                        response.GetSchemeShardReason(), {}));
+                    this->Die(ctx);
+                }
                 return;
             }
 
@@ -177,6 +193,7 @@ public:
 private:
     TActorId ShemePipeActorId;
     bool FailedOnAlreadyExists = false;
+    bool SuccessOnNotExist = false;
 };
 
 } // namespace NKqp

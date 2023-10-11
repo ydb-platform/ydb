@@ -118,7 +118,16 @@ public:
         }
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
-        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, true);
+        
+        bool successOnNotExist = ev->Record.GetTransaction().GetModifyScheme().HasSuccessOnNotExist() 
+            ? ev->Record.GetTransaction().GetModifyScheme().GetSuccessOnNotExist()
+            : false;
+        IActor* requestHandler = new TSchemeOpRequestHandler(
+            ev.Release(), 
+            promise, 
+            true, 
+            successOnNotExist
+        );
         RegisterWithSameMailbox(requestHandler);
 
         auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
@@ -126,7 +135,7 @@ public:
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
             auto ev = MakeHolder<TEvPrivate::TEvResult>();
             ev->Result = future.GetValue();
-
+            
             actorSystem->Send(selfId, ev.Release());
         });
 

@@ -1491,6 +1491,8 @@ message TModifyScheme {
     optional TDropBlockStoreVolume DropBlockStoreVolume = 60;
 
     optional NKikimrIndexBuilder.TColumnBuildSettings InitiateColumnBuild = 61;
+
+    optional bool SuccessOnNotExist = 62;
 }
 
 // "Script", used by client to parse text files with multiple DDL commands

@@ -571,10 +571,10 @@ public:
         FORWARD_ENSURE_NO_PREPARE(RenameTable, src, dst, cluster);
     }
 
-    TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) override {
+    TFuture<TGenericResult> DropTable(const TString& cluster, const TDropTableSettings& settings) override {
         CHECK_PREPARED_DDL(DropTable);
 
-        auto metadata = SessionCtx->Tables().GetTable(cluster, table).Metadata;
+        auto metadata = SessionCtx->Tables().GetTable(cluster, settings.Table).Metadata;
 
         std::pair<TString, TString> pathPair;
         TString error;
@@ -597,7 +597,7 @@ public:
             auto& phyTx = *phyQuery.AddTransactions();
             phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
             phyTx.MutableSchemeOperation()->MutableDropTable()->Swap(&schemeTx);
-
+            phyTx.MutableSchemeOperation()->MutableDropTable()->SetSuccessOnNotExist(settings.SuccessOnNotExist);
             TGenericResult result;
             result.SetSuccess();
             dropPromise.SetValue(result);
@@ -610,7 +610,7 @@ public:
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
                 dropPromise.SetValue(errResult);
             }
-            return Gateway->DropTable(cluster, table);
+            return Gateway->DropTable(cluster, settings);
         }
 
         return dropPromise.GetFuture();

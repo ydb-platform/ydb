@@ -1007,7 +1007,7 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             switch (tableTypeItem) {
                 case ETableType::Table:
-                    future = Gateway->DropTable(table.Metadata->Cluster, table.Metadata->Name);
+                    future = Gateway->DropTable(table.Metadata->Cluster, TDropTableSettings{.Table = table.Metadata->Name, .SuccessOnNotExist = missingOk});
                     if (missingOk) {
                         future = future.Apply([](const NThreading::TFuture<IKikimrGateway::TGenericResult>& res) {
                             auto operationResult = res.GetValue();

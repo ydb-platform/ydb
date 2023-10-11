@@ -120,7 +120,7 @@ void TestLoadTableMetadataCommon(TIntrusivePtr<IKikimrGateway> gateway) {
 }
 
 void TestDropTableCommon(TIntrusivePtr<IKikimrGateway> gateway) {
-    auto responseFuture = gateway->DropTable(TestCluster, "/Root/Test/UserTable");
+    auto responseFuture = gateway->DropTable(TestCluster, TDropTableSettings{.Table = "/Root/Test/UserTable"});
     responseFuture.Wait();
     auto response = responseFuture.GetValue();
     response.Issues().PrintTo(Cerr);

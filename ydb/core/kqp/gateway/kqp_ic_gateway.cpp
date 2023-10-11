@@ -849,14 +849,14 @@ public:
         }
     }
 
-    TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) override {
+    TFuture<TGenericResult> DropTable(const TString& cluster, const NYql::TDropTableSettings& settings) override {
         try {
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
             }
 
             Ydb::Table::DropTableRequest dropTable;
-            dropTable.set_path(table);
+            dropTable.set_path(settings.Table);
 
             // FIXME: should be defined in grpc_services/rpc_calls.h, but cause cyclic dependency
             using namespace NGRpcService;

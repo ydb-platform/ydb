@@ -604,6 +604,11 @@ struct TAlterTableStoreSettings {
     TString TableStore;
 };
 
+struct TDropTableSettings {
+    TString Table;
+    bool SuccessOnNotExist;
+};
+
 struct TDropTableStoreSettings {
     TString TableStore;
 };
@@ -761,7 +766,7 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) = 0;
+    virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TDropTableSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) = 0;
 

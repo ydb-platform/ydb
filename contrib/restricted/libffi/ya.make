@@ -128,6 +128,11 @@ ELSEIF (ARCH_RISCV32 AND OS_NONE)
         contrib/restricted/libffi/configs/x86_64-pc-linux-gnu
         GLOBAL contrib/restricted/libffi/configs/x86_64-pc-linux-gnu/include
     )
+ELSEIF (ARCH_XTENSA AND OS_NONE)
+    ADDINCL(
+        contrib/restricted/libffi/configs/x86_64-pc-linux-gnu
+        GLOBAL contrib/restricted/libffi/configs/x86_64-pc-linux-gnu/include
+    )
 ELSEIF (ARCH_X86_64 AND OS_ANDROID)
     ADDINCL(
         contrib/restricted/libffi/configs/x86_64-pc-linux-android21

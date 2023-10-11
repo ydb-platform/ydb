@@ -540,20 +540,19 @@ private:
 
         EStep Check(const NUdf::TUnboxedValuePod bitmapValue) {
             Y_ABORT_UNLESS(!IsFinished_);
+            Y_ABORT_UNLESS(!InputSize_);
             auto& bitmap = Arrays_.back();
-            if (!InputSize_) {
-                bitmap = TArrowBlock::From(bitmapValue).GetDatum().array();
-                if (!bitmap->length)
-                    return EStep::Skip;
+            bitmap = TArrowBlock::From(bitmapValue).GetDatum().array();
+            if (!bitmap->length)
+                return EStep::Skip;
 
-                const auto popCount = GetBitmapPopCount(bitmap);
-                if (!popCount)
-                    return EStep::Skip;
+            const auto popCount = GetBitmapPopCount(bitmap);
+            if (!popCount)
+                return EStep::Skip;
 
 
-                if (!OutputPos_ && ui64(bitmap->length) == popCount)
-                    return EStep::Copy;
-            }
+            if (!OutputPos_ && ui64(bitmap->length) == popCount)
+                return EStep::Copy;
 
             return EStep::Pass;
         }

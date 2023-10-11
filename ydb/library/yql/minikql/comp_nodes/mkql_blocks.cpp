@@ -78,18 +78,12 @@ public:
         auto& s = GetState(state, ctx);
         const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
 
-        while (!s.Count) {
-            do {
-                if (s.IsFinished_) {
-                    if (s.Rows_)
-                        break;
-                    else
-                        return EFetchResult::Finish;
-                } else switch (Flow_->FetchValues(ctx, fields)) {
+        if (!s.Count) {
+            if (!s.IsFinished_) do {
+                switch (Flow_->FetchValues(ctx, fields)) {
                     case EFetchResult::One:
                         for (size_t i = 0; i < Types_.size(); ++i)
                             s.Add(s.Values[i], i);
-                        ++s.Rows_;
                         continue;
                     case EFetchResult::Yield:
                         return EFetchResult::Yield;
@@ -97,9 +91,13 @@ public:
                         s.IsFinished_ = true;
                         break;
                 }
-            } while (s.Rows_ < MaxLength_);
+                break;
+            } while (++s.Rows_ < MaxLength_);
 
-            s.MakeBlocks(ctx.HolderFactory);
+            if (s.Rows_)
+                s.MakeBlocks(ctx.HolderFactory);
+            else
+                return EFetchResult::Finish;
         }
 
         const auto sliceSize = s.Slice();
@@ -141,7 +139,6 @@ public:
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
-        const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
         const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
         const auto read = BasicBlock::Create(context, "read", ctx.Func);
@@ -168,11 +165,6 @@ public:
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
         const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetCount() }, "count_ptr", block);
-
-        BranchInst::Create(loop, block);
-
-        block = loop;
-
         const auto count = new LoadInst(indexType, countPtr, "count", block);
         const auto none = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, count, ConstantInt::get(indexType, 0), "none", block);
 
@@ -182,20 +174,9 @@ public:
 
         const auto rowsPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetRows() }, "rows_ptr", block);
         const auto finishedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIsFinished() }, "is_finished_ptr", block);
-
-        const auto rows = new LoadInst(indexType, rowsPtr, "rows", block);
         const auto finished = new LoadInst(Type::getInt1Ty(context), finishedPtr, "finished", block);
 
         BranchInst::Create(skip, read, finished, block);
-
-        block = skip;
-
-        const auto empty = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rows, ConstantInt::get(indexType, 0), "empty", block);
-
-        const auto result = PHINode::Create(statusType, 3U, "result", over);
-        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
-
-        BranchInst::Create(over, work, empty, block);
 
         block = read;
 
@@ -205,16 +186,13 @@ public:
         way->addCase(ConstantInt::get(statusType, i32(EFetchResult::Finish)), stop);
         way->addCase(ConstantInt::get(statusType, i32(EFetchResult::Yield)), over);
 
+        const auto result = PHINode::Create(statusType, 3U, "result", over);
         result->addIncoming(getres.first, block);
-
-        block = stop;
-
-        new StoreInst(ConstantInt::getTrue(context), finishedPtr, block);
-        BranchInst::Create(skip, block);
 
         block = good;
 
-        const auto increment = BinaryOperator::CreateAdd(rows, ConstantInt::get(indexType, 1), "increment", block);
+        const auto read_rows = new LoadInst(indexType, rowsPtr, "read_rows", block);
+        const auto increment = BinaryOperator::CreateAdd(read_rows, ConstantInt::get(indexType, 1), "increment", block);
         new StoreInst(increment, rowsPtr, block);
 
         for (size_t idx = 0U; idx < Types_.size(); ++idx) {
@@ -224,7 +202,21 @@ public:
         }
 
         const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, increment, ConstantInt::get(indexType, MaxLength_), "next", block);
-        BranchInst::Create(more, fill, next, block);
+        BranchInst::Create(read, work, next, block);
+
+        block = stop;
+
+        new StoreInst(ConstantInt::getTrue(context), finishedPtr, block);
+        BranchInst::Create(skip, block);
+
+        block = skip;
+
+        const auto rows = new LoadInst(indexType, rowsPtr, "rows", block);
+        const auto empty = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rows, ConstantInt::get(indexType, 0), "empty", block);
+
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
+
+        BranchInst::Create(over, work, empty, block);
 
         block = work;
 
@@ -233,7 +225,7 @@ public:
         const auto makeBlockPtr = CastInst::Create(Instruction::IntToPtr, makeBlockFunc, PointerType::getUnqual(makeBlockType), "make_blocks_func", block);
         CallInst::Create(makeBlockType, makeBlockPtr, {stateArg, ctx.GetFactory()}, "", block);
 
-        BranchInst::Create(loop, block);
+        BranchInst::Create(fill, block);
 
         block = fill;
 
@@ -1072,7 +1064,7 @@ public:
         new StoreInst(height, countPtr, block);
 
         const auto makeBlockFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TBlockState::FillArrays));
-        const auto makeBlockType = FunctionType::get(indexType, {statePtrType}, false);
+        const auto makeBlockType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
         const auto makeBlockPtr = CastInst::Create(Instruction::IntToPtr, makeBlockFunc, PointerType::getUnqual(makeBlockType), "fill_arrays_func", block);
         CallInst::Create(makeBlockType, makeBlockPtr, {stateArg}, "", block);
 

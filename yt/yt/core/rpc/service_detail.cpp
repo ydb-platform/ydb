@@ -22,6 +22,7 @@
 
 #include <yt/yt/core/logging/log_manager.h>
 
+#include <yt/yt/core/misc/crash_handler.h>
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/core/net/address.h>
@@ -833,7 +834,13 @@ private:
         }
 
         {
-            TCurrentAuthenticationIdentityGuard identityGuard(&GetAuthenticationIdentity());
+            const auto& authenticationIdentity = GetAuthenticationIdentity();
+            TCodicilGuard codicilGuard(Format("RequestId: %v, Method: %v.%v, AuthenticationIdentity: %v",
+                GetRequestId(),
+                GetService(),
+                GetMethod(),
+                authenticationIdentity));
+            TCurrentAuthenticationIdentityGuard identityGuard(&authenticationIdentity);
             handler(this, descriptor.Options);
         }
     }

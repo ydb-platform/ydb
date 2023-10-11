@@ -40,7 +40,7 @@ int ares__bitncmp(const void *l, const void *r, int n)
 
   b = n / 8;
   x = memcmp(l, r, b);
-  if (x || (n & 7) == 0)
+  if (x || (n % 8) == 0)
     return (x);
 
   lb = ((const unsigned char *)l)[b];

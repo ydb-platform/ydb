@@ -110,8 +110,5 @@ SRCS(
 END()
 
 RECURSE(
-    acountry
-    adig
-    ahost
     test
 )

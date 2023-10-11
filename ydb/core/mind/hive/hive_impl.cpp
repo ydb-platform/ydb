@@ -273,6 +273,11 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
     }
 }
 
+void THive::HandleInit(TEvPrivate::TEvProcessBootQueue::TPtr&) {
+    BLOG_W("Received TEvProcessBootQueue while in StateInit");
+    Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessBootQueue());
+}
+
 void THive::Handle(TEvPrivate::TEvProcessBootQueue::TPtr&) {
     BLOG_TRACE("ProcessBootQueue - executing");
     Execute(CreateProcessBootQueue());
@@ -2154,6 +2159,11 @@ std::optional<EResourceToBalance> THive::CheckScatter(const TResourceNormalizedV
     return std::nullopt;
 }
 
+void THive::HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
+    BLOG_W("Received TEvProcessTabletBalancer while in StateInit");
+    Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessTabletBalancer());
+}
+
 void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     ProcessTabletBalancerScheduled = false;
     if (!SubActors.empty()) {
@@ -2774,6 +2784,8 @@ void THive::EnqueueIncomingEvent(STATEFN_SIG) {
 STFUNC(THive::StateInit) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+        hFunc(TEvPrivate::TEvProcessBootQueue, HandleInit);
+        hFunc(TEvPrivate::TEvProcessTabletBalancer, HandleInit);
         // We subscribe to config updates before hive is fully loaded
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
         fFunc(NConsole::TEvConsole::TEvConfigNotificationRequest::EventType, EnqueueIncomingEvent);

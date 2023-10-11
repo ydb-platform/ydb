@@ -518,9 +518,11 @@ protected:
     void Handle(TEvPrivate::TEvKickTablet::TPtr&);
     void Handle(TEvPrivate::TEvBootTablets::TPtr&);
     void Handle(TEvPrivate::TEvCheckTabletNodeAlive::TPtr&);
+    void HandleInit(TEvPrivate::TEvProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvPostponeProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr&);
+    void HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&);
     void Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&);
     void Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr&);
     void Handle(TEvPrivate::TEvProcessPendingOperations::TPtr&);

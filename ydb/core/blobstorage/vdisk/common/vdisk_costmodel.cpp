@@ -215,7 +215,7 @@ namespace NKikimr {
     }
 
     ui64 TCostModel::ReadCostBySize(ui64 size) const {
-        ui64 seekCost = (size / ReadBlockSize + 1) * SeekTimeUs;
+        ui64 seekCost = (size / ReadBlockSize + 1) * SeekTimeUs * 1000ull;
         ui64 readCost = size * ui64(1000000000) / ReadSpeedBps;
         return seekCost + readCost;
     }
@@ -231,7 +231,7 @@ namespace NKikimr {
                 cost += InMemReadCost();
             } else {
                 // we don't know cost of the query, it depends on number of elements and their size
-                cost += 10000000; // let's assume it's 10 ms
+                cost += 1000ull * SeekTimeUs + 2'000'000ull * 1'000'000'000 / ReadSpeedBps;
             }
         }
 

@@ -10,7 +10,7 @@ namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
     // TCostModel -- estimate complexity of incoming request
-    // All estimations are performed in time (Us)
+    // All estimations are performed in time (ns)
     ////////////////////////////////////////////////////////////////////////////
     class TCostModel {
     public:
@@ -101,14 +101,14 @@ namespace NKikimr {
 
     protected:
         ui64 SmallWriteCost(ui64 size) const {
-            const ui64 seekCost = SeekTimeUs / 100u; // assume we do one seek per 100 log records
+            const ui64 seekCost = SeekTimeUs  * 1000ull / 100u; // assume we do one seek per 100 log records
             const ui64 writeCost = size * ui64(1000000000) / WriteSpeedBps;
             const ui64 cost = seekCost + writeCost;
             return cost ? cost : 1;
         }
 
         ui64 HugeWriteCost(ui64 size) const {
-            const ui64 seekCost = (size / WriteBlockSize + 1) * SeekTimeUs; // huge blocks may require several seeks
+            const ui64 seekCost = (size / WriteBlockSize + 1) * SeekTimeUs * 1000ull; // huge blocks may require several seeks
             const ui64 writeCost = size * ui64(1000000000) / WriteSpeedBps;
             const ui64 cost = seekCost + writeCost;
             Y_VERIFY_DEBUG(cost);

@@ -258,11 +258,7 @@ migrations:
     - yabs/server/test/ft/BSSERVER-17885
     - yabs/server/test/ft/BSSERVER-18047
     - yabs/server/test/ft/BSSERVER-19352
-    - yabs/server/test/ft/BSSERVER-20124
-    - yabs/server/test/ft/BSSERVER-21248
-    - yabs/server/test/ft/BSSERVER-21283
     - yabs/server/test/ft/BSSERVER-21794
-    - yabs/server/test/ft/BSSERVER-22115/test_disable_sub_designs
     - yabs/server/test/ft/BSSERVER-2214
     - yabs/server/test/ft/BSSERVER-22647
     - yabs/server/test/ft/BSSERVER-2306
@@ -4585,8 +4581,6 @@ migrations:
     - market/idx/datacamp/dev/generate_offers
     - market/idx/datacamp/dev/push_update_tasks
     - market/idx/datacamp/dev/repush_all_update_tasks
-    - market/idx/datacamp/yatf
-    - market/idx/datacamp/yatf/matchers
     - market/infra/itreg/softreg
     - market/library/shiny/external/rps_limiter/beam
     - market/library/shiny/server/gen/lib
@@ -7101,7 +7095,6 @@ migrations:
     - library/python/errorboosterclient/errorboosterclient
     - logos/libs/approx
     - logos/libs/attributes
-    - logos/libs/clean
     - logos/libs/clients
     - logos/libs/clients/nile
     - logos/libs/clients/pulsar
@@ -8459,7 +8452,6 @@ migrations:
     - voicetech/infra/tools/library/websocket_tts
     - yabs/qa/oneshots/cberg/new_keywords_eda_plus_crypta
     - yabs/server/test/ft/BSSERVER-16637
-    - yabs/server/test/ft/BSSERVER-19282
     - yabs/server/test/ft/BSSERVER-19930
   PLW0122:
     ignore:

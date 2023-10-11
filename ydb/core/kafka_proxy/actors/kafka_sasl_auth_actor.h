@@ -93,7 +93,7 @@ private:
     TString ResourcePath;
     TString CloudId;
     TString KafkaApiFlag;
-    bool IsServerless;
+    bool IsServerless = false;
 };
 
 } // NKafka

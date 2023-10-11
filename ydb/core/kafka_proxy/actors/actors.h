@@ -37,7 +37,7 @@ struct TContext {
     TString DatabaseId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientDC;
-    bool IsServerless;
+    bool IsServerless = false;
 
     NKikimr::NPQ::TRlContext RlContext;
 

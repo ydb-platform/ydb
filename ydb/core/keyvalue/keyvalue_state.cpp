@@ -16,7 +16,7 @@
 #include <util/string/escape.h>
 #include <util/charset/utf8.h>
 
-// Set to 1 in order for tablet to reboot instead of failing a Y_VERIFY on database damage
+// Set to 1 in order for tablet to reboot instead of failing a Y_ABORT_UNLESS on database damage
 #define KIKIMR_KEYVALUE_ALLOW_DAMAGE 0
 
 namespace NKikimr {

@@ -347,7 +347,7 @@ namespace NKikimr {
         // ensure that keys are coming in strictly ascending order
         if (IsFromSameSequence(newKey, it)) {
             // check that existing key is really greater that the new one -- this is internal consistency check
-            // so we can do it in Y_VERIFY
+            // so we can do it in Y_ABORT_UNLESS
             const TKeyBarrier& key = it.GetCurKey();
             Y_ABORT_UNLESS(std::make_tuple(key.Gen, key.GenCounter) > std::make_tuple(newKey.Gen, newKey.GenCounter) &&
                     key.TabletId == newKey.TabletId && key.Channel == newKey.Channel && key.Hard == newKey.Hard);

@@ -170,7 +170,7 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
         }
 
         /* Sometimes clang drops the last emplace_back above if move was used
-            before for data field. This hacky Y_VERIFY prevents this and check
+            before for data field. This hacky Y_ABORT_UNLESS prevents this and check
             that emplace always happens.
          */
 

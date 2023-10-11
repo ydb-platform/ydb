@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
         ValidatePartitionChildren(partition3, {});
         ValidatePartitionChildren(partition4, {});
 
-        // Reboot for check Y_VERIFY
+        // Reboot for check Y_ABORT_UNLESS
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
     } // Y_UNIT_TEST(SplitWithManyPartition)
 

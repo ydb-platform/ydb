@@ -14,7 +14,7 @@ TEST(TConcurrentRWHashTest, TEmptyGetTest) {
     EXPECT_FALSE(h.Get("key", res));
     EXPECT_EQ(res, 100);
 
-    // Can't check h.Get("key") here because it has Y_VERIFY inside o_O
+    // Can't check h.Get("key") here because it has Y_ABORT_UNLESS inside o_O
 }
 
 TEST(TConcurrentRWHashTest, TInsertTest) {

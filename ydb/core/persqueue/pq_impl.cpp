@@ -2484,7 +2484,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
 
     if (txBody.GetImmediate()) {
         //
-        // FIXME(abcdef): вместо Y_VERIFY отправлять TEvProposeTransactionResult с кодом ошибки
+        // FIXME(abcdef): вместо Y_ABORT_UNLESS отправлять TEvProposeTransactionResult с кодом ошибки
         //
         Y_ABORT_UNLESS(txBody.OperationsSize() > 0);
 

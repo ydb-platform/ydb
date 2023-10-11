@@ -248,14 +248,18 @@
   - __algorithm/pop_heap.h:                       contrib/libs/cxxsupp/libcxx/include/__algorithm/pop_heap.h
   - __algorithm/prev_permutation.h:               contrib/libs/cxxsupp/libcxx/include/__algorithm/prev_permutation.h
   - __algorithm/push_heap.h:                      contrib/libs/cxxsupp/libcxx/include/__algorithm/push_heap.h
+  - __algorithm/ranges_count.h:                   contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_count.h
+  - __algorithm/ranges_count_if.h:                contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_count_if.h
   - __algorithm/ranges_find.h:                    contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find.h
   - __algorithm/ranges_find_if.h:                 contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find_if.h
   - __algorithm/ranges_find_if_not.h:             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find_if_not.h
+  - __algorithm/ranges_max.h:                     contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_max.h
   - __algorithm/ranges_max_element.h:             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_max_element.h
   - __algorithm/ranges_min.h:                     contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_min.h
   - __algorithm/ranges_min_element.h:             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_min_element.h
   - __algorithm/ranges_mismatch.h:                contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_mismatch.h
   - __algorithm/ranges_swap_ranges.h:             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_swap_ranges.h
+  - __algorithm/ranges_transform.h:               contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_transform.h
   - __algorithm/remove.h:                         contrib/libs/cxxsupp/libcxx/include/__algorithm/remove.h
   - __algorithm/remove_copy.h:                    contrib/libs/cxxsupp/libcxx/include/__algorithm/remove_copy.h
   - __algorithm/remove_copy_if.h:                 contrib/libs/cxxsupp/libcxx/include/__algorithm/remove_copy_if.h
@@ -293,12 +297,23 @@
   - __bit/byteswap.h:                             contrib/libs/cxxsupp/libcxx/include/__bit/byteswap.h
   - __chrono/calendar.h:                          contrib/libs/cxxsupp/libcxx/include/__chrono/calendar.h
   - __chrono/convert_to_timespec.h:               contrib/libs/cxxsupp/libcxx/include/__chrono/convert_to_timespec.h
+  - __chrono/day.h:                               contrib/libs/cxxsupp/libcxx/include/__chrono/day.h
   - __chrono/duration.h:                          contrib/libs/cxxsupp/libcxx/include/__chrono/duration.h
   - __chrono/file_clock.h:                        contrib/libs/cxxsupp/libcxx/include/__chrono/file_clock.h
+  - __chrono/hh_mm_ss.h:                          contrib/libs/cxxsupp/libcxx/include/__chrono/hh_mm_ss.h
   - __chrono/high_resolution_clock.h:             contrib/libs/cxxsupp/libcxx/include/__chrono/high_resolution_clock.h
+  - __chrono/literals.h:                          contrib/libs/cxxsupp/libcxx/include/__chrono/literals.h
+  - __chrono/month.h:                             contrib/libs/cxxsupp/libcxx/include/__chrono/month.h
+  - __chrono/month_weekday.h:                     contrib/libs/cxxsupp/libcxx/include/__chrono/month_weekday.h
+  - __chrono/monthday.h:                          contrib/libs/cxxsupp/libcxx/include/__chrono/monthday.h
   - __chrono/steady_clock.h:                      contrib/libs/cxxsupp/libcxx/include/__chrono/steady_clock.h
   - __chrono/system_clock.h:                      contrib/libs/cxxsupp/libcxx/include/__chrono/system_clock.h
   - __chrono/time_point.h:                        contrib/libs/cxxsupp/libcxx/include/__chrono/time_point.h
+  - __chrono/weekday.h:                           contrib/libs/cxxsupp/libcxx/include/__chrono/weekday.h
+  - __chrono/year.h:                              contrib/libs/cxxsupp/libcxx/include/__chrono/year.h
+  - __chrono/year_month.h:                        contrib/libs/cxxsupp/libcxx/include/__chrono/year_month.h
+  - __chrono/year_month_day.h:                    contrib/libs/cxxsupp/libcxx/include/__chrono/year_month_day.h
+  - __chrono/year_month_weekday.h:                contrib/libs/cxxsupp/libcxx/include/__chrono/year_month_weekday.h
   - __compare/common_comparison_category.h:       contrib/libs/cxxsupp/libcxx/include/__compare/common_comparison_category.h
   - __compare/compare_partial_order_fallback.h:   contrib/libs/cxxsupp/libcxx/include/__compare/compare_partial_order_fallback.h
   - __compare/compare_strong_order_fallback.h:    contrib/libs/cxxsupp/libcxx/include/__compare/compare_strong_order_fallback.h
@@ -335,6 +350,7 @@
   - __concepts/swappable.h:                       contrib/libs/cxxsupp/libcxx/include/__concepts/swappable.h
   - __concepts/totally_ordered.h:                 contrib/libs/cxxsupp/libcxx/include/__concepts/totally_ordered.h
   - __filesystem/file_time_type.h:                contrib/libs/cxxsupp/libcxx/include/__filesystem/file_time_type.h
+  - __format/enable_insertable.h:                 contrib/libs/cxxsupp/libcxx/include/__format/enable_insertable.h
   - __functional/binary_function.h:               contrib/libs/cxxsupp/libcxx/include/__functional/binary_function.h
   - __functional/binary_negate.h:                 contrib/libs/cxxsupp/libcxx/include/__functional/binary_negate.h
   - __functional/bind.h:                          contrib/libs/cxxsupp/libcxx/include/__functional/bind.h
@@ -399,10 +415,12 @@
   - __iterator/unreachable_sentinel.h:            contrib/libs/cxxsupp/libcxx/include/__iterator/unreachable_sentinel.h
   - __iterator/wrap_iter.h:                       contrib/libs/cxxsupp/libcxx/include/__iterator/wrap_iter.h
   - __memory/addressof.h:                         contrib/libs/cxxsupp/libcxx/include/__memory/addressof.h
+  - __memory/allocate_at_least.h:                 contrib/libs/cxxsupp/libcxx/include/__memory/allocate_at_least.h
   - __memory/allocation_guard.h:                  contrib/libs/cxxsupp/libcxx/include/__memory/allocation_guard.h
   - __memory/allocator.h:                         contrib/libs/cxxsupp/libcxx/include/__memory/allocator.h
   - __memory/allocator_arg_t.h:                   contrib/libs/cxxsupp/libcxx/include/__memory/allocator_arg_t.h
   - __memory/allocator_traits.h:                  contrib/libs/cxxsupp/libcxx/include/__memory/allocator_traits.h
+  - __memory/assume_aligned.h:                    contrib/libs/cxxsupp/libcxx/include/__memory/assume_aligned.h
   - __memory/auto_ptr.h:                          contrib/libs/cxxsupp/libcxx/include/__memory/auto_ptr.h
   - __memory/compressed_pair.h:                   contrib/libs/cxxsupp/libcxx/include/__memory/compressed_pair.h
   - __memory/concepts.h:                          contrib/libs/cxxsupp/libcxx/include/__memory/concepts.h
@@ -443,6 +461,8 @@
   - __support/xlocale/__strtonum_fallback.h:      contrib/libs/cxxsupp/libcxx/include/__support/xlocale/__strtonum_fallback.h
   - __thread/poll_with_backoff.h:                 contrib/libs/cxxsupp/libcxx/include/__thread/poll_with_backoff.h
   - __thread/timed_backoff_policy.h:              contrib/libs/cxxsupp/libcxx/include/__thread/timed_backoff_policy.h
+  - __type_traits/integral_constant.h:            contrib/libs/cxxsupp/libcxx/include/__type_traits/integral_constant.h
+  - __type_traits/is_callable.h:                  contrib/libs/cxxsupp/libcxx/include/__type_traits/is_callable.h
   - __utility/as_const.h:                         contrib/libs/cxxsupp/libcxx/include/__utility/as_const.h
   - __utility/auto_cast.h:                        contrib/libs/cxxsupp/libcxx/include/__utility/auto_cast.h
   - __utility/cmp.h:                              contrib/libs/cxxsupp/libcxx/include/__utility/cmp.h

@@ -27,7 +27,7 @@ namespace
         (NDB::CurrentThread::getGroup()->client_logs_level >= (priority));         \
     if ((logger)->is((PRIORITY)) || is_clients_log)                               \
     {                                                                             \
-        std::string formatted_message = numArgs(__VA_ARGS__) > 1 ? fmt::format(__VA_ARGS__) : firstArg(__VA_ARGS__); \
+        std::string formatted_message = fmt::format(__VA_ARGS__);                 \
         if (auto channel = (logger)->getChannel())                                \
         {                                                                         \
             std::string file_function;                                            \

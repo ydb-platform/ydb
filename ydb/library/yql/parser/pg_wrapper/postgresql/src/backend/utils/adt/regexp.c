@@ -109,6 +109,15 @@ typedef struct cached_re_str
 static __thread int	num_res = 0;		/* # of cached re's */
 static __thread cached_re_str re_array[MAX_CACHED_RES];	/* cached re's */
 
+void RE_cleanup_cache(void) {
+    int i;
+    for (i = 0; i < num_res; ++i) {
+        pg_regfree(&re_array[i].cre_re);
+        free(re_array[i].cre_pat);
+    }
+
+    num_res = 0;
+}
 
 /* Local functions */
 static regexp_matches_ctx *setup_regexp_matches(text *orig_str, text *pattern,

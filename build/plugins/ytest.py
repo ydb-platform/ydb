@@ -641,6 +641,8 @@ def onadd_check(unit, *args):
         fork_mode = unit.get('TEST_FORK_MODE') or ''
     elif check_type == "ktlint":
         test_timeout = '120'
+        ktlint_binary =  '$(KTLINT_OLD)/run.bat' if unit.get('_USE_KTLINT_OLD') == 'yes' else '$(KTLINT)/run.bat'
+        extra_test_dart_data['KTLINT_BINARY'] = ktlint_binary
     elif check_type == "JAVA_STYLE":
         if ymake_java_test and not unit.get('ALL_SRCDIRS') or '':
             return

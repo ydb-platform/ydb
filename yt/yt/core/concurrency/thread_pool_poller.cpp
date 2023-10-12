@@ -135,7 +135,10 @@ class TThreadPoolPoller
     , public NThreading::TThread
 {
 public:
-    TThreadPoolPoller(int threadCount, const TString& threadNamePrefix, const TDuration pollingPeriod)
+    TThreadPoolPoller(
+        int threadCount,
+        const TString& threadNamePrefix,
+        TDuration pollingPeriod)
         : TThread(Format("%v:%v", threadNamePrefix, "Poll"))
         , Logger(ConcurrencyLogger.WithTag("ThreadNamePrefix: %v", threadNamePrefix))
     {
@@ -424,7 +427,7 @@ private:
 IThreadPoolPollerPtr CreateThreadPoolPoller(
     int threadCount,
     const TString& threadNamePrefix,
-    const TDuration pollingPeriod)
+    TDuration pollingPeriod)
 {
     auto poller = New<TThreadPoolPoller>(threadCount, threadNamePrefix, pollingPeriod);
     poller->Start();

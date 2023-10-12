@@ -51,7 +51,7 @@ NThreading::TFuture<TTableStoreManager::TYqlConclusionStatus> TTableStoreManager
                     ev->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
                 }
                 auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
-                operation->SerializeScheme(schemeTx);
+                operation->SerializeScheme(schemeTx, IsStandalone);
 
                 auto promiseScheme = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
                 actorSystem->Register(new NKqp::TSchemeOpRequestHandler(ev.Release(), promiseScheme, false));

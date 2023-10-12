@@ -27,9 +27,8 @@ TConclusionStatus TAddColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl::
     return TConclusionStatus::Success();
 }
 
-void TAddColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchemaPreset& presetProto) const {
-    auto schemaData = presetProto.MutableAlterSchema();
-    auto column = schemaData->AddAddColumns();
+void TAddColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& schemaData) const {
+    auto column = schemaData.AddAddColumns();
     column->SetName(ColumnName);
     column->SetType(ColumnType);
     column->SetNotNull(NotNull);

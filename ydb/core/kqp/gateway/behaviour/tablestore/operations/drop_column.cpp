@@ -14,9 +14,8 @@ TConclusionStatus TDropColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl:
     return TConclusionStatus::Success();
 }
 
-void TDropColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchemaPreset& presetProto) const {
-    auto schemaData = presetProto.MutableAlterSchema();
-    auto column = schemaData->AddDropColumns();
+void TDropColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& schemaData) const {
+    auto column = schemaData.AddDropColumns();
     column->SetName(ColumnName);
 }
 

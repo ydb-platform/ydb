@@ -29,15 +29,22 @@ TConclusionStatus ITableStoreOperation::Deserialize(const NYql::TObjectSettingsI
     return TConclusionStatus::Success();
 }
 
-void ITableStoreOperation::SerializeScheme(NKikimrSchemeOp::TModifyScheme& scheme) const {
+void ITableStoreOperation::SerializeScheme(NKikimrSchemeOp::TModifyScheme& scheme, const bool isStandalone) const {
     scheme.SetWorkingDir(WorkingDir);
-    scheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnStore);
-
-    NKikimrSchemeOp::TAlterColumnStore* alter = scheme.MutableAlterColumnStore();
-    alter->SetName(StoreName);
-    auto schemaPresetObject = alter->AddAlterSchemaPresets();
-    schemaPresetObject->SetName(PresetName);
-    return DoSerializeScheme(*schemaPresetObject);
+    if (isStandalone) {
+        scheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
+        NKikimrSchemeOp::TAlterColumnTable* alter = scheme.MutableAlterColumnTable();
+        alter->SetName(StoreName);
+        auto schemaObject = alter->MutableAlterSchema();
+        return DoSerializeScheme(*schemaObject);
+    } else {
+        scheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnStore);
+        NKikimrSchemeOp::TAlterColumnStore* alter = scheme.MutableAlterColumnStore();
+        alter->SetName(StoreName);
+        auto schemaPresetObject = alter->AddAlterSchemaPresets();
+        schemaPresetObject->SetName(PresetName);
+        return DoSerializeScheme(*(schemaPresetObject->MutableAlterSchema()));
+    }
 }
 
 }

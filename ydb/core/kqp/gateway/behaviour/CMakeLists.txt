@@ -7,4 +7,5 @@
 
 
 add_subdirectory(external_data_source)
+add_subdirectory(table)
 add_subdirectory(tablestore)

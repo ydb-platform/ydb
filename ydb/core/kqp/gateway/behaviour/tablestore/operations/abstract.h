@@ -16,10 +16,10 @@ public:
 
     TConclusionStatus Deserialize(const NYql::TObjectSettingsImpl& settings);
 
-    void SerializeScheme(NKikimrSchemeOp::TModifyScheme& scheme) const;
+    void SerializeScheme(NKikimrSchemeOp::TModifyScheme& scheme, const bool isStandalone) const;
 private:
     virtual TConclusionStatus DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) = 0;
-    virtual void DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchemaPreset& scheme) const = 0;
+    virtual void DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& scheme) const = 0;
 };
 
 }

@@ -25,9 +25,8 @@ TConclusionStatus TAlterColumnOperation::DoDeserialize(NYql::TObjectSettingsImpl
     return TConclusionStatus::Success();
 }
 
-void TAlterColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchemaPreset& presetProto) const {
-    auto schemaData = presetProto.MutableAlterSchema();
-    auto* column = schemaData->AddAlterColumns();
+void TAlterColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& schemaData) const {
+    auto* column = schemaData.AddAlterColumns();
     column->SetName(ColumnName);
     *column->MutableCompression() = CompressionDiff.SerializeToProto();
     *column->MutableDictionaryEncoding() = DictionaryEncodingDiff.SerializeToProto();

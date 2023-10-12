@@ -3,6 +3,7 @@
 namespace NKikimr::NKqp {
 
 class TAddColumnOperation : public ITableStoreOperation {
+private:
     static TString GetTypeName() {
         return "NEW_COLUMN";
     }
@@ -15,7 +16,7 @@ private:
 public:
     TConclusionStatus DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) override;
 
-    void DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchemaPreset& presetProto) const override;
+    void DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& schemaData) const override;
 };
 
 }

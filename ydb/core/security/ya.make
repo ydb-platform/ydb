@@ -9,6 +9,7 @@ SRCS(
     ticket_parser.cpp
     ticket_parser.h
     ldap_auth_provider.cpp
+    ldap_utils.cpp
 )
 
 IF(OS_LINUX OR OS_DARWIN)

@@ -3,6 +3,7 @@
 #include <ydb/core/base/ticket_parser.h>
 #include "ticket_parser_log.h"
 #include "ldap_auth_provider.h"
+#include "ldap_utils.h"
 
 // This temporary solution
 // These lines should be declared outside ldap_compat.h
@@ -67,6 +68,7 @@ private:
 public:
     TLdapAuthProvider(const NKikimrProto::TLdapAuthentication& settings)
         : Settings(settings)
+        , FilterCreator(Settings)
     {}
 
     void Bootstrap() {
@@ -232,7 +234,7 @@ private:
         char* dn = NKikimrLdap::GetDn(*request.Ld, request.Entry);
         if (dn == nullptr) {
             return {{TEvLdapAuthProvider::EStatus::UNAUTHORIZED,
-                    {.Message = "Could not get dn for the first entry matching " + GetFilter(request.Login) + " on server " + Settings.GetHost() + "\n"
+                    {.Message = "Could not get dn for the first entry matching " + FilterCreator.GetFilter(request.Login) + " on server " + Settings.GetHost() + "\n"
                             + NKikimrLdap::LdapError(*request.Ld),
                     .Retryable = false}}};
         }
@@ -249,7 +251,7 @@ private:
 
     TSearchUserResponse SearchUserRecord(const TSearchUserRequest& request) {
         LDAPMessage* searchMessage = nullptr;
-        const TString searchFilter = GetFilter(request.User);
+        const TString searchFilter = FilterCreator.GetFilter(request.User);
 
         int result = NKikimrLdap::Search(request.Ld,
                                         Settings.GetBaseDn(),
@@ -285,28 +287,9 @@ private:
         return response;
     }
 
-    TString GetFilter(const TString& userName) const {
-        if (!Settings.GetSearchFilter().empty()) {
-            return GetFormatSearchFilter(userName);
-        } else if (!Settings.GetSearchAttribute().empty()) {
-            return Settings.GetSearchAttribute() + "=" + userName;
-        } else {
-            return "uid=" + userName;
-        }
-    }
-
-    TString GetFormatSearchFilter(const TString& userName) const {
-        const TStringBuf namePlaceHolder = "$username";
-        const TString& searchFilter = Settings.GetSearchFilter();
-        size_t n = searchFilter.find(namePlaceHolder);
-        if (n == TString::npos) {
-            return searchFilter;
-        }
-        return searchFilter.substr(0, n) + userName + searchFilter.substr(n + namePlaceHolder.size());
-    }
-
 private:
     const NKikimrProto::TLdapAuthentication Settings;
+    const TSearchFilterCreator FilterCreator;
 };
 
 IActor* CreateLdapAuthProvider(const NKikimrProto::TLdapAuthentication& settings) {

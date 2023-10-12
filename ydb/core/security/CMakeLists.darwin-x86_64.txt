@@ -31,5 +31,6 @@ target_sources(ydb-core-security PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/security/login_shared_func.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/security/ticket_parser.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/security/ldap_auth_provider.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/security/ldap_utils.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/security/ldap_auth_provider_linux.cpp
 )

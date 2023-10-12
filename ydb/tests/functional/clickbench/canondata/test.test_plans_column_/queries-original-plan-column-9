@@ -66,7 +66,7 @@
                                                                                 "Node Type": "Aggregate-TableFullScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: SUM(item.AdvEngineID),_yql_agg_1: SUM(state._yql_agg_1)}",
+                                                                                        "Aggregation": "{_yql_agg_1: SUM(state._yql_agg_1),_yql_agg_3: SUM(item.AdvEngineID)}",
                                                                                         "GroupBy": "item.RegionID",
                                                                                         "Name": "Aggregate"
                                                                                     },
@@ -130,7 +130,7 @@
                                                                                 "Node Type": "Aggregate",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_3: Inc(state._yql_agg_3)}",
+                                                                                        "Aggregation": "{_yql_agg_2: Inc(state._yql_agg_2)}",
                                                                                         "GroupBy": "item.RegionID",
                                                                                         "Name": "Aggregate"
                                                                                     }

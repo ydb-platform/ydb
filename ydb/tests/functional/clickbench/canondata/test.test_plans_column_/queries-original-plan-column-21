@@ -52,7 +52,7 @@
                                                                 "Node Type": "Aggregate-TableFullScan",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_0: MIN(item.URL),_yql_agg_1: SUM(state._yql_agg_1)}",
+                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0),_yql_agg_1: MIN(item.URL)}",
                                                                         "GroupBy": "item.SearchPhrase",
                                                                         "Name": "Aggregate"
                                                                     },

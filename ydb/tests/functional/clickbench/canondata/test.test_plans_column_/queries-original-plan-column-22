@@ -66,7 +66,7 @@
                                                                                 "Node Type": "Aggregate-TableFullScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: MIN(item.URL),_yql_agg_1: MIN(item.Title),_yql_agg_2: SUM(state._yql_agg_2)}",
+                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0),_yql_agg_2: MIN(item.URL),_yql_agg_3: MIN(item.Title)}",
                                                                                         "GroupBy": "item.SearchPhrase",
                                                                                         "Name": "Aggregate"
                                                                                     },
@@ -298,7 +298,7 @@
                                                                                 "Node Type": "Aggregate",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_3: Inc(state._yql_agg_3)}",
+                                                                                        "Aggregation": "{_yql_agg_1: Inc(state._yql_agg_1)}",
                                                                                         "GroupBy": "item.SearchPhrase",
                                                                                         "Name": "Aggregate"
                                                                                     }

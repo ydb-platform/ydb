@@ -3022,6 +3022,99 @@ bool HasPayload(const TCoAggregate& node) {
                                          HasSetting(node.Settings().Ref(), "session");
 }
 
+TExprNode::TPtr Normalize(const TCoAggregate& node, TExprContext& ctx) {
+    TMap<TStringBuf, TExprNode::TPtr> aggTuples; // key is a min output column for given tuple
+    bool needRebuild = false;
+    for (const auto& aggTuple : node.Handlers()) {
+        const TExprNode& columns = aggTuple.ColumnName().Ref();
+        TVector<TStringBuf> names;
+        bool namesInOrder = true;
+        if (columns.IsList()) {
+            for (auto& column : columns.ChildrenList()) {
+                YQL_ENSURE(column->IsAtom());
+                if (!names.empty()) {
+                    namesInOrder = namesInOrder && (column->Content() >= names.back());
+                }
+                names.push_back(column->Content());
+            }
+        } else {
+            YQL_ENSURE(columns.IsAtom());
+            names.push_back(columns.Content());
+        }
+
+        TExprNode::TPtr aggTupleNode = aggTuple.Ptr();
+        if (!namesInOrder && aggTuple.Trait().Maybe<TCoAggregationTraits>()) {
+            auto traits = aggTuple.Trait().Cast<TCoAggregationTraits>();
+            const TTypeAnnotationNode* finishType = traits.FinishHandler().Ref().GetTypeAnn();
+            if (finishType->GetKind() == ETypeAnnotationKind::Tuple && finishType->Cast<TTupleExprType>()->GetSize() == names.size()) {
+                needRebuild = true;
+                TMap<TStringBuf, size_t> originalIndexes;
+                for (size_t i = 0; i < names.size(); ++i) {
+                    YQL_ENSURE(originalIndexes.insert({ names[i], i}).second);
+                }
+
+                TExprNodeList nameNodes;
+                TExprNodeList finishBody;
+                TExprNode::TPtr arg = ctx.NewArgument(traits.FinishHandler().Pos(), "arg");
+                auto originalTuple = ctx.Builder(traits.FinishHandler().Pos())
+                    .Apply(traits.FinishHandler().Ref())
+                        .With(0, arg)
+                    .Seal()
+                    .Build();
+                
+                for (auto& [name, idx] : originalIndexes) {
+                    nameNodes.emplace_back(ctx.NewAtom(aggTuple.ColumnName().Pos(), name));
+                    finishBody.emplace_back(ctx.Builder(traits.FinishHandler().Pos())
+                        .Callable("Nth")
+                            .Add(0, originalTuple)
+                            .Atom(1, idx)
+                        .Seal()
+                        .Build());
+                }
+
+                auto finishLambda = ctx.NewLambda(traits.FinishHandler().Pos(),
+                    ctx.NewArguments(traits.FinishHandler().Pos(), { arg }),
+                    ctx.NewList(traits.FinishHandler().Pos(), std::move(finishBody)));
+
+                aggTupleNode = Build<TCoAggregateTuple>(ctx, aggTuple.Pos())
+                    .InitFrom(aggTuple)
+                    .ColumnName(ctx.NewList(aggTuple.ColumnName().Pos(), std::move(nameNodes)))
+                    .Trait<TCoAggregationTraits>()
+                        .InitFrom(traits)
+                        .FinishHandler(finishLambda)
+                    .Build()
+                    .Done().Ptr();
+                Sort(names);
+            }
+        }
+
+        YQL_ENSURE(!names.empty());
+        if (!aggTuples.empty()) {
+            auto last = aggTuples.end();
+            --last;
+            if (names.front() < last->first) {
+                needRebuild = true;
+            }
+        }
+
+        aggTuples[names.front()] = aggTupleNode;
+    }
+
+    if (!needRebuild) {
+        return node.Ptr();
+    }
+
+    TExprNodeList newHandlers;
+    for (auto& t : aggTuples) {
+        newHandlers.push_back(t.second);
+    }
+
+    return Build<TCoAggregate>(ctx, node.Pos())
+        .InitFrom(node)
+        .Handlers(ctx.NewList(node.Pos(), std::move(newHandlers)))
+        .Done().Ptr();
+}
+
 TExprNode::TPtr PullAssumeColumnOrderOverEquiJoin(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     TVector<ui32> withAssume;
     for (ui32 i = 0; i < node->ChildrenSize() - 2; i++) {
@@ -4716,6 +4809,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Content() << " without payload with same keys";
                 return self.Input().Ptr();
             }
+        }
+
+        if (auto normalized = Normalize(self, ctx); normalized != node) {
+            YQL_CLOG(DEBUG, Core) << "Normalized " << node->Content() << " payloads";
+            return normalized;
         }
 
         return DropReorder<false>(node, ctx);

@@ -29,7 +29,8 @@ class TestHive(object):
                 hive_config={
                     'max_node_usage_to_kick': 100,
                     'min_scatter_to_balance': 100,
-                    'object_imbalance_to_balance': 1000000,
+                    'min_counter_scatter_to_balance': 100,
+                    'object_imbalance_to_balance': 100,
                 },
             )
         )

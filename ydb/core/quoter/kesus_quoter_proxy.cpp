@@ -210,7 +210,8 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
 
             if (Props.GetAccountingConfig().GetEnabled()) {
                 AccountingReportPeriod = TDuration::MilliSeconds(Props.GetAccountingConfig().GetReportPeriodMs());
-                THolder<TTimeSeriesVec<double>> history(new TTimeSeriesVec<double>(Props.GetAccountingConfig().GetCollectPeriodSec()));
+                const ui64 intervalsInSec = 100; // as far as default resolution in TTimeSerisVec is 10'000
+                THolder<TTimeSeriesVec<double>> history(new TTimeSeriesVec<double>(Props.GetAccountingConfig().GetCollectPeriodSec() * intervalsInSec));
                 if (History) {
                     history->Add(*History.Get());
                 }

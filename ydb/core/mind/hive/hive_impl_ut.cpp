@@ -104,7 +104,6 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
     }
 
     Y_UNIT_TEST(BalancerSpeedAndDistribution) {
-        return;
         static constexpr ui64 NUM_TABLETS = 1000000;
         static constexpr ui64 NUM_BUCKETS = 16;
 
@@ -179,9 +178,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         for (ui64 i = 0; i < NUM_TABLETS; ++i) {
             TLeaderTabletInfo& tablet = allTablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
-            NKikimrTabletBase::TMetrics metrics;
-            metrics.SetMemory(RandomNumber<double>());
-            tablet.UpdateResourceUsage(metrics);
+            tablet.GetMutableResourceValues().SetMemory(RandomNumber<double>());
         }
 
         Ctest << "HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST" << Endl;

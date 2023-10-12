@@ -289,9 +289,10 @@ public:
         return ResourceMetricsAggregates;
     }
 
-    /*NKikimrTabletBase::TMetrics& GetMutableResourceValues() {
+    // ONLY for use in unit tests
+    NKikimrTabletBase::TMetrics& GetMutableResourceValues() {
         return ResourceValues;
-    }*/
+    }
 
     void ActualizeTabletStatistics(TInstant now);
     ui64 GetRestartsPerPeriod(TInstant barrier);

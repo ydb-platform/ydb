@@ -129,7 +129,7 @@ public:
     const TVersionedIndex& SchemaVersions;
     const NColumnShard::TIndexationCounters Counters;
 
-    TConstructionContext(const TVersionedIndex& schemaVersions, const NColumnShard::TIndexationCounters counters)
+    TConstructionContext(const TVersionedIndex& schemaVersions, const NColumnShard::TIndexationCounters& counters)
         : SchemaVersions(schemaVersions)
         , Counters(counters) {
 

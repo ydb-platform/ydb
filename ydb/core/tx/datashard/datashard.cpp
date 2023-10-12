@@ -2285,9 +2285,17 @@ void TDataShard::CheckMediatorStateRestored() {
     // writes before the restart, and conversely don't accidentally read any
     // data that is definitely not replied yet.
     if (SnapshotManager.GetImmediateWriteEdgeReplied() < SnapshotManager.GetImmediateWriteEdge()) {
+        const ui64 writeStep = SnapshotManager.GetImmediateWriteEdge().Step;
         const TRowVersion edge(GetMaxObservedStep(), Max<ui64>());
         SnapshotManager.PromoteImmediateWriteEdgeReplied(
             Min(edge, SnapshotManager.GetImmediateWriteEdge()));
+        // Try to ensure writes become visible sooner rather than later
+        if (edge.Step < writeStep) {
+            if (MediatorTimeCastWaitingSteps.insert(writeStep).second) {
+                Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), writeStep));
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << writeStep << " from mediator time cast");
+            }
+        }
     }
 
     MediatorStateWaiting = false;

@@ -3871,10 +3871,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     }
 
     Y_UNIT_TEST_TWIN(ComplexLookupLimit, NewPredicateExtract) {
-        if (NewPredicateExtract) {
-            return;
-        }
-
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetPredicateExtract20(NewPredicateExtract);

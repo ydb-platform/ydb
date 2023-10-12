@@ -184,6 +184,19 @@ namespace NKikimr::NFlatTxCoordinator {
         }
     }
 
+    void TTxCoordinator::Handle(TEvTxProxy::TEvRequirePlanSteps::TPtr& ev) {
+        auto* msg = ev->Get();
+        for (ui64 step : msg->Record.GetPlanSteps()) {
+            // Note: we could schedule an exact volatile step here in the future
+            step = AlignPlanStep(step);
+            // Note: this is not a sibling step, but it behaves similar enough
+            // so we reuse the same queue here.
+            if (step > VolatileState.LastPlanned && PendingSiblingSteps.insert(step).second) {
+                SchedulePlanTickExact(step);
+            }
+        }
+    }
+
     void TTxCoordinator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         auto* msg = ev->Get();
         if (auto* state = Siblings.FindPtr(msg->TabletId); state && state->Subscribed) {

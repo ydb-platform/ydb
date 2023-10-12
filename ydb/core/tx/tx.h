@@ -18,6 +18,7 @@ struct TEvTxProxy {
         EvUnsubscribeReadStep,
         EvSubscribeLastStep,
         EvUnsubscribeLastStep,
+        EvRequirePlanSteps,
 
         EvProposeTransactionStatus = EvProposeTransaction + 1 * 512,
         EvAcquireReadStepResult,
@@ -160,6 +161,25 @@ struct TEvTxProxy {
             Record.SetCoordinatorID(coordinator);
             Record.SetSeqNo(seqNo);
             Record.SetLastStep(lastStep);
+        }
+    };
+
+    struct TEvRequirePlanSteps
+        : public TEventPB<TEvRequirePlanSteps, NKikimrTx::TEvRequirePlanSteps, EvRequirePlanSteps>
+    {
+        TEvRequirePlanSteps() = default;
+
+        TEvRequirePlanSteps(ui64 coordinator, ui64 planStep) {
+            Record.SetCoordinatorID(coordinator);
+            Record.AddPlanSteps(planStep);
+        }
+
+        TEvRequirePlanSteps(ui64 coordinator, const std::set<ui64>& planSteps) {
+            Record.SetCoordinatorID(coordinator);
+            Record.MutablePlanSteps()->Reserve(planSteps.size());
+            for (ui64 planStep : planSteps) {
+                Record.AddPlanSteps(planStep);
+            }
         }
     };
 };

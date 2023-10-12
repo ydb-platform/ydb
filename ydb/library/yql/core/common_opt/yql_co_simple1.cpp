@@ -2554,8 +2554,19 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
             }
 
             if (count <= 1) {
-                YQL_CLOG(DEBUG, Core) << node->Content() << " over 0/1 literals";
-                return ctx.RenameNode(*node, "AssumeSorted");
+                YQL_CLOG(DEBUG, Core) << node->Content() << " over " << count << " literals.";
+                if constexpr (IsTop) {
+                    return ctx.Builder(node->Pos())
+                        .Callable("AssumeSorted")
+                            .Callable(0, "Take")
+                                .Add(0, node->HeadPtr())
+                                .Add(1, node->ChildPtr(1))
+                            .Seal()
+                            .Add(1, node->ChildPtr(2))
+                            .Add(2, node->ChildPtr(3))
+                        .Seal().Build();
+                } else
+                    return ctx.RenameNode(*node, "AssumeSorted");
             }
         }
 

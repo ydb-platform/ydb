@@ -3773,6 +3773,97 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { uint32_value: 3 } items { uint32_value: 3 } }");
     }
 
+    Y_UNIT_TEST(ReadIteratorLocalSnapshotThenWrite) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(100)
+            .SetAppConfig(app);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        auto opts = TShardedTableOptions()
+                        .Shards(1)
+                        .Columns({
+                            {"key", "Uint32", true, false},
+                            {"value", "Uint32", false, false}});
+        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        CreateShardedTable(server, sender, "/Root", "table-2", opts);
+
+        // Perform a snapshot read, this will persist "reads from snapshots" flag
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value
+                FROM `/Root/table-1`
+                UNION ALL
+                SELECT key, value
+                FROM `/Root/table-2`
+                )")),
+            "");
+
+        // Insert rows using a single-shard write
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3)"));
+
+        // Wait until mediator goes idle
+        size_t timecastUpdates = 0;
+        auto observer = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvMediatorTimecast::TEvUpdate::EventType: {
+                    ++timecastUpdates;
+                    break;
+                }
+                case TEvDataShard::TEvRead::EventType: {
+                    auto* msg = ev->Get<TEvDataShard::TEvRead>();
+                    msg->Record.SetMaxRowsInResult(1);
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = runtime.SetObserverFunc(observer);
+
+        auto waitFor = [&](const auto& condition, const TString& description) {
+            if (!condition()) {
+                Cerr << "... waiting for " << description << Endl;
+                TDispatchOptions options;
+                options.CustomFinalCondition = [&]() {
+                    return condition();
+                };
+                runtime.DispatchEvents(options);
+                UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
+            }
+        };
+
+        waitFor([&]{ return timecastUpdates >= 3; }, "at least 3 timecast updates");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value
+                FROM `/Root/table-1`
+                ORDER BY key
+                )")),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 3 } }");
+
+        auto start = runtime.GetCurrentTime();
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33)"));
+        auto duration = runtime.GetCurrentTime() - start;
+        UNIT_ASSERT_C(duration <= TDuration::MilliSeconds(200), "UPSERT takes too much time: " << duration);
+    }
+
 }
 
 } // namespace NKikimr

@@ -1508,7 +1508,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
         if (!optCtx.IsSingleUsage(node->Head()) && !optCtx.IsPersistentNode(node->Head())) {
             return node;
         }
-/*TODO: Enable later. Providers is not ready right now.
+
         if (node->Head().IsCallable("Sort")) {
             YQL_CLOG(DEBUG, Core) << "Fuse " << node->Content() << " over " << node->Head().Content();
             auto children = node->Head().ChildrenList();
@@ -1516,7 +1516,15 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             children.emplace(++it, node->TailPtr());
             return ctx.NewCallable(node->Pos(), "TopSort", std::move(children));
         }
-*/
+
+        if (node->Head().IsCallable("ExtractMembers") && node->Head().Head().IsCallable("Sort") && optCtx.IsSingleUsage(node->Head().Head())) {
+            YQL_CLOG(DEBUG, Core) << "Fuse " << node->Content() << " over " << node->Head().Content() << " over " <<  node->Head().Head().Content();
+            auto children =  node->Head().Head().ChildrenList();
+            auto it = children.cbegin();
+            children.emplace(++it, node->TailPtr());
+            return ctx.ChangeChild(node->Head(), 0U, ctx.NewCallable(node->Pos(), "TopSort", std::move(children)));
+        }
+
         if (node->Head().IsCallable({"Top", "TopSort"})) {
             YQL_CLOG(DEBUG, Core) << "Fuse " << node->Content() << " over " << node->Head().Content();
             return ctx.ChangeChild(node->Head(), 1U, ctx.NewCallable(node->Pos(), "Min", {node->TailPtr(), node->Head().ChildPtr(1)}));

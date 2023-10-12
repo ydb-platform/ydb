@@ -272,8 +272,12 @@ void TTxCoordinator::SchedulePlanTickAligned(ui64 next) {
         return;
     }
 
+    SchedulePlanTickExact(AlignPlanStep(next));
+}
+
+ui64 TTxCoordinator::AlignPlanStep(ui64 step) {
     const ui64 resolution = Config.Resolution;
-    SchedulePlanTickExact((next + resolution - 1) / resolution * resolution);
+    return ((step + resolution - 1) / resolution * resolution);
 }
 
 void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorContext &ctx) {

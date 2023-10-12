@@ -49,16 +49,21 @@ bool TGeneralSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
                         Y_ABORT_UNLESS((i64)chunksInProgress[i]->GetPackedSize() > Settings.GetMinBlobSize() - partSize);
                         Y_ABORT_UNLESS(otherSize - (Settings.GetMinBlobSize() - partSize) >= Settings.GetMinBlobSize());
 
-                        Counters->BySizeSplitter.OnTrashSerialized(chunksInProgress[i]->GetPackedSize());
-                        const std::vector<ui64> sizes = {(ui64)(Settings.GetMinBlobSize() - partSize)};
-                        std::vector<IPortionColumnChunk::TPtr> newChunks = chunksInProgress[i]->InternalSplit(Schema->GetColumnSaver(chunksInProgress[i]->GetColumnId()), Counters, sizes);
-                        chunksInProgress.erase(chunksInProgress.begin() + i);
-                        chunksInProgress.insert(chunksInProgress.begin() + i, newChunks.begin(), newChunks.end());
+                        std::vector<IPortionColumnChunk::TPtr> newChunks;
+                        const bool splittable = chunksInProgress[i]->GetRecordsCount() > 1;
+                        if (splittable) {
+                            Counters->BySizeSplitter.OnTrashSerialized(chunksInProgress[i]->GetPackedSize());
+                            const std::vector<ui64> sizes = {(ui64)(Settings.GetMinBlobSize() - partSize)};
+                            newChunks = chunksInProgress[i]->InternalSplit(Schema->GetColumnSaver(chunksInProgress[i]->GetColumnId()), Counters, sizes);
+                            chunksInProgress.erase(chunksInProgress.begin() + i);
+                            chunksInProgress.insert(chunksInProgress.begin() + i, newChunks.begin(), newChunks.end());
+                        }
 
                         TSplittedBlob newBlob;
                         for (ui32 chunk = 0; chunk <= i; ++chunk) {
                             newBlob.Take(chunksInProgress[chunk]);
                         }
+                        AFL_VERIFY(splittable || newBlob.GetSize() < Settings.GetMaxBlobSize())("splittable", splittable)("blob_size", newBlob.GetSize())("max", Settings.GetMaxBlobSize());
                         if (newBlob.GetSize() < Settings.GetMaxBlobSize()) {
                             chunksInProgress.erase(chunksInProgress.begin(), chunksInProgress.begin() + i + 1);
                             result.emplace_back(std::move(newBlob));

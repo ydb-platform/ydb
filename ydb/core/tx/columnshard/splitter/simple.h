@@ -63,9 +63,9 @@ public:
         , PackSize(packSize)
         , ObjectsCount(objectsCount)
     {
-        Y_ABORT_UNLESS(objectsCount >= packsCount);
-        Y_ABORT_UNLESS(PackSize);
-        Y_ABORT_UNLESS(PacksCount);
+        AFL_VERIFY(objectsCount >= packsCount)("objects_count", objectsCount)("packs_count", packsCount);
+        AFL_VERIFY(PackSize);
+        AFL_VERIFY(PacksCount);
     }
 
     class TIterator {

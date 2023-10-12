@@ -3,13 +3,15 @@ import logging
 import os
 import subprocess
 import sys
+import time
 
 import pytest
+
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 from ydb import Driver, DriverConfig, SessionPool
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness.ydb_fixtures import ydb_database_ctx
-from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +39,9 @@ CLUSTER_CONFIG = dict(
     },
     enable_audit_log=True,
     # extra_feature_flags=['enable_grpc_audit'],
+
+    # two builtin users with empty passwords
+    default_users=dict((i, '') for i in ('root', 'other-user')),
 )
 
 
@@ -47,7 +52,6 @@ def cluster_endpoint(cluster):
 def ydbcli_db_schema_exec(cluster, operation_proto):
     endpoint = cluster_endpoint(cluster)
     args = [
-        # cluster.binary_path,
         cluster.nodes[1].binary_path,
         f'--server=grpc://{endpoint}',
         'db',
@@ -56,24 +60,37 @@ def ydbcli_db_schema_exec(cluster, operation_proto):
         operation_proto,
     ]
     r = subprocess.run(args, capture_output=True)
-    assert r.returncode == 0, r
+    assert r.returncode == 0, r.stderr.decode('utf-8')
 
 
-def alter_database_audit_settings(cluster, database_path, enable_dml_audit, expected_subjects=None):
+def alter_database_audit_settings(cluster, database_path, enable_dml_audit=None, expected_subjects=None):
+    assert enable_dml_audit is not None or expected_subjects is not None
+
+    enable_dml_audit_proto = ''
+    if enable_dml_audit is not None:
+        enable_dml_audit_proto = '''EnableDmlAudit: %s''' % (enable_dml_audit)
+
+    expected_subjects_proto = ''
+    if expected_subjects is not None:
+        expected_subjects_proto = '''ExpectedSubjects: [%s]''' % (', '.join([f'"{i}"' for i in expected_subjects]))
+
     alter_proto = r'''ModifyScheme {
         OperationType: ESchemeOpAlterExtSubDomain
         WorkingDir: "%s"
         SubDomain {
             Name: "%s"
             AuditSettings {
-                EnableDmlAudit: %s
+                %s
+                %s
             }
         }
     }''' % (
         os.path.dirname(database_path),
         os.path.basename(database_path),
-        enable_dml_audit,
+        enable_dml_audit_proto,
+        expected_subjects_proto,
     )
+
     ydbcli_db_schema_exec(cluster, alter_proto)
 
 
@@ -86,9 +103,11 @@ class CaptureFileOutput:
         return self
 
     def __exit__(self, *exc):
-        with open(self.filename, 'r') as f:
+        # unreliable way to get all due audit records into the file
+        time.sleep(0.1)
+        with open(self.filename, 'rb', buffering=0) as f:
             f.seek(self.saved_pos)
-            self.captured = f.read()
+            self.captured = f.read().decode('utf-8')
 
 
 @pytest.fixture(scope='module')
@@ -99,8 +118,15 @@ def _database(ydb_cluster, ydb_root, request):
 
 
 @pytest.fixture(scope='module')
-def _client_session_pool_with_auth(ydb_cluster, _database):
+def _client_session_pool_with_auth_root(ydb_cluster, _database):
     with Driver(DriverConfig(cluster_endpoint(ydb_cluster), _database, auth_token='root@builtin')) as driver:
+        with SessionPool(driver) as pool:
+            yield pool
+
+
+@pytest.fixture(scope='module')
+def _client_session_pool_with_auth_other(ydb_cluster, _database):
+    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), _database, auth_token='other-user@builtin')) as driver:
         with SessionPool(driver) as pool:
             yield pool
 
@@ -172,10 +198,10 @@ QUERIES = [
 
 
 @pytest.mark.parametrize("query_template", QUERIES, ids=lambda x: x.split(maxsplit=1)[0])
-def test_single_dml_query_logged(query_template, prepared_test_env, _client_session_pool_with_auth):
+def test_single_dml_query_logged(query_template, prepared_test_env, _client_session_pool_with_auth_root):
     table_path, capture_audit = prepared_test_env
 
-    pool = _client_session_pool_with_auth
+    pool = _client_session_pool_with_auth_root
     query_text = query_template.format(table_path=table_path)
 
     with capture_audit:
@@ -185,10 +211,10 @@ def test_single_dml_query_logged(query_template, prepared_test_env, _client_sess
     assert query_text in capture_audit.captured
 
 
-def test_dml_begin_commit_logged(prepared_test_env, _client_session_pool_with_auth):
+def test_dml_begin_commit_logged(prepared_test_env, _client_session_pool_with_auth_root):
     table_path, capture_audit = prepared_test_env
 
-    pool = _client_session_pool_with_auth
+    pool = _client_session_pool_with_auth_root
 
     with pool.checkout() as session:
         with capture_audit:
@@ -202,10 +228,10 @@ def test_dml_begin_commit_logged(prepared_test_env, _client_session_pool_with_au
 
 
 # TODO: fix ydbd crash on exit
-# def test_dml_begin_rollback_logged(prepared_test_env, _client_session_pool_with_auth):
+# def test_dml_begin_rollback_logged(prepared_test_env, _client_session_pool_with_auth_root):
 #     table_path, capture_audit = prepared_test_env
 #
-#     pool = _client_session_pool_with_auth
+#     pool = _client_session_pool_with_auth_root
 #
 #     with pool.checkout() as session:
 #         with capture_audit:
@@ -244,3 +270,43 @@ def test_dml_requests_logged_when_unauthorized(prepared_test_env, _client_sessio
                     tx.execute(query_text, commit_tx=True)
             print(capture_audit.captured, file=sys.stderr)
             assert query_text in capture_audit.captured
+
+
+def test_dml_requests_arent_logged_when_sid_is_expected(ydb_cluster, _database, prepared_test_env, _client_session_pool_with_auth_root):
+    database_path = _database
+    table_path, capture_audit = prepared_test_env
+
+    alter_database_audit_settings(ydb_cluster, database_path, enable_dml_audit=True, expected_subjects=['root@builtin'])
+
+    pool = _client_session_pool_with_auth_root
+    with capture_audit:
+        for i in QUERIES:
+            query_text = i.format(table_path=table_path)
+            execute_data_query(pool, query_text)
+
+    print(capture_audit.captured, file=sys.stderr)
+    assert len(capture_audit.captured) == 0, capture_audit.captured
+
+
+def give_use_permission_to_user(pool, database_path, user):
+    def f(s, database_path):
+        s.execute_scheme(fr'''
+            grant 'ydb.generic.use' on `{database_path}` to `{user}`
+        ''')
+    pool.retry_operation_sync(f, database_path=database_path, retry_settings=None)
+
+
+def test_dml_requests_logged_when_sid_is_unexpected(ydb_cluster, _database, prepared_test_env, _client_session_pool_no_auth, _client_session_pool_with_auth_other):
+    database_path = _database
+    table_path, capture_audit = prepared_test_env
+
+    alter_database_audit_settings(ydb_cluster, database_path, enable_dml_audit=True, expected_subjects=['root@builtin'])
+    give_use_permission_to_user(_client_session_pool_no_auth, database_path, 'other-user@builtin')
+
+    pool = _client_session_pool_with_auth_other
+    for i in QUERIES:
+        query_text = i.format(table_path=table_path)
+        with capture_audit:
+            execute_data_query(pool, query_text)
+        print(capture_audit.captured, file=sys.stderr)
+        assert query_text in capture_audit.captured

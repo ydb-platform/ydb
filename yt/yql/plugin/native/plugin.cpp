@@ -8,8 +8,6 @@
 #include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 
-#include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
-
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include "ydb/library/yql/providers/common/proto/gateways_config.pb.h"
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -21,6 +19,8 @@
 #include <ydb/library/yql/core/file_storage/file_storage.h>
 #include "ydb/library/yql/core/file_storage/proto/file_storage.pb.h"
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
+#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
+#include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 
@@ -49,10 +49,62 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+std::optional<TString> MaybeToOptional(const TMaybe<TString>& maybeStr)
+{
+    if (!maybeStr) {
+        return std::nullopt;
+    }
+    return *maybeStr;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TQueryPlan
+{
+    std::optional<TString> Plan;
+    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, PlanSpinLock);
+};
+
 struct TActiveQuery
 {
     TProgressMerger ProgressMerger;
     std::optional<TString> Plan;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TQueryPipelineConfigurator
+    : public NYql::IPipelineConfigurator
+{
+public:
+    TQueryPipelineConfigurator(NYql::TProgramPtr program, TQueryPlan& plan)
+        : Program_(program)
+        , Plan_(plan)
+    { }
+
+    void AfterCreate(NYql::TTransformationPipeline* /*pipeline*/) const override
+    { }
+
+    void AfterTypeAnnotation(NYql::TTransformationPipeline* /*pipeline*/) const override
+    { }
+
+    void AfterOptimize(NYql::TTransformationPipeline* pipeline) const override
+    {
+        auto transformer = [this](NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& /*ctx*/) {
+            output = input;
+
+            auto guard = WriterGuard(Plan_.PlanSpinLock);
+            Plan_.Plan = MaybeToOptional(Program_->GetQueryPlan());
+
+            return NYql::IGraphTransformer::TStatus::Ok;
+        };
+
+        pipeline->Add(NYql::CreateFunctorTransformer(transformer), "PlanOutput");
+    }
+
+private:
+    NYql::TProgramPtr Program_;
+    TQueryPlan& Plan_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -203,17 +255,21 @@ public:
         auto userDataTable = FilesToUserTable(files);
         program->AddUserDataTable(userDataTable);
 
-        auto maybeToOptional = [] (const TMaybe<TString>& maybeStr) -> std::optional<TString> {
-            if (!maybeStr) {
-                return std::nullopt;
-            }
-            return *maybeStr;
-        };
+        TQueryPlan queryPlan;
+        auto pipelineConfigurator = TQueryPipelineConfigurator(program, queryPlan);
 
         program->SetProgressWriter([&] (const NYql::TOperationProgress& progress) {
+            std::optional<TString> plan;
+            {
+                auto guard = ReaderGuard(queryPlan.PlanSpinLock);
+                plan.swap(queryPlan.Plan);
+            }
+
             auto guard = WriterGuard(ProgressSpinLock);
             ActiveQueriesProgress_[queryId].ProgressMerger.MergeWith(progress);
-            ActiveQueriesProgress_[queryId].Plan = maybeToOptional(program->GetQueryPlan());
+            if (plan) {
+                ActiveQueriesProgress_[queryId].Plan.swap(plan);
+            }
         });
 
         NSQLTranslation::TTranslationSettings sqlSettings;
@@ -238,7 +294,7 @@ public:
         }
 
         NYql::TProgram::TStatus status = NYql::TProgram::TStatus::Error;
-        status = program->Run(GetUsername(), nullptr, nullptr, nullptr);
+        status = program->RunWithConfig(GetUsername(), pipelineConfigurator);
 
         if (status == NYql::TProgram::TStatus::Error) {
             return TQueryResult{
@@ -266,10 +322,10 @@ public:
 
         return {
             .YsonResult = result.Empty() ? std::nullopt : std::make_optional(result.Str()),
-            .Plan = maybeToOptional(program->GetQueryPlan()),
-            .Statistics = maybeToOptional(program->GetStatistics()),
+            .Plan = MaybeToOptional(program->GetQueryPlan()),
+            .Statistics = MaybeToOptional(program->GetStatistics()),
             .Progress = progress,
-            .TaskInfo = maybeToOptional(program->GetTasksInfo()),
+            .TaskInfo = MaybeToOptional(program->GetTasksInfo()),
         };
     }
 

@@ -1116,6 +1116,10 @@ bool IsTypeSupportedInMergeCn(EDataSlot type) {
         case EDataSlot::TzDatetime:
         case EDataSlot::TzTimestamp:
         case EDataSlot::JsonDocument:
+        case EDataSlot::Date32:
+        case EDataSlot::Datetime64:
+        case EDataSlot::Timestamp64:
+        case EDataSlot::Interval64:
             return false;
     }
     return false;

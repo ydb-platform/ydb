@@ -61,11 +61,15 @@ bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot type, TFunc&& callback) {
         case NUdf::EDataSlot::Uint16:
             return callback(TTypeWrapper<arrow::UInt16Type>());
         case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Date32:
             return callback(TTypeWrapper<arrow::Int32Type>());
         case NUdf::EDataSlot::Datetime:
         case NUdf::EDataSlot::Uint32:
             return callback(TTypeWrapper<arrow::UInt32Type>());
         case NUdf::EDataSlot::Int64:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
+        case NUdf::EDataSlot::Interval64:
             return callback(TTypeWrapper<arrow::Int64Type>());
         case NUdf::EDataSlot::Uint64:
             return callback(TTypeWrapper<arrow::UInt64Type>());

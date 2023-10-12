@@ -222,6 +222,10 @@ namespace NYql {
                 case EDataSlot::Datetime:
                 case EDataSlot::Timestamp:
                 case EDataSlot::Interval:
+                case EDataSlot::Date32:
+                case EDataSlot::Datetime64:
+                case EDataSlot::Timestamp64:
+                case EDataSlot::Interval64:
                     return true;
                 case EDataSlot::String:
                 case EDataSlot::Utf8:

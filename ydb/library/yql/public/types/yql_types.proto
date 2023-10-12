@@ -28,6 +28,10 @@ enum TypeIds {
     TzDate = 0x0034;
     TzDatetime = 0x0035;
     TzTimestamp = 0x0036;
+    Date32 = 0x0040;
+    Datetime64 = 0x0041;
+    Timestamp64 = 0x0042;
+    Interval64 = 0x0043;
     Decimal = 0x1301;
     DyNumber = 0x1302;
 }

@@ -109,7 +109,11 @@ struct TTzDataType
     xx(NUdf::TDate, ui16)        \
     xx(NUdf::TDatetime, ui32)    \
     xx(NUdf::TTimestamp, ui64)   \
-    xx(NUdf::TInterval, i64)
+    xx(NUdf::TInterval, i64)     \
+    xx(NUdf::TDate32, i32)       \
+    xx(NUdf::TDatetime64, i64)   \
+    xx(NUdf::TTimestamp64, i64)  \
+    xx(NUdf::TInterval64, i64)
 
 template <typename T>
 struct TPrimitiveDataType
@@ -140,14 +144,28 @@ class TInterval {};
 class TTzDate {};
 class TTzDatetime {};
 class TTzTimestamp {};
+class TDate32 {};
+class TDatetime64 {};
+class TTimestamp64 {};
+class TInterval64 {};
 class TDecimal {};
 class TDyNumber {};
 
-constexpr ui16 MAX_DATE = 49673u;
+constexpr ui16 MAX_DATE = 49673u; // non-inclusive
 constexpr ui32 MAX_DATETIME = 86400u * 49673u;
 constexpr ui64 MAX_TIMESTAMP = 86400000000ull * 49673u;
 constexpr ui32 MIN_YEAR = 1970u;
-constexpr ui32 MAX_YEAR = 2106u;
+constexpr ui32 MAX_YEAR = 2106u; // non-inclusive
+
+constexpr i32 MIN_DATE32 = -53375809; // inclusive
+constexpr i64 MIN_DATETIME64 = -4611669897600ll;
+constexpr i64 MIN_TIMESTAMP64 = -4611669897600000000ll;
+constexpr i32 MAX_DATE32 = 53375807; // inclusive
+constexpr i64 MAX_DATETIME64 = 4611669811199ll;
+constexpr i64 MAX_TIMESTAMP64 = 4611669811199999999ll;
+constexpr i64 MAX_INTERVAL64 = MAX_TIMESTAMP64 - MIN_TIMESTAMP64;
+constexpr i32 MIN_YEAR32 = -144169; // inclusive
+constexpr i32 MAX_YEAR32 = 148108; // non-inclusive
 
 #define UDF_TYPE_ID_MAP(XX)  \
     XX(Bool, NYql::NProto::Bool, bool, CommonType, bool, 0) \
@@ -176,6 +194,10 @@ constexpr ui32 MAX_YEAR = 2106u;
     XX(Decimal, NYql::NProto::Decimal, TDecimal, CommonType | DecimalType, TDecimal, 2) \
     XX(DyNumber, NYql::NProto::DyNumber, TDyNumber, CommonType, TDyNumber, 0) \
     XX(JsonDocument, NYql::NProto::JsonDocument, TJsonDocument, PayloadType, TJsonDocument, 0) \
+    XX(Date32, NYql::NProto::Date32, TDate32, CommonType | DateType, i32, 0) \
+    XX(Datetime64, NYql::NProto::Datetime64, TDatetime64, CommonType | DateType, i64, 0) \
+    XX(Timestamp64, NYql::NProto::Timestamp64, TTimestamp64, CommonType | DateType, i64, 0) \
+    XX(Interval64, NYql::NProto::Interval64, TInterval64, CommonType | TimeIntervalType, i64, 0) \
 
 #define UDF_TYPE_ID(xName, xTypeId, xType, xFeatures, xLayoutType, xParamsCount)                 \
     template <>                                                                                  \

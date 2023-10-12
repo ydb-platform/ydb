@@ -199,6 +199,7 @@ std::optional<ui64> EstimateIntegralDataSize(const TDataType* dataType) {
         case NUdf::EDataSlot::TzDate:
         case NUdf::EDataSlot::Datetime:
         case NUdf::EDataSlot::TzDatetime:
+        case NUdf::EDataSlot::Date32:
             return 4;
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Uint64:
@@ -206,6 +207,9 @@ std::optional<ui64> EstimateIntegralDataSize(const TDataType* dataType) {
         case NUdf::EDataSlot::Timestamp:
         case NUdf::EDataSlot::TzTimestamp:
         case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
+        case NUdf::EDataSlot::Interval64:
             return 8;
         case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::Decimal:

@@ -127,6 +127,18 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
                 writer.OnUtf8StringScalar(out.AsStringRef());
                 return;
             }
+            case NUdf::TDataType<NUdf::TDate32>::Id:
+                writer.OnInt64Scalar(value.Get<i32>());
+                return;
+            case NUdf::TDataType<NUdf::TDatetime64>::Id:
+                writer.OnInt64Scalar(value.Get<i64>());
+                return;
+            case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+                writer.OnInt64Scalar(value.Get<i64>());
+                return;
+            case NUdf::TDataType<NUdf::TInterval64>::Id:
+                writer.OnInt64Scalar(value.Get<i64>());
+                return;
 
             default:
                 throw yexception() << "Unknown data type: " << dataType->GetSchemeType();
@@ -415,9 +427,13 @@ TExprNode::TPtr DataNodeToExprLiteral(TPositionHandle pos, const TTypeAnnotation
 TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TDataExprType* type) {
     switch (type->GetSlot()) {
         case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Date32:
             return ToString(value.Get<i32>());
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
+        case NUdf::EDataSlot::Interval64:
             return ToString(value.Get<i64>());
         case NUdf::EDataSlot::Uint32:
         case NUdf::EDataSlot::Datetime:

@@ -1130,6 +1130,30 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.NewTzDataLiteral<NUdf::TTzTimestamp>(parts.first, parts.second);
     });
 
+    AddCallable("Date32", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto value = FromString<i32>(node.Head(), NUdf::EDataSlot::Date32);
+        return ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::Date32>(
+            NUdf::TStringRef((const char*)&value, sizeof(value)));
+    });
+
+    AddCallable("Datetime64", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto value = FromString<i64>(node.Head(), NUdf::EDataSlot::Datetime64);
+        return ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::Datetime64>(
+            NUdf::TStringRef((const char*)&value, sizeof(value)));
+    });
+
+    AddCallable("Timestamp64", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto value = FromString<i64>(node.Head(), NUdf::EDataSlot::Timestamp64);
+        return ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::Timestamp64>(
+            NUdf::TStringRef((const char*)&value, sizeof(value)));
+    });
+
+    AddCallable("Interval64", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto value = FromString<i64>(node.Head(), NUdf::EDataSlot::Interval64);
+        return ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::Interval64>(
+            NUdf::TStringRef((const char*)&value, sizeof(value)));
+    });    
+
     AddCallable("FoldMap", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto list = MkqlBuildExpr(node.Head(), ctx);
         const auto state = MkqlBuildExpr(*node.Child(1), ctx);

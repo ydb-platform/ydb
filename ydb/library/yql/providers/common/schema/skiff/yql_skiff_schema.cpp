@@ -51,6 +51,10 @@ struct TSkiffTypeLoader {
         case NUdf::EDataSlot::Int32:
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Date32:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
+        case NUdf::EDataSlot::Interval64:
             return NYT::TNode()("wire_type", "int64");
         case NUdf::EDataSlot::Uint8:
         case NUdf::EDataSlot::Uint16:

@@ -2267,6 +2267,15 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorCo
         break;
     }
 
+    if (Pipeline.HasPredictedPlan()) {
+        ui64 nextStep = Pipeline.NextPredictedPlanStep();
+        if (nextStep <= mediatorStep) {
+            SchedulePlanPredictedTxs();
+        } else {
+            WaitPredictedPlanStep(nextStep);
+        }
+    }
+
     if (IsMvccEnabled()) {
         PromoteFollowerReadEdge();
     }
@@ -3171,6 +3180,24 @@ bool TDataShard::WaitPlanStep(ui64 step) {
     }
 
     return false;
+}
+
+void TDataShard::WaitPredictedPlanStep(ui64 step) {
+    if (!MediatorTimeCastEntry) {
+        return;
+    }
+
+    if (step <= MediatorTimeCastEntry->Get(TabletID())) {
+        // This step is ready, schedule a transaction plan
+        SchedulePlanPredictedTxs();
+        return;
+    }
+
+    if (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin()) {
+        MediatorTimeCastWaitingSteps.insert(step);
+        Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
+    }
 }
 
 bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const {

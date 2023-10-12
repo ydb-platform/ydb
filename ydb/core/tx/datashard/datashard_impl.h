@@ -166,9 +166,11 @@ class TDataShard
     class TTxInitSchema;
     class TTxInitSchemaDefaults;
     class TTxPlanStep;
+    class TTxPlanPredictedTxs;
     class TTxProgressResendRS;
     class TTxProgressTransaction;
     class TTxCleanupTransaction;
+    class TTxCleanupVolatileTransaction;
     class TTxProposeDataTransaction;
     class TTxProposeSchemeTransaction;
     class TTxCancelTransactionProposal;
@@ -351,6 +353,7 @@ class TDataShard
             EvChangeExchangeExecuteHandshakes,
             EvConfirmReadonlyLease,
             EvReadonlyLeaseConfirmation,
+            EvPlanPredictedTxs,
             EvEnd
         };
 
@@ -544,6 +547,8 @@ class TDataShard
         };
 
         struct TEvReadonlyLeaseConfirmation: public TEventLocal<TEvReadonlyLeaseConfirmation, EvReadonlyLeaseConfirmation> {};
+
+        struct TEvPlanPredictedTxs : public TEventLocal<TEvPlanPredictedTxs, EvPlanPredictedTxs> {};
     };
 
     struct Schema : NIceDb::Schema {
@@ -1320,6 +1325,8 @@ class TDataShard
 
     void Handle(TEvPrivate::TEvConfirmReadonlyLease::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPrivate::TEvPlanPredictedTxs::TPtr& ev, const TActorContext& ctx);
+
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
     void DoPeriodicTasks(const TActorContext &ctx);
@@ -1937,6 +1944,7 @@ public:
 
     // Executes TTxCleanupTransaction
     void ExecuteCleanupTx(const TActorContext& ctx);
+    void ExecuteCleanupVolatileTx(ui64 txId, const TActorContext& ctx);
 
     void StopFindSubDomainPathId();
     void StartFindSubDomainPathId(bool delayFirstRequest = true);
@@ -1946,6 +1954,9 @@ public:
 
     bool WaitPlanStep(ui64 step);
     bool CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const;
+
+    void WaitPredictedPlanStep(ui64 step);
+    void SchedulePlanPredictedTxs();
 
     bool CheckChangesQueueOverflow() const;
     void CheckChangesQueueNoOverflow();
@@ -2769,6 +2780,8 @@ private:
 
     bool UpdateFollowerReadEdgePending = false;
 
+    bool ScheduledPlanPredictedTxs = false;
+
 public:
     auto& GetLockChangeRecords() {
         return LockChangeRecords;
@@ -2940,6 +2953,7 @@ protected:
             HFunc(TEvDataShard::TEvGetOpenTxs, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFunc(TEvPrivate::TEvConfirmReadonlyLease, Handle);
+            HFunc(TEvPrivate::TEvPlanPredictedTxs, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD,

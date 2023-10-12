@@ -92,4 +92,47 @@ void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
     }
 }
 
+class TDataShard::TTxPlanPredictedTxs : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxPlanPredictedTxs(TDataShard* self)
+        : TTransactionBase(self)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_PLAN_PREDICTED_TXS; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        Self->ScheduledPlanPredictedTxs = false;
+
+        ui64 step = Self->MediatorTimeCastEntry->Get(Self->TabletID());
+        bool planned = Self->Pipeline.PlanPredictedTxs(step, txc, ctx);
+
+        if (Self->Pipeline.HasPredictedPlan()) {
+            ui64 nextStep = Self->Pipeline.NextPredictedPlanStep();
+            Y_ABORT_UNLESS(step < nextStep);
+            Self->WaitPredictedPlanStep(nextStep);
+        }
+
+        if (planned) {
+            Self->PlanQueue.Progress(ctx);
+        }
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        // nothing
+    }
+};
+
+void TDataShard::Handle(TEvPrivate::TEvPlanPredictedTxs::TPtr&, const TActorContext& ctx) {
+    Y_ABORT_UNLESS(ScheduledPlanPredictedTxs);
+    Execute(new TTxPlanPredictedTxs(this), ctx);
+}
+
+void TDataShard::SchedulePlanPredictedTxs() {
+    if (!ScheduledPlanPredictedTxs) {
+        ScheduledPlanPredictedTxs = true;
+        Send(SelfId(), new TEvPrivate::TEvPlanPredictedTxs());
+    }
+}
+
 }}

@@ -462,4 +462,6 @@ enum ETxTypes {
     TXTYPE_FIND_WRITE_CONFLICTS = 77                      [(TxTypeOpts) = {Name: "TTxFindWriteConflicts"}];
     TXTYPE_UPDATE_FOLLOWER_READ_EDGE = 78                 [(TxTypeOpts) = {Name: "TxUpdateFollowerReadEdge"}];
     TXTYPE_CDC_STREAM_EMIT_HEARTBEATS = 79                [(TxTypeOpts) = {Name: "TTxCdcStreamEmitHeartbeats"}];
+    TXTYPE_CLEANUP_VOLATILE = 80                          [(TxTypeOpts) = {Name: "TxCleanupVolatile"}];
+    TXTYPE_PLAN_PREDICTED_TXS = 81                        [(TxTypeOpts) = {Name: "TxPlanPredictedTxs"}];
 }

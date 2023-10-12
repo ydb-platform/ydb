@@ -9,14 +9,14 @@ const TSet<TStepOrder> TTransQueue::EMPTY_PLAN;
 
 void TTransQueue::AddTxInFly(TOperation::TPtr op) {
     const ui64 txId = op->GetTxId();
-    const ui64 maxStep = op->GetMaxStep();
     Y_VERIFY_S(!TxsInFly.contains(txId), "Adding duplicate txId " << txId);
     TxsInFly[txId] = op;
     if (Y_LIKELY(!op->GetStep())) {
         ++PlanWaitingTxCount;
-    }
-    if (maxStep != Max<ui64>()) {
-        DeadlineQueue.emplace(std::make_pair(maxStep, txId));
+        const ui64 maxStep = op->GetMaxStep();
+        if (maxStep != Max<ui64>()) {
+            DeadlineQueue.emplace(std::make_pair(maxStep, txId));
+        }
     }
     Self->SetCounter(COUNTER_TX_IN_FLY, TxsInFly.size());
 }
@@ -28,6 +28,10 @@ void TTransQueue::RemoveTxInFly(ui64 txId, std::vector<std::unique_ptr<IEventHan
             Self->GetCleanupReplies(it->second, *cleanupReplies);
         }
         if (!it->second->GetStep()) {
+            const ui64 maxStep = it->second->GetMaxStep();
+            if (maxStep != Max<ui64>()) {
+                DeadlineQueue.erase(std::make_pair(maxStep, txId));
+            }
             --PlanWaitingTxCount;
         }
         TxsInFly.erase(it);
@@ -492,6 +496,21 @@ ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedSt
 
     Self->IncCounter(COUNTER_TX_PROGRESS_OUTDATED, outdatedTxs.size());
     return ECleanupStatus::Success;
+}
+
+bool TTransQueue::CleanupVolatile(ui64 txId, std::vector<std::unique_ptr<IEventHandle>>& replies) {
+    auto it = TxsInFly.find(txId);
+    if (it != TxsInFly.end() && it->second->HasVolatilePrepareFlag() && !it->second->GetStep()) {
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Cleaning up volatile tx " << txId << " ahead of time");
+
+        RemoveTxInFly(txId, &replies);
+
+        Self->IncCounter(COUNTER_TX_PROGRESS_OUTDATED, 1);
+        return true;
+    }
+
+    return false;
 }
 
 void TTransQueue::PlanTx(TOperation::TPtr op,

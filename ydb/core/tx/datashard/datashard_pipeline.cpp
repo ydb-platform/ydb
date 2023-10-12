@@ -664,15 +664,20 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
         active = false;
     }
     if (op) {
+        if (!op->GetStep() && !op->GetPredictedStep() && !active) {
+            op->SetPredictedStep(step);
+            AddPredictedPlan(step, txId, ctx);
+        }
         // If input read sets are not loaded yet then
         // it will be added at load.
         if (op->HasLoadedInRSFlag()) {
             op->AddInReadSet(rs.Record);
+        } else {
+            op->AddDelayedInReadSet(rs.Record);
         }
         if (ack) {
             op->AddDelayedAck(THolder(ack.Release()));
         }
-        op->AddDelayedInReadSet(rs.Record);
 
         if (active) {
             AddCandidateOp(op);
@@ -783,9 +788,11 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
 
     // Add read sets not stored to DB.
     for (auto &rs : op->DelayedInReadSets()) {
-        if (! loadedReadSets.contains(TReadSetKey(rs)))
-            op->AddInReadSet(rs);
+        if (!loadedReadSets.contains(TReadSetKey(rs))) {
+            op->AddInReadSet(std::move(rs));
+        }
     }
+    op->DelayedInReadSets().clear();
 
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Remain " << op->GetRemainReadSets() << " read sets for " << *op
@@ -856,52 +863,123 @@ bool TPipeline::PlanTxs(ui64 step,
     if (step <= LastPlannedTx.Step)
         return false;
 
-    ui64 lastTxId = txIds.empty()? 0: txIds.back();
+    auto it = PredictedPlan.begin();
+    while (it != PredictedPlan.end() && it->Step < step) {
+        PlanTxImpl(it->Step, it->TxId, txc, ctx);
+        PredictedPlan.erase(it++);
+    }
+
+    ui64 lastTxId = 0;
+    for (ui64 txId : txIds) {
+        while (it != PredictedPlan.end() && it->Step == step && it->TxId < txId) {
+            PlanTxImpl(step, it->TxId, txc, ctx);
+            PredictedPlan.erase(it++);
+        }
+        if (it != PredictedPlan.end() && it->Step == step && it->TxId == txId) {
+            PredictedPlan.erase(it++);
+        }
+        PlanTxImpl(step, txId, txc, ctx);
+        lastTxId = txId;
+    }
+
+    while (it != PredictedPlan.end() && it->Step == step) {
+        PlanTxImpl(step, it->TxId, txc, ctx);
+        lastTxId = it->TxId;
+        PredictedPlan.erase(it++);
+    }
 
     NIceDb::TNiceDb db(txc.DB);
     SaveLastPlannedTx(db, TStepOrder(step, lastTxId));
-    for (ui64 txId : txIds) {
-        if (SchemaTx && SchemaTx->TxId == txId && SchemaTx->MinStep > step)  {
-            TString explain = TStringBuilder() << "Scheme transaction has come too early"
-                                               << ", only after particular step this shema tx is allowed"
-                                               << ", txId: " << txId
-                                               << ", expected min step: " << SchemaTx->MinStep
-                                               << ", actual step: " << step;
-            Y_VERIFY_DEBUG_S(SchemaTx->MinStep <= step, explain);
-            LOG_ALERT_S(ctx, NKikimrServices::TX_DATASHARD, explain);
-        }
-
-        auto op = Self->TransQueue.FindTxInFly(txId);
-        if (!op) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "Ignoring PlanStep " << step << " for unknown txId "
-                        << txId << " at tablet " <<  Self->TabletID());
-            continue;
-        }
-
-        if (op->GetStep() && op->GetStep() != step) {
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "Ignoring PlanStep " << step << " for txId " << txId
-                        << " which already has PlanStep " << op->GetStep()
-                        << " at tablet " << Self->TabletID());
-            continue;
-        }
-
-        Self->TransQueue.PlanTx(op, step, db);
-        // Execute WaitForPlan unit here to correctly compute operation
-        // profile. Otherwise profile might count time spent in plan
-        // queue as 'wait for plan' time.
-        if (op->GetCurrentUnit() == EExecutionUnitKind::WaitForPlan) {
-            auto status = RunExecutionUnit(op, txc, ctx);
-            Y_ABORT_UNLESS(status == EExecutionStatus::Executed);
-        }
-    }
 
     AddCandidateUnit(EExecutionUnitKind::PlanQueue);
     MaybeActivateWaitingSchemeOps(ctx);
     ActivateWaitingTxOps(ctx);
 
     return true;
+}
+
+bool TPipeline::PlanPredictedTxs(ui64 step, TTransactionContext &txc, const TActorContext &ctx) {
+    if (step <= LastPlannedTx.Step) {
+        return false;
+    }
+
+    ui64 lastStep = 0;
+    ui64 lastTxId = 0;
+    size_t planned = 0;
+
+    auto it = PredictedPlan.begin();
+    while (it != PredictedPlan.end() && it->Step <= step) {
+        PlanTxImpl(it->Step, it->TxId, txc, ctx);
+        lastStep = it->Step;
+        lastTxId = it->TxId;
+        PredictedPlan.erase(it++);
+        ++planned;
+    }
+
+    if (planned == 0) {
+        return false;
+    }
+
+    NIceDb::TNiceDb db(txc.DB);
+    SaveLastPlannedTx(db, TStepOrder(lastStep, lastTxId));
+
+    AddCandidateUnit(EExecutionUnitKind::PlanQueue);
+    MaybeActivateWaitingSchemeOps(ctx);
+    ActivateWaitingTxOps(ctx);
+    return true;
+}
+
+void TPipeline::PlanTxImpl(ui64 step, ui64 txId, TTransactionContext &txc, const TActorContext &ctx)
+{
+    if (SchemaTx && SchemaTx->TxId == txId && SchemaTx->MinStep > step) {
+        TString explain = TStringBuilder() << "Scheme transaction has come too early"
+                                            << ", only after particular step this shema tx is allowed"
+                                            << ", txId: " << txId
+                                            << ", expected min step: " << SchemaTx->MinStep
+                                            << ", actual step: " << step;
+        Y_VERIFY_DEBUG_S(SchemaTx->MinStep <= step, explain);
+        LOG_ALERT_S(ctx, NKikimrServices::TX_DATASHARD, explain);
+    }
+
+    auto op = Self->TransQueue.FindTxInFly(txId);
+    if (!op) {
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "Ignoring PlanStep " << step << " for unknown txId "
+                    << txId << " at tablet " <<  Self->TabletID());
+        return;
+    }
+
+    if (op->GetStep() && op->GetStep() != step) {
+        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "Ignoring PlanStep " << step << " for txId " << txId
+                    << " which already has PlanStep " << op->GetStep()
+                    << " at tablet " << Self->TabletID());
+        return;
+    }
+
+    NIceDb::TNiceDb db(txc.DB);
+    Self->TransQueue.PlanTx(op, step, db);
+
+    // Execute WaitForPlan unit here to correctly compute operation
+    // profile. Otherwise profile might count time spent in plan
+    // queue as 'wait for plan' time.
+    if (op->GetCurrentUnit() == EExecutionUnitKind::WaitForPlan) {
+        auto status = RunExecutionUnit(op, txc, ctx);
+        Y_ABORT_UNLESS(status == EExecutionStatus::Executed);
+    }
+}
+
+void TPipeline::AddPredictedPlan(ui64 step, ui64 txId, const TActorContext &ctx)
+{
+    if (step <= LastPlannedTx.Step) {
+        // Trying to add a predicted step to transaction that is in the past
+        // We cannot plan for the past, so we need to clean it up as soon as possible
+        Self->ExecuteCleanupVolatileTx(txId, ctx);
+        return;
+    }
+
+    PredictedPlan.emplace(step, txId);
+    Self->WaitPredictedPlanStep(step);
 }
 
 void TPipeline::MarkOpAsUsingSnapshot(TOperation::TPtr op)
@@ -1126,6 +1204,29 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
     Self->CheckDelayedProposeQueue(ctx);
 
     return status;
+}
+
+bool TPipeline::CleanupVolatile(ui64 txId, const TActorContext& ctx,
+        std::vector<std::unique_ptr<IEventHandle>>& replies)
+{
+    if (Self->TransQueue.CleanupVolatile(txId, replies)) {
+        ForgetTx(txId);
+
+        Self->CheckDelayedProposeQueue(ctx);
+
+        // Outdated op removal might enable scheme op proposal.
+        MaybeActivateWaitingSchemeOps(ctx);
+
+        // Outdated op removal might enable another op execution.
+        // N.B.: actually this happens only for DROP which waits
+        // for TxInFly having only the DROP.
+        // N.B.: compatibility with older datashard versions.
+        AddCandidateUnit(EExecutionUnitKind::PlanQueue);
+        Self->PlanQueue.Progress(ctx);
+        return true;
+    }
+
+    return false;
 }
 
 ui64 TPipeline::PlannedTxInFly() const

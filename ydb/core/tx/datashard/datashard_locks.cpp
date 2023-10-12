@@ -17,6 +17,10 @@ namespace NDataShard {
 struct TLockLoggerContext {
     TLockLoggerContext() = default;
 
+    TInstant Timestamp() const {
+        return TInstant::Now();
+    }
+
     NLog::TSettings* LoggerSettings() const {
         return TlsActivationContext ? TlsActivationContext->LoggerSettings() : nullptr;
     }

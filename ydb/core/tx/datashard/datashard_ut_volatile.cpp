@@ -1853,7 +1853,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                         // It would be as if shard missed them for some reason
                         for (auto& pr : acks) {
                             auto* ack = new TEvTxProcessing::TEvPlanStepAck(tabletId, step, pr.second.begin(), pr.second.end());
-                            runtime.Send(new IEventHandle(ev->Sender, recipient, ack), 0, true);
+                            runtime.Send(new IEventHandle(pr.first, recipient, ack), 0, true);
                         }
                         auto* accept = new TEvTxProcessing::TEvPlanStepAccepted(tabletId, step);
                         runtime.Send(new IEventHandle(ev->Sender, recipient, accept), 0, true);
@@ -1896,8 +1896,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitTxNotification(server, sender, txId);
         auto dropLatency = runtime.GetCurrentTime() - dropStartTs;
         Cerr << "... drop finished in " << dropLatency << Endl;
-        // TODO: we need to use neighbor readset hints to cancel earlier
-        // UNIT_ASSERT(dropLatency < TDuration::Seconds(5));
+        UNIT_ASSERT(dropLatency < TDuration::Seconds(5));
     }
 
     Y_UNIT_TEST(DistributedWriteLostPlanThenSplit) {
@@ -1947,7 +1946,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                         // It would be as if shard missed them for some reason
                         for (auto& pr : acks) {
                             auto* ack = new TEvTxProcessing::TEvPlanStepAck(tabletId, step, pr.second.begin(), pr.second.end());
-                            runtime.Send(new IEventHandle(ev->Sender, recipient, ack), 0, true);
+                            runtime.Send(new IEventHandle(pr.first, recipient, ack), 0, true);
                         }
                         auto* accept = new TEvTxProcessing::TEvPlanStepAccepted(tabletId, step);
                         runtime.Send(new IEventHandle(ev->Sender, recipient, accept), 0, true);
@@ -1990,8 +1989,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitTxNotification(server, sender, txId);
         auto splitLatency = runtime.GetCurrentTime() - splitStartTs;
         Cerr << "... split finished in " << splitLatency << Endl;
-        // TODO: we need to use neighbor readset hints to cancel earlier
-        // UNIT_ASSERT(splitLatency < TDuration::Seconds(5));
+        UNIT_ASSERT(splitLatency < TDuration::Seconds(5));
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardVolatile)

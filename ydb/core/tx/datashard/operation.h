@@ -371,6 +371,8 @@ public:
 
     ui64 GetStep() const { return Step; }
     void SetStep(ui64 step) { Step = step; }
+    ui64 GetPredictedStep() const { return PredictedStep; }
+    void SetPredictedStep(ui64 step) { PredictedStep = step; }
 
     TStepOrder GetStepOrder() const { return TStepOrder(GetStep(), GetTxId()); }
 
@@ -415,6 +417,7 @@ protected:
     ui64 Flags;
     ui64 GlobalTxId;
     ui64 Step;
+    ui64 PredictedStep = 0;
     TInstant ReceivedAt;
 
     ui64 MinStep;

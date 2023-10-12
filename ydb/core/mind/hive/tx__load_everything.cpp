@@ -435,6 +435,7 @@ public:
                         tablet.BecomeStopped();
                     }
                 }
+                tablet.InitTabletMetrics();
 
                 TOwnerIdxType::TValueType owner = tabletRowset.GetValue<Schema::Tablet::Owner>();
                 Self->OwnerToTablet.emplace(owner, tabletId);
@@ -593,6 +594,7 @@ public:
                             follower.BecomeStopped();
                         }
                     }
+                    follower.InitTabletMetrics();
                 } else {
                     ++numMissingTablets;
                 }
@@ -631,10 +633,6 @@ public:
             }
             BLOG_D("THive::TTxLoadEverything loaded " << numMetrics << " metrics ("
                     << numMissingTablets << " for missing tablets)");
-        }
-
-        for (auto& [tabletId, tablet] : Self->Tablets) {
-            tablet.ActualizeCounter();
         }
 
         size_t numDeletedNodes = 0;

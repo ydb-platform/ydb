@@ -249,14 +249,14 @@ ui64 GetWriteThroughput(const NKikimrTabletBase::TMetrics& values) {
     return acc;
 }
 
-TString GetCounter(ui64 counter, const TString& zero) {
+TString GetCounter(i64 counter, const TString& zero) {
     if (counter == 0) {
         return zero;
     }
-    return Sprintf("%lu", counter);
+    return Sprintf("%ld", counter);
 }
 
-TString GetBytes(ui64 bytes, const TString& zero) {
+TString GetBytes(i64 bytes, const TString& zero) {
     if (bytes == 0) {
         return zero;
     }
@@ -277,14 +277,14 @@ TString GetBytes(ui64 bytes, const TString& zero) {
     return Sprintf(format, value);
 }
 
-TString GetBytesPerSecond(ui64 bytes, const TString& zero) {
+TString GetBytesPerSecond(i64 bytes, const TString& zero) {
     if (bytes == 0) {
         return zero;
     }
     return GetBytes(bytes) + "/s";
 }
 
-TString GetTimes(ui64 times, const TString& zero) {
+TString GetTimes(i64 times, const TString& zero) {
     if (times == 0) {
         return zero;
     }

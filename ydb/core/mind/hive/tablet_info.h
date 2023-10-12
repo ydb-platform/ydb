@@ -278,7 +278,7 @@ public:
     }
 
     void InitTabletMetrics() {
-        ResourceValues.SetCounter(1);
+        UpdateResourceUsage({});
     }
 
     const TTabletMetricsAggregates& GetResourceMetricsAggregates() const {

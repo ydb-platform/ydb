@@ -24,7 +24,7 @@ class TFutureTest
     : public ::testing::Test
 { };
 
-struct NonAssignable
+struct TNonAssignable
 {
     const int Value = 0;
 };
@@ -101,11 +101,11 @@ TEST_F(TFutureTest, NoncopyableApply5)
 
 TEST_F(TFutureTest, NonAssignable1)
 {
-    auto f = MakeFuture<NonAssignable>({
+    auto f = MakeFuture<TNonAssignable>({
         .Value = 1
     });
 
-    auto g = f.ApplyUnique(BIND([] (NonAssignable&& object) {
+    auto g = f.ApplyUnique(BIND([] (TNonAssignable&& object) {
         EXPECT_EQ(1, object.Value);
     }));
 
@@ -115,7 +115,7 @@ TEST_F(TFutureTest, NonAssignable1)
 
 TEST_F(TFutureTest, NonAssignable2)
 {
-    auto f = MakeFuture<NonAssignable>({
+    auto f = MakeFuture<TNonAssignable>({
         .Value = 1
     });
 
@@ -124,7 +124,7 @@ TEST_F(TFutureTest, NonAssignable2)
     futures.push_back(f);
     futures.push_back(f);
 
-    auto g = AllSet(futures).ApplyUnique(BIND([] (std::vector<TErrorOr<NonAssignable>>&& objects) {
+    auto g = AllSet(futures).ApplyUnique(BIND([] (std::vector<TErrorOr<TNonAssignable>>&& objects) {
         EXPECT_TRUE(objects.at(0).IsOK());
         EXPECT_TRUE(objects.at(1).IsOK());
         EXPECT_EQ(1, objects[0].Value().Value);
@@ -136,7 +136,7 @@ TEST_F(TFutureTest, NonAssignable2)
 
 TEST_F(TFutureTest, NonAssignable3)
 {
-    auto f = MakeFuture<NonAssignable>({
+    auto f = MakeFuture<TNonAssignable>({
         .Value = 1
     });
 
@@ -145,7 +145,7 @@ TEST_F(TFutureTest, NonAssignable3)
     futures.push_back(f);
     futures.push_back(f);
 
-    auto g = AllSucceeded(futures).ApplyUnique(BIND([] (std::vector<NonAssignable>&& objects) {
+    auto g = AllSucceeded(futures).ApplyUnique(BIND([] (std::vector<TNonAssignable>&& objects) {
         EXPECT_EQ(1, objects[0].Value);
     }));
 

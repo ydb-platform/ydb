@@ -1722,11 +1722,10 @@ TFuture<T>* TFutureHolder<T>::operator->() // noexcept
 namespace NDetail {
 
 template <class T>
-concept CLightweight = std::default_initializable<T> &&
-                       std::is_trivially_destructible_v<T> &&
-                       std::is_move_assignable_v<T>;
-
-////////////////////////////////////////////////////////////////////////////////
+concept CLightweight =
+    std::default_initializable<T> &&
+    std::is_trivially_destructible_v<T> &&
+    std::is_move_assignable_v<T>;
 
 template <class T>
 class TFutureCombinerResultHolderStorage
@@ -1736,11 +1735,11 @@ public:
         : Impl_(size)
     { }
 
-    template <class... Args>
-        requires std::constructible_from<T, Args...>
-    constexpr void ConstructAt(size_t index, Args&&... args)
+    template <class... TArgs>
+        requires std::constructible_from<T, TArgs...>
+    constexpr void ConstructAt(size_t index, TArgs&&... args)
     {
-        Impl_[index].emplace(std::forward<Args>(args)...);
+        Impl_[index].emplace(std::forward<TArgs>(args)...);
     }
 
     constexpr std::vector<T> VectorFromThis() &&
@@ -1762,8 +1761,6 @@ private:
     std::vector<std::optional<T>> Impl_;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
 template <NDetail::CLightweight T>
 class TFutureCombinerResultHolderStorage<T>
 {
@@ -1772,15 +1769,15 @@ public:
         : Impl_(size)
     { }
 
-    template <class... Args>
-        requires std::constructible_from<T, Args...>
-    constexpr void ConstructAt(size_t index, Args&&... args)
+    template <class... TArgs>
+        requires std::constructible_from<T, TArgs...>
+    constexpr void ConstructAt(size_t index, TArgs&&... args)
     {
-        Impl_[index] = T(std::forward<Args>(args)...);
+        Impl_[index] = T(std::forward<TArgs>(args)...);
     }
 
     //! This method is inherently unsafe because it assumes
-    //! That you have filled every slot
+    //! that you have filled every slot.
     constexpr std::vector<T> VectorFromThis() &&
     {
         return std::move(Impl_);

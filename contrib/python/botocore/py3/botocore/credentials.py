@@ -344,6 +344,7 @@ class RefreshableCredentials(Credentials):
     :param str access_key: The access key part of the credentials.
     :param str secret_key: The secret key part of the credentials.
     :param str token: The security token, valid only for session credentials.
+    :param datetime expiry_time: The expiration time of the credentials.
     :param function refresh_using: Callback function to refresh the credentials.
     :param str method: A string which identifies where the credentials
         were found.

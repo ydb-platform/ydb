@@ -1449,32 +1449,70 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(TestProcessingQueue)
     {
-        const ui32 RequestsCount = 8;
-        TCmsTestEnv env(RequestsCount);
+        const ui32 nodes = 8;
+        TCmsTestEnv env(nodes);
+        env.CreateDefaultCmsPipe();
+
+        auto makeRequest = [&env](ui32 nodeId) {
+            auto ev = MakePermissionRequest("user", false, true, false,
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(nodeId), 60000000, "storage")
+            );
+            ev->Record.SetDuration(60000000);
+            ev->Record.SetAvailabilityMode(MODE_FORCE_RESTART);
+            env.SendToCms(ev.Release());
+        };
+
+        TActorId cmsActorId;
+        {
+            makeRequest(0);
+            auto ev = env.GrabEdgeEvent<TEvCms::TEvPermissionResponse>(env.GetSender());
+            cmsActorId = ev->Sender;
+        }
+
+        THolder<IEventHandle> delayedClusterInfo;
+        env.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->Recipient == cmsActorId && ev->GetTypeRewrite() == TCms::TEvPrivate::EvClusterInfo) {
+                delayedClusterInfo.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
 
         // We need to send messages in fixed order
-        env.CreateDefaultCmsPipe();
-        env.ProcessQueueCount = 0;
-        for (ui32 i = 0; i < RequestsCount; ++i) {
-            auto req = MakePermissionRequest("user", true, true, false,
-                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(i), 60000000, "storage"));
-            req->Record.SetDuration(600000);
-            req->Record.SetAvailabilityMode(MODE_MAX_AVAILABILITY);
-
-            env.SendToCms(req.Release());
+        for (ui32 i = 0; i < nodes; ++i) {
+            makeRequest(i);
         }
-        env.DestroyDefaultCmsPipe();
+
+        if (!delayedClusterInfo) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayedClusterInfo](IEventHandle&) {
+                return bool(delayedClusterInfo);
+            });
+            env.DispatchEvents(opts);
+        }
+
+        ui32 processQueueCount = 0;
+        env.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->Recipient == cmsActorId && ev->GetTypeRewrite() == TCms::TEvPrivate::EvProcessQueue) {
+                ++processQueueCount;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        env.Send(delayedClusterInfo.Release(), 0, true);
 
         // Check responses order
-        for (ui32 i = 0; i < RequestsCount; ++i) {
-            TAutoPtr<IEventHandle> handle;
-            auto reply = env.GrabEdgeEventRethrow<TEvCms::TEvPermissionResponse>(handle);
-            const auto &rec = reply->Record;
+        for (ui32 i = 0; i < nodes; ++i) {
+            auto ev = env.GrabEdgeEvent<TEvCms::TEvPermissionResponse>(env.GetSender());
+            const auto &rec = ev->Get()->Record;
 
             UNIT_ASSERT_VALUES_EQUAL(rec.permissions_size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(rec.permissions()[0].GetAction().GetHost(), ToString(env.GetNodeId(i)));
         }
-        UNIT_ASSERT_VALUES_EQUAL(env.ProcessQueueCount, RequestsCount);
+
+        // first request processed without EvProcessQueue
+        UNIT_ASSERT_VALUES_EQUAL(processQueueCount, nodes - 1);
+        env.DestroyDefaultCmsPipe();
     }
 
     Y_UNIT_TEST(TestLogOperationsRollback)

@@ -245,7 +245,7 @@ void TQueryPlanPrinter::Print(const TString& plan) {
                 const auto& queries = planJson.GetMapSafe().at("queries").GetArraySafe();
                 for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
                     const auto& query = queries[queryId];
-                    Cout << "Query " << queryId << ":" << Endl;
+                    Output << "Query " << queryId << ":" << Endl;
                     PrintPretty(query);
                 }
             } else {
@@ -264,7 +264,7 @@ void TQueryPlanPrinter::Print(const TString& plan) {
 }
 
 void TQueryPlanPrinter::PrintJson(const TString& plan) {
-    Cout << NJson::PrettifyJson(plan, false) << Endl;
+    Output << NJson::PrettifyJson(plan, false) << Endl;
 }
 
 void TQueryPlanPrinter::PrintPretty(const NJson::TJsonValue& plan) {
@@ -313,29 +313,29 @@ void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<T
             }
 
             if (info.empty()) {
-                Cout << prefix << op.GetMapSafe().at("Name").GetString() << Endl;
+                Output << prefix << op.GetMapSafe().at("Name").GetString() << Endl;
             } else {
-                Cout << prefix << op.GetMapSafe().at("Name").GetString()
+                Output << prefix << op.GetMapSafe().at("Name").GetString()
                      << " (" << JoinStrings(info, ", ") << ")" << Endl;
             }
         }
     } else if (node.contains("PlanNodeType") && node.at("PlanNodeType").GetString() == "Connection") {
-        Cout << prefix << "<" << node.at("Node Type").GetString() << ">" << Endl;
+        Output << prefix << "<" << node.at("Node Type").GetString() << ">" << Endl;
     } else {
-        Cout << prefix << node.at("Node Type").GetString() << Endl;
+        Output << prefix << node.at("Node Type").GetString() << Endl;
     }
 
     static const THashSet<TString> requiredFields = {"CTE Name", "Tables"};
     for (const auto& [key, value] : node) {
         if (requiredFields.contains(key)) {
-            Cout << headerPrefix << key << ": " << JsonToString(value) << Endl;
+            Output << headerPrefix << key << ": " << JsonToString(value) << Endl;
         }
     }
 
     if (AnalyzeMode && node.contains("Stats")) {
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NColorizer::AutoColors(Output);
         for (const auto& [key, value] : node.at("Stats").GetMapSafe()) {
-            Cout << headerPrefix << colors.Yellow() << key << ": " << colors.Cyan()
+            Output << headerPrefix << colors.Yellow() << key << ": " << colors.Cyan()
                  << JsonToString(value) << colors.Default() << Endl;
         }
     }

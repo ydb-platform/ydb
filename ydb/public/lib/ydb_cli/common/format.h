@@ -84,9 +84,10 @@ private:
 
 class TQueryPlanPrinter {
 public:
-    TQueryPlanPrinter(EOutputFormat format, bool analyzeMode = false)
+    TQueryPlanPrinter(EOutputFormat format, bool analyzeMode = false, IOutputStream& output = Cout)
         : Format(format)
-        , AnalyzeMode(analyzeMode) {}
+        , AnalyzeMode(analyzeMode)
+        , Output(output) {}
 
     void Print(const TString& plan);
 
@@ -98,6 +99,7 @@ private:
 
     EOutputFormat Format;
     bool AnalyzeMode;
+    IOutputStream& Output;
 };
 
 }

@@ -65,9 +65,9 @@ public:
         lwmOptions.FunctionRegistry = functionRegistry;
         lwmOptions.TaskRunnerInvokerFactory = new NDqs::TTaskRunnerInvokerFactory();
         lwmOptions.TaskRunnerActorFactory = NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory(
-            [=](const NDq::TDqTaskSettings& task, const NDq::TLogFunc& )
+            [factory=lwmOptions.Factory](const NDq::TDqTaskSettings& task, const NDq::TLogFunc& )
                 {
-                    return lwmOptions.Factory->Get(task);
+                    return factory->Get(task);
                 });
         lwmOptions.Counters = NDqs::TWorkerManagerCounters(MetricsRegistry->GetSensors()->GetSubgroup("component", "lwm"));
         lwmOptions.DropTaskCountersOnFinish = false;

@@ -445,7 +445,7 @@ struct TGenericExec {
                     auto ptr = (char*)ret;
                     ui32 len;
                     if (state.TypeLen == -1) {
-                        len = VARHDRSZ + VARSIZE((const text*)ptr);
+                        len = GetFullVarSize((const text*)ptr);
                     } else if (state.TypeLen == -2) {
                         len = 1 + strlen(ptr);
                     } else {

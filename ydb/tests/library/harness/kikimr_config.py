@@ -94,6 +94,16 @@ def _load_yaml_config(filename):
     return yaml.safe_load(_read_file(filename))
 
 
+def use_in_memory_pdisks_var(pdisk_store_path, use_in_memory_pdisks):
+    if os.getenv('YDB_USE_IN_MEMORY_PDISKS') is not None:
+        return os.getenv('YDB_USE_IN_MEMORY_PDISKS') == "true"
+
+    if pdisk_store_path:
+        return False
+
+    return use_in_memory_pdisks
+
+
 class KikimrConfigGenerator(object):
     def __init__(
             self,
@@ -123,7 +133,7 @@ class KikimrConfigGenerator(object):
             n_to_select=None,
             use_log_files=True,
             grpc_ssl_enable=False,
-            use_in_memory_pdisks=False,
+            use_in_memory_pdisks=True,
             enable_pqcd=True,
             enable_metering=False,
             enable_audit_log=False,
@@ -194,7 +204,7 @@ class KikimrConfigGenerator(object):
         self.state_storage_rings = state_storage_rings
         if self.state_storage_rings is None:
             self.state_storage_rings = copy.deepcopy(self.__node_ids[: 9 if erasure == Erasure.MIRROR_3_DC else 8])
-        self.__use_in_memory_pdisks = use_in_memory_pdisks or os.getenv('YDB_USE_IN_MEMORY_PDISKS') == 'true'
+        self.__use_in_memory_pdisks = use_in_memory_pdisks_var(pdisk_store_path, use_in_memory_pdisks)
         self.__pdisks_directory = os.getenv('YDB_PDISKS_DIRECTORY')
         self.static_erasure = erasure
         self.domain_name = domain_name

@@ -25,6 +25,7 @@ class TestHive(object):
                 additional_log_configs={
                     'HIVE': LogLevels.TRACE, 'LOCAL': LogLevels.TRACE
                 },
+                use_in_memory_pdisks=False,
                 hive_config={
                     'max_node_usage_to_kick': 100,
                     'min_scatter_to_balance': 100,

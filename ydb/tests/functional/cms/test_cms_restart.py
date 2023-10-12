@@ -30,6 +30,7 @@ class AbstractLocalClusterTest(object):
         nodes_count *= 2
         configurator = KikimrConfigGenerator(cls.erasure,
                                              nodes=nodes_count,
+                                             use_in_memory_pdisks=False,
                                              additional_log_configs={'CMS': LogLevels.DEBUG},
                                              )
         cls.cluster = kikimr_cluster_factory(configurator=configurator)

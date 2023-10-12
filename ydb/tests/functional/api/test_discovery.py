@@ -121,7 +121,7 @@ class TestDiscoveryFaultInjectionSlotStop(AbstractTestDiscoveryFaultInjection):
 class TestMirror3DCDiscovery(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(erasure=types.Erasure.MIRROR_3_DC))
+        cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(erasure=types.Erasure.MIRROR_3_DC, use_in_memory_pdisks=False))
         cls.cluster.start()
 
     @classmethod

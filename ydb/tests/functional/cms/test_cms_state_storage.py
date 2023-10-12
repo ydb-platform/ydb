@@ -24,6 +24,7 @@ class AbstractLocalClusterTest(object):
     def setup_class(cls):
         configurator = KikimrConfigGenerator(Erasure.NONE,
                                              nodes=27,
+                                             use_in_memory_pdisks=False,
                                              additional_log_configs={'CMS': LogLevels.DEBUG},
                                              state_storage_rings=[[n, n + 1, n + 2] for n in range(1, 27, 3)]
                                              )

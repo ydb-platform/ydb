@@ -65,6 +65,10 @@ struct TDropTabletParams {
     ui64 TxId = 0;
 };
 
+struct TCancelTransactionProposalParams {
+    ui64 TxId = 0;
+};
+
 using NKikimr::NPQ::NHelpers::CreatePQTabletMock;
 using TPQTabletMock = NKikimr::NPQ::NHelpers::TPQTabletMock;
 
@@ -131,6 +135,7 @@ protected:
     using TPlanStepParams = NHelpers::TPlanStepParams;
     using TReadSetParams = NHelpers::TReadSetParams;
     using TDropTabletParams = NHelpers::TDropTabletParams;
+    using TCancelTransactionProposalParams = NHelpers::TCancelTransactionProposalParams;
 
     void SetUp(NUnitTest::TTestContext&) override;
     void TearDown(NUnitTest::TTestContext&) override;
@@ -158,11 +163,20 @@ protected:
     void StartPQWriteStateObserver();
     void WaitForPQWriteState();
 
+    void SendCancelTransactionProposal(const TCancelTransactionProposalParams& params);
+
+    void StartPQWriteTxsObserver();
+    void WaitForPQWriteTxs();
+
     void WaitForCalcPredicateResult();
 
     void TestWaitingForTEvReadSet(size_t senders, size_t receivers);
 
+    void StartPQWriteObserver(bool& flag, unsigned cookie);
+    void WaitForPQWriteComplete(bool& flag);
+
     bool FoundPQWriteState = false;
+    bool FoundPQWriteTxs = false;
 
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
@@ -465,16 +479,15 @@ void TPQTabletFixture::WaitForCalcPredicateResult()
     UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
 }
 
-void TPQTabletFixture::StartPQWriteStateObserver()
+void TPQTabletFixture::StartPQWriteObserver(bool& flag, unsigned cookie)
 {
-    FoundPQWriteState = false;
-
-    auto observer = [this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+    flag = false;
+    auto observer = [&flag, cookie](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
         if (auto* kvResponse = event->CastAsLocal<TEvKeyValue::TEvResponse>()) {
             if ((event->Sender == event->Recipient) &&
                 kvResponse->Record.HasCookie() &&
-                (kvResponse->Record.GetCookie() == 4)) { // TPersQueue::WRITE_STATE_COOKIE
-                FoundPQWriteState = true;
+                (kvResponse->Record.GetCookie() == cookie)) {
+                flag = true;
             }
         }
 
@@ -483,13 +496,41 @@ void TPQTabletFixture::StartPQWriteStateObserver()
     Ctx->Runtime->SetObserverFunc(observer);
 }
 
-void TPQTabletFixture::WaitForPQWriteState()
+void TPQTabletFixture::WaitForPQWriteComplete(bool& flag)
 {
     TDispatchOptions options;
-    options.CustomFinalCondition = [this]() {
-        return FoundPQWriteState;
+    options.CustomFinalCondition = [&flag]() {
+        return flag;
     };
     UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+}
+
+void TPQTabletFixture::StartPQWriteStateObserver()
+{
+    StartPQWriteObserver(FoundPQWriteState, 4); // TPersQueue::WRITE_STATE_COOKIE
+}
+
+void TPQTabletFixture::WaitForPQWriteState()
+{
+    WaitForPQWriteComplete(FoundPQWriteState);
+}
+
+void TPQTabletFixture::SendCancelTransactionProposal(const TCancelTransactionProposalParams& params)
+{
+    auto event = MakeHolder<TEvPersQueue::TEvCancelTransactionProposal>(params.TxId);
+
+    SendToPipe(Ctx->Edge,
+               event.Release());
+}
+
+void TPQTabletFixture::StartPQWriteTxsObserver()
+{
+    StartPQWriteObserver(FoundPQWriteTxs, 5); // TPersQueue::WRITE_TX_COOKIE
+}
+
+void TPQTabletFixture::WaitForPQWriteTxs()
+{
+    WaitForPQWriteComplete(FoundPQWriteTxs);
 }
 
 NHelpers::TPQTabletMock* TPQTabletFixture::CreatePQTabletMock(ui64 tabletId)
@@ -959,6 +1000,27 @@ Y_UNIT_TEST_F(TEvReadSet_comes_before_TEvPlanStep, TPQTabletFixture)
 
     WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
     WaitPlanStepAccepted({.Step=100});
+}
+
+Y_UNIT_TEST_F(Cancel_Tx, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    StartPQWriteTxsObserver();
+
+    SendCancelTransactionProposal({.TxId=txId});
+
+    WaitForPQWriteTxs();
 }
 
 }

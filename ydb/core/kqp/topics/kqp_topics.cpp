@@ -111,8 +111,6 @@ void TTopicPartitionOperations::BuildTopicTxs(THashMap<ui64, NKikimrPQ::TDataTra
         o->SetPartitionId(*Partition_);
         o->SetPath(*Topic_);
     }
-
-    tx.MutableCoordinators()->Add(Coordinators_.begin(), Coordinators_.end());
 }
 
 void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
@@ -132,20 +130,6 @@ void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
     }
 
     HasWriteOperations_ |= rhs.HasWriteOperations_;
-
-    // If the list of coordinators is empty, then we use a ready-made one.
-    // Otherwise, we leave the common elements
-    if (Coordinators_.empty()) {
-        Coordinators_ = rhs.Coordinators_;
-    } else {
-        for (auto iter = Coordinators_.begin(); iter != Coordinators_.end(); ) {
-            if (rhs.Coordinators_.contains(*iter)) {
-                ++iter;
-            } else {
-                iter = Coordinators_.erase(iter);
-            }
-        }
-    }
 }
 
 ui64 TTopicPartitionOperations::GetTabletId() const
@@ -170,11 +154,6 @@ bool TTopicPartitionOperations::HasReadOperations() const
 bool TTopicPartitionOperations::HasWriteOperations() const
 {
     return HasWriteOperations_;
-}
-
-void TTopicPartitionOperations::SetCoordinators(const TVector<ui64>& coordinators)
-{
-    Coordinators_ = std::unordered_set<ui64>(coordinators.begin(), coordinators.end());
 }
 
 //
@@ -344,7 +323,6 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
                           << ", " << partition.GetTabletId());
 
                     p->second.SetTabletId(partition.GetTabletId());
-                    p->second.SetCoordinators(result.DomainInfo->Coordinators.List());
                 }
             }
         } else {

@@ -868,7 +868,6 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
     ConfigInited = true;
 
-    InitProcessingParams(ctx);
     InitializeMeteringSink(ctx);
 
     Y_ABORT_UNLESS(!NewConfigShouldBeApplied);
@@ -2344,6 +2343,10 @@ void TPersQueue::HandleDie(const TActorContext& ctx)
         Y_ABORT_UNLESS(res);
     }
     ResponseProxy.clear();
+
+    StopWatchingTenantPathId(ctx);
+    MediatorTimeCastUnregisterTablet(ctx);
+
     NKeyValue::TKeyValueFlat::HandleDie(ctx);
 }
 
@@ -2379,10 +2382,55 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
 
 void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
-
     IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
 
     ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(ctx.SelfID.NodeId()));
+    InitProcessingParams(ctx);
+}
+
+void TPersQueue::StartWatchingTenantPathId(const TActorContext& ctx)
+{
+    ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(Info()->TenantPathId));
+}
+
+void TPersQueue::StopWatchingTenantPathId(const TActorContext& ctx)
+{
+    ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove());
+}
+
+void TPersQueue::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx)
+{
+    const auto& result = ev->Get()->Result;
+    ProcessingParams = result->GetPathDescription().GetDomainDescription().GetProcessingParams();
+
+    InitMediatorTimeCast(ctx);
+}
+
+void TPersQueue::MediatorTimeCastRegisterTablet(const TActorContext& ctx)
+{
+    Y_ABORT_UNLESS(ProcessingParams);
+    ctx.Send(MakeMediatorTimecastProxyID(),
+             new TEvMediatorTimecast::TEvRegisterTablet(TabletID(), *ProcessingParams));
+}
+
+void TPersQueue::MediatorTimeCastUnregisterTablet(const TActorContext& ctx)
+{
+    ctx.Send(MakeMediatorTimecastProxyID(),
+             new TEvMediatorTimecast::TEvUnregisterTablet(TabletID()));
+}
+
+void TPersQueue::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx)
+{
+    const auto* message = ev->Get();
+    Y_ABORT_UNLESS(message->TabletId == TabletID());
+
+    MediatorTimeCastEntry = message->Entry;
+    Y_ABORT_UNLESS(MediatorTimeCastEntry);
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() <<
+                "Registered with mediator time cast");
+
+    TryWriteTxs(ctx);
 }
 
 void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorContext& ctx)
@@ -2422,7 +2470,41 @@ void TPersQueue::HandleWakeup(const TActorContext& ctx) {
         AggregateAndSendLabeledCountersFor(g, ctx);
     }
     MeteringSink.MayFlush(ctx.Now());
+    DeleteExpiredTransactions(ctx);
     ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
+}
+
+void TPersQueue::DeleteExpiredTransactions(const TActorContext& ctx)
+{
+    if (!MediatorTimeCastEntry) {
+        return;
+    }
+
+    ui64 step = MediatorTimeCastEntry->Get(TabletID());
+
+    for (auto& [txId, tx] : Txs) {
+        if ((tx.MaxStep < step) && (tx.State <= NKikimrPQ::TTransaction::PREPARED)) {
+            DeleteTx(tx);
+        }
+    }
+
+    TryWriteTxs(ctx);
+}
+
+void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx)
+{
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvPersQueue::TEvCancelTransactionProposal");
+
+    NKikimrPQ::TEvCancelTransactionProposal& event = ev->Get()->Record;
+    Y_ABORT_UNLESS(event.HasTxId());
+
+    if (auto tx = GetTransaction(ctx, event.GetTxId()); tx) {
+        Y_ABORT_UNLESS(tx->State <= NKikimrPQ::TTransaction::PREPARED);
+
+        DeleteTx(*tx);
+
+        TryWriteTxs(ctx);
+    }
 }
 
 void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
@@ -2639,11 +2721,34 @@ void TPersQueue::Handle(TEvPQ::TEvTxCommitDone::TPtr& ev, const TActorContext& c
     TryWriteTxs(ctx);
 }
 
+bool TPersQueue::CanProcessProposeTransactionQueue() const
+{
+    return
+        !EvProposeTransactionQueue.empty()
+        && ProcessingParams
+        && (!UseMediatorTimeCast || MediatorTimeCastEntry);
+}
+
+bool TPersQueue::CanProcessPlanStepQueue() const
+{
+    return !EvPlanStepQueue.empty();
+}
+
+bool TPersQueue::CanProcessWriteTxs() const
+{
+    return !WriteTxs.empty();
+}
+
+bool TPersQueue::CanProcessDeleteTxs() const
+{
+    return !DeleteTxs.empty();
+}
+
 void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(!WriteTxsInProgress);
 
-    if (EvProposeTransactionQueue.empty() && EvPlanStepQueue.empty() && WriteTxs.empty() && DeleteTxs.empty()) {
+    if (!CanProcessProposeTransactionQueue() && !CanProcessPlanStepQueue() && !CanProcessWriteTxs() && !CanProcessDeleteTxs()) {
         return;
     }
 
@@ -2704,7 +2809,9 @@ void TPersQueue::TryWriteTxs(const TActorContext& ctx)
 
 void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
 {
-    while (!EvProposeTransactionQueue.empty()) {
+    Y_ABORT_UNLESS(!WriteTxsInProgress);
+
+    while (CanProcessProposeTransactionQueue()) {
         const auto front = std::move(EvProposeTransactionQueue.front());
         EvProposeTransactionQueue.pop_front();
 
@@ -2736,7 +2843,7 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(!WriteTxsInProgress);
 
-    while (!EvPlanStepQueue.empty()) {
+    while (CanProcessPlanStepQueue()) {
         const auto front = std::move(EvPlanStepQueue.front());
         EvPlanStepQueue.pop_front();
 
@@ -2764,6 +2871,8 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
 
                 if (auto p = Txs.find(txId); p != Txs.end()) {
                     TDistributedTransaction& tx = p->second;
+
+                    Y_ABORT_UNLESS(tx.MaxStep >= step);
 
                     if (tx.Step == Max<ui64>()) {
                         Y_ABORT_UNLESS(TxQueue.empty() || (TxQueue.back() < std::make_pair(step, txId)));
@@ -2879,11 +2988,7 @@ void TPersQueue::ScheduleProposeTransactionResult(const TDistributedTransaction&
     event->Record.SetMinStep(tx.MinStep);
     event->Record.SetMaxStep(tx.MaxStep);
 
-    // If you have sent a list of preferred coordinators, then we will use them.
-    // Otherwise, we take the list of coordinators from the domain description
-    if (tx.Coordinators) {
-        event->Record.MutableDomainCoordinators()->Add(tx.Coordinators.begin(), tx.Coordinators.end());
-    } else if (ProcessingParams) {
+    if (ProcessingParams) {
         event->Record.MutableDomainCoordinators()->CopyFrom(ProcessingParams->GetCoordinators());
     }
 
@@ -3269,14 +3374,37 @@ void TPersQueue::CheckChangedTxStates(const TActorContext& ctx)
     }
     ChangedTxs.clear();
 }
- 
+
 void TPersQueue::InitProcessingParams(const TActorContext& ctx)
 {
+    if (Info()->TenantPathId) {
+        UseMediatorTimeCast = true;
+        StartWatchingTenantPathId(ctx);
+        return;
+    }
+
     auto appdata = AppData(ctx);
     const ui32 domainId = appdata->DomainsInfo->GetDomainUidByTabletId(TabletID());
     Y_ABORT_UNLESS(domainId != appdata->DomainsInfo->BadDomainId);
+
     const auto& domain = appdata->DomainsInfo->GetDomain(domainId);
     ProcessingParams = ExtractProcessingParams(domain);
+
+    InitMediatorTimeCast(ctx);
+}
+
+void TPersQueue::InitMediatorTimeCast(const TActorContext& ctx)
+{
+    Y_ABORT_UNLESS(ProcessingParams);
+
+    if (ProcessingParams->MediatorsSize()) {
+        UseMediatorTimeCast = true;
+        MediatorTimeCastRegisterTablet(ctx);
+    } else {
+        UseMediatorTimeCast = false;
+
+        TryWriteTxs(ctx);
+    }
 }
 
 bool TPersQueue::AllTransactionsHaveBeenProcessed() const
@@ -3439,10 +3567,8 @@ void TPersQueue::OnInitComplete(const TActorContext& ctx)
 
 ui64 TPersQueue::GetAllowedStep() const
 {
-    //
-    // TODO(abcdef): использовать MediatorTimeCastEntry
-    //
-    return Max(LastStep + 1, TAppData::TimeProvider->Now().MilliSeconds());
+    return Max(LastStep + 1,
+               MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : TAppData::TimeProvider->Now().MilliSeconds());
 }
 
 NTabletPipe::TClientConfig TPersQueue::GetPipeClientConfig()
@@ -3528,6 +3654,9 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvTxCommitDone, Handle);
         HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
         HFuncTraced(TEvPersQueue::TEvProposeTransactionAttach, Handle);
+        HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+        HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
+        HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         default:
             return false;
     }

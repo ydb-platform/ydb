@@ -257,6 +257,8 @@ struct TEvPersQueue {
     };
 
     struct TEvCancelTransactionProposal : public TEventPB<TEvCancelTransactionProposal, NKikimrPQ::TEvCancelTransactionProposal, EvCancelTransactionProposal> {
+        TEvCancelTransactionProposal() = default;
+
         explicit TEvCancelTransactionProposal(ui64 txId) {
             Record.SetTxId(txId);
         }

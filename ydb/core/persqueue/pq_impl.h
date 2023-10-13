@@ -9,6 +9,8 @@
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
@@ -347,10 +349,31 @@ private:
     THashMap<ui64, THashSet<ui64>> BindedTxs;
 
     void InitProcessingParams(const TActorContext& ctx);
+    void InitMediatorTimeCast(const TActorContext& ctx);
 
     TMaybe<NKikimrSubDomains::TProcessingParams> ProcessingParams;
 
     void Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr& ev, const TActorContext& ctx);
+
+    void StartWatchingTenantPathId(const TActorContext& ctx);
+    void StopWatchingTenantPathId(const TActorContext& ctx);
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
+
+    void MediatorTimeCastRegisterTablet(const TActorContext& ctx);
+    void MediatorTimeCastUnregisterTablet(const TActorContext& ctx);
+    void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
+
+    TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
+
+    void DeleteExpiredTransactions(const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
+
+    bool CanProcessProposeTransactionQueue() const;
+    bool CanProcessPlanStepQueue() const;
+    bool CanProcessWriteTxs() const;
+    bool CanProcessDeleteTxs() const;
+
+    bool UseMediatorTimeCast = true;
 };
 
 

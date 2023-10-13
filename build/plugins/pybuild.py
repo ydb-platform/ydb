@@ -373,6 +373,8 @@ def onpy_srcs(unit, *args):
                         mod_root_path = root_rel_path[: -(len(path) + 1)]
                         py_namespaces.setdefault(mod_root_path, set()).add(ns if ns else '.')
                     mod = ns + mod_name
+                    if in_proto_library:
+                        mod = mod.replace('-', '_')
 
             if main_mod:
                 py_main(unit, mod + ":main")

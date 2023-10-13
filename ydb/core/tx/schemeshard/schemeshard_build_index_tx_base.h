@@ -95,6 +95,13 @@ public:
         Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
     }
+
+    bool Reply(const NKikimrScheme::EStatus status, const TString& errorMessage)
+    {
+        Y_ABORT_UNLESS(Response);
+        Response->Record.SetSchemeStatus(status);
+        return Reply(TranslateStatusCode(status), errorMessage);
+    }
 };
 
 } // NSchemeShard

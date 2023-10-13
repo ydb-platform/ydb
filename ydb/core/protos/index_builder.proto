@@ -21,7 +21,8 @@ message TIndexBuildSettings {
     optional string source_path = 1;
     optional Ydb.Table.TableIndex index = 2;
     optional TColumnBuildSettings column_build_operation = 7;
-    optional bool pg_mode = 8;
+    optional bool pg_mode = 8 [ default = false];
+    optional bool if_not_exist = 9 [ default = false];
 
     optional uint32 max_batch_rows = 3 [ default = 500 ];
     optional uint64 max_batch_bytes = 4 [ default = 8388608 ];
@@ -49,6 +50,7 @@ message TEvCreateResponse {
     optional Ydb.StatusIds.StatusCode Status = 2;
     repeated Ydb.Issue.IssueMessage Issues = 3;
     optional TIndexBuild IndexBuild = 4;
+    optional sint32 SchemeStatus = 5 [default = -1]; //flat_tx_scheme.proto - enum EStatus, -1 is inexistent enum value
 }
 
 message TEvGetRequest {

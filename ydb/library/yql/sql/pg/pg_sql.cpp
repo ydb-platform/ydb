@@ -2221,11 +2221,11 @@ public:
             return nullptr;
         }
 
-        //std::vector<TAstNode*> flags;
-        //flags.emplace_back(QA("pg"));
-        //if (value->if_not_exists) {
-        //    flags.emplace_back(QA("ifNotExists"));
-        //}
+        std::vector<TAstNode*> flags;
+        flags.emplace_back(QA("pg"));
+        if (value->if_not_exists) {
+            flags.emplace_back(QA("ifNotExists"));
+        }
 
         std::vector<TAstNode*> desc;
         auto indexNameAtom = QA("indexName");
@@ -2237,7 +2237,7 @@ public:
         desc.emplace_back(QL(QA("indexType"), QA(value->unique ? "syncGlobalUnique" : "syncGlobal")));
         desc.emplace_back(QL(QA("indexColumns"), QVL(columns->data(), columns->size())));
         desc.emplace_back(QL(QA("dataColumns"), QVL(coverColumns->data(), coverColumns->size())));
-        //desc.emplace_back(QL(QA("flags"), QVL(flags.data(), flags.size())));
+        desc.emplace_back(QL(QA("flags"), QVL(flags.data(), flags.size())));
 
         Statements.push_back(L(
             A("let"),

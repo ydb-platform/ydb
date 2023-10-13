@@ -142,12 +142,7 @@ class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTab
     }
 
 public:
-    enum EFlags : ui8 {
-        Default = 0,
-        PgMode = 1
-    };
-
-    TAlterTableRPC(IRequestOpCtx* msg, ui8 flags = Default)
+    TAlterTableRPC(IRequestOpCtx* msg, ui64 flags = NKqpProto::TKqpSchemeOperation::FLAG_UNSPECIFIED)
         : TBase(msg)
         , Flags(flags)
     {}
@@ -407,8 +402,11 @@ private:
         const auto& req = *GetProtoRequest();
 
         NKikimrIndexBuilder::TIndexBuildSettings settings;
-        if (Flags & PgMode) {
+        if (Flags & NKqpProto::TKqpSchemeOperation::FLAG_PG_MODE) {
             settings.set_pg_mode(true);
+        }
+        if (Flags & NKqpProto::TKqpSchemeOperation::FLAG_IF_NOT_EXISTS) {
+            settings.set_if_not_exist(true);
         }
         settings.set_source_path(req.path());
         auto tableIndex = settings.mutable_index();
@@ -435,7 +433,9 @@ private:
             << ", Id# " << response.GetIndexBuild().GetId());
 
         if (status == Ydb::StatusIds::SUCCESS) {
-            if (GetOperationMode() == Ydb::Operations::OperationParams::SYNC) {
+            if (response.HasSchemeStatus() && response.GetSchemeStatus() == NKikimrScheme::EStatus::StatusAlreadyExists) {
+                Reply(status, issuesProto, ctx);
+            } else if (GetOperationMode() == Ydb::Operations::OperationParams::SYNC) {
                 CreateSSOpSubscriber(SchemeshardId, TxId, DatabaseName, TOpType::BuildIndex, std::move(Request_), ctx);
                 Die(ctx);
             } else {
@@ -723,7 +723,7 @@ private:
     TTableProfiles Profiles;
     EOp OpType;
 
-    const ui8 Flags;
+    const ui64 Flags;
 };
 
 void DoAlterTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
@@ -735,8 +735,8 @@ IActor* TEvAlterTableRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCt
     return new TAlterTableRPC(msg);
 }
 
-IActor* CreatePgAlterTableRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
-    return new TAlterTableRPC(msg, TAlterTableRPC::PgMode);
+IActor* CreateExtAlterTableRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg, ui64 flags) {
+    return new TAlterTableRPC(msg, flags);
 }
 
 

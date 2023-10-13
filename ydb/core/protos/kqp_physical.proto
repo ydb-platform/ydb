@@ -372,9 +372,15 @@ message TKqpPhyResult {
 }
 
 message TKqpSchemeOperation {
+    enum EFlags {
+        FLAG_UNSPECIFIED = 0;
+        FLAG_PG_MODE = 1; // set if pg compatible mode
+        FLAG_IF_NOT_EXISTS = 2; // set if IF_NOT_EXISTS modificator present
+    };
     message TAlterTable {
         Ydb.Table.AlterTableRequest Req = 1;
         string Type = 2;
+        uint64 Flags = 3;
     }
     oneof Operation {
         NKikimrSchemeOp.TModifyScheme CreateTable = 1;

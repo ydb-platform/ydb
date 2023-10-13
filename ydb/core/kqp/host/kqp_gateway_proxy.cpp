@@ -544,7 +544,7 @@ public:
     }
 
     TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>& requestType) override
+        const TMaybe<TString>& requestType, ui64 flags) override
     {
         CHECK_PREPARED_DDL(AlterTable);
 
@@ -558,13 +558,15 @@ public:
                 alter->SetType(*requestType);
             }
 
+            alter->SetFlags(flags);
+
             auto promise = NewPromise<TGenericResult>();
             TGenericResult result;
             result.SetSuccess();
             promise.SetValue(result);
             return promise.GetFuture();
         } else {
-            return Gateway->AlterTable(cluster, std::move(req), requestType);
+            return Gateway->AlterTable(cluster, std::move(req), requestType, flags);
         }
     }
 

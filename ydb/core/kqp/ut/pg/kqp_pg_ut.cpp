@@ -1537,17 +1537,25 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
 
-/*
         {
             const auto query = Q_(R"(
                 --!syntax_pg
                 CREATE INDEX IF NOT EXISTS "test_fk_idx" ON test (fk);
                 )");
 
-            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            auto result = session.ExecuteQuery(query, txCtrl).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-*/
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE INDEX IF NOT EXISTS "test" ON test (fk);
+                )");
+
+            auto result = session.ExecuteQuery(query, txCtrl).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST(CreateUniqPgColumn) {

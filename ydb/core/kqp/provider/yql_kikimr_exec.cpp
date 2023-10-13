@@ -1059,6 +1059,7 @@ public:
                 return SyncError();
             }
 
+            ui64 alterTableFlags = 0; //additional flags to pass options without public api modification
             Ydb::Table::AlterTableRequest alterTableRequest;
             alterTableRequest.set_path(table.Metadata->Name);
 
@@ -1333,6 +1334,20 @@ public:
                                 TString columnName(column.Value());
                                 add_index->add_data_columns(columnName);
                             }
+                        } else if (name == "flags") {
+                            auto flagList = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (auto flag : flagList) {
+                                TString flagName(flag.Value());
+                                if (flagName == "pg") {
+                                    alterTableFlags |= NKqpProto::TKqpSchemeOperation::FLAG_PG_MODE;
+                                } else if (flagName == "ifNotExists") {
+                                    alterTableFlags |= NKqpProto::TKqpSchemeOperation::FLAG_IF_NOT_EXISTS;
+                                } else {
+                                    ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                        TStringBuilder() << "Unknown add index flag: " << flagName));
+                                    return SyncError();
+                                }
+                            }
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
                                 TStringBuilder() << "Unknown add index setting: " << name));
@@ -1524,7 +1539,7 @@ public:
                 if (!SessionCtx->Query().DocumentApiRestricted) {
                     requestType = NKikimr::NDocApi::RequestType;
                 }
-                future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType);
+                future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType, alterTableFlags);
             }
 
             return WrapFuture(future,

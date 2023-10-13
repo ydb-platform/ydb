@@ -45,7 +45,7 @@ public:
                 .NotUnderDomainUpgrade();
 
             if (!checks) {
-                return Reply(TranslateStatusCode(checks.GetStatus()), checks.GetError());
+                return Reply(checks.GetStatus(), checks.GetError());
             }
         }
 
@@ -76,7 +76,7 @@ public:
                 .IsTheSameDomain(domainPath);
 
             if (!checks) {
-                return Reply(TranslateStatusCode(checks.GetStatus()), checks.GetError());
+                return Reply(checks.GetStatus(), checks.GetError());
             }
         }
 
@@ -96,7 +96,7 @@ public:
                     checks
                         .IsResolved()
                         .NotUnderDeleting()
-                        .FailOnExist(TPathElement::EPathType::EPathTypeTableIndex, false);
+                        .FailOnExist(TPathElement::EPathType::EPathTypeTableIndex, settings.if_not_exist());
                 } else {
                     checks
                         .NotEmpty()
@@ -114,7 +114,7 @@ public:
                     .ShardsLimit(1); // impl-table
 
                 if (!checks) {
-                    return Reply(TranslateStatusCode(checks.GetStatus()), checks.GetError());
+                    return Reply(checks.GetStatus(), checks.GetError());
                 }
             }
 

@@ -104,7 +104,7 @@ public:
                 }
 
                 auto cb = GetAlterTableRespHandler();
-                DoAlterTableSameMailbox(std::move(*alter.MutableReq()), std::move(cb),
+                DoAlterTableSameMailbox(std::move(alter), std::move(cb),
                     Database, token, type);
 
                 Become(&TKqpSchemeExecuter::ExecuteState);

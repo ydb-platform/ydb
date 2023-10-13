@@ -798,8 +798,11 @@ public:
         }
     }
 
-    TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req, const TMaybe<TString>& requestType) override {
+    TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
+        const TMaybe<TString>& requestType, ui64 flags) override
+    {
         try {
+            YQL_ENSURE(!flags); //Supported only for prepared mode
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
             }

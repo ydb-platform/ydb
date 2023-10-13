@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.2.6)
+VERSION(0.2.7)
 
 LICENSE(MIT)
 
@@ -21,6 +21,7 @@ RESOURCE_FILES(
     PREFIX contrib/python/wcwidth/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    wcwidth/version.json
 )
 
 END()

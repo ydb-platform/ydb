@@ -112,7 +112,7 @@ private:
         }
     }
 
-    void ReplyWithFile(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx, const TString& name) {
+    void ReplyWithFile(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx, const TString& name, const bool cached = false) {
         TString filename = TString("cms/ui") + name;
         if (filename.EndsWith('/'))
             filename += "index.html";
@@ -138,6 +138,9 @@ private:
         response << "HTTP/1.1 200 Ok\r\n";
         response << "Content-Type: " << type << "\r\n";
         response << "Content-Length: " << blob.size() << "\r\n";
+        if (cached) {
+            response << "Cache-Control: public, max-age=31536000\r\n" << "\r\n";
+        }
         response << "\r\n";
         response.Write(blob.data(), blob.size());
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
@@ -202,7 +205,10 @@ private:
                                                           NMon::IEvHttpInfoRes::EContentType::Custom));
             return;
         }
-
+        if (msg->Request.GetPathInfo().StartsWith("/ext/monaco-editor/")) {
+            ReplyWithFile(ev, ctx, TString{msg->Request.GetPathInfo()}, true);
+            return;
+        }
         ReplyWithFile(ev, ctx, TString{msg->Request.GetPathInfo()});
     }
 

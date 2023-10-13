@@ -172,6 +172,64 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         }
     }
 
+    Y_UNIT_TEST(TopicPartitions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        for (const auto& keyType : TVector<TString>{"Uint64", "Uint32", "Utf8"}) {
+            const auto status = keyType != "Utf8"
+                ? NKikimrScheme::StatusAccepted
+                : NKikimrScheme::StatusInvalidParameter;
+
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "Table%s"
+                Columns { Name: "key" Type: "%s" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )", keyType.c_str(), keyType.c_str()));
+            env.TestWaitNotification(runtime, txId);
+
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table%s"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                }
+                TopicPartitions: 10
+            )", keyType.c_str()), {status});
+
+            if (status != NKikimrScheme::StatusAccepted) {
+                continue;
+            }
+
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePrivatePath(runtime, Sprintf("/MyRoot/Table%s/Stream/streamImpl", keyType.c_str())), {
+                NLs::PathExist,
+                NLs::CheckPartCount("streamImpl", 10, 2, 5, 10),
+            });
+        }
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+            TopicPartitions: 0
+        )", {NKikimrScheme::StatusInvalidParameter});
+    }
+
     Y_UNIT_TEST(Attributes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));

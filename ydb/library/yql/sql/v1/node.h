@@ -1023,6 +1023,7 @@ namespace NSQLTranslationV1 {
         TNodePtr VirtualTimestamps;
         TNodePtr ResolvedTimestamps;
         TNodePtr RetentionPeriod;
+        TNodePtr TopicPartitions;
         TNodePtr AwsRegion;
         std::optional<std::variant<TLocalSinkSettings>> SinkSettings;
     };

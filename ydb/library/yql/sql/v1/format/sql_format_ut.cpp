@@ -441,6 +441,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "ALTER TABLE user\n\tADD CHANGEFEED user WITH (virtual_timestamps = FALSE);\n\n"},
             {"alter table user add changefeed user with (resolved_timestamps = Interval(\"PT1S\"))",
              "ALTER TABLE user\n\tADD CHANGEFEED user WITH (resolved_timestamps = Interval(\"PT1S\"));\n\n"},
+            {"alter table user add changefeed user with (topic_min_active_partitions = 1)",
+             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_min_active_partitions = 1);\n\n"},
         };
 
         TSetup setup;

@@ -498,8 +498,21 @@ private:
         for (const auto& add : req->add_changefeeds()) {
             auto op = modifyScheme->MutableCreateCdcStream();
             op->SetTableName(name);
+
             if (add.has_retention_period()) {
                 op->SetRetentionPeriodSeconds(add.retention_period().seconds());
+            }
+
+            if (add.has_topic_partitioning_settings()) {
+                i64 minActivePartitions = add.topic_partitioning_settings().min_active_partitions();
+                if (minActivePartitions < 0) {
+                    NYql::TIssues issues;
+                    issues.AddIssue(NYql::TIssue("Topic partitions count must be positive"));
+                    return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
+                } else if (minActivePartitions == 0) {
+                    minActivePartitions = 1;
+                }
+                op->SetTopicPartitions(minActivePartitions);
             }
 
             StatusIds::StatusCode code;

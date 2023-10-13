@@ -1967,6 +1967,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                     VIRTUAL_TIMESTAMPS = FALSE,
                     RESOLVED_TIMESTAMPS = Interval("PT1S"),
                     RETENTION_PERIOD = Interval("P1D"),
+                    TOPIC_MIN_ACTIVE_PARTITIONS = 10,
                     AWS_REGION = 'aws:region'
                 )
             );
@@ -1986,6 +1987,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("false"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("resolved_timestamps"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("retention_period"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("topic_min_active_partitions"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("aws_region"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("aws:region"));
             }
@@ -3913,6 +3915,19 @@ select FormatType($f());
         auto res = SqlToYql(req);
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:99: Error: Literal of Interval type is expected for RETENTION_PERIOD\n");
+    }
+
+    Y_UNIT_TEST(InvalidChangefeedTopicPartitions) {
+        auto req = R"(
+            USE plato;
+            CREATE TABLE tableName (
+                Key Uint32, PRIMARY KEY (Key),
+                CHANGEFEED feedName WITH (MODE = "KEYS_ONLY", FORMAT = "json", TOPIC_MIN_ACTIVE_PARTITIONS = "foo")
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:110: Error: Literal of integer type is expected for TOPIC_MIN_ACTIVE_PARTITIONS\n");
     }
 
     Y_UNIT_TEST(InvalidChangefeedAwsRegion) {

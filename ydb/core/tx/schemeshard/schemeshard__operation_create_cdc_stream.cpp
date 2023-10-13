@@ -723,6 +723,37 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
             << "Initial scan is not supported yet")};
     }
 
+    Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+    auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+
+    TVector<TString> boundaries;
+    if (op.HasTopicPartitions()) {
+        if (op.GetTopicPartitions() <= 0) {
+            return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Topic partitions count must be greater than 0")};
+        }
+
+        const auto& keyColumns = table->KeyColumnIds;
+        const auto& columns = table->Columns;
+
+        Y_ABORT_UNLESS(!keyColumns.empty());
+        Y_ABORT_UNLESS(columns.contains(keyColumns.at(0)));
+        const auto firstKeyColumnType = columns.at(keyColumns.at(0)).PType;
+
+        if (!TSchemeShard::FillUniformPartitioning(boundaries, keyColumns.size(), firstKeyColumnType, op.GetTopicPartitions(), AppData()->TypeRegistry, errStr)) {
+            return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, errStr)};
+        }
+    } else {
+        const auto& partitions = table->GetPartitions();
+        boundaries.reserve(partitions.size() - 1);
+
+        for (ui32 i = 0; i < partitions.size(); ++i) {
+            const auto& partition = partitions.at(i);
+            if (i != partitions.size() - 1) {
+                boundaries.push_back(partition.EndOfRange);
+            }
+        }
+    }
+
     TVector<ISubOperation::TPtr> result;
 
     if (initialScan) {
@@ -759,16 +790,12 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     }
 
     {
-        Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-        auto table = context.SS->Tables.at(tablePath.Base()->PathId);
-        const auto& partitions = table->GetPartitions();
-
         auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
         outTx.SetFailOnExist(!acceptExisted);
 
         auto& desc = *outTx.MutableCreatePersQueueGroup();
         desc.SetName("streamImpl");
-        desc.SetTotalGroupCount(partitions.size());
+        desc.SetTotalGroupCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : table->GetPartitions().size());
         desc.SetPartitionPerTablet(2);
 
         auto& pqConfig = *desc.MutablePQTabletConfig();
@@ -795,23 +822,19 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
             }
         }
 
-        for (ui32 i = 0; i < partitions.size(); ++i) {
-            const auto& cur = partitions.at(i);
+        for (const auto& serialized : boundaries) {
+            TSerializedCellVec endKey(serialized);
+            Y_ABORT_UNLESS(endKey.GetCells().size() <= table->KeyColumnIds.size());
 
-            if (i != partitions.size() - 1) {
-                TSerializedCellVec endKey(cur.EndOfRange);
-                Y_ABORT_UNLESS(endKey.GetCells().size() <= table->KeyColumnIds.size());
-
-                TString errStr;
-                auto& boundary = *desc.AddPartitionBoundaries();
-                for (ui32 ki = 0; ki < endKey.GetCells().size(); ++ki) {
-                    const auto& cell = endKey.GetCells()[ki];
-                    const auto tag = table->KeyColumnIds.at(ki);
-                    Y_ABORT_UNLESS(table->Columns.contains(tag));
-                    const auto typeId = table->Columns.at(tag).PType;
-                    const bool ok = NMiniKQL::CellToValue(typeId, cell, *boundary.AddTuple(), errStr);
-                    Y_ABORT_UNLESS(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
-                }
+            TString errStr;
+            auto& boundary = *desc.AddPartitionBoundaries();
+            for (ui32 ki = 0; ki < endKey.GetCells().size(); ++ki) {
+                const auto& cell = endKey.GetCells()[ki];
+                const auto tag = table->KeyColumnIds.at(ki);
+                Y_ABORT_UNLESS(table->Columns.contains(tag));
+                const auto typeId = table->Columns.at(tag).PType;
+                const bool ok = NMiniKQL::CellToValue(typeId, cell, *boundary.AddTuple(), errStr);
+                Y_ABORT_UNLESS(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
             }
         }
 

@@ -139,7 +139,7 @@ message TSelect {
 
     message TWhere {
         // Strongly typed tree of predicates
-        TFilter filter_typed = 1;
+        TPredicate filter_typed = 1;
 
         // An internal representation of YQL request part describing filters.
         // Advanced connectors may use it for the full-fledged implementations of the push down.
@@ -302,94 +302,86 @@ message TContinuation {
 
 // ---------- Filters ----------
 
-// Filter - a special type to describe a constraint (or a set of constraints) applied to SQL expression:
-// SELECT $columns FROM $table WHERE $filter.
-// It can be also used for the purpose of split pruning.
-message TFilter {
-    // Represents an elementary comparison between a column and some value
-    message TComparison {
-
-        // A subset of comparators corresponding to the binary logical operators
-        message TBinary {
-
-            // An operation code.
-            enum EOperation {
-                RESERVED = 0;
-                L = 1;  // renders to "col < value"
-                LE = 2; // renders to "col <= value"
-                EQ = 3; // renders to "col = value"
-                NE = 4; // renders to "col != value"
-                GE = 5; // renders to "col >= value"
-                G = 6;  // renders to "col > value"
-            }
-
-            oneof payload {
-                // A scalar value
-                Ydb.TypedValue typed_value = 1;
-                // A name of another column to compare with
-                string column = 2;
-            }
-        }
-
-        // Renders to "$column IS NULL"
-        message TIsNull {
-            string column = 1;
-        }
-
-        // Renders to "$column IS NOT NULL"
-        message TIsNotNull {
-            string column = 1;
-        }
-
-        // Renders to "$column IN $(values)"
-        message TIn {
-            repeated Ydb.TypedValue values = 1;
-        }
-
-        // Renders to "$column BETWEEN $least AND $greatest"
-        message TBetween {
-            Ydb.TypedValue least = 1;
-            Ydb.TypedValue greatest = 2;
-        }
-
-        oneof payload {
-            TBinary binary = 1;
-            TIsNull is_null = 2;
-            TIsNotNull is_not_null = 3;
-            TIn in = 4;
-            TBetween between = 5;
-        }
+// Expression with value
+// Can be a column, a constant or a result of, for example,
+// some arithmetical operation
+message TExpression {
+    oneof payload {
+        // A scalar value
+        Ydb.TypedValue typed_value = 1;
+        // A name of another column to compare with
+        string column = 2;
     }
+}
 
-    // transforms into "AND"
-    message TConjunction {
-        repeated TFilter operands = 1;
-    }
-
-    // transforms into "OR"
-    message TDisjunction {
-        repeated TFilter operands = 1;
-    }
-
-    // transforms into "NOT"
+// Predicate
+message TPredicate {
+    // NOT
     message TNegation {
-        TFilter operand = 1;
+        TPredicate operand = 1;
     }
 
-    // SubExpr transformation rules:
-    // 1. top-level:      $children
-    // 2. other levels:  ($children)
-    message TSubExpr {
-        // Next level expression
-        TFilter operand = 1;
+    // AND
+    message TConjunction {
+        repeated TPredicate operands = 1;
+    }
+
+    // OR
+    message TDisjunction {
+        repeated TPredicate operands = 1;
+    }
+
+    // "$column BETWEEN $least AND $greatest"
+    message TBetween {
+        TExpression value = 1;
+        TExpression least = 2;
+        TExpression greatest = 3;
+    }
+
+    // "$column IN $(set)"
+    message TIn {
+        TExpression value = 1;
+        repeated TExpression set = 2;
+    }
+
+    // "$column IS NULL"
+    message TIsNull {
+        TExpression value = 1;
+    }
+
+    // "$column IS NOT NULL"
+    // TODO: maybe it is better to express with TNegation here
+    message TIsNotNull {
+        TExpression value = 1;
+    }
+
+    // A subset of comparators corresponding to the binary logical operators
+    message TComparison {
+        // An operation code.
+        enum EOperation {
+            RESERVED = 0;
+            L = 1;  // "$column < value"
+            LE = 2; // "$column <= value"
+            EQ = 3; // "$column = value"
+            NE = 4; // "$column != value"
+            GE = 5; // "$column >= value"
+            G = 6;  // "$column > value"
+        }
+
+        EOperation operation = 1;
+        TExpression left_value = 2;
+        TExpression right_value = 3;
     }
 
     oneof payload {
-        TComparison comparison = 1;
+        TNegation negation = 1;
         TConjunction conjunction = 2;
         TDisjunction disjunction = 3;
-        TNegation negation = 4;
-        TSubExpr sub_expr = 5;
+        TBetween between = 4;
+        TIn in = 5;
+        TIsNull is_null = 6;
+        TIsNotNull is_not_null = 7;
+        TComparison comparison = 8;
     }
 }
 

@@ -552,19 +552,6 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
         keysTuple = L(keysTuple, BuildQuotedAtom(Pos, key));
     }
 
-    std::map<std::pair<bool, TString>, std::vector<IAggregation*>> genericAggrs;
-    for (const auto& aggr: Aggregations) {
-        if (const auto key = aggr->GetGenericKey()) {
-            genericAggrs[{aggr->IsDistinct(), *key}].emplace_back(aggr.Get());
-        }
-    }
-
-    for (const auto& aggr : genericAggrs) {
-        for (size_t i = 1U; i < aggr.second.size(); ++i) {
-            aggr.second.front()->Join(aggr.second[i]);
-        }
-    }
-
     const auto listType = Y("TypeOf", label);
     auto aggrArgs = Y();
     const bool overState = GroupBySuffix == "CombineState" || GroupBySuffix == "MergeState" ||

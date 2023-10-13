@@ -4965,7 +4965,7 @@ namespace {
                         rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
                             child->Head().Child(index)->Content(),
                             (isOptional || (input->Child(1)->ChildrenSize() == 0 && !isHopping)) &&
-                                item->GetKind() != ETypeAnnotationKind::Optional ? ctx.Expr.MakeType<TOptionalExprType>(item) : item));
+                                !item->IsOptionalOrNull() ? ctx.Expr.MakeType<TOptionalExprType>(item) : item));
                     }
                 } else {
                     const TTypeAnnotationNode* defValType;

@@ -796,8 +796,6 @@ namespace NSQLTranslationV1 {
 
         void DoUpdateState() const override;
 
-        virtual const TString* GetGenericKey() const;
-
         virtual bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) = 0;
 
         virtual std::pair<TNodePtr, bool> AggregationTraits(const TNodePtr& type, bool overState, bool many, bool allowAggApply, TContext& ctx) const;
@@ -814,9 +812,6 @@ namespace NSQLTranslationV1 {
 
         EAggregateMode GetAggregationMode() const;
         void MarkKeyColumnAsGenerated();
-
-        virtual void Join(IAggregation* aggr);
-
     private:
         virtual TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const = 0;
 

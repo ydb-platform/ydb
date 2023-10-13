@@ -20,7 +20,7 @@ on:
           - leak
       runner_label:
         type: string
-        default: "linux"
+        default: "ya-make"
         description: "runner label"
       run_build:
         type: boolean
@@ -30,6 +30,30 @@ on:
         type: boolean
         default: true
         description: "run tests"
+      testmo_source:
+        type: string
+        default: "ya-x86-64"
+        description: "testmo source"
+  workflow_call:
+    inputs:
+      build_target:
+        type: string
+        default: "ydb/"
+      sanitizer:
+        type: string
+        default: "none"
+      run_build:
+        type: boolean
+        default: true
+      run_tests:
+        type: boolean
+        default: true
+      runner_label:
+        type: string
+        default: "ya-make"
+      testmo_source:
+        type: string
+        default: "ya-x86-64"
 
 jobs:
   main:
@@ -41,5 +65,5 @@ jobs:
       sanitizer: ${{ inputs.sanitizer }}
       run_build: ${{ inputs.run_build }}
       run_tests: ${{ inputs.run_tests }}
-      log_suffix: ya-${{ inputs.sanitizer != 'none' && format('{0}-{1}', inputs.runner_label, inputs.sanitizer) || inputs.runner_label }}
+      log_suffix: ${{ inputs.testmo_source }}
     secrets: inherit

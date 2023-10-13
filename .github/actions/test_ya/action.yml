@@ -36,6 +36,7 @@ runs:
         echo "SHELLOPTS=xtrace" >> $GITHUB_ENV
         export TMP_DIR=$(pwd)/tmp
         echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV
+        echo "LOG_DIR=$TMP_DIR/logs" >> $GITHUB_ENV
         echo "OUT_DIR=$TMP_DIR/out" >> $GITHUB_ENV
         echo "ARTIFACTS_DIR=$TMP_DIR/artifacts" >> $GITHUB_ENV
         echo "JUNIT_REPORT_XML=$TMP_DIR/junit.xml" >> $GITHUB_ENV
@@ -47,8 +48,7 @@ runs:
       shell: bash
       run: |
         rm -rf $TMP_DIR $JUNIT_REPORT_XML
-        mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR
-    
+        mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR $LOG_DIR
     
     - name: Install Node required for Testmo CLI
       uses: actions/setup-node@v3
@@ -116,7 +116,9 @@ runs:
         fi
 
         ./ya test -A --build relwithdebinfo -D'BUILD_LANGUAGES=CPP PY3' --test-threads "${{ inputs.test_threads }}" \
-          --do-not-output-stderrs -T \
+          --regular-tests --do-not-output-stderrs -T \
+          --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" \
+          --dump-graph --dump-graph-to-file "$LOG_DIR/ya_graph.json" \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" "${extra_params[@]}" || (
             RC=$?
             if [ $RC == 10 ]; then
@@ -168,6 +170,14 @@ runs:
       run: |
         echo "::group::s3-sync"
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$ARTIFACTS_DIR/" "$S3_BUCKET_PATH/"
+        echo "::endgroup::"
+
+    - name: sync logs results to s3
+      if: always()
+      shell: bash
+      run: |
+        echo "::group::s3-sync"
+        s3cmd sync --follow-symlinks --acl-private --no-progress --stats --no-check-md5 "$LOG_DIR/" "$S3_BUCKET_PATH/test_logs/"
         echo "::endgroup::"
 
 

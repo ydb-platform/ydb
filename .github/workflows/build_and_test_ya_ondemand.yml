@@ -30,6 +30,23 @@ on:
         type: boolean
         default: true
         description: "run tests"
+  workflow_call:
+    inputs:
+      image:
+        type: string
+        default: fd8earpjmhevh8h6ug5o
+      build_target:
+        type: string
+        default: "ydb/"
+      sanitizer:
+        type: string
+        default: "none"
+      run_build:
+        type: boolean
+        default: true
+      run_tests:
+        type: boolean
+        default: true
 
 jobs:
   provide-runner:
@@ -51,8 +68,8 @@ jobs:
           image-id: ${{ inputs.image }}
           disk-size: ${{ vars.DISK_SIZE && vars.DISK_SIZE || '1023GB' }}
           disk-type: network-ssd-nonreplicated
-          cores: 32
-          memory: 256GB
+          cores: 64
+          memory: 192GB
           core-fraction: 100
           zone-id: ru-central1-b
           subnet-id: ${{ secrets.YC_SUBNET }}

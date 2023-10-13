@@ -107,23 +107,44 @@ namespace NYql {
                 YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it, "cluster not found: " << clusterName);
 
                 const auto& clusterConfig = it->second;
+                const auto dataSourceKind = clusterConfig.GetKind();
 
                 auto dsi = request.mutable_data_source_instance();
                 dsi->mutable_endpoint()->CopyFrom(clusterConfig.GetEndpoint());
-                dsi->set_kind(clusterConfig.GetKind());
+                dsi->set_kind(dataSourceKind);
                 dsi->mutable_credentials()->CopyFrom(clusterConfig.GetCredentials());
                 dsi->set_use_tls(clusterConfig.GetUseSsl());
                 dsi->set_protocol(clusterConfig.GetProtocol());
 
-                const auto& table = item.second;
-                TStringBuf db, dbTable;
-                if (!TStringBuf(table).TrySplit('.', db, dbTable)) {
-                    db = "default";
-                    dbTable = table;
-                }
+                // for backward compability full path can be used (cluster_name.`db_name.table`)
+                // TODO: simplify during https://st.yandex-team.ru/YQ-2494
+                const auto& tablePath = item.second;
+                const auto& dbNameFromConfig = clusterConfig.GetDatabaseName();
+                TStringBuf dbNameTarget, tableName;
+                auto isFullPath = TStringBuf(tablePath).TrySplit('.', dbNameTarget, tableName);
 
-                dsi->set_database(TString(db));
-                request.set_table(TString(dbTable));
+                if (!dbNameFromConfig.empty()) {
+                    dbNameTarget = dbNameFromConfig;
+                    if (!isFullPath) {
+                        tableName = tablePath;
+                    }
+                } else if (!isFullPath) {
+                    tableName = tablePath;
+                    switch (dataSourceKind) {
+                        case NYql::NConnector::NApi::CLICKHOUSE:
+                            dbNameTarget = "default";
+                            break;
+                        case NYql::NConnector::NApi::POSTGRESQL:
+                            dbNameTarget = "postgres";
+                            break;
+                        default:
+                            ythrow yexception() << "Unexpected data source kind: '"
+                                                << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
+                    }
+                } // else take database name from table path
+
+                dsi->set_database(TString(dbNameTarget));
+                request.set_table(TString(tableName));
 
                 // NOTE: errors will be checked further in DoApplyAsyncChanges
                 Results_.emplace(item, TGenericTableDescription(request.data_source_instance(), State_->GenericClient->DescribeTable(request)));

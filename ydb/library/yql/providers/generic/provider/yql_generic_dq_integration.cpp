@@ -101,16 +101,16 @@ namespace NYql {
                     Generic::TSource srcDesc;
                     srcDesc.set_token(token);
 
+                    // for backward compability full path can be used (cluster_name.`db_name.table`)
+                    // TODO: simplify during https://st.yandex-team.ru/YQ-2494
                     TStringBuf db, dbTable;
                     if (!TStringBuf(table).TrySplit('.', db, dbTable)) {
-                        db = "default";
                         dbTable = table;
                     }
 
                     YQL_CLOG(INFO, ProviderGeneric)
                         << "Filling source settings"
                         << ": cluster: " << clusterName
-                        << ", database: " << db
                         << ", table: " << table
                         << ", endpoint: " << endpoint.ShortDebugString();
 

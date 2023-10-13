@@ -101,6 +101,7 @@ void FillGenericClusterConfig(
     clusterCfg.SetKind(dataSourceKind);
     clusterCfg.SetName(connectionName);
     clusterCfg.SetDatabaseId(connection.database_id());
+    clusterCfg.SetDatabaseName(connection.database_name());
     clusterCfg.mutable_credentials()->mutable_basic()->set_username(connection.login());
     clusterCfg.mutable_credentials()->mutable_basic()->set_password(connection.password());
     FillClusterAuth(clusterCfg, connection.auth(), authToken, accountIdSignatures);

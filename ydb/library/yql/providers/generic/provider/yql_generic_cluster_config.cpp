@@ -110,13 +110,13 @@ namespace NYql {
                            NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("database_name");
         if (it == properties.cend()) {
-            // TODO: make this property required during https://st.yandex-team.ru/YQ-2184
+            // TODO: make this property required during https://st.yandex-team.ru/YQ-2494
             // ythrow yexception() <<  "missing 'DATABASE_NAME' value";
             return;
         }
 
         if (!it->second) {
-            // TODO: make this property required during https://st.yandex-team.ru/YQ-2184
+            // TODO: make this property required during https://st.yandex-team.ru/YQ-2494
             // ythrow yexception() << "invalid 'DATABASE_NAME' value: '" << it->second << "'";
             return;
         }
@@ -353,7 +353,7 @@ namespace NYql {
         }
 
         // TODO: validate Credentials.basic.password after ClickHouse recipe fix
-        // TODO: validate DatabaseName field when it is supported on frontend
+        // TODO: validate DatabaseName field during https://st.yandex-team.ru/YQ-2494
 
         if (clusterConfig.GetProtocol() == EProtocol::PROTOCOL_UNSPECIFIED) {
             return ValidationError(clusterConfig, context, "empty field 'Protocol'");

@@ -77,6 +77,11 @@ void InitLdapSettingsWithUnavaliableHost(NKikimrProto::TLdapAuthentication* ldap
     ldapSettings->SetHost("unavaliablehost");
 }
 
+void InitLdapSettingsWithCustomGroupAttribute(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
+    ldapSettings->SetRequestedGroupAttribute("groupDN");
+}
+
 class TLdapKikimrServer {
 public:
     TLdapKikimrServer(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)> initLdapSettings)
@@ -146,7 +151,7 @@ TAutoPtr<IEventHandle> LdapAuthenticate(TLdapKikimrServer& server, const TString
 class TCorrectLdapResponse {
 public:
     static std::vector<TString> Groups;
-    static LdapMock::TLdapMockResponses GetResponses(const TString& login);
+    static LdapMock::TLdapMockResponses GetResponses(const TString& login, const TString& groupAttribute = "memberOf");
 };
 
 std::vector<TString> TCorrectLdapResponse::Groups {
@@ -155,7 +160,7 @@ std::vector<TString> TCorrectLdapResponse::Groups {
     "cn=developers,ou=groups,dc=search,dc=yandex,dc=net"
 };
 
-LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& login) {
+LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& login, const TString& groupAttribute) {
     LdapMock::TLdapMockResponses responses;
     responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
 
@@ -165,7 +170,7 @@ LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& l
             .Scope = 2,
             .DerefAliases = 0,
             .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
-            .Attributes = {"memberOf"}
+            .Attributes = {groupAttribute}
         }
     };
 
@@ -173,7 +178,7 @@ LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& l
         {
             .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net",
             .AttributeList = {
-                                {"memberOf", TCorrectLdapResponse::Groups}
+                                {groupAttribute, TCorrectLdapResponse::Groups}
                             }
         }
     };
@@ -507,7 +512,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Ticket is empty");
     }
 
-    Y_UNIT_TEST(LdapFetchGroupsGood) {
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
 
@@ -533,6 +538,83 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         for (const auto& expectedGroup : expectedGroups) {
             UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
         }
+
+        ldapServer.Stop();
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithCustomGroupAttributeGood) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+
+        TLdapKikimrServer server(InitLdapSettingsWithCustomGroupAttribute);
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), TCorrectLdapResponse::GetResponses(login, "groupDN"));
+
+        TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT(ticketParserResult->Token != nullptr);
+        const TString ldapDomain = "@ldap";
+        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
+        const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
+        THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
+
+        THashSet<TString> expectedGroups;
+        std::transform(TCorrectLdapResponse::Groups.begin(), TCorrectLdapResponse::Groups.end(), std::inserter(expectedGroups, expectedGroups.end()), [&ldapDomain](TString& group) {
+            return group.append(ldapDomain);
+        });
+        expectedGroups.insert("all-users@well-known");
+
+        UNIT_ASSERT_VALUES_EQUAL(fetchedGroups.size(), expectedGroups.size());
+        for (const auto& expectedGroup : expectedGroups) {
+            UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
+        }
+
+        ldapServer.Stop();
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDontExistGroupAttribute) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+
+        TLdapKikimrServer server(InitLdapSettingsWithCustomGroupAttribute);
+
+        LdapMock::TLdapMockResponses responses;
+        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
+
+        LdapMock::TSearchRequestInfo fetchGroupsSearchRequestInfo {
+            {
+                .BaseDn = "dc=search,dc=yandex,dc=net",
+                .Scope = 2,
+                .DerefAliases = 0,
+                .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
+                .Attributes = {"groupDN"}
+            }
+        };
+
+        std::vector<LdapMock::TSearchEntry> fetchGroupsSearchResponseEntries {
+            {
+                .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net",
+                .AttributeList = {} // Return empty group list, attribute 'groupDN' not found
+            }
+        };
+
+        LdapMock::TSearchResponseInfo fetchGroupsSearchResponseInfo {
+            .ResponseEntries = fetchGroupsSearchResponseEntries,
+            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+        };
+        responses.SearchResponses.push_back({fetchGroupsSearchRequestInfo, fetchGroupsSearchResponseInfo});
+
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), responses);
+
+        TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT(ticketParserResult->Token != nullptr);
+        const TString ldapDomain = "@ldap";
+        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
+        const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
+        UNIT_ASSERT_EQUAL(fetchedGroups.size(), 1);
+        UNIT_ASSERT_STRINGS_EQUAL(fetchedGroups.front(), "all-users@well-known");
 
         ldapServer.Stop();
     }

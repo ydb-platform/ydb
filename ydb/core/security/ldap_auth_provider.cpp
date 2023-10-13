@@ -69,7 +69,11 @@ public:
     TLdapAuthProvider(const NKikimrProto::TLdapAuthentication& settings)
         : Settings(settings)
         , FilterCreator(Settings)
-    {}
+    {
+        const TString& requestedGroupAttribute = Settings.GetRequestedGroupAttribute();
+        RequestedAttributes[0] = const_cast<char*>(requestedGroupAttribute.empty() ? "memberOf" : requestedGroupAttribute.c_str());
+        RequestedAttributes[1] = nullptr;
+    }
 
     void Bootstrap() {
         TBase::Become(&TThis::StateWork);
@@ -121,10 +125,9 @@ private:
             return;
         }
 
-        char* requestedAttributes[] = {const_cast<char*>("memberOf"), nullptr};
         TSearchUserResponse searchUserResponse = SearchUserRecord({.Ld = ld,
                                                                 .User = request->User,
-                                                                .RequestedAttributes = requestedAttributes});
+                                                                .RequestedAttributes = RequestedAttributes});
         if (searchUserResponse.Status != TEvLdapAuthProvider::EStatus::SUCCESS) {
             NKikimrLdap::Unbind(ld);
             Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, searchUserResponse.Status, searchUserResponse.Error));
@@ -290,6 +293,7 @@ private:
 private:
     const NKikimrProto::TLdapAuthentication Settings;
     const TSearchFilterCreator FilterCreator;
+    char* RequestedAttributes[2];
 };
 
 IActor* CreateLdapAuthProvider(const NKikimrProto::TLdapAuthentication& settings) {

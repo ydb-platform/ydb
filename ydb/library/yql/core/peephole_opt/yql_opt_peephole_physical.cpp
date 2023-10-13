@@ -128,18 +128,18 @@ TExprNode::TPtr RebuildArgumentsOnlyLambdaForBlocks(const TExprNode& lambda, TEx
 TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
     if (node->Head().IsCallable("WideFromBlocks")) {
-        YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " over " << node->Head().Content();
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << node->Head().Content();
         return node->Head().HeadPtr();
     }
 
-    if (const auto& input = node->Head(); input.IsCallable("Extend")) {
+    if (const auto& input = node->Head(); input.IsCallable({"Extend", "OrderedExtend"})) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
         TExprNodeList newChildren;
         newChildren.reserve(input.ChildrenSize());
         for (auto& child : input.ChildrenList()) {
             newChildren.emplace_back(ctx.ChangeChild(*node, 0, std::move(child)));
         }
-        return ctx.NewCallable(input.Pos(), "BlockExtend", std::move(newChildren));
+        return ctx.ChangeChildren(input, std::move(newChildren));
     }
 
     return node;
@@ -3770,16 +3770,14 @@ TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx
         }
     }
 
-    if (const auto& input = node->Head(); input.IsCallable("Extend")) {
-        bool isWideBlockFlow = AllOf(node->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems(),
-            [](const auto& itemType) { return itemType->IsBlockOrScalar(); });
+    if (const auto& input = node->Head(); input.IsCallable({"Extend", "OrderedExtend"})) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
         TExprNodeList newChildren;
         newChildren.reserve(input.ChildrenSize());
-        for (auto& child : input.ChildrenList()) {
+        for (const auto& child : input.ChildrenList()) {
             newChildren.emplace_back(ctx.ChangeChildren(*node, { child, ctx.DeepCopyLambda(node->Tail())}));
         }
-        return ctx.NewCallable(input.Pos(), isWideBlockFlow ? "BlockExtend" : "Extend", std::move(newChildren));
+        return ctx.ChangeChildren(input, std::move(newChildren));
     }
 
 /* TODO
@@ -4610,7 +4608,7 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
     const auto needKeyFlatten = GetExpandMapsForLambda(*node->Child(2U), tupleExpandMap, structExpandMap, &listExpandMap);
 
     if (const auto selector = node->Child(2); selector != selector->Tail().GetDependencyScope()->second && originalKeySize == 1) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " by constant key.";
+        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " by constant key.";
         return ctx.Builder(node->Pos())
             .Callable("WideMap")
                 .Callable(0, "WideCondense1")
@@ -5286,7 +5284,7 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
     const auto lambda = node->TailPtr();
     if (node->Head().IsCallable("WideFromBlocks")) {
         if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(*lambda, ctx, types)) {
-            YQL_CLOG(DEBUG, Core) << "Swap " << node->Head().Content() << " with " << node->Content();
+            YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Head().Content() << " with " << node->Content();
             return ctx.Builder(node->Pos())
                 .Callable("WideFromBlocks")
                     .Callable(0, "WideMap")

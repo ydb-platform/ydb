@@ -66,10 +66,11 @@ class IDiagnosableInvokerPool
 public:
     struct TInvokerStatistics
     {
-        ui64 EnqueuedActionCount = 0;
-        ui64 DequeuedActionCount = 0;
-        ui64 WaitingActionCount = 0;
-        TDuration AverageWaitTime = {};
+        i64 EnqueuedActionCount = 0;
+        i64 DequeuedActionCount = 0;
+        i64 WaitingActionCount = 0;
+        // TODO(eshcherbin): Use max wait time instead of average wait time?
+        TDuration AverageWaitTime;
     };
 
     //! Returns statistics of the invoker by the integer #index.

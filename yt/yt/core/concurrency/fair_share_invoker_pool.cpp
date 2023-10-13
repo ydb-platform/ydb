@@ -146,15 +146,13 @@ public:
 
     void Enqueue(TClosure callback, int index)
     {
-        auto now = GetInstant();
         {
+            auto now = GetInstant();
+
             auto guard = WriterGuard(InvokerQueueStatesLock_);
 
             auto& queueState = InvokerQueueStates_[index];
-
-            queueState.ActionEnqueueTimes.push(now);
-            queueState.SumOfActionEnqueueTimes += now.GetValue();
-            ++queueState.EnqueuedActionCount;
+            queueState.OnActionEnqueued(now);
         }
 
         Queue_->Enqueue(std::move(callback), index);
@@ -179,18 +177,7 @@ protected:
         auto guard = ReaderGuard(InvokerQueueStatesLock_);
 
         const auto& queueState = InvokerQueueStates_[index];
-
-        auto waitingActionCount = queueState.ActionEnqueueTimes.size();
-        auto averageWaitTime = waitingActionCount > 0
-            ? ValueToDuration(now.GetValue() - queueState.SumOfActionEnqueueTimes / waitingActionCount)
-            : TDuration::Zero();
-
-        return {
-            queueState.EnqueuedActionCount,
-            queueState.DequeuedActionCount,
-            waitingActionCount,
-            averageWaitTime,
-        };
+        return queueState.GetInvokerStatistics(now);
     }
 
 private:
@@ -198,12 +185,61 @@ private:
 
     std::vector<IInvokerPtr> Invokers_;
 
-    struct TInvokerQueueState
+    class TInvokerQueueState
     {
-        TRingQueue<TInstant> ActionEnqueueTimes;
-        TInstant::TValue SumOfActionEnqueueTimes = {};
-        ui64 EnqueuedActionCount = 0;
-        ui64 DequeuedActionCount = 0;
+    public:
+        void OnActionEnqueued(TInstant now)
+        {
+            UpdateTotalWaitTime(now);
+            ActionEnqueueTimes_.push(now);
+            ++EnqueuedActionCount_;
+        }
+
+        void OnActionDequeued()
+        {
+            YT_VERIFY(!ActionEnqueueTimes_.empty());
+            YT_VERIFY(LastTotalWaitTimeUpdateTime_);
+
+            auto actionEnqueueTime = ActionEnqueueTimes_.front();
+            auto actionRecordedWaitTime = *LastTotalWaitTimeUpdateTime_ - actionEnqueueTime;
+            TotalWaitTime_ -= actionRecordedWaitTime;
+
+            ActionEnqueueTimes_.pop();
+            ++DequeuedActionCount_;
+        }
+
+        TInvokerStatistics GetInvokerStatistics(TInstant now) const
+        {
+            UpdateTotalWaitTime(now);
+
+            auto waitingActionCount = std::ssize(ActionEnqueueTimes_);
+            auto averageWaitTime = waitingActionCount > 0
+                ? TotalWaitTime_ / waitingActionCount
+                : TDuration::Zero();
+
+            return TInvokerStatistics{
+                .EnqueuedActionCount = EnqueuedActionCount_,
+                .DequeuedActionCount = DequeuedActionCount_,
+                .WaitingActionCount = waitingActionCount,
+                .AverageWaitTime = averageWaitTime,
+            };
+        }
+
+    private:
+        TRingQueue<TInstant> ActionEnqueueTimes_;
+        mutable TDuration TotalWaitTime_;
+        mutable std::optional<TInstant> LastTotalWaitTimeUpdateTime_;
+        i64 EnqueuedActionCount_ = 0;
+        i64 DequeuedActionCount_ = 0;
+
+        void UpdateTotalWaitTime(TInstant now) const
+        {
+            auto singleActionWaitTimeDelta = now - LastTotalWaitTimeUpdateTime_.value_or(now);
+            int waitingActionCount = std::ssize(ActionEnqueueTimes_);
+            TotalWaitTime_ += waitingActionCount * singleActionWaitTimeDelta;
+
+            LastTotalWaitTimeUpdateTime_ = now;
+        }
     };
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, InvokerQueueStatesLock_);
@@ -283,12 +319,7 @@ private:
             auto guard = WriterGuard(InvokerQueueStatesLock_);
 
             auto& queueState = InvokerQueueStates_[bucketIndex];
-            YT_VERIFY(!queueState.ActionEnqueueTimes.empty());
-
-            auto currentActionEnqueueTime = queueState.ActionEnqueueTimes.front();
-            queueState.ActionEnqueueTimes.pop();
-            queueState.SumOfActionEnqueueTimes -= currentActionEnqueueTime.GetValue();
-            ++queueState.DequeuedActionCount;
+            queueState.OnActionDequeued();
         }
 
         {

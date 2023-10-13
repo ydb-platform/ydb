@@ -65,6 +65,18 @@ struct TSinkInfo {
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
 };
 
+class TDummyMemoryQuotaManager: public IMemoryQuotaManager {
+    bool AllocateQuota(ui64) override {
+        return true;
+    }
+
+    void FreeQuota(ui64) override { }
+
+    ui64 GetCurrentQuota() const override {
+        return std::numeric_limits<ui64>::max();
+    }
+};
+
 class TDqWorker: public TRichActor<TDqWorker>
                , IDqComputeActorAsyncOutput::ICallbacks
                , ITaskRunnerActor::ICallbacks
@@ -84,6 +96,7 @@ public:
         , TaskRunnerActorFactory(taskRunnerActorFactory)
         , RuntimeData(runtimeData)
         , TraceId(traceId)
+        , MemoryQuotaManager(new TDummyMemoryQuotaManager)
     {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         YQL_CLOG(DEBUG, ProviderDq) << "TDqWorker created ";
@@ -276,7 +289,8 @@ private:
                                 .ReadRanges = readRanges,
                                 .ComputeActorId = SelfId(),
                                 .TypeEnv = typeEnv,
-                                .HolderFactory = holderFactory
+                                .HolderFactory = holderFactory,
+                                .MemoryQuotaManager = MemoryQuotaManager
                             });
                         RegisterLocalChild(source.Actor);
                     } else {
@@ -769,6 +783,8 @@ private:
     NYql::TCounters Stat;
 
     TVector<Yql::DqsProto::TWorkerInfo> AllWorkers;
+
+    IMemoryQuotaManager::TPtr MemoryQuotaManager;
 };
 
 NActors::IActor* CreateWorkerActor(

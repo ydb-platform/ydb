@@ -548,6 +548,7 @@ void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon
                             TABLEH() { html << "LockOffset"; }
                             TABLEH() { html << "PathId"; }
                             TABLEH() { html << "Kind"; }
+                            TABLEH() { html << "Source"; }
                             TABLEH() { html << "TableId"; }
                             TABLEH() { html << "SchemaVersion"; }
                         }
@@ -565,6 +566,7 @@ void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon
                                 TABLED() { html << record.GetLockOffset(); }
                                 TABLED() { PathLink(html, record.GetPathId()); }
                                 TABLED() { html << record.GetKind(); }
+                                TABLED() { html << record.GetSource(); }
                                 TABLED() { PathLink(html, record.GetTableId()); }
                                 TABLED() { html << record.GetSchemaVersion(); }
                             }

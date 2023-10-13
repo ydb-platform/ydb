@@ -105,7 +105,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                         }
                     }
 
-                    RecordsToSend[recipient].emplace_back(TChangeRecordBuilder(details.GetValue<Schema::LockChangeRecordDetails::Kind>())
+                    auto changeRecordBuilder = TChangeRecordBuilder(details.GetValue<Schema::LockChangeRecordDetails::Kind>())
                         .WithOrder(it->Order)
                         .WithGroup(itCommit->second.Group)
                         .WithStep(itCommit->second.Step)
@@ -119,8 +119,13 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                         .WithSchema(schema)
                         .WithBody(details.GetValue<Schema::LockChangeRecordDetails::Body>())
                         .WithLockId(itQueue->second.LockId)
-                        .WithLockOffset(itQueue->second.LockOffset)
-                        .Build());
+                        .WithLockOffset(itQueue->second.LockOffset);
+                    
+                    if (details.HaveValue<Schema::LockChangeRecordDetails::Source>()) {
+                        changeRecordBuilder.WithSource(details.GetValue<Schema::LockChangeRecordDetails::Source>());
+                    }
+
+                    RecordsToSend[recipient].emplace_back(changeRecordBuilder.Build());
                 } else {
                     auto basic = db.Table<Schema::ChangeRecords>().Key(it->Order).Select();
                     auto details = db.Table<Schema::ChangeRecordDetails>().Key(it->Order).Select();
@@ -157,7 +162,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                         }
                     }
                     
-                    RecordsToSend[recipient].emplace_back(TChangeRecordBuilder(details.GetValue<Schema::ChangeRecordDetails::Kind>())
+                    auto changeRecordBuilder = TChangeRecordBuilder(details.GetValue<Schema::ChangeRecordDetails::Kind>())
                         .WithOrder(it->Order)
                         .WithGroup(basic.GetValue<Schema::ChangeRecords::Group>())
                         .WithStep(basic.GetValue<Schema::ChangeRecords::PlanStep>())
@@ -169,8 +174,13 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                         .WithTableId(tableId)
                         .WithSchemaVersion(schemaVersion)
                         .WithSchema(schema)
-                        .WithBody(details.GetValue<Schema::ChangeRecordDetails::Body>())
-                        .Build());
+                        .WithBody(details.GetValue<Schema::ChangeRecordDetails::Body>());
+                    
+                    if (details.HaveValue<Schema::ChangeRecordDetails::Source>()) {
+                        changeRecordBuilder.WithSource(details.GetValue<Schema::ChangeRecordDetails::Source>());
+                    }
+
+                    RecordsToSend[recipient].emplace_back(changeRecordBuilder.Build());
                 }
 
                 MemUsage += it->BodySize;

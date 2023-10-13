@@ -372,20 +372,24 @@ void TChangeRecord::SerializeToDebeziumJson(NJson::TJsonValue& keyJson, NJson::T
     }
 
     // payload.op. Mandatory
-    switch (body.GetRowOperationCase()) {
-        case NKikimrChangeExchange::TDataChange::kUpsert:
-        case NKikimrChangeExchange::TDataChange::kReset:
-            if (streamMode == TUserTable::TCdcStream::EMode::ECdcStreamModeNewAndOldImages) {
-                valueJson["payload"]["op"] = body.HasOldImage() ? "u" : "c"; // u = update, c = create
-            } else {
-                valueJson["payload"]["op"] = "u"; // u = update
-            }
-            break;
-        case NKikimrChangeExchange::TDataChange::kErase:
-            valueJson["payload"]["op"] = "d"; // d = delete
-            break;
-        default:
-            Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
+    if (Source == ESource::InitialScan) {
+        valueJson["payload"]["op"] = "r"; // r = read
+    } else {
+        switch (body.GetRowOperationCase()) {
+            case NKikimrChangeExchange::TDataChange::kUpsert:
+            case NKikimrChangeExchange::TDataChange::kReset:
+                if (streamMode == TUserTable::TCdcStream::EMode::ECdcStreamModeNewAndOldImages) {
+                    valueJson["payload"]["op"] = body.HasOldImage() ? "u" : "c"; // u = update, c = create
+                } else {
+                    valueJson["payload"]["op"] = "u"; // u = update
+                }
+                break;
+            case NKikimrChangeExchange::TDataChange::kErase:
+                valueJson["payload"]["op"] = "d"; // d = delete
+                break;
+            default:
+                Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
+        }
     }
 
     // payload.ts. Optional. "ts_ms" int64 in Debezium, "ts" array here
@@ -398,6 +402,7 @@ void TChangeRecord::SerializeToDebeziumJson(NJson::TJsonValue& keyJson, NJson::T
         {"version", "0.0.1"},
         {"connector", "ydb_debezium_json"},
         {"ts_ms", GetApproximateCreationDateTime().MilliSeconds()},
+        {"snapshot", Source == ESource::InitialScan},
         {"txId", TxId},
     });
 }
@@ -490,6 +495,7 @@ void TChangeRecord::Out(IOutputStream& out) const {
         << " TxId: " << TxId
         << " PathId: " << PathId
         << " Kind: " << Kind
+        << " Source: " << Source
         << " Body: " << Body.size() << "b"
         << " TableId: " << TableId
         << " SchemaVersion: " << SchemaVersion
@@ -559,6 +565,11 @@ TChangeRecordBuilder& TChangeRecordBuilder::WithBody(const TString& body) {
 
 TChangeRecordBuilder& TChangeRecordBuilder::WithBody(TString&& body) {
     Record.Body = std::move(body);
+    return *this;
+}
+
+TChangeRecordBuilder& TChangeRecordBuilder::WithSource(ESource source) {
+    Record.Source = source;
     return *this;
 }
 

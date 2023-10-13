@@ -291,6 +291,7 @@ public:
                 .WithTableId(tablePathId)
                 .WithSchemaVersion(table->GetTableSchemaVersion())
                 .WithBody(body.SerializeAsString())
+                .WithSource(TChangeRecord::ESource::InitialScan)
                 .Build();
 
             ChangeRecords.push_back(IDataShardChangeCollector::TChange{

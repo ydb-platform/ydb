@@ -1074,6 +1074,11 @@
                 "ColumnId": 3,
                 "ColumnName": "Body",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Source",
+                "ColumnType": "Byte"
             }
         ],
         "ColumnsDropped": [],
@@ -1082,7 +1087,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2120,6 +2126,11 @@
                 "ColumnId": 4,
                 "ColumnName": "Body",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "Source",
+                "ColumnType": "Byte"
             }
         ],
         "ColumnsDropped": [],
@@ -2129,7 +2140,8 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,

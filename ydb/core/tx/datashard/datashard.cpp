@@ -725,7 +725,8 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::ChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
         db.Table<Schema::ChangeRecordDetails>().Key(record.GetOrder()).Update(
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
-            NIceDb::TUpdate<Schema::ChangeRecordDetails::Body>(record.GetBody()));
+            NIceDb::TUpdate<Schema::ChangeRecordDetails::Body>(record.GetBody()),
+            NIceDb::TUpdate<Schema::ChangeRecordDetails::Source>(record.GetSource()));
     } else {
         auto& state = LockChangeRecords[lockId];
         Y_ABORT_UNLESS(state.Changes.empty() || state.Changes.back().LockOffset < record.GetLockOffset(),
@@ -773,7 +774,8 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::LockChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
         db.Table<Schema::LockChangeRecordDetails>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Kind>(record.GetKind()),
-            NIceDb::TUpdate<Schema::LockChangeRecordDetails::Body>(record.GetBody()));
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::Body>(record.GetBody()),
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::Source>(record.GetSource()));
     }
 }
 

@@ -22,6 +22,11 @@ class TChangeRecord {
     friend class TChangeRecordBuilder;
 
 public:
+    enum class ESource: ui8 {
+        Unspecified = 0,
+        InitialScan = 1,
+    };
+
     enum class EKind: ui8 {
         AsyncIndex,
         CdcDataChange,
@@ -44,6 +49,7 @@ public:
     const TPathId& GetPathId() const { return PathId; }
     EKind GetKind() const { return Kind; }
     const TString& GetBody() const { return Body; }
+    ESource GetSource() const { return Source; }
 
     const TPathId& GetTableId() const { return TableId; }
     ui64 GetSchemaVersion() const { return SchemaVersion; }
@@ -72,6 +78,7 @@ private:
     TPathId PathId;
     EKind Kind;
     TString Body;
+    ESource Source = ESource::Unspecified;
 
     ui64 SchemaVersion;
     TPathId TableId;
@@ -84,6 +91,7 @@ private:
 
 class TChangeRecordBuilder {
     using EKind = TChangeRecord::EKind;
+    using ESource = TChangeRecord::ESource;
 
 public:
     explicit TChangeRecordBuilder(EKind kind);
@@ -103,6 +111,8 @@ public:
 
     TChangeRecordBuilder& WithBody(const TString& body);
     TChangeRecordBuilder& WithBody(TString&& body);
+
+    TChangeRecordBuilder& WithSource(ESource source);
 
     TChangeRecord&& Build();
 

@@ -57,12 +57,13 @@ class TPgDumpParser {
     };
 
 public:
-    explicit TPgDumpParser(IOutputStream& out);
+    explicit TPgDumpParser(IOutputStream& out, bool ignoreUnsupported);
 
     void Prepare(IInputStream& in);
     void WritePgDump(IInputStream& in);
 
 private:
+    static bool IsPrimaryKeyTokens(const TVector<TString>& tokens);
     static bool IsNewTokenSymbol(char c) {
         return c == '(' || c == ')' || c == ',' || c == ';' || c == '\'';
     }
@@ -88,9 +89,12 @@ private:
     bool IsPrimaryKey = false;
     bool IsCommented = false;
     bool NotFlush = false;
+
     size_t BracesCount = 0;
 
     IOutputStream& Out;
+    const bool IgnoreUnsupported;
+
     TSQLCommandNode RunRoot, PrepareRoot;
     TSQLCommandNode* CurrentNode = nullptr;
 };

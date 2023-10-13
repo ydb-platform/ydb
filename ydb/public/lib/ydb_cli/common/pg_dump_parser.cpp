@@ -1,5 +1,7 @@
 #include "pg_dump_parser.h"
 
+#include <ydb/public/lib/ydb_cli/common/common.h>
+
 namespace NYdb::NConsoleClient {
 
 size_t TFixedStringStream::DoRead(void* buf, size_t len) {
@@ -66,7 +68,7 @@ TPgDumpParser::TSQLCommandNode* TPgDumpParser::TSQLCommandNode::GetNextCommand(c
     return nullptr;
 }
 
-TPgDumpParser::TPgDumpParser(IOutputStream& out) : Out(out) {
+TPgDumpParser::TPgDumpParser(IOutputStream& out, bool ignoreUnsupported) : Out(out), IgnoreUnsupported(ignoreUnsupported) {
     auto saveTableName = [this] {
         FixPublicScheme();
         TableName = LastToken;
@@ -199,6 +201,10 @@ void TPgDumpParser::PgCatalogCheck() {
     if (IsSelect) {
         IsSelect = false;
         if (TableName.StartsWith("pg_catalog.set_config")) {
+            if (!IgnoreUnsupported) {
+                throw yexception() << "\"SELECT pg_catalog.set_config.*\" statement is not supported.\n" <<
+                    "Use \"--ignore-unsupported\" option if you want to ignore this statement.";
+            }
             TString tmpBuffer;
             while (!Buffer.empty()) {
                 auto token = ExtractToken(&tmpBuffer, [](char c){return !std::isspace(c);});
@@ -209,16 +215,32 @@ void TPgDumpParser::PgCatalogCheck() {
             }
             std::reverse(tmpBuffer.begin(), tmpBuffer.vend());
             Buffer += TStringBuilder() << "-- " << tmpBuffer;
+            Cerr << TStringBuilder() << "-- " << tmpBuffer << Endl;
         }
     }
+}
+
+bool TPgDumpParser::IsPrimaryKeyTokens(const TVector<TString>& tokens) {
+    const TVector<TString> desired = {"ALTER", "TABLE", "ONLY", "", "ADD", "CONSTRAINT", "", "PRIMARY", "KEY", "(", "", ")", ";"};
+    if (tokens.size() != desired.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < desired.size(); ++i) {
+        if (!desired[i].empty() && desired[i] != tokens[i]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void TPgDumpParser::AlterTableCheck() {
     if (IsAlterTable) {
         IsAlterTable = false;
         TString tmpBuffer;
+        TVector <TString> tokens;
         while (!Buffer.empty()) {
             auto token = ExtractToken(&tmpBuffer, [](char c){return !std::isspace(c);});
+            tokens.push_back(token);
             if (token == "ALTER") {
                 break;
             }
@@ -228,8 +250,14 @@ void TPgDumpParser::AlterTableCheck() {
             }
             ExtractToken(&tmpBuffer, [](char c){return std::isspace(c);});
         }
+        std::reverse(tokens.begin(), tokens.end());
+        if (!IgnoreUnsupported && !IsPrimaryKeyTokens(tokens)) {
+            throw yexception() << "\"ALTER TABLE\" statement is not supported.\n" <<
+                "Use \"--ignore-unsupported\" option if you want to ignore this statement.";
+        }
         std::reverse(tmpBuffer.begin(), tmpBuffer.vend());
         Buffer += TStringBuilder() << "-- " << tmpBuffer;
+        Cerr << TStringBuilder() << "-- " << tmpBuffer << Endl;
     }
 }
 

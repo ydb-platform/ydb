@@ -8,7 +8,7 @@ using namespace NYdb::NConsoleClient;
 Y_UNIT_TEST_SUITE(PgDumpParserTests) {
     TString ParseDump(const TString& data) {
         TStringStream in, out;
-        TPgDumpParser parser(out);
+        TPgDumpParser parser(out, true);
 
         in << data;
         parser.Prepare(in);
@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(PgDumpParserTests) {
     TString ParseDumpFixedString(const TString& data) {
         TStringStream out;
         TFixedStringStream in(data);
-        TPgDumpParser parser(out);
+        TPgDumpParser parser(out, true);
 
         parser.Prepare(in);
         in.MovePointer();

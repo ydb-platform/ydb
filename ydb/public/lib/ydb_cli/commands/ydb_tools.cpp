@@ -392,6 +392,7 @@ void TCommandPgConvert::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
 
     config.Opts->AddLongOption('i', "input", "Path to input SQL file. Read from stdin if not specified.").StoreResult(&Path);
+    config.Opts->AddLongOption("ignore-unsupported", "Comment unsupported statements in result dump file if specified.").StoreTrue(&IgnoreUnsupported);
 }
 
 void TCommandPgConvert::Parse(TConfig& config) {
@@ -400,7 +401,7 @@ void TCommandPgConvert::Parse(TConfig& config) {
 
 int TCommandPgConvert::Run(TConfig& config) {
     Y_UNUSED(config);
-    TPgDumpParser parser(Cout);
+    TPgDumpParser parser(Cout, IgnoreUnsupported);
     if (Path) {
         std::unique_ptr<TFileInput> fileInput = std::make_unique<TFileInput>(Path);
         parser.Prepare(*fileInput);

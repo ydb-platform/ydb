@@ -116,6 +116,7 @@ public:
 
 private:
     TString Path;
+    bool IgnoreUnsupported = false;
 };
 
 }

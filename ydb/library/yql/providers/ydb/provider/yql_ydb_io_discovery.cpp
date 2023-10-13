@@ -17,7 +17,7 @@ namespace {
 using namespace NNodes;
 
 class TYdbIODiscoveryTransformer : public TGraphTransformerBase {
-using TDbId2Endpoint = THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseResolverResponse::TEndpoint>;
+using TDbId2Endpoint = THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseResolverResponse::TDatabaseDescription>;
 public:
     TYdbIODiscoveryTransformer(TYdbState::TPtr state)
         : State_(std::move(state))
@@ -77,7 +77,7 @@ public:
             ctx.IssueManager.AddIssues(DbResolverResponse_->Issues);
             return TStatus::Error;
         }
-        FullResolvedIds_.insert(DbResolverResponse_->DatabaseId2Endpoint.begin(), DbResolverResponse_->DatabaseId2Endpoint.end());
+        FullResolvedIds_.insert(DbResolverResponse_->DatabaseDescriptionMap.begin(), DbResolverResponse_->DatabaseDescriptionMap.end());
         DbResolverResponse_ = std::make_shared<NYql::TDatabaseResolverResponse>();
         auto& clusters = State_->Configuration->Clusters;
         const auto& id2Clusters = State_->Configuration->DbId2Clusters;

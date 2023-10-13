@@ -11,6 +11,7 @@ RECURSE(
     control_plane_config
     control_plane_proxy
     control_plane_storage
+    db_id_async_resolver_impl
     db_schema
     events
     gateway

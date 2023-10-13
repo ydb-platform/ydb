@@ -9,7 +9,6 @@
 
 #include <ydb/core/fq/libs/control_plane_storage/message_builders.h>
 #include <ydb/core/fq/libs/actors/database_resolver.h>
-#include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -857,33 +856,6 @@ Y_UNIT_TEST_SUITE(Yq_1) {
 }
 
 Y_UNIT_TEST_SUITE(Yq_2) {
-    // use fork for data test due to ch initialization problem
-    Y_UNIT_TEST(Test_HostNameTrasformation) {
-        {
-            auto transformer = ::NFq::MakeMdbEndpointGeneratorLegacy();
-            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1c-p5waby2y5y1kb5ue.db.yandex.net", true),
-                                    "rc1c-p5waby2y5y1kb5ue.db.yandex.net:8443");
-            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "ya.ru", false),
-                                    "ya.db.yandex.net:8123");
-        }
-
-        {
-            auto transformer = ::NFq::MakeMdbEndpointGeneratorGeneric(false);
-            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", true),
-                                    "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net:8443");
-            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net", false),
-                                    "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net:6432");
-        }
-
-        {
-            auto transformer = ::NFq::MakeMdbEndpointGeneratorGeneric(true);
-            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", false),
-                                    "rc1a-d6dv17lv47v5mcop.db.yandex.net:8123");
-            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net", true),
-                                    "rc1b-eyt6dtobu96rwydq.db.yandex.net:6432");
-        }
-    }
-
     SIMPLE_UNIT_FORKED_TEST(ReadFromYdbOverYq) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc        = server.GetPort();

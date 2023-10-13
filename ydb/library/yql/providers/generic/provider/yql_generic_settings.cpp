@@ -43,7 +43,7 @@ namespace NYql {
 
             const auto token = MakeStructuredToken(clusterConfig, credentials);
 
-            databaseAuth[std::make_pair(databaseId, DataSourceKindToDatabaseType(clusterConfig.GetKind()))] =
+            databaseAuth[std::make_pair(databaseId, DatabaseTypeFromDataSourceKind(clusterConfig.GetKind()))] =
                 NYql::TDatabaseAuth{token, /*AddBearer=*/true, clusterConfig.GetUseSsl()};
 
             DatabaseIdsToClusterNames[databaseId].emplace_back(clusterName);

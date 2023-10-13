@@ -19,6 +19,6 @@ void FindYdsDbIdsForResolving(
 
 void FillSettingsWithResolvedYdsIds(
     const TPqState::TPtr& state,
-    const TDatabaseResolverResponse::TDatabaseEndpointsMap& fullResolvedIds);
+    const TDatabaseResolverResponse::TDatabaseDescriptionMap& fullResolvedIds);
 
 } // namespace NYql

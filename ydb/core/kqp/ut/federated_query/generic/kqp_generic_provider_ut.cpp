@@ -2,7 +2,6 @@
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/external_data_source.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/database_resolver_mock.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>

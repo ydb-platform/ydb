@@ -12,7 +12,7 @@ namespace {
 using namespace NNodes;
 
 class TPqDataSinkIODiscoveryTransformer : public TGraphTransformerBase {
-using TDbId2Endpoint = THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseResolverResponse::TEndpoint>;
+using TDbId2Endpoint = THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseResolverResponse::TDatabaseDescription>;
 public:
     explicit TPqDataSinkIODiscoveryTransformer(TPqState::TPtr state)
         : State_(state)
@@ -54,7 +54,7 @@ public:
             ctx.IssueManager.AddIssues(DbResolverResponse_->Issues);
             return TStatus::Error;
         }
-        FullResolvedIds_.insert(DbResolverResponse_->DatabaseId2Endpoint.begin(), DbResolverResponse_->DatabaseId2Endpoint.end());
+        FullResolvedIds_.insert(DbResolverResponse_->DatabaseDescriptionMap.begin(), DbResolverResponse_->DatabaseDescriptionMap.end());
         DbResolverResponse_ = std::make_shared<NYql::TDatabaseResolverResponse>();
         FillSettingsWithResolvedYdsIds(State_, FullResolvedIds_);
         return TStatus::Ok;

@@ -79,7 +79,7 @@ void FindYdsDbIdsForResolving(
 
 void FillSettingsWithResolvedYdsIds(
     const TPqState::TPtr& state,
-    const TDatabaseResolverResponse::TDatabaseEndpointsMap& fullResolvedIds)
+    const TDatabaseResolverResponse::TDatabaseDescriptionMap& fullResolvedIds)
 {
     YQL_CLOG(INFO, ProviderPq) << "FullResolvedIds size: " << fullResolvedIds.size();
     auto& clusters = state->Configuration->ClustersConfigurationSettings;

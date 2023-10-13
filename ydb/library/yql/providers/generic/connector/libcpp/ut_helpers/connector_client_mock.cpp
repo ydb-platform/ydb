@@ -53,8 +53,7 @@ namespace NYql::NConnector::NTest {
         const TString& password,
         bool useTls,
         const TString& serviceAccountId,
-        const TString& serviceAccountIdSignature,
-        NYql::NConnector::EExternalDataSource sourceType)
+        const TString& serviceAccountIdSignature)
     {
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
@@ -83,7 +82,7 @@ namespace NYql::NConnector::NTest {
             "protocol"_a = NYql::NConnector::NApi::EProtocol_Name(protocol),
             "service_account_id"_a = serviceAccountId,
             "service_account_id_signature"_a = serviceAccountIdSignature,
-            "source_type"_a = ToString(sourceType));
+            "source_type"_a = ToString(NYql::EDatabaseType::ClickHouse));
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     }

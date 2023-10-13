@@ -160,8 +160,7 @@ namespace NYql::NConnector::NTest {
         const TString& password = DEFAULT_PASSWORD,
         bool useTls = DEFAULT_USE_TLS,
         const TString& serviceAccountId = DEFAULT_CH_SERVICE_ACCOUNT_ID,
-        const TString& serviceAccountIdSignature = DEFAULT_CH_SERVICE_ACCOUNT_ID_SIGNATURE,
-        NYql::NConnector::EExternalDataSource sourceType = DEFAULT_CH_SOURCE_TYPE);
+        const TString& serviceAccountIdSignature = DEFAULT_CH_SERVICE_ACCOUNT_ID_SIGNATURE);
 
     class TConnectorClientMock: public NYql::NConnector::IClient {
     public:

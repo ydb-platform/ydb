@@ -165,8 +165,8 @@ private:
             return;
         }
 
-        auto it = response.DatabaseId2Endpoint.find(std::pair{ClusterConfig.GetDatabaseId(), NYql::EDatabaseType::DataStreams});
-        if (it == response.DatabaseId2Endpoint.end()) {
+        auto it = response.DatabaseDescriptionMap.find(std::pair{ClusterConfig.GetDatabaseId(), NYql::EDatabaseType::DataStreams});
+        if (it == response.DatabaseDescriptionMap.end()) {
             TC_LOG_E(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Test data streams connection: database is not found for database_id " << ClusterConfig.GetDatabaseId());
             ReplyError(TStringBuilder{} << "Test data streams connection: database is not found for database_id " << ClusterConfig.GetDatabaseId());
             return;

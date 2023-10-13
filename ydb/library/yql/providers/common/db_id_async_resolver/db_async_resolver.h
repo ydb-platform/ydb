@@ -2,6 +2,7 @@
 
 #include <library/cpp/threading/future/future.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -15,25 +16,39 @@ enum class EDatabaseType {
     PostgreSQL
 };
 
-inline EDatabaseType DataSourceKindToDatabaseType(NConnector::NApi::EDataSourceKind dataSourceKind) {
+inline EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourceKind dataSourceKind) {
     switch (dataSourceKind) {
         case NConnector::NApi::EDataSourceKind::POSTGRESQL:
             return EDatabaseType::PostgreSQL;
         case NConnector::NApi::EDataSourceKind::CLICKHOUSE:
             return EDatabaseType::ClickHouse;
         default:
-            ythrow yexception() << TStringBuf() << "Unknown data source kind: " << NConnector::NApi::EDataSourceKind_Name(dataSourceKind);
+            ythrow yexception() << "Unknown data source kind: " << NConnector::NApi::EDataSourceKind_Name(dataSourceKind);
     }
 }
 
-inline TString DatabaseTypeToString(EDatabaseType databaseType) {
+inline NConnector::NApi::EDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType databaseType) {
+    switch (databaseType) {
+        case EDatabaseType::PostgreSQL:
+            return  NConnector::NApi::EDataSourceKind::POSTGRESQL;
+        case EDatabaseType::ClickHouse:
+            return  NConnector::NApi::EDataSourceKind::CLICKHOUSE;
+        default:
+            ythrow yexception() << "Unknown database type: " << ToString(databaseType);
+    }
+}
+
+inline TString DatabaseTypeToMdbUrlPath(EDatabaseType databaseType) {
+    auto dump = ToString(databaseType);
+    dump.to_lower();
+
     switch (databaseType) {
         case EDatabaseType::ClickHouse:
-            return "clickhouse";
+            return dump;
         case EDatabaseType::PostgreSQL:
-            return "postgresql";
+            return dump;
         default:
-            ythrow yexception() << TStringBuf() << "Unknown database type: " << int(databaseType);
+            ythrow yexception() << "Unsupported database type: " << ToString(databaseType);
     }
 }
 
@@ -59,37 +74,28 @@ struct TDatabaseAuth {
 
 struct TDatabaseResolverResponse {
 
-    struct TEndpoint {
-        std::tuple<TString, ui32> ParseHostPort() const {
-            size_t pos = Endpoint.find(':');
-            if (pos == TString::npos) {
-                ythrow yexception() << TStringBuilder() << "Endpoint '" << Endpoint << "' contains no ':' separator";
-            }
-
-            auto host = Endpoint.substr(0, pos);
-            auto port = static_cast<ui32>(std::stoi(Endpoint.substr(pos + 1)));
-        
-            return std::make_tuple(std::move(host), port);
-        }
-
+    struct TDatabaseDescription {
         TString Endpoint;
+        TString Host;
+        ui32 Port = 0;
         TString Database;
         bool Secure = false;
     };
 
-    using TDatabaseEndpointsMap = THashMap<std::pair<TString, EDatabaseType>, TEndpoint>;
+    // key - (database id, database type), value - resolved database params
+    using TDatabaseDescriptionMap = THashMap<std::pair<TString, EDatabaseType>, TDatabaseDescription>;
 
     TDatabaseResolverResponse() = default;
 
     TDatabaseResolverResponse(
-        TDatabaseEndpointsMap&& databaseId2Endpoint,
+        TDatabaseDescriptionMap&& databaseDescriptionMap,
         bool success = false,
         const NYql::TIssues& issues = {})
-        : DatabaseId2Endpoint(std::move(databaseId2Endpoint))
+        : DatabaseDescriptionMap(std::move(databaseDescriptionMap))
         , Success(success)
         , Issues(issues) {}
 
-    TDatabaseEndpointsMap DatabaseId2Endpoint;
+    TDatabaseDescriptionMap DatabaseDescriptionMap;
     bool Success = false;
     NYql::TIssues Issues;
 };

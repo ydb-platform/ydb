@@ -6,13 +6,28 @@
 # original buildsystem will not be accepted.
 
 
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
-add_library(providers-common-db_id_async_resolver INTERFACE)
-target_link_libraries(providers-common-db_id_async_resolver INTERFACE
+add_library(providers-common-db_id_async_resolver)
+target_compile_options(providers-common-db_id_async_resolver PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(providers-common-db_id_async_resolver PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-threading-future
   connector-api-common
   yql-public-issue
+  tools-enum_parser-enum_serialization_runtime
+)
+generate_enum_serilization(providers-common-db_id_async_resolver
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h
+  INCLUDE_HEADERS
+  ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h
 )

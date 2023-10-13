@@ -6,7 +6,7 @@
 #include <util/string/cast.h>
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/external_data_source.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 
 namespace NKikimr::NExternalSource {
@@ -34,13 +34,16 @@ private:
 
 IExternalSourceFactory::TPtr CreateExternalSourceFactory() {
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
-        {"ObjectStorage", CreateObjectStorageExternalSource()},
         {
-            ToString(NYql::NConnector::EExternalDataSource::ClickHouse),
+            ToString(NYql::EDatabaseType::ObjectStorage),
+            CreateObjectStorageExternalSource()
+        },
+        {
+            ToString(NYql::EDatabaseType::ClickHouse),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"MDB_BASIC", "BASIC"}, {"database_name", "protocol", "mdb_cluster_id", "use_tls"})
         },
         {
-            ToString(NYql::NConnector::EExternalDataSource::PostgreSQL), 
+            ToString(NYql::EDatabaseType::PostgreSQL),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"MDB_BASIC", "BASIC"}, {"database_name", "protocol", "mdb_cluster_id", "use_tls", "schema"})
         }
     });

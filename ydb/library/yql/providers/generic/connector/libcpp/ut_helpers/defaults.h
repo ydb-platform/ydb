@@ -1,6 +1,5 @@
 #pragma once
 #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/external_data_source.h>
 
 #include <util/generic/string.h>
 #include <util/string/builder.h>
@@ -23,7 +22,6 @@ namespace NYql::NConnector::NTest {
     extern const TString DEFAULT_CH_ENDPOINT;
     extern const TString DEFAULT_CH_CLUSTER_ID;
     constexpr NApi::EProtocol DEFAULT_CH_PROTOCOL = NApi::EProtocol::HTTP;
-    constexpr NYql::NConnector::EExternalDataSource DEFAULT_CH_SOURCE_TYPE = NYql::NConnector::EExternalDataSource::ClickHouse;
     extern const TString DEFAULT_CH_SERVICE_ACCOUNT_ID;
     extern const TString DEFAULT_CH_SERVICE_ACCOUNT_ID_SIGNATURE;
 } // namespace NYql::NConnector::NTest

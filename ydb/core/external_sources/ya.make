@@ -10,7 +10,7 @@ PEERDIR(
     library/cpp/scheme
     ydb/core/base
     ydb/core/protos
-    ydb/library/yql/providers/generic/connector/libcpp
+    ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/s3/path_generator
     ydb/public/sdk/cpp/client/ydb_params
     ydb/public/sdk/cpp/client/ydb_value

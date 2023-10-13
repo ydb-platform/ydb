@@ -10,11 +10,14 @@ namespace NYql {
     class IMdbEndpointGenerator {
     public:
         using TPtr = std::shared_ptr<IMdbEndpointGenerator>;
+        using TEndpoint = std::pair<TString, ui32>;
 
-        virtual TString ToEndpoint(
+        // Returns FQDN and port of the database host
+        virtual TEndpoint ToEndpoint(
             const NYql::EDatabaseType databaseType,
             const TString& mdbHost,
             bool useTls) const = 0;
+
         virtual ~IMdbEndpointGenerator() = default;
     };
 }

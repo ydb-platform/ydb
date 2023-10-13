@@ -53,7 +53,7 @@ namespace NYql {
                         auto databaseId = cluster.GetDatabaseId();
                         if (databaseId) {
                             YQL_CLOG(DEBUG, ProviderGeneric) << "found database id: " << databaseId;
-                            const auto idKey = std::make_pair(databaseId, DataSourceKindToDatabaseType(cluster.GetKind()));
+                            const auto idKey = std::make_pair(databaseId, DatabaseTypeFromDataSourceKind(cluster.GetKind()));
                             const auto iter = State_->DatabaseAuth.find(idKey);
                             if (iter != State_->DatabaseAuth.end()) {
                                 YQL_CLOG(DEBUG, ProviderGeneric) << "resolve database id: " << databaseId;
@@ -93,7 +93,7 @@ namespace NYql {
                 }
 
                 // Copy resolver results and reallocate pointer
-                auto databaseIdsToEndpointsResolved = std::move(DbResolverResponse_->DatabaseId2Endpoint);
+                auto databaseIdsToEndpointsResolved = std::move(DbResolverResponse_->DatabaseDescriptionMap);
 
                 DbResolverResponse_ = std::make_shared<NYql::TDatabaseResolverResponse>();
 
@@ -107,15 +107,18 @@ namespace NYql {
             }
 
         private:
-            TStatus ModifyClusterConfigs(const TDatabaseResolverResponse::TDatabaseEndpointsMap& databaseIdsToEndpoints, TExprContext& ctx) {
+            TStatus ModifyClusterConfigs(const TDatabaseResolverResponse::TDatabaseDescriptionMap& databaseDescriptions, TExprContext& ctx) {
                 const auto& databaseIdsToClusterNames = State_->Configuration->DatabaseIdsToClusterNames;
                 auto& clusterNamesToClusterConfigs = State_->Configuration->ClusterNamesToClusterConfigs;
 
-                for (const auto& [databaseIdWithType, endpointSrc] : databaseIdsToEndpoints) {
+                for (const auto& [databaseIdWithType, databaseDescription] : databaseDescriptions) {
                     const auto& databaseId = databaseIdWithType.first;
 
-                    YQL_CLOG(DEBUG, ProviderGeneric) << "resolved database id: " << databaseId
-                                                     << ",  endpoint: " << endpointSrc.Endpoint;
+                    Y_ENSURE(databaseDescription.Host, "Empty resolved database host");
+                    Y_ENSURE(databaseDescription.Port, "Empty resolved database port");
+                    YQL_CLOG(INFO, ProviderGeneric) << "resolved database id: " << databaseId
+                                                    << ", host: " << databaseDescription.Host
+                                                    << ", port: " << databaseDescription.Port;
 
                     auto clusterNamesIter = databaseIdsToClusterNames.find(databaseId);
 
@@ -136,10 +139,9 @@ namespace NYql {
                             return TStatus::Error;
                         }
 
-                        auto hostPort = endpointSrc.ParseHostPort();
                         auto endpointDst = clusterConfigIter->second.mutable_endpoint();
-                        endpointDst->set_host(std::get<0>(hostPort));
-                        endpointDst->set_port(std::get<1>(hostPort));
+                        endpointDst->set_host(databaseDescription.Host);
+                        endpointDst->set_port(databaseDescription.Port);
                     }
                 }
 

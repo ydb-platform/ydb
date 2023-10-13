@@ -6,7 +6,7 @@
 #include <util/generic/yexception.h>
 
 #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/external_data_source.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 #include "yql_generic_cluster_config.h"
 
@@ -145,11 +145,6 @@ namespace NYql {
         clusterConfig.SetDatabaseId(it->second);
     }
 
-    static THashMap<EExternalDataSource, EDataSourceKind> DataSourceApiMapping = {
-        {EExternalDataSource::ClickHouse, EDataSourceKind::CLICKHOUSE},
-        {EExternalDataSource::PostgreSQL, EDataSourceKind::POSTGRESQL},
-    };
-
     void ParseSourceType(const THashMap<TString, TString>& properties,
                          NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("source_type");
@@ -158,17 +153,7 @@ namespace NYql {
             ythrow yexception() << "missing 'SOURCE_TYPE' value";
         }
 
-        EExternalDataSource externalDataSource;
-        if (!TryFromString<EExternalDataSource>(it->second, externalDataSource)) {
-            ythrow yexception() << "invalid 'SOURCE_TYPE' value: '" << it->second
-                                << "', valid types are: " << GetEnumAllNames<EExternalDataSource>();
-        }
-
-        if (!DataSourceApiMapping.contains(externalDataSource)) {
-            ythrow yexception() << "cannot map 'SOURCE_TYPE' value: '" << it->second << "' into Connector API value";
-        }
-
-        clusterConfig.SetKind(DataSourceApiMapping.at(externalDataSource));
+        clusterConfig.SetKind(DatabaseTypeToDataSourceKind(FromString<NYql::EDatabaseType>(it->second)));
     }
 
     void ParseProtocol(const THashMap<TString, TString>& properties,

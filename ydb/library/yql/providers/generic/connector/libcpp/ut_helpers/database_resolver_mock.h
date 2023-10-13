@@ -20,7 +20,8 @@ namespace NYql::NConnector::NTest {
 
         void AddClickHouseCluster(
             const TString& clusterId = DEFAULT_CH_CLUSTER_ID,
-            const TString& endpoint = DEFAULT_CH_ENDPOINT,
+            const TString& hostFqdn = DEFAULT_CH_HOST,
+            const ui32 port = DEFAULT_CH_PORT,
             const TString& serviceAccountId = DEFAULT_CH_SERVICE_ACCOUNT_ID,
             const TString& serviceAccountIdSignature = DEFAULT_CH_SERVICE_ACCOUNT_ID_SIGNATURE) {
             NYql::IDatabaseAsyncResolver::TDatabaseAuthMap dbResolverReq;
@@ -30,11 +31,11 @@ namespace NYql::NConnector::NTest {
                     true,
                     true};
 
-            NYql::TDatabaseResolverResponse::TDatabaseEndpointsMap databaseEndpointsMap;
-            databaseEndpointsMap[std::make_pair(clusterId, NYql::EDatabaseType::ClickHouse)] =
-                NYql::TDatabaseResolverResponse::TEndpoint{endpoint, clusterId};
+            NYql::TDatabaseResolverResponse::TDatabaseDescriptionMap databaseDescriptions;
+            databaseDescriptions[std::make_pair(clusterId, NYql::EDatabaseType::ClickHouse)] =
+                NYql::TDatabaseResolverResponse::TDatabaseDescription{"", hostFqdn, port, clusterId};
             auto dbResolverPromise = NThreading::NewPromise<NYql::TDatabaseResolverResponse>();
-            dbResolverPromise.SetValue(NYql::TDatabaseResolverResponse(std::move(databaseEndpointsMap), true));
+            dbResolverPromise.SetValue(NYql::TDatabaseResolverResponse(std::move(databaseDescriptions), true));
 
             auto result = dbResolverPromise.GetFuture();
             EXPECT_CALL(*this, ResolveIds(DatabaseAuthMapMatcher(dbResolverReq)))

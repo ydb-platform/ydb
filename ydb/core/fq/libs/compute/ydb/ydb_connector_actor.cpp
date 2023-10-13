@@ -50,6 +50,7 @@ public:
         settings.Syntax(event.Syntax);
         settings.ExecMode(event.ExecMode);
         settings.StatsMode(Ydb::Query::StatsMode::STATS_MODE_FULL);
+        settings.TraceId(event.TraceId);
         QueryClient
             ->ExecuteScript(event.Sql, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie](auto future) {

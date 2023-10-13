@@ -989,7 +989,11 @@ public:
             if (ListLength(x->targetList) > 0) {
                 setItemOptions.push_back(QL(QA("result"), QVL(res.data(), res.size())));
             } else {
-                setItemOptions.push_back(ParseValuesList(x->valuesLists));
+                auto valuesList = ParseValuesList(x->valuesLists);
+                if (!valuesList) {
+                    return nullptr;
+                }
+                setItemOptions.push_back(valuesList);
             }
 
             if (!fromList.empty()) {

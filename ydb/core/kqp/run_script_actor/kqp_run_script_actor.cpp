@@ -56,9 +56,7 @@ public:
         , LeaseDuration(leaseDuration)
         , QueryServiceConfig(queryServiceConfig)
         , Counters(counters)
-    {
-        Request.SetTraceId(ExecutionId);
-    }
+    { }
 
     static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
 

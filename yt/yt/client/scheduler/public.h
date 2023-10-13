@@ -126,6 +126,8 @@ DEFINE_ENUM(EAbortReason,
     ((JobMemoryThrashing)              ( 47))
     ((InterruptionUnsupported)         ( 48))
     ((Abandoned)                       ( 49))
+    // TODO(ignat): is it actually a scheduling type of abortion?
+    ((JobSettlementTimedOut)           ( 50))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))

@@ -249,7 +249,7 @@ private:
                     ? GetTableTypeFromString(settings.TableType.Cast())
                     : ETableType::Table; // v0 support
 
-                if (mode == "create") {
+                if (mode == "create" || mode == "create_if_not_exists") {
                     if (!settings.Columns) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                             << "No columns provided for create mode."));
@@ -691,7 +691,7 @@ public:
                     ? settings.TableType.Cast()
                     : Build<TCoAtom>(ctx, node->Pos()).Value("table").Done(); // v0 support
                 auto mode = settings.Mode.Cast();
-                if (mode == "create") {
+                if (mode == "create" || mode == "create_if_not_exists") {
                     YQL_ENSURE(settings.Columns);
                     YQL_ENSURE(!settings.Columns.Cast().Empty());
 
@@ -721,6 +721,8 @@ public:
                         ? settings.Temporary.Cast()
                         : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
 
+                    auto existringOk = (settings.Mode.Cast().Value() == "create_if_not_exists");
+
                     return Build<TKiCreateTable>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
@@ -738,6 +740,9 @@ public:
                         .ColumnsDefaultValues(settings.ColumnsDefaultValues.Cast())
                         .TableSettings(settings.TableSettings.Cast())
                         .TableType(tableType)
+                        .ExistingOk<TCoAtom>()
+                            .Value(existringOk)
+                        .Build()
                         .Done()
                         .Ptr();
                 } else if (mode == "alter") {

@@ -418,7 +418,7 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
-    TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir) override {
+    TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk) override {
         CHECK_PREPARED_DDL(CreateTable);
 
         std::pair<TString, TString> pathPair;
@@ -433,7 +433,7 @@ public:
         auto profilesFuture = Gateway->GetTableProfiles();
         auto tablePromise = NewPromise<TGenericResult>();
         auto temporary = metadata->Temporary;
-        profilesFuture.Subscribe([gateway, sessionCtx, metadata, tablePromise, pathPair, isPrepare, temporary]
+        profilesFuture.Subscribe([gateway, sessionCtx, metadata, tablePromise, pathPair, isPrepare, temporary, existingOk]
             (const TFuture<IKqpGateway::TKqpTableProfilesResult>& future) mutable {
                 auto profilesResult = future.GetValue();
                 if (!profilesResult.Success()) {
@@ -510,6 +510,7 @@ public:
                     auto& phyQuery = *sessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
                     auto& phyTx = *phyQuery.AddTransactions();
                     phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                    schemeTx.SetFailedOnAlreadyExists(!existingOk);
                     phyTx.MutableSchemeOperation()->MutableCreateTable()->Swap(&schemeTx);
 
                     TGenericResult result;

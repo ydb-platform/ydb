@@ -1166,7 +1166,7 @@ message TBlockStoreAssignOp {
     optional uint64 TokenVersion = 3;
 }
 
-message TDropBlockStoreVolume { 
+message TDropBlockStoreVolume {
     optional uint64 FillGeneration = 1;
 }
 
@@ -1494,6 +1494,8 @@ message TModifyScheme {
     optional NKikimrIndexBuilder.TColumnBuildSettings InitiateColumnBuild = 61;
 
     optional bool SuccessOnNotExist = 62;
+
+    optional bool FailedOnAlreadyExists = 63 [default = true];
 }
 
 // "Script", used by client to parse text files with multiple DDL commands

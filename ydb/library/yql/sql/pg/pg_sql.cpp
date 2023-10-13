@@ -116,7 +116,7 @@ bool ValueAsString(const Value& val, TString& ret) {
         ret = StrFloatVal(val);
         return true;
     }
-    case T_String: 
+    case T_String:
     case T_BitString: {
         ret = StrVal(val);
         return true;
@@ -214,7 +214,7 @@ public:
         TVector<TString> ColNames;
         TAstNode* Source = nullptr;
     };
-    
+
     struct TPgConst {
         TMaybe<TString> value;
         enum class Type {
@@ -425,7 +425,7 @@ public:
                 std::make_move_iterator(next_row_items_to)
             };
         }
-        
+
         return listOfTuples;
     }
 
@@ -460,7 +460,7 @@ public:
         }
         return true;
     }
-    
+
     TMaybe<TVector<TPgConst::Type>> InferColumnTypesForValuesStmt(const TVector<TPgConst>& values, size_t cols) {
         Y_ABORT_UNLESS((values.size() % cols == 0), "wrong amount of columns for auto param values vector");
         TVector<TMaybe<TPgConst::Type>> maybeColumnTypes(cols);
@@ -469,7 +469,7 @@ public:
             const auto& value = values[i];
             size_t col = i % cols;
             auto& columnType = maybeColumnTypes[col];
-            
+
             if (!columnType || columnType.GetRef() == TPgConst::Type::unknown || columnType.GetRef() == TPgConst::Type::nil) {
                 columnType = value.type;
                 continue;
@@ -477,8 +477,8 @@ public:
 
             // should we allow compatible types here?
             if (columnType.GetRef() != value.type && columnType.GetRef() != TPgConst::Type::unknown && columnType.GetRef() != TPgConst::Type::nil) {
-                YQL_CLOG(INFO, Default) 
-                    << "Failed to auto parametrize: different types: " 
+                YQL_CLOG(INFO, Default)
+                    << "Failed to auto parametrize: different types: "
                     << TPgConst::ToString(columnType.GetRef()) << " and " << TPgConst::ToString(value.type)
                     << " in col " << col;
                 return {};
@@ -495,14 +495,14 @@ public:
         }
         return columnTypes;
     }
-    
+
     using TAutoParamName = TString;
     TAutoParamName AddAutoParam(Ydb::TypedValue&& val) {
         auto nextName = TString(AUTO_PARAM_PREFIX) + ToString(AutoParamValues.size());
         AutoParamValues.emplace(nextName, std::move(val));
         return nextName;
     }
-    
+
     TAstNode* MakeValuesStmtAutoParam(TVector<TPgConst>&& values, TVector<TPgConst::Type>&& columnTypes) {
         TVector<Ydb::Value> ydbValues;
         for (auto&& pgConst : values) {
@@ -582,7 +582,7 @@ public:
                 return QL(QA("values"), QVL(valNames.data(), valNames.size()), valuesNode);
             }
         }
-        
+
         TVector<TAstNode*> valueRows;
         valueRows.reserve(ListLength(valuesLists));
         valueRows.push_back(A("AsList"));
@@ -1287,11 +1287,11 @@ public:
 
         const auto select = (value->selectStmt)
             ? ParseSelectStmt(
-                CAST_NODE(SelectStmt, value->selectStmt), 
-                true, 
-                targetColumns, 
-                /*allowEmptyResSet=*/false, 
-                /*emitPgStar=*/false, 
+                CAST_NODE(SelectStmt, value->selectStmt),
+                true,
+                targetColumns,
+                /*allowEmptyResSet=*/false,
+                /*emitPgStar=*/false,
                 /*fillTargetColumns=*/true)
             : L(A("Void"));
         if (!select) {
@@ -1455,6 +1455,7 @@ private:
         std::unordered_set<TString> NotNullColSet;
         bool isTemporary;
         std::vector<TAstNode*> SerialColumns;
+        bool ifNotExists;
     };
 
     bool CheckConstraintSupported(const Constraint* pk) {
@@ -1649,7 +1650,8 @@ private:
     TAstNode* BuildCreateTableOptions(TCreateTableCtx& ctx) {
         std::vector<TAstNode*> options;
 
-        options.push_back(QL(QA("mode"), QA("create")));
+        TString mode = (ctx.ifNotExists) ? "create_if_not_exists" : "create";
+        options.push_back(QL(QA("mode"), QA(mode)));
         options.push_back(QL(QA("columns"), QVL(ctx.Columns.data(), ctx.Columns.size())));
         if (!ctx.PrimaryKey.empty()) {
             options.push_back(QL(QA("primarykey"), QVL(ctx.PrimaryKey.data(), ctx.PrimaryKey.size())));
@@ -1738,12 +1740,11 @@ public:
             return nullptr;
         }
 
-        if (value->if_not_exists) {
-            AddError("IF NOT EXISTS not supported");
-            return nullptr;
-        }
-
         TCreateTableCtx ctx {};
+
+        if (value->if_not_exists) {
+            ctx.ifNotExists = true;
+        }
 
         const auto relPersistence = static_cast<NPg::ERelPersistence>(value->relation->relpersistence);
         switch (relPersistence) {
@@ -2766,7 +2767,7 @@ public:
             return nullptr;
         }
     }
-    
+
     TMaybe<TPgConst> GetValueNType(const A_Const* value) {
         TPgConst pgConst;
         const auto& val = value->val;
@@ -2804,7 +2805,7 @@ public:
             }
         }
     }
-    
+
     TAstNode* AutoParametrizeConst(TPgConst&& valueNType, TAstNode* pgType) {
         Ydb::TypedValue typedValue;
 
@@ -2835,11 +2836,11 @@ public:
             return nullptr;
         }
 
-        TAstNode* pgTypeNode = NodeTag(val) != T_Null 
+        TAstNode* pgTypeNode = NodeTag(val) != T_Null
             ? L(A("PgType"), QA(TPgConst::ToString(valueNType->type)))
             : L(A("PgType"), QA("unknown"));
 
-        if (Settings.AutoParametrizeEnabled && 
+        if (Settings.AutoParametrizeEnabled &&
             Settings.AutoParametrizeEnabledScopes.contains(settings.Scope)) {
             return AutoParametrizeConst(std::move(valueNType.GetRef()), pgTypeNode);
         }
@@ -3979,7 +3980,7 @@ public:
     TAstNode* QVL(TAstNode* node, TPosition pos = {}) {
         return QVL(&node, 1, pos);
     }
-    
+
     TAstNode* QVL(TArrayRef<TAstNode*> nodes, TPosition pos = {}) {
         return Q(VL(nodes, pos), pos);
     }

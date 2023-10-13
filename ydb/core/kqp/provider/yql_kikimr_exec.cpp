@@ -941,6 +941,7 @@ public:
 
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
+            bool existingOk = (maybeCreate.ExistingOk().Cast().Value() == "1");
             switch (tableTypeItem) {
                 case ETableType::ExternalTable: {
                     future = Gateway->CreateExternalTable(cluster,
@@ -959,7 +960,7 @@ public:
                 }
                 case ETableType::Table:
                 case ETableType::Unknown: {
-                    future = isColumn ? Gateway->CreateColumnTable(table.Metadata, true) : Gateway->CreateTable(table.Metadata, true);
+                    future = isColumn ? Gateway->CreateColumnTable(table.Metadata, true) : Gateway->CreateTable(table.Metadata, true, existingOk);
                     break;
                 }
             }

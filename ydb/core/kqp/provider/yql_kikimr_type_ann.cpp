@@ -925,7 +925,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         }
 
         auto& tableDesc = SessionCtx->Tables().GetTable(cluster, table);
-        if (meta->TableType == ETableType::Table && tableDesc.DoesExist() && !tableDesc.Metadata->IsSameTable(*meta)) {
+
+        auto existingOk = (create.ExistingOk().Value() == "1");
+        if (!existingOk && meta->TableType == ETableType::Table && tableDesc.DoesExist() && !tableDesc.Metadata->IsSameTable(*meta)) {
             ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
                 << "Table name conflict: " << NCommon::FullTableName(cluster, table)
                 << " is used to reference multiple tables."));

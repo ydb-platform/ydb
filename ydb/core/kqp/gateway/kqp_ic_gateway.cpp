@@ -725,9 +725,10 @@ public:
         return profilesPromise.GetFuture();
     }
 
-    TFuture<TGenericResult> CreateTable(NYql::TKikimrTableMetadataPtr metadata, bool createDir) override {
+    TFuture<TGenericResult> CreateTable(NYql::TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk) override {
         Y_UNUSED(metadata);
         Y_UNUSED(createDir);
+        Y_UNUSED(existingOk);
         return NotImplemented<TGenericResult>();
     }
 

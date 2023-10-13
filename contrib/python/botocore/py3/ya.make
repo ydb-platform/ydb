@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.31.56)
+VERSION(1.31.57)
 
 LICENSE(Apache-2.0)
 
@@ -242,6 +242,12 @@ RESOURCE_FILES(
     botocore/data/batch/2016-08-10/examples-1.json
     botocore/data/batch/2016-08-10/paginators-1.json
     botocore/data/batch/2016-08-10/service-2.json
+    botocore/data/bedrock-runtime/2023-09-30/endpoint-rule-set-1.json.gz
+    botocore/data/bedrock-runtime/2023-09-30/paginators-1.json
+    botocore/data/bedrock-runtime/2023-09-30/service-2.json
+    botocore/data/bedrock/2023-04-20/endpoint-rule-set-1.json.gz
+    botocore/data/bedrock/2023-04-20/paginators-1.json
+    botocore/data/bedrock/2023-04-20/service-2.json
     botocore/data/billingconductor/2021-07-30/endpoint-rule-set-1.json.gz
     botocore/data/billingconductor/2021-07-30/examples-1.json
     botocore/data/billingconductor/2021-07-30/paginators-1.json

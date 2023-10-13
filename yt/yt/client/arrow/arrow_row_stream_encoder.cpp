@@ -51,6 +51,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
     auto simpleType = CastToV1Type(schema.LogicalType()).first;
     switch (simpleType) {
         case ESimpleLogicalValueType::Null:
+        case ESimpleLogicalValueType::Void:
             return std::make_tuple(
                 org::apache::arrow::flatbuf::Type_Null,
                 org::apache::arrow::flatbuf::CreateNull(*flatbufBuilder)
@@ -549,6 +550,13 @@ void SerializeBooleanColumn(
          });
 }
 
+void SerializeNullColumn(
+    const TTypedBatchColumn& typedColumn,
+    TRecordBatchSerializationContext* context)
+{
+    SerializeColumnPrologue(typedColumn, context);
+}
+
 void SerializeColumn(
     const TTypedBatchColumn& typedColumn,
     TRecordBatchSerializationContext* context)
@@ -580,7 +588,9 @@ void SerializeColumn(
     } else if (simpleType == ESimpleLogicalValueType::Boolean) {
         SerializeBooleanColumn(typedColumn, context);
     } else if (simpleType == ESimpleLogicalValueType::Null) {
-        // No buffers are allocated for null columns.
+        SerializeNullColumn(typedColumn, context);
+    } else if (simpleType == ESimpleLogicalValueType::Void) {
+        SerializeNullColumn(typedColumn, context);
     } else {
         THROW_ERROR_EXCEPTION("Column %v has unexpected type %Qlv",
             typedColumn.Column->Id,
@@ -871,11 +881,7 @@ private:
             }
             return std::nullopt;
         }
-        auto columnSchema = *columnSchemaPtr;
-        if (CastToV1Type(columnSchema.LogicalType()).first != ESimpleLogicalValueType::Null) {
-            return columnSchema;
-        }
-        return std::nullopt;
+        return *columnSchemaPtr;
     }
 
     void PrepareColumns()

@@ -53,6 +53,7 @@ public:
         THashMap<TString, NYTree::INodePtr> commonFields,
         bool enableControlMessages = true,
         bool enableSourceLocation = false,
+        bool enableInstant = true,
         NJson::TJsonFormatConfigPtr jsonFormat = nullptr);
 
     i64 WriteFormatted(IOutputStream* outputStream, const TLogEvent& event) override;
@@ -65,6 +66,7 @@ private:
     const THashMap<TString, NYTree::INodePtr> CommonFields_;
     const bool EnableSystemMessages_;
     const bool EnableSourceLocation_;
+    const bool EnableInstant_;
     const NJson::TJsonFormatConfigPtr JsonFormat_;
 
     TCachingDateFormatter CachingDateFormatter_;

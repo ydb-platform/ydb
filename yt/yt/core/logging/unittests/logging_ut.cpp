@@ -659,6 +659,7 @@ TEST_F(TLoggingTest, StructuredLoggingJsonFormat)
         /*commonFields*/ THashMap<TString, INodePtr>{},
         /*enableControlMessages*/ true,
         /*enableSourceLocation*/ false,
+        /*enableInstant*/ true,
         jsonFormat);
 
     auto writer = CreateFileLogWriter(

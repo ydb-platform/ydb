@@ -137,11 +137,13 @@ TStructuredLogFormatter::TStructuredLogFormatter(
     THashMap<TString, NYTree::INodePtr> commonFields,
     bool enableSystemMessages,
     bool enableSourceLocation,
+    bool enableInstant,
     NJson::TJsonFormatConfigPtr jsonFormat)
     : Format_(format)
     , CommonFields_(std::move(commonFields))
     , EnableSystemMessages_(enableSystemMessages)
     , EnableSourceLocation_(enableSourceLocation)
+    , EnableInstant_(enableInstant)
     , JsonFormat_(!jsonFormat && (Format_ == ELogFormat::Json)
         ? New<NJson::TJsonFormatConfig>()
         : std::move(jsonFormat))
@@ -182,7 +184,9 @@ i64 TStructuredLogFormatter::WriteFormatted(IOutputStream* stream, const TLogEve
             .DoIf(event.MessageKind == ELogMessageKind::Unstructured, [&] (auto fluent) {
                 fluent.Item("message").Value(event.MessageRef.ToStringBuf());
             })
-            .Item("instant").Value(dateTimeBuffer.GetBuffer())
+            .DoIf(EnableInstant_, [&] (auto fluent) {
+                fluent.Item("instant").Value(dateTimeBuffer.GetBuffer());
+            })
             .Item("level").Value(FormatEnum(event.Level))
             .Item("category").Value(event.Category->Name)
             .DoIf(event.Family == ELogFamily::PlainText, [&] (auto fluent) {

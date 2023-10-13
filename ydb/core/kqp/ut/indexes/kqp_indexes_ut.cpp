@@ -4152,6 +4152,151 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .ExpectedReads = 1
         });
     }
+    Y_UNIT_TEST(IndexTopSortPushDown) {
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false /*populateTables*/);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            REPLACE INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES
+                ("0",    "0",    "Value2"),
+                ("1",    "0",    "Value1"),
+                ("2",    "1",    "Value0"),
+                ("3",    "1",    "Value0"),
+                ("4",    "1",    "Value0");
+        )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        {
+            // Use top without sort if ORDER BY is index key columns
+            result = session.ExecuteDataQuery(Q1_(R"(
+                SELECT Index2, Key, Value, ExtPayload FROM `/Root/SecondaryWithDataColumns` VIEW Index
+                ORDER BY Index2, Key
+                LIMIT 2;
+            )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns", {
+                .ExpectedReads = 2
+            });
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns/Index/indexImplTable", {
+                .ExpectedReads = 2
+            });
+            CompareYson(R"([
+                [["0"];["0"];["Value2"];#];
+                [["0"];["1"];["Value1"];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        {
+            // Use top without sort if ORDER BY is prefix of index key columns
+            result = session.ExecuteDataQuery(Q1_(R"(
+                SELECT Index2, Key, Value, ExtPayload FROM `/Root/SecondaryWithDataColumns` VIEW Index
+                ORDER BY Index2
+                LIMIT 2;
+            )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns", {
+                .ExpectedReads = 2
+            });
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns/Index/indexImplTable", {
+                .ExpectedReads = 2
+            });
+        }
+        {
+            // Use push down for top sort if ORDER BY exist column from idex data columns
+            result = session.ExecuteDataQuery(Q1_(R"(
+                SELECT Index2, Key, Value, ExtPayload FROM `/Root/SecondaryWithDataColumns` VIEW Index
+                ORDER BY Index2, Key, Value
+                LIMIT 2;
+            )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns", {
+                .ExpectedReads = 2
+            });
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns/Index/indexImplTable", {
+                .ExpectedReads = 5
+            });
+        }
+        {
+            // Use push down for top sort if ORDER BY exist column from idex data columns
+            result = session.ExecuteDataQuery(Q1_(R"(
+                SELECT * FROM `/Root/SecondaryWithDataColumns` VIEW Index
+                ORDER BY Index2, Value
+                LIMIT 2;
+            )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns", {
+                .ExpectedReads = 2
+            });
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns/Index/indexImplTable", {
+                .ExpectedReads = 5
+            });
+        }
+        {
+            // Use push down for top sort if all columns in ORDER BY are in data columns
+            result = session.ExecuteDataQuery(Q1_(R"(
+                SELECT * FROM `/Root/SecondaryWithDataColumns` VIEW Index
+                ORDER BY Value
+                LIMIT 2;
+            )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns", {
+                .ExpectedReads = 2
+            });
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns/Index/indexImplTable", {
+                .ExpectedReads = 5
+            });
+        }
+        {
+            // Use push down for top sort if columns in ORDER BY in wrong order
+            result = session.ExecuteDataQuery(Q1_(R"(
+                SELECT * FROM `/Root/SecondaryWithDataColumns` VIEW Index
+                ORDER BY Key, Index2, Value
+                LIMIT 2;
+            )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns", {
+                .ExpectedReads = 2
+            });
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns/Index/indexImplTable", {
+                .ExpectedReads = 5
+            });
+        }
+        {
+            // Don't use push down for top sort if columns in ORDER BY in wrong order
+            result = session.ExecuteDataQuery(Q1_(R"(
+                SELECT * FROM `/Root/SecondaryWithDataColumns` VIEW Index
+                ORDER BY Index2, Value, Key
+                LIMIT 2;
+            )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns", {
+                .ExpectedReads = 2
+            });
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns/Index/indexImplTable", {
+                .ExpectedReads = 5
+            });
+        }
+        {
+            // Don't use push down if ORDER BY exists column not from index
+            result = session.ExecuteDataQuery(Q1_(R"(
+                SELECT * FROM `/Root/SecondaryWithDataColumns` VIEW Index
+                ORDER BY Index2, Key, Value, ExtPayload
+                LIMIT 2;
+            )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns", {
+                .ExpectedReads = 5
+            });
+            AssertTableStats(result, "/Root/SecondaryWithDataColumns/Index/indexImplTable", {
+                .ExpectedReads = 5
+            });
+        }
+    }
     Y_UNIT_TEST(UpdateOnReadColumns) {
         {
             // Check that keys from non involved index are not in read columns

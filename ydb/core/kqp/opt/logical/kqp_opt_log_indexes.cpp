@@ -58,8 +58,8 @@ TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>
         .Done();
 }
 
-bool IsKeySelectorPkPrefix(NNodes::TCoLambda keySelector, const TKikimrTableDescription& tableDesc, TVector<TString>* columns) {
-    auto checkKey = [keySelector, &tableDesc, columns] (const TExprBase& key, ui32 index) {
+bool IsKeySelectorPkPrefix(NNodes::TCoLambda keySelector, const TKikimrTableDescription& tableDesc) {
+    auto checkKey = [keySelector, &tableDesc] (const TExprBase& key, ui32 index) {
         if (!key.Maybe<TCoMember>()) {
             return false;
         }
@@ -73,10 +73,6 @@ bool IsKeySelectorPkPrefix(NNodes::TCoLambda keySelector, const TKikimrTableDesc
         auto columnIndex = tableDesc.GetKeyColumnIndex(column);
         if (!columnIndex || *columnIndex != index) {
             return false;
-        }
-
-        if (columns) {
-            columns->emplace_back(std::move(column));
         }
 
         return true;
@@ -99,8 +95,48 @@ bool IsKeySelectorPkPrefix(NNodes::TCoLambda keySelector, const TKikimrTableDesc
     return true;
 }
 
-bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& tableDesc, TVector<TString>* columns) {
-    return IsKeySelectorPkPrefix(node.KeySelectorLambda(), tableDesc, columns);
+bool IsTableExistsKeySelector(NNodes::TCoLambda keySelector, const TKikimrTableDescription& tableDesc, TVector<TString>* columns) {
+    auto checkKey = [keySelector, &tableDesc, columns] (const TExprBase& key) {
+        if (!key.Maybe<TCoMember>()) {
+            return false;
+        }
+
+        auto member = key.Cast<TCoMember>();
+        if (member.Struct().Raw() != keySelector.Args().Arg(0).Raw()) {
+            return false;
+        }
+
+        auto column = member.Name().StringValue();
+        if (!tableDesc.Metadata->Columns.contains(column)) {
+            return false;
+        }
+
+        if (columns) {
+            columns->emplace_back(std::move(column));
+        }
+
+        return true;
+    };
+
+    auto lambdaBody = keySelector.Body();
+    if (auto maybeTuple = lambdaBody.Maybe<TExprList>()) {
+        auto tuple = maybeTuple.Cast();
+        for (size_t i = 0; i < tuple.Size(); ++i) {
+            if (!checkKey(tuple.Item(i))) {
+                return false;
+            }
+        }
+    } else {
+        if (!checkKey(lambdaBody)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& indexDesc, TVector<TString>* columns) {
+    return IsTableExistsKeySelector(node.KeySelectorLambda(), indexDesc, columns);
 }
 
 struct TReadMatch {
@@ -267,7 +303,9 @@ TExprBase DoRewriteIndexRead(const TReadMatch& read, TExprContext& ctx,
             structMembers.push_back(member);
         }
 
-        readIndexTable = Build<TCoMap>(ctx, read.Pos())
+        // We need to save order for TopSort, otherwise TopSort will be replaced by Top during optimization (https://st.yandex-team.ru/YQL-15415)
+        readIndexTable = Build<TCoMapBase>(ctx, read.Pos())
+            .CallableName(readIndexTable.Maybe<TCoTopSort>() ? TCoOrderedMap::CallableName() : TCoMap::CallableName())
             .Input(readIndexTable)
             .Lambda()
                 .Args({arg})
@@ -591,6 +629,8 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         return node;
     }
 
+    bool needSort = node.Maybe<TCoTopSort>() && !IsKeySelectorPkPrefix(topBase.KeySelectorLambda(), indexDesc);
+
     auto filter = [&](const TExprBase& in) mutable {
         auto sortInput = in;
 
@@ -603,7 +643,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         }
 
         auto newTop = Build<TCoTopBase>(ctx, node.Pos())
-            .CallableName(node.Ref().Content())
+            .CallableName(needSort ? TCoTopSort::CallableName() : TCoTop::CallableName())
             .Input(sortInput)
             .KeySelectorLambda(ctx.DeepCopyLambda(topBase.KeySelectorLambda().Ref()))
             .SortDirections(topBase.SortDirections())

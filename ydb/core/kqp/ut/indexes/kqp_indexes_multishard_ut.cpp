@@ -1763,6 +1763,54 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     Y_UNIT_TEST(WriteIntoRenamingAsyncIndex) {
         CheckWriteIntoRenamingIndex(true);
     }
+
+    Y_UNIT_TEST_TWIN(CheckPushTopSort, StreamLookup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(StreamLookup);
+
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTableWithMultishardIndexAndDataColumn(kikimr.GetTestClient());
+
+        AssertSuccessResult(session.ExecuteDataQuery(Q1_(R"(
+            UPSERT INTO `/Root/MultiShardIndexedWithDataColumn` (key, fk, value) VALUES
+                (101u, 1001, "Value4"),
+                (102u, 1001, "Value3"),
+                (103u, 1001, "Value2"),
+                (99u, 1000, "Value1");
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync());
+
+        auto query = Q1_(R"(
+            SELECT key, fk, value, ext_value FROM MultiShardIndexedWithDataColumn VIEW index
+            WHERE key > 98
+            ORDER BY fk, value
+            LIMIT 2;
+        )");
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        auto result = session.ExecuteDataQuery(
+                query,
+                TTxControl::BeginTx().CommitTx(),
+                execSettings)
+            .ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        AssertTableStats(result, "/Root/MultiShardIndexedWithDataColumn", {
+            .ExpectedReads = 2   // without push down ExpectedReads = 4
+        });
+        AssertTableStats(result, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable", {
+            .ExpectedReads = 4
+        });
+        CompareYson(R"([
+            [[99u];[1000u];["Value1"];#];
+            [[103u];[1001u];["Value2"];#]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 }

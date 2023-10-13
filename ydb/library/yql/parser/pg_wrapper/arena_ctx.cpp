@@ -11,11 +11,19 @@ extern "C" {
 
 namespace NYql {
 
+struct TArenaPAllocHeader {
+    size_t Size;
+    MemoryContext Self; // should be placed right before pointer to allocated area, see GetMemoryChunkContext
+};
+
+static_assert(sizeof(TArenaPAllocHeader) == sizeof(size_t) + sizeof(MemoryContext), "Padding is not allowed");
+
 void *MyAllocSetAlloc(MemoryContext context, Size size) {
-    auto fullSize = size + MAXIMUM_ALIGNOF - 1 + sizeof(void*);
+    auto fullSize = size + MAXIMUM_ALIGNOF - 1 + sizeof(TArenaPAllocHeader);
     auto ptr = TArenaMemoryContext::GetCurrentPool().Allocate(fullSize);
-    auto aligned = (void*)MAXALIGN(ptr + sizeof(void*));
-    *(MemoryContext *)(((char *)aligned) - sizeof(void *)) = context;
+    auto aligned = (TArenaPAllocHeader*)MAXALIGN(ptr + sizeof(TArenaPAllocHeader));
+    aligned[-1].Self = context;
+    aligned[-1].Size = size;
     return aligned;
 }
 
@@ -29,7 +37,8 @@ void* MyAllocSetRealloc(MemoryContext context, void* pointer, Size size) {
 
     void* ret = MyAllocSetAlloc(context, size);
     if (pointer) {
-        memmove(ret, pointer, size);
+        auto prevSize = ((const TArenaPAllocHeader*)pointer)[-1].Size;
+        memmove(ret, pointer, prevSize);
     }
 
     return ret;

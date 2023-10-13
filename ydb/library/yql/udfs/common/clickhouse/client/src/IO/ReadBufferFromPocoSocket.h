@@ -5,6 +5,8 @@
 
 #include <Poco/Net/Socket.h>
 
+#include <functional>
+
 namespace NDB
 {
 

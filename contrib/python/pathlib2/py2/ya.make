@@ -7,15 +7,10 @@ VERSION(2.3.7.post1)
 LICENSE(MIT)
 
 PEERDIR(
+    contrib/deprecated/python/scandir
+    contrib/deprecated/python/typing
     contrib/python/six
 )
-
-IF (PYTHON2)
-    PEERDIR(
-        contrib/deprecated/python/scandir
-        contrib/deprecated/python/typing
-    )
-ENDIF()
 
 NO_LINT()
 

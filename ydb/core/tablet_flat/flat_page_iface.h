@@ -66,6 +66,7 @@ namespace NPage {
         GarbageStats = 10, /* Stats on garbage in historic data */
         TxIdStats = 11, /* Stats for uncommitted TxIds at compaction time */
         TxStatus = 12, /* Status of committed/removed transactions */
+        BTreeIndex = 13,
     };
 
     enum class ECodec : ui8 {

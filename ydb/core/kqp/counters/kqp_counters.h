@@ -57,7 +57,8 @@ protected:
     void ReportResultsBytes(ui64 resultsSize);
 
     static TString GetIssueName(ui32 issueCode);
-    void ReportIssues(const Ydb::Issue::IssueMessage& issue);
+    void ReportIssues(THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr>& issueCounters,
+        const Ydb::Issue::IssueMessage& issue);
 
     void ReportQueryLatency(NKikimrKqp::EQueryAction action, const TDuration& duration);
 
@@ -152,8 +153,6 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr YdbResponseBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueryResultsBytes;
 
-    THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr> IssueCounters;
-
     // Workers
     NMonitoring::THistogramPtr WorkerLifeSpan;
     NMonitoring::THistogramPtr QueriesPerWorker;
@@ -247,7 +246,6 @@ private:
 
 using TKqpDbCountersPtr = TIntrusivePtr<TKqpDbCounters>;
 
-
 class TKqpCounters : public TThrRefBase, public TKqpCountersBase {
 private:
     struct TTxByKindCounters {
@@ -278,7 +276,9 @@ public:
 
     void ReportResponseStatus(TKqpDbCountersPtr dbCounters, ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus);
     void ReportResultsBytes(TKqpDbCountersPtr dbCounters, ui64 resultsSize);
-    void ReportIssues(TKqpDbCountersPtr dbCounters, const Ydb::Issue::IssueMessage& issue);
+    void ReportIssues(TKqpDbCountersPtr dbCounters,
+        THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr>& issueCounters,
+        const Ydb::Issue::IssueMessage& issue);
 
     void ReportQueryWithRangeScan(TKqpDbCountersPtr dbCounters);
     void ReportQueryWithFullScan(TKqpDbCountersPtr dbCounters);

@@ -1608,7 +1608,7 @@ public:
         
         Counters->ReportResponseStatus(Settings.DbCounters, record.ByteSize(), record.GetYdbStatus());
         for (auto& issue : record.GetResponse().GetQueryIssues()) {
-            Counters->ReportIssues(Settings.DbCounters, issue);
+            Counters->ReportIssues(Settings.DbCounters, CachedIssueCounters, issue);
         }
 
         Send(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
@@ -2179,6 +2179,8 @@ private:
     TActorId Owner;
     TString SessionId;
 
+    // cached lookups to issue counters
+    THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr> CachedIssueCounters;
     TInstant CreationTime;
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<TKqpRequestCounters> RequestCounters;

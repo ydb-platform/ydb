@@ -20,12 +20,12 @@ public:
     TSortableScanData() = default;
     TSortableScanData(std::shared_ptr<arrow::RecordBatch> batch, const std::vector<std::string>& columns);
 
-    bool IsSameSchema(const std::shared_ptr<arrow::Schema> schema) const {
+    bool IsSameSchema(const std::shared_ptr<arrow::Schema>& schema) const {
         if (Fields.size() != (size_t)schema->num_fields()) {
             return false;
         }
         for (ui32 i = 0; i < Fields.size(); ++i) {
-            if (Fields[i]->type() != schema->field(i)->type()) {
+            if (!Fields[i]->type()->Equals(schema->field(i)->type())) {
                 return false;
             }
             if (Fields[i]->name() != schema->field(i)->name()) {
@@ -37,6 +37,10 @@ public:
 
     NJson::TJsonValue DebugJson(const i32 position) const {
         NJson::TJsonValue result = NJson::JSON_MAP;
+        auto& jsonFields = result.InsertValue("fields", NJson::JSON_ARRAY);
+        for (auto&& i : Fields) {
+            jsonFields.AppendValue(i->ToString());
+        }
         for (ui32 i = 0; i < Columns.size(); ++i) {
             auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
             jsonColumn["name"] = Fields[i]->name();

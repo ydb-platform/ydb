@@ -6,6 +6,7 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/remove_gc.h>
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NColumnShard {
@@ -47,9 +48,9 @@ protected:
         return "";
     }
 
-    virtual std::shared_ptr<IBlobsGCAction> DoStartGCAction() const = 0;
-    std::shared_ptr<IBlobsGCAction> StartGCAction() const {
-        return DoStartGCAction();
+    virtual std::shared_ptr<IBlobsGCAction> DoStartGCAction(const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) const = 0;
+    std::shared_ptr<IBlobsGCAction> StartGCAction(const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) const {
+        return DoStartGCAction(counters);
     }
 
 public:
@@ -76,8 +77,10 @@ public:
         return DoOnTieringModified(tiers);
     }
 
-    std::shared_ptr<IBlobsDeclareRemovingAction> StartDeclareRemovingAction(const TString& /*consumerId*/) {
-        return DoStartDeclareRemovingAction();
+    std::shared_ptr<IBlobsDeclareRemovingAction> StartDeclareRemovingAction(const TString& consumerId) {
+        auto result = DoStartDeclareRemovingAction();
+        result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetRemoveDeclareCounters());
+        return result;
     }
     std::shared_ptr<IBlobsWritingAction> StartWritingAction(const TString& consumerId) {
         auto result = DoStartWritingAction();
@@ -96,7 +99,7 @@ public:
         if (Stopped) {
             return false;
         }
-        auto task = StartGCAction();
+        auto task = StartGCAction(Counters->GetConsumerCounter("GC")->GetRemoveGCCounters());
         if (!task) {
             return false;
         }

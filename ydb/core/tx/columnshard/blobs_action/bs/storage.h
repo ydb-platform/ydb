@@ -18,7 +18,7 @@ protected:
     virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction() override;
     virtual std::shared_ptr<IBlobsWritingAction> DoStartWritingAction() override;
     virtual std::shared_ptr<IBlobsReadingAction> DoStartReadingAction() override;
-    virtual std::shared_ptr<IBlobsGCAction> DoStartGCAction() const override;
+    virtual std::shared_ptr<IBlobsGCAction> DoStartGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const override;
     virtual bool DoLoad(NColumnShard::IBlobManagerDb& dbBlobs) override {
         return Manager->LoadState(dbBlobs);
     }

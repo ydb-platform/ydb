@@ -22,6 +22,8 @@ TConsumerCounters::TConsumerCounters(const TString& consumerId, const TStorageCo
     DeepSubGroup("Consumer", consumerId);
     ReadCounters = std::make_shared<TReadCounters>(*this);
     WriteCounters = std::make_shared<TWriteCounters>(*this);
+    RemoveDeclareCounters = std::make_shared<TRemoveDeclareCounters>(*this);
+    RemoveGCCounters = std::make_shared<TRemoveGCCounters>(*this);
 }
 
 }

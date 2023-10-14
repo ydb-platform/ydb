@@ -4,6 +4,8 @@ SRCS(
     read.cpp
     storage.cpp
     write.cpp
+    remove_declare.cpp
+    remove_gc.cpp
 )
 
 PEERDIR(

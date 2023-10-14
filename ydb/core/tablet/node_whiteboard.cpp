@@ -596,7 +596,9 @@ protected:
                 maxDiskUsage = std::max(maxDiskUsage, 1.0 - avail);
             }
         }
-        SystemStateInfo.SetMaxDiskUsage(maxDiskUsage);
+        if (PDiskStateInfo.size() > 0) {
+            SystemStateInfo.SetMaxDiskUsage(maxDiskUsage);
+        }
         if (pDiskFlag == NKikimrWhiteboard::EFlag::Yellow) {
             switch (yellowFlags) {
             case 1:

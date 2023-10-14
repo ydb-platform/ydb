@@ -308,6 +308,7 @@ message TSystemStateInfo {
     optional NActorsInterconnect.TNodeLocation Location = 31;
     optional uint64 ClockSkewMicrosec = 32;
     optional uint64 ClockSkewPeerId = 33;
+    optional uint64 DisconnectTime = 34;
 }
 
 message TEvSystemStateRequest {

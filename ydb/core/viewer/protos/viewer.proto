@@ -393,8 +393,8 @@ message TStoragePoolInfo {
 message TStorageInfo {
     EFlag Overall = 1;
     repeated TStoragePoolInfo StoragePools = 2;
-    uint64 TotalGroups = 3;
-    uint64 FoundGroups = 4;
+    optional uint64 TotalGroups = 3;
+    optional uint64 FoundGroups = 4;
     repeated TStorageGroupInfo StorageGroups = 5;
 }
 
@@ -408,14 +408,14 @@ message TNodeInfo {
     NKikimrWhiteboard.TSystemStateInfo SystemState = 2;
     repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 3;
     repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 4;
-    repeated NKikimrWhiteboard.TTabletStateInfo Tablets = 5;
+    repeated TTabletStateInfo Tablets = 5;
 }
 
 message TNodesInfo {
     EFlag Overall = 1;
     repeated TNodeInfo Nodes = 2;
-    uint64 TotalNodes = 3;
-    uint64 FoundNodes = 4;
+    optional uint64 TotalNodes = 3;
+    optional uint64 FoundNodes = 4;
 }
 
 enum ENodeType {

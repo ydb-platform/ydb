@@ -201,6 +201,7 @@ namespace NKikimr::NKqp {
             const TString query = fmt::format(
                 R"(
                 SELECT 42 FROM {data_source_name}.`{database_name}.{table_name}`;
+                SELECT 42 FROM {data_source_name}.`{database_name}.{table_name}`;
             )",
                 "data_source_name"_a = DEFAULT_DATA_SOURCE_NAME,
                 "database_name"_a = DEFAULT_DATABASE,
@@ -210,13 +211,16 @@ namespace NKikimr::NKqp {
             auto queryResult = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), EStatus::SUCCESS, queryResult.GetIssues().ToString());
 
-            TResultSetParser resultSet(queryResult.GetResultSetParser(0));
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), ROWS_COUNT);
-
-            // check every row
             std::vector<i32> constants(ROWS_COUNT, 42);
-            MATCH_RESULT_WITH_INPUT(constants, resultSet, GetInt32);
+
+            for (size_t i = 0; i < 2; ++i) {
+                TResultSetParser resultSet(queryResult.GetResultSetParser(i));
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), ROWS_COUNT);
+
+                // check every row
+                MATCH_RESULT_WITH_INPUT(constants, resultSet, GetInt32);
+            }
         }
 
         Y_UNIT_TEST(PostgreSQLSelectConstant) {

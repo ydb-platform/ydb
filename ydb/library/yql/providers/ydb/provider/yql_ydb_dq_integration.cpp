@@ -72,7 +72,7 @@ public:
     bool CanRead(const TExprNode& read, TExprContext&, bool ) override {
         return TYdbReadTable::Match(&read);
     }
-    
+
     TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
         if (AllOf(read, [](const auto val) { return TYdbReadTable::Match(val); })) {
             return 0ul; // TODO: return real size
@@ -83,6 +83,7 @@ public:
     TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
         if (const auto& maybeYdbReadTable = TMaybeNode<TYdbReadTable>(read)) {
             const auto& ydbReadTable = maybeYdbReadTable.Cast();
+            YQL_ENSURE(ydbReadTable.Ref().GetTypeAnn(), "No type annotation for node " << ydbReadTable.Ref().Content());
             const auto& clusterName = ydbReadTable.DataSource().Cluster().Value();
             const auto token = "cluster:default_" + TString(clusterName);
             YQL_CLOG(INFO, ProviderYdb) << "Wrap " << read->Content() << " with token: " << token;

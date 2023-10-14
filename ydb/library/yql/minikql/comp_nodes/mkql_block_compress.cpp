@@ -268,7 +268,7 @@ public:
                         s.IsFinished_ = true;
                         break;
                     case EFetchResult::One:
-                        switch (s.Check(bitmap)) {
+                        switch (s.Check(bitmap.Release())) {
                             case TState::EStep::Copy:
                                 for (ui32 i = 0; i < s.Values.size(); ++i) {
                                     if (const auto out = output[i]) {
@@ -541,15 +541,16 @@ private:
         EStep Check(const NUdf::TUnboxedValuePod bitmapValue) {
             Y_ABORT_UNLESS(!IsFinished_);
             Y_ABORT_UNLESS(!InputSize_);
+            const NUdf::TUnboxedValue b(std::move(bitmapValue));
             auto& bitmap = Arrays_.back();
-            bitmap = TArrowBlock::From(bitmapValue).GetDatum().array();
+            bitmap = TArrowBlock::From(b).GetDatum().array();
+
             if (!bitmap->length)
                 return EStep::Skip;
 
             const auto popCount = GetBitmapPopCount(bitmap);
             if (!popCount)
                 return EStep::Skip;
-
 
             if (!OutputPos_ && ui64(bitmap->length) == popCount)
                 return EStep::Copy;

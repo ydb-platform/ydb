@@ -20,6 +20,7 @@ SRCS(
     mkql_bit_utils_ut.cpp
     mkql_block_compress_ut.cpp
     mkql_block_skiptake_ut.cpp
+    mkql_block_top_sort_ut.cpp
     mkql_blocks_ut.cpp
     mkql_combine_ut.cpp
     mkql_condense_ut.cpp

@@ -10,6 +10,7 @@
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
@@ -21,18 +22,18 @@ namespace NMiniKQL {
 namespace {
 
 template <bool Sort, bool HasCount>
-class TTopOrSortBlocksWrapper : public TStatefulWideFlowBlockComputationNode<TTopOrSortBlocksWrapper<Sort, HasCount>> {
-    using TSelf = TTopOrSortBlocksWrapper<Sort, HasCount>;
-    using TBase = TStatefulWideFlowBlockComputationNode<TSelf>;
-    using TChunkedArrayIndex = TVector<IArrayBuilder::TArrayDataItem>;
+class TTopOrSortBlocksWrapper : public TStatefulWideFlowCodegeneratorNode<TTopOrSortBlocksWrapper<Sort, HasCount>> {
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TTopOrSortBlocksWrapper<Sort, HasCount>>;
+using TChunkedArrayIndex = std::vector<IArrayBuilder::TArrayDataItem>;
 public:
     TTopOrSortBlocksWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TArrayRef<TType* const> wideComponents, IComputationNode* count,
-        TVector<IComputationNode*>&& directions, TVector<ui32>&& keyIndicies)
-        : TBase(mutables, flow, wideComponents.size())
+        TComputationNodePtrVector&& directions, std::vector<ui32>&& keyIndicies)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
         , Flow_(flow)
         , Count_(count)
         , Directions_(std::move(directions))
         , KeyIndicies_(std::move(keyIndicies))
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(wideComponents.size()))
     {
         for (ui32 i = 0; i < wideComponents.size() - 1; ++i) {
             Columns_.push_back(AS_TYPE(TBlockType, wideComponents[i]));
@@ -41,130 +42,205 @@ public:
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         Y_ABORT_UNLESS(output[Columns_.size()]);
-
         auto& s = GetState(state, ctx);
-        if (s.IsFinished_) {
-            return EFetchResult::Finish;
-        }
 
-        if (!s.PreparedCountAndDirections_) {
-            if constexpr (HasCount) {
-                s.Count_ = Count_->GetValue(ctx).Get<ui64>();
-            }
-
-            for (ui32 k = 0; k < KeyIndicies_.size(); ++k) {
-                s.Directions_[k] = Directions_[k]->GetValue(ctx).Get<bool>();
-            }
-
-            s.PreparedCountAndDirections_ = true;
-        }
-
-        if constexpr (HasCount) {
-            if (!s.Count_) {
-                s.IsFinished_ = true;
+        if (!s.Count) {
+            if (s.IsFinished_)
                 return EFetchResult::Finish;
+
+            if (!s.WritingOutput_) {
+                for (const auto fields = ctx.WideFields.data() + WideFieldsIndex_;;) {
+                    switch (Flow_->FetchValues(ctx, fields)) {
+                        case EFetchResult::Yield:
+                            return EFetchResult::Yield;
+                        case EFetchResult::One:
+                            s.ProcessInput();
+                            continue;
+                        case EFetchResult::Finish:
+                            break;
+                    }
+                    break;
+                }
             }
-        }
 
-        if (!s.PreparedBuilders_) {
-            s.AllocateBuilders(Columns_, ctx);
-            s.PreparedBuilders_ = true;
-        }
-
-        if (s.WritingOutput_) {
-            if (s.Written_ >= s.OutputLength_) {
-                s.IsFinished_ = true;
+            if (!s.FillOutput(ctx.HolderFactory))
                 return EFetchResult::Finish;
-            }
-
-            s.FillSortOutputPart(Columns_, output, ctx);
-            return EFetchResult::One;
         }
 
-        for (;;) {
-            auto result = Flow_->FetchValues(ctx, s.ValuePointers_.data());
-            if (result == EFetchResult::Yield) {
-                return result;
-            } else if (result == EFetchResult::One) {
-                ui64 blockLen = TArrowBlock::From(s.Values_.back()).GetDatum().template scalar_as<arrow::UInt64Scalar>().value;
-
-                if (!s.ScalarsFilled_) {
-                    for (ui32 i = 0; i < Columns_.size(); ++i) {
-                        if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
-                            s.ScalarValues_[i] = s.Values_[i];
-                        }
-                    }
-
-                    s.ScalarsFilled_ = true;
-                }
-
-                if constexpr (!HasCount) {
-                    for (ui32 i = 0; i < Columns_.size(); ++i) {
-                        auto datum = TArrowBlock::From(s.Values_[i]).GetDatum();
-                        if (Columns_[i]->GetShape() != TBlockType::EShape::Scalar) {
-                            s.SortInput_[i].emplace_back(datum);
-                        }
-                    }
-
-                    s.OutputLength_ += blockLen;
-                    continue;
-                }
-
-                // shrink input block
-                TMaybe<TVector<ui64>> blockIndicies;
-                if (blockLen > s.Count_) {
-                    blockIndicies.ConstructInPlace();
-                    blockIndicies->reserve(blockLen);
-                    for (ui64 row = 0; row < blockLen; ++row) {
-                        blockIndicies->emplace_back(row);
-                    }
-
-                    TVector<TChunkedArrayIndex> arrayIndicies(Columns_.size());
-                    for (ui32 i = 0; i < Columns_.size(); ++i) {
-                        if (Columns_[i]->GetShape() != TBlockType::EShape::Scalar) {
-                            auto datum = TArrowBlock::From(s.Values_[i]).GetDatum();
-                            arrayIndicies[i] = MakeChunkedArrayIndex(datum);
-                        }
-                    }
-
-                    TBlockLess cmp(KeyIndicies_, s, arrayIndicies);
-                    NYql::FastNthElement(blockIndicies->begin(), blockIndicies->begin() + s.Count_, blockIndicies->end(), cmp);
-                }
-
-                // copy all to builders
-                s.AddTop(Columns_, blockIndicies, blockLen);
-                if (s.BuilderLength_ + s.Count_ > s.BuilderMaxLength_) {
-                    s.CompressBuilders(false, Columns_, KeyIndicies_, ctx);
-                }
-
-            } else {
-                if constexpr (!HasCount) {
-                    if (!s.OutputLength_) {
-                        s.IsFinished_ = true;
-                        return EFetchResult::Finish;
-                    }
-
-                    s.SortAll(Columns_, KeyIndicies_);
-                    s.WritingOutput_ = true;
-                    s.FillSortOutputPart(Columns_, output, ctx);
-                    return EFetchResult::One;
-                }
-
-                s.IsFinished_ = true;
-                if (!s.BuilderLength_) {
-                    return EFetchResult::Finish;
-                }
-
-                if (s.BuilderLength_ > s.Count_ || Sort) {
-                    s.CompressBuilders(Sort, Columns_, KeyIndicies_, ctx);
-                }
-
-                s.FillOutput(Columns_, output, ctx);
-                return EFetchResult::One;
+        const auto sliceSize = s.Slice();
+        for (size_t i = 0; i <= Columns_.size(); ++i) {
+            if (const auto out = output[i]) {
+                *out = s.Get(sliceSize, ctx.HolderFactory, i);
             }
         }
+        return EFetchResult::One;
     }
+#ifndef MKQL_DISABLE_CODEGEN
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+        auto& context = ctx.Codegen.GetContext();
 
+        const auto width = Columns_.size() + 1U;
+
+        const auto valueType = Type::getInt128Ty(context);
+        const auto ptrValueType = PointerType::getUnqual(valueType);
+        const auto statusType = Type::getInt32Ty(context);
+        const auto indexType = Type::getInt64Ty(context);
+        const auto flagType = Type::getInt1Ty(context);
+        const auto arrayType = ArrayType::get(valueType, width);
+        const auto ptrValuesType = PointerType::getUnqual(arrayType);
+
+        TLLVMFieldsStructureState stateFields(context, width);
+        const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
+        const auto statePtrType = PointerType::getUnqual(stateType);
+
+        const auto atTop = &ctx.Func->getEntryBlock().back();
+
+        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Get));
+        const auto getType = FunctionType::get(valueType, {statePtrType, indexType, ctx.GetFactory()->getType(), indexType}, false);
+        const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", atTop);
+
+        const auto heightPtr = new AllocaInst(indexType, 0U, "height_ptr", atTop);
+        const auto stateOnStack = new AllocaInst(statePtrType, 0U, "state_on_stack", atTop);
+
+        new StoreInst(ConstantInt::get(indexType, 0), heightPtr, atTop);
+        new StoreInst(ConstantPointerNull::get(statePtrType), stateOnStack, atTop);
+
+        const auto make = BasicBlock::Create(context, "make", ctx.Func);
+        const auto main = BasicBlock::Create(context, "main", ctx.Func);
+        const auto more = BasicBlock::Create(context, "more", ctx.Func);
+        const auto test = BasicBlock::Create(context, "test", ctx.Func);
+        const auto read = BasicBlock::Create(context, "read", ctx.Func);
+        const auto good = BasicBlock::Create(context, "good", ctx.Func);
+        const auto work = BasicBlock::Create(context, "work", ctx.Func);
+        const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
+        const auto over = BasicBlock::Create(context, "over", ctx.Func);
+
+        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        block = make;
+
+        llvm::Value* trunc;
+        if constexpr (HasCount) {
+            const auto count = GetNodeValue(Count_, ctx, block);
+            trunc = GetterFor<ui64>(count, context, block);
+        } else {
+            trunc = ConstantInt::get(Type::getInt64Ty(context), 0U);
+        }
+
+        const auto dirsType = ArrayType::get(flagType, Directions_.size());
+        const auto dirs = new AllocaInst(dirsType, 0U, "dirs", block);
+        for (auto i = 0U; i < Directions_.size(); ++i) {
+            const auto dir = GetNodeValue(Directions_[i], ctx, block);
+            const auto cut = GetterFor<bool>(dir, context, block);
+            const auto ptr = GetElementPtrInst::CreateInBounds(dirsType, dirs, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, "ptr", block);
+            new StoreInst(cut, ptr, block);
+        }
+
+        const auto ptrType = PointerType::getUnqual(StructType::get(context));
+        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TTopOrSortBlocksWrapper::MakeState));
+        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType(), dirs->getType(), trunc->getType()}, false);
+        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
+        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr, dirs, trunc}, "", block);
+
+        BranchInst::Create(main, block);
+
+        block = main;
+
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
+        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
+        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
+        const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetCount() }, "count_ptr", block);
+
+        const auto count = new LoadInst(indexType, countPtr, "count", block);
+        const auto none = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, count, ConstantInt::get(indexType, 0), "none", block);
+
+        BranchInst::Create(more, fill, none, block);
+
+        block = more;
+
+        const auto finishedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIsFinished() }, "is_finished_ptr", block);
+        const auto finished = new LoadInst(flagType, finishedPtr, "finished", block);
+
+        const auto result = PHINode::Create(statusType, 4U, "result", over);
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
+
+        BranchInst::Create(over, test, finished, block);
+
+        block = test;
+
+        const auto writingOutputPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetWritingOutput() }, "writing_output_ptr", block);
+        const auto writingOutput = new LoadInst(flagType, writingOutputPtr, "writing_output", block);
+
+        BranchInst::Create(work, read, writingOutput, block);
+
+        block = read;
+
+        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
+        const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
+        SafeUnRefUnboxed(values, ctx, block);
+
+        const auto getres = GetNodeValues(Flow_, ctx, block);
+
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
+
+        const auto way = SwitchInst::Create(getres.first, good, 2U, block);
+        way->addCase(ConstantInt::get(statusType, i32(EFetchResult::Finish)), work);
+        way->addCase(ConstantInt::get(statusType, i32(EFetchResult::Yield)), over);
+
+        block = good;
+
+        Value* array = UndefValue::get(arrayType);
+        for (auto idx = 0U; idx < getres.second.size(); ++idx) {
+            const auto value = getres.second[idx](ctx, block);
+            AddRefBoxed(value, ctx, block);
+            array = InsertValueInst::Create(array, value, {idx}, (TString("value_") += ToString(idx)).c_str(), block);
+        }
+        new StoreInst(array, values, block);
+
+        const auto processBlockFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::ProcessInput));
+        const auto processBlockType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
+        const auto processBlockPtr = CastInst::Create(Instruction::IntToPtr, processBlockFunc, PointerType::getUnqual(processBlockType), "process_inputs_func", block);
+        CallInst::Create(processBlockType, processBlockPtr, {stateArg}, "", block);
+
+        BranchInst::Create(read, block);
+
+        block = work;
+
+        const auto fillBlockFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::FillOutput));
+        const auto fillBlockType = FunctionType::get(flagType, {statePtrType, ctx.GetFactory()->getType()}, false);
+        const auto fillBlockPtr = CastInst::Create(Instruction::IntToPtr, fillBlockFunc, PointerType::getUnqual(fillBlockType), "fill_output_func", block);
+        const auto hasData = CallInst::Create(fillBlockType, fillBlockPtr, {stateArg, ctx.GetFactory()}, "fill_output", block);
+
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
+
+        BranchInst::Create(fill, over, hasData, block);
+
+        block = fill;
+
+        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Slice));
+        const auto sliceType = FunctionType::get(indexType, {statePtrType}, false);
+        const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice_func", block);
+        const auto slice = CallInst::Create(sliceType, slicePtr, {stateArg}, "slice", block);
+        new StoreInst(slice, heightPtr, block);
+        new StoreInst(stateArg, stateOnStack, block);
+
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
+
+        BranchInst::Create(over, block);
+
+        block = over;
+
+        ICodegeneratorInlineWideNode::TGettersList getters(width);
+        for (size_t idx = 0U; idx < getters.size(); ++idx) {
+            getters[idx] = [idx, getType, getPtr, heightPtr, indexType, statePtrType, stateOnStack](const TCodegenContext& ctx, BasicBlock*& block) {
+                const auto stateArg = new LoadInst(statePtrType, stateOnStack, "state", block);
+                const auto heightArg = new LoadInst(indexType, heightPtr, "height", block);
+                return CallInst::Create(getType, getPtr, {stateArg, heightArg, ctx.GetFactory(), ConstantInt::get(indexType, idx)}, "get", block);
+            };
+        }
+        return {result, std::move(getters)};
+    }
+#endif
 private:
     void RegisterDependencies() const final {
         if (const auto flow = this->FlowDependsOn(Flow_)) {
@@ -178,42 +254,46 @@ private:
         }
     }
 
-    class TState : public TComputationValue<TState> {
-        using TBase = TComputationValue<TState>;
+    class TState : public TBlockState {
     public:
         bool WritingOutput_ = false;
+        bool IsFinished_ = false;
+
         ui64 OutputLength_ = 0;
         ui64 Written_ = 0;
-        TVector<TVector<arrow::Datum>> SortInput_;
-        TVector<ui64> SortPermutation_;
-        TVector<TChunkedArrayIndex> SortArrays_;
+        const std::vector<bool> Directions_;
+        const ui64 Count_;
+        const std::vector<TBlockType*> Columns_;
+        const std::vector<ui32> KeyIndicies_;
+        std::vector<std::vector<arrow::Datum>> SortInput_;
+        std::vector<ui64> SortPermutation_;
+        std::vector<TChunkedArrayIndex> SortArrays_;
 
-        bool IsFinished_ = false;
-        bool PreparedCountAndDirections_ = false;
-        ui64 Count_ = 0;
-        TVector<bool> Directions_;
         bool ScalarsFilled_ = false;
-        TVector<NUdf::TUnboxedValue> ScalarValues_;
-        TVector<std::unique_ptr<IBlockReader>> LeftReaders_;
-        TVector<std::unique_ptr<IBlockReader>> RightReaders_;
-        bool PreparedBuilders_ = false;
-        TVector<std::unique_ptr<IArrayBuilder>> Builders_;
+        TUnboxedValueVector ScalarValues_;
+        std::vector<std::unique_ptr<IBlockReader>> LeftReaders_;
+        std::vector<std::unique_ptr<IBlockReader>> RightReaders_;
+        std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
         ui64 BuilderMaxLength_ = 0;
         ui64 BuilderLength_ = 0;
-        TVector<NUdf::IBlockItemComparator::TPtr> Comparators_; // by key columns only
+        std::vector<NUdf::IBlockItemComparator::TPtr> Comparators_; // by key columns only
 
-        TVector<NUdf::TUnboxedValue> Values_;
-        TVector<NUdf::TUnboxedValue*> ValuePointers_;
-
-        TState(TMemoryUsageInfo* memInfo, const TVector<ui32>& keyIndicies, const TVector<TBlockType*>& columns)
-            : TBase(memInfo)
+        TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const std::vector<ui32>& keyIndicies, const std::vector<TBlockType*>& columns, const bool* directions, ui64 count)
+            : TBlockState(memInfo, columns.size() + 1U)
+            , IsFinished_(HasCount && !count)
+            , Directions_(directions, directions + keyIndicies.size())
+            , Count_(count)
+            , Columns_(columns)
+            , KeyIndicies_(keyIndicies)
+            , SortInput_(Columns_.size())
+            , SortArrays_(Columns_.size())
+            , LeftReaders_(Columns_.size())
+            , RightReaders_(Columns_.size())
+            , Builders_(Columns_.size())
+            , Comparators_(KeyIndicies_.size())
         {
-            Directions_.resize(keyIndicies.size());
-            LeftReaders_.resize(columns.size());
-            RightReaders_.resize(columns.size());
-            Builders_.resize(columns.size());
-            for (ui32 i = 0; i < columns.size(); ++i) {
-                if (columns[i]->GetShape() == TBlockType::EShape::Scalar) {
+            for (ui32 i = 0; i < Columns_.size(); ++i) {
+                if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
                     continue;
                 }
 
@@ -221,68 +301,112 @@ private:
                 RightReaders_[i] = MakeBlockReader(TTypeInfoHelper(), columns[i]->GetItemType());
             }
 
-            Values_.resize(columns.size() + 1);
-            ValuePointers_.resize(columns.size() + 1);
-            for (ui32 i = 0; i <= columns.size(); ++i) {
-                ValuePointers_[i] = &Values_[i];
+            for (ui32 k = 0; k < KeyIndicies_.size(); ++k) {
+                Comparators_[k] = TBlockTypeHelper().MakeComparator(Columns_[KeyIndicies_[k]]->GetItemType());
             }
 
-            Comparators_.resize(keyIndicies.size());
-            for (ui32 k = 0; k < keyIndicies.size(); ++k) {
-                Comparators_[k] = TBlockTypeHelper().MakeComparator(columns[keyIndicies[k]]->GetItemType());
-            }
-
-            SortInput_.resize(columns.size());
-            SortArrays_.resize(columns.size());
-        }
-
-        ui64 GetStorageLength() const {
-            Y_ABORT_UNLESS(PreparedCountAndDirections_);
-            return 2 * Count_;
-        }
-
-        void AllocateBuilders(const TVector<TBlockType*>& columns, TComputationContext& ctx) {
             BuilderMaxLength_ = GetStorageLength();
             size_t maxBlockItemSize = 0;
-            for (ui32 i = 0; i < columns.size(); ++i) {
-                if (columns[i]->GetShape() == TBlockType::EShape::Scalar) {
+            for (ui32 i = 0; i < Columns_.size(); ++i) {
+                if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
                     continue;
                 }
 
-                maxBlockItemSize = Max(maxBlockItemSize, CalcMaxBlockItemSize(columns[i]->GetItemType()));
+                maxBlockItemSize = Max(maxBlockItemSize, CalcMaxBlockItemSize(Columns_[i]->GetItemType()));
             };
 
             BuilderMaxLength_ = Max(BuilderMaxLength_, CalcBlockLen(maxBlockItemSize));
 
-            for (ui32 i = 0; i < columns.size(); ++i) {
-                if (columns[i]->GetShape() == TBlockType::EShape::Scalar) {
+            for (ui32 i = 0; i < Columns_.size(); ++i) {
+                if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
                     continue;
                 }
 
-                Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), columns[i]->GetItemType(), ctx.ArrowMemoryPool, BuilderMaxLength_, &ctx.Builder->GetPgBuilder());
+                Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), Columns_[i]->GetItemType(), ctx.ArrowMemoryPool, BuilderMaxLength_, &ctx.Builder->GetPgBuilder());
             }
         }
 
-        void CompressBuilders(bool sort, const TVector<TBlockType*>& columns, const TVector<ui32>& keyIndicies, TComputationContext&) {
+        void Add(const NUdf::TUnboxedValuePod value, size_t idx) {
+            Values[idx] = value;
+        }
+
+        void ProcessInput() {
+            const ui64 blockLen = TArrowBlock::From(Values.back()).GetDatum().template scalar_as<arrow::UInt64Scalar>().value;
+
+            if (!ScalarsFilled_) {
+                for (ui32 i = 0; i < Columns_.size(); ++i) {
+                    if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
+                        ScalarValues_[i] = std::move(Values[i]);
+                    }
+                }
+
+                ScalarsFilled_ = true;
+            }
+
+            if constexpr (!HasCount) {
+                for (ui32 i = 0; i < Columns_.size(); ++i) {
+                    auto datum = TArrowBlock::From(Values[i]).GetDatum();
+                    if (Columns_[i]->GetShape() != TBlockType::EShape::Scalar) {
+                        SortInput_[i].emplace_back(datum);
+                    }
+                }
+
+                OutputLength_ += blockLen;
+                return;
+            }
+
+            // shrink input block
+            std::optional<std::vector<ui64>> blockIndicies;
+            if (blockLen > Count_) {
+                blockIndicies.emplace();
+                blockIndicies->reserve(blockLen);
+                for (ui64 row = 0; row < blockLen; ++row) {
+                    blockIndicies->emplace_back(row);
+                }
+
+                std::vector<TChunkedArrayIndex> arrayIndicies(Columns_.size());
+                for (ui32 i = 0; i < Columns_.size(); ++i) {
+                    if (Columns_[i]->GetShape() != TBlockType::EShape::Scalar) {
+                        auto datum = TArrowBlock::From(Values[i]).GetDatum();
+                        arrayIndicies[i] = MakeChunkedArrayIndex(datum);
+                    }
+                }
+
+                const TBlockLess cmp(KeyIndicies_, *this, arrayIndicies);
+                NYql::FastNthElement(blockIndicies->begin(), blockIndicies->begin() + Count_, blockIndicies->end(), cmp);
+            }
+
+            // copy all to builders
+            AddTop(Columns_, blockIndicies, blockLen);
+            if (BuilderLength_ + Count_ > BuilderMaxLength_) {
+                CompressBuilders(false);
+            }
+        }
+
+        ui64 GetStorageLength() const {
+            return 2 * Count_;
+        }
+
+        void CompressBuilders(bool sort) {
             Y_ABORT_UNLESS(ScalarsFilled_);
-            TVector<TChunkedArrayIndex> arrayIndicies(columns.size());
-            TVector<arrow::Datum> tmpDatums(columns.size());
-            for (ui32 i = 0; i < columns.size(); ++i) {
-                if (columns[i]->GetShape() != TBlockType::EShape::Scalar) {
+            std::vector<TChunkedArrayIndex> arrayIndicies(Columns_.size());
+            std::vector<arrow::Datum> tmpDatums(Columns_.size());
+            for (ui32 i = 0; i < Columns_.size(); ++i) {
+                if (Columns_[i]->GetShape() != TBlockType::EShape::Scalar) {
                     auto datum = Builders_[i]->Build(false);
                     arrayIndicies[i] = MakeChunkedArrayIndex(datum);
                     tmpDatums[i] = std::move(datum);
                 }
             }
 
-            TVector<ui64> blockIndicies;
+            std::vector<ui64> blockIndicies;
             blockIndicies.reserve(BuilderLength_);
             for (ui64 row = 0; row < BuilderLength_; ++row) {
                 blockIndicies.push_back(row);
             }
 
-            ui64 blockLen = Min(BuilderLength_, Count_);
-            TBlockLess cmp(keyIndicies, *this, arrayIndicies);
+            const ui64 blockLen = Min(BuilderLength_, Count_);
+            const TBlockLess cmp(KeyIndicies_, *this, arrayIndicies);
             if (BuilderLength_ <= Count_) {
                 if (sort) {
                     std::sort(blockIndicies.begin(), blockIndicies.end(), cmp);
@@ -295,8 +419,8 @@ private:
                 }
             }
 
-            for (ui32 i = 0; i < columns.size(); ++i) {
-                if (columns[i]->GetShape() == TBlockType::EShape::Scalar) {
+            for (ui32 i = 0; i < Columns_.size(); ++i) {
+                if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
                     continue;
                 }
 
@@ -307,13 +431,13 @@ private:
             BuilderLength_ = blockLen;
         }
 
-        void SortAll(const TVector<TBlockType*>& columns, const TVector<ui32>& keyIndicies) {
+        void SortAll() {
             SortPermutation_.reserve(OutputLength_);
             for (ui64 i = 0; i < OutputLength_; ++i) {
                 SortPermutation_.emplace_back(i);
             }
 
-            for (ui32 i = 0; i < columns.size(); ++i) {
+            for (ui32 i = 0; i < Columns_.size(); ++i) {
                 ui64 offset = 0;
                 for (const auto& datum : SortInput_[i]) {
                     if (datum.is_scalar()) {
@@ -333,55 +457,72 @@ private:
                 }
             }
 
-            TBlockLess cmp(keyIndicies, *this, SortArrays_);
+            TBlockLess cmp(KeyIndicies_, *this, SortArrays_);
             std::sort(SortPermutation_.begin(), SortPermutation_.end(), cmp);
         }
 
-        void FillSortOutputPart(const TVector<TBlockType*>& columns, NUdf::TUnboxedValue*const* output, TComputationContext& ctx) {
+        bool FillOutput(const THolderFactory& holderFactory) {
+            if (WritingOutput_) {
+                FillSortOutputPart(holderFactory);
+            } else if constexpr (!HasCount) {
+                if (!OutputLength_) {
+                    IsFinished_ = true;
+                    return false;
+                }
+
+                SortAll();
+                WritingOutput_ = true;
+                FillSortOutputPart(holderFactory);
+            } else {
+                IsFinished_ = true;
+                if (!BuilderLength_) {
+                    return false;
+                }
+
+                if (BuilderLength_ > Count_ || Sort) {
+                    CompressBuilders(Sort);
+                }
+
+                for (ui32 i = 0; i < Columns_.size(); ++i) {
+                    if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
+                        Values[i] = ScalarValues_[i];
+                    } else {
+                        Values[i] = holderFactory.CreateArrowBlock(arrow::Datum(Builders_[i]->Build(true)));
+                    }
+                }
+
+                Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(BuilderLength_)));
+            }
+            FillArrays();
+            return true;
+        }
+
+        void FillSortOutputPart(const THolderFactory& holderFactory) {
             auto blockLen = Min(BuilderMaxLength_, OutputLength_ - Written_);
             const bool isLast = (Written_ + blockLen == OutputLength_);
 
-            for (ui32 i = 0; i < columns.size(); ++i) {
-                if (!output[i]) {
-                    continue;
-                }
-
-                if (columns[i]->GetShape() == TBlockType::EShape::Scalar) {
-                    *output[i] = ScalarValues_[i];
+            for (ui32 i = 0; i < Columns_.size(); ++i) {
+                if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
+                    Values[i] = ScalarValues_[i];
                 } else {
                     Builders_[i]->AddMany(SortArrays_[i].data(), SortArrays_[i].size(), SortPermutation_.data() + Written_, blockLen);
-                    *output[i] = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(Builders_[i]->Build(isLast)));
+                    Values[i] = holderFactory.CreateArrowBlock(arrow::Datum(Builders_[i]->Build(isLast)));
                 }
             }
 
-            *output[columns.size()] = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
-
+            Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
             Written_ += blockLen;
+            if (Written_ >= OutputLength_)
+                IsFinished_ = true;
         }
 
-        void FillOutput(const TVector<TBlockType*>& columns, NUdf::TUnboxedValue*const* output, TComputationContext& ctx) {
-            for (ui32 i = 0; i < columns.size(); ++i) {
-                if (!output[i]) {
-                    continue;
-                }
-
-                if (columns[i]->GetShape() == TBlockType::EShape::Scalar) {
-                    *output[i] = ScalarValues_[i];
-                } else {
-                    *output[i] = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(Builders_[i]->Build(true)));
-                }
-            }
-
-            *output[columns.size()] = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(BuilderLength_)));
-        }
-
-        void AddTop(const TVector<TBlockType*>& columns, const TMaybe<TVector<ui64>>& blockIndicies, ui64 blockLen) {
+        void AddTop(const std::vector<TBlockType*>& columns, const std::optional<std::vector<ui64>>& blockIndicies, ui64 blockLen) {
             for (ui32 i = 0; i < columns.size(); ++i) {
                 if (columns[i]->GetShape() == TBlockType::EShape::Scalar) {
                     continue;
                 }
 
-                const auto& datum = TArrowBlock::From(Values_[i]).GetDatum();
+                const auto& datum = TArrowBlock::From(Values[i]).GetDatum();
                 auto arrayIndex = MakeChunkedArrayIndex(datum);
                 if (blockIndicies) {
                     Builders_[i]->AddMany(arrayIndex.data(), arrayIndex.size(), blockIndicies->data(), Count_);
@@ -397,10 +538,57 @@ private:
             }
         }
     };
+#ifndef MKQL_DISABLE_CODEGEN
+    class TLLVMFieldsStructureState: public TLLVMFieldsStructureBlockState {
+    private:
+        using TBase = TLLVMFieldsStructureBlockState;
+        llvm::IntegerType*const WritingOutputType;
+        llvm::IntegerType*const IsFinishedType;
+    protected:
+        using TBase::Context;
+    public:
+        std::vector<llvm::Type*> GetFieldsArray() {
+            std::vector<llvm::Type*> result = TBase::GetFieldsArray();
+            result.emplace_back(WritingOutputType);
+            result.emplace_back(IsFinishedType);
+            return result;
+        }
+
+        llvm::Constant* GetWritingOutput() {
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + BaseFields);
+        }
+
+        llvm::Constant* GetIsFinished() {
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + BaseFields + 1);
+        }
+
+        TLLVMFieldsStructureState(llvm::LLVMContext& context, size_t width)
+            : TBase(context, width)
+            , WritingOutputType(Type::getInt1Ty(Context))
+            , IsFinishedType(Type::getInt1Ty(Context))
+        {}
+    };
+#endif
+    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, const bool* directions, ui64 count = 0ULL) const {
+        state = ctx.HolderFactory.Create<TState>(ctx, KeyIndicies_, Columns_, directions, count);
+    }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (!state.HasValue()) {
-            state = ctx.HolderFactory.Create<TState>(KeyIndicies_, Columns_);
+            std::vector<bool> dirs(Directions_.size());
+            std::transform(Directions_.cbegin(), Directions_.cend(), dirs.begin(), [&ctx](IComputationNode* dir){ return dir->GetValue(ctx).Get<bool>(); });
+
+            if constexpr (HasCount)
+                MakeState(ctx, state, dirs.data(), Count_->GetValue(ctx).Get<ui64>());
+            else
+                MakeState(ctx, state, dirs.data());
+
+            auto& s = *static_cast<TState*>(state.AsBoxed().Get());
+            const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
+            for (size_t i = 0; i < s.Values.size(); ++i) {
+                fields[i] = &s.Values[i];
+            }
+            return s;
         }
 
         return *static_cast<TState*>(state.AsBoxed().Get());
@@ -424,7 +612,7 @@ private:
 
     class TBlockLess {
     public:
-        TBlockLess(const TVector<ui32>& keyIndicies, const TState& state, const TVector<TChunkedArrayIndex>& arrayIndicies)
+        TBlockLess(const std::vector<ui32>& keyIndicies, const TState& state, const std::vector<TChunkedArrayIndex>& arrayIndicies)
             : KeyIndicies_(keyIndicies)
             , ArrayIndicies_(arrayIndicies)
             , State_(state)
@@ -472,7 +660,6 @@ private:
                 return false;
             }
         }
-
     private:
         static TBlockItem GetBlockItem(IBlockReader& reader, const TChunkedArrayIndex& arrayIndex, ui64 idx) {
             Y_VERIFY_DEBUG(!arrayIndex.empty());
@@ -484,16 +671,17 @@ private:
             return reader.GetItem(*it->Data, idx);
         }
 
-        const TVector<ui32>& KeyIndicies_;
-        const TVector<TChunkedArrayIndex> ArrayIndicies_;
+        const std::vector<ui32>& KeyIndicies_;
+        const std::vector<TChunkedArrayIndex> ArrayIndicies_;
         const TState& State_;
     };
 
-    IComputationWideFlowNode* Flow_;
-    IComputationNode* Count_;
-    const TVector<IComputationNode*> Directions_;
-    const TVector<ui32> KeyIndicies_;
-    TVector<TBlockType*> Columns_;
+    IComputationWideFlowNode *const Flow_;
+    IComputationNode *const Count_;
+    const TComputationNodePtrVector Directions_;
+    const std::vector<ui32> KeyIndicies_;
+    std::vector<TBlockType*> Columns_;
+    const size_t WideFieldsIndex_;
 };
 
 template <bool Sort, bool HasCount>
@@ -506,7 +694,7 @@ IComputationNode* WrapTopOrSort(TCallable& callable, const TComputationNodeFacto
     const auto wideComponents = GetWideComponents(flowType);
     MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
 
-    auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
+    const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
 
     IComputationNode* count = nullptr;
@@ -516,8 +704,8 @@ IComputationNode* WrapTopOrSort(TCallable& callable, const TComputationNodeFacto
         count = LocateNode(ctx.NodeLocator, callable, 1);
     }
 
-    TVector<IComputationNode*> directions;
-    TVector<ui32> keyIndicies;
+    TComputationNodePtrVector directions;
+    std::vector<ui32> keyIndicies;
     for (ui32 i = 2; i < inputsWithCount; i += 2) {
         ui32 keyIndex = AS_VALUE(TDataLiteral, callable.GetInput(i - offset))->AsValue().Get<ui32>();
         MKQL_ENSURE(keyIndex + 1 < wideComponents.size(), "Wrong key index");

@@ -42,6 +42,7 @@ target_sources(ydb-library-yql-minikql-comp_nodes-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_bit_utils_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_block_compress_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_block_skiptake_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_block_top_sort_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_blocks_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_combine_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_condense_ut.cpp

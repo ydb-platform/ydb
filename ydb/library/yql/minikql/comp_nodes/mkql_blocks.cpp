@@ -948,12 +948,9 @@ public:
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         auto& s = GetState(state, ctx);
-        const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
-        for (size_t i = 0; i < Width_; ++i)
-            fields[i] = output[i] ? &s.Values[i] : nullptr;
-
-        while (!s.Count) {
+        if (!s.Count) {
             s.Values.assign(s.Values.size(), NUdf::TUnboxedValuePod());
+            const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
             if (const auto result = Flow_->FetchValues(ctx, fields); result != EFetchResult::One)
                 return result;
             s.FillArrays();
@@ -994,17 +991,9 @@ public:
         new StoreInst(ConstantInt::get(indexType, 0), heightPtr, atTop);
         new StoreInst(ConstantPointerNull::get(statePtrType), stateOnStack, atTop);
 
-        const auto name = "GetBlockCount";
-        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
-        const auto getCountType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
-            FunctionType::get(indexType, { valueType }, false):
-            FunctionType::get(indexType, { ptrValueType }, false);
-        const auto getCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getCountType);
-
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
-        const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
-        const auto more = BasicBlock::Create(context, "more", ctx.Func);
+        const auto read = BasicBlock::Create(context, "read", ctx.Func);
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
@@ -1027,18 +1016,13 @@ public:
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
         const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetCount() }, "count_ptr", block);
-
-        BranchInst::Create(loop, block);
-
-        block = loop;
-
         const auto count = new LoadInst(indexType, countPtr, "count", block);
 
         const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, count, ConstantInt::get(indexType, 0), "next", block);
 
-        BranchInst::Create(more, fill, next, block);
+        BranchInst::Create(read, fill, next, block);
 
-        block = more;
+        block = read;
 
         const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
         const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
@@ -1055,20 +1039,20 @@ public:
 
         block = work;
 
-        const auto countValue = getres.second.back()(ctx, block);
-        const auto tailPtr = GetElementPtrInst::CreateInBounds(arrayType, values, {  ConstantInt::get(indexType, 0), ConstantInt::get(indexType, Width_ - 1U) }, "tail_ptr", block);
-        new StoreInst(countValue, tailPtr, block);
-        AddRefBoxed(countValue, ctx, block);
+        Value* array = UndefValue::get(arrayType);
+        for (auto idx = 0U; idx < getres.second.size(); ++idx) {
+            const auto value = getres.second[idx](ctx, block);
+            AddRefBoxed(value, ctx, block);
+            array = InsertValueInst::Create(array, value, {idx}, (TString("value_") += ToString(idx)).c_str(), block);
+        }
+        new StoreInst(array, values, block);
 
-        const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(countValue, ctx, block) }, "height", block);
-        new StoreInst(height, countPtr, block);
+        const auto fillArraysFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TBlockState::FillArrays));
+        const auto fillArraysType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
+        const auto fillArraysPtr = CastInst::Create(Instruction::IntToPtr, fillArraysFunc, PointerType::getUnqual(fillArraysType), "fill_arrays_func", block);
+        CallInst::Create(fillArraysType, fillArraysPtr, {stateArg}, "", block);
 
-        const auto makeBlockFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TBlockState::FillArrays));
-        const auto makeBlockType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
-        const auto makeBlockPtr = CastInst::Create(Instruction::IntToPtr, makeBlockFunc, PointerType::getUnqual(makeBlockType), "fill_arrays_func", block);
-        CallInst::Create(makeBlockType, makeBlockPtr, {stateArg}, "", block);
-
-        BranchInst::Create(loop, block);
+        BranchInst::Create(fill, block);
 
         block = fill;
 
@@ -1087,33 +1071,10 @@ public:
 
         ICodegeneratorInlineWideNode::TGettersList getters(Width_);
         for (size_t idx = 0U; idx < getters.size(); ++idx) {
-            getters[idx] = [idx, width = Width_, getType, getPtr, heightPtr, indexType, arrayType, ptrValuesType, stateType, statePtrType, stateOnStack, getBlocks = getres.second](const TCodegenContext& ctx, BasicBlock*& block) {
-                auto& context = ctx.Codegen.GetContext();
-                const auto init = BasicBlock::Create(context, "init", ctx.Func);
-                const auto call = BasicBlock::Create(context, "call", ctx.Func);
-
-                TLLVMFieldsStructureBlockState stateFields(context, width);
-
+            getters[idx] = [idx, getType, getPtr, heightPtr, indexType, statePtrType, stateOnStack](const TCodegenContext& ctx, BasicBlock*& block) {
                 const auto stateArg = new LoadInst(statePtrType, stateOnStack, "state", block);
-                const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
-                const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
-                const auto index = ConstantInt::get(indexType, idx);
-                const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {  ConstantInt::get(indexType, 0), index }, "pointer", block);
-
-                BranchInst::Create(call, init, HasValue(pointer, block), block);
-
-                block = init;
-
-                const auto value = getBlocks[idx](ctx, block);
-                new StoreInst(value, pointer, block);
-                AddRefBoxed(value, ctx, block);
-
-                BranchInst::Create(call, block);
-
-                block = call;
-
                 const auto heightArg = new LoadInst(indexType, heightPtr, "height", block);
-                return CallInst::Create(getType, getPtr, {stateArg, heightArg, ctx.GetFactory(), index}, "get", block);
+                return CallInst::Create(getType, getPtr, {stateArg, heightArg, ctx.GetFactory(), ConstantInt::get(indexType, idx)}, "get", block);
             };
         }
         return {result, std::move(getters)};
@@ -1125,8 +1086,15 @@ private:
     }
 
     TBlockState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue())
+        if (!state.HasValue()) {
             MakeState(ctx, state);
+
+            auto& s = *static_cast<TBlockState*>(state.AsBoxed().Get());
+            const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
+            for (size_t i = 0; i < Width_; ++i)
+                fields[i] = &s.Values[i];
+            return s;
+        }
         return *static_cast<TBlockState*>(state.AsBoxed().Get());
     }
 

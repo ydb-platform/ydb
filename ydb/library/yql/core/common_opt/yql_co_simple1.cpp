@@ -3028,14 +3028,17 @@ TExprNode::TPtr Normalize(const TCoAggregate& node, TExprContext& ctx) {
     for (const auto& aggTuple : node.Handlers()) {
         const TExprNode& columns = aggTuple.ColumnName().Ref();
         TVector<TStringBuf> names;
-        bool namesInOrder = true;
+        bool needRebuildNames = false;
         if (columns.IsList()) {
             for (auto& column : columns.ChildrenList()) {
                 YQL_ENSURE(column->IsAtom());
                 if (!names.empty()) {
-                    namesInOrder = namesInOrder && (column->Content() >= names.back());
+                    needRebuildNames = needRebuildNames || (column->Content() < names.back());
                 }
                 names.push_back(column->Content());
+            }
+            if (names.size() == 1) {
+                needRebuildNames = true;
             }
         } else {
             YQL_ENSURE(columns.IsAtom());
@@ -3043,7 +3046,7 @@ TExprNode::TPtr Normalize(const TCoAggregate& node, TExprContext& ctx) {
         }
 
         TExprNode::TPtr aggTupleNode = aggTuple.Ptr();
-        if (!namesInOrder && aggTuple.Trait().Maybe<TCoAggregationTraits>()) {
+        if (needRebuildNames && aggTuple.Trait().Maybe<TCoAggregationTraits>()) {
             auto traits = aggTuple.Trait().Cast<TCoAggregationTraits>();
             const TTypeAnnotationNode* finishType = traits.FinishHandler().Ref().GetTypeAnn();
             if (finishType->GetKind() == ETypeAnnotationKind::Tuple && finishType->Cast<TTupleExprType>()->GetSize() == names.size()) {
@@ -3052,6 +3055,7 @@ TExprNode::TPtr Normalize(const TCoAggregate& node, TExprContext& ctx) {
                 for (size_t i = 0; i < names.size(); ++i) {
                     YQL_ENSURE(originalIndexes.insert({ names[i], i}).second);
                 }
+                YQL_ENSURE(names.size() == originalIndexes.size());
 
                 TExprNodeList nameNodes;
                 TExprNodeList finishBody;
@@ -3074,11 +3078,11 @@ TExprNode::TPtr Normalize(const TCoAggregate& node, TExprContext& ctx) {
 
                 auto finishLambda = ctx.NewLambda(traits.FinishHandler().Pos(),
                     ctx.NewArguments(traits.FinishHandler().Pos(), { arg }),
-                    ctx.NewList(traits.FinishHandler().Pos(), std::move(finishBody)));
+                    (originalIndexes.size() == 1) ? finishBody.front() : ctx.NewList(traits.FinishHandler().Pos(), std::move(finishBody)));
 
                 aggTupleNode = Build<TCoAggregateTuple>(ctx, aggTuple.Pos())
                     .InitFrom(aggTuple)
-                    .ColumnName(ctx.NewList(aggTuple.ColumnName().Pos(), std::move(nameNodes)))
+                    .ColumnName((originalIndexes.size() == 1) ? nameNodes.front() : ctx.NewList(aggTuple.ColumnName().Pos(), std::move(nameNodes)))
                     .Trait<TCoAggregationTraits>()
                         .InitFrom(traits)
                         .FinishHandler(finishLambda)

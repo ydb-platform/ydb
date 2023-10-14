@@ -13,6 +13,11 @@ const TAllocationTags::TTags& TAllocationTags::GetTags() const noexcept
     return Tags_;
 }
 
+const TAllocationTags::TTags* TAllocationTags::GetTagsPtr() const noexcept
+{
+    return &Tags_;
+}
+
 std::optional<TAllocationTags::TValue> TAllocationTags::FindTagValue(const TKey& key) const
 {
     return FindTagValue(Tags_, key);

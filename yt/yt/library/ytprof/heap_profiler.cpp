@@ -34,10 +34,9 @@ Y_WEAK void* CopyAllocationTagsData(void* userData)
 Y_WEAK void DestroyAllocationTagsData(void* /*userData*/)
 { }
 
-Y_WEAK const std::vector<std::pair<TString, TString>>& ReadAllocationTagsData(void* /*userData*/)
+Y_WEAK const std::vector<std::pair<TString, TString>>* ReadAllocationTagsData(void* /*userData*/)
 {
-    static const std::vector<std::pair<TString, TString>> emptyTags;
-    return emptyTags;
+    return nullptr;
 }
 
 Y_WEAK std::optional<TString> FindTagValue(
@@ -132,10 +131,12 @@ NProto::Profile ConvertAllocationProfile(const tcmalloc::Profile& snapshot)
         }
 
         // TODO(gepardo): Deduplicate values in string table
-        for (const auto& [key, value] : ReadAllocationTagsData(sample.user_data)) {
-            auto label = sampleProto->add_label();
-            label->set_key(addString(key));
-            label->set_str(addString(value));
+        if (const auto* data = ReadAllocationTagsData(sample.user_data)) {
+            for (const auto& [key, value] : *data) {
+                auto label = sampleProto->add_label();
+                label->set_key(addString(key));
+                label->set_str(addString(value));
+            }
         }
     });
 
@@ -193,8 +194,10 @@ TMemoryUsageSnapshotPtr CollectMemoryUsageSnapshot()
 
     auto snapshot = tcmalloc::MallocExtension::SnapshotCurrent(tcmalloc::ProfileType::kHeap);
     snapshot.Iterate([&] (const tcmalloc::Profile::Sample& sample) {
-        for (const auto& [tagName, tag] : ReadAllocationTagsData(sample.user_data)) {
-            usage[tagName][tag] += sample.sum;
+        if (const auto* data = ReadAllocationTagsData(sample.user_data)) {
+            for (const auto& [tagName, tag] : *data) {
+                usage[tagName][tag] += sample.sum;
+            }
         }
     });
 

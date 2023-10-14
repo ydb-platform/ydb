@@ -19,6 +19,8 @@ public:
 
     const TTags& GetTags() const noexcept;
 
+    const TTags* GetTagsPtr() const noexcept;
+
     std::optional<TValue> FindTagValue(const TKey& key) const;
 
     static std::optional<TValue> FindTagValue(

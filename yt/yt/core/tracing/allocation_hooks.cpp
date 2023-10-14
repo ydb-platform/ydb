@@ -42,14 +42,14 @@ void DestroyAllocationTagsData(void* userData)
     FreeList->ScheduleFree(allocationTagsPtr);
 }
 
-const TAllocationTags::TTags& ReadAllocationTagsData(void* userData)
+const TAllocationTags::TTags* ReadAllocationTagsData(void* userData)
 {
-    auto* allocationTagsPtr = static_cast<TAllocationTags*>(userData);
-    if (!allocationTagsPtr) {
-        static TAllocationTags::TTags emptyTags;
-        return emptyTags;
+    if (!userData) {
+        return nullptr;
     }
-    return allocationTagsPtr->GetTags();
+
+    const auto* allocationTagsPtr = static_cast<TAllocationTags*>(userData);
+    return allocationTagsPtr->GetTagsPtr();
 }
 
 std::optional<TString> FindTagValue(

@@ -16,7 +16,7 @@ void TFetchingInterval::ConstructResult() {
             if (i->GetStart().Compare(Start) == std::partial_ordering::equivalent && !i->IsMergingStarted()) {
                 auto rb = i->GetBatch();
                 if (rb) {
-                    Merger->AddPoolSource({}, rb, i->GetFilterStageData().GetNotAppliedEarlyFilter());
+                    Merger->AddSource(rb, i->GetFilterStageData().GetNotAppliedEarlyFilter());
                 }
                 i->StartMerging();
             }

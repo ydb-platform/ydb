@@ -8,7 +8,7 @@ class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges {
 private:
     using TBase = TCompactColumnEngineChanges;
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
-    std::vector<NIndexedReader::TSortableBatchPosition> CheckPoints;
+    std::map<NIndexedReader::TSortableBatchPosition, bool> CheckPoints;
 protected:
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
     virtual TPortionMeta::EProduced GetResultProducedClass() const override {
@@ -19,7 +19,7 @@ protected:
 public:
     using TBase::TBase;
 
-    void AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position);
+    void AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position, const bool include = true);
 
     virtual TString TypeString() const override {
         return StaticTypeName();

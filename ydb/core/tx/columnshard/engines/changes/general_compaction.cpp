@@ -60,9 +60,9 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 batch = NArrow::TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), portionRecordIndexField, column->BuildArray(batch->num_rows())));
             }
             Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
-            mergeStream.AddPoolSource({}, batch, nullptr);
+            mergeStream.AddSource(batch, nullptr);
         }
-        batchResults = mergeStream.DrainAllParts(CheckPoints, indexFields, true);
+        batchResults = mergeStream.DrainAllParts(CheckPoints, indexFields);
     }
     Y_ABORT_UNLESS(batchResults.size());
 
@@ -208,11 +208,8 @@ NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounter
     return isSuccess ? NColumnShard::COUNTER_COMPACTION_SUCCESS : NColumnShard::COUNTER_COMPACTION_FAIL;
 }
 
-void TGeneralCompactColumnEngineChanges::AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position) {
-    if (CheckPoints.size()) {
-        AFL_VERIFY(CheckPoints.back().Compare(position) == std::partial_ordering::less);
-    }
-    CheckPoints.emplace_back(position);
+void TGeneralCompactColumnEngineChanges::AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position, const bool include) {
+    AFL_VERIFY(CheckPoints.emplace(position, include).second);
 }
 
 }

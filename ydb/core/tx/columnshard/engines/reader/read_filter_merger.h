@@ -14,6 +14,120 @@ namespace NKikimr::NOlap::NIndexedReader {
 
 class TRecordBatchBuilder;
 
+template <class TSortCursor>
+class TSortingHeap {
+public:
+    TSortingHeap() = default;
+
+    template <typename TCursors>
+    TSortingHeap(TCursors& cursors, bool notNull) {
+        Queue.reserve(cursors.size());
+        for (auto& cur : cursors) {
+            if (!cur.Empty()) {
+                Queue.emplace_back(TSortCursor(&cur, notNull));
+            }
+        }
+        std::make_heap(Queue.begin(), Queue.end());
+    }
+
+    const TSortCursor& Current() const { return Queue.front(); }
+    size_t Size() const { return Queue.size(); }
+    bool Empty() const { return Queue.empty(); }
+    TSortCursor& NextChild() { return Queue[NextChildIndex()]; }
+
+    void Next() {
+        Y_ABORT_UNLESS(Size());
+
+        if (Queue.front().Next()) {
+            UpdateTop();
+        } else {
+            RemoveTop();
+        }
+    }
+
+    void RemoveTop() {
+        std::pop_heap(Queue.begin(), Queue.end());
+        Queue.pop_back();
+        NextIdx = 0;
+    }
+
+    void Push(TSortCursor&& cursor) {
+        Queue.emplace_back(cursor);
+        std::push_heap(Queue.begin(), Queue.end());
+        NextIdx = 0;
+    }
+
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_ARRAY;
+        for (auto&& i : Queue) {
+            result.AppendValue(i.DebugJson());
+        }
+        return result;
+    }
+
+private:
+    std::vector<TSortCursor> Queue;
+    /// Cache comparison between first and second child if the order in queue has not been changed.
+    size_t NextIdx = 0;
+
+    size_t NextChildIndex() {
+        if (NextIdx == 0) {
+            NextIdx = 1;
+            if (Queue.size() > 2 && Queue[1] < Queue[2]) {
+                ++NextIdx;
+            }
+        }
+
+        return NextIdx;
+    }
+
+    /// This is adapted version of the function __sift_down from libc++.
+    /// Why cannot simply use std::priority_queue?
+    /// - because it doesn't support updating the top element and requires pop and push instead.
+    /// Also look at "Boost.Heap" library.
+    void UpdateTop() {
+        size_t size = Queue.size();
+        if (size < 2)
+            return;
+
+        auto begin = Queue.begin();
+
+        size_t child_idx = NextChildIndex();
+        auto child_it = begin + child_idx;
+
+        /// Check if we are in order.
+        if (*child_it < *begin)
+            return;
+
+        NextIdx = 0;
+
+        auto curr_it = begin;
+        auto top(std::move(*begin));
+        do {
+            /// We are not in heap-order, swap the parent with it's largest child.
+            *curr_it = std::move(*child_it);
+            curr_it = child_it;
+
+            // recompute the child based off of the updated parent
+            child_idx = 2 * child_idx + 1;
+
+            if (child_idx >= size)
+                break;
+
+            child_it = begin + child_idx;
+
+            if ((child_idx + 1) < size && *child_it < *(child_it + 1)) {
+                /// Right child exists and is greater than left child.
+                ++child_it;
+                ++child_idx;
+            }
+
+            /// Check if we are in order.
+        } while (!(*child_it < top));
+        *curr_it = std::move(top);
+    }
+};
+
 class TMergePartialStream {
 private:
 #ifndef NDEBUG
@@ -26,7 +140,6 @@ private:
         TSortableBatchPosition VersionColumns;
         i64 RecordsCount;
         int ReverseSortKff;
-        YDB_OPT(ui32, PoolId);
 
         std::shared_ptr<NArrow::TColumnFilter> Filter;
         std::shared_ptr<NArrow::TColumnFilter::TIterator> FilterIterator;
@@ -62,13 +175,12 @@ private:
         }
 
         TBatchIterator(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter,
-            const std::vector<std::string>& keyColumns, const std::vector<std::string>& dataColumns, const bool reverseSort, const std::optional<ui32> poolId)
+            const std::vector<std::string>& keyColumns, const std::vector<std::string>& dataColumns, const bool reverseSort)
             : ControlPointFlag(false)
             , KeyColumns(batch, 0, keyColumns, dataColumns, reverseSort)
             , VersionColumns(batch, 0, TIndexInfo::GetSpecialColumnNames(), {}, false)
             , RecordsCount(batch->num_rows())
             , ReverseSortKff(reverseSort ? -1 : 1)
-            , PoolId(poolId)
             , Filter(filter)
         {
             Y_ABORT_UNLESS(KeyColumns.InitPosition(GetFirstPosition()));
@@ -136,43 +248,11 @@ private:
             result["current"] = CurrentKeyColumns->DebugJson();
         }
 #endif
-        for (auto&& i : SortHeap) {
-            result["heap"].AppendValue(i.DebugJson());
-        }
+        result.InsertValue("heap", SortHeap.DebugJson());
         return result;
     }
 
-    bool NextInHeap(const bool needPop) {
-        if (SortHeap.empty()) {
-            return false;
-        }
-        if (needPop) {
-            std::pop_heap(SortHeap.begin(), SortHeap.end());
-        }
-        if (SortHeap.back().Next()) {
-            std::push_heap(SortHeap.begin(), SortHeap.end());
-        } else if (!SortHeap.back().HasPoolId()) {
-            SortHeap.pop_back();
-        } else {
-            auto it = BatchPools.find(SortHeap.back().GetPoolIdUnsafe());
-            Y_ABORT_UNLESS(it->second.size());
-            if (it->second.size() == 1) {
-                BatchPools.erase(it);
-                SortHeap.pop_back();
-            } else {
-                it->second.pop_front();
-                TBatchIterator oldIterator = std::move(SortHeap.back());
-                SortHeap.pop_back();
-                AddNewToHeap(SortHeap.back().GetPoolIdUnsafe(), it->second.front().GetBatch(), it->second.front().GetFilter(), false);
-                oldIterator.CheckNextBatch(SortHeap.back());
-                std::push_heap(SortHeap.begin(), SortHeap.end());
-            }
-        }
-        return SortHeap.size();
-    }
-
-    THashMap<ui32, std::deque<TIteratorData>> BatchPools;
-    std::vector<TBatchIterator> SortHeap;
+    TSortingHeap<TBatchIterator> SortHeap;
     std::shared_ptr<arrow::Schema> SortSchema;
     std::shared_ptr<arrow::Schema> DataSchema;
     const bool Reverse;
@@ -180,7 +260,7 @@ private:
 
     std::optional<TSortableBatchPosition> DrainCurrentPosition();
 
-    void AddNewToHeap(const std::optional<ui32> poolId, std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter, const bool restoreHeap);
+    void AddNewToHeap(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter);
     void CheckSequenceInDebug(const TSortableBatchPosition& nextKeyColumnsPosition);
 public:
     TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, std::shared_ptr<arrow::Schema> dataSchema, const bool reverse)
@@ -193,15 +273,7 @@ public:
     }
 
     bool IsValid() const {
-        return SortHeap.size();
-    }
-
-    bool HasRecordsInPool(const ui32 poolId) const {
-        auto it = BatchPools.find(poolId);
-        if (it == BatchPools.end()) {
-            return false;
-        }
-        return it->second.size();
+        return SortHeap.Size();
     }
 
     void PutControlPoint(std::shared_ptr<TSortableBatchPosition> point);
@@ -209,19 +281,19 @@ public:
     void RemoveControlPoint();
 
     bool ControlPointEnriched() const {
-        return SortHeap.size() && SortHeap.front().IsControlPoint();
+        return SortHeap.Size() && SortHeap.Current().IsControlPoint();
     }
 
-    void AddPoolSource(const std::optional<ui32> poolId, std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter);
+    void AddSource(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter);
 
     bool IsEmpty() const {
-        return SortHeap.empty();
+        return !SortHeap.Size();
     }
 
     bool DrainAll(TRecordBatchBuilder& builder);
     bool DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish);
-    std::vector<std::shared_ptr<arrow::RecordBatch>> DrainAllParts(const std::vector<TSortableBatchPosition>& positions,
-        const std::vector<std::shared_ptr<arrow::Field>>& resultFields, const bool includePositions);
+    std::vector<std::shared_ptr<arrow::RecordBatch>> DrainAllParts(const std::map<TSortableBatchPosition, bool>& positions,
+        const std::vector<std::shared_ptr<arrow::Field>>& resultFields);
 };
 
 class TRecordBatchBuilder {

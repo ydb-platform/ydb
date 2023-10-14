@@ -86,6 +86,8 @@ struct TSolomonExporterConfig
 
     TShardConfigPtr MatchShard(const TString& sensorName);
 
+    ESummaryPolicy GetSummaryPolicy() const;
+
     REGISTER_YSON_STRUCT(TSolomonExporterConfig);
 
     static void Register(TRegistrar registrar);
@@ -209,6 +211,8 @@ private:
     void CleanResponseCache();
 
     bool FilterDefaultGrid(const TString& sensorName);
+
+    static void ValidateSummaryPolicy(ESummaryPolicy policy);
 
     // For locking.
     friend class TSensorService;

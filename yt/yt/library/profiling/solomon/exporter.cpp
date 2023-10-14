@@ -166,6 +166,22 @@ TShardConfigPtr TSolomonExporterConfig::MatchShard(const TString& sensorName)
     return matchedShard;
 }
 
+ESummaryPolicy TSolomonExporterConfig::GetSummaryPolicy() const
+{
+    auto policy = ESummaryPolicy::Default;
+    if (ExportSummary) {
+        policy |= ESummaryPolicy::All;
+    }
+    if (ExportSummaryAsMax) {
+        policy |= ESummaryPolicy::Max;
+    }
+    if (ExportSummaryAsAvg) {
+        policy |= ESummaryPolicy::Avg;
+    }
+
+    return policy;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TSolomonExporter::TSolomonExporter(
@@ -540,9 +556,10 @@ bool TSolomonExporter::ReadSensors(
     readOptions.Times.emplace_back(std::vector<int>{Registry_->IndexOf(Window_.back().first)}, TInstant::Zero());
     readOptions.ConvertCountersToRateGauge = false;
     readOptions.EnableHistogramCompat = true;
-    readOptions.ExportSummary |= Config_->ExportSummary;
-    readOptions.ExportSummaryAsMax |= Config_->ExportSummaryAsMax;
-    readOptions.ExportSummaryAsAvg |= Config_->ExportSummaryAsAvg;
+
+    readOptions.SummaryPolicy |= Config_->GetSummaryPolicy();
+    ValidateSummaryPolicy(readOptions.SummaryPolicy);
+
     readOptions.MarkAggregates |= Config_->MarkAggregates;
     if (!readOptions.Host && Config_->Host) {
         readOptions.Host = Config_->Host;
@@ -786,9 +803,7 @@ void TSolomonExporter::DoHandleShard(
 
         options.EnableSolomonAggregationWorkaround = isSolomon;
         options.Times = readWindow;
-        options.ExportSummary = Config_->ExportSummary;
-        options.ExportSummaryAsMax = Config_->ExportSummaryAsMax;
-        options.ExportSummaryAsAvg = Config_->ExportSummaryAsAvg;
+        options.SummaryPolicy = Config_->GetSummaryPolicy();
         options.MarkAggregates = Config_->MarkAggregates;
         options.StripSensorsNamePrefix = Config_->StripSensorsNamePrefix;
         options.LingerWindowSize = Config_->LingerTimeout / gridStep;
@@ -970,6 +985,23 @@ void TSolomonExporter::CleanResponseCache()
 
     for (const auto& removedKey : toRemove) {
         ResponseCache_.erase(removedKey);
+    }
+}
+
+void TSolomonExporter::ValidateSummaryPolicy(ESummaryPolicy policy)
+{
+    static const TError SummaryPolicyError("Invalid summary policy in read options");
+
+    auto summaryPolicyConflicts = GetSummaryPolicyConflicts(policy);
+    if (summaryPolicyConflicts.AllPolicyWithSpecifiedAggregates) {
+        THROW_ERROR SummaryPolicyError
+            << TError("%Qv policy can be used only without specified policies", ESummaryPolicy::All)
+            << TErrorAttribute("policy", policy);
+    }
+    if (summaryPolicyConflicts.OmitNameLabelSuffixWithSeveralAggregates) {
+        THROW_ERROR SummaryPolicyError
+            << TError("%Qv option can be used only with single specified policy", ESummaryPolicy::OmitNameLabelSuffix)
+            << TErrorAttribute("policy", policy);
     }
 }
 

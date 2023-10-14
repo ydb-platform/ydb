@@ -100,7 +100,7 @@ private:
 
         TTagList tags(options.TagMap.begin(), options.TagMap.end());
         TReadOptions readOptions{
-            .ExportSummaryAsMax = options.ExportSummaryAsMax,
+            .SummaryPolicy = options.ExportSummaryAsMax ? ESummaryPolicy::Max : ESummaryPolicy::Default,
             .ReadAllProjections = options.ReadAllProjections,
             .SummaryAsMaxForAllTime = options.SummaryAsMaxForAllTime,
         };

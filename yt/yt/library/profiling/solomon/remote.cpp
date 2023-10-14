@@ -105,6 +105,7 @@ void TRemoteRegistry::Transfer(const NProto::TSensorDump& dump)
         options.Global = cube.global();
         options.DisableSensorsRename = cube.disable_sensors_rename();
         options.DisableDefault = cube.disable_default();
+        options.SummaryPolicy = NYT::FromProto<ESummaryPolicy>(cube.summary_policy());
 
         auto sensorName = cube.name();
         auto sensorSet = Registry_->FindSet(cube.name(), options);

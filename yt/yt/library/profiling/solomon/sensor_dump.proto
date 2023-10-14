@@ -18,6 +18,8 @@ message TCube {
     optional bool global = 4 [default=false];
     optional bool disable_sensors_rename = 5 [default=false];
     optional bool disable_default = 6 [default=false];
+
+    optional uint64 summary_policy = 7; // ESummaryPolicy
 };
 
 message TProjection {

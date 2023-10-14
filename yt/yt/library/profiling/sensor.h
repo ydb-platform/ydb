@@ -13,6 +13,8 @@
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
+#include <library/cpp/yt/misc/enum.h>
+
 #include <vector>
 
 namespace NYT::NProfiling {
@@ -175,6 +177,30 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DEFINE_BIT_ENUM_WITH_UNDERLYING_TYPE(ESummaryPolicy, ui8,
+    ((Default)             (0x0000))
+    // Aggregation policy.
+    ((All)                 (0x0001))
+    ((Sum)                 (0x0002))
+    ((Min)                 (0x0004))
+    ((Max)                 (0x0008))
+    ((Avg)                 (0x0010))
+    // Export policy.
+    ((OmitNameLabelSuffix) (0x0020))
+);
+
+struct TSummaryPolicyConflicts
+{
+    bool AllPolicyWithSpecifiedAggregates;
+    bool OmitNameLabelSuffixWithSeveralAggregates;
+};
+
+TSummaryPolicyConflicts GetSummaryPolicyConflicts(ESummaryPolicy policy);
+
+bool CheckSummaryPolicy(ESummaryPolicy policy);
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TSensorOptions
 {
     bool Global = false;
@@ -191,6 +217,8 @@ struct TSensorOptions
     std::vector<TDuration> TimeHistogramBounds;
 
     std::vector<double> HistogramBounds;
+
+    ESummaryPolicy SummaryPolicy = ESummaryPolicy::Default;
 
     bool IsCompatibleWith(const TSensorOptions& other) const;
 };
@@ -314,19 +342,19 @@ public:
     TTimeGauge TimeGauge(const TString& name) const;
 
     //! Summary is used to measure distribution of values.
-    TSummary Summary(const TString& name) const;
+    TSummary Summary(const TString& name, ESummaryPolicy summaryPolicy = ESummaryPolicy::Default) const;
 
     //! GaugeSummary is used to aggregate multiple values locally.
     /*!
      *  Each TGauge tracks single value. Values are aggregated using Summary rules.
      */
-    TGauge GaugeSummary(const TString& name) const;
+    TGauge GaugeSummary(const TString& name, ESummaryPolicy summaryPolicy = ESummaryPolicy::Default) const;
 
     //! TimeGaugeSummary is used to aggregate multiple values locally.
     /*!
      *  Each TGauge tracks single value. Values are aggregated using Summary rules.
      */
-    TTimeGauge TimeGaugeSummary(const TString& name) const;
+    TTimeGauge TimeGaugeSummary(const TString& name, ESummaryPolicy summaryPolicy = ESummaryPolicy::Default) const;
 
     //! Timer is used to measure distribution of event durations.
     /*!

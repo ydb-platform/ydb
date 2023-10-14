@@ -13,6 +13,29 @@ namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TSummaryPolicyConflicts GetSummaryPolicyConflicts(ESummaryPolicy policy)
+{
+    bool isAllPolicy = Any(policy & ESummaryPolicy::All);
+    int specifiedAggregateCount = Any(policy & ESummaryPolicy::Sum) +
+        Any(policy & ESummaryPolicy::Min) +
+        Any(policy & ESummaryPolicy::Max) +
+        Any(policy & ESummaryPolicy::Avg);
+
+    return {
+        .AllPolicyWithSpecifiedAggregates = isAllPolicy && specifiedAggregateCount > 0,
+        .OmitNameLabelSuffixWithSeveralAggregates = (isAllPolicy || specifiedAggregateCount != 1) &&
+            Any(policy & ESummaryPolicy::OmitNameLabelSuffix),
+    };
+}
+
+bool CheckSummaryPolicy(ESummaryPolicy policy)
+{
+    auto conflicts = GetSummaryPolicyConflicts(policy);
+    return !conflicts.AllPolicyWithSpecifiedAggregates && !conflicts.OmitNameLabelSuffixWithSeveralAggregates;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TCounter::Increment(i64 delta) const
 {
     if (!Counter_) {
@@ -248,15 +271,15 @@ TRateHistogram::operator bool() const
 TString ToString(const TSensorOptions& options)
 {
     return Format(
-        "{sparse=%v;global=%v;hot=%v;histogram_min=%v;histogram_max=%v;time_histogram_bounds=%v;histogram_bounds=%v}",
+        "{sparse=%v;global=%v;hot=%v;histogram_min=%v;histogram_max=%v;time_histogram_bounds=%v;histogram_bounds=%v;summary_policy=%v}",
         options.Sparse,
         options.Global,
         options.Hot,
         options.HistogramMin,
         options.HistogramMax,
         options.TimeHistogramBounds,
-        options.HistogramBounds
-    );
+        options.HistogramBounds,
+        options.SummaryPolicy);
 }
 
 bool TSensorOptions::IsCompatibleWith(const TSensorOptions& other) const
@@ -265,7 +288,8 @@ bool TSensorOptions::IsCompatibleWith(const TSensorOptions& other) const
         Global == other.Global &&
         DisableSensorsRename == other.DisableSensorsRename &&
         DisableDefault == other.DisableDefault &&
-        DisableProjections == other.DisableProjections;
+        DisableProjections == other.DisableProjections &&
+        SummaryPolicy == other.SummaryPolicy;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -516,36 +540,45 @@ TTimeGauge TProfiler::TimeGauge(const TString& name) const
     return gauge;
 }
 
-TSummary TProfiler::Summary(const TString& name) const
+TSummary TProfiler::Summary(const TString& name, ESummaryPolicy summaryPolicy) const
 {
     if (!Impl_) {
         return {};
     }
 
+    auto options = Options_;
+    options.SummaryPolicy = summaryPolicy;
+
     TSummary summary;
-    summary.Summary_ = Impl_->RegisterSummary(Namespace_ + Prefix_ + name, Tags_, Options_);
+    summary.Summary_ = Impl_->RegisterSummary(Namespace_ + Prefix_ + name, Tags_, std::move(options));
     return summary;
 }
 
-TGauge TProfiler::GaugeSummary(const TString& name) const
+TGauge TProfiler::GaugeSummary(const TString& name, ESummaryPolicy summaryPolicy) const
 {
     if (!Impl_) {
         return {};
     }
 
+    auto options = Options_;
+    options.SummaryPolicy = summaryPolicy;
+
     TGauge gauge;
-    gauge.Gauge_ = Impl_->RegisterGaugeSummary(Namespace_ + Prefix_ + name, Tags_, Options_);
+    gauge.Gauge_ = Impl_->RegisterGaugeSummary(Namespace_ + Prefix_ + name, Tags_, std::move(options));
     return gauge;
 }
 
-TTimeGauge TProfiler::TimeGaugeSummary(const TString& name) const
+TTimeGauge TProfiler::TimeGaugeSummary(const TString& name, ESummaryPolicy summaryPolicy) const
 {
     if (!Impl_) {
         return {};
     }
 
+    auto options = Options_;
+    options.SummaryPolicy = summaryPolicy;
+
     TTimeGauge gauge;
-    gauge.Gauge_ = Impl_->RegisterTimeGaugeSummary(Namespace_ + Prefix_ + name, Tags_, Options_);
+    gauge.Gauge_ = Impl_->RegisterTimeGaugeSummary(Namespace_ + Prefix_ + name, Tags_, std::move(options));
     return gauge;
 }
 

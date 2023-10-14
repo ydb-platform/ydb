@@ -1,6 +1,8 @@
 #include "sensor_set.h"
 #include "private.h"
 
+#include <yt/yt/core/misc/protobuf_helpers.h>
+
 #include <library/cpp/yt/assert/assert.h>
 
 #include <library/cpp/monlib/metrics/summary_snapshot.h>
@@ -15,8 +17,12 @@ const static auto& Logger = SolomonLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSensorSet::TSensorSet(TSensorOptions options, i64 iteration, int windowSize, int gridFactor)
-    : Options_(options)
+TSensorSet::TSensorSet(
+    TSensorOptions options,
+    i64 iteration,
+    int windowSize,
+    int gridFactor)
+    : Options_(std::move(options))
     , GridFactor_(gridFactor)
     , CountersCube_{windowSize, iteration}
     , TimeCountersCube_{windowSize, iteration}
@@ -45,7 +51,7 @@ void TSensorSet::Profile(const TProfiler &profiler)
     SensorsEmitted_ = profiler.Gauge("/sensors_emitted");
 }
 
-void TSensorSet::ValidateOptions(TSensorOptions options)
+void TSensorSet::ValidateOptions(const TSensorOptions& options)
 {
     if (!Options_.IsCompatibleWith(options)) {
         OnError(TError("Conflicting sensor settings")
@@ -278,7 +284,7 @@ int TSensorSet::Collect()
 
 void TSensorSet::ReadSensors(
     const TString& name,
-    const TReadOptions& options,
+    TReadOptions readOptions,
     TTagWriter* tagWriter,
     ::NMonitoring::IMetricConsumer* consumer) const
 {
@@ -286,11 +292,13 @@ void TSensorSet::ReadSensors(
         return;
     }
 
-    auto readOptions = options;
     readOptions.Sparse = Options_.Sparse;
     readOptions.Global = Options_.Global;
     readOptions.DisableSensorsRename = Options_.DisableSensorsRename;
     readOptions.DisableDefault = Options_.DisableDefault;
+    if (Options_.SummaryPolicy != ESummaryPolicy::Default) {
+        readOptions.SummaryPolicy = Options_.SummaryPolicy;
+    }
 
     int sensorsEmitted = 0;
 
@@ -309,7 +317,7 @@ void TSensorSet::ReadSensors(
 int TSensorSet::ReadSensorValues(
     const TTagIdList& tagIds,
     int index,
-    const TReadOptions& options,
+    TReadOptions readOptions,
     const TTagRegistry& tagRegistry,
     TFluentAny fluent) const
 {
@@ -318,15 +326,19 @@ int TSensorSet::ReadSensorValues(
             << Error_;
     }
 
+    if (Options_.SummaryPolicy != ESummaryPolicy::Default) {
+        readOptions.SummaryPolicy = Options_.SummaryPolicy;
+    }
+
     int valuesRead = 0;
-    valuesRead += CountersCube_.ReadSensorValues(tagIds, index, options, tagRegistry, fluent);
-    valuesRead += TimeCountersCube_.ReadSensorValues(tagIds, index, options, tagRegistry, fluent);
-    valuesRead += GaugesCube_.ReadSensorValues(tagIds, index, options, tagRegistry, fluent);
-    valuesRead += SummariesCube_.ReadSensorValues(tagIds, index, options, tagRegistry, fluent);
-    valuesRead += TimersCube_.ReadSensorValues(tagIds, index, options, tagRegistry, fluent);
-    valuesRead += TimeHistogramsCube_.ReadSensorValues(tagIds, index, options, tagRegistry, fluent);
-    valuesRead += GaugeHistogramsCube_.ReadSensorValues(tagIds, index, options, tagRegistry, fluent);
-    valuesRead += RateHistogramsCube_.ReadSensorValues(tagIds, index, options, tagRegistry, fluent);
+    valuesRead += CountersCube_.ReadSensorValues(tagIds, index, readOptions, tagRegistry, fluent);
+    valuesRead += TimeCountersCube_.ReadSensorValues(tagIds, index, readOptions, tagRegistry, fluent);
+    valuesRead += GaugesCube_.ReadSensorValues(tagIds, index, readOptions, tagRegistry, fluent);
+    valuesRead += SummariesCube_.ReadSensorValues(tagIds, index, readOptions, tagRegistry, fluent);
+    valuesRead += TimersCube_.ReadSensorValues(tagIds, index, readOptions, tagRegistry, fluent);
+    valuesRead += TimeHistogramsCube_.ReadSensorValues(tagIds, index, readOptions, tagRegistry, fluent);
+    valuesRead += GaugeHistogramsCube_.ReadSensorValues(tagIds, index, readOptions, tagRegistry, fluent);
+    valuesRead += RateHistogramsCube_.ReadSensorValues(tagIds, index, readOptions, tagRegistry, fluent);
 
     return valuesRead;
 }
@@ -400,6 +412,7 @@ void TSensorSet::DumpCube(NProto::TCube *cube) const
     cube->set_global(Options_.Global);
     cube->set_disable_default(Options_.DisableDefault);
     cube->set_disable_sensors_rename(Options_.DisableSensorsRename);
+    cube->set_summary_policy(ToProto<ui64>(Options_.SummaryPolicy));
 
     CountersCube_.DumpCube(cube);
     TimeCountersCube_.DumpCube(cube);

@@ -74,14 +74,6 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T>
-size_t UnpackBitVector(TCompressedVectorView view, std::vector<T>* container);
-
-template <class T>
-size_t UnpackBitVector(const ui64* input, std::vector<T>* container);
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT
 
 #define BIT_PACKING_INL_H_

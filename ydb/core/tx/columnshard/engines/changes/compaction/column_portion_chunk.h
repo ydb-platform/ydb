@@ -120,12 +120,8 @@ public:
 
     void FlushBuffer();
 
-    std::shared_ptr<arrow::Array> AppendBlob(const TString& data, const TColumnRecord& columnChunk);
-    std::shared_ptr<arrow::Array> AppendSlice(const std::shared_ptr<arrow::RecordBatch>& data) {
-        Y_ABORT_UNLESS(data->num_columns() == 1);
-        return AppendSlice(data->column(0));
-    }
-    std::shared_ptr<arrow::Array> AppendSlice(const std::shared_ptr<arrow::Array>& a);
+    std::shared_ptr<arrow::Array> AppendBlob(const TString& data, const TColumnRecord& columnChunk, ui32& remained);
+    ui32 AppendSlice(const std::shared_ptr<arrow::Array>& a, const ui32 startIndex, const ui32 length);
 };
 
 }

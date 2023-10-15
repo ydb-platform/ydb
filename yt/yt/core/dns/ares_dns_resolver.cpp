@@ -492,6 +492,8 @@ private:
                 request->HostName);
             request->Promise.TrySet(TError("Ares DNS resolve failed for %Qv",
                 request->HostName)
+                << TErrorAttribute("enable_ipv4", request->Options.EnableIPv4)
+                << TErrorAttribute("enable_ipv6", request->Options.EnableIPv6)
                 << TError(ares_strerror(status)));
             FailureCounter_.Increment();
             return;

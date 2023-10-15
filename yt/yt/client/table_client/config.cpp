@@ -364,6 +364,10 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("single_column_group_by_default", &TThis::SingleColumnGroupByDefault)
         .Default();
+    registrar.Parameter("enable_columnar_value_statistics", &TThis::EnableColumnarValueStatistics)
+        .Default(true);
+    registrar.Parameter("enable_row_count_in_columnar_statistics", &TThis::EnableRowCountInColumnarStatistics)
+        .Default(true);
 
     registrar.Parameter("schema_modification", &TThis::SchemaModification)
         .Default(ETableSchemaModification::None);

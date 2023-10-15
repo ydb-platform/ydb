@@ -1,12 +1,14 @@
-#include "util/generic/yexception.h"
-#include "util/stream/input.h"
-#include "util/stream/output.h"
-#include "ydb/core/protos/blobstorage.pb.h"
 #include <cstring>
-#include <util/system/yassert.h>
+
 #include <library/cpp/testing/benchmark/bench.h>
 
+#include <util/generic/yexception.h>
+#include <util/stream/input.h>
+#include <util/stream/output.h>
+#include <util/system/yassert.h>
+
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace {
 
@@ -45,29 +47,39 @@ private:
 };
 
 template <typename Event, size_t bytes>
-void SerDeLoop(Event& ev, Buffer<bytes>& buffer, size_t iterations) {
+void SerDeLoop(Event& ev, Buffer<bytes>& buffer, size_t iterations, size_t read_iterations) {
     for (size_t i = 0; i < iterations; ++i) {
         ev.Save(&buffer);
 
-        ev.Load(&buffer);
-        buffer.Flush();
-        ev.Load(&buffer);
-        buffer.Flush();
-        ev.Load(&buffer);
-        buffer.Flush();
+        for (size_t j = 0; j < read_iterations; ++j) {
+            ev.Load(&buffer);
+            buffer.Flush();
+        }
     }
 }
 
 } // namespace
 
-Y_CPU_BENCHMARK(Put, info) {
+Y_CPU_BENCHMARK(Put_1_1, info) {
     NKikimrBlobStorage::TEvVPut evPut;
     Buffer<2048> buf;
-    SerDeLoop(evPut, buf, info.Iterations());
+    SerDeLoop(evPut, buf, info.Iterations(), 1);
 }
 
-Y_CPU_BENCHMARK(Get, info) {
+Y_CPU_BENCHMARK(Get_1_1, info) {
     NKikimrBlobStorage::TEvVGet evGet;
     Buffer<2048> buf;
-    SerDeLoop(evGet, buf, info.Iterations());
+    SerDeLoop(evGet, buf, info.Iterations(), 1);
+}
+
+Y_CPU_BENCHMARK(Put_1_3, info) {
+    NKikimrBlobStorage::TEvVPut evPut;
+    Buffer<2048> buf;
+    SerDeLoop(evPut, buf, info.Iterations(), 3);
+}
+
+Y_CPU_BENCHMARK(Get_1_3, info) {
+    NKikimrBlobStorage::TEvVGet evGet;
+    Buffer<2048> buf;
+    SerDeLoop(evGet, buf, info.Iterations(), 3);
 }

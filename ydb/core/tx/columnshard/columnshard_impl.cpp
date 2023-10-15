@@ -675,12 +675,13 @@ private:
 protected:
     virtual bool DoExecute() override {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
-        auto guard = TxEvent->PutResult->StartCpuGuard();
-
-        NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
-        Y_ABORT_UNLESS(TxEvent->IndexChanges->ConstructBlobs(context).Ok());
-        if (!TxEvent->IndexChanges->GetWritePortionsCount()) {
-            TxEvent->SetPutStatus(NKikimrProto::OK);
+        {
+            auto guard = TxEvent->PutResult->StartCpuGuard();
+            NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
+            Y_ABORT_UNLESS(TxEvent->IndexChanges->ConstructBlobs(context).Ok());
+            if (!TxEvent->IndexChanges->GetWritePortionsCount()) {
+                TxEvent->SetPutStatus(NKikimrProto::OK);
+            }
         }
         TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
         return true;

@@ -1,4 +1,5 @@
 RECURSE_ROOT_RELATIVE(
+    ydb/core/blobstorage/vdisk/common/benchmark
     ydb/library/yql/minikql/benchmark
     ydb/library/yql/minikql/jsonpath/benchmark
     ydb/library/yql/minikql/perf/alloc

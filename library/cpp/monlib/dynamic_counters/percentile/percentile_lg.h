@@ -1,7 +1,5 @@
 #pragma once
 
-#include <library/cpp/containers/stack_vector/stack_vec.h>
-
 #include <util/generic/bitops.h>
 
 #include <cmath>
@@ -140,7 +138,7 @@ struct TPercentileTrackerLg : public TPercentileBase {
 
     // Needed only for tests
     size_t GetPercentile(float threshold) {
-        TStackVec<size_t, ITEMS_COUNT> totals(ITEMS_COUNT);
+        std::array<size_t, ITEMS_COUNT> totals;
         size_t total = 0;
         for (size_t i = 0; i < ITEMS_COUNT; ++i) {
             total += Items[i].load();
@@ -156,7 +154,7 @@ struct TPercentileTrackerLg : public TPercentileBase {
 
     // shift frame (call periodically)
     void Update() {
-        TStackVec<size_t, ITEMS_COUNT> totals(ITEMS_COUNT);
+        std::array<size_t, ITEMS_COUNT> totals;
         size_t total = 0;
         for (size_t i = 0; i < ITEMS_COUNT; ++i) {
             size_t item = Items[i].load(std::memory_order_relaxed);

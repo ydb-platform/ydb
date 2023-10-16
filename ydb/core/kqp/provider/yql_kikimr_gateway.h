@@ -427,7 +427,10 @@ struct TKikimrTableMetadata : public TThrRefBase {
         , SysView(message->GetSysView())
         , SchemaVersion(message->GetSchemaVersion())
         , Kind(static_cast<EKikimrTableKind>(message->GetKind()))
+        , RecordsCount(message->GetRecordsCount())
+        , DataSize(message->GetDataSize())
         , KeyColumnNames(message->GetKeyColunmNames().begin(), message->GetKeyColunmNames().end())
+
     {
         for(auto& attr: message->GetAttributes()) {
             Attributes.emplace(attr.GetKey(), attr.GetValue());
@@ -491,6 +494,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
         PathId.ToMessage(message->MutablePathId());
         message->SetSchemaVersion(SchemaVersion);
         message->SetKind(static_cast<ui32>(Kind));
+        message->SetRecordsCount(RecordsCount);
+        message->SetDataSize(DataSize);
         for(auto& [key, value] : Attributes) {
             message->AddAttributes()->SetKey(key);
             message->AddAttributes()->SetValue(value);

@@ -163,6 +163,8 @@ message TKqpTableMetadataProto {
     repeated string KeyColunmNames = 10;
     repeated TIndexDescriptionProto Indexes = 11;
     repeated TKqpTableMetadataProto SecondaryGlobalIndexMetadata = 12;
+    optional uint64 RecordsCount = 13;
+    optional uint64 DataSize = 14;
 }
 
 message TRlPath {

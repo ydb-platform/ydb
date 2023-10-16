@@ -100,7 +100,7 @@ IF (OS_LINUX)
 ENDIF()
 
 IF (CLANG)
-    CFLAGS(
+    CXXFLAGS(
         GLOBAL -nostdinc++
     )
 ENDIF()

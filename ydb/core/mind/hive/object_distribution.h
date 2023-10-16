@@ -60,7 +60,7 @@ struct TObjectDistribution {
         if (diff + value < 0) {
             BLOG_ERROR("UpdateObjectCount: new value " << diff + value << " is negative");
         }
-        Y_VERIFY_DEBUG(diff + value >= 0);
+        Y_DEBUG_ABORT_UNLESS(diff + value >= 0);
         value += diff;
         SortedDistribution.insert(value);
         double newMean = (Mean * (numNodes - 1) + value) / numNodes;

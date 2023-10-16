@@ -508,7 +508,7 @@ namespace NKikimr {
             ActiveActors.Erase(ev->Sender);
             switch (ev->Get()->Type) {
                 case THullCommitFinished::CommitLevel:
-                    Y_VERIFY_DEBUG(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateWaitCommit);
+                    Y_DEBUG_ABORT_UNLESS(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateWaitCommit);
                     RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateNoComp);
                     RTCtx->LevelIndex->PrevEntryPointLsn = ui64(-1);
                     ScheduleCompaction(ctx);

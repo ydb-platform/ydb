@@ -130,7 +130,7 @@ namespace NPage {
         using THeapByBytes = TIntrusiveHeap<TEntry, THeapIndexByBytes, TCompareByBytes>;
 
         bool IsLast(TEntries::iterator it) {
-            Y_VERIFY_DEBUG(it != Entries.end());
+            Y_DEBUG_ABORT_UNLESS(it != Entries.end());
             return ++it == Entries.end();
         }
 
@@ -148,7 +148,7 @@ namespace NPage {
                     it, std::piecewise_construct,
                     std::forward_as_tuple(rowVersion),
                     std::forward_as_tuple(bytes));
-                Y_VERIFY_DEBUG(IsLast(it));
+                Y_DEBUG_ABORT_UNLESS(IsLast(it));
                 return;
             }
 
@@ -166,7 +166,7 @@ namespace NPage {
                 it, std::piecewise_construct,
                 std::forward_as_tuple(rowVersion),
                 std::forward_as_tuple(bytes));
-            Y_VERIFY_DEBUG(!IsLast(it));
+            Y_DEBUG_ABORT_UNLESS(!IsLast(it));
             ByBytes.Add(&*it);
         }
 
@@ -182,9 +182,9 @@ namespace NPage {
             TEntry* top;
             while (Entries.size() > count && (top = ByBytes.Top())) {
                 auto it = Entries.find(top->first);
-                Y_VERIFY_DEBUG(it != Entries.end());
+                Y_DEBUG_ABORT_UNLESS(it != Entries.end());
                 auto next = std::next(it);
-                Y_VERIFY_DEBUG(next != Entries.end());
+                Y_DEBUG_ABORT_UNLESS(next != Entries.end());
                 ByBytes.Remove(top);
                 next->second.Bytes += top->second.Bytes;
                 if (!IsLast(next)) {

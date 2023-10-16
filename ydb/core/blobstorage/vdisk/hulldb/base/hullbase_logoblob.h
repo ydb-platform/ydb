@@ -167,7 +167,7 @@ namespace NKikimr {
         }
 
         void SetType(TBlobType::EType t) {
-            Y_VERIFY_DEBUG(t == TBlobType::DiskBlob || t == TBlobType::HugeBlob || t == TBlobType::ManyHugeBlobs);
+            Y_DEBUG_ABORT_UNLESS(t == TBlobType::DiskBlob || t == TBlobType::HugeBlob || t == TBlobType::ManyHugeBlobs);
             Type = t;
         }
 
@@ -184,7 +184,7 @@ namespace NKikimr {
         }
 
         TMemPart GetMemData() const {
-            Y_VERIFY_DEBUG(GetType() == TBlobType::MemBlob);
+            Y_DEBUG_ABORT_UNLESS(GetType() == TBlobType::MemBlob);
             return TMemPart(ui64(Id) << 32 | Offset, Size);
         }
 

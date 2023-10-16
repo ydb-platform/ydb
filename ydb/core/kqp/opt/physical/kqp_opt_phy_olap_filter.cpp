@@ -502,7 +502,7 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, TExprContext& ctx
         return TFilterOpsLevels(ops, NullNode);
     }
 
-    Y_VERIFY_DEBUG(predicate.Maybe<TCoXor>());
+    Y_DEBUG_ABORT_UNLESS(predicate.Maybe<TCoXor>());
 
     auto ops = Build<TKqpOlapXor>(ctx, pos)
         .Add(firstLvlOps)

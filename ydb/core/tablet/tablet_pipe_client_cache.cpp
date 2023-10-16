@@ -186,7 +186,7 @@ namespace NTabletPipe {
         void MoveToPool(ui64 tabletId, const TClientCacheEntry& currentClient) {
             TClientCacheEntry* insertedClient;
             if (!PoolContainer->Insert(tabletId, currentClient, insertedClient)) {
-                Y_VERIFY_DEBUG(!insertedClient->Client);
+                Y_DEBUG_ABORT_UNLESS(!insertedClient->Client);
                 *insertedClient = currentClient;
             }
 
@@ -196,7 +196,7 @@ namespace NTabletPipe {
         void Erase(ui64 tabletId, const TActorId& clientId) {
             TClientCacheEntry* currentClient;
             if (Container->Find(tabletId, currentClient)) {
-                Y_VERIFY_DEBUG(!!currentClient->Client);
+                Y_DEBUG_ABORT_UNLESS(!!currentClient->Client);
                 if (!clientId || (currentClient->Client == clientId))
                     Container->Erase(tabletId);
             }

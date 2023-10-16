@@ -878,7 +878,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
         // Delete ChangeRecordCommits row when the last record is removed
         auto it = CommittedLockChangeRecords.find(record.LockId);
         if (it != CommittedLockChangeRecords.end()) {
-            Y_VERIFY_DEBUG(it->second.Count > 0);
+            Y_DEBUG_ABORT_UNLESS(it->second.Count > 0);
             if (it->second.Count > 0 && 0 == --it->second.Count) {
                 db.Table<Schema::ChangeRecordCommits>().Key(it->second.Order).Delete();
                 CommittedLockChangeRecords.erase(it);
@@ -910,7 +910,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
                 }
             }
         } else {
-            Y_VERIFY_DEBUG(State == TShardState::PreOffline);
+            Y_DEBUG_ABORT_UNLESS(State == TShardState::PreOffline);
         }
     }
 
@@ -1759,7 +1759,7 @@ void TDataShard::SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnaps
         auto stepOrder = txSnapContext->GetStepOrder();
         auto op = Pipeline.GetActiveOp(stepOrder.TxId);
 
-        Y_VERIFY_DEBUG(op, "The Tx that requested snapshot must be active!");
+        Y_DEBUG_ABORT_UNLESS(op, "The Tx that requested snapshot must be active!");
         if (!op) {
             LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD,
                        "Got snapshot for missing operation " << stepOrder
@@ -1958,7 +1958,7 @@ TReadWriteVersions TDataShard::GetLocalReadWriteVersions() const {
 }
 
 TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const {
-    Y_VERIFY_DEBUG(IsMvccEnabled());
+    Y_DEBUG_ABORT_UNLESS(IsMvccEnabled());
 
     if (op) {
         if (op->IsMvccSnapshotRead()) {

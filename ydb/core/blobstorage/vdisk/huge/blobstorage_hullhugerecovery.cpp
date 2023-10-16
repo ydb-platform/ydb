@@ -248,7 +248,7 @@ namespace NKikimr {
 
             // log pos
             TString serializedLogPos = LogPos.Serialize();
-            Y_VERIFY_DEBUG(serializedLogPos.size() == THullHugeRecoveryLogPos::SerializedSize);
+            Y_DEBUG_ABORT_UNLESS(serializedLogPos.size() == THullHugeRecoveryLogPos::SerializedSize);
             str.Write(serializedLogPos.data(), THullHugeRecoveryLogPos::SerializedSize);
 
             // heap

@@ -131,7 +131,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                 return false;
             }
 
-            Y_VERIFY_DEBUG(join->GetJoin());
+            Y_DEBUG_ABORT_UNLESS(join->GetJoin());
             join->GetJoin()->SetupJoin(joinOp, joinKeyExpr, linkSettings);
             break;
         }
@@ -161,7 +161,7 @@ TNodePtr TSqlSelect::JoinExpr(ISource* join, const TRule_join_constraint& node) 
                 return nullptr;
             }
 
-            Y_VERIFY_DEBUG(join->GetJoin());
+            Y_DEBUG_ABORT_UNLESS(join->GetJoin());
             return join->GetJoin()->BuildJoinKeys(Ctx, names);
         }
         case TRule_join_constraint::ALT_NOT_SET:

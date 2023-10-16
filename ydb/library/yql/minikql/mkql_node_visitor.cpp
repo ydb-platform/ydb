@@ -322,7 +322,7 @@ void TEmptyNodeVisitor::Visit(TMultiType& node) {
 }
 
 void TExploringNodeVisitor::Visit(TTypeType& node) {
-    Y_VERIFY_DEBUG(node.GetType() == &node);
+    Y_DEBUG_ABORT_UNLESS(node.GetType() == &node);
 }
 
 void TExploringNodeVisitor::Visit(TVoidType& node) {

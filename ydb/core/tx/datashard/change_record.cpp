@@ -258,7 +258,7 @@ static void ToAttributeValues(TUserTable::TCPtr schema, NJson::TJsonValue& value
                 continue; // index hash column
             }
         } else if (name == "__RowData") {
-            Y_VERIFY_DEBUG(type == NScheme::NTypeIds::JsonDocument);
+            Y_DEBUG_ABORT_UNLESS(type == NScheme::NTypeIds::JsonDocument);
             const auto rowData = StringToJson(NBinaryJson::SerializeToJson(cell.AsBuf()));
             if (rowData.GetType() == NJson::JSON_MAP) {
                 auto map = rowData.GetMapSafe().find("M");

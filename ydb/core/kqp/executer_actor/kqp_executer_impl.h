@@ -736,7 +736,7 @@ protected:
 
 protected:
     void BuildSysViewScanTasks(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
-        Y_VERIFY_DEBUG(stageInfo.Meta.IsSysView());
+        Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.IsSysView());
 
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
@@ -744,7 +744,7 @@ protected:
         const auto& keyTypes = tableInfo->KeyColumnTypes;
 
         for (auto& op : stage.GetTableOps()) {
-            Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
+            Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.ExecuterId = this->SelfId();
@@ -1168,7 +1168,7 @@ protected:
         const auto& keyTypes = tableInfo->KeyColumnTypes;
         ui32 metaId = 0;
         for (auto& op : stage.GetTableOps()) {
-            Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
+            Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto columns = BuildKqpColumns(op, tableInfo);
             auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv());

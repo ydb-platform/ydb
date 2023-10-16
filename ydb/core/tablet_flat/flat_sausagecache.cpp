@@ -29,7 +29,7 @@ TPrivatePageCache::TInfo::TInfo(const TInfo &info)
     PageMap.resize(info.PageMap.size());
     for (const auto& kv : info.PageMap) {
         auto* src = kv.second.Get();
-        Y_VERIFY_DEBUG(src);
+        Y_DEBUG_ABORT_UNLESS(src);
         if (src->LoadState == TPage::LoadStateLoaded) {
             auto* dst = EnsurePage(src->Id);
             dst->LoadState = TPage::LoadStateLoaded;
@@ -47,7 +47,7 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
 
     for (const auto& kv : info->PageMap) {
         auto* page = kv.second.Get();
-        Y_VERIFY_DEBUG(page);
+        Y_DEBUG_ABORT_UNLESS(page);
         
         if (page->SharedBody)
             Stats.TotalSharedBody += page->Size;
@@ -58,11 +58,11 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
         if (page->Sticky)
             Stats.TotalSticky += page->Size;
 
-        Y_VERIFY_DEBUG(!page->SharedPending, "New page shouldn't be shared pending");
+        Y_DEBUG_ABORT_UNLESS(!page->SharedPending, "New page shouldn't be shared pending");
         TryShareBody(page);
 
         TryUnload(page);
-        Y_VERIFY_DEBUG(!page->IsUnnecessary());
+        Y_DEBUG_ABORT_UNLESS(!page->IsUnnecessary());
     }
 
     ++info->Users;
@@ -77,7 +77,7 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(
     TPage::TWaitQueuePtr ret;
     for (const auto& kv : info->PageMap) {
         auto* page = kv.second.Get();
-        Y_VERIFY_DEBUG(page);
+        Y_DEBUG_ABORT_UNLESS(page);
 
         if (page->LoadState == TPage::LoadStateRequested) {
             while (TPrivatePageCacheWaitPad *x = page->WaitQueue->Pop()) {
@@ -121,7 +121,7 @@ bool TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
     if (!info->Users) {
         for (const auto& kv : info->PageMap) {
             auto* page = kv.second.Get();
-            Y_VERIFY_DEBUG(page);
+            Y_DEBUG_ABORT_UNLESS(page);
 
             Y_ABORT_UNLESS(!page->WaitQueue, "non-empty wait queue in forgotten page.");
             Y_ABORT_UNLESS(!page->PinPad, "non-empty pin pad in forgotten page.");
@@ -166,7 +166,7 @@ void TPrivatePageCache::MarkSticky(ui32 pageId, TInfo *collectionInfo) {
 }
 
 TIntrusivePtr<TPrivatePageCachePinPad> TPrivatePageCache::Pin(TPage *page) {
-    Y_VERIFY_DEBUG(page);
+    Y_DEBUG_ABORT_UNLESS(page);
     if (page && !page->PinPad) {
         page->PinPad = new TPrivatePageCachePinPad();
         Stats.PinnedSetSize += page->Size;
@@ -204,7 +204,7 @@ std::pair<ui32, ui64> TPrivatePageCache::Request(TVector<ui32> &pages, TPrivateP
         TPage *page = info->EnsurePage(*it);
         switch (page->LoadState) {
         case TPage::LoadStateNo:
-            Y_VERIFY_DEBUG(!page->SharedPending, "Trying to load a page that may be restored");
+            Y_DEBUG_ABORT_UNLESS(!page->SharedPending, "Trying to load a page that may be restored");
             [[fallthrough]];
         case TPage::LoadStateRequestedAsync:
             page->LoadState = TPage::LoadStateRequested;
@@ -286,7 +286,7 @@ void TPrivatePageCache::TPrivatePageCache::TryEraseIfUnnecessary(TPage *page) {
         }
         const ui32 pageId = page->Id;
         auto* info = page->Info;
-        Y_VERIFY_DEBUG(info->PageMap[pageId].Get() == page);
+        Y_DEBUG_ABORT_UNLESS(info->PageMap[pageId].Get() == page);
         Y_ABORT_UNLESS(info->PageMap.erase(pageId));
     }
 }
@@ -339,7 +339,7 @@ TSharedPageRef TPrivatePageCache::LookupShared(ui32 pageId, TInfo *info) {
 
     if (page->LoadState == TPage::LoadStateLoaded) {
         if (page->SharedBody) {
-            Y_VERIFY_DEBUG(page->SharedBody.IsUsed(), "Loaded page should have used body");
+            Y_DEBUG_ABORT_UNLESS(page->SharedBody.IsUsed(), "Loaded page should have used body");
             return page->SharedBody;
         } else {
             return TSharedPageRef::MakePrivate(page->PinnedBody);
@@ -406,7 +406,7 @@ void TPrivatePageCache::RepinPages(TPinned &newPinned, TPinned &oldPinned, size_
             // We had previously pinned pages from this page collection
             // Create new or move used old pins to the new map
             if (auto it = oldPinnedCollection->find(page->Id); it != oldPinnedCollection->end()) {
-                Y_VERIFY_DEBUG(it->second);
+                Y_DEBUG_ABORT_UNLESS(it->second);
                 newPinnedCollection[page->Id] = std::move(it->second);
                 oldPinnedCollection->erase(it);
             } else {
@@ -483,7 +483,7 @@ void TPrivatePageCache::UpdateSharedBody(TInfo *info, ui32 pageId, TSharedPageRe
     if (Y_UNLIKELY(!page->SharedPending)) {
         return;
     }
-    Y_VERIFY_DEBUG(page->LoadState == TPage::LoadStateLoaded, "Shared pending page should be loaded");
+    Y_DEBUG_ABORT_UNLESS(page->LoadState == TPage::LoadStateLoaded, "Shared pending page should be loaded");
     
     // Shared cache accepted our page and provided its shared reference
     Stats.TotalSharedPending -= page->Size;
@@ -527,7 +527,7 @@ void TPrivatePageCache::DropSharedBody(TInfo *info, ui32 pageId) {
 TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock(
         NSharedCache::TEvResult::TLoaded&& loaded, TInfo *info)
 {
-    Y_VERIFY_DEBUG(loaded.Page && loaded.Page.IsUsed());
+    Y_DEBUG_ABORT_UNLESS(loaded.Page && loaded.Page.IsUsed());
     TPage *page = info->EnsurePage(loaded.PageId);
 
     if (page->LoadState != TPage::LoadStateLoaded && page->PinPad)

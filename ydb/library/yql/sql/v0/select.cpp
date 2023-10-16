@@ -64,7 +64,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         return Node->Translate(ctx);
     }
 
@@ -136,7 +136,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         return Node->Translate(ctx);
     }
 
@@ -285,12 +285,12 @@ protected:
     {}
 
     void AllColumns() override {
-        Y_VERIFY_DEBUG(Source);
+        Y_DEBUG_ABORT_UNLESS(Source);
         return Source->AllColumns();
     }
 
     const TColumns* GetColumns() const override {
-        Y_VERIFY_DEBUG(Source);
+        Y_DEBUG_ABORT_UNLESS(Source);
         return Source->GetColumns();
     }
 
@@ -300,7 +300,7 @@ protected:
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
-        Y_VERIFY_DEBUG(Source);
+        Y_DEBUG_ABORT_UNLESS(Source);
         const TString label(Source->GetLabel());
         Source->SetLabel(Label);
         const auto ret = Source->AddColumn(ctx, column);
@@ -313,17 +313,17 @@ protected:
     }
 
     bool IsStream() const override {
-        Y_VERIFY_DEBUG(Source);
+        Y_DEBUG_ABORT_UNLESS(Source);
         return Source->IsStream();
     }
 
     bool IsOrdered() const override {
-        Y_VERIFY_DEBUG(Source);
+        Y_DEBUG_ABORT_UNLESS(Source);
         return Source->IsOrdered();
     }
 
     TWriteSettings GetWriteSettings() const override {
-        Y_VERIFY_DEBUG(Source);
+        Y_DEBUG_ABORT_UNLESS(Source);
         return Source->GetWriteSettings();
     }
 
@@ -544,7 +544,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         return Node->Translate(ctx);
     }
 
@@ -929,7 +929,7 @@ public:
     void SetSubselects(TVector<TSourcePtr>&& subselects, TSet<TString>&& groupingCols) {
         Subselects = std::move(subselects);
         GroupingCols = std::move(groupingCols);
-        Y_VERIFY_DEBUG(Subselects.size() > 1);
+        Y_DEBUG_ABORT_UNLESS(Subselects.size() > 1);
     }
 
     void GetInputTables(TTableList& tableList) const override {
@@ -1516,7 +1516,7 @@ private:
     TNodePtr BuildColumnsTerms(TContext& ctx) {
         TNodePtr terms;
         if (Columns.All) {
-            Y_VERIFY_DEBUG(Columns.List.empty());
+            Y_DEBUG_ABORT_UNLESS(Columns.List.empty());
             terms = PrepareWithout(Y());
             if (ctx.EnableSystemColumns) {
                 terms = L(terms, Y("let", "res", Y("AsList", Y("RemoveSystemMembers", "row"))));
@@ -1524,7 +1524,7 @@ private:
                 terms = L(terms, (Y("let", "res", Y("AsList", "row"))));
             }
         } else if (!Columns.List.empty()) {
-            Y_VERIFY_DEBUG(Columns.List.size() == Terms.size());
+            Y_DEBUG_ABORT_UNLESS(Columns.List.size() == Terms.size());
             const bool isJoin = Source->GetJoin();
 
             terms = TermsGround ? TermsGround : Y();
@@ -1722,7 +1722,7 @@ public:
         }
 
         auto processSource = ListCall ? fakeSource.Get() : src;
-        Y_VERIFY_DEBUG(processSource != nullptr);
+        Y_DEBUG_ABORT_UNLESS(processSource != nullptr);
 
         ctx.PushBlockShortcuts();
         if (!With->Init(ctx, processSource)) {
@@ -1837,11 +1837,11 @@ private:
     TNodePtr BuildColumnsTerms(TContext& ctx) {
         Y_UNUSED(ctx);
         TNodePtr terms;
-        Y_VERIFY_DEBUG(Terms.size() == 1);
+        Y_DEBUG_ABORT_UNLESS(Terms.size() == 1);
         if (Columns.All) {
             terms = Y(Y("let", "res", Y("ToSequence", Terms.front())));
         } else {
-            Y_VERIFY_DEBUG(Columns.List.size() == Terms.size());
+            Y_DEBUG_ABORT_UNLESS(Columns.List.size() == Terms.size());
             terms = TermsGround ? TermsGround : Y();
             terms = L(terms, Y("let", "res",
                 L(Y("AsStruct"), Q(Y(BuildQuotedAtom(Pos, Columns.List.front()), Terms.front())))));
@@ -2044,7 +2044,7 @@ public:
                 return false;
             }
             auto c = s->GetColumns();
-            Y_VERIFY_DEBUG(c);
+            Y_DEBUG_ABORT_UNLESS(c);
             Columns.Merge(*c);
         }
         return true;

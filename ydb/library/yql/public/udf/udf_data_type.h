@@ -245,7 +245,7 @@ struct TDataTypeInfo {
 extern const TDataTypeInfo DataTypeInfos[DataSlotCount];
 
 inline const TDataTypeInfo& GetDataTypeInfo(EDataSlot slot) {
-    Y_VERIFY_DEBUG(static_cast<ui32>(slot) < DataSlotCount);
+    Y_DEBUG_ABORT_UNLESS(static_cast<ui32>(slot) < DataSlotCount);
     return DataTypeInfos[static_cast<ui32>(slot)];
 }
 

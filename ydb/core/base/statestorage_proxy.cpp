@@ -319,7 +319,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             ReplyAndDie(NKikimrProto::RACE);
             return;
         }
-        Y_VERIFY_DEBUG(false);
+        Y_DEBUG_ABORT_UNLESS(false);
         PassAway();
     }
 
@@ -390,7 +390,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             ReplyAndDie(NKikimrProto::RACE);
             return;
         }
-        Y_VERIFY_DEBUG(false);
+        Y_DEBUG_ABORT_UNLESS(false);
         PassAway();
     }
 

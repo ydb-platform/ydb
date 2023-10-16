@@ -51,7 +51,7 @@ public:
         , IsNull_(ptr == nullptr)
         , Ptr(ptr)
     {
-        Y_VERIFY_DEBUG(ptr || size == 0);
+        Y_DEBUG_ABORT_UNLESS(ptr || size == 0);
 
         if (CanInline(size)) {
             IsInline_ = 1;
@@ -113,13 +113,13 @@ public:
     // Optimization to store small values (<= 8 bytes) inplace
     static constexpr bool CanInline(ui32 sz) { return sz <= 8; }
     static constexpr size_t MaxInlineSize() { return 8; }
-    const char* InlineData() const                  { Y_VERIFY_DEBUG(IsInline_); return IsNull_ ? nullptr : (char*)&IntVal; }
+    const char* InlineData() const                  { Y_DEBUG_ABORT_UNLESS(IsInline_); return IsNull_ ? nullptr : (char*)&IntVal; }
     const char* Data() const                        { return IsNull_ ? nullptr : (IsInline_ ? (char*)&IntVal : Ptr); }
 #else
     // Non-inlinable version for perf comparisons
     static bool CanInline(ui32)                     { return false; }
-    const char* InlineData() const                  { Y_VERIFY_DEBUG(!IsInline_); return Ptr; }
-    const char* Data() const                        { Y_VERIFY_DEBUG(!IsInline_); return Ptr; }
+    const char* InlineData() const                  { Y_DEBUG_ABORT_UNLESS(!IsInline_); return Ptr; }
+    const char* Data() const                        { Y_DEBUG_ABORT_UNLESS(!IsInline_); return Ptr; }
 #endif
 
     void CopyDataInto(char * dst) const {
@@ -163,8 +163,8 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
 #define SIMPLE_TYPE_SWITCH(typeEnum, castType)      \
     case NKikimr::NScheme::NTypeIds::typeEnum:      \
     {                                               \
-        Y_VERIFY_DEBUG(a.IsInline());                      \
-        Y_VERIFY_DEBUG(b.IsInline());                      \
+        Y_DEBUG_ABORT_UNLESS(a.IsInline());                      \
+        Y_DEBUG_ABORT_UNLESS(b.IsInline());                      \
         castType va = ReadUnaligned<castType>((const castType*)a.InlineData()); \
         castType vb = ReadUnaligned<castType>((const castType*)b.InlineData()); \
         return va == vb ? 0 : ((va < vb) != type.IsDescending() ? -1 : 1);   \
@@ -211,8 +211,8 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
 
     case NKikimr::NScheme::NTypeIds::Decimal:
     {
-        Y_VERIFY_DEBUG(a.Size() == sizeof(std::pair<ui64, i64>));
-        Y_VERIFY_DEBUG(b.Size() == sizeof(std::pair<ui64, i64>));
+        Y_DEBUG_ABORT_UNLESS(a.Size() == sizeof(std::pair<ui64, i64>));
+        Y_DEBUG_ABORT_UNLESS(b.Size() == sizeof(std::pair<ui64, i64>));
         std::pair<ui64, i64> va = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)a.Data());
         std::pair<ui64, i64> vb = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)b.Data());
         if (va.second == vb.second)
@@ -229,7 +229,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
     }
 
     default:
-        Y_VERIFY_DEBUG(false, "Unknown type");
+        Y_DEBUG_ABORT_UNLESS(false, "Unknown type");
     };
 
     return 0;
@@ -250,7 +250,7 @@ inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeCl
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
 template<class TTypeClass>
 inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 cnt_a, const ui32 cnt_b) {
-    Y_VERIFY_DEBUG(cnt_b <= cnt_a);
+    Y_DEBUG_ABORT_UNLESS(cnt_b <= cnt_a);
     ui32 i = 0;
     for (; i < cnt_b; ++i) {
         int cmpRes = CompareTypedCells(a[i], b[i], type[i]);
@@ -323,7 +323,7 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
         return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
     }
 
-    Y_VERIFY_DEBUG(false, "Type not supported for user columns: %d", typeId);
+    Y_DEBUG_ABORT_UNLESS(false, "Type not supported for user columns: %d", typeId);
     return 0;
 }
 

@@ -218,7 +218,7 @@ bool IsMapWrite(const TKikimrTableDescription& table, TExprBase input, TExprCont
 }
 
 TDqPhyPrecompute BuildPrecomputeStage(TExprBase expr, TExprContext& ctx) {
-    Y_VERIFY_DEBUG(IsDqPureExpr(expr));
+    Y_DEBUG_ABORT_UNLESS(IsDqPureExpr(expr));
 
     auto pureStage = Build<TDqStage>(ctx, expr.Pos())
         .Inputs()

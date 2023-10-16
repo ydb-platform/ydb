@@ -22,7 +22,7 @@ namespace NSequenceShard {
             // Make sure actual value was updated before this tx executed
             auto savedValue = std::make_pair(Generation, Round);
             auto& currentValue = Self->SchemeShardRounds[SchemeShardId];
-            Y_VERIFY_DEBUG(currentValue >= savedValue);
+            Y_DEBUG_ABORT_UNLESS(currentValue >= savedValue);
 
             NIceDb::TNiceDb db(txc.DB);
             db.Table<Schema::SchemeShardRounds>().Key(SchemeShardId).Update(
@@ -48,7 +48,7 @@ namespace NSequenceShard {
         ui64 round = msg->Record.GetRound();
 
         auto it = PipeInfos.find(serverId);
-        Y_VERIFY_DEBUG(it != PipeInfos.end());
+        Y_DEBUG_ABORT_UNLESS(it != PipeInfos.end());
         if (Y_LIKELY(it != PipeInfos.end())) {
             it->second.SchemeShardId = schemeShardId;
             it->second.Generation = generation;

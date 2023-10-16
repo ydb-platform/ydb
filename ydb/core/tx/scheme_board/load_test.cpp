@@ -253,7 +253,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
             break;
 
         default:
-            Y_VERIFY_DEBUG(false, "Unknown wakeup tag");
+            Y_DEBUG_ABORT_UNLESS(false, "Unknown wakeup tag");
             break;
         }
     }

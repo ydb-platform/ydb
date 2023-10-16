@@ -433,7 +433,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
         Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&pqGroupInfo->PreSerializedPathDescription);
     }
 
-    Y_VERIFY_DEBUG(!pqGroupInfo->PreSerializedPathDescription.empty());
+    Y_DEBUG_ABORT_UNLESS(!pqGroupInfo->PreSerializedPathDescription.empty());
     Result->PreSerializedData += pqGroupInfo->PreSerializedPathDescription;
 
     bool returnPartitioning = Params.GetReturnPartitioningInfo();
@@ -492,7 +492,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
             Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&pqGroupInfo->PreSerializedPartitionsDescription);
         }
 
-        Y_VERIFY_DEBUG(!pqGroupInfo->PreSerializedPartitionsDescription.empty());
+        Y_DEBUG_ABORT_UNLESS(!pqGroupInfo->PreSerializedPartitionsDescription.empty());
         Result->PreSerializedData += pqGroupInfo->PreSerializedPartitionsDescription;
     }
 
@@ -531,7 +531,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
         allocate->SetAlterVersion(pqGroupInfo->AlterVersion);
     }
 
-    Y_VERIFY_DEBUG(!Result->PreSerializedData.empty());
+    Y_DEBUG_ABORT_UNLESS(!Result->PreSerializedData.empty());
     if (!pathEl->IsCreateFinished()) {
         // Don't cache until create finishes (KIKIMR-4337)
         pqGroupInfo->PreSerializedPathDescription.clear();

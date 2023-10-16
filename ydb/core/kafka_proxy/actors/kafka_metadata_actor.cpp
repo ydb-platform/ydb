@@ -119,8 +119,8 @@ void TKafkaMetadataActor::HandleResponse(TEvLocationResponse::TPtr ev, const TAc
     auto* r = ev->Get();
     auto actorIter = TopicIndexes.find(ev->Sender);
 
-    Y_VERIFY_DEBUG(!actorIter.IsEnd()); 
-    Y_VERIFY_DEBUG(!actorIter->second.empty());
+    Y_DEBUG_ABORT_UNLESS(!actorIter.IsEnd()); 
+    Y_DEBUG_ABORT_UNLESS(!actorIter->second.empty());
 
     if (actorIter.IsEnd()) {
         KAFKA_LOG_CRIT("Metadata actor: got unexpected location response, ignoring. Expect malformed/incompled reply");

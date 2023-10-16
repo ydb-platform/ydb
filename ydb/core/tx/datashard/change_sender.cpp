@@ -44,7 +44,7 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     TSender& AddChangeSender(const TPathId& pathId, const TTableId& userTableId, ESenderType type) {
-        Y_VERIFY_DEBUG(!Senders.contains(pathId));
+        Y_DEBUG_ABORT_UNLESS(!Senders.contains(pathId));
 
         auto& sender = Senders[pathId];
         sender.UserTableId = userTableId;
@@ -63,7 +63,7 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void RegisterChangeSender(const TPathId& pathId, TSender& sender) const {
-        Y_VERIFY_DEBUG(!sender.ActorId);
+        Y_DEBUG_ABORT_UNLESS(!sender.ActorId);
         sender.ActorId = RegisterChangeSender(pathId, sender.UserTableId, sender.Type);
     }
 

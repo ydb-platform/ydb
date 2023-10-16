@@ -1942,7 +1942,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
 TNodePtr TSqlExpression::BinOperList(const TString& opName, TVector<TNodePtr>::const_iterator begin, TVector<TNodePtr>::const_iterator end) const {
     TPosition pos(Ctx.Pos());
     const size_t opCount = end - begin;
-    Y_VERIFY_DEBUG(opCount >= 2);
+    Y_DEBUG_ABORT_UNLESS(opCount >= 2);
     if (opCount == 2) {
         return BuildBinaryOp(Ctx, pos, opName, *begin, *(begin+1));
     } if (opCount == 3) {

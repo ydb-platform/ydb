@@ -111,7 +111,7 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
             username = "UNAUTHENTICATED";
         }
 
-        Y_VERIFY_DEBUG(extractQueryText);
+        Y_DEBUG_ABORT_UNLESS(extractQueryText);
         auto queryText = extractQueryText();
 
         auto paramsText = TStringBuilder()

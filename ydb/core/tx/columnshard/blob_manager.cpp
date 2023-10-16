@@ -329,7 +329,7 @@ void TBlobManager::DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) {
     // Add this batch to KeepQueue
     TGenStep edgeGenStep = EdgeGenStep();
     for (auto&& blobId: blobBatch.BatchInfo->GetBlobIds()) {
-        Y_VERIFY_DEBUG(blobId.IsDsBlob(), "Not a DS blob id: %s", blobId.ToStringNew().c_str());
+        Y_DEBUG_ABORT_UNLESS(blobId.IsDsBlob(), "Not a DS blob id: %s", blobId.ToStringNew().c_str());
 
         auto logoBlobId = blobId.GetLogoBlobId();
         TGenStep genStep{logoBlobId.Generation(), logoBlobId.Step()};

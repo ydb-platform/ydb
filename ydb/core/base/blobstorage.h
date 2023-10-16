@@ -1719,7 +1719,7 @@ struct TEvBlobStorage {
             , MinGeneration(minGeneration)
             , BlockedGeneration(blockedGeneration)
         {
-            Y_VERIFY_DEBUG(status != NKikimrProto::OK);
+            Y_DEBUG_ABORT_UNLESS(status != NKikimrProto::OK);
         }
 
         TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer)

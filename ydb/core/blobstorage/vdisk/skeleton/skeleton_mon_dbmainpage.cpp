@@ -99,7 +99,7 @@ namespace NKikimr {
 
         void Handle(NMon::TEvHttpInfoRes::TPtr &ev, const TActorContext &ctx) {
             NMon::TEvHttpInfoRes *ptr = dynamic_cast<NMon::TEvHttpInfoRes*>(ev->Get());
-            Y_VERIFY_DEBUG(ptr);
+            Y_DEBUG_ABORT_UNLESS(ptr);
             if (ptr->SubRequestId == ConvertToSubRequestId(DbName)) {
                 HullCompactionAnswer = ptr->Answer;
             } else if (ptr->SubRequestId == TDbMon::Defrag) {

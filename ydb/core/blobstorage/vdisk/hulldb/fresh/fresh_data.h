@@ -106,7 +106,7 @@ namespace NKikimr {
 
     template <class TKey, class TMemRec>
     void TFreshData<TKey, TMemRec>::PutAppendix(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) {
-        Y_VERIFY_DEBUG(lastLsn >= firstLsn);
+        Y_DEBUG_ABORT_UNLESS(lastLsn >= firstLsn);
         Cur->PutAppendix(std::move(a), firstLsn, lastLsn);
         SwapWithDregIfRequired();
     }

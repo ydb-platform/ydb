@@ -55,7 +55,7 @@ namespace NKikimr {
         }
 
         void TBarriersDs::PutToFresh(std::shared_ptr<TBase::TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) {
-             Y_VERIFY_DEBUG(a);
+             Y_DEBUG_ABORT_UNLESS(a);
 
              // update barriers cache with newly inserted elements
              TFreshAppendix::TIterator it(Settings.HullCtx, a.get());

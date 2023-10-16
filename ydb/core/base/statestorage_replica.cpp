@@ -180,7 +180,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         TEvStateStorage::TEvReplicaLookup *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
         const ui64 tabletId = msg->Record.GetTabletID();
-        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup,
+        Y_DEBUG_ABORT_UNLESS(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup,
             "tabletId# %" PRIu64 " SSGFTID# %" PRIu64 " SSG# %" PRIu64,
             (ui64)tabletId, (ui64)StateStorageGroupFromTabletID(tabletId), (ui64)Info->StateStorageGroup);
         TTablets::const_iterator it = Tablets.find(msg->Record.GetTabletID());
@@ -210,7 +210,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         TEvStateStorage::TEvReplicaUpdate *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
         const ui64 tabletId = msg->Record.GetTabletID();
-        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
+        Y_DEBUG_ABORT_UNLESS(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
 
         TEntry *x = nullptr;
         auto tabletIt = Tablets.find(tabletId);
@@ -256,7 +256,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         const auto &record = ev->Get()->Record;
         BLOG_D("Replica::Handle ev: " << ev->Get()->ToString());
         const ui64 tabletId = record.GetTabletID();
-        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
+        Y_DEBUG_ABORT_UNLESS(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
         const TActorId proposedLeader = ActorIdFromProto(record.GetProposedLeader());
 
         auto tabletIt = Tablets.find(tabletId);
@@ -276,7 +276,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         TEvStateStorage::TEvReplicaDelete *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
         const ui64 tabletId = msg->Record.GetTabletID();
-        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
+        Y_DEBUG_ABORT_UNLESS(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
 
         auto tabletIt = Tablets.find(tabletId);
         if (tabletIt == Tablets.end()) {
@@ -298,7 +298,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         TEvStateStorage::TEvReplicaLock *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
         const ui64 tabletId = msg->Record.GetTabletID();
-        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
+        Y_DEBUG_ABORT_UNLESS(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
         const TActorId &sender = ev->Sender;
 
         if (CheckSignature(msg)) {
@@ -332,7 +332,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaRegFollower::TPtr &ev) {
         const NKikimrStateStorage::TEvRegisterFollower &record = ev->Get()->Record;
         const ui64 tabletId = record.GetTabletID();
-        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
+        Y_DEBUG_ABORT_UNLESS(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
         TEntry &x = Tablets[tabletId]; // could lead to creation of zombie entries when follower exist w/o leader so we must filter on info
 
         const TActorId follower = ActorIdFromProto(record.GetFollower());
@@ -370,14 +370,14 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaUnregFollower::TPtr &ev) {
         const TEvStateStorage::TEvReplicaUnregFollower *msg = ev->Get();
         const ui64 tabletId = msg->Record.GetTabletID();
-        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
+        Y_DEBUG_ABORT_UNLESS(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
 
         ForgetFollower(tabletId, ev->Sender);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev) {
         const ui64 tabletId = ev->Cookie;
-        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
+        Y_DEBUG_ABORT_UNLESS(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
 
         ForgetFollower(tabletId, ev->Sender);
     }

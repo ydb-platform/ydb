@@ -150,7 +150,7 @@ namespace NKikimr {
 
             // update current entry point for desired level index
             const auto& results = msg->Results;
-            Y_VERIFY_DEBUG(results.size() == 1 && results.front().Lsn == LsnSeg.Last);
+            Y_DEBUG_ABORT_UNLESS(results.size() == 1 && results.front().Lsn == LsnSeg.Last);
 
             LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                      VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "%s lsn# %s done",

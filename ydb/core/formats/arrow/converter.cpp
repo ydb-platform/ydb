@@ -179,7 +179,7 @@ std::shared_ptr<arrow::RecordBatch> InplaceConvertColumns(const std::shared_ptr<
     auto convertedBatch = arrow::RecordBatch::Make(resultSchemaFixed, batch->num_rows(), std::move(columns));
 
     Y_ABORT_UNLESS(convertedBatch->Validate().ok());
-    Y_VERIFY_DEBUG(convertedBatch->ValidateFull().ok());
+    Y_DEBUG_ABORT_UNLESS(convertedBatch->ValidateFull().ok());
     return convertedBatch;
 }
 

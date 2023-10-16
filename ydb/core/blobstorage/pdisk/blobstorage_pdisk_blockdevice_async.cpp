@@ -389,7 +389,7 @@ class TRealBlockDevice : public IBlockDevice {
                     Y_ABORT_UNLESS(WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] == nullptr);
                     WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] = completionAction;
                 } else {
-                    Y_VERIFY_DEBUG(false, "Threre must not be writes of size 0 in TRealBlockDevice");
+                    Y_DEBUG_ABORT_UNLESS(false, "Threre must not be writes of size 0 in TRealBlockDevice");
                 }
             } else {
                 if ((ui64)op->GetOffset() != EndOffset) {

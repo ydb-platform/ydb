@@ -2482,7 +2482,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         pool->State = state;
 
         auto tenant = GetTenant(path);
-        Y_VERIFY_DEBUG(tenant, "loaded pool for unknown tenant %s", path.data());
+        Y_DEBUG_ABORT_UNLESS(tenant, "loaded pool for unknown tenant %s", path.data());
         if (tenant) {
             tenant->StoragePools[kind] = pool;
 
@@ -2507,7 +2507,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         ui64 count = slotRowset.GetValue<Schema::TenantUnits::Count>();
 
         auto tenant = GetTenant(path);
-        Y_VERIFY_DEBUG(tenant, "loaded units <%s, %s>(%" PRIu64 ") for unknown tenant %s",
+        Y_DEBUG_ABORT_UNLESS(tenant, "loaded units <%s, %s>(%" PRIu64 ") for unknown tenant %s",
                        kind.data(), zone.data(), count, path.data());
         if (tenant) {
             tenant->ComputationalUnits[std::make_pair(kind, zone)] = count;
@@ -2534,7 +2534,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         TString kind = registeredRowset.GetValue<Schema::RegisteredUnits::Kind>();
 
         auto tenant = GetTenant(path);
-        Y_VERIFY_DEBUG(tenant, "loaded registered unit %s:%" PRIu32 " for unknown tenant %s",
+        Y_DEBUG_ABORT_UNLESS(tenant, "loaded registered unit %s:%" PRIu32 " for unknown tenant %s",
                        host.data(), port, path.data());
         if (tenant) {
             TAllocatedComputationalUnit unit{host, port, kind};

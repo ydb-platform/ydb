@@ -68,7 +68,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         for (const auto& item : Self->PathsById) {
             if (item.second->DbRefCount == 0 && item.second->Dropped()) {
-                Y_VERIFY_DEBUG(!underOperation.contains(item.first));
+                Y_DEBUG_ABORT_UNLESS(!underOperation.contains(item.first));
                 Self->CleanDroppedPathsCandidates.insert(item.first);
             }
         }
@@ -79,7 +79,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
             auto path = Self->PathsById.at(item.first);
             if (path->DbRefCount == 1 && path->AllChildrenCount == 0 && path->Dropped()) {
-                Y_VERIFY_DEBUG(!underOperation.contains(item.first));
+                Y_DEBUG_ABORT_UNLESS(!underOperation.contains(item.first));
                 Self->CleanDroppedSubDomainsCandidates.insert(item.first);
             }
         }
@@ -1371,7 +1371,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 pathRows.pop_front();
             }
 
-            Y_VERIFY_DEBUG(IsSorted(pathRows.begin(), pathRows.end()));
+            Y_DEBUG_ABORT_UNLESS(IsSorted(pathRows.begin(), pathRows.end()));
 
             for (auto& rec: pathRows) {
                 TPathElement::TPtr path = MakePathElement(rec);

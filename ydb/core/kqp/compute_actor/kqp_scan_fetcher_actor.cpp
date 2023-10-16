@@ -64,7 +64,7 @@ TVector<NKikimr::TSerializedTableRange> TKqpScanFetcherActor::BuildSerializedTab
             sr.FromInclusive = sr.ToInclusive = true;
         }
     }
-    Y_VERIFY_DEBUG(!resultLocal.empty());
+    Y_DEBUG_ABORT_UNLESS(!resultLocal.empty());
     return resultLocal;
 }
 

@@ -3,7 +3,7 @@
 namespace NKikimr::NOlap {
 TMarksGranules::TMarksGranules(std::vector<TPair>&& marks) noexcept
     : Marks(std::move(marks)) {
-    Y_VERIFY_DEBUG(std::is_sorted(Marks.begin(), Marks.end()));
+    Y_DEBUG_ABORT_UNLESS(std::is_sorted(Marks.begin(), Marks.end()));
 }
 
 TMarksGranules::TMarksGranules(std::vector<TMark>&& points) {

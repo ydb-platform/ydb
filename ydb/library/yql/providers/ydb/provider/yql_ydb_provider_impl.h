@@ -43,12 +43,12 @@ public:
     }
 
     std::string_view GetTablePath() const {
-        Y_VERIFY_DEBUG(KeyType == Type::Table || KeyType == Type::TableScheme);
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Table || KeyType == Type::TableScheme);
         return Target;
     }
 
     std::string_view GetFolderPath() const {
-        Y_VERIFY_DEBUG(KeyType == Type::TableList);
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::TableList);
         return Target;
     }
 

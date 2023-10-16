@@ -88,7 +88,7 @@ namespace NTable {
             // We know that it and [lower, upper) can be merged (lower <= it->Upper)
             // We have to find the first item we cannot merge (upper < end->Lower)
             auto end = Items.upper_bound(TMergeUpper{ upper });
-            Y_VERIFY_DEBUG(end != it); // sanity check
+            Y_DEBUG_ABORT_UNLESS(end != it); // sanity check
 
             // Becomes true when we make any changes
             bool changed = false;
@@ -208,7 +208,7 @@ namespace NTable {
             }
 
             static size_t FindNextIndex(size_t index, size_t size) {
-                Y_VERIFY_DEBUG(index < size);
+                Y_DEBUG_ABORT_UNLESS(index < size);
 
                 if (!IsLastChild(index) && (index + 1) < size) {
                     // Go to the next item in current node
@@ -282,12 +282,12 @@ namespace NTable {
                     Upper.resize(ranges.size());
                     TSteppedCookieAllocator steppedCookieAllocator(ranges.size());
                     for (const auto& item : ranges) {
-                        Y_VERIFY_DEBUG(steppedCookieAllocator);
+                        Y_DEBUG_ABORT_UNLESS(steppedCookieAllocator);
                         Lower[steppedCookieAllocator.Current()] = item.Lower;
                         Upper[steppedCookieAllocator.Current()] = item.Upper;
                         steppedCookieAllocator.MoveNext();
                     }
-                    Y_VERIFY_DEBUG(!steppedCookieAllocator);
+                    Y_DEBUG_ABORT_UNLESS(!steppedCookieAllocator);
                 }
             }
 

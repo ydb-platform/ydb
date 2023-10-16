@@ -123,7 +123,7 @@ namespace NKikimr {
         }
         const ui32 numParts = PopCount(item.PartsMask);
         if (numParts >= Info->Type.MinimalRestorablePartCount()) {
-            Y_VERIFY_DEBUG(item.Parts.size() == Info->Type.TotalPartCount());
+            Y_DEBUG_ABORT_UNLESS(item.Parts.size() == Info->Type.TotalPartCount());
 
             ui32 restoreMask = 0;
             for (ui8 i = item.Needed.FirstPosition(); i != item.Needed.GetSize(); i = item.Needed.NextPosition(i)) {

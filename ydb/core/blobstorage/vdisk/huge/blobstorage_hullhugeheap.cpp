@@ -655,7 +655,7 @@ namespace NKikimr {
 
         void TAllChains::BuildSearchTable() {
             const ui32 endBlocks = GetEndBlocks();
-            Y_VERIFY_DEBUG(!ChainDelegators.empty());
+            Y_DEBUG_ABORT_UNLESS(!ChainDelegators.empty());
             TAllChainDelegators::iterator it = ChainDelegators.begin();
             TChainDelegator *ptr = nullptr;
             ui32 blocks = it->Blocks;

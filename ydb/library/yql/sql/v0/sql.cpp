@@ -1440,8 +1440,8 @@ TNodePtr TSqlExpression::UnaryExpr(const TUnarySubExprType& node) {
         Ctx.IncrementMonCounter("sql_errors", "CollateUnarySubexpr");
         Error() << "unary_subexpr: COLLATE is not implemented yet";
     }
-    Y_VERIFY_DEBUG(!ids.empty());
-    Y_VERIFY_DEBUG(ids.front().Expr);
+    Y_DEBUG_ABORT_UNLESS(!ids.empty());
+    Y_DEBUG_ABORT_UNLESS(ids.front().Expr);
     return ids.size() > 1 ? BuildAccess(pos, ids, isLookup) : ids.back().Expr;
 }
 
@@ -2049,7 +2049,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node) {
 TNodePtr TSqlExpression::BinOperList(const TString& opName, TVector<TNodePtr>::const_iterator begin, TVector<TNodePtr>::const_iterator end) const {
     TPosition pos(Ctx.Pos());
     const size_t opCount = end - begin;
-    Y_VERIFY_DEBUG(opCount >= 2);
+    Y_DEBUG_ABORT_UNLESS(opCount >= 2);
     if (opCount == 2) {
         return BuildBinaryOp(pos, opName, *begin, *(begin+1));
     } if (opCount == 3) {
@@ -2421,7 +2421,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock2& block) 
                 }
             }
 
-            Y_VERIFY_DEBUG(join->GetJoin());
+            Y_DEBUG_ABORT_UNLESS(join->GetJoin());
             join->GetJoin()->SetupJoin(joinOp, joinKeyExpr);
             break;
         }
@@ -2450,7 +2450,7 @@ TNodePtr TSqlSelect::JoinExpr(ISource* join, const TRule_join_constraint& node) 
                 return nullptr;
             }
 
-            Y_VERIFY_DEBUG(join->GetJoin());
+            Y_DEBUG_ABORT_UNLESS(join->GetJoin());
             return join->GetJoin()->BuildJoinKeys(Ctx, names);
         }
         default:
@@ -4232,9 +4232,9 @@ private:
         const auto& descr = AltDescription(node);
         TVector<TString> parts;
         const auto pos = descr.find(": ");
-        Y_VERIFY_DEBUG(pos != TString::npos);
+        Y_DEBUG_ABORT_UNLESS(pos != TString::npos);
         Split(TString(descr.begin() + pos + 2, descr.end()), "_", parts);
-        Y_VERIFY_DEBUG(parts.size() > 1);
+        Y_DEBUG_ABORT_UNLESS(parts.size() > 1);
         parts.pop_back();
         for (auto& part: parts) {
             part.to_upper(0, 1);
@@ -5013,7 +5013,7 @@ TSourcePtr TSqlQuery::Build(const TRule_set_clause_list& stmt) {
             return nullptr;
         }
     }
-    Y_VERIFY_DEBUG(targetList.size() == values.size());
+    Y_DEBUG_ABORT_UNLESS(targetList.size() == values.size());
     return BuildUpdateValues(pos, targetList, values);
 }
 

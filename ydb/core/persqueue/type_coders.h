@@ -294,7 +294,7 @@ public:
 
 protected:
     void DoAddData(const char* data, size_t size) override {
-        Y_VERIFY_DEBUG(size == sizeof(bool));
+        Y_DEBUG_ABORT_UNLESS(size == sizeof(bool));
         if (IsNullable)
             Mask.Append(1, 1);
         Mask.Append(*(const bool*)data, 1);

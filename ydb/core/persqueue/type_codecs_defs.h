@@ -227,7 +227,7 @@ public:
         : ShortSize_(size)
         , IsNull_(0)
     {
-        Y_VERIFY_DEBUG(size <= INTRUSIVE_SIZE);
+        Y_DEBUG_ABORT_UNLESS(size <= INTRUSIVE_SIZE);
         if (size) {
             ::memcpy(IntrusiveData_, data, size);
         }
@@ -385,7 +385,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 inline IChunkDecoder::TPtr IChunkDecoder::ReadChunk(const TDataRef& data, const TTypeCodecs* codecs) {
-    Y_VERIFY_DEBUG(data.Size() >= sizeof(TCodecSig));
+    Y_DEBUG_ABORT_UNLESS(data.Size() >= sizeof(TCodecSig));
     const TCodecSig sig = ReadUnaligned<TCodecSig>(data.Data());
     auto codec = codecs->GetCodec(sig);
     Y_ABORT_UNLESS(codec, "Unregistered codec (%u).", ui16(sig));

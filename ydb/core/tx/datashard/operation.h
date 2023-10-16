@@ -777,7 +777,7 @@ public:
 
     void AddExecutionTime(TDuration val)
     {
-        Y_VERIFY_DEBUG(!IsExecutionPlanFinished());
+        Y_DEBUG_ABORT_UNLESS(!IsExecutionPlanFinished());
         auto &profile = ExecutionProfile.UnitProfiles[ExecutionPlan[CurrentUnit]];
         profile.ExecuteTime += val;
         ++profile.ExecuteCount;

@@ -775,7 +775,7 @@ private:
                 std::piecewise_construct,
                 std::forward_as_tuple(shardId),
                 std::forward_as_tuple(shardId));
-            Y_VERIFY_DEBUG(inserted, "Duplicate shard %" PRIu64 " after keys resolve", shardId);
+            Y_DEBUG_ABORT_UNLESS(inserted, "Duplicate shard %" PRIu64 " after keys resolve", shardId);
 
             auto& state = it->second;
             auto& range = state.Ranges.emplace_back();
@@ -1151,7 +1151,7 @@ private:
         Y_UNUSED(shardId);
 
         ++TabletPrepareErrors;
-        Y_VERIFY_DEBUG(TabletsToPrepare > 0);
+        Y_DEBUG_ABORT_UNLESS(TabletsToPrepare > 0);
         if (!--TabletsToPrepare) {
             TxProxyMon->MarkShardError->Inc();
             TXLOG_E("Gathered all snapshot propose results, TabletPrepareErrors# " << TabletPrepareErrors);
@@ -1297,7 +1297,7 @@ private:
                 "Received TEvProposeTransactionResult from unexpected shardId# " << shardId);
         auto& state = it->second;
 
-        Y_VERIFY_DEBUG(state.State == EShardState::SnapshotPlanned);
+        Y_DEBUG_ABORT_UNLESS(state.State == EShardState::SnapshotPlanned);
 
         if (msg->GetTxId() != TxId) {
             TXLOG_E("Unexpected TEvProposeTransactionResult (snapshot tx) TxId# " << msg->GetTxId() << " expected " << TxId);

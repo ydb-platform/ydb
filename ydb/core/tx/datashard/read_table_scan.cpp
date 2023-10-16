@@ -73,7 +73,7 @@ Y_FORCE_INLINE void AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
         break;
     case NUdf::TDataType<NUdf::TDecimal>::Id:
         {
-            Y_VERIFY_DEBUG(cell.Size() == 16);
+            Y_DEBUG_ABORT_UNLESS(cell.Size() == 16);
             struct TCellData {
                 ui64 Low;
                 ui64 High;
@@ -582,7 +582,7 @@ private:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow &row) noexcept override
     {
-        Y_VERIFY_DEBUG(DebugCheckKeyInRange(key));
+        Y_DEBUG_ABORT_UNLESS(DebugCheckKeyInRange(key));
 
         Writer->PutRow(row);
 

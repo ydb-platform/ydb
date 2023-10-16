@@ -1838,7 +1838,7 @@ bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, co
         WaitingDataTxOps.emplace(TRowVersion::Min(), std::move(ev)); // postpone tx processing till mvcc state switch is finished
     } else {
         bool prioritizedReads = Self->GetEnablePrioritizedMvccSnapshotReads();
-        Y_VERIFY_DEBUG(ev->Get()->Record.HasMvccSnapshot());
+        Y_DEBUG_ABORT_UNLESS(ev->Get()->Record.HasMvccSnapshot());
         TRowVersion snapshot(ev->Get()->Record.GetMvccSnapshot().GetStep(), ev->Get()->Record.GetMvccSnapshot().GetTxId());
         WaitingDataTxOps.emplace(snapshot, std::move(ev));
         const ui64 waitStep = prioritizedReads ? snapshot.Step : snapshot.Step + 1;
@@ -2116,8 +2116,8 @@ bool TPipeline::MarkPlannedLogicallyCompleteUpTo(const TRowVersion& version, TTr
         if (version <= prVersion) {
             return false;
         }
-        Y_VERIFY_DEBUG(!pr.second->IsImmediate());
-        Y_VERIFY_DEBUG(!pr.second->HasFlag(TTxFlags::BlockingImmediateOps));
+        Y_DEBUG_ABORT_UNLESS(!pr.second->IsImmediate());
+        Y_DEBUG_ABORT_UNLESS(!pr.second->HasFlag(TTxFlags::BlockingImmediateOps));
         pr.second->SetFlag(TTxFlags::BlockingImmediateOps);
         pr.second->PromoteImmediateConflicts();
         // TODO: we don't want to persist these flags in the future
@@ -2151,9 +2151,9 @@ bool TPipeline::MarkPlannedLogicallyIncompleteUpTo(const TRowVersion& version, T
         if (version < prVersion) {
             return false;
         }
-        Y_VERIFY_DEBUG(!pr.second->IsImmediate());
-        Y_VERIFY_DEBUG(!pr.second->HasFlag(TTxFlags::BlockingImmediateOps));
-        Y_VERIFY_DEBUG(!pr.second->HasFlag(TTxFlags::BlockingImmediateWrites));
+        Y_DEBUG_ABORT_UNLESS(!pr.second->IsImmediate());
+        Y_DEBUG_ABORT_UNLESS(!pr.second->HasFlag(TTxFlags::BlockingImmediateOps));
+        Y_DEBUG_ABORT_UNLESS(!pr.second->HasFlag(TTxFlags::BlockingImmediateWrites));
         pr.second->SetFlag(TTxFlags::BlockingImmediateWrites);
         pr.second->PromoteImmediateWriteConflicts();
         // TODO: we don't want to persist these flags in the future

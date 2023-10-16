@@ -112,13 +112,13 @@ public:
                 auto task = std::move(taskIt->second);
                 requestIt->second.InFlyTasks.erase(taskIt);
 
-                Y_VERIFY_DEBUG(requestIt->second.TotalMemory >= task.Memory);
+                Y_DEBUG_ABORT_UNLESS(requestIt->second.TotalMemory >= task.Memory);
                 requestIt->second.TotalMemory -= task.Memory;
                 requestIt->second.ExecutionCancelled |= !success;
 
                 auto& meta = Meta[txId];
-                Y_VERIFY_DEBUG(meta.TotalMemory >= task.Memory);
-                Y_VERIFY_DEBUG(meta.TotalComputeActors >= 1);
+                Y_DEBUG_ABORT_UNLESS(meta.TotalMemory >= task.Memory);
+                Y_DEBUG_ABORT_UNLESS(meta.TotalComputeActors >= 1);
                 meta.TotalMemory -= task.Memory;
                 meta.TotalComputeActors--;
 
@@ -250,8 +250,8 @@ private:
         YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
 
         auto& meta = Meta[txId];
-        Y_VERIFY_DEBUG(meta.TotalMemory >= ret->TotalMemory);
-        Y_VERIFY_DEBUG(meta.TotalComputeActors >= 1);
+        Y_DEBUG_ABORT_UNLESS(meta.TotalMemory >= ret->TotalMemory);
+        Y_DEBUG_ABORT_UNLESS(meta.TotalComputeActors >= 1);
         meta.TotalMemory -= ret->TotalMemory;
         meta.TotalComputeActors -= ret->InFlyTasks.size();
 

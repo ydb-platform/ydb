@@ -925,7 +925,7 @@ namespace NKikimr::NDataShard {
     bool TVolatileTxManager::ReadyToDbCommit(TVolatileTxInfo* info) const {
         if (info->State == EVolatileTxState::Committed && info->Dependencies.empty()) {
             if (info->CommitOrdered) {
-                Y_VERIFY_DEBUG(!VolatileTxByCommitOrder.Empty());
+                Y_DEBUG_ABORT_UNLESS(!VolatileTxByCommitOrder.Empty());
                 return VolatileTxByCommitOrder.Front() == info;
             }
 

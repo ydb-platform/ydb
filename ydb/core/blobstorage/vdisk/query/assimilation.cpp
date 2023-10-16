@@ -218,7 +218,7 @@ namespace NKikimr {
         void SendResultAndDie() {
 #ifndef NDEBUG
             const size_t actualLen = Result->Record.ByteSizeLong();
-            Y_VERIFY_DEBUG(actualLen == RecordSize, "actualLen# %zu != RecordSize# %zu", actualLen, RecordSize);
+            Y_DEBUG_ABORT_UNLESS(actualLen == RecordSize, "actualLen# %zu != RecordSize# %zu", actualLen, RecordSize);
 #endif
             Send(Ev->Sender, Result.release(), IEventHandle::MakeFlags(TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA, 0),
                 Ev->Cookie);

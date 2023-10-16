@@ -444,7 +444,7 @@ namespace NOps {
         {
             TGuard<ui64, NUtil::TIncDecOps<ui64>> guard(Depth);
 
-            Y_VERIFY_DEBUG(MayProgress(), "React called with non-ready cache");
+            Y_DEBUG_ABORT_UNLESS(MayProgress(), "React called with non-ready cache");
             Y_ABORT_UNLESS(Scan, "Table scan op has been finalized");
 
             TStatState stat(Seen, Skipped);

@@ -1940,7 +1940,7 @@ NUdf::ETypeKind TTypeInfoHelper::GetTypeKind(const NUdf::TType* type) const {
     case NMiniKQL::TType::EKind::Pg: return NUdf::ETypeKind::Pg;
     case NMiniKQL::TType::EKind::Block: return NUdf::ETypeKind::Block;
     default:
-        Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
+        Y_DEBUG_ABORT_UNLESS(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
         return NUdf::ETypeKind::Unknown;
     }
 }
@@ -1951,7 +1951,7 @@ void TTypeInfoHelper::VisitType(const NUdf::TType* type, NUdf::ITypeVisitor* vis
         return;
     }
 
-    Y_VERIFY_DEBUG(visitor->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(1, 0)));
+    Y_DEBUG_ABORT_UNLESS(visitor->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(1, 0)));
     auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
 
 #define MKQL_HANDLE_UDF_TYPE(TypeKind) \
@@ -1976,7 +1976,7 @@ case NMiniKQL::TType::EKind::TypeKind: { \
         MKQL_HANDLE_UDF_TYPE(Pg)
         MKQL_HANDLE_UDF_TYPE(Block)
     default:
-        Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
+        Y_DEBUG_ABORT_UNLESS(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
     }
 
 #undef MKQL_HANDLE_UDF_TYPE

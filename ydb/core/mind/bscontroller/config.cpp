@@ -432,7 +432,7 @@ namespace NKikimr::NBsController {
                 } else if (!base || base->second->Status != NKikimrBlobStorage::EVDiskStatus::READY) {
                     overlay->second->PutInVSlotReadyTimestampQ(now);
                 } else {
-                    Y_VERIFY_DEBUG(overlay->second->IsReady || overlay->second->IsInVSlotReadyTimestampQ());
+                    Y_DEBUG_ABORT_UNLESS(overlay->second->IsReady || overlay->second->IsInVSlotReadyTimestampQ());
                 }
             }
 
@@ -519,7 +519,7 @@ namespace NKikimr::NBsController {
                 if (!overlay->second) {
                     ScrubState.OnDeleteVSlot(overlay->first, txc);
                 } else if (!base) {
-                    Y_VERIFY_DEBUG(!overlay->second->IsBeingDeleted());
+                    Y_DEBUG_ABORT_UNLESS(!overlay->second->IsBeingDeleted());
                     ScrubState.UpdateVDiskState(&*overlay->second);
                 } else if (overlay->second->IsBeingDeleted() && !base->second->IsBeingDeleted()) {
                     ScrubState.OnDeleteVSlot(overlay->first, txc);

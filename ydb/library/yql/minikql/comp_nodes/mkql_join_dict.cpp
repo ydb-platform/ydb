@@ -146,7 +146,7 @@ private:
                 // traverse dict1, lookup dict2
                 const auto it = dict1.GetDictIterator();
                 for (NUdf::TUnboxedValue key1, payload1; it.NextPair(key1, payload1);) {
-                    Y_VERIFY_DEBUG(!HasNullInKey(key1));
+                    Y_DEBUG_ABORT_UNLESS(!HasNullInKey(key1));
                     if (const auto lookup2 = dict2.Lookup(key1)) {
                         WriteValuesImpl<EJoinKind::Inner>(payload1, lookup2, resList, ctx);
                     }
@@ -155,7 +155,7 @@ private:
                 // traverse dict2, lookup dict1
                 const auto it = dict2.GetDictIterator();
                 for (NUdf::TUnboxedValue key2, payload2; it.NextPair(key2, payload2);) {
-                    Y_VERIFY_DEBUG(!HasNullInKey(key2));
+                    Y_DEBUG_ABORT_UNLESS(!HasNullInKey(key2));
                     if (const auto lookup1 = dict1.Lookup(key2)) {
                         WriteValuesImpl<EJoinKind::Inner>(lookup1, payload2, resList, ctx);
                     }
@@ -264,7 +264,7 @@ private:
         case EJoinKind::LeftSemi: {
                 const auto it = dict1.GetDictIterator();
                 for (NUdf::TUnboxedValue key1, payload1; it.NextPair(key1, payload1);) {
-                    Y_VERIFY_DEBUG(!HasNullInKey(key1));
+                    Y_DEBUG_ABORT_UNLESS(!HasNullInKey(key1));
                     if (dict2.Contains(key1)) {
                         if (IsMulti1) {
                             TThresher<false>::DoForEachItem(payload1,
@@ -283,7 +283,7 @@ private:
         case EJoinKind::RightSemi: {
                 const auto it = dict2.GetDictIterator();
                 for (NUdf::TUnboxedValue key2, payload2; it.NextPair(key2, payload2);) {
-                    Y_VERIFY_DEBUG(!HasNullInKey(key2));
+                    Y_DEBUG_ABORT_UNLESS(!HasNullInKey(key2));
                     if (dict1.Contains(key2)) {
                         if (IsMulti2) {
                             TThresher<false>::DoForEachItem(payload2,

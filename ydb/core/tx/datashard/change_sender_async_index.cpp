@@ -483,7 +483,7 @@ class TAsyncIndexChangeSenderMain
         }
 
         for (const auto& [tag, column] : entry.Columns) {
-            Y_VERIFY_DEBUG(!MainColumnToTag.contains(column.Name));
+            Y_DEBUG_ABORT_UNLESS(!MainColumnToTag.contains(column.Name));
             MainColumnToTag.emplace(column.Name, tag);
         }
 
@@ -600,7 +600,7 @@ class TAsyncIndexChangeSenderMain
             auto it = MainColumnToTag.find(column.Name);
             Y_ABORT_UNLESS(it != MainColumnToTag.end());
 
-            Y_VERIFY_DEBUG(!TagMap.contains(it->second));
+            Y_DEBUG_ABORT_UNLESS(!TagMap.contains(it->second));
             TagMap.emplace(it->second, tag);
 
             if (column.KeyOrder < 0) {

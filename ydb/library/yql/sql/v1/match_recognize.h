@@ -111,7 +111,7 @@ protected:
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         Node->VisitTree(func, visited);
     }
 

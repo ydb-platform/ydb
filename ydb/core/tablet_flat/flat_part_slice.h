@@ -193,19 +193,19 @@ namespace NTable {
 
         const TScreen::THole& operator*() const
         {
-            Y_VERIFY_DEBUG(Valid);
+            Y_DEBUG_ABORT_UNLESS(Valid);
             return Current;
         }
 
         const TScreen::THole* operator->() const
         {
-            Y_VERIFY_DEBUG(Valid);
+            Y_DEBUG_ABORT_UNLESS(Valid);
             return &Current;
         }
 
         TScreenRowsIterator& operator++()
         {
-            Y_VERIFY_DEBUG(Valid);
+            Y_DEBUG_ABORT_UNLESS(Valid);
             MoveNext();
             return *this;
         }
@@ -259,19 +259,19 @@ namespace NTable {
 
         const TScreen::THole& operator*() const
         {
-            Y_VERIFY_DEBUG(Valid);
+            Y_DEBUG_ABORT_UNLESS(Valid);
             return Current;
         }
 
         const TScreen::THole* operator->() const
         {
-            Y_VERIFY_DEBUG(Valid);
+            Y_DEBUG_ABORT_UNLESS(Valid);
             return &Current;
         }
 
         TSlicesRowsIterator& operator++()
         {
-            Y_VERIFY_DEBUG(Valid);
+            Y_DEBUG_ABORT_UNLESS(Valid);
             MoveNext();
             return *this;
         }
@@ -445,7 +445,7 @@ namespace NTable {
          */
         const_iterator Lookup(const_iterator it, TRowId rowBegin, TRowId rowEnd) const noexcept
         {
-            Y_VERIFY_DEBUG(rowBegin < rowEnd);
+            Y_DEBUG_ABORT_UNLESS(rowBegin < rowEnd);
             it = LookupBackward(it, rowEnd - 1);
             it = LookupForward(it, rowBegin);
             return it;

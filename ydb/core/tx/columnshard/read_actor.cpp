@@ -60,7 +60,7 @@ public:
         } else {
             ACFL_DEBUG("event", "TEvTaskProcessedResult");
             auto t = static_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult());
-            Y_VERIFY_DEBUG(dynamic_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult()));
+            Y_DEBUG_ABORT_UNLESS(dynamic_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult()));
             if (!IndexedData->IsFinished()) {
                 Y_ABORT_UNLESS(t->Apply(*IndexedData));
             }

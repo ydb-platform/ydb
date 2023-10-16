@@ -71,7 +71,7 @@ namespace NTable {
                                 lastRowId,
                                 firstKey,
                                 lastKey);
-                            Y_VERIFY_DEBUG(run, "Unexpected null result");
+                            Y_DEBUG_ABORT_UNLESS(run, "Unexpected null result");
 
                             if (run->size() > 0) {
                                 run->Validate();

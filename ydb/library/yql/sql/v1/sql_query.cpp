@@ -2216,7 +2216,7 @@ TSourcePtr TSqlQuery::Build(const TRule_set_clause_list& stmt) {
             return nullptr;
         }
     }
-    Y_VERIFY_DEBUG(targetList.size() == values.size());
+    Y_DEBUG_ABORT_UNLESS(targetList.size() == values.size());
     return BuildUpdateValues(pos, targetList, values);
 }
 

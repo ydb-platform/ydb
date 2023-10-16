@@ -326,7 +326,7 @@ void TKeyValueState::CountDeleteInline(ui32 sizeBytes) {
 void TKeyValueState::CountInitialTrashRecord(const TLogoBlobID& id) {
     TabletCounters->Simple()[COUNTER_TRASH_COUNT] += 1;
     TabletCounters->Simple()[COUNTER_TRASH_BYTES] += id.BlobSize();
-    Y_VERIFY_DEBUG(TabletCounters->Simple()[COUNTER_UNCOMMITTED_TRASH_BYTES].Get() +
+    Y_DEBUG_ABORT_UNLESS(TabletCounters->Simple()[COUNTER_UNCOMMITTED_TRASH_BYTES].Get() +
         TabletCounters->Simple()[COUNTER_TRASH_BYTES].Get() +
         TabletCounters->Simple()[COUNTER_VIRTUAL_TRASH_BYTES].Get() == TotalTrashSize);
 }
@@ -334,7 +334,7 @@ void TKeyValueState::CountInitialTrashRecord(const TLogoBlobID& id) {
 void TKeyValueState::CountUncommittedTrashRecord(const TLogoBlobID& id) {
     TabletCounters->Simple()[COUNTER_UNCOMMITTED_TRASH_COUNT] += 1;
     TabletCounters->Simple()[COUNTER_UNCOMMITTED_TRASH_BYTES] += id.BlobSize();
-    Y_VERIFY_DEBUG(TabletCounters->Simple()[COUNTER_UNCOMMITTED_TRASH_BYTES].Get() +
+    Y_DEBUG_ABORT_UNLESS(TabletCounters->Simple()[COUNTER_UNCOMMITTED_TRASH_BYTES].Get() +
         TabletCounters->Simple()[COUNTER_TRASH_BYTES].Get() +
         TabletCounters->Simple()[COUNTER_VIRTUAL_TRASH_BYTES].Get() == TotalTrashSize);
 }
@@ -344,7 +344,7 @@ void TKeyValueState::CountTrashCollected(const TLogoBlobID& id) {
     TabletCounters->Simple()[COUNTER_TRASH_BYTES] -= id.BlobSize();
     TabletCounters->Simple()[COUNTER_VIRTUAL_TRASH_COUNT] += 1;
     TabletCounters->Simple()[COUNTER_VIRTUAL_TRASH_BYTES] += id.BlobSize();
-    Y_VERIFY_DEBUG(TabletCounters->Simple()[COUNTER_UNCOMMITTED_TRASH_BYTES].Get() +
+    Y_DEBUG_ABORT_UNLESS(TabletCounters->Simple()[COUNTER_UNCOMMITTED_TRASH_BYTES].Get() +
         TabletCounters->Simple()[COUNTER_TRASH_BYTES].Get() +
         TabletCounters->Simple()[COUNTER_VIRTUAL_TRASH_BYTES].Get() == TotalTrashSize);
 }
@@ -354,7 +354,7 @@ void TKeyValueState::CountTrashCommitted(const TLogoBlobID& id) {
     TabletCounters->Simple()[COUNTER_UNCOMMITTED_TRASH_BYTES] -= id.BlobSize();
     TabletCounters->Simple()[COUNTER_TRASH_COUNT] += 1;
     TabletCounters->Simple()[COUNTER_TRASH_BYTES] += id.BlobSize();
-    Y_VERIFY_DEBUG(TabletCounters->Simple()[COUNTER_UNCOMMITTED_TRASH_BYTES].Get() +
+    Y_DEBUG_ABORT_UNLESS(TabletCounters->Simple()[COUNTER_UNCOMMITTED_TRASH_BYTES].Get() +
         TabletCounters->Simple()[COUNTER_TRASH_BYTES].Get() +
         TabletCounters->Simple()[COUNTER_VIRTUAL_TRASH_BYTES].Get() == TotalTrashSize);
 }
@@ -362,7 +362,7 @@ void TKeyValueState::CountTrashCommitted(const TLogoBlobID& id) {
 void TKeyValueState::CountTrashDeleted(const TLogoBlobID& id) {
     TabletCounters->Simple()[COUNTER_VIRTUAL_TRASH_COUNT] -= 1;
     TabletCounters->Simple()[COUNTER_VIRTUAL_TRASH_BYTES] -= id.BlobSize();
-    Y_VERIFY_DEBUG(TabletCounters->Simple()[COUNTER_UNCOMMITTED_TRASH_BYTES].Get() +
+    Y_DEBUG_ABORT_UNLESS(TabletCounters->Simple()[COUNTER_UNCOMMITTED_TRASH_BYTES].Get() +
         TabletCounters->Simple()[COUNTER_TRASH_BYTES].Get() +
         TabletCounters->Simple()[COUNTER_VIRTUAL_TRASH_BYTES].Get() == TotalTrashSize);
 }

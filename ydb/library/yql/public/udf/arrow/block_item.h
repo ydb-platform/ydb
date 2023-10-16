@@ -59,22 +59,22 @@ public:
 
     // TODO: deprecate AsTuple() in favor of GetElements()
     inline const TBlockItem* AsTuple() const {
-        Y_VERIFY_DEBUG(Raw.GetMarkers() == EMarkers::Present);
+        Y_DEBUG_ABORT_UNLESS(Raw.GetMarkers() == EMarkers::Present);
         return Raw.Tuple.Value;
     }
 
     inline const TBlockItem* GetElements() const {
-        Y_VERIFY_DEBUG(Raw.GetMarkers() == EMarkers::Present);
+        Y_DEBUG_ABORT_UNLESS(Raw.GetMarkers() == EMarkers::Present);
         return Raw.Tuple.Value;
     }
 
     inline TBlockItem GetElement(ui32 index) const {
-        Y_VERIFY_DEBUG(Raw.GetMarkers() == EMarkers::Present);
+        Y_DEBUG_ABORT_UNLESS(Raw.GetMarkers() == EMarkers::Present);
         return Raw.Tuple.Value[index];
     }
 
     inline TStringRef AsStringRef() const {
-        Y_VERIFY_DEBUG(Raw.GetMarkers() == EMarkers::Present);
+        Y_DEBUG_ABORT_UNLESS(Raw.GetMarkers() == EMarkers::Present);
         return TStringRef(Raw.String.Value, Raw.String.Size);
     }
 
@@ -93,7 +93,7 @@ public:
         if (Raw.Simple.Meta)
             return *this;
 
-        Y_VERIFY_DEBUG(Raw.Simple.Count > 0U, "Can't get value from empty.");
+        Y_DEBUG_ABORT_UNLESS(Raw.Simple.Count > 0U, "Can't get value from empty.");
 
         TBlockItem result(*this);
         --result.Raw.Simple.Count;
@@ -144,7 +144,7 @@ UDF_ASSERT_TYPE_SIZE(TBlockItem, 16);
     template <> \
     inline xType TBlockItem::As<xType>() const \
     { \
-        Y_VERIFY_DEBUG(Raw.GetMarkers() == EMarkers::Present); \
+        Y_DEBUG_ABORT_UNLESS(Raw.GetMarkers() == EMarkers::Present); \
         return Raw.Simple.xType##_; \
     }
 
@@ -152,7 +152,7 @@ UDF_ASSERT_TYPE_SIZE(TBlockItem, 16);
     template <> \
     inline xType TBlockItem::Get<xType>() const \
     { \
-        Y_VERIFY_DEBUG(Raw.GetMarkers() == EMarkers::Present); \
+        Y_DEBUG_ABORT_UNLESS(Raw.GetMarkers() == EMarkers::Present); \
         return Raw.Simple.xType##_; \
     }
 

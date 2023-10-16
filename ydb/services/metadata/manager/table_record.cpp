@@ -116,7 +116,7 @@ ui32 TTableRecords::AddRecordImpl(const TTableRecord& record) {
         if (v) {
             if (!TYDBValue::IsSameType(*v, Columns[i].type())) {
                 ALS_ERROR(NKikimrServices::METADATA_MANAGER);
-                Y_VERIFY_DEBUG(false);
+                Y_DEBUG_ABORT_UNLESS(false);
                 continue;
             }
             ++foundColumns;

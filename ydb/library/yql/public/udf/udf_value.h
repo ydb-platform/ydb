@@ -951,7 +951,7 @@ public:
     }
 
     inline static void Validate(const TUnboxedValuePod& value) {
-        Y_VERIFY_DEBUG(value.GetResourceTag() == TStringRef(ResourceTag, std::strlen(ResourceTag)));
+        Y_DEBUG_ABORT_UNLESS(value.GetResourceTag() == TStringRef(ResourceTag, std::strlen(ResourceTag)));
     }
 
 private:

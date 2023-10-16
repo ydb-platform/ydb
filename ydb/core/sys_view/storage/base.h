@@ -64,7 +64,7 @@ namespace NKikimr::NSysView {
         template<typename TTo, typename TFrom>
         TCell Convert(const TFrom& value) {
             const TTo tmp(value);
-            Y_VERIFY_DEBUG(TFrom(tmp) == value);
+            Y_DEBUG_ABORT_UNLESS(TFrom(tmp) == value);
             return TCell::Make<TTo>(tmp);
         }
 

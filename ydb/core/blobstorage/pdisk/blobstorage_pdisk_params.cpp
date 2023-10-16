@@ -26,7 +26,7 @@ namespace NKikimr {
         , PrefetchSizeBytes(CalculatePrefetchSizeBytes(seekTimeUs, readSpeedBps))
         , GlueRequestDistanceBytes(CalculateGlueRequestDistanceBytes(seekTimeUs, readSpeedBps))
     {
-        Y_VERIFY_DEBUG(AppendBlockSize <= ChunkSize);
+        Y_DEBUG_ABORT_UNLESS(AppendBlockSize <= ChunkSize);
     }
 
     // Read size that allows pdisk to spend at least 50% actually reading the data (not seeking)

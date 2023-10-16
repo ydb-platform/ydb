@@ -356,16 +356,16 @@ TNodePtr TTranslation::GetNamedNode(const TString& name) {
         Ctx.Error() << "Unknown name: " << name;
         return nullptr;
     }
-    Y_VERIFY_DEBUG(!mapIt->second.empty());
+    Y_DEBUG_ABORT_UNLESS(!mapIt->second.empty());
     return mapIt->second.top()->Clone();
 }
 
 void TTranslation::PushNamedNode(const TString& name, TNodePtr node) {
-    Y_VERIFY_DEBUG(node);
+    Y_DEBUG_ABORT_UNLESS(node);
     auto mapIt = Ctx.NamedNodes.find(name);
     if (mapIt == Ctx.NamedNodes.end()) {
         auto result = Ctx.NamedNodes.insert(std::make_pair(name, TStack<TNodePtr>()));
-        Y_VERIFY_DEBUG(result.second);
+        Y_DEBUG_ABORT_UNLESS(result.second);
         mapIt = result.first;
     }
 
@@ -374,8 +374,8 @@ void TTranslation::PushNamedNode(const TString& name, TNodePtr node) {
 
 void TTranslation::PopNamedNode(const TString& name) {
     auto mapIt = Ctx.NamedNodes.find(name);
-    Y_VERIFY_DEBUG(mapIt != Ctx.NamedNodes.end());
-    Y_VERIFY_DEBUG(mapIt->second.size() > 0);
+    Y_DEBUG_ABORT_UNLESS(mapIt != Ctx.NamedNodes.end());
+    Y_DEBUG_ABORT_UNLESS(mapIt->second.size() > 0);
     mapIt->second.pop();
     if (mapIt->second.empty()) {
         Ctx.NamedNodes.erase(mapIt);

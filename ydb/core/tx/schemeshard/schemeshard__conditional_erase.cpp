@@ -186,14 +186,14 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
 
             auto [tableInfo, shardIdx] = ResolveInfo(Self, tabletId);
             if (!tableInfo || shardIdx == InvalidShardIdx) {
-                Y_VERIFY_DEBUG(false, "Unreachable");
+                Y_DEBUG_ABORT_UNLESS(false, "Unreachable");
                 continue;
             }
 
             auto& inFlight = tableInfo->GetInFlightCondErase();
             auto it = inFlight.find(shardIdx);
             if (it == inFlight.end()) {
-                Y_VERIFY_DEBUG(false, "Unreachable");
+                Y_DEBUG_ABORT_UNLESS(false, "Unreachable");
                 continue;
             }
 
@@ -407,7 +407,7 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
         if (lag) {
             Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
         } else {
-            Y_VERIFY_DEBUG(false);
+            Y_DEBUG_ABORT_UNLESS(false);
         }
 
         const auto now = ctx.Now();

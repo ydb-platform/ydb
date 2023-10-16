@@ -158,7 +158,7 @@ namespace NKikimr {
                     }
                 }
 
-                Y_VERIFY_DEBUG((item.PartsMask >> groupType.TotalPartCount()) == 0);
+                Y_DEBUG_ABORT_UNLESS((item.PartsMask >> groupType.TotalPartCount()) == 0);
                 const ui32 presentParts = PopCount(item.PartsMask);
                 bool canRestore = presentParts >= groupType.MinimalRestorablePartCount();
                 bool nonPhantom = true;
@@ -252,7 +252,7 @@ namespace NKikimr {
                     (BlobId, id), (Parts, parts), (IsPhantom, isPhantom), (LooksLikePhantom, looksLikePhantom));
 
                 const bool success = isPhantom; // confirmed phantom blob
-                Y_VERIFY_DEBUG(isPhantom <= looksLikePhantom);
+                Y_DEBUG_ABORT_UNLESS(isPhantom <= looksLikePhantom);
 
                 ++(success
                     ? ReplCtx->MonGroup.ReplPhantomLikeDropped()

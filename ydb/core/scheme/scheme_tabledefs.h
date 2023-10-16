@@ -180,7 +180,7 @@ public:
         , Point(point)
     {
         if (Point) {
-            Y_VERIFY_DEBUG(toValues.empty() || fromValues.size() == toValues.size());
+            Y_DEBUG_ABORT_UNLESS(toValues.empty() || fromValues.size() == toValues.size());
         }
     }
 
@@ -244,7 +244,7 @@ public:
         range.SetFrom(From.GetBuffer());
         range.SetFromInclusive(FromInclusive);
         if (Point) {
-            Y_VERIFY_DEBUG(FromInclusive);
+            Y_DEBUG_ABORT_UNLESS(FromInclusive);
             range.SetTo(From.GetBuffer());
             range.SetToInclusive(true);
         } else {

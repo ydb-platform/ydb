@@ -108,7 +108,7 @@ public:
         if (!HistoryGroups.empty()) {
             auto& h = HistoryGroups[0];
             const auto& hscheme = Part->Scheme->HistoryGroup;
-            Y_VERIFY_DEBUG(hscheme.ColsKeyIdx.size() == 3);
+            Y_DEBUG_ABORT_UNLESS(hscheme.ColsKeyIdx.size() == 3);
             while (h.Pos.IsValid() && h.Pos.GetRecord()->Cell(hscheme.ColsKeyIdx[0]).AsValue<TRowId>() < nextRowId) {
                 // eagerly include all history up to the next row id
                 if (rowCount) AddPageSize(stats.DataSize, h.Pos.GetPageId(), h.GroupId);

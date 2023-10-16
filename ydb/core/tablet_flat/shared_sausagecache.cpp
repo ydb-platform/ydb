@@ -101,7 +101,7 @@ public:
             auto& registration = it->second;
             CompactionComplete(registration);
             registration->SetConsumption(0);
-            Y_VERIFY_DEBUG(NonCompacting.contains(registration));
+            Y_DEBUG_ABORT_UNLESS(NonCompacting.contains(registration));
             NonCompacting.erase(registration);
             Registrations.erase(it);
         }
@@ -240,7 +240,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         void Initialize(TSharedData data) {
-            Y_VERIFY_DEBUG(HasMissingBody());
+            Y_DEBUG_ABORT_UNLESS(HasMissingBody());
             TSharedPageHandle::Initialize(std::move(data));
             State = PageStateLoaded;
         }
@@ -478,7 +478,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             collection.MetaId = metaId;
             collection.PageMap.resize(pageCollection.Total());
         } else {
-            Y_VERIFY_DEBUG(collection.MetaId == metaId);
+            Y_DEBUG_ABORT_UNLESS(collection.MetaId == metaId);
             Y_ABORT_UNLESS(collection.PageMap.size() == pageCollection.Total(),
                 "Page collection %s changed number of pages from %" PRISZT " to %" PRIu32 " by %s",
                 metaId.ToString().c_str(), collection.PageMap.size(), pageCollection.Total(), owner.ToString().c_str());
@@ -1001,7 +1001,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             Y_VERIFY_DEBUG_S(page->Collection, "Evicted pages are expected to have collection");
             if (auto* collection = page->Collection) {
                 auto pageId = page->PageId;
-                Y_VERIFY_DEBUG(collection->PageMap[pageId].Get() == page);
+                Y_DEBUG_ABORT_UNLESS(collection->PageMap[pageId].Get() == page);
                 Y_ABORT_UNLESS(collection->PageMap.erase(pageId));
                 // Note: don't use page after erase as it may be deleted
                 if (collection->Owners) {
@@ -1275,7 +1275,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     inline void RemoveActivePage(const TPage* page) {
-        Y_VERIFY_DEBUG(StatActiveBytes >= sizeof(TPage) + page->Size);
+        Y_DEBUG_ABORT_UNLESS(StatActiveBytes >= sizeof(TPage) + page->Size);
         StatActiveBytes -= sizeof(TPage) + page->Size;
         if (Config->Counters) {
             --*Config->Counters->ActivePages;
@@ -1284,7 +1284,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     inline void RemovePassivePage(const TPage* page) {
-        Y_VERIFY_DEBUG(StatPassiveBytes >= sizeof(TPage) + page->Size);
+        Y_DEBUG_ABORT_UNLESS(StatPassiveBytes >= sizeof(TPage) + page->Size);
         StatPassiveBytes -= sizeof(TPage) + page->Size;
         if (Config->Counters) {
             --*Config->Counters->PassivePages;
@@ -1293,7 +1293,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     inline void RemoveInFlyPage(const TPage* page) {
-        Y_VERIFY_DEBUG(StatLoadInFlyBytes >= sizeof(TPage) + page->Size);
+        Y_DEBUG_ABORT_UNLESS(StatLoadInFlyBytes >= sizeof(TPage) + page->Size);
         StatLoadInFlyBytes -= sizeof(TPage) + page->Size;
         if (Config->Counters) {
             --*Config->Counters->LoadInFlyPages;

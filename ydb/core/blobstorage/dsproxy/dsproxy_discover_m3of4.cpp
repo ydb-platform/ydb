@@ -172,7 +172,7 @@ public:
         }
         const TVDiskID& vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         TDiskState& disk = DiskState[Info->GetOrderNumber(vdiskId)];
-        Y_VERIFY_DEBUG(disk.VDiskId == vdiskId);
+        Y_DEBUG_ABORT_UNLESS(disk.VDiskId == vdiskId);
         const EDiskState prev = std::exchange(disk.State, EDiskState::IDLE);
         Y_ABORT_UNLESS(prev == EDiskState::READ_PENDING);
         NumUnrepliedDisks -= !std::exchange(disk.Replied, true);

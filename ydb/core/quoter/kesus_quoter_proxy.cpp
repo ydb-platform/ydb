@@ -1103,7 +1103,7 @@ public:
                     << ev->GetTypeRewrite()
                     << " event: "
                     << ev->ToString());
-                Y_VERIFY_DEBUG(false, "Unknown event");
+                Y_DEBUG_ABORT_UNLESS(false, "Unknown event");
                 break;
         }
 

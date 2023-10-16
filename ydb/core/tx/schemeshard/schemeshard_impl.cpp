@@ -374,7 +374,7 @@ void TSchemeShard::IncrementPathDbRefCount(const TPathId& pathId, const TStringB
     if (it != PathsById.end()) {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "IncrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
         size_t newRefCount = ++it->second->DbRefCount;
-        Y_VERIFY_DEBUG(newRefCount > 0);
+        Y_DEBUG_ABORT_UNLESS(newRefCount > 0);
     }
 }
 
@@ -384,7 +384,7 @@ void TSchemeShard::DecrementPathDbRefCount(const TPathId& pathId, const TStringB
     if (it != PathsById.end()) {
         // FIXME: not all references are accounted right now
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "DecrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
-        Y_VERIFY_DEBUG(it->second->DbRefCount > 0);
+        Y_DEBUG_ABORT_UNLESS(it->second->DbRefCount > 0);
         if (it->second->DbRefCount > 0) {
             size_t newRefCount = --it->second->DbRefCount;
             if (newRefCount == 0 && it->second->Dropped()) {
@@ -886,7 +886,7 @@ bool TSchemeShard::ResolveChannelsByPoolKinds(
         return false;
     }
 
-    Y_VERIFY_DEBUG(!channelsBinding.empty());
+    Y_DEBUG_ABORT_UNLESS(!channelsBinding.empty());
     return !channelsBinding.empty();
 }
 
@@ -1785,7 +1785,7 @@ void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TP
     PathsById.erase(path->PathId);
 
     auto itParent = PathsById.find(path->ParentPathId);
-    Y_VERIFY_DEBUG(itParent != PathsById.end());
+    Y_DEBUG_ABORT_UNLESS(itParent != PathsById.end());
     if (itParent != PathsById.end()) {
         itParent->second->RemoveChild(path->Name, path->PathId);
         Y_ABORT_UNLESS(itParent->second->AllChildrenCount > 0);

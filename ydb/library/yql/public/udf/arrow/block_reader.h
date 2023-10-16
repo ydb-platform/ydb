@@ -103,7 +103,7 @@ public:
     using TOffset = typename TStringType::offset_type;
 
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
-        Y_VERIFY_DEBUG(data.buffers.size() == 3);
+        Y_DEBUG_ABORT_UNLESS(data.buffers.size() == 3);
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
                 return {};
@@ -153,7 +153,7 @@ public:
     }
 
     void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
-        Y_VERIFY_DEBUG(data.buffers.size() == 3);
+        Y_DEBUG_ABORT_UNLESS(data.buffers.size() == 3);
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
                 return out.PushChar(0);

@@ -282,7 +282,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             replica.State = EReplicaState::NoInfo;
             ++Stats.NoInfo;
         } else {
-            Y_VERIFY_DEBUG(record.GetInfo().size());
+            Y_DEBUG_ABORT_UNLESS(record.GetInfo().size());
             replica.State = EReplicaState::Ready;
             ++Stats.HasInfo;
 

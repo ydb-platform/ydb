@@ -196,7 +196,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvCommitFinished::TPtr& ev) {
     auto it = Transactions.find(msg->TxId.UniqueId);
     Y_ABORT_UNLESS(it != Transactions.end());
     auto& tx = it->second;
-    Y_VERIFY_DEBUG(tx.TxId == msg->TxId);
+    Y_DEBUG_ABORT_UNLESS(tx.TxId == msg->TxId);
 
     for (auto& c : tx.Committers) {
         SendReplyIssues(ERequestType::Commit, c.Sender, c.Cookie, msg->Status, msg->Issues);
@@ -806,7 +806,7 @@ void TLongTxServiceActor::SendProxyRequest(ui32 nodeId, ERequestType type, THold
         return;
     }
 
-    Y_VERIFY_DEBUG(node.State == EProxyState::Connected);
+    Y_DEBUG_ABORT_UNLESS(node.State == EProxyState::Connected);
     pendingEv->Rewrite(TEvInterconnect::EvForward, node.Session);
     TActivationContext::Send(pendingEv.Release());
     req.State = ERequestState::Sent;

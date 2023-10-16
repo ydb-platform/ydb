@@ -108,7 +108,7 @@ namespace NKikimr {
         Send(MonActor, new TEvThroughputAddRequest(ev->Get()->HandleClass, bytes));
         EnableWilsonTracing(ev, Mon->PutSamplePPM);
 
-        Y_VERIFY_DEBUG(MinREALHugeBlobInBytes);
+        Y_DEBUG_ABORT_UNLESS(MinREALHugeBlobInBytes);
         const ui32 partSize = Info->Type.PartSize(ev->Get()->Id);
 
         if (EnablePutBatching && partSize < MinREALHugeBlobInBytes && partSize <= MaxBatchedPutSize) {

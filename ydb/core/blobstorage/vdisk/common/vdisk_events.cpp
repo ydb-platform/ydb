@@ -43,7 +43,7 @@ namespace NKikimr {
     void TEvBlobStorage::TEvVMultiPut::StorePayload(NKikimrBlobStorage::TVMultiPutItem &item, const TRcBuf& buffer) {
         if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
             AddPayload(TRope(buffer));
-            Y_VERIFY_DEBUG(Record.ItemsSize() == GetPayloadCount());
+            Y_DEBUG_ABORT_UNLESS(Record.ItemsSize() == GetPayloadCount());
         } else {
             item.SetBuffer(buffer.GetData(), buffer.GetSize());
         }

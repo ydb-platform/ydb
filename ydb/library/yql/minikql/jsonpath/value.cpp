@@ -220,7 +220,7 @@ bool TValue::IsArray() const {
 }
 
 double TValue::GetNumber() const {
-    Y_VERIFY_DEBUG(IsNumber());
+    Y_DEBUG_ABORT_UNLESS(IsNumber());
 
     if (const auto* value = std::get_if<TEntryCursor>(&Value)) {
         return value->GetNumber();
@@ -238,7 +238,7 @@ double TValue::GetNumber() const {
 }
 
 bool TValue::GetBool() const {
-    Y_VERIFY_DEBUG(IsBool());
+    Y_DEBUG_ABORT_UNLESS(IsBool());
 
     if (const auto* value = std::get_if<TEntryCursor>(&Value)) {
         return value->GetType() == EEntryType::BoolTrue;
@@ -250,7 +250,7 @@ bool TValue::GetBool() const {
 }
 
 const TStringBuf TValue::GetString() const {
-    Y_VERIFY_DEBUG(IsString());
+    Y_DEBUG_ABORT_UNLESS(IsString());
 
     if (const auto* value = std::get_if<TEntryCursor>(&Value)) {
         return value->GetString();
@@ -262,7 +262,7 @@ const TStringBuf TValue::GetString() const {
 }
 
 ui32 TValue::GetSize() const {
-    Y_VERIFY_DEBUG(IsArray() || IsObject());
+    Y_DEBUG_ABORT_UNLESS(IsArray() || IsObject());
 
     if (const auto* value = std::get_if<TContainerCursor>(&Value)) {
         return value->GetSize();
@@ -282,7 +282,7 @@ ui32 TValue::GetSize() const {
 }
 
 TValue TValue::GetElement(ui32 index) const {
-    Y_VERIFY_DEBUG(IsArray());
+    Y_DEBUG_ABORT_UNLESS(IsArray());
 
     if (const auto* value = std::get_if<TContainerCursor>(&Value)) {
         return TValue(value->GetElement(index));
@@ -294,7 +294,7 @@ TValue TValue::GetElement(ui32 index) const {
 }
 
 TArrayIterator TValue::GetArrayIterator() const {
-    Y_VERIFY_DEBUG(IsArray());
+    Y_DEBUG_ABORT_UNLESS(IsArray());
 
     if (const auto* value = std::get_if<TContainerCursor>(&Value)) {
         return TArrayIterator(value->GetArrayIterator());
@@ -309,7 +309,7 @@ TArrayIterator TValue::GetArrayIterator() const {
 }
 
 TMaybe<TValue> TValue::Lookup(const TStringBuf key) const {
-    Y_VERIFY_DEBUG(IsObject());
+    Y_DEBUG_ABORT_UNLESS(IsObject());
 
     if (const auto* value = std::get_if<TContainerCursor>(&Value)) {
         const auto payload = value->Lookup(key);
@@ -337,7 +337,7 @@ TMaybe<TValue> TValue::Lookup(const TStringBuf key) const {
 }
 
 TObjectIterator TValue::GetObjectIterator() const {
-    Y_VERIFY_DEBUG(IsObject());
+    Y_DEBUG_ABORT_UNLESS(IsObject());
 
     if (const auto* value = std::get_if<TContainerCursor>(&Value)) {
         return TObjectIterator(value->GetObjectIterator());

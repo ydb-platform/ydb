@@ -241,7 +241,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
     // Set initial chunk owners
     // Use actual format info to set busy chunks mask
     ui32 chunkCount = (ui32)(Format.DiskSize / (ui64)Format.ChunkSize);
-    Y_VERIFY_DEBUG(ChunkState.size() == 0);
+    Y_DEBUG_ABORT_UNLESS(ChunkState.size() == 0);
     ChunkState = TVector<TChunkState>(chunkCount);
     Y_ABORT_UNLESS(ChunkState.size() >= Format.SystemChunkCount);
     for (ui32 i = 0; i < Format.SystemChunkCount; ++i) {
@@ -678,7 +678,7 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
     size_t logOperationSizeBytes = 0;
     TVector<ui32> logChunksToCommit;
     for (TLogWrite *logWrite : JointLogWrites) {
-        Y_VERIFY_DEBUG(logWrite);
+        Y_DEBUG_ABORT_UNLESS(logWrite);
         logOperationSizeBytes += logWrite->Data.size();
         TStringStream errorReason;
         NKikimrProto::EReplyStatus status = ValidateRequest(logWrite, errorReason);
@@ -803,7 +803,7 @@ bool TPDisk::AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, 
 }
 
 void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
-    Y_VERIFY_DEBUG(!evLog.Result);
+    Y_DEBUG_ABORT_UNLESS(!evLog.Result);
     OwnerData[evLog.Owner].Status = TOwnerData::VDISK_STATUS_LOGGED;
 
     bool isCommitRecord = evLog.Signature.HasCommitRecord();

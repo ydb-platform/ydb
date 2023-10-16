@@ -139,7 +139,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 Status = StatusBody;
                 break;
             case StatusOk:
-                Y_VERIFY_DEBUG(false);
+                Y_DEBUG_ABORT_UNLESS(false);
                 break;
             case StatusBody:
                 break;
@@ -579,7 +579,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         if (IntrospectionTrace) {
             IntrospectionTrace->Attach(MakeHolder<NTracing::TOnCheckRefsGetResult>(msg->ResponseSz));
         }
-        Y_VERIFY_DEBUG(msg->Status == NKikimrProto::OK);
+        Y_DEBUG_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 
         for (ui32 i = 0, e = msg->ResponseSz; i != e; ++i) {
             const TEvBlobStorage::TEvGetResult::TResponse &response = msg->Responses[i];

@@ -1503,7 +1503,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 FillInfo(Kind, FileStoreInfo, std::move(*pathDesc.MutableFileStoreDescription()));
                 break;
             case NKikimrSchemeOp::EPathTypeInvalid:
-                Y_VERIFY_DEBUG(false, "Invalid path type");
+                Y_DEBUG_ABORT_UNLESS(false, "Invalid path type");
                 break;
             }
 
@@ -1571,7 +1571,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
-                        Y_VERIFY_DEBUG(false, "Invalid path type");
+                        Y_DEBUG_ABORT_UNLESS(false, "Invalid path type");
                         break;
                     }
                 }
@@ -1586,7 +1586,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 SetPathId(notify.PathId);
             }
 
-            Y_VERIFY_DEBUG(Subscriber.DomainOwnerId);
+            Y_DEBUG_ABORT_UNLESS(Subscriber.DomainOwnerId);
             if (notify.Strong) {
                 Status = NKikimrScheme::StatusPathDoesNotExist;
             }

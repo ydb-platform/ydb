@@ -335,7 +335,7 @@ public:
         }
 
         if (combinedStatus.Level == TStatus::Ok) {
-            Y_VERIFY_DEBUG(!newNode);
+            Y_DEBUG_ABORT_UNLESS(!newNode);
             node->SetState(TExprNode::EState::ConstrComplete);
             return ExecuteNode(node, output, ctx, depth - 1);
         } else {
@@ -398,7 +398,7 @@ public:
             output = node;
             auto status = (*datasink)->GetCallableExecutionTransformer().Transform(node, output, ctx);
             if (status.Level == TStatus::Async) {
-                Y_VERIFY_DEBUG(output == node);
+                Y_DEBUG_ABORT_UNLESS(output == node);
                 StartNode(category, *node);
                 AddCallable(node, (*datasink).Get(), ctx);
             } else {
@@ -446,7 +446,7 @@ public:
         output = node;
         TStatus status = dataProvider->GetCallableExecutionTransformer().Transform(node, output, ctx);
         if (status.Level == TStatus::Async) {
-            Y_VERIFY_DEBUG(output == node);
+            Y_DEBUG_ABORT_UNLESS(output == node);
             StartNode(dataProvider->GetName(), *node);
             AddCallable(node, dataProvider, ctx);
         } else {

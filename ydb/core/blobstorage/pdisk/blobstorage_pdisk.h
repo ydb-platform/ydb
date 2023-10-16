@@ -513,7 +513,7 @@ struct TEvChunkLock : public TEventLocal<TEvChunkLock, TEvBlobStorage::EvChunkLo
         , Count(count)
         , Color(color)
     {
-        Y_VERIFY_DEBUG(from != ELockFrom::PERSONAL_QUOTA);
+        Y_DEBUG_ABORT_UNLESS(from != ELockFrom::PERSONAL_QUOTA);
     }
 
     TEvChunkLock(ELockFrom from, TOwner owner, ui32 count, NKikimrBlobStorage::TPDiskSpaceColor::E color)
@@ -523,7 +523,7 @@ struct TEvChunkLock : public TEventLocal<TEvChunkLock, TEvBlobStorage::EvChunkLo
         , Count(count)
         , Color(color)
     {
-        Y_VERIFY_DEBUG(from == ELockFrom::PERSONAL_QUOTA);
+        Y_DEBUG_ABORT_UNLESS(from == ELockFrom::PERSONAL_QUOTA);
     }
 
     TEvChunkLock(ELockFrom from, TVDiskID vdiskId, bool isGenerationSet, ui32 count, NKikimrBlobStorage::TPDiskSpaceColor::E color)
@@ -534,7 +534,7 @@ struct TEvChunkLock : public TEventLocal<TEvChunkLock, TEvBlobStorage::EvChunkLo
         , Count(count)
         , Color(color)
     {
-        Y_VERIFY_DEBUG(from == ELockFrom::PERSONAL_QUOTA);
+        Y_DEBUG_ABORT_UNLESS(from == ELockFrom::PERSONAL_QUOTA);
     }
 
     TString ToString() const {
@@ -612,7 +612,7 @@ struct TEvChunkUnlock : public TEventLocal<TEvChunkUnlock, TEvBlobStorage::EvChu
     TEvChunkUnlock(TEvChunkLock::ELockFrom lockFrom)
         : LockFrom(lockFrom)
     {
-        Y_VERIFY_DEBUG(LockFrom != TEvChunkLock::ELockFrom::PERSONAL_QUOTA);
+        Y_DEBUG_ABORT_UNLESS(LockFrom != TEvChunkLock::ELockFrom::PERSONAL_QUOTA);
     }
 
     TEvChunkUnlock(TEvChunkLock::ELockFrom lockFrom, TOwner owner)
@@ -620,7 +620,7 @@ struct TEvChunkUnlock : public TEventLocal<TEvChunkUnlock, TEvBlobStorage::EvChu
         , ByVDiskId(false)
         , Owner(owner)
     {
-        Y_VERIFY_DEBUG(LockFrom == TEvChunkLock::ELockFrom::PERSONAL_QUOTA);
+        Y_DEBUG_ABORT_UNLESS(LockFrom == TEvChunkLock::ELockFrom::PERSONAL_QUOTA);
     }
 
     TEvChunkUnlock(TEvChunkLock::ELockFrom lockFrom, TVDiskID vdiskId, bool isGenerationSet)
@@ -629,7 +629,7 @@ struct TEvChunkUnlock : public TEventLocal<TEvChunkUnlock, TEvBlobStorage::EvChu
         , VDiskId(vdiskId)
         , IsGenerationSet(isGenerationSet)
     {
-        Y_VERIFY_DEBUG(LockFrom == TEvChunkLock::ELockFrom::PERSONAL_QUOTA);
+        Y_DEBUG_ABORT_UNLESS(LockFrom == TEvChunkLock::ELockFrom::PERSONAL_QUOTA);
     }
 
     TString ToString() const {
@@ -966,7 +966,7 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
         {}
 
         virtual TDataRef operator[] (ui32 i) const override {
-            Y_VERIFY_DEBUG(i < Buffers.size());
+            Y_DEBUG_ABORT_UNLESS(i < Buffers.size());
             return TDataRef(Buffers[i].Data(), Buffers[i].Size());
         }
 
@@ -992,7 +992,7 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
         }
 
         virtual TDataRef operator[] (ui32 i) const override {
-            Y_VERIFY_DEBUG(i == 0);
+            Y_DEBUG_ABORT_UNLESS(i == 0);
             return TDataRef(Buf.data(), (ui32)Buf.size());
         }
 
@@ -1014,7 +1014,7 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
             : Data(std::move(data))
             , FullSize(fullSize)
         {
-            Y_VERIFY_DEBUG(Data.size() <= FullSize);
+            Y_DEBUG_ABORT_UNLESS(Data.size() <= FullSize);
         }
 
         virtual ui32 Size() const override {
@@ -1026,7 +1026,7 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
                 return std::make_pair(Data.data(), Data.size());
             } else {
                 ui32 padding = FullSize - Data.size();
-                Y_VERIFY_DEBUG(padding);
+                Y_DEBUG_ABORT_UNLESS(padding);
                 return std::make_pair(nullptr, padding);
             }
         }

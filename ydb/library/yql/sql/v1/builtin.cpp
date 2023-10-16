@@ -1875,7 +1875,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         return Node->Translate(ctx);
     }
 
@@ -1911,7 +1911,7 @@ bool TTableRows::DoInit(TContext& ctx, ISource* /*src*/) {
 }
 
 TAstNode* TTableRows::Translate(TContext& ctx) const {
-    Y_VERIFY_DEBUG(Node);
+    Y_DEBUG_ABORT_UNLESS(Node);
     return Node->Translate(ctx);
 }
 
@@ -2097,7 +2097,7 @@ private:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         return Node->Translate(ctx);
     }
 
@@ -2380,7 +2380,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         return Node->Translate(ctx);
     }
 
@@ -2402,7 +2402,7 @@ public:
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         Node->VisitTree(func, visited);
     }
 private:
@@ -2488,7 +2488,7 @@ public:
 
     TAstNode* Translate(TContext& ctx) const override {
         Y_UNUSED(ctx);
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         return Node->Translate(ctx);
     }
 
@@ -2501,7 +2501,7 @@ public:
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         Node->VisitTree(func, visited);
     }
 private:
@@ -3587,13 +3587,13 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             if (mustUseNamed && *mustUseNamed) {
                 *mustUseNamed = false;
                 YQL_ENSURE(args.size() == 2);
-                Y_VERIFY_DEBUG(dynamic_cast<TTupleNode*>(args[0].Get()));
+                Y_DEBUG_ABORT_UNLESS(dynamic_cast<TTupleNode*>(args[0].Get()));
                 auto posArgs = static_cast<TTupleNode*>(args[0].Get());
                 if (posArgs->IsEmpty()) {
                     if (normalizedName == "asstruct") {
                         return args[1];
                     } else {
-                        Y_VERIFY_DEBUG(dynamic_cast<TStructNode*>(args[1].Get()));
+                        Y_DEBUG_ABORT_UNLESS(dynamic_cast<TStructNode*>(args[1].Get()));
                         auto namedArgs = static_cast<TStructNode*>(args[1].Get());
                         return new TStructTypeNode(pos, namedArgs->GetExprs());
                     }
@@ -3611,8 +3611,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             }
             YQL_ENSURE(args.size() == 2);
             auto posArgs = static_cast<TTupleNode*>(args[0].Get());
-            Y_VERIFY_DEBUG(dynamic_cast<TTupleNode*>(args[0].Get()));
-            Y_VERIFY_DEBUG(dynamic_cast<TStructNode*>(args[1].Get()));
+            Y_DEBUG_ABORT_UNLESS(dynamic_cast<TTupleNode*>(args[0].Get()));
+            Y_DEBUG_ABORT_UNLESS(dynamic_cast<TStructNode*>(args[1].Get()));
             if (posArgs->GetTupleSize() != 1) {
                 return new TInvalidBuiltin(pos, TStringBuilder() << "ExpandStruct requires all arguments except first to be named");
             }
@@ -3698,7 +3698,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     if (ns == "datetime2" && name == "Update") {
         if (namedArgs) {
             TStructNode* castedNamedArgs = dynamic_cast<TStructNode*>(namedArgs.Get());
-            Y_VERIFY_DEBUG(castedNamedArgs);
+            Y_DEBUG_ABORT_UNLESS(castedNamedArgs);
             auto exprs = castedNamedArgs->GetExprs();
             for (auto& arg : exprs) {
                 if (arg->GetLabel() == "Timezone") {

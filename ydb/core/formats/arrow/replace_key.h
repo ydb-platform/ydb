@@ -123,20 +123,20 @@ public:
 
     template<typename T>
     std::partial_ordering CompareColumnValueNotNull(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
-        Y_VERIFY_DEBUG(Column(column).type_id() == key.Column(keyColumn).type_id());
+        Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
 
         return TypedCompare<true>(Column(column), Position, key.Column(keyColumn), key.Position);
     }
 
     template<typename T>
     std::partial_ordering CompareColumnValue(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
-        Y_VERIFY_DEBUG(Column(column).type_id() == key.Column(keyColumn).type_id());
+        Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
 
         return TypedCompare<false>(Column(column), Position, key.Column(keyColumn), key.Position);
     }
 
     int Size() const {
-        Y_VERIFY_DEBUG(Columns);
+        Y_DEBUG_ABORT_UNLESS(Columns);
         return Columns->size();
     }
 
@@ -145,15 +145,15 @@ public:
     }
 
     const arrow::Array& Column(int i) const {
-        Y_VERIFY_DEBUG(Columns);
-        Y_VERIFY_DEBUG((size_t)i < Columns->size());
-        Y_VERIFY_DEBUG((*Columns)[i]);
+        Y_DEBUG_ABORT_UNLESS(Columns);
+        Y_DEBUG_ABORT_UNLESS((size_t)i < Columns->size());
+        Y_DEBUG_ABORT_UNLESS((*Columns)[i]);
         return *(*Columns)[i];
     }
 
     std::shared_ptr<arrow::Array> ColumnPtr(int i) const {
-        Y_VERIFY_DEBUG(Columns);
-        Y_VERIFY_DEBUG((size_t)i < Columns->size());
+        Y_DEBUG_ABORT_UNLESS(Columns);
+        Y_DEBUG_ABORT_UNLESS((size_t)i < Columns->size());
         return (*Columns)[i];
     }
 
@@ -204,18 +204,18 @@ public:
     }
 
     static TReplaceKeyTemplate<TArrayVecPtr> FromScalar(const std::shared_ptr<arrow::Scalar>& s) {
-        Y_VERIFY_DEBUG(IsGoodScalar(s));
+        Y_DEBUG_ABORT_UNLESS(IsGoodScalar(s));
         auto res = MakeArrayFromScalar(*s, 1);
         Y_ABORT_UNLESS(res.status().ok(), "%s", res.status().ToString().c_str());
         return TReplaceKeyTemplate<TArrayVecPtr>(std::make_shared<TArrayVec>(1, *res), 0);
     }
 
     static std::shared_ptr<arrow::Scalar> ToScalar(const TReplaceKeyTemplate<TArrayVecPtr>& key, int colNumber = 0) {
-        Y_VERIFY_DEBUG(colNumber < key.Size());
+        Y_DEBUG_ABORT_UNLESS(colNumber < key.Size());
         auto& column = key.Column(colNumber);
         auto res = column.GetScalar(key.GetPosition());
         Y_ABORT_UNLESS(res.status().ok(), "%s", res.status().ToString().c_str());
-        Y_VERIFY_DEBUG(IsGoodScalar(*res));
+        Y_DEBUG_ABORT_UNLESS(IsGoodScalar(*res));
         return *res;
     }
 

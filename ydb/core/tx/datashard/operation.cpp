@@ -94,8 +94,8 @@ void TOperation::AddSpecialDependency(const TOperation::TPtr &op) {
 
 void TOperation::AddImmediateConflict(const TOperation::TPtr &op) {
     Y_ABORT_UNLESS(this != op.Get());
-    Y_VERIFY_DEBUG(!IsImmediate());
-    Y_VERIFY_DEBUG(op->IsImmediate());
+    Y_DEBUG_ABORT_UNLESS(!IsImmediate());
+    Y_DEBUG_ABORT_UNLESS(op->IsImmediate());
 
     if (HasFlag(TTxFlags::BlockingImmediateOps) ||
         HasFlag(TTxFlags::BlockingImmediateWrites) && !op->IsReadOnly())
@@ -110,7 +110,7 @@ void TOperation::AddImmediateConflict(const TOperation::TPtr &op) {
 
 void TOperation::PromoteImmediateConflicts() {
     for (auto& op : ImmediateConflicts) {
-        Y_VERIFY_DEBUG(op->PlannedConflicts.contains(this));
+        Y_DEBUG_ABORT_UNLESS(op->PlannedConflicts.contains(this));
         op->PlannedConflicts.erase(this);
         op->AddDependency(this);
     }
@@ -124,7 +124,7 @@ void TOperation::PromoteImmediateWriteConflicts() {
             ++it;
             continue;
         }
-        Y_VERIFY_DEBUG(op->PlannedConflicts.contains(this));
+        Y_DEBUG_ABORT_UNLESS(op->PlannedConflicts.contains(this));
         op->PlannedConflicts.erase(this);
         op->AddDependency(this);
         auto last = it;
@@ -135,7 +135,7 @@ void TOperation::PromoteImmediateWriteConflicts() {
 
 void TOperation::ClearDependents() {
     for (auto &op : Dependents) {
-        Y_VERIFY_DEBUG(op->Dependencies.contains(this));
+        Y_DEBUG_ABORT_UNLESS(op->Dependencies.contains(this));
         op->Dependencies.erase(this);
     }
     Dependents.clear();
@@ -143,7 +143,7 @@ void TOperation::ClearDependents() {
 
 void TOperation::ClearDependencies() {
     for (auto &op : Dependencies) {
-        Y_VERIFY_DEBUG(op->Dependents.contains(this));
+        Y_DEBUG_ABORT_UNLESS(op->Dependents.contains(this));
         op->Dependents.erase(this);
     }
     Dependencies.clear();
@@ -151,7 +151,7 @@ void TOperation::ClearDependencies() {
 
 void TOperation::ClearSpecialDependents() {
     for (auto &op : SpecialDependents) {
-        Y_VERIFY_DEBUG(op->SpecialDependencies.contains(this));
+        Y_DEBUG_ABORT_UNLESS(op->SpecialDependencies.contains(this));
         op->SpecialDependencies.erase(this);
     }
     SpecialDependents.clear();
@@ -159,7 +159,7 @@ void TOperation::ClearSpecialDependents() {
 
 void TOperation::ClearSpecialDependencies() {
     for (auto &op : SpecialDependencies) {
-        Y_VERIFY_DEBUG(op->SpecialDependents.contains(this));
+        Y_DEBUG_ABORT_UNLESS(op->SpecialDependents.contains(this));
         op->SpecialDependents.erase(this);
     }
     SpecialDependencies.clear();
@@ -167,7 +167,7 @@ void TOperation::ClearSpecialDependencies() {
 
 void TOperation::ClearPlannedConflicts() {
     for (auto &op : PlannedConflicts) {
-        Y_VERIFY_DEBUG(op->ImmediateConflicts.contains(this));
+        Y_DEBUG_ABORT_UNLESS(op->ImmediateConflicts.contains(this));
         op->ImmediateConflicts.erase(this);
     }
     PlannedConflicts.clear();
@@ -175,7 +175,7 @@ void TOperation::ClearPlannedConflicts() {
 
 void TOperation::ClearImmediateConflicts() {
     for (auto &op : ImmediateConflicts) {
-        Y_VERIFY_DEBUG(op->PlannedConflicts.contains(this));
+        Y_DEBUG_ABORT_UNLESS(op->PlannedConflicts.contains(this));
         op->PlannedConflicts.erase(this);
     }
     ImmediateConflicts.clear();

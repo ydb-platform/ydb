@@ -5,7 +5,7 @@ using namespace NYql;
 namespace NSQLTranslationV1 {
 
 TAstNode* TListBuiltin::Translate(TContext& ctx) const {
-    Y_VERIFY_DEBUG(Node);
+    Y_DEBUG_ABORT_UNLESS(Node);
     return Node->Translate(ctx);
 }
 

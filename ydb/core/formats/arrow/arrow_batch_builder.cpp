@@ -289,12 +289,12 @@ std::shared_ptr<arrow::RecordBatch> CreateNoColumnsBatch(ui64 rowsCount) {
     std::shared_ptr<arrow::Schema> schema = std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>({field}));
     std::unique_ptr<arrow::RecordBatchBuilder> batchBuilder;
     auto status = arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), &batchBuilder);
-    Y_VERIFY_DEBUG(status.ok(), "Failed to create BatchBuilder");
+    Y_DEBUG_ABORT_UNLESS(status.ok(), "Failed to create BatchBuilder");
     status = batchBuilder->GetFieldAs<arrow::NullBuilder>(0)->AppendNulls(rowsCount);
-    Y_VERIFY_DEBUG(status.ok(), "Failed to Append nulls");
+    Y_DEBUG_ABORT_UNLESS(status.ok(), "Failed to Append nulls");
     std::shared_ptr<arrow::RecordBatch> batch;
     status = batchBuilder->Flush(&batch);
-    Y_VERIFY_DEBUG(status.ok(), "Failed to Flush Batch");
+    Y_DEBUG_ABORT_UNLESS(status.ok(), "Failed to Flush Batch");
     return batch;
 }
 

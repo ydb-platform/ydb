@@ -153,7 +153,7 @@ namespace NKikimr {
                     auto guard = Guard(ReaderLock);
 
                     Y_ABORT_UNLESS(!Finished);
-                    Y_VERIFY_DEBUG(Reader);
+                    Y_DEBUG_ABORT_UNLESS(Reader);
 
                     if (Initialized)
                         Process(Reply);

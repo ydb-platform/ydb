@@ -50,7 +50,7 @@ public:
         for (ui64 tabletId : ShardIds) {
             LOG_T("Send request about tabletId: " << tabletId);
             bool sent = Send(TabletResolver, new TEvPipeCache::TEvGetTabletNode(tabletId));
-            Y_VERIFY_DEBUG(sent);
+            Y_DEBUG_ABORT_UNLESS(sent);
         }
 
         Become(&TKqpShardsResolver::ResolveState);

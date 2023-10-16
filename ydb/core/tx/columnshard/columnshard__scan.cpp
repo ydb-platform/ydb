@@ -149,7 +149,7 @@ private:
         } else {
             ACFL_DEBUG("event", "TEvTaskProcessedResult");
             auto t = static_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult());
-            Y_VERIFY_DEBUG(dynamic_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult()));
+            Y_DEBUG_ABORT_UNLESS(dynamic_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult()));
             if (!ScanIterator->Finished()) {
                 ScanIterator->Apply(t);
             }
@@ -295,7 +295,7 @@ private:
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " is hanging"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId << " debug: " << ScanIterator->DebugString());
-        Y_VERIFY_DEBUG(false);
+        Y_DEBUG_ABORT_UNLESS(false);
     }
 
     void HandleScan(TEvKqp::TEvAbortExecution::TPtr& ev) noexcept {

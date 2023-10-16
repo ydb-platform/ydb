@@ -275,7 +275,7 @@ namespace NKikimr {
                     const ui64 cost = rec->Cost;
                     if (CanSendToSkeleton(cost) || forceError) {
                         ui32 recByteSize = rec->ByteSize;
-                        Y_VERIFY_DEBUG(DelayedCount > 0 && DelayedBytes >= recByteSize);
+                        Y_DEBUG_ABORT_UNLESS(DelayedCount > 0 && DelayedBytes >= recByteSize);
 
                         --DelayedCount;
                         DelayedBytes -= recByteSize;
@@ -1078,7 +1078,7 @@ namespace NKikimr {
 
         template <class TEventPtr>
         inline void CheckEvent(TEventPtr &ev, const char *msgName) {
-            Y_VERIFY_DEBUG(VCtx->CostModel);
+            Y_DEBUG_ABORT_UNLESS(VCtx->CostModel);
             Y_ABORT_UNLESS(ev->Get(), "Incoming message of type %s is null at the VDisk border. This MUST never happens, "
                    "check VDisk clients: bufSize# %u", msgName, unsigned(ev->GetSize()));
         }
@@ -1259,7 +1259,7 @@ namespace NKikimr {
                 /*GetLowRead*/   {false, false, false, false, false,  false, false, true}
             };
 
-            Y_VERIFY_DEBUG(int(extId) >= 0 && int(extId) <= 7 && int(intId) >= 0 && int(intId) <= 7);
+            Y_DEBUG_ABORT_UNLESS(int(extId) >= 0 && int(extId) <= 7 && int(intId) >= 0 && int(intId) <= 7);
             return compatibilityMatrix[extId][intId];
         }
 
@@ -1437,7 +1437,7 @@ namespace NKikimr {
                 std::optional<NBackpressure::TMessageId> expectedMsgId;
                 if (record.HasQoS()) {
                     const auto& qos = record.GetQoS();
-                    Y_VERIFY_DEBUG(qos.HasExtQueueId());
+                    Y_DEBUG_ABORT_UNLESS(qos.HasExtQueueId());
                     if (qos.HasExtQueueId()) {
                         auto& queue = GetExtQueue(qos.GetExtQueueId());
                         expectedMsgId = queue.GetExpectedMsgId(ev->Sender);
@@ -2044,7 +2044,7 @@ namespace NKikimr {
                 HFuncStatus(TEvBlobStorage::TEvVGetBlock, status, errorReason, now, wstatus);
                 HFuncStatus(TEvBlobStorage::TEvVCollectGarbage, status, errorReason, now, wstatus);
                 HFuncStatus(TEvBlobStorage::TEvVGetBarrier, status, errorReason, now, wstatus);
-                default: Y_VERIFY_DEBUG(false, "Unsupported message %d", ev->GetTypeRewrite());
+                default: Y_DEBUG_ABORT_UNLESS(false, "Unsupported message %d", ev->GetTypeRewrite());
             }
         }
 

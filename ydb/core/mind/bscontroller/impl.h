@@ -135,7 +135,7 @@ public:
                 if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // became "replicating"
                     LastGotReplicating = instant;
                 } else if (Status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // was "replicating"
-                    Y_VERIFY_DEBUG(LastGotReplicating != TInstant::Zero());
+                    Y_DEBUG_ABORT_UNLESS(LastGotReplicating != TInstant::Zero());
                     ReplicationTime += instant - LastGotReplicating;
                     LastGotReplicating = {};
                 }
@@ -164,7 +164,7 @@ public:
             const TMonotonic readyAfter = now + ReadyStablePeriod; // vdisk will be treated as READY one shortly, but not now
             Y_ABORT_UNLESS(VSlotReadyTimestampIter == TVSlotReadyTimestampQ::iterator());
             Y_ABORT_UNLESS(Group);
-            Y_VERIFY_DEBUG(VSlotReadyTimestampQ.empty() || VSlotReadyTimestampQ.back().first <= readyAfter);
+            Y_DEBUG_ABORT_UNLESS(VSlotReadyTimestampQ.empty() || VSlotReadyTimestampQ.back().first <= readyAfter);
             VSlotReadyTimestampIter = VSlotReadyTimestampQ.emplace(VSlotReadyTimestampQ.end(), readyAfter, this);
         }
 
@@ -1626,10 +1626,10 @@ private:
 
     TGroupInfo* FindGroup(TGroupId id) {
         if (const auto it = GroupLookup.find(id); it != GroupLookup.end()) {
-            Y_VERIFY_DEBUG(GroupMap[id].Get() == it->second && it->second);
+            Y_DEBUG_ABORT_UNLESS(GroupMap[id].Get() == it->second && it->second);
             return it->second;
         } else {
-            Y_VERIFY_DEBUG(!GroupMap.count(id));
+            Y_DEBUG_ABORT_UNLESS(!GroupMap.count(id));
             return nullptr;
         }
     }
@@ -2156,7 +2156,7 @@ public:
         auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
         for (auto it = VSlotReadyTimestampQ.begin(); it != VSlotReadyTimestampQ.end() && it->first <= now;
                 it = VSlotReadyTimestampQ.erase(it)) {
-            Y_VERIFY_DEBUG(!it->second->IsReady);
+            Y_DEBUG_ABORT_UNLESS(!it->second->IsReady);
             
             sh->VDiskIsReadyUpdate.emplace_back(it->second->GetVDiskId(), true);
             it->second->IsReady = true;
@@ -2213,7 +2213,7 @@ public:
                     hist.IncrementFor(timeBeingReplicating.Seconds());
                 }
             } else {
-                Y_VERIFY_DEBUG(false);
+                Y_DEBUG_ABORT_UNLESS(false);
             }
         }
         Schedule(TDuration::Seconds(15), new TEvPrivate::TEvVSlotNotReadyHistogramUpdate);

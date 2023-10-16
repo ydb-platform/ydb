@@ -68,7 +68,7 @@ public:
     }
 
     void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ack) {
-        Y_VERIFY_DEBUG(ack->Sender == OwnerId);
+        Y_DEBUG_ABORT_UNLESS(ack->Sender == OwnerId);
         if (!ScanActorId) {
             if (CurrentRange < Ranges.size()) {
                 auto actor = CreateSystemViewScan(

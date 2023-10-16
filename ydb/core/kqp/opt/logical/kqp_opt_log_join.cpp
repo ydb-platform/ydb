@@ -145,7 +145,7 @@ bool IsKqlPureExpr(const TExprBase& expr) {
 }
 
 TDqJoin FlipLeftSemiJoin(const TDqJoin& join, TExprContext& ctx) {
-    Y_VERIFY_DEBUG(join.JoinType().Value() == "LeftSemi");
+    Y_DEBUG_ABORT_UNLESS(join.JoinType().Value() == "LeftSemi");
 
     auto joinKeysBuilder = Build<TDqJoinKeyTupleList>(ctx, join.Pos());
     for (const auto& keys : join.JoinKeys()) {

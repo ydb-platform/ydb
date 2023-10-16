@@ -233,7 +233,7 @@ private:
 
 void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool);
 inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
-    Y_VERIFY_DEBUG(state);
+    Y_DEBUG_ABORT_UNLESS(state);
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
@@ -257,7 +257,7 @@ inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemor
 }
 
 inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
-    Y_VERIFY_DEBUG(state);
+    Y_DEBUG_ABORT_UNLESS(state);
 
     bool useMemalloc = state->SupportsSizedAllocators && sz > MaxPageUserData;
 
@@ -296,7 +296,7 @@ inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool = EMe
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     TAllocState *state = TlsAllocState;
-    Y_VERIFY_DEBUG(state);
+    Y_DEBUG_ABORT_UNLESS(state);
 
     auto entry = (TAllocState::TListEntry*)(mem) - 1;
     entry->Unlink();
@@ -305,7 +305,7 @@ inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool = EMe
 #endif
 
     TAllocPageHeader* header = (TAllocPageHeader*)TAllocState::GetPageStart(mem);
-    Y_VERIFY_DEBUG(header->MyAlloc == TlsAllocState, "%s", (TStringBuilder() << "wrong allocator was used; "
+    Y_DEBUG_ABORT_UNLESS(header->MyAlloc == TlsAllocState, "%s", (TStringBuilder() << "wrong allocator was used; "
         "allocated with: " << header->MyAlloc->GetInfo() << " freed with: " << TlsAllocState->GetInfo()).data());
     if (Y_LIKELY(--header->UseCount != 0)) {
         return;
@@ -319,7 +319,7 @@ inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state,
         return;
     }
 
-    Y_VERIFY_DEBUG(state);
+    Y_DEBUG_ABORT_UNLESS(state);
 
     bool useFree = state->SupportsSizedAllocators && sz > MaxPageUserData;
 
@@ -336,7 +336,7 @@ inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state,
     }
 
     TAllocPageHeader* header = (TAllocPageHeader*)TAllocState::GetPageStart(mem);
-    Y_VERIFY_DEBUG(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
+    Y_DEBUG_ABORT_UNLESS(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
         "allocated with: " << header->MyAlloc->GetInfo() << " freed with: " << TlsAllocState->GetInfo()).data());
     if (Y_LIKELY(--header->UseCount != 0)) {
         header->Deallocated += sz;
@@ -564,9 +564,9 @@ public:
         {}
 
         T& operator*() {
-            Y_VERIFY_DEBUG(PageIndex < OBJECTS_PER_PAGE);
-            Y_VERIFY_DEBUG(PageNo < Owner->Pages.size());
-            Y_VERIFY_DEBUG(PageNo + 1 < Owner->Pages.size() || PageIndex < Owner->IndexInLastPage);
+            Y_DEBUG_ABORT_UNLESS(PageIndex < OBJECTS_PER_PAGE);
+            Y_DEBUG_ABORT_UNLESS(PageNo < Owner->Pages.size());
+            Y_DEBUG_ABORT_UNLESS(PageNo + 1 < Owner->Pages.size() || PageIndex < Owner->IndexInLastPage);
             return *Owner->ObjectAt(Owner->Pages[PageNo], PageIndex);
         }
 
@@ -614,9 +614,9 @@ public:
         {}
 
         const T& operator*() {
-            Y_VERIFY_DEBUG(PageIndex < OBJECTS_PER_PAGE);
-            Y_VERIFY_DEBUG(PageNo < Owner->Pages.size());
-            Y_VERIFY_DEBUG(PageNo + 1 < Owner->Pages.size() || PageIndex < Owner->IndexInLastPage);
+            Y_DEBUG_ABORT_UNLESS(PageIndex < OBJECTS_PER_PAGE);
+            Y_DEBUG_ABORT_UNLESS(PageNo < Owner->Pages.size());
+            Y_DEBUG_ABORT_UNLESS(PageNo + 1 < Owner->Pages.size() || PageIndex < Owner->IndexInLastPage);
             return *Owner->ObjectAt(Owner->Pages[PageNo], PageIndex);
         }
 

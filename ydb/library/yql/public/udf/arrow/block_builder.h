@@ -46,7 +46,7 @@ inline const IArrayBuilder::TArrayDataItem* LookupArrayDataItem(const IArrayBuil
         --it;
     }
 
-    Y_VERIFY_DEBUG(it->StartOffset <= idx);
+    Y_DEBUG_ABORT_UNLESS(it->StartOffset <= idx);
     idx -= it->StartOffset;
     return it;
 }
@@ -96,31 +96,31 @@ public:
     }
 
     void Add(NUdf::TUnboxedValuePod value) final {
-        Y_VERIFY_DEBUG(CurrLen < MaxLen);
+        Y_DEBUG_ABORT_UNLESS(CurrLen < MaxLen);
         DoAdd(value);
         CurrLen++;
     }
 
     void Add(TBlockItem value) final {
-        Y_VERIFY_DEBUG(CurrLen < MaxLen);
+        Y_DEBUG_ABORT_UNLESS(CurrLen < MaxLen);
         DoAdd(value);
         CurrLen++;
     }
 
     void Add(TBlockItem value, size_t count) final {
-        Y_VERIFY_DEBUG(CurrLen + count <= MaxLen);
+        Y_DEBUG_ABORT_UNLESS(CurrLen + count <= MaxLen);
         DoAdd(value, count);
         CurrLen += count;
     }
 
     void Add(TInputBuffer& input) final {
-        Y_VERIFY_DEBUG(CurrLen < MaxLen);
+        Y_DEBUG_ABORT_UNLESS(CurrLen < MaxLen);
         DoAdd(input);
         CurrLen++;
     }
 
     void AddDefault() {
-        Y_VERIFY_DEBUG(CurrLen < MaxLen);
+        Y_DEBUG_ABORT_UNLESS(CurrLen < MaxLen);
         DoAddDefault();
         CurrLen++;
     }

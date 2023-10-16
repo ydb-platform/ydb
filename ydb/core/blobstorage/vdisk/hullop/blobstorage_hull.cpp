@@ -533,7 +533,7 @@ namespace NKikimr {
         // do job - update blocks cache
         NSyncLog::TFragmentReader(data).ForEach(otherHandler, blockHandler, otherHandler, blockHandlerV2);
         // check that all records are applied
-        Y_VERIFY_DEBUG(curLsn == seg.Last + 1);
+        Y_DEBUG_ABORT_UNLESS(curLsn == seg.Last + 1);
 
         return seg;
     }
@@ -571,7 +571,7 @@ namespace NKikimr {
 
         // record handlers
         auto blobHandler = [&] (const NSyncLog::TLogoBlobRec *rec) {
-            Y_VERIFY_DEBUG(TIngress::MustKnowAboutLogoBlob(HullDs->HullCtx->VCtx->Top.get(),
+            Y_DEBUG_ABORT_UNLESS(TIngress::MustKnowAboutLogoBlob(HullDs->HullCtx->VCtx->Top.get(),
                                                            HullDs->HullCtx->VCtx->ShortSelfVDisk,
                                                            rec->LogoBlobID()),
                          "logoBlobID# %s ShortSelfVDisk# %s top# %s",
@@ -601,7 +601,7 @@ namespace NKikimr {
         NSyncLog::TFragmentReader fragment(data);
         fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2);
         // check that all records are applied
-        Y_VERIFY_DEBUG(curLsn == seg.Last + 1);
+        Y_DEBUG_ABORT_UNLESS(curLsn == seg.Last + 1);
 
         // run compaction if required
         CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx);

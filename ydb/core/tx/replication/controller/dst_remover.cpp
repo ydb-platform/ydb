@@ -66,7 +66,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
 
         switch (record.GetStatus()) {
         case NKikimrScheme::StatusAccepted:
-            Y_VERIFY_DEBUG(TxId == record.GetTxId());
+            Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
             return SubscribeTx(record.GetTxId());
         case NKikimrScheme::StatusMultipleModifications:
             if (record.HasPathDropTxId()) {

@@ -111,10 +111,10 @@ void TDsProxyNodeMon::CountPutPesponseTime(NPDisk::EDeviceType type, NKikimrBlob
             PutTabletLogResponseTime.Increment(durationMs);
             if (size < (256 << 10)) {
                 PutTabletLogResponseTime256.Increment(durationMs);
-                Y_VERIFY_DEBUG(PutTabletLogResponseTimeHist256Ki[idx]);
+                Y_DEBUG_ABORT_UNLESS(PutTabletLogResponseTimeHist256Ki[idx]);
                 PutTabletLogResponseTimeHist256Ki[idx]->Collect(durationMsFloat);
             } else {
-                Y_VERIFY_DEBUG(PutTabletLogResponseTimeHistInf[idx]);
+                Y_DEBUG_ABORT_UNLESS(PutTabletLogResponseTimeHistInf[idx]);
                 PutTabletLogResponseTimeHistInf[idx]->Collect(durationMsFloat);
                 if (size < (512 << 10)) {
                     PutTabletLogResponseTime512.Increment(durationMs);
@@ -123,12 +123,12 @@ void TDsProxyNodeMon::CountPutPesponseTime(NPDisk::EDeviceType type, NKikimrBlob
             break;
         case NKikimrBlobStorage::EPutHandleClass::AsyncBlob:
             PutAsyncBlobResponseTime.Increment(durationMs);
-            Y_VERIFY_DEBUG(PutAsyncBlobResponseTimeHist[idx]);
+            Y_DEBUG_ABORT_UNLESS(PutAsyncBlobResponseTimeHist[idx]);
             PutAsyncBlobResponseTimeHist[idx]->Collect(durationMsFloat);
             break;
         case NKikimrBlobStorage::EPutHandleClass::UserData:
             PutUserDataResponseTime.Increment(durationMs);
-            Y_VERIFY_DEBUG(PutUserDataResponseTimeHist[idx]);
+            Y_DEBUG_ABORT_UNLESS(PutUserDataResponseTimeHist[idx]);
             PutUserDataResponseTimeHist[idx]->Collect(durationMsFloat);
             break;
         default:
@@ -146,28 +146,28 @@ void TDsProxyNodeMon::CountGetResponseTime(NPDisk::EDeviceType type, NKikimrBlob
     switch (cls) {
         case NKikimrBlobStorage::EGetHandleClass::AsyncRead:
             GetAsyncReadResponseTime.Increment(durationMs);
-            Y_VERIFY_DEBUG(GetAsyncReadResponseTimeHist[idx]);
+            Y_DEBUG_ABORT_UNLESS(GetAsyncReadResponseTimeHist[idx]);
             GetAsyncReadResponseTimeHist[idx]->Collect(durationMsFloat);
             break;
         case NKikimrBlobStorage::EGetHandleClass::FastRead:
             if (size < (256 << 10)) {
                 GetFastReadResponseTime256Ki.Increment(durationMs);
-                Y_VERIFY_DEBUG(GetFastReadResponseTimeHist256Ki[idx]);
+                Y_DEBUG_ABORT_UNLESS(GetFastReadResponseTimeHist256Ki[idx]);
                 GetFastReadResponseTimeHist256Ki[idx]->Collect(durationMsFloat);
             } else {
                 GetFastReadResponseTimeInf.Increment(durationMs);
-                Y_VERIFY_DEBUG(GetFastReadResponseTimeHistInf[idx]);
+                Y_DEBUG_ABORT_UNLESS(GetFastReadResponseTimeHistInf[idx]);
                 GetFastReadResponseTimeHistInf[idx]->Collect(durationMsFloat);
             }
             break;
         case NKikimrBlobStorage::EGetHandleClass::Discover:
             GetDiscoverResponseTime.Increment(durationMs);
-            Y_VERIFY_DEBUG(GetDiscoverResponseTimeHist[idx]);
+            Y_DEBUG_ABORT_UNLESS(GetDiscoverResponseTimeHist[idx]);
             GetDiscoverResponseTimeHist[idx]->Collect(durationMsFloat);
             break;
         case NKikimrBlobStorage::EGetHandleClass::LowRead:
             GetLowReadResponseTime.Increment(durationMs);
-            Y_VERIFY_DEBUG(GetLowReadResponseTimeHist[idx]);
+            Y_DEBUG_ABORT_UNLESS(GetLowReadResponseTimeHist[idx]);
             GetLowReadResponseTimeHist[idx]->Collect(durationMsFloat);
             break;
         default:

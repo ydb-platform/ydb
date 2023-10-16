@@ -111,7 +111,7 @@ namespace NKikimr {
             , AllChunks()
             , StorageRatio()
         {
-            Y_VERIFY_DEBUG(!addr.Empty());
+            Y_DEBUG_ABORT_UNLESS(!addr.Empty());
         }
 
         TLevelSegment(TVDiskContextPtr vctx, const NKikimrVDiskData::TDiskPart &pb)
@@ -193,7 +193,7 @@ namespace NKikimr {
         const TKey &LastKey() const;
         // number of elements in the sst
         ui64 Elements() const {
-            Y_VERIFY_DEBUG(IsLoaded());
+            Y_DEBUG_ABORT_UNLESS(IsLoaded());
             return LoadedIndex.size();
         }
         // append cur seg chunk ids (index and data) to the vector

@@ -802,7 +802,7 @@ namespace NKikimr::NBsController {
                 hFunc(TEvBlobDepot::TEvApplyConfigResult, Handle);
 
                 default:
-                    Y_VERIFY_DEBUG(false, "unexpected event Type# %08" PRIx32, type);
+                    Y_DEBUG_ABORT_UNLESS(false, "unexpected event Type# %08" PRIx32, type);
             }
         }
 

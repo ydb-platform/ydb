@@ -77,7 +77,7 @@ public:
         }
 
         void Fill(TSharedData data, bool sticky = false) {
-            Y_VERIFY_DEBUG(!SharedBody && !SharedPending, "Populating cache with shared data already present");
+            Y_DEBUG_ABORT_UNLESS(!SharedBody && !SharedPending, "Populating cache with shared data already present");
             Sticky = sticky;
             LoadState = LoadStateLoaded;
             PinnedBody = std::move(data);

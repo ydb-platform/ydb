@@ -364,7 +364,7 @@ private:
                 Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, Generation);
             }
             auto send = SendResult(Result->PageFault, true);
-            Y_VERIFY_DEBUG(send);
+            Y_DEBUG_ABORT_UNLESS(send);
         }
 
         Driver = nullptr;
@@ -412,7 +412,7 @@ private:
             }
             case NKikimrTxDataShard::EScanDataFormat::ARROW: {
                 NKikimr::TDbTupleRef key;
-                Y_VERIFY_DEBUG((*row).size() == Types.size());
+                Y_DEBUG_ABORT_UNLESS((*row).size() == Types.size());
                 NKikimr::TDbTupleRef value = NKikimr::TDbTupleRef(Types.data(), (*row).data(), Types.size());
                 BatchBuilder->AddRow(key, value);
                 break;

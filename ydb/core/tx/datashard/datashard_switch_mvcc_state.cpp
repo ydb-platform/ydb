@@ -28,7 +28,7 @@ void TDataShard::CheckMvccStateChangeCanStart(const TActorContext& ctx) {
                 case TShardState::Unknown:
                     // We cannot start checking before shard initialization
 
-                    Y_VERIFY_DEBUG(false, "Unexpected shard state State:%d", State);
+                    Y_DEBUG_ABORT_UNLESS(false, "Unexpected shard state State:%d", State);
                     [[fallthrough]];
 
                 case TShardState::Readonly:

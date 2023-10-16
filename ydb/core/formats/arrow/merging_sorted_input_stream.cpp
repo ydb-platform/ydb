@@ -153,7 +153,7 @@ void TMergingSortedInputStream::Init() {
     /// Let's check that all source blocks have the same structure.
     for (const auto& batch : SourceBatches) {
         if (batch) {
-            Y_VERIFY_DEBUG(batch->schema()->Equals(*Header));
+            Y_DEBUG_ABORT_UNLESS(batch->schema()->Equals(*Header));
         }
     }
 }
@@ -172,7 +172,7 @@ std::shared_ptr<arrow::RecordBatch> TMergingSortedInputStream::ReadImpl() {
     }
 
     if (SliceSources) {
-        Y_VERIFY_DEBUG(!Description->Reverse);
+        Y_DEBUG_ABORT_UNLESS(!Description->Reverse);
         TSlicedRowsBuffer rowsBuffer(MaxBatchSize);
         Merge(rowsBuffer, Queue);
         auto batch = rowsBuffer.GetBatch();
@@ -217,7 +217,7 @@ void TMergingSortedInputStream::FetchNextBatch(const TSortCursor& current, TSort
         }
 
         if (batch->num_rows()) {
-            Y_VERIFY_DEBUG(batch->schema()->Equals(*Header));
+            Y_DEBUG_ABORT_UNLESS(batch->schema()->Equals(*Header));
 
             Cursors[order].Reset(batch);
             queue.ReplaceTop(TSortCursor(&Cursors[order], Description->NotNull));

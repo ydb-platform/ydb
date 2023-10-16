@@ -76,7 +76,7 @@ T UnpackData(TChunkedInputBuffer& buf) {
 NUdf::TUnboxedValuePod UnpackString(TChunkedInputBuffer& buf, ui32 size) {
     auto res = MakeStringNotFilled(size, 0);
     NYql::NUdf::TMutableStringRef ref = res.AsStringRef();
-    Y_VERIFY_DEBUG(size == ref.Size());
+    Y_DEBUG_ABORT_UNLESS(size == ref.Size());
     buf.CopyTo(ref.Data(), size);
     return res;
 }
@@ -123,18 +123,18 @@ public:
     }
 
     inline void EraseBack(size_t len) {
-        Y_VERIFY_DEBUG(Size_ >= len);
+        Y_DEBUG_ABORT_UNLESS(Size_ >= len);
         Size_ -= len;
     }
 
     inline void Append(const char* data, size_t len) {
-        Y_VERIFY_DEBUG(Size_ + len <= Capacity_);
+        Y_DEBUG_ABORT_UNLESS(Size_ + len <= Capacity_);
         std::memcpy(Data_ + Size_, data, len);
         Size_ += len;
     }
 
     inline void Append(char c) {
-        Y_VERIFY_DEBUG(Size_ + 1 <= Capacity_);
+        Y_DEBUG_ABORT_UNLESS(Size_ + 1 <= Capacity_);
         *(Pos()) = c;
         ++Size_;
     }
@@ -552,15 +552,15 @@ void DoUnpackBatch(const TType* type, TChunkedInputBuffer& buf, size_t totalSize
     if (type->IsMulti()) {
         auto multiType = static_cast<const TMultiType*>(type);
         const ui32 width = multiType->GetElementsCount();
-        Y_VERIFY_DEBUG(result.IsWide());
-        Y_VERIFY_DEBUG(result.Width() == width);
+        Y_DEBUG_ABORT_UNLESS(result.IsWide());
+        Y_DEBUG_ABORT_UNLESS(result.Width() == width);
         for (ui64 i = 0; i < len; ++i) {
             result.PushRow([&](ui32 j) {
                 return UnpackFromChunkedBuffer<Fast>(multiType->GetElementType(j), buf, topLength, holderFactory, s);
             });
         }
     } else {
-        Y_VERIFY_DEBUG(!result.IsWide());
+        Y_DEBUG_ABORT_UNLESS(!result.IsWide());
         for (ui64 i = 0; i < len; ++i) {
             result.emplace_back(UnpackFromChunkedBuffer<Fast>(itemType, buf, topLength, holderFactory, s));
         }
@@ -1064,7 +1064,7 @@ void TValuePackerTransport<Fast>::StartPack() {
 
 template<bool Fast>
 TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddItem(const NUdf::TUnboxedValuePod& value) {
-    Y_VERIFY_DEBUG(!Type_->IsMulti());
+    Y_DEBUG_ABORT_UNLESS(!Type_->IsMulti());
     const TType* itemType = Type_;
     if (!ItemCount_) {
         StartPack();
@@ -1077,8 +1077,8 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddItem(const NUdf::TU
 
 template<bool Fast>
 TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItem(const NUdf::TUnboxedValuePod* values, ui32 width) {
-    Y_VERIFY_DEBUG(Type_->IsMulti());
-    Y_VERIFY_DEBUG(static_cast<const TMultiType*>(Type_)->GetElementsCount() == width);
+    Y_DEBUG_ABORT_UNLESS(Type_->IsMulti());
+    Y_DEBUG_ABORT_UNLESS(static_cast<const TMultiType*>(Type_)->GetElementsCount() == width);
     if (IsBlock_) {
         return AddWideItemBlocks(values, width);
     }
@@ -1250,7 +1250,7 @@ TRope TValuePackerTransport<Fast>::Finish() {
     }
     if constexpr (Fast) {
         char* dst = Buffer_->Header(sizeof(ItemCount_));
-        Y_VERIFY_DEBUG(dst);
+        Y_DEBUG_ABORT_UNLESS(dst);
         std::memcpy(dst, &ItemCount_, sizeof(ItemCount_));
     } else {
         BuildMeta(Buffer_, true);

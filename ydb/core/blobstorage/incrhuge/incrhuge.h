@@ -193,7 +193,7 @@ namespace NKikimr {
             ui64 raw2 = keeperId.RawX2();
             Y_ABORT_UNLESS(raw2 < (ui64(1) << 32));
             ui32 pdiskId = raw2;
-            Y_VERIFY_DEBUG(keeperId == MakeIncrHugeKeeperId(pdiskId));
+            Y_DEBUG_ABORT_UNLESS(keeperId == MakeIncrHugeKeeperId(pdiskId));
             return pdiskId;
         }
 

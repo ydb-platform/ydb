@@ -37,7 +37,7 @@ namespace NGcOpt {
                               ui32 recsMerged,
                               bool allowKeepFlags) const {
             const TIngress ingress = memRec.GetIngress();
-            Y_VERIFY_DEBUG(recsMerged >= 1);
+            Y_DEBUG_ABORT_UNLESS(recsMerged >= 1);
             return KeepLogoBlob(key.LogoBlobID(), ingress, recsMerged, allowKeepFlags);
         }
 

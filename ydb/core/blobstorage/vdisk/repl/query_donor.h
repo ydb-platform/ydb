@@ -80,7 +80,7 @@ namespace NKikimr {
             auto& result = Result->Record;
             for (const auto& item : ev->Get()->Record.GetResult()) {
                 const ui64 index = item.GetCookie();
-                Y_VERIFY_DEBUG(UnresolvedItems[index]);
+                Y_DEBUG_ABORT_UNLESS(UnresolvedItems[index]);
 
                 if (item.GetStatus() == NKikimrProto::OK /* || item.GetStatus() == NKikimrProto::ERROR */) {
                     auto *res = result.MutableResult(index);

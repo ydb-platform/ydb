@@ -219,7 +219,7 @@ namespace NKikimr {
             // callee function current chunk state will be reset to 'no current chunk'
             if (Keeper.State.CurrentChunk && CurrentChunkOffsetInBlocks + sizeInBlocks > Keeper.State.BlocksInDataSection) {
                 FinishCurrentChunk(ctx);
-                Y_VERIFY_DEBUG(!Keeper.State.CurrentChunk);
+                Y_DEBUG_ABORT_UNLESS(!Keeper.State.CurrentChunk);
             }
 
             // if we have no current chunk, then try to allocate one; this usually happens if we just have finished
@@ -463,7 +463,7 @@ namespace NKikimr {
         void TWriter::FinishCurrentChunk(const TActorContext& ctx) {
             // create finalizing chunk record; store metadata here, it may be required in deletion and enumeration
             // this record lives longer that TIndexWriteQueueItem, so we store chunk index here
-            Y_VERIFY_DEBUG(!FinalizingChunks.count(Keeper.State.CurrentChunk));
+            Y_DEBUG_ABORT_UNLESS(!FinalizingChunks.count(Keeper.State.CurrentChunk));
             TFinalizingChunk fin;
             fin.WritesInFlight = CurrentChunkWritesInFlight;
             fin.Index = std::move(CurrentChunkIndex);

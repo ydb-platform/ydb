@@ -88,7 +88,7 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             Prepare();
-            Y_VERIFY_DEBUG(!Merger.HaveToMergeData());
+            Y_DEBUG_ABORT_UNLESS(!Merger.HaveToMergeData());
             MainCycleIndexOnly(ctx);
         }
 
@@ -159,7 +159,7 @@ namespace NKikimr {
             , TActorBootstrapped<TLevelIndexRangeQueryViaBatcherIndexOnly>()
             , Merger(QueryCtx->HullCtx->VCtx->Top->GType)
         {
-            Y_VERIFY_DEBUG(Record.GetIndexOnly());
+            Y_DEBUG_ABORT_UNLESS(Record.GetIndexOnly());
         }
     };
 

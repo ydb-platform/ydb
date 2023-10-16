@@ -16,7 +16,7 @@ void TMergePartialStream::AddSource(std::shared_ptr<arrow::RecordBatch> batch, s
     if (!batch || !batch->num_rows()) {
         return;
     }
-    Y_VERIFY_DEBUG(NArrow::IsSorted(batch, SortSchema));
+    Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
     AddNewToHeap(batch, filter);
 }
 
@@ -137,8 +137,8 @@ NJson::TJsonValue TMergePartialStream::TBatchIterator::DebugJson() const {
 }
 
 void TRecordBatchBuilder::AddRecord(const TSortableBatchPosition& position) {
-    Y_VERIFY_DEBUG(position.GetData().GetColumns().size() == Builders.size());
-    Y_VERIFY_DEBUG(IsSameFieldsSequence(position.GetData().GetFields(), Fields));
+    Y_DEBUG_ABORT_UNLESS(position.GetData().GetColumns().size() == Builders.size());
+    Y_DEBUG_ABORT_UNLESS(IsSameFieldsSequence(position.GetData().GetFields(), Fields));
 //    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "record_add_on_read")("record", position.DebugJson());
     for (ui32 i = 0; i < position.GetData().GetColumns().size(); ++i) {
         NArrow::Append(*Builders[i], *position.GetData().GetColumns()[i], position.GetPosition());

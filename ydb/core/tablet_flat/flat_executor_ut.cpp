@@ -2256,7 +2256,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedRows) {
                 TString expected(1024, (char)key);
                 Y_ABORT_UNLESS(selected == expected);
 
-                Y_VERIFY_DEBUG(rit != KeysRanges.end());
+                Y_DEBUG_ABORT_UNLESS(rit != KeysRanges.end());
                 if (++expectedKey == rit->second) {
                     expectedKey = ++rit != KeysRanges.end() ? rit->first : -1;
                 }

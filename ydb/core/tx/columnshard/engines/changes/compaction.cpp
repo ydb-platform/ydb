@@ -93,7 +93,7 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits
 }
 
 TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {
-    Y_VERIFY_DEBUG(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
+    Y_DEBUG_ABORT_UNLESS(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
 }
 
 THashSet<TPortionAddress> TCompactColumnEngineChanges::GetTouchedPortions() const {

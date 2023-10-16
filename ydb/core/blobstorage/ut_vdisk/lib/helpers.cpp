@@ -479,7 +479,7 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
     void Handle(TEvBlobStorage::TEvVMultiPutResult::TPtr &ev, const TActorContext &ctx) {
         NKikimrBlobStorage::TEvVMultiPutResult &record = ev->Get()->Record;
         //Cerr << "Handle\n";
-        Y_VERIFY_DEBUG(LastBatchSize && LastBatchSize == record.ItemsSize());
+        Y_DEBUG_ABORT_UNLESS(LastBatchSize && LastBatchSize == record.ItemsSize());
         const bool noTimeout = RequestTimeout == TDuration::Seconds(0);
         auto status = record.GetStatus();
         Y_ABORT_UNLESS(status == NKikimrProto::OK || noTimeout && status == NKikimrProto::DEADLINE,

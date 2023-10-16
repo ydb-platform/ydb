@@ -427,7 +427,7 @@ private:
     }
 
     NUdf::TUnboxedValue GetElement(ui32 index) const final {
-        Y_VERIFY_DEBUG(index < Size);
+        Y_DEBUG_ABORT_UNLESS(index < Size);
         return GetPtr()[index];
     }
 
@@ -1010,7 +1010,7 @@ private:
             Y_FAIL();
         }
 
-        Y_VERIFY_DEBUG(IsSortedUnique());
+        Y_DEBUG_ABORT_UNLESS(IsSortedUnique());
         IsBuilt = true;
 
         if (!Items.empty()) {
@@ -1212,7 +1212,7 @@ private:
             Y_FAIL();
         }
 
-        Y_VERIFY_DEBUG(IsSortedUnique());
+        Y_DEBUG_ABORT_UNLESS(IsSortedUnique());
         IsBuilt = true;
 
         if (!Items.empty()) {

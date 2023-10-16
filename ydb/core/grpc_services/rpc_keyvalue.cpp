@@ -792,7 +792,7 @@ protected:
         if (const auto &partition = desc.GetPartitions(rec.partition_id()); partition.GetPartitionId() == partitionId) {
             KVTabletId = partition.GetTabletId();
         } else {
-            Y_VERIFY_DEBUG(false);
+            Y_DEBUG_ABORT_UNLESS(false);
             for (const NKikimrSchemeOp::TSolomonVolumeDescription::TPartition &partition : desc.GetPartitions()) {
                 if (partition.GetPartitionId() == partitionId)  {
                     KVTabletId = partition.GetTabletId();

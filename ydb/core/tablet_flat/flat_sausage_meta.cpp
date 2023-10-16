@@ -61,19 +61,19 @@ TInfo TMeta::Page(ui32 page) const noexcept
 
 ui32 TMeta::GetPageType(ui32 pageId) const noexcept
 {
-    Y_VERIFY_DEBUG(pageId < Header->Pages);
+    Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);
     return Extra[pageId].Type;
 }
 
 ui32 TMeta::GetPageChecksum(ui32 pageId) const noexcept
 {
-    Y_VERIFY_DEBUG(pageId < Header->Pages);
+    Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);
     return Extra[pageId].Crc32;
 }
 
 ui64 TMeta::GetPageSize(ui32 pageId) const noexcept
 {
-    Y_VERIFY_DEBUG(pageId < Header->Pages);
+    Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);
 
     const ui64 begin = (pageId == 0) ? 0 : Index[pageId - 1].Page;
     return Index[pageId].Page - begin;
@@ -81,7 +81,7 @@ ui64 TMeta::GetPageSize(ui32 pageId) const noexcept
 
 TStringBuf TMeta::GetPageInplaceData(ui32 pageId) const noexcept
 {
-    Y_VERIFY_DEBUG(pageId < Header->Pages);
+    Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);
 
     const ui64 end = Index[pageId].Inplace;
     const ui64 begin = (pageId == 0) ? 0 : Index[pageId - 1].Inplace;

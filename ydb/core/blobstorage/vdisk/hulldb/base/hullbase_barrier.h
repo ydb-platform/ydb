@@ -176,7 +176,7 @@ namespace NKikimr {
         }
 
         void SetType(TBlobType::EType t) {
-            Y_VERIFY_DEBUG(t == TBlobType::DiskBlob);
+            Y_DEBUG_ABORT_UNLESS(t == TBlobType::DiskBlob);
             Y_UNUSED(t);
         }
 

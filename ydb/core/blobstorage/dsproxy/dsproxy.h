@@ -302,7 +302,7 @@ public:
         }
 
         // make NodeWarden restart the query just after proxy reconfiguration
-        Y_VERIFY_DEBUG(RestartCounter < 100);
+        Y_DEBUG_ABORT_UNLESS(RestartCounter < 100);
         auto q = self.RestartQuery(RestartCounter + 1);
         if (q->Type() != TEvBlobStorage::EvBunchOfEvents) {
             SetExecutionRelay(*q, std::exchange(ExecutionRelay, {}));

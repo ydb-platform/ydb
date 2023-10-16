@@ -93,7 +93,7 @@ namespace NKikimr {
         Info = std::move(info);
         if (Info) {
             if (Topology) {
-                Y_VERIFY_DEBUG(Topology->EqualityCheck(Info->GetTopology()));
+                Y_DEBUG_ABORT_UNLESS(Topology->EqualityCheck(Info->GetTopology()));
             } else {
                 Topology = Info->PickTopology();
             }
@@ -215,7 +215,7 @@ namespace NKikimr {
             SetStateEstablishingSessions();
         }
 
-        Y_VERIFY_DEBUG(CurrentStateFunc() != &TThis::StateWork || MinREALHugeBlobInBytes);
+        Y_DEBUG_ABORT_UNLESS(CurrentStateFunc() != &TThis::StateWork || MinREALHugeBlobInBytes);
 
         if (const ui32 prev = std::exchange(NumUnconnectedDisks, Sessions->GetNumUnconnectedDisks()); prev != NumUnconnectedDisks) {
             NodeMon->IncNumUnconnected(NumUnconnectedDisks);

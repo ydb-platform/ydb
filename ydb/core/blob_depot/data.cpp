@@ -42,13 +42,13 @@ namespace NKikimr::NBlobDepot {
             return false;
         }
 
-        Y_VERIFY_DEBUG(chain.HasLocator());
+        Y_DEBUG_ABORT_UNLESS(chain.HasLocator());
         const auto& locator1 = chain.GetLocator();
-        Y_VERIFY_DEBUG(locator1.HasGroupId() && locator1.HasBlobSeqId() && locator1.HasTotalDataLen());
+        Y_DEBUG_ABORT_UNLESS(locator1.HasGroupId() && locator1.HasBlobSeqId() && locator1.HasTotalDataLen());
 
-        Y_VERIFY_DEBUG(item.HasBlobLocator());
+        Y_DEBUG_ABORT_UNLESS(item.HasBlobLocator());
         const auto& locator2 = item.GetBlobLocator();
-        Y_VERIFY_DEBUG(locator2.HasGroupId() && locator2.HasBlobSeqId() && locator2.HasTotalDataLen());
+        Y_DEBUG_ABORT_UNLESS(locator2.HasGroupId() && locator2.HasBlobSeqId() && locator2.HasTotalDataLen());
 
 #define COMPARE_FIELD(NAME) \
         if (locator1.Has##NAME() != locator2.Has##NAME()) { \

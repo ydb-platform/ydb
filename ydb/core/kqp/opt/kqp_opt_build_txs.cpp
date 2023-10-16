@@ -88,7 +88,7 @@ private:
 
     TStatus DoBuildTxResults(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) {
         auto stages = CollectStages(inputExpr, ctx);
-        Y_VERIFY_DEBUG(!stages.empty());
+        Y_DEBUG_ABORT_UNLESS(!stages.empty());
 
         auto results = TKqlQueryResultList(inputExpr);
         auto txResults = BuildTxResults(results, stages, ctx);
@@ -121,7 +121,7 @@ private:
 
     TStatus DoBuildTxEffects(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) {
         auto stages = CollectStages(inputExpr, ctx);
-        Y_VERIFY_DEBUG(!stages.empty());
+        Y_DEBUG_ABORT_UNLESS(!stages.empty());
 
         TKqpPhyTxSettings txSettings;
         txSettings.Type = EPhysicalTxType::Data;
@@ -708,7 +708,7 @@ private:
                 computedInputsSet.insert(precompute.Raw());
             }
         }
-        Y_VERIFY_DEBUG(phaseResults.size() == computedInputs.size());
+        Y_DEBUG_ABORT_UNLESS(phaseResults.size() == computedInputs.size());
 
         auto phaseResultsNode = Build<TKqlQueryResultList>(ctx, query.Pos())
             .Add(phaseResults)

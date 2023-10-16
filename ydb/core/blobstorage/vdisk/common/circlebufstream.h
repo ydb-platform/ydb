@@ -43,11 +43,11 @@ private:
     bool Skipped = false;
 
     void SelfCheck() const {
-        Y_VERIFY_DEBUG(Buffer.size() == BufferSize);
+        Y_DEBUG_ABORT_UNLESS(Buffer.size() == BufferSize);
         if (Skipped) {
-            Y_VERIFY_DEBUG(StartPos == EndPos);
+            Y_DEBUG_ABORT_UNLESS(StartPos == EndPos);
         } else {
-            Y_VERIFY_DEBUG(StartPos == 0 && StartPos <= EndPos);
+            Y_DEBUG_ABORT_UNLESS(StartPos == 0 && StartPos <= EndPos);
         }
     }
 
@@ -59,11 +59,11 @@ private:
 
         // write appendLen bytes
         Buffer.replace(EndPos, appendLen, static_cast<const char*>(buf), appendLen);
-        Y_VERIFY_DEBUG(Buffer.size() == BufferSize);
+        Y_DEBUG_ABORT_UNLESS(Buffer.size() == BufferSize);
         if (StartPos < EndPos || (StartPos == EndPos && !Skipped)) {
             EndPos += appendLen;
         } else {
-            Y_VERIFY_DEBUG(Skipped && StartPos == EndPos);
+            Y_DEBUG_ABORT_UNLESS(Skipped && StartPos == EndPos);
             EndPos += appendLen;
             StartPos = EndPos;
         }

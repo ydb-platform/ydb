@@ -97,7 +97,7 @@ namespace NKikimr {
             Y_ABORT_UNLESS(Initialized, "Restore(%p): SelfVDiskID# %s TargetVDiskID# %s id# %s",
                    this, SelfVDiskID.ToString().data(), TargetVDiskID.ToString().data(), id.ToString().data());
             ui32 byteSize = TEvLocalHandoff::ByteSize(data.GetSize());
-            Y_VERIFY_DEBUG(byteSize < MaxBytes);
+            Y_DEBUG_ABORT_UNLESS(byteSize < MaxBytes);
 
             while (true) {
                 ui64 monitor = AtomicGet(Monitor);
@@ -121,7 +121,7 @@ namespace NKikimr {
         }
 
         void TProxyState::FreeElement(ui32 byteSize) {
-            Y_VERIFY_DEBUG(Initialized);
+            Y_DEBUG_ABORT_UNLESS(Initialized);
             bool done = false;
             while (!done) {
                 ui64 monitor = AtomicGet(Monitor);

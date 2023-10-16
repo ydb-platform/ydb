@@ -78,7 +78,7 @@ namespace NKikimr::NBlobDepot {
     ui64 TSpaceMonitor::GetGroupAllocationWeight(ui32 groupId, bool stopOnLightYellow) const {
         const auto it = Groups.find(groupId);
         if (it == Groups.end()) {
-            Y_VERIFY_DEBUG(false);
+            Y_DEBUG_ABORT_UNLESS(false);
             return 0;
         }
 

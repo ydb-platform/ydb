@@ -140,22 +140,22 @@ namespace NKikimr {
             }
 
             const TLogoBlobRec *GetLogoBlob() const {
-                Y_VERIFY_DEBUG(RecType == RecLogoBlob);
+                Y_DEBUG_ABORT_UNLESS(RecType == RecLogoBlob);
                 return (const TLogoBlobRec *)(this + 1);
             }
 
             const TBlockRec *GetBlock() const {
-                Y_VERIFY_DEBUG(RecType == RecBlock);
+                Y_DEBUG_ABORT_UNLESS(RecType == RecBlock);
                 return (const TBlockRec *)(this + 1);
             }
 
             const TBarrierRec *GetBarrier() const {
-                Y_VERIFY_DEBUG(RecType == RecBarrier);
+                Y_DEBUG_ABORT_UNLESS(RecType == RecBarrier);
                 return (const TBarrierRec *)(this + 1);
             }
 
             const TBlockRecV2 *GetBlockV2() const {
-                Y_VERIFY_DEBUG(RecType == RecBlockV2);
+                Y_DEBUG_ABORT_UNLESS(RecType == RecBlockV2);
                 return (const TBlockRecV2 *)(this + 1);
             }
 
@@ -287,7 +287,7 @@ namespace NKikimr {
             }
 
             void Next() {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 It = It->Next();
             }
 

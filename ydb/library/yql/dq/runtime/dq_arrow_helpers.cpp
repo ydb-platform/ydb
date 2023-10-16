@@ -301,7 +301,7 @@ void AppendDataValue(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
 
 template <>
 void AppendDataValue<arrow::UInt64Type>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
-    Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::UINT64);
+    Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::UINT64);
     auto typedBuilder = reinterpret_cast<arrow::UInt64Builder*>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
@@ -314,7 +314,7 @@ void AppendDataValue<arrow::UInt64Type>(arrow::ArrayBuilder* builder, NUdf::TUnb
 
 template <>
 void AppendDataValue<arrow::Int64Type>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
-    Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::INT64);
+    Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::INT64);
     auto typedBuilder = reinterpret_cast<arrow::Int64Builder*>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
@@ -327,7 +327,7 @@ void AppendDataValue<arrow::Int64Type>(arrow::ArrayBuilder* builder, NUdf::TUnbo
 
 template <>
 void AppendDataValue<arrow::TimestampType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
-    Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::TIMESTAMP);
+    Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::TIMESTAMP);
     auto typedBuilder = reinterpret_cast<arrow::TimestampBuilder*>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
@@ -340,7 +340,7 @@ void AppendDataValue<arrow::TimestampType>(arrow::ArrayBuilder* builder, NUdf::T
 
 template <>
 void AppendDataValue<arrow::DurationType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
-    Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::DURATION);
+    Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::DURATION);
     auto typedBuilder = reinterpret_cast<arrow::DurationBuilder*>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
@@ -353,7 +353,7 @@ void AppendDataValue<arrow::DurationType>(arrow::ArrayBuilder* builder, NUdf::TU
 
 template <>
 void AppendDataValue<arrow::StringType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
-    Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::STRING);
+    Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::STRING);
     auto typedBuilder = reinterpret_cast<arrow::StringBuilder*>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
@@ -367,7 +367,7 @@ void AppendDataValue<arrow::StringType>(arrow::ArrayBuilder* builder, NUdf::TUnb
 
 template <>
 void AppendDataValue<arrow::BinaryType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
-    Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::BINARY);
+    Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::BINARY);
     auto typedBuilder = reinterpret_cast<arrow::BinaryBuilder*>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
@@ -381,7 +381,7 @@ void AppendDataValue<arrow::BinaryType>(arrow::ArrayBuilder* builder, NUdf::TUnb
 
 template <>
 void AppendDataValue<arrow::Decimal128Type>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
-    Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::DECIMAL128);
+    Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::DECIMAL128);
     auto typedBuilder = reinterpret_cast<arrow::Decimal128Builder*>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
@@ -560,10 +560,10 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
                     Y_VERIFY_S(status.ok(), status.ToString());
                 }
             } else {
-                Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::STRUCT);
+                Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::STRUCT);
                 auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
-                Y_VERIFY_DEBUG(structBuilder->num_fields() == 2);
-                Y_VERIFY_DEBUG(structBuilder->field_builder(0)->type()->id() == arrow::Type::UINT64);
+                Y_DEBUG_ABORT_UNLESS(structBuilder->num_fields() == 2);
+                Y_DEBUG_ABORT_UNLESS(structBuilder->field_builder(0)->type()->id() == arrow::Type::UINT64);
                 auto status = structBuilder->Append();
                 Y_VERIFY_S(status.ok(), status.ToString());
                 auto depthBuilder = reinterpret_cast<arrow::UInt64Builder*>(structBuilder->field_builder(0));
@@ -590,7 +590,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         case TType::EKind::List: {
             auto listType = static_cast<const TListType*>(type);
             auto itemType = listType->GetItemType();
-            Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::LIST);
+            Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::LIST);
             auto listBuilder = reinterpret_cast<arrow::ListBuilder*>(builder);
             auto status = listBuilder->Append();
             Y_VERIFY_S(status.ok(), status.ToString());
@@ -612,11 +612,11 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
 
         case TType::EKind::Struct: {
             auto structType = static_cast<const TStructType*>(type);
-            Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::STRUCT);
+            Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::STRUCT);
             auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
             auto status = structBuilder->Append();
             Y_VERIFY_S(status.ok(), status.ToString());
-            Y_VERIFY_DEBUG(static_cast<ui32>(structBuilder->num_fields()) == structType->GetMembersCount());
+            Y_DEBUG_ABORT_UNLESS(static_cast<ui32>(structBuilder->num_fields()) == structType->GetMembersCount());
             for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
                 auto innerBuilder = structBuilder->field_builder(index);
                 auto memberType = structType->GetMemberType(index);
@@ -627,11 +627,11 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
 
         case TType::EKind::Tuple: {
             auto tupleType = static_cast<const TTupleType*>(type);
-            Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::STRUCT);
+            Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::STRUCT);
             auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
             auto status = structBuilder->Append();
             Y_VERIFY_S(status.ok(), status.ToString());
-            Y_VERIFY_DEBUG(static_cast<ui32>(structBuilder->num_fields()) == tupleType->GetElementsCount());
+            Y_DEBUG_ABORT_UNLESS(static_cast<ui32>(structBuilder->num_fields()) == tupleType->GetElementsCount());
             for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
                 auto innerBuilder = structBuilder->field_builder(index);
                 auto elementType = tupleType->GetElementType(index);
@@ -649,18 +649,18 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
             arrow::ArrayBuilder* itemBuilder;
             arrow::StructBuilder* structBuilder = nullptr;
             if (keyType->GetKind() == TType::EKind::Optional) {
-                Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::LIST);
+                Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::LIST);
                 auto listBuilder = reinterpret_cast<arrow::ListBuilder*>(builder);
-                Y_VERIFY_DEBUG(listBuilder->value_builder()->type()->id() == arrow::Type::STRUCT);
+                Y_DEBUG_ABORT_UNLESS(listBuilder->value_builder()->type()->id() == arrow::Type::STRUCT);
                 // Start a new list in ListArray of structs
                 auto status = listBuilder->Append();
                 Y_VERIFY_S(status.ok(), status.ToString());
                 structBuilder = reinterpret_cast<arrow::StructBuilder*>(listBuilder->value_builder());
-                Y_VERIFY_DEBUG(structBuilder->num_fields() == 2);
+                Y_DEBUG_ABORT_UNLESS(structBuilder->num_fields() == 2);
                 keyBuilder = structBuilder->field_builder(0);
                 itemBuilder = structBuilder->field_builder(1);
             } else {
-                Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::MAP);
+                Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::MAP);
                 auto mapBuilder = reinterpret_cast<arrow::MapBuilder*>(builder);
                 // Start a new map in MapArray
                 auto status = mapBuilder->Append();
@@ -685,7 +685,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         case TType::EKind::Variant: {
             // TODO Need to properly convert variants containing more than 127*127 types?
             auto variantType = static_cast<const TVariantType*>(type);
-            Y_VERIFY_DEBUG(builder->type()->id() == arrow::Type::DENSE_UNION);
+            Y_DEBUG_ABORT_UNLESS(builder->type()->id() == arrow::Type::DENSE_UNION);
             auto unionBuilder = reinterpret_cast<arrow::DenseUnionBuilder*>(builder);
             ui32 variantIndex = value.GetVariantIndex();
             TType* innerType = variantType->GetUnderlyingType();
@@ -697,12 +697,12 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
             }
             if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
                 ui32 numberOfGroups = (variantType->GetAlternativesCount() - 1) / arrow::UnionType::kMaxTypeCode + 1;
-                Y_VERIFY_DEBUG(static_cast<ui32>(unionBuilder->num_children()) == numberOfGroups);
+                Y_DEBUG_ABORT_UNLESS(static_cast<ui32>(unionBuilder->num_children()) == numberOfGroups);
                 ui32 groupIndex = variantIndex / arrow::UnionType::kMaxTypeCode;
                 auto status = unionBuilder->Append(groupIndex);
                 Y_VERIFY_S(status.ok(), status.ToString());
                 auto innerBuilder = unionBuilder->child_builder(groupIndex);
-                Y_VERIFY_DEBUG(innerBuilder->type()->id() == arrow::Type::DENSE_UNION);
+                Y_DEBUG_ABORT_UNLESS(innerBuilder->type()->id() == arrow::Type::DENSE_UNION);
                 auto innerUnionBuilder = reinterpret_cast<arrow::DenseUnionBuilder*>(innerBuilder.get());
                 ui32 innerVariantIndex = variantIndex % arrow::UnionType::kMaxTypeCode;
                 status = innerUnionBuilder->Append(innerVariantIndex);
@@ -754,14 +754,14 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
                 result = GetUnboxedValue<TType>(array, row);
                 return true;
             });
-            Y_VERIFY_DEBUG(success);
+            Y_DEBUG_ABORT_UNLESS(success);
             return result;
         }
         case TType::EKind::Struct: {
             auto structType = static_cast<const TStructType*>(itemType);
-            Y_VERIFY_DEBUG(array->type_id() == arrow::Type::STRUCT);
+            Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::STRUCT);
             auto typedArray = static_pointer_cast<arrow::StructArray>(array);
-            Y_VERIFY_DEBUG(static_cast<ui32>(typedArray->num_fields()) == structType->GetMembersCount());
+            Y_DEBUG_ABORT_UNLESS(static_cast<ui32>(typedArray->num_fields()) == structType->GetMembersCount());
             NUdf::TUnboxedValue* itemsPtr = nullptr;
             auto result = holderFactory.CreateDirectArrayHolder(structType->GetMembersCount(), itemsPtr);
             for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
@@ -772,9 +772,9 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
         }
         case TType::EKind::Tuple: {
             auto tupleType = static_cast<const TTupleType*>(itemType);
-            Y_VERIFY_DEBUG(array->type_id() == arrow::Type::STRUCT);
+            Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::STRUCT);
             auto typedArray = static_pointer_cast<arrow::StructArray>(array);
-            Y_VERIFY_DEBUG(static_cast<ui32>(typedArray->num_fields()) == tupleType->GetElementsCount());
+            Y_DEBUG_ABORT_UNLESS(static_cast<ui32>(typedArray->num_fields()) == tupleType->GetElementsCount());
             NUdf::TUnboxedValue* itemsPtr = nullptr;
             auto result = holderFactory.CreateDirectArrayHolder(tupleType->GetElementsCount(), itemsPtr);
             for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
@@ -787,10 +787,10 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
             auto optionalType = static_cast<const TOptionalType*>(itemType);
             auto innerOptionalType = optionalType->GetItemType();
             if (innerOptionalType->GetKind() == TType::EKind::Optional) {
-                Y_VERIFY_DEBUG(array->type_id() == arrow::Type::STRUCT);
+                Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::STRUCT);
                 auto structArray = static_pointer_cast<arrow::StructArray>(array);
-                Y_VERIFY_DEBUG(structArray->num_fields() == 2);
-                Y_VERIFY_DEBUG(structArray->field(0)->type_id() == arrow::Type::UINT64);
+                Y_DEBUG_ABORT_UNLESS(structArray->num_fields() == 2);
+                Y_DEBUG_ABORT_UNLESS(structArray->field(0)->type_id() == arrow::Type::UINT64);
                 auto depthArray = static_pointer_cast<arrow::UInt64Array>(structArray->field(0));
                 auto valuesArray = structArray->field(1);
                 auto depth = depthArray->Value(row);
@@ -813,7 +813,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
         }
         case TType::EKind::List: {
             auto listType = static_cast<const TListType*>(itemType);
-            Y_VERIFY_DEBUG(array->type_id() == arrow::Type::LIST);
+            Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::LIST);
             auto typedArray = static_pointer_cast<arrow::ListArray>(array);
             auto arraySlice = typedArray->value_slice(row);
             auto itemType = listType->GetItemType();
@@ -836,17 +836,17 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
             ui64 dictLength = 0;
             ui64 offset = 0;
             if (keyType->GetKind() == TType::EKind::Optional) {
-                Y_VERIFY_DEBUG(array->type_id() == arrow::Type::LIST);
+                Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::LIST);
                 auto listArray = static_pointer_cast<arrow::ListArray>(array);
                 auto arraySlice = listArray->value_slice(row);
-                Y_VERIFY_DEBUG(arraySlice->type_id() == arrow::Type::STRUCT);
+                Y_DEBUG_ABORT_UNLESS(arraySlice->type_id() == arrow::Type::STRUCT);
                 auto structArray = static_pointer_cast<arrow::StructArray>(arraySlice);
-                Y_VERIFY_DEBUG(structArray->num_fields() == 2);
+                Y_DEBUG_ABORT_UNLESS(structArray->num_fields() == 2);
                 dictLength = arraySlice->length();
                 keyArray = structArray->field(0);
                 payloadArray = structArray->field(1);
             } else {
-                Y_VERIFY_DEBUG(array->type_id() == arrow::Type::MAP);
+                Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::MAP);
                 auto mapArray = static_pointer_cast<arrow::MapArray>(array);
                 dictLength = mapArray->value_length(row);
                 offset = mapArray->value_offset(row);
@@ -863,14 +863,14 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
         case TType::EKind::Variant: {
             // TODO Need to properly convert variants containing more than 127*127 types?
             auto variantType = static_cast<const TVariantType*>(itemType);
-            Y_VERIFY_DEBUG(array->type_id() == arrow::Type::DENSE_UNION);
+            Y_DEBUG_ABORT_UNLESS(array->type_id() == arrow::Type::DENSE_UNION);
             auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
             auto variantIndex = unionArray->child_id(row);
             auto rowInChild = unionArray->value_offset(row);
             std::shared_ptr<arrow::Array> valuesArray = unionArray->field(variantIndex);
             if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
                 // Go one step deeper
-                Y_VERIFY_DEBUG(valuesArray->type_id() == arrow::Type::DENSE_UNION);
+                Y_DEBUG_ABORT_UNLESS(valuesArray->type_id() == arrow::Type::DENSE_UNION);
                 auto innerUnionArray = static_pointer_cast<arrow::DenseUnionArray>(valuesArray);
                 auto innerVariantIndex = innerUnionArray->child_id(rowInChild);
                 rowInChild = innerUnionArray->value_offset(rowInChild);
@@ -935,7 +935,7 @@ std::shared_ptr<arrow::Array> DeserializeArray(const std::string& blob, std::sha
     arrow::io::BufferReader reader(buffer);
     auto schema = std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>{arrow::field("", type)});
     auto batch = ReadRecordBatch(schema, &dictMemo, options, &reader);
-    Y_VERIFY_DEBUG(batch.ok() && (*batch)->ValidateFull().ok(), "Failed to deserialize batch");
+    Y_DEBUG_ABORT_UNLESS(batch.ok() && (*batch)->ValidateFull().ok(), "Failed to deserialize batch");
     return (*batch)->column(0);
 }
 

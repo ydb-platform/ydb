@@ -192,7 +192,7 @@ namespace NKikimr {
                             case TBlobState::ESituation::Present:
                             case TBlobState::ESituation::Sent:
                                 // unexpected state
-                                Y_VERIFY_DEBUG(false);
+                                Y_DEBUG_ABORT_UNLESS(false);
                                 [[fallthrough]];
                             case TBlobState::ESituation::Error:
                                 state.WholeSituation = TBlobState::ESituation::Error;

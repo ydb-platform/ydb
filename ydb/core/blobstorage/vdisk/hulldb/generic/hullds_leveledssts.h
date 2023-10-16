@@ -27,7 +27,7 @@ namespace NKikimr {
         {
             typename TOrderedLevelSegments::TSstIterator it(&s);
             it.SeekToFirst();
-            Y_VERIFY_DEBUG(it.Valid());
+            Y_DEBUG_ABORT_UNLESS(it.Valid());
             while (it.Valid()) {
                 PushBack(TLevelSstPtr(level, it.Get()));
                 it.Next();
@@ -87,12 +87,12 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             Pos++;
         }
 
         TLevelSstPtr Get() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             return LeveledSsts->Vec[Pos];
         }
     };

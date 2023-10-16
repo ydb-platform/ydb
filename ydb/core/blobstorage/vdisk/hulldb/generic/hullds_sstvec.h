@@ -62,7 +62,7 @@ namespace NKikimr {
         };
 
         ui64 GetFirstLsn() const {
-            Y_VERIFY_DEBUG(!Empty());
+            Y_DEBUG_ABORT_UNLESS(!Empty());
             ui64 firstLsn = ui64(-1);
             for (const auto &x : Segments)
                 firstLsn = Min(firstLsn, x->Info.FirstLsn);
@@ -70,7 +70,7 @@ namespace NKikimr {
         }
 
         ui64 GetLastLsn() const {
-            Y_VERIFY_DEBUG(!Empty());
+            Y_DEBUG_ABORT_UNLESS(!Empty());
             ui64 lastLsn = 0;
             for (const auto &x : Segments)
                 lastLsn = Max(lastLsn, x->Info.LastLsn);

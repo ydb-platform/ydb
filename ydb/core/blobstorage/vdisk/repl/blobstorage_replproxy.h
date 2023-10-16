@@ -76,17 +76,17 @@ namespace NKikimr {
             ////////////////////////////////////////////////////////////////////////////////
 
             void Add(const TLogoBlobID& logoBlobId, TRope&& data) {
-                Y_VERIFY_DEBUG(FrontPos == 0);
+                Y_DEBUG_ABORT_UNLESS(FrontPos == 0);
                 Items.emplace_back(TMemoryConsumer(Consumer), logoBlobId, NKikimrProto::OK, std::move(data));
             }
 
             void AddError(const TLogoBlobID& logoBlobId, NKikimrProto::EReplyStatus status) {
-                Y_VERIFY_DEBUG(FrontPos == 0);
+                Y_DEBUG_ABORT_UNLESS(FrontPos == 0);
                 Items.emplace_back(TMemoryConsumer(Consumer), logoBlobId, status, TRope());
             }
 
             void Append(TDataPortion&& from) {
-                Y_VERIFY_DEBUG(FrontPos == 0);
+                Y_DEBUG_ABORT_UNLESS(FrontPos == 0);
                 if (Items.empty()) {
                     Items = std::move(from.Items);
                 } else {
@@ -113,7 +113,7 @@ namespace NKikimr {
             }
 
             void GetFrontItem(TLogoBlobID *logoBlobId, NKikimrProto::EReplyStatus *status, TRope *data) {
-                Y_VERIFY_DEBUG(FrontPos < Items.size());
+                Y_DEBUG_ABORT_UNLESS(FrontPos < Items.size());
                 const TDataElement& elem = Items[FrontPos];
                 *logoBlobId = elem.LogoBlobId;
                 *status = elem.Status;
@@ -121,17 +121,17 @@ namespace NKikimr {
             }
 
             void GetFrontItem(TLogoBlobID *logoBlobId) const {
-                Y_VERIFY_DEBUG(FrontPos < Items.size());
+                Y_DEBUG_ABORT_UNLESS(FrontPos < Items.size());
                 *logoBlobId = Items[FrontPos].LogoBlobId;
             }
 
             bool Valid() const {
-                Y_VERIFY_DEBUG(FrontPos <= Items.size());
+                Y_DEBUG_ABORT_UNLESS(FrontPos <= Items.size());
                 return FrontPos != Items.size();
             }
 
             void Next() {
-                Y_VERIFY_DEBUG(FrontPos < Items.size());
+                Y_DEBUG_ABORT_UNLESS(FrontPos < Items.size());
                 Items[FrontPos].Reset();
                 ++FrontPos;
             }
@@ -272,7 +272,7 @@ namespace NKikimr {
 
         public:
             void Put(const TLogoBlobID &id, ui32 expectedReplySize) {
-                Y_VERIFY_DEBUG(State == Initial);
+                Y_DEBUG_ABORT_UNLESS(State == Initial);
                 Ids.emplace_back(id, expectedReplySize);
             }
 
@@ -290,7 +290,7 @@ namespace NKikimr {
             // IsEof(): returns true on EOF condition, i.e. when there is no more data exists in buffer and
             // no more data is expected in future
             bool IsEof() const {
-                Y_VERIFY_DEBUG(State == Ok || State == Eof || State == Error);
+                Y_DEBUG_ABORT_UNLESS(State == Ok || State == Eof || State == Error);
                 return (State == Error || State == Eof) && !DataPortion.Valid();
             }
 
@@ -321,7 +321,7 @@ namespace NKikimr {
         public:
             struct TPtrGreater {
                 bool operator() (const TVDiskProxyPtr &x, const TVDiskProxyPtr &y) const {
-                    Y_VERIFY_DEBUG(x->Valid() && y->Valid());
+                    Y_DEBUG_ABORT_UNLESS(x->Valid() && y->Valid());
                     return x->GenLogoBlobId() > y->GenLogoBlobId();
                 }
             };

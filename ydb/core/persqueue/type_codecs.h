@@ -21,7 +21,7 @@ public:
     }
 
     TCodecSig Signature() const override {
-        Y_VERIFY_DEBUG(TCoder::Sig() == TDecoder::Sig());
+        Y_DEBUG_ABORT_UNLESS(TCoder::Sig() == TDecoder::Sig());
         return TCoder::Sig();
     }
 

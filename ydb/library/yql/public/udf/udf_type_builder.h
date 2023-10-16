@@ -363,7 +363,7 @@ public:
     }
 
     inline void UnRef() noexcept {
-        Y_VERIFY_DEBUG(Refs_ > 0);
+        Y_DEBUG_ABORT_UNLESS(Refs_ > 0);
         if (--Refs_ == 0) {
             delete this;
         }

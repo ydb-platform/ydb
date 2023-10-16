@@ -162,20 +162,20 @@ struct TPODWriter {
 
     template <typename T>
     void Write(const T& value) {
-        Y_VERIFY_DEBUG(Offset + sizeof(T) <= Buffer.Size());
+        Y_DEBUG_ABORT_UNLESS(Offset + sizeof(T) <= Buffer.Size());
         MemCopy(Buffer.Data() + Offset, reinterpret_cast<const char*>(&value), sizeof(T));
         Offset += sizeof(T);
     }
 
     void Write(const char* source, ui32 length) {
-        Y_VERIFY_DEBUG(Offset + length <= Buffer.Size());
+        Y_DEBUG_ABORT_UNLESS(Offset + length <= Buffer.Size());
         MemCopy(Buffer.Data() + Offset, source, length);
         Offset += length;
     }
 
     template <typename T>
     void Skip(ui32 count) {
-        Y_VERIFY_DEBUG(Offset + count * sizeof(T) <= Buffer.Size());
+        Y_DEBUG_ABORT_UNLESS(Offset + count * sizeof(T) <= Buffer.Size());
         Offset += count * sizeof(T);
     }
 };
@@ -250,7 +250,7 @@ private:
      * @brief Writes container and all its children recursively
      */
     void WriteContainer(TPODWriter& valueWriter, ui32 index) {
-        Y_VERIFY_DEBUG(index < Json.Containers.size());
+        Y_DEBUG_ABORT_UNLESS(index < Json.Containers.size());
         const auto& container = Json.Containers[index];
 
         switch (container.Type) {

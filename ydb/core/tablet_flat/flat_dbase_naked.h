@@ -225,9 +225,9 @@ namespace NTable {
             Serial_++;
 
             // Sanity checks
-            Y_VERIFY_DEBUG(Annex.empty());
-            Y_VERIFY_DEBUG(Flushed.empty());
-            Y_VERIFY_DEBUG(Prepared.empty());
+            Y_DEBUG_ABORT_UNLESS(Annex.empty());
+            Y_DEBUG_ABORT_UNLESS(Flushed.empty());
+            Y_DEBUG_ABORT_UNLESS(Prepared.empty());
         }
 
         TEpoch FlushTable(ui32 tid) noexcept

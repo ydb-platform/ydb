@@ -133,7 +133,7 @@ TAutoPtr<TTableIt> TDatabase::IterateRange(ui32 table, const TKeyRange& range, T
 {
     Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
-    Y_VERIFY_DEBUG(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
+    Y_DEBUG_ABORT_UNLESS(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
         "%s", IsAmbiguousRangeReason(range, Require(table)->GetScheme()->Keys->Size()));
 
     IteratedTables.insert(table);
@@ -162,7 +162,7 @@ TAutoPtr<TTableReverseIt> TDatabase::IterateRangeReverse(ui32 table, const TKeyR
 {
     Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
-    Y_VERIFY_DEBUG(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
+    Y_DEBUG_ABORT_UNLESS(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
         "%s", IsAmbiguousRangeReason(range, Require(table)->GetScheme()->Keys->Size()));
 
     IteratedTables.insert(table);
@@ -272,7 +272,7 @@ bool TDatabase::Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
 
 void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, TRowVersion rowVersion)
 {
-    Y_VERIFY_DEBUG(rowVersion != TRowVersion::Max(), "Updates cannot have v{max} as row version");
+    Y_DEBUG_ABORT_UNLESS(rowVersion != TRowVersion::Max(), "Updates cannot have v{max} as row version");
 
     for (size_t index = 0; index < key.size(); ++index) {
         if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {

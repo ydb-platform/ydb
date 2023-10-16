@@ -862,7 +862,7 @@ bool TResourceBroker::SubmitTaskInstant(const TEvResourceBroker::TEvSubmitTask& 
 
             if (!success) {
                 auto removed = Scheduler.RemoveQueuedTask(ev.Task.TaskId, sender, *ActorSystem);
-                Y_VERIFY_DEBUG(removed.Success);
+                Y_DEBUG_ABORT_UNLESS(removed.Success);
             }
         }
 
@@ -916,13 +916,13 @@ bool TResourceBroker::MergeTasksInstant(ui64 recipientTaskId, ui64 donorTaskId, 
 
         bool updated = Scheduler.UpdateTask(recipientTaskId, sender, mergedResources, recipientTask->Priority,
             recipientTask->Type, /* resubmit */ false, *ActorSystem);
-        Y_VERIFY_DEBUG(updated);
+        Y_DEBUG_ABORT_UNLESS(updated);
 
         auto finished = Scheduler.FinishTask(donorTaskId, sender, /* cancel */ false, *ActorSystem);
-        Y_VERIFY_DEBUG(finished.Success);
+        Y_DEBUG_ABORT_UNLESS(finished.Success);
 
         Scheduler.ScheduleTasks(*ActorSystem, [this, recipientTaskId](const TTask &task) {
-            Y_VERIFY_DEBUG(task.TaskId != recipientTaskId);
+            Y_DEBUG_ABORT_UNLESS(task.TaskId != recipientTaskId);
             ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
         });
 

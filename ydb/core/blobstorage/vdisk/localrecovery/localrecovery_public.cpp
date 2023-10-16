@@ -125,7 +125,7 @@ namespace NKikimr {
         void SignalSuccessAndDie(const TActorContext &ctx) {
             // recover Lsn and ConfirmedLsn:
             // Db->Lsn now contains last seen lsn
-            Y_VERIFY_DEBUG(LocRecCtx->HullDbRecovery->GetHullDs());
+            Y_DEBUG_ABORT_UNLESS(LocRecCtx->HullDbRecovery->GetHullDs());
 
             LocRecCtx->RecovInfo->SuccessfulRecovery = true;
             LocRecCtx->RecovInfo->CheckConsistency();
@@ -635,7 +635,7 @@ namespace NKikimr {
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::LocalRecovInfoId);
+            Y_DEBUG_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::LocalRecovInfoId);
             TStringStream str;
             LocRecCtx->RecovInfo->OutputHtml(str);
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::LocalRecovInfoId));

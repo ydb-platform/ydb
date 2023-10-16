@@ -40,7 +40,7 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(CrossSegIt != All->Segments.end());
+            Y_DEBUG_ABORT_UNLESS(CrossSegIt != All->Segments.end());
             CurSegIt.Next();
             if (!CurSegIt.Valid()) {
                 ++CrossSegIt;
@@ -89,11 +89,11 @@ namespace NKikimr {
             CrossSegIt = ::LowerBound(b, e, key, TVectorLess());
 
             if (CrossSegIt == e) {
-                Y_VERIFY_DEBUG(b != e); // we can't have empty vector
+                Y_DEBUG_ABORT_UNLESS(b != e); // we can't have empty vector
                 --CrossSegIt;
             } else {
                 const TKey firstKey = (*CrossSegIt)->FirstKey();
-                Y_VERIFY_DEBUG(firstKey >= key);
+                Y_DEBUG_ABORT_UNLESS(firstKey >= key);
                 if (firstKey > key) {
                     if (CrossSegIt == b) {
                         // good
@@ -114,7 +114,7 @@ namespace NKikimr {
 
         template <class TRecordMerger>
         void PutToMerger(TRecordMerger *merger) {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             CurSegIt.template PutToMerger<TRecordMerger>(merger);
         }
 
@@ -173,12 +173,12 @@ namespace NKikimr {
         {}
 
         void SeekToFirst() {
-            Y_VERIFY_DEBUG(S);
+            Y_DEBUG_ABORT_UNLESS(S);
             Cur = S->Segments.begin();
         }
 
         void SeekToLast() {
-            Y_VERIFY_DEBUG(S);
+            Y_DEBUG_ABORT_UNLESS(S);
             Cur = S->Segments.end();
             --Cur;
         }
@@ -197,17 +197,17 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             ++Cur;
         }
 
         void Prev() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             --Cur;
         }
 
         TLevelSegmentPtr Get() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             return *Cur;
         }
     };
@@ -234,7 +234,7 @@ namespace NKikimr {
         {}
 
         void SeekToFirst() {
-            Y_VERIFY_DEBUG(S);
+            Y_DEBUG_ABORT_UNLESS(S);
             if (NumLimit > 0) {
                 // for zero NumLimit we have a race of adding element into
                 // empty list and calling begin() on it
@@ -251,18 +251,18 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             ++CurNum;
             if (CurNum < NumLimit) {
                 // update Cur only if we don't stay at the last elements,
                 // otherwise we have a race
-                Y_VERIFY_DEBUG(Cur != S->Segments.end());
+                Y_DEBUG_ABORT_UNLESS(Cur != S->Segments.end());
                 ++Cur;
             }
         }
 
         TLevelSegmentPtr Get() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             return *Cur;
         }
     };

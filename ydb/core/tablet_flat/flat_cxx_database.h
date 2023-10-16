@@ -1006,7 +1006,7 @@ struct Schema {
 
             private:
                 bool IsDeleted() const {
-                    Y_VERIFY_DEBUG(
+                    Y_DEBUG_ABORT_UNLESS(
                         Iterator->Row().GetRowState() != NTable::ERowOp::Erase,
                         "Unexpected deleted row returned from iterator");
                     return false;
@@ -1407,16 +1407,16 @@ struct Schema {
 
                 template <typename... ColumnType>
                 auto GetValue() const {
-                    Y_VERIFY_DEBUG(IsReady(), "Rowset is not ready");
-                    Y_VERIFY_DEBUG(IsValid(), "Rowset is not valid");
+                    Y_DEBUG_ABORT_UNLESS(IsReady(), "Rowset is not ready");
+                    Y_DEBUG_ABORT_UNLESS(IsValid(), "Rowset is not valid");
                     typename Columns<ColumnType...>::Type value(GetColumnValue<ColumnType>()...);
                     return value;
                 }
 
                 template <typename ColumnType>
                 auto GetValueOrDefault(typename ColumnType::Type defaultValue = GetDefaultValue<ColumnType>(SFINAE::special())) const {
-                    Y_VERIFY_DEBUG(IsReady(), "Rowset is not ready");
-                    Y_VERIFY_DEBUG(IsValid(), "Rowset is not valid");
+                    Y_DEBUG_ABORT_UNLESS(IsReady(), "Rowset is not ready");
+                    Y_DEBUG_ABORT_UNLESS(IsValid(), "Rowset is not valid");
                     typename ColumnType::Type value(HaveValue<ColumnType>() ? GetColumnValue<ColumnType>() : defaultValue);
                     return value;
                 }
@@ -1434,8 +1434,8 @@ struct Schema {
                 }
 
                 TString DbgPrint(const NScheme::TTypeRegistry& typeRegistry) {
-                    Y_VERIFY_DEBUG(IsReady(), "Rowset is not ready");
-                    Y_VERIFY_DEBUG(IsValid(), "Rowset is not valid");
+                    Y_DEBUG_ABORT_UNLESS(IsReady(), "Rowset is not ready");
+                    Y_DEBUG_ABORT_UNLESS(IsValid(), "Rowset is not valid");
                     return DbgPrintTuple(Iterator.GetKey(), typeRegistry) + " -> " + DbgPrintTuple(Iterator.GetValues(), typeRegistry);
                 }
 

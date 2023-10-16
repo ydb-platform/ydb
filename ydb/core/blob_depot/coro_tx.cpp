@@ -65,7 +65,7 @@ namespace NKikimr::NBlobDepot {
             TExceptionSafeContext returnContext;
             Y_ABORT_UNLESS(!BackContext);
             BackContext = &returnContext;
-            Y_VERIFY_DEBUG(CurrentTx() || Aborted);
+            Y_DEBUG_ABORT_UNLESS(CurrentTx() || Aborted);
             returnContext.SwitchTo(&Context);
             Y_ABORT_UNLESS(BackContext == &returnContext);
             BackContext = nullptr;

@@ -83,7 +83,7 @@ void TKafkaFetchActor::Handle(NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, const 
 
 size_t TKafkaFetchActor::CheckTopicIndex(const NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev) {
     auto topicIt = TopicIndexes.find(ev->Sender);
-    Y_VERIFY_DEBUG(topicIt != TopicIndexes.end());
+    Y_DEBUG_ABORT_UNLESS(topicIt != TopicIndexes.end());
 
     if (topicIt == TopicIndexes.end()) {
         KAFKA_LOG_CRIT("Fetch actor: Received unexpected TEvFetchResponse. Ignoring. Expect malformed/incompled fetch reply.");

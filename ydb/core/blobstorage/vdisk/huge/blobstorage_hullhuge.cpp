@@ -355,7 +355,7 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             // prepare log record
-            Y_VERIFY_DEBUG(!ChunksToFree.empty());
+            Y_DEBUG_ABORT_UNLESS(!ChunksToFree.empty());
             NHuge::TFreeChunkRecoveryLogRec logRec(ChunksToFree);
             TRcBuf data = TRcBuf(logRec.Serialize());
 
@@ -365,7 +365,7 @@ namespace NKikimr {
             // prepare commit record, i.e. commit reserved chunk
             NPDisk::TCommitRecord commitRecord;
             commitRecord.FirstLsnToKeep = 0;
-            Y_VERIFY_DEBUG(!ChunksToFree.empty());
+            Y_DEBUG_ABORT_UNLESS(!ChunksToFree.empty());
             commitRecord.DeleteChunks = ChunksToFree;
             commitRecord.IsStartingPoint = false;
 
@@ -901,7 +901,7 @@ namespace NKikimr {
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::HugeKeeperId);
+            Y_DEBUG_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::HugeKeeperId);
             TStringStream str;
             HTML(str) {
                 DIV_CLASS("panel panel-default") {

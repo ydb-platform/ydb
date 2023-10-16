@@ -69,7 +69,7 @@ EExecutionStatus TCompleteOperationUnit::Execute(TOperation::TPtr op,
     // TODO: prepared txs may be cancelled until planned, in which case we may
     // end up with a dangling snapshot reference. Such references would have
     // to be handled in a restart-safe manner too.
-    Y_VERIFY_DEBUG(!op->HasAcquiredSnapshotKey());
+    Y_DEBUG_ABORT_UNLESS(!op->HasAcquiredSnapshotKey());
 
     return EExecutionStatus::DelayComplete;
 }

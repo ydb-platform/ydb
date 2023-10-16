@@ -68,17 +68,17 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(Ptr && Ptr < End() && Ptr >= Begin());
+            Y_DEBUG_ABORT_UNLESS(Ptr && Ptr < End() && Ptr >= Begin());
             ++Ptr;
         }
 
         void Prev() {
-            Y_VERIFY_DEBUG(Ptr && Ptr <= End() && Ptr >= Begin());
+            Y_DEBUG_ABORT_UNLESS(Ptr && Ptr <= End() && Ptr >= Begin());
             --Ptr;
         }
 
         TKey GetCurKey() const {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             return Ptr->Key;
         }
 

@@ -176,15 +176,15 @@ public:
             : Object(object) {
         }
         const TColumnTableInfo* operator->() const {
-            Y_VERIFY_DEBUG(Object);
+            Y_DEBUG_ABORT_UNLESS(Object);
             return Object.Get();
         }
         const TColumnTableInfo& operator*() const {
-            Y_VERIFY_DEBUG(Object);
+            Y_DEBUG_ABORT_UNLESS(Object);
             return *Object;
         }
         const TColumnTableInfo* operator->() {
-            Y_VERIFY_DEBUG(Object);
+            Y_DEBUG_ABORT_UNLESS(Object);
             return Object.Get();
         }
     };

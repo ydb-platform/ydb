@@ -1916,7 +1916,7 @@ public:
                 }
 
                 if (status != NKikimrTxDataShard::TError::OK) {
-                    Y_VERIFY_DEBUG(!Op);
+                    Y_DEBUG_ABORT_UNLESS(!Op);
                     if (Y_UNLIKELY(readIt == Self->ReadIterators.end())) {
                         // iterator already aborted
                         return true;
@@ -2621,7 +2621,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
 
     TActorId sessionId;
     if (readId.Sender.NodeId() != SelfId().NodeId()) {
-        Y_VERIFY_DEBUG(ev->InterconnectSession);
+        Y_DEBUG_ABORT_UNLESS(ev->InterconnectSession);
         THashMap<TActorId, TReadIteratorSession>::insert_ctx sessionsInsertCtx;
         auto itSession = ReadIteratorSessions.find(ev->InterconnectSession, sessionsInsertCtx);
         if (itSession == ReadIteratorSessions.end()) {

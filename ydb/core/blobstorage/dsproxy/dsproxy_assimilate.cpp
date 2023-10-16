@@ -11,7 +11,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
         TBlock(const TBlock&) = default;
 
         TBlock(ui64 key, const NKikimrBlobStorage::TEvVAssimilateResult::TBlock& msg, TBlobStorageGroupType /*gtype*/) {
-            Y_VERIFY_DEBUG(msg.HasBlockedGeneration());
+            Y_DEBUG_ABORT_UNLESS(msg.HasBlockedGeneration());
             TabletId = key;
             BlockedGeneration = msg.GetBlockedGeneration();
         }
@@ -37,7 +37,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
             std::tie(TabletId, Channel) = key;
 
             auto parseValue = [](auto& value, const auto& pb) {
-                Y_VERIFY_DEBUG(pb.HasRecordGeneration() && pb.HasPerGenerationCounter() && pb.HasCollectGeneration() &&
+                Y_DEBUG_ABORT_UNLESS(pb.HasRecordGeneration() && pb.HasPerGenerationCounter() && pb.HasCollectGeneration() &&
                     pb.HasCollectStep());
                 value = {
                     .RecordGeneration = pb.GetRecordGeneration(),
@@ -79,7 +79,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
         TBlob(const TBlob&) = default;
 
         TBlob(TLogoBlobID key, const NKikimrBlobStorage::TEvVAssimilateResult::TBlob& msg, TBlobStorageGroupType gtype) {
-            Y_VERIFY_DEBUG(msg.HasIngress());
+            Y_DEBUG_ABORT_UNLESS(msg.HasIngress());
             Id = key;
             const int collectMode = TIngress(msg.GetIngress()).GetCollectMode(TIngress::IngressMode(gtype));
             Keep = collectMode & CollectModeKeep;
@@ -129,10 +129,10 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
             auto getKey = [&](const auto& item) {
                 using T = std::decay_t<decltype(item)>;
                 if constexpr (std::is_same_v<T, NKikimrBlobStorage::TEvVAssimilateResult::TBlock>) {
-                    Y_VERIFY_DEBUG(item.HasTabletId());
+                    Y_DEBUG_ABORT_UNLESS(item.HasTabletId());
                     return ui64(item.GetTabletId());
                 } else if constexpr (std::is_same_v<T, NKikimrBlobStorage::TEvVAssimilateResult::TBarrier>) {
-                    Y_VERIFY_DEBUG(item.HasTabletId() && item.HasChannel());
+                    Y_DEBUG_ABORT_UNLESS(item.HasTabletId() && item.HasChannel());
                     return std::tuple<ui64, ui8>(item.GetTabletId(), item.GetChannel());
                 } else if constexpr (std::is_same_v<T, NKikimrBlobStorage::TEvVAssimilateResult::TBlob>) {
                     if (item.HasRawX1()) {
@@ -305,7 +305,7 @@ public:
             hFunc(TEvBlobStorage::TEvVAssimilateResult, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                Y_VERIFY_DEBUG(false);
+                Y_DEBUG_ABORT_UNLESS(false);
         }
     }
 

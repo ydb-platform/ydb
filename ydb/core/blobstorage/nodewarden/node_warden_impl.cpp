@@ -289,7 +289,7 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
     const NPDisk::TEvSlayResult &msg = *ev->Get();
     const TVSlotId vslotId(LocalNodeId, msg.PDiskId, msg.VSlotId);
     const auto it = SlayInFlight.find(vslotId);
-    Y_VERIFY_DEBUG(it != SlayInFlight.end());
+    Y_DEBUG_ABORT_UNLESS(it != SlayInFlight.end());
     STLOG(PRI_INFO, BS_NODE, NW28, "Handle(NPDisk::TEvSlayResult)", (Msg, msg.ToString()),
         (ExpectedRound, it != SlayInFlight.end() ? std::make_optional(it->second) : std::nullopt));
     if (it == SlayInFlight.end() || it->second != msg.SlayOwnerRound) {

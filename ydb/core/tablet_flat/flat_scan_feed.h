@@ -22,7 +22,7 @@ namespace NTable {
 
         void Resume(EScan op) noexcept
         {
-            Y_VERIFY_DEBUG(op == EScan::Feed || op == EScan::Reset);
+            Y_DEBUG_ABORT_UNLESS(op == EScan::Feed || op == EScan::Reset);
 
             OnPause = false;
 
@@ -80,7 +80,7 @@ namespace NTable {
                         break;
 
                     case EVersionState::SkipUncommitted:
-                        Y_VERIFY_DEBUG(VersionScan);
+                        Y_DEBUG_ABORT_UNLESS(VersionScan);
                         ready = Iter->SkipUncommitted();
                         switch (ready) {
                             case EReady::Page:
@@ -100,7 +100,7 @@ namespace NTable {
                         break;
 
                     case EVersionState::SkipVersion:
-                        Y_VERIFY_DEBUG(VersionScan);
+                        Y_DEBUG_ABORT_UNLESS(VersionScan);
                         ready = Iter->SkipToRowVersion(NextRowVersion);
                         switch (ready) {
                             case EReady::Page:
@@ -122,7 +122,7 @@ namespace NTable {
                     case EVersionState::EndDeltasAndKey:
                     case EVersionState::Feed:
                     case EVersionState::EndKey:
-                        Y_VERIFY_DEBUG(VersionScan);
+                        Y_DEBUG_ABORT_UNLESS(VersionScan);
                         ready = EReady::Data;
                         break;
                 }
@@ -139,7 +139,7 @@ namespace NTable {
                                 Seen++;
                                 op = Scan->Feed(Iter->GetKey().Cells(), Iter->Row());
                             } else {
-                                Y_VERIFY_DEBUG(!Conf.NoErased, "VersionScan with Conf.NoErased == true is unexpected");
+                                Y_DEBUG_ABORT_UNLESS(!Conf.NoErased, "VersionScan with Conf.NoErased == true is unexpected");
                                 op = VersionScan->BeginKey(Iter->GetKey().Cells());
                                 if (Iter->IsUncommitted()) {
                                     VersionState = EVersionState::BeginDeltas;
@@ -150,14 +150,14 @@ namespace NTable {
                             break;
 
                         case EVersionState::BeginDeltas:
-                            Y_VERIFY_DEBUG(Iter->IsUncommitted());
+                            Y_DEBUG_ABORT_UNLESS(Iter->IsUncommitted());
                             op = VersionScan->BeginDeltas();
                             VersionState = EVersionState::FeedDelta;
                             break;
 
                         case EVersionState::FeedDelta: {
                             Seen++;
-                            Y_VERIFY_DEBUG(Iter->IsUncommitted());
+                            Y_DEBUG_ABORT_UNLESS(Iter->IsUncommitted());
                             ui64 txId = Iter->GetUncommittedTxId();
                             if (!Subset.RemovedTransactions.Contains(txId)) {
                                 op = VersionScan->Feed(Iter->Row(), txId);
@@ -479,8 +479,8 @@ namespace NTable {
                     break;
             }
 
-            Y_VERIFY_DEBUG(LoadingParts == 0);
-            Y_VERIFY_DEBUG(Boots.empty());
+            Y_DEBUG_ABORT_UNLESS(LoadingParts == 0);
+            Y_DEBUG_ABORT_UNLESS(Boots.empty());
             return false;
         }
 

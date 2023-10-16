@@ -874,7 +874,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Unexpected response from scheme cache"
             << ": " << navigate->ToString(*AppData()->TypeRegistry));
-        Y_VERIFY_DEBUG(false, "Unreachable");
+        Y_DEBUG_ABORT_UNLESS(false, "Unreachable");
 
         TxProxyMon->ResolveKeySetFail->Inc();
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);

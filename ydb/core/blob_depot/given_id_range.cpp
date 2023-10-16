@@ -15,12 +15,12 @@ namespace NKikimr::NBlobDepot {
             const size_t count = Min(end - begin, BitsPerChunk - offset);
 
             if (it == Ranges.end() || it->first != key) {
-                Y_VERIFY_DEBUG(it == Ranges.end() || key < it->first);
+                Y_DEBUG_ABORT_UNLESS(it == Ranges.end() || key < it->first);
                 it = Ranges.emplace_hint(it, key, TChunk());
             }
 
             TChunk& chunk = it->second;
-            Y_VERIFY_DEBUG((chunk >> offset).FirstNonZeroBit() >= count);
+            Y_DEBUG_ABORT_UNLESS((chunk >> offset).FirstNonZeroBit() >= count);
             chunk.Set(offset, offset + count);
 
             ++it;
@@ -32,7 +32,7 @@ namespace NKikimr::NBlobDepot {
         const ui64 key = value / BitsPerChunk;
         TChunk& chunk = Ranges[key];
         const size_t offset = value % BitsPerChunk;
-        Y_VERIFY_DEBUG(!chunk[offset]);
+        Y_DEBUG_ABORT_UNLESS(!chunk[offset]);
         chunk.Set(offset);
         ++NumAvailableItems;
     }
@@ -96,7 +96,7 @@ namespace NKikimr::NBlobDepot {
                 break;
             } else if (validSince < (it->first + 1) * BitsPerChunk) {
                 const size_t numBits = validSince - it->first * BitsPerChunk;
-                Y_VERIFY_DEBUG(0 < numBits && numBits < BitsPerChunk);
+                Y_DEBUG_ABORT_UNLESS(0 < numBits && numBits < BitsPerChunk);
 
                 TChunk mask;
                 mask.Set(0, numBits);
@@ -138,7 +138,7 @@ namespace NKikimr::NBlobDepot {
             } else {
                 TChunk& myChunk = myIt->second;
                 const TChunk& otherChunk = otherIt->second;
-                Y_VERIFY_DEBUG((myChunk & otherChunk) == otherChunk);
+                Y_DEBUG_ABORT_UNLESS((myChunk & otherChunk) == otherChunk);
                 myChunk -= otherChunk;
                 NumAvailableItems -= otherChunk.Count();
 

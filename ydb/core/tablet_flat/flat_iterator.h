@@ -72,8 +72,8 @@ class TTableItBase : TNonCopyable {
                 FreeKey(&LastErased);
                 if (PrevEntryValid) {
                     // Merge the two adjacent entries that we have
-                    Y_VERIFY_DEBUG(!FirstErased);
-                    Y_VERIFY_DEBUG(MaxVersion >= PrevEntry->MaxVersion);
+                    Y_DEBUG_ABORT_UNLESS(!FirstErased);
+                    Y_DEBUG_ABORT_UNLESS(MaxVersion >= PrevEntry->MaxVersion);
                     NextEntry = Cache.MergeAdjacent(PrevEntry, NextEntry, ::Max(MaxVersion, version));
                 } else if (FirstErased) {
                     // Extend the next entry with an earlier key
@@ -87,8 +87,8 @@ class TTableItBase : TNonCopyable {
                 ErasedCount = 0;
                 MaxVersion = TRowVersion::Min();
 
-                Y_VERIFY_DEBUG(!FirstErased);
-                Y_VERIFY_DEBUG(!LastErased);
+                Y_DEBUG_ABORT_UNLESS(!FirstErased);
+                Y_DEBUG_ABORT_UNLESS(!LastErased);
 
                 if (NextEntry->MaxVersion > It->SnapshotVersion) {
                     // The range is in future, the iterator cannot use it
@@ -126,7 +126,7 @@ class TTableItBase : TNonCopyable {
                 return;
             }
 
-            Y_VERIFY_DEBUG(ErasedCount == 0);
+            Y_DEBUG_ABORT_UNLESS(ErasedCount == 0);
 
             if (NextEntryValid) {
                 // We already know the next erased key, but we don't know
@@ -134,8 +134,8 @@ class TTableItBase : TNonCopyable {
                 return;
             }
 
-            Y_VERIFY_DEBUG(!PrevEntryValid);
-            Y_VERIFY_DEBUG(!NextEntryValid);
+            Y_DEBUG_ABORT_UNLESS(!PrevEntryValid);
+            Y_DEBUG_ABORT_UNLESS(!NextEntryValid);
 
             // Check if this key is an already known erase key
             auto res = Cache.FindKey(key);
@@ -179,12 +179,12 @@ class TTableItBase : TNonCopyable {
 
             if (ErasedCount > 0 && LastErased) {
                 if (PrevEntryValid) {
-                    Y_VERIFY_DEBUG(!FirstErased);
+                    Y_DEBUG_ABORT_UNLESS(!FirstErased);
                     Cache.ExtendForward(PrevEntry, TakeKey(&LastErased), true, MaxVersion);
                     Cache.EvictOld();
                 } else if (ErasedCount >= Cache.MinRows()) {
                     // We have enough erased rows to make a new cache entry
-                    Y_VERIFY_DEBUG(FirstErased);
+                    Y_DEBUG_ABORT_UNLESS(FirstErased);
                     Cache.AddRange(TakeKey(&FirstErased), TakeKey(&LastErased), MaxVersion);
                     Cache.EvictOld();
                 }
@@ -290,7 +290,7 @@ public:
                         eraseCache.Flush();
                     }
                 } else {
-                    Y_VERIFY_DEBUG(Active != Inactive);
+                    Y_DEBUG_ABORT_UNLESS(Active != Inactive);
                     Stage = EStage::Fill;
                 }
             } else if ((Ready = Apply()) != EReady::Data) {
@@ -397,7 +397,7 @@ private:
             if (int cmp = CompareKeys(a.Key, b.Key))
                 return cmp > 0;
 
-            Y_VERIFY_DEBUG(a.IteratorId.Epoch != b.IteratorId.Epoch,
+            Y_DEBUG_ABORT_UNLESS(a.IteratorId.Epoch != b.IteratorId.Epoch,
                 "Found equal key iterators with the same epoch");
             return a.IteratorId.Epoch < b.IteratorId.Epoch;
         }
@@ -635,7 +635,7 @@ inline EReady TTableItBase<TIteratorOps>::Turn() noexcept
                 TIteratorOps::MoveNext(mi);
                 if (mi.IsValid()) {
                     Active->Key = mi.GetKey().Cells();
-                    Y_VERIFY_DEBUG(Active->Key.size() == Scheme->Keys->Types.size());
+                    Y_DEBUG_ABORT_UNLESS(Active->Key.size() == Scheme->Keys->Types.size());
                     std::push_heap(Iterators.begin(), ++Active, Comparator);
                 } else {
                     Active = Iterators.erase(Active);
@@ -655,7 +655,7 @@ inline EReady TTableItBase<TIteratorOps>::Turn() noexcept
 
                     case EReady::Data:
                         Active->Key = it.GetKey().Cells();
-                        Y_VERIFY_DEBUG(Active->Key.size() == Scheme->Keys->Types.size());
+                        Y_DEBUG_ABORT_UNLESS(Active->Key.size() == Scheme->Keys->Types.size());
                         Active->IteratorId.Epoch = it.Epoch();
                         std::push_heap(Iterators.begin(), ++Active, Comparator);
                         break;
@@ -687,10 +687,10 @@ template<class TIteratorOps>
 inline bool TTableItBase<TIteratorOps>::IsUncommitted() const noexcept
 {
     // Must only be called after a fully successful Apply()
-    Y_VERIFY_DEBUG(Stage == EStage::Done && Ready == EReady::Data);
+    Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready == EReady::Data);
 
     // There must be at least one active iterator
-    Y_VERIFY_DEBUG(Active != Inactive);
+    Y_DEBUG_ABORT_UNLESS(Active != Inactive);
 
     return Delta && Uncommitted;
 }
@@ -699,13 +699,13 @@ template<class TIteratorOps>
 inline ui64 TTableItBase<TIteratorOps>::GetUncommittedTxId() const noexcept
 {
     // Must only be called after a fully successful Apply()
-    Y_VERIFY_DEBUG(Stage == EStage::Done && Ready == EReady::Data);
+    Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready == EReady::Data);
 
     // There must be at least one active iterator
-    Y_VERIFY_DEBUG(Active != Inactive);
+    Y_DEBUG_ABORT_UNLESS(Active != Inactive);
 
     // Must only be called for uncommitted positions
-    Y_VERIFY_DEBUG(Delta && Uncommitted);
+    Y_DEBUG_ABORT_UNLESS(Delta && Uncommitted);
 
     return DeltaTxId;
 }
@@ -714,7 +714,7 @@ template<class TIteratorOps>
 inline EReady TTableItBase<TIteratorOps>::SkipUncommitted() noexcept
 {
     // Must only be called after successful Apply() or page fault in SkipUncommitted()
-    Y_VERIFY_DEBUG(Stage == EStage::Done && Ready != EReady::Gone);
+    Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready != EReady::Gone);
 
     if (Ready == EReady::Page) {
         // Previous SkipUncommitted() failed with a page fault, we must not skip again
@@ -739,13 +739,13 @@ template<class TIteratorOps>
 inline TRowVersion TTableItBase<TIteratorOps>::GetRowVersion() const noexcept
 {
     // Must only be called after a fully successful Apply()
-    Y_VERIFY_DEBUG(Stage == EStage::Done && Ready == EReady::Data);
+    Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready == EReady::Data);
 
     // There must be at least one active iterator
-    Y_VERIFY_DEBUG(Active != Inactive);
+    Y_DEBUG_ABORT_UNLESS(Active != Inactive);
 
     if (Delta) {
-        Y_VERIFY_DEBUG(!Uncommitted, "Cannot get version for uncommitted deltas");
+        Y_DEBUG_ABORT_UNLESS(!Uncommitted, "Cannot get version for uncommitted deltas");
         return DeltaVersion;
     }
 
@@ -766,7 +766,7 @@ template<class TIteratorOps>
 inline EReady TTableItBase<TIteratorOps>::SkipToRowVersion(TRowVersion rowVersion) noexcept
 {
     // Must only be called after successful Apply()
-    Y_VERIFY_DEBUG(Stage == EStage::Done && Ready != EReady::Gone);
+    Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready != EReady::Gone);
 
     switch (Snap(rowVersion)) {
         case EReady::Data:
@@ -785,7 +785,7 @@ inline EReady TTableItBase<TIteratorOps>::SkipToRowVersion(TRowVersion rowVersio
 template<class TIteratorOps>
 inline EReady TTableItBase<TIteratorOps>::Snap() noexcept
 {
-    Y_VERIFY_DEBUG(Active != Inactive);
+    Y_DEBUG_ABORT_UNLESS(Active != Inactive);
 
     switch (Snap(SnapshotVersion)) {
         case EReady::Data:
@@ -823,7 +823,7 @@ inline EReady TTableItBase<TIteratorOps>::Snap(TRowVersion rowVersion) noexcept
                 if (ready == EReady::Data) {
                     return EReady::Data;
                 } else if (ready != EReady::Gone) {
-                    Y_VERIFY_DEBUG(ready == EReady::Page);
+                    Y_DEBUG_ABORT_UNLESS(ready == EReady::Page);
                     return ready;
                 }
                 break;
@@ -837,21 +837,21 @@ inline EReady TTableItBase<TIteratorOps>::Snap(TRowVersion rowVersion) noexcept
     }
 
     // We ran out of versions, move to the next key
-    Y_VERIFY_DEBUG(Active == Inactive);
+    Y_DEBUG_ABORT_UNLESS(Active == Inactive);
     return EReady::Gone;
 }
 
 template<class TIteratorOps>
 inline EReady TTableItBase<TIteratorOps>::DoSkipUncommitted() noexcept
 {
-    Y_VERIFY_DEBUG(Delta && Uncommitted);
+    Y_DEBUG_ABORT_UNLESS(Delta && Uncommitted);
 
     for (auto i = TReverseIter(Inactive), e = TReverseIter(Active); i != e; ++i) {
         TIteratorId ai = i->IteratorId;
         switch (ai.Type) {
             case EType::Mem: {
                 auto& it = *MemIters[ai.Index];
-                Y_VERIFY_DEBUG(it.IsDelta() && !CommittedTransactions.Find(it.GetDeltaTxId()));
+                Y_DEBUG_ABORT_UNLESS(it.IsDelta() && !CommittedTransactions.Find(it.GetDeltaTxId()));
                 TransactionObserver.OnSkipUncommitted(it.GetDeltaTxId());
                 if (it.SkipDelta()) {
                     return EReady::Data;
@@ -860,7 +860,7 @@ inline EReady TTableItBase<TIteratorOps>::DoSkipUncommitted() noexcept
             }
             case EType::Run: {
                 auto& it = *RunIters[ai.Index];
-                Y_VERIFY_DEBUG(it.IsDelta() && !CommittedTransactions.Find(it.GetDeltaTxId()));
+                Y_DEBUG_ABORT_UNLESS(it.IsDelta() && !CommittedTransactions.Find(it.GetDeltaTxId()));
                 TransactionObserver.OnSkipUncommitted(it.GetDeltaTxId());
                 auto ready = it.SkipDelta();
                 if (ready != EReady::Gone) {
@@ -895,7 +895,7 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
         State.Set(pin.Pos, { ECellOp::Set, ELargeObj::Inline }, key[pin.Key]);
 
     // We must have at least one active iterator
-    Y_VERIFY_DEBUG(Active != Inactive);
+    Y_DEBUG_ABORT_UNLESS(Active != Inactive);
 
     bool committed = false;
     for (auto i = TReverseIter(Inactive), e = TReverseIter(Active); i != e; ++i) {
@@ -1044,7 +1044,7 @@ inline bool TTableItBase<TIteratorOps>::SeekInternal(TArrayRef<const TCell> key,
                 TIteratorOps::Seek(mi, key, seek);
                 if (mi.IsValid()) {
                     Active->Key = mi.GetKey().Cells();
-                    Y_VERIFY_DEBUG(Active->Key.size() == Scheme->Keys->Types.size());
+                    Y_DEBUG_ABORT_UNLESS(Active->Key.size() == Scheme->Keys->Types.size());
                     std::push_heap(Iterators.begin(), ++Active, Comparator);
                 } else {
                     Active = Iterators.erase(Active);
@@ -1063,7 +1063,7 @@ inline bool TTableItBase<TIteratorOps>::SeekInternal(TArrayRef<const TCell> key,
 
                     case EReady::Data:
                         Active->Key = it.GetKey().Cells();
-                        Y_VERIFY_DEBUG(Active->Key.size() == Scheme->Keys->Types.size());
+                        Y_DEBUG_ABORT_UNLESS(Active->Key.size() == Scheme->Keys->Types.size());
                         Active->IteratorId.Epoch = it.Epoch();
                         std::push_heap(Iterators.begin(), ++Active, Comparator);
                         break;

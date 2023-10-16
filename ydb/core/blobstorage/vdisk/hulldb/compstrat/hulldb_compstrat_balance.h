@@ -140,7 +140,7 @@ namespace NKikimr {
                 ui32 added = 0;
                 auto it = SliceSnap.GetLevel0SstIterator();
                 it.SeekToFirst();
-                Y_VERIFY_DEBUG(it.Valid());
+                Y_DEBUG_ABORT_UNLESS(it.Valid());
                 while (it.Valid() && added < Boundaries->Level0MaxSstsAtOnce) {
                     // push to the task
                     TLevelSegmentPtr sst(it.Get());
@@ -380,7 +380,7 @@ namespace NKikimr {
             {}
 
             void CalculateRanks(std::vector<double> &ranks) {
-                Y_VERIFY_DEBUG(ranks.size() == 2);
+                Y_DEBUG_ABORT_UNLESS(ranks.size() == 2);
                 ui32 otherLevelsNum = SliceSnap.GetLevelXNumber();
                 for (ui32 i = Boundaries->SortedParts * 2; i < otherLevelsNum; i++) {
                     ui32 virtualLevel = i - Boundaries->SortedParts * 2 + 2;
@@ -392,14 +392,14 @@ namespace NKikimr {
             void Compact(const ui32 virtualLevelToCompact) {
                 const ui32 srcLevel = virtualLevelToCompact - 2 + Boundaries->SortedParts * 2 + 1;
 
-                Y_VERIFY_DEBUG(srcLevel > 0);
+                Y_DEBUG_ABORT_UNLESS(srcLevel > 0);
                 const ui32 srcLevelArrIdx = srcLevel - 1; // srcLevel=1 has index 0
 
                 // find sst to compact
                 const TSortedLevel &srcLevelData = SliceSnap.GetLevelXRef(srcLevelArrIdx);
                 const TKey &lastCompactedKey = srcLevelData.LastCompactedKey;
                 const TSegments &srcSegs = srcLevelData.Segs->Segments;
-                Y_VERIFY_DEBUG(!srcSegs.empty());
+                Y_DEBUG_ABORT_UNLESS(!srcSegs.empty());
                 typename TSegments::const_iterator srcIt = ::LowerBound(srcSegs.begin(),
                                                                         srcSegs.end(),
                                                                         lastCompactedKey,
@@ -601,7 +601,7 @@ namespace NKikimr {
                 BalanceLevelX.CalculateRanks(ranks);
 
                 // find level to compact
-                Y_VERIFY_DEBUG(!ranks.empty());
+                Y_DEBUG_ABORT_UNLESS(!ranks.empty());
                 ranks.VirtualLevelToCompact = 0;
                 double minRank = ranks[0];
                 for (ui32 i = 1; i < ranks.size(); i++) {

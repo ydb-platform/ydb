@@ -314,7 +314,7 @@ private:
                 GRpcResponsesSize_ -= GRpcResponsesSizeQueue_.front();
                 GRpcResponsesSizeQueue_.pop();
             }
-            Y_VERIFY_DEBUG(GRpcResponsesSizeQueue_.empty() == (GRpcResponsesSize_ == 0));
+            Y_DEBUG_ABORT_UNLESS(GRpcResponsesSizeQueue_.empty() == (GRpcResponsesSize_ == 0));
 
             if (WaitOnSeqNo_ && RpcBufferSize_ > GRpcResponsesSize_) {
                 ui64 freeSpace = RpcBufferSize_ - GRpcResponsesSize_;

@@ -62,7 +62,7 @@ public:
      */
     bool Use() noexcept {
         ui64 flags = Flags.fetch_add(UseCountInc, std::memory_order_acquire);
-        Y_VERIFY_DEBUG((flags & UseCountMask) != UseCountMask,
+        Y_DEBUG_ABORT_UNLESS((flags & UseCountMask) != UseCountMask,
             "Use count overflow, too many actors are using the same page");
 
         if (flags & FlagDropped) {
@@ -83,7 +83,7 @@ public:
      */
     bool UnUse() noexcept {
         ui64 flags = Flags.fetch_sub(UseCountInc, std::memory_order_release);
-        Y_VERIFY_DEBUG((flags & UseCountMask) != 0,
+        Y_DEBUG_ABORT_UNLESS((flags & UseCountMask) != 0,
             "Use count underflow, possible Use/UnUse mismatch");
 
         flags -= UseCountInc;
@@ -111,14 +111,14 @@ public:
     TSharedData Pin() noexcept {
         // Pin needs to be fast, so we increment first and verify later
         ui64 flags = Flags.fetch_add(PinCountInc, std::memory_order_acquire);
-        Y_VERIFY_DEBUG((flags & PinCountMask) != PinCountMask,
+        Y_DEBUG_ABORT_UNLESS((flags & PinCountMask) != PinCountMask,
             "Pin count overflow, too many actors are pinning the same page");
 
-        Y_VERIFY_DEBUG(!(flags & FlagDropped) || (flags & PinCountMask) > 0,
+        Y_DEBUG_ABORT_UNLESS(!(flags & FlagDropped) || (flags & PinCountMask) > 0,
             "Pin on a dropped handle, only live pages may be pinned");
 
         TSharedData ref = Data[flags & DataIndexMask];
-        Y_VERIFY_DEBUG(ref, "Pinned page has an unexpected empty shared data");
+        Y_DEBUG_ABORT_UNLESS(ref, "Pinned page has an unexpected empty shared data");
         return ref;
     }
 
@@ -130,7 +130,7 @@ public:
     void UnPin() noexcept {
         // UnPin needs to be fast, so we decrement first and verify later
         ui64 flags = Flags.fetch_sub(PinCountInc, std::memory_order_release);
-        Y_VERIFY_DEBUG((flags & PinCountMask) != 0,
+        Y_DEBUG_ABORT_UNLESS((flags & PinCountMask) != 0,
             "Pin count underflow, possible Pin/UnPin mismatch");
 
         if ((flags & FlagDropped) && (flags & PinCountMask) == PinCountInc) {
@@ -145,7 +145,7 @@ public:
      * This operation may fail if old data is currently pinned in memory
      */
     bool TryMove(const TSharedData& to) noexcept {
-        Y_VERIFY_DEBUG(to, "Cannot move to empty data");
+        Y_DEBUG_ABORT_UNLESS(to, "Cannot move to empty data");
 
         ui64 flags = Flags.load(std::memory_order_relaxed);
         size_t oldIndex = flags & DataIndexMask;
@@ -153,8 +153,8 @@ public:
         Data[newIndex] = to;
 
         do {
-            Y_VERIFY_DEBUG(!(flags & FlagDropped), "Trying to move a dropped page");
-            Y_VERIFY_DEBUG((flags & DataIndexMask) == oldIndex, "Page data index must not change during move");
+            Y_DEBUG_ABORT_UNLESS(!(flags & FlagDropped), "Trying to move a dropped page");
+            Y_DEBUG_ABORT_UNLESS((flags & DataIndexMask) == oldIndex, "Page data index must not change during move");
 
             if ((flags & PinCountMask) != 0) {
                 // Data is currently pinned and cannot be moved
@@ -179,9 +179,9 @@ public:
         size_t index = flags & DataIndexMask;
 
         for (;;) {
-            Y_VERIFY_DEBUG((flags & FlagGarbage), "Trying to drop a handle not marked as garbage");
-            Y_VERIFY_DEBUG(!(flags & FlagDropped), "Trying to drop a handle that is already dropped");
-            Y_VERIFY_DEBUG((flags & DataIndexMask) == index, "Page data index must not change during drop");
+            Y_DEBUG_ABORT_UNLESS((flags & FlagGarbage), "Trying to drop a handle not marked as garbage");
+            Y_DEBUG_ABORT_UNLESS(!(flags & FlagDropped), "Trying to drop a handle that is already dropped");
+            Y_DEBUG_ABORT_UNLESS((flags & DataIndexMask) == index, "Page data index must not change during drop");
 
             if ((flags & UseCountMask) != 0) {
                 // Data is currently used and cannot be dropped, drop the garbage flag
@@ -189,7 +189,7 @@ public:
                     return { };
                 }
             } else {
-                Y_VERIFY_DEBUG((flags & PinCountMask) != PinCountMask, "Pin count overflow");
+                Y_DEBUG_ABORT_UNLESS((flags & PinCountMask) != PinCountMask, "Pin count overflow");
                 if (Flags.compare_exchange_weak(flags, (flags + PinCountInc) | FlagDropped, std::memory_order_acquire, std::memory_order_relaxed)) {
                     break;
                 }
@@ -209,8 +209,8 @@ protected:
      * Initializes handle with the specified data and a use count of 1
      */
     void Initialize(TSharedData data) {
-        Y_VERIFY_DEBUG(data);
-        Y_VERIFY_DEBUG(!IsInitialized());
+        Y_DEBUG_ABORT_UNLESS(data);
+        Y_DEBUG_ABORT_UNLESS(!IsInitialized());
         Data[0] = std::move(data);
         Flags.store(UseCountInc, std::memory_order_release);
     }
@@ -396,7 +396,7 @@ public:
 
     bool UnUse() noexcept {
         if (std::exchange(Used, false)) {
-            Y_VERIFY_DEBUG(Handle);
+            Y_DEBUG_ABORT_UNLESS(Handle);
 
             if (Handle->UnUse()) {
                 if (GCList) {
@@ -469,7 +469,7 @@ public:
         : Data_(std::move(ref.Data_))
         , Handle_(std::move(ref.Handle_))
     {
-        Y_VERIFY_DEBUG(!ref.Handle_);
+        Y_DEBUG_ABORT_UNLESS(!ref.Handle_);
     }
 
     TPinnedPageRef& operator=(const TPinnedPageRef& ref) noexcept {
@@ -491,7 +491,7 @@ public:
             Drop();
             Data_ = std::move(ref.Data_);
             Handle_ = std::move(ref.Handle_);
-            Y_VERIFY_DEBUG(!ref.Handle_);
+            Y_DEBUG_ABORT_UNLESS(!ref.Handle_);
         }
 
         return *this;

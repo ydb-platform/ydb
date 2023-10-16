@@ -75,11 +75,11 @@ namespace NKikimr {
                 : GcMap(gcMap)
                 , Pos(0)
             {
-                Y_VERIFY_DEBUG(GcMap);
+                Y_DEBUG_ABORT_UNLESS(GcMap);
             }
 
             void Next() {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 Pos++;
             }
 
@@ -88,14 +88,14 @@ namespace NKikimr {
             }
 
             bool KeepItem() const {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 bool keepIndex = GcMap->IndexKeepMap.Get(Pos);
                 bool keepData = GcMap->DataKeepMap.Get(Pos);
                 return keepIndex || keepData;
             }
 
             bool KeepData() const {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 bool keepData = GcMap->DataKeepMap.Get(Pos);
                 return keepData;
             }

@@ -267,7 +267,7 @@ struct TUserTable : public TThrRefBase {
         {
             THashMap<TStringBuf, ui32> nameToId;
             for (const auto& [id, column] : columns) {
-                Y_VERIFY_DEBUG(!nameToId.contains(column.Name));
+                Y_DEBUG_ABORT_UNLESS(!nameToId.contains(column.Name));
                 nameToId.emplace(column.Name, id);
             }
 

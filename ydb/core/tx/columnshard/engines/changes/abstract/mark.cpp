@@ -61,9 +61,9 @@ NArrow::TReplaceKey TMark::MinBorder(const std::shared_ptr<arrow::Schema>& schem
         columns.reserve(schema->num_fields());
         for (const auto& field : schema->fields()) {
             auto scalar = MinScalar(field->type());
-            Y_VERIFY_DEBUG(scalar);
+            Y_DEBUG_ABORT_UNLESS(scalar);
             auto res = arrow::MakeArrayFromScalar(*scalar, 1);
-            Y_VERIFY_DEBUG(res.ok());
+            Y_DEBUG_ABORT_UNLESS(res.ok());
             columns.emplace_back(*res);
         }
         return NArrow::TReplaceKey::FromBatch(arrow::RecordBatch::Make(schema, 1, columns), 0);

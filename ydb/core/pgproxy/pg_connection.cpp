@@ -707,7 +707,7 @@ protected:
     }
 
     const TPGMessage* GetInputMessage() const {
-        Y_VERIFY_DEBUG(HasInputMessage());
+        Y_DEBUG_ABORT_UNLESS(HasInputMessage());
         return reinterpret_cast<const TPGMessage*>(BufferInput.data());
     }
 

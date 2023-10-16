@@ -199,7 +199,7 @@ namespace NDataShard {
                         return;
                     }
 
-                    Y_VERIFY_DEBUG(!tptr->Get());
+                    Y_DEBUG_ABORT_UNLESS(!tptr->Get());
                     break;
                 }
 
@@ -296,17 +296,17 @@ namespace NDataShard {
          * Removes node t from the tree
          */
         void DoRemove(TNode* t) noexcept {
-            Y_VERIFY_DEBUG(t, "Trying to remove a nullptr node");
+            Y_DEBUG_ABORT_UNLESS(t, "Trying to remove a nullptr node");
             TNode* p = t->Parent;
             if (p) {
                 if (p->Left == t) {
                     return DoRemove(&p->Left);
                 } else {
-                    Y_VERIFY_DEBUG(p->Right == t, "Node has corrupted parent link");
+                    Y_DEBUG_ABORT_UNLESS(p->Right == t, "Node has corrupted parent link");
                     return DoRemove(&p->Right);
                 }
             } else {
-                Y_VERIFY_DEBUG(Root.Get() == t, "Node has corrupted parent link");
+                Y_DEBUG_ABORT_UNLESS(Root.Get() == t, "Node has corrupted parent link");
                 return DoRemove(&Root);
             }
         }
@@ -316,7 +316,7 @@ namespace NDataShard {
          */
         void DoRemove(THolder<TNode>* tptr) noexcept {
             THolder<TNode> d = std::move(*tptr);
-            Y_VERIFY_DEBUG(d, "Cannot remove a null node");
+            Y_DEBUG_ABORT_UNLESS(d, "Cannot remove a null node");
             ++Stats_.Deletes;
             --Size_;
 
@@ -335,8 +335,8 @@ namespace NDataShard {
          * Merges two subtrees l and r (where l < r)
          */
         THolder<TNode> Merge(THolder<TNode> l, THolder<TNode> r) noexcept {
-            Y_VERIFY_DEBUG(!l || l->Parent == nullptr);
-            Y_VERIFY_DEBUG(!r || r->Parent == nullptr);
+            Y_DEBUG_ABORT_UNLESS(!l || l->Parent == nullptr);
+            Y_DEBUG_ABORT_UNLESS(!r || r->Parent == nullptr);
             if (!l || !r) {
                 return l ? std::move(l) : std::move(r);
             } else if (l->Prio <= r->Prio) {

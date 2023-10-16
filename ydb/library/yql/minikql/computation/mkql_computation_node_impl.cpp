@@ -146,7 +146,7 @@ TString TExternalComputationNode::DebugString() const {
 void TExternalComputationNode::RegisterDependencies() const {}
 
 void TExternalComputationNode::SetOwner(const IComputationNode* owner) {
-    Y_VERIFY_DEBUG(!Owner);
+    Y_DEBUG_ABORT_UNLESS(!Owner);
     Owner = owner;
 }
 
@@ -205,7 +205,7 @@ ui32 TWideFlowProxyComputationNode::GetDependencesCount() const {
 }
 
 IComputationNode* TWideFlowProxyComputationNode::AddDependence(const IComputationNode* node) {
-    Y_VERIFY_DEBUG(!Dependence);
+    Y_DEBUG_ABORT_UNLESS(!Dependence);
     Dependence = node;
     return this;
 }
@@ -227,7 +227,7 @@ void TWideFlowProxyComputationNode::PrepareStageTwo() {
 }
 
 void TWideFlowProxyComputationNode::SetOwner(const IComputationNode* owner) {
-    Y_VERIFY_DEBUG(!Owner);
+    Y_DEBUG_ABORT_UNLESS(!Owner);
     Owner = owner;
 }
 

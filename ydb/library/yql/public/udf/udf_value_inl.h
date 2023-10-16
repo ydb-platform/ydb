@@ -41,7 +41,7 @@ inline void IBoxedValue1::UnRef() noexcept
     if (Refs_ < 0)
         return;
 #endif
-    Y_VERIFY_DEBUG(Refs_ > 0);
+    Y_DEBUG_ABORT_UNLESS(Refs_ > 0);
     if (!--Refs_)
         delete this;
 }
@@ -52,7 +52,7 @@ inline void IBoxedValue1::ReleaseRef() noexcept
     if (Refs_ < 0)
         return;
 #endif
-    Y_VERIFY_DEBUG(Refs_ > 0);
+    Y_DEBUG_ABORT_UNLESS(Refs_ > 0);
     --Refs_;
 }
 
@@ -76,15 +76,15 @@ inline ui8 IBoxedValue1::UserMark() const noexcept {
 }
 
 inline i32 IBoxedValue1::LockRef() noexcept {
-   Y_VERIFY_DEBUG(Refs_ != -1);
+   Y_DEBUG_ABORT_UNLESS(Refs_ != -1);
    auto ret = Refs_;
    Refs_ = -1;
    return ret;
 }
 
 inline void IBoxedValue1::UnlockRef(i32 prev) noexcept {
-   Y_VERIFY_DEBUG(Refs_ == -1);
-   Y_VERIFY_DEBUG(prev != -1);
+   Y_DEBUG_ABORT_UNLESS(Refs_ == -1);
+   Y_DEBUG_ABORT_UNLESS(prev != -1);
    Refs_ = prev;
 }
 
@@ -93,175 +93,175 @@ inline void IBoxedValue1::UnlockRef(i32 prev) noexcept {
 //////////////////////////////////////////////////////////////////////////////
 
 inline bool TBoxedValueAccessor::HasFastListLength(const IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.HasFastListLength();
 }
 
 inline ui64 TBoxedValueAccessor::GetListLength(const IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.GetListLength();
 }
 
 inline ui64 TBoxedValueAccessor::GetEstimatedListLength(const IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.GetEstimatedListLength();
 }
 
 inline TUnboxedValue TBoxedValueAccessor::GetListIterator(const IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.GetListIterator();
 }
 
 inline const TOpaqueListRepresentation* TBoxedValueAccessor::GetListRepresentation(const IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.GetListRepresentation();
 }
 
 inline IBoxedValuePtr TBoxedValueAccessor::ReverseListImpl(const IBoxedValue& value, const IValueBuilder& builder) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.ReverseListImpl(builder);
 }
 
 inline IBoxedValuePtr TBoxedValueAccessor::SkipListImpl(const IBoxedValue& value, const IValueBuilder& builder, ui64 count) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.SkipListImpl(builder, count);
 }
 
 inline IBoxedValuePtr TBoxedValueAccessor::TakeListImpl(const IBoxedValue& value, const IValueBuilder& builder, ui64 count) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.TakeListImpl(builder, count);
 }
 
 inline IBoxedValuePtr TBoxedValueAccessor::ToIndexDictImpl(const IBoxedValue& value, const IValueBuilder& builder) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.ToIndexDictImpl(builder);
 }
 
 inline ui64 TBoxedValueAccessor::GetDictLength(const IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.GetDictLength();
 }
 
 inline TUnboxedValue TBoxedValueAccessor::GetDictIterator(const IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.GetDictIterator();
 }
 
 inline TUnboxedValue TBoxedValueAccessor::GetKeysIterator(const IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.GetKeysIterator();
 }
 
 inline TUnboxedValue TBoxedValueAccessor::GetPayloadsIterator(const IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.GetPayloadsIterator();
 }
 
 inline bool TBoxedValueAccessor::Contains(const IBoxedValue& value, const TUnboxedValuePod& key) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.Contains(key);
 }
 
 inline TUnboxedValue TBoxedValueAccessor::Lookup(const IBoxedValue& value, const TUnboxedValuePod& key) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.Lookup(key);
 }
 
 inline TUnboxedValue TBoxedValueAccessor::GetElement(const IBoxedValue& value, ui32 index) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.GetElement(index);
 }
 
 inline const TUnboxedValue* TBoxedValueAccessor::GetElements(const IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.GetElements();
 }
 
 inline TUnboxedValue TBoxedValueAccessor::Run(const IBoxedValue& value, const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.Run(valueBuilder, args);
 }
 
 inline TStringRef TBoxedValueAccessor::GetResourceTag(const IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.GetResourceTag();
 }
 
 inline void* TBoxedValueAccessor::GetResource(IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.GetResource();
 }
 
 inline bool TBoxedValueAccessor::HasListItems(const IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.HasListItems();
 }
 
 inline bool TBoxedValueAccessor::HasDictItems(const IBoxedValue& value) {
-   Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+   Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.HasDictItems();
 }
 
 inline ui32 TBoxedValueAccessor::GetVariantIndex(const IBoxedValue& value) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
     return value.GetVariantIndex();
 }
 
 inline TUnboxedValue TBoxedValueAccessor::GetVariantItem(const IBoxedValue& value) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
     return value.GetVariantItem();
 }
 
 inline EFetchStatus TBoxedValueAccessor::Fetch(IBoxedValue& value, TUnboxedValue& result) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
     return value.Fetch(result);
 }
 
 inline bool TBoxedValueAccessor::Skip(IBoxedValue& value) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
     return value.Skip();
 }
 
 inline bool TBoxedValueAccessor::Next(IBoxedValue& value, TUnboxedValue& result) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
     return value.Next(result);
 }
 
 inline bool TBoxedValueAccessor::NextPair(IBoxedValue& value, TUnboxedValue& key, TUnboxedValue& payload) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
     return value.NextPair(key, payload);
 }
 
 inline void TBoxedValueAccessor::Apply(IBoxedValue& value, IApplyContext& context) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
+    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
     return value.Apply(context);
 }
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
 inline ui32 TBoxedValueAccessor::GetTraverseCount(const IBoxedValue& value) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3)));
+    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3)));
     return value.GetTraverseCount();
 }
 
 inline TUnboxedValue TBoxedValueAccessor::GetTraverseItem(const IBoxedValue& value, ui32 index) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3)));
+    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3)));
     return value.GetTraverseItem(index);
 }
 
 inline TUnboxedValue TBoxedValueAccessor::Save(const IBoxedValue& value) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3)));
+    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3)));
     return value.Save();
 }
 
 inline void TBoxedValueAccessor::Load(IBoxedValue& value, const TStringRef& state) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3)));
+    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 3)));
     value.Load(state);
 }
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
 inline void TBoxedValueAccessor::Push(IBoxedValue& value, const TUnboxedValuePod& data) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 11)));
+    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 11)));
     return value.Push(data);
 }
 #endif
@@ -278,7 +278,7 @@ inline bool TBoxedValueAccessor::IsSortedDict(IBoxedValue& value) {
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
 inline EFetchStatus TBoxedValueAccessor::WideFetch(IBoxedValue& value, TUnboxedValue* result, ui32 width) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 30)));
+    Y_DEBUG_ABORT_UNLESS(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 30)));
     return value.WideFetch(result, width);
 }
 #endif
@@ -360,8 +360,8 @@ Y_FORCE_INLINE TUnboxedValuePod::TUnboxedValuePod(IBoxedValuePtr&& value)
 
 Y_FORCE_INLINE TUnboxedValuePod::TUnboxedValuePod(TStringValue&& value, ui32 size, ui32 offset)
 {
-    Y_VERIFY_DEBUG(size);
-    Y_VERIFY_DEBUG(offset < std::min(OffsetLimit, value.Size()));
+    Y_DEBUG_ABORT_UNLESS(size);
+    Y_DEBUG_ABORT_UNLESS(offset < std::min(OffsetLimit, value.Size()));
     Raw.String.Size = std::min(value.Size() - offset, size);
     Raw.String.Offset = offset;
     Raw.String.Value = value.ReleaseBuf();

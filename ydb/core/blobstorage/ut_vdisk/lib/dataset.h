@@ -97,12 +97,12 @@ protected:
         }
 
         virtual const TDataItem *Get() const override {
-            Y_VERIFY_DEBUG(IsValid());
+            Y_DEBUG_ABORT_UNLESS(IsValid());
             return &*Cur;
         }
 
         virtual void Next() override {
-            Y_VERIFY_DEBUG(IsValid());
+            Y_DEBUG_ABORT_UNLESS(IsValid());
             ++Cur;
         }
 
@@ -166,12 +166,12 @@ private:
             return !Eof;
         }
         virtual const TDataItem *Get() const override {
-            Y_VERIFY_DEBUG(IsValid());
+            Y_DEBUG_ABORT_UNLESS(IsValid());
             return &Cur;
         }
 
         virtual void Next() override {
-            Y_VERIFY_DEBUG(IsValid());
+            Y_DEBUG_ABORT_UNLESS(IsValid());
             Eof = !Generator->Next(Cur);
         }
 

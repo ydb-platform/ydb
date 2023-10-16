@@ -516,7 +516,7 @@ void TShardKeyRanges::AddPoint(TSerializedCellVec&& point) {
 }
 
 void TShardKeyRanges::AddRange(TSerializedTableRange&& range) {
-    Y_VERIFY_DEBUG(!range.Point);
+    Y_DEBUG_ABORT_UNLESS(!range.Point);
     if (!IsFullRange()) {
         Ranges.emplace_back(std::move(range));
     }
@@ -526,7 +526,7 @@ void TShardKeyRanges::Add(TSerializedPointOrRange&& pointOrRange) {
     if (!IsFullRange()) {
         Ranges.emplace_back(std::move(pointOrRange));
         if (std::holds_alternative<TSerializedTableRange>(Ranges.back())) {
-            Y_VERIFY_DEBUG(!std::get<TSerializedTableRange>(Ranges.back()).Point);
+            Y_DEBUG_ABORT_UNLESS(!std::get<TSerializedTableRange>(Ranges.back()).Point);
         }
     }
 }
@@ -536,7 +536,7 @@ void TShardKeyRanges::CopyFrom(const TVector<TSerializedPointOrRange>& ranges) {
         Ranges = ranges;
         for (auto& x : Ranges) {
             if (std::holds_alternative<TSerializedTableRange>(x)) {
-                Y_VERIFY_DEBUG(!std::get<TSerializedTableRange>(x).Point);
+                Y_DEBUG_ABORT_UNLESS(!std::get<TSerializedTableRange>(x).Point);
             }
         }
     }
@@ -657,7 +657,7 @@ void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpTransaction_TDataTaskM
                 protoRanges->AddKeyPoints(x.GetBuffer());
             } else {
                 auto& x = std::get<TSerializedTableRange>(range);
-                Y_VERIFY_DEBUG(!x.Point);
+                Y_DEBUG_ABORT_UNLESS(!x.Point);
                 auto& keyRange = *protoRanges->AddKeyRanges();
                 x.Serialize(keyRange);
             }
@@ -674,7 +674,7 @@ void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpTransaction_TScanTaskM
             auto& keyRange = *proto->AddKeyRanges();
             if (std::holds_alternative<TSerializedTableRange>(range)) {
                 auto& x = std::get<TSerializedTableRange>(range);
-                Y_VERIFY_DEBUG(!x.Point);
+                Y_DEBUG_ABORT_UNLESS(!x.Point);
                 x.Serialize(keyRange);
             } else {
                 const auto& x = std::get<TSerializedCellVec>(range);
@@ -714,7 +714,7 @@ void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettin
                 }
             } else {
                 auto& x = std::get<TSerializedTableRange>(range);
-                Y_VERIFY_DEBUG(!x.Point);
+                Y_DEBUG_ABORT_UNLESS(!x.Point);
                 auto& keyRange = *protoRanges->AddKeyRanges();
                 x.Serialize(keyRange);
             }

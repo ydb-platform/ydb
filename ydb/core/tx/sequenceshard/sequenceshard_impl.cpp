@@ -107,7 +107,7 @@ namespace NSequenceShard {
 
     void TSequenceShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
         auto* msg = ev->Get();
-        Y_VERIFY_DEBUG(!PipeInfos.contains(msg->ServerId), "Unexpected duplicate pipe server");
+        Y_DEBUG_ABORT_UNLESS(!PipeInfos.contains(msg->ServerId), "Unexpected duplicate pipe server");
         auto& info = PipeInfos[msg->ServerId];
         info.ServerId = msg->ServerId;
         info.ClientId = msg->ClientId;
@@ -115,7 +115,7 @@ namespace NSequenceShard {
 
     void TSequenceShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
         auto* msg = ev->Get();
-        Y_VERIFY_DEBUG(PipeInfos.contains(msg->ServerId), "Unexpected missing pipe server");
+        Y_DEBUG_ABORT_UNLESS(PipeInfos.contains(msg->ServerId), "Unexpected missing pipe server");
         PipeInfos.erase(msg->ServerId);
     }
 

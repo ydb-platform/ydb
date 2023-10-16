@@ -59,7 +59,7 @@ void TBlobState::MarkBlobReadyToPut(ui8 blobIdx) {
 bool TBlobState::Restore(const TBlobStorageGroupInfo &info) {
     const TIntervalVec<i32> fullBlobInterval(0, Id.BlobSize());
     const TIntervalSet<i32> here = Whole.Here();
-    Y_VERIFY_DEBUG((here - fullBlobInterval).IsEmpty()); // ensure no excessive data outsize blob's boundaries
+    Y_DEBUG_ABORT_UNLESS((here - fullBlobInterval).IsEmpty()); // ensure no excessive data outsize blob's boundaries
     if (fullBlobInterval.IsSubsetOf(here)) { // we already have 'whole' part, no need for restoration
         return true;
     }
@@ -70,7 +70,7 @@ bool TBlobState::Restore(const TBlobStorageGroupInfo &info) {
         if (const ui32 partSize = info.Type.PartSize(TLogoBlobID(Id, i + 1))) {
             const TIntervalVec<i32> fullPartInterval(0, partSize);
             const TIntervalSet<i32> partHere = Parts[i].Here();
-            Y_VERIFY_DEBUG((partHere - fullPartInterval).IsEmpty()); // ensure no excessive part data outside boundaries
+            Y_DEBUG_ABORT_UNLESS((partHere - fullPartInterval).IsEmpty()); // ensure no excessive part data outside boundaries
             if (fullPartInterval.IsSubsetOf(partHere)) {
                 parts[i] = Parts[i].Data.Read(0, partSize);
                 if (++partsPresent >= info.Type.MinimalRestorablePartCount()) {
@@ -78,7 +78,7 @@ bool TBlobState::Restore(const TBlobStorageGroupInfo &info) {
                     ErasureRestore((TErasureType::ECrcMode)Id.CrcMode(), info.Type, Id.BlobSize(), &whole, parts, 0, 0, false);
                     Y_ABORT_UNLESS(whole.size() == Id.BlobSize());
                     Whole.Data.SetMonolith(std::move(whole));
-                    Y_VERIFY_DEBUG(Whole.Here() == fullBlobInterval);
+                    Y_DEBUG_ABORT_UNLESS(Whole.Here() == fullBlobInterval);
                     return true;
                 }
             }

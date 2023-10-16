@@ -130,7 +130,7 @@ private:
         SetTo(rp);
     }
     void AdjustToBaseLine(const TTabletCumulativeCounter& baseLine) {
-        Y_VERIFY_DEBUG(Value >= baseLine.Value);
+        Y_DEBUG_ABORT_UNLESS(Value >= baseLine.Value);
         Value -= baseLine.Value;
     }
     void SetTo(const TTabletCumulativeCounter& rp) {
@@ -177,9 +177,9 @@ public:
     }
 
     void Initialize(ui32 rangeCount, const TRangeDef* ranges, bool integral) {
-        Y_VERIFY_DEBUG(Ranges.empty());
-        Y_VERIFY_DEBUG(Values.empty());
-        Y_VERIFY_DEBUG(rangeCount > 0);
+        Y_DEBUG_ABORT_UNLESS(Ranges.empty());
+        Y_DEBUG_ABORT_UNLESS(Values.empty());
+        Y_DEBUG_ABORT_UNLESS(rangeCount > 0);
 
         Ranges.resize(rangeCount + 1);
         for (auto i: xrange(rangeCount)) {
@@ -191,7 +191,7 @@ public:
 
         Integral = integral;
 
-        Y_VERIFY_DEBUG(IsSorted());
+        Y_DEBUG_ABORT_UNLESS(IsSorted());
 
         Values.resize(Ranges.size());
     }
@@ -217,7 +217,7 @@ public:
     TTabletPercentileCounter& DecrementFor(ui64 what) {
         Y_ABORT_UNLESS(Integral);
         ui32 index = FindSlot(what);
-        Y_VERIFY_DEBUG(Values[index] > 0);
+        Y_DEBUG_ABORT_UNLESS(Values[index] > 0);
         Values[index] -= 1;
         return *this;
     }
@@ -256,13 +256,13 @@ private:
     //
     void AdjustToBaseLine(const TTabletPercentileCounter& baseLine) {
         //
-        Y_VERIFY_DEBUG(Ranges.size() == baseLine.Ranges.size());
+        Y_DEBUG_ABORT_UNLESS(Ranges.size() == baseLine.Ranges.size());
         if (Integral) {
             return;
         }
 
         for (auto i: xrange(Ranges.size())) {
-            Y_VERIFY_DEBUG(Values[i] >= baseLine.Values[i]);
+            Y_DEBUG_ABORT_UNLESS(Values[i] >= baseLine.Values[i]);
             Values[i] -= baseLine.Values[i];
         }
     }
@@ -279,7 +279,7 @@ private:
     //
     void SetTo(const TTabletPercentileCounter& rp) {
         //
-        Y_VERIFY_DEBUG(Ranges.size() == rp.Ranges.size());
+        Y_DEBUG_ABORT_UNLESS(Ranges.size() == rp.Ranges.size());
         Values = rp.Values;
     }
 
@@ -306,7 +306,7 @@ private:
 
     void Populate(const TTabletPercentileCounter& rp) {
         if (IsInitialized()) {
-            Y_VERIFY_DEBUG(Ranges.size() == rp.Ranges.size());
+            Y_DEBUG_ABORT_UNLESS(Ranges.size() == rp.Ranges.size());
             for (auto i: xrange(Ranges.size())) {
                 Values[i] += rp.Values[i];
             }
@@ -395,14 +395,14 @@ private:
 
     //
     void AdjustToBaseLine(const TCountersArray<T>& baseLine) {
-        Y_VERIFY_DEBUG(baseLine.CountersQnt == CountersQnt);
+        Y_DEBUG_ABORT_UNLESS(baseLine.CountersQnt == CountersQnt);
         for (ui32 i = 0, e = CountersQnt; i < e; ++i) {
             Counters[i].AdjustToBaseLine(baseLine.Counters[i]);
         }
     }
 
     void SetTo(const TCountersArray<T>& rp) {
-        Y_VERIFY_DEBUG(rp.CountersQnt == CountersQnt);
+        Y_DEBUG_ABORT_UNLESS(rp.CountersQnt == CountersQnt);
         for (ui32 i = 0, e = CountersQnt; i < e; ++i) {
             Counters[i].SetTo(rp.Counters[i]);
         }
@@ -466,9 +466,9 @@ public:
         , PercentileCountersMetaInfo(counters->PercentileCountersMetaInfo + percentileOffset)
 
     {
-        Y_VERIFY_DEBUG(counters->Simple().Size() > simpleOffset);
-        Y_VERIFY_DEBUG(counters->Cumulative().Size() > cumulativeOffset);
-        Y_VERIFY_DEBUG(counters->Percentile().Size() > percentileOffset);
+        Y_DEBUG_ABORT_UNLESS(counters->Simple().Size() > simpleOffset);
+        Y_DEBUG_ABORT_UNLESS(counters->Cumulative().Size() > cumulativeOffset);
+        Y_DEBUG_ABORT_UNLESS(counters->Percentile().Size() > percentileOffset);
     }
 
     virtual ~TTabletCountersBase()

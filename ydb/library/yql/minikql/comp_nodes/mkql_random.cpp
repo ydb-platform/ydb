@@ -64,7 +64,7 @@ public:
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& compCtx) const {
         auto rand = Rand->GetValue(compCtx);
-        Y_VERIFY_DEBUG(rand.GetResourceTag() == NUdf::TStringRef(RandomMTResource));
+        Y_DEBUG_ABORT_UNLESS(rand.GetResourceTag() == NUdf::TStringRef(RandomMTResource));
         NUdf::TUnboxedValue *items = nullptr;
         const auto tuple = ResPair.NewArray(compCtx, 2, items);
         items[0] = NUdf::TUnboxedValuePod(static_cast<TMersenne<ui64>*>(rand.GetResource())->GenRand());

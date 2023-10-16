@@ -245,7 +245,7 @@ void TStrategyBase::PreparePartLayout(const TBlobState &state, const TBlobStorag
     if (slowDiskIdx == InvalidVDiskIdx) {
         layout->SlowVDiskMask = 0;
     } else {
-        Y_VERIFY_DEBUG(slowDiskIdx < sizeof(layout->SlowVDiskMask) * 8);
+        Y_DEBUG_ABORT_UNLESS(slowDiskIdx < sizeof(layout->SlowVDiskMask) * 8);
         layout->SlowVDiskMask = (1ull << slowDiskIdx);
     }
 }
@@ -276,10 +276,10 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
         const TBlobStorageGroupInfo &info, TGroupDiskRequests &groupDiskRequests,
         TBlobStorageGroupType::TPartPlacement &partPlacement) {
     bool isPartsAvailable = true;
-    Y_VERIFY_DEBUG(state.Parts.size() == info.Type.TotalPartCount());
+    Y_DEBUG_ABORT_UNLESS(state.Parts.size() == info.Type.TotalPartCount());
     for (auto& record : partPlacement.Records) {
         const ui32 partIdx = record.PartIdx;
-        Y_VERIFY_DEBUG(partIdx < state.Parts.size());
+        Y_DEBUG_ABORT_UNLESS(partIdx < state.Parts.size());
         auto& part = state.Parts[partIdx];
         if (!part.Data.IsMonolith() || part.Data.GetMonolith().size() != info.Type.PartSize(TLogoBlobID(state.Id, partIdx + 1))) {
             isPartsAvailable = false;

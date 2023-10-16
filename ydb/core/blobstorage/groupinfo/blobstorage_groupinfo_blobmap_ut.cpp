@@ -30,7 +30,7 @@ namespace {
             Y_ABORT_UNLESS(vdiskSz == subgroupSz);
 
             const TBlobStorageGroupInfo::TFailRealm& realm = Realms[0];
-            Y_VERIFY_DEBUG(realm.FailDomains.size() >= subgroupSz);
+            Y_DEBUG_ABORT_UNLESS(realm.FailDomains.size() >= subgroupSz);
 
             ui32 domainIdx = hash % realm.FailDomains.size();
             TReallyFastRng32 rng(hash);

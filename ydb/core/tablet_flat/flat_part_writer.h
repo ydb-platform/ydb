@@ -104,8 +104,8 @@ namespace NTable {
                     g.Data.Flush(*this);
                 }
 
-                Y_VERIFY_DEBUG(!NextSliceForce);
-                Y_VERIFY_DEBUG(NextSliceFirstRowId == Max<TRowId>());
+                Y_DEBUG_ABORT_UNLESS(!NextSliceForce);
+                Y_DEBUG_ABORT_UNLESS(NextSliceFirstRowId == Max<TRowId>());
             }
         }
 
@@ -119,7 +119,7 @@ namespace NTable {
 
         void AddKeyVersion(const TRowState& row, TRowVersion version) noexcept
         {
-            Y_VERIFY_DEBUG(version < KeyState.LastVersion, "Key versions must be in descending order");
+            Y_DEBUG_ABORT_UNLESS(version < KeyState.LastVersion, "Key versions must be in descending order");
 
             if (row != ERowOp::Erase) {
                 WriteRow(row, version, KeyState.DelayedErase ? KeyState.LastVersion : TRowVersion::Max());
@@ -207,7 +207,7 @@ namespace NTable {
             Current.DeltaRows += 1;
 
             // Uncommitted rows may we be committed using any version in the future
-            Y_VERIFY_DEBUG(MinRowVersion == TRowVersion::Min());
+            Y_DEBUG_ABORT_UNLESS(MinRowVersion == TRowVersion::Min());
             Current.MinRowVersion = TRowVersion::Min();
             Current.MaxRowVersion = TRowVersion::Max();
             Current.Versioned = true;
@@ -244,7 +244,7 @@ namespace NTable {
         {
             Y_ABORT_UNLESS(Phase == 0, "WriteMainRow called after Finish");
 
-            Y_VERIFY_DEBUG(minVersion < maxVersion);
+            Y_DEBUG_ABORT_UNLESS(minVersion < maxVersion);
 
             ui64 overheadBytes = 0;
             for (size_t groupIdx : xrange(Groups.size())) {
@@ -284,7 +284,7 @@ namespace NTable {
                 Current.MaxRowVersion = Max(Current.MaxRowVersion, maxVersion);
             }
 
-            Y_VERIFY_DEBUG(minVersion >= MinRowVersion);
+            Y_DEBUG_ABORT_UNLESS(minVersion >= MinRowVersion);
             if (minVersion == MinRowVersion) {
                 // Don't waste bytes writing a statically known minimum version
                 minVersion = TRowVersion::Min();
@@ -337,7 +337,7 @@ namespace NTable {
         {
             Y_ABORT_UNLESS(Phase == 0, "WriteHistoryRow called after Finish");
 
-            Y_VERIFY_DEBUG(minVersion < maxVersion);
+            Y_DEBUG_ABORT_UNLESS(minVersion < maxVersion);
 
             // Mark main group row as having a history
             Groups[0].Data.GetLastRecord().MarkHasHistory();
@@ -634,7 +634,7 @@ namespace NTable {
             }
 
             // There must have been at least one row
-            Y_VERIFY_DEBUG(Current.MinRowVersion <= Current.MaxRowVersion);
+            Y_DEBUG_ABORT_UNLESS(Current.MinRowVersion <= Current.MaxRowVersion);
 
             if (Current.Versioned) {
                 if (Current.MinRowVersion) {
@@ -649,8 +649,8 @@ namespace NTable {
                 }
             } else {
                 // Unversioned parts must have min/max equal to zero
-                Y_VERIFY_DEBUG(!Current.MinRowVersion);
-                Y_VERIFY_DEBUG(!Current.MaxRowVersion);
+                Y_DEBUG_ABORT_UNLESS(!Current.MinRowVersion);
+                Y_DEBUG_ABORT_UNLESS(!Current.MaxRowVersion);
             }
 
             TString blob;
@@ -704,7 +704,7 @@ namespace NTable {
                 TPgSize keySize = g.FirstKeyIndexSize;
 
                 if (groupId.IsMain()) {
-                    Y_VERIFY_DEBUG(NextSliceFirstRowId != Max<TRowId>());
+                    Y_DEBUG_ABORT_UNLESS(NextSliceFirstRowId != Max<TRowId>());
 
                     InitKey(Key, dataPage->Record(0), groupId);
 
@@ -739,7 +739,7 @@ namespace NTable {
                 auto page = WritePage(raw, EPage::DataPage, groupId.Index);
 
                 // N.B. non-main groups have no key
-                Y_VERIFY_DEBUG(g.Index.CalcSize(Key) == keySize);
+                Y_DEBUG_ABORT_UNLESS(g.Index.CalcSize(Key) == keySize);
 
                 g.Index.Add(keySize, Key, dataPage.BaseRow(), page);
 
@@ -754,7 +754,7 @@ namespace NTable {
                     SaveSlice(lastRowId, TSerializedCellVec(Key));
 
                     if (Phase == 1) {
-                        Y_VERIFY_DEBUG(g.Index.CalcSize(Key) == g.LastKeyIndexSize);
+                        Y_DEBUG_ABORT_UNLESS(g.Index.CalcSize(Key) == g.LastKeyIndexSize);
                         g.Index.Add(g.LastKeyIndexSize, Key, lastRowId, page);
                         Y_ABORT_UNLESS(std::exchange(Phase, 2) == 1);
                         PrevPageLastKey.clear(); // new index will be started

@@ -172,7 +172,7 @@ private:
         Subset->ColdParts.clear(); // stats won't include cold parts, if any
 
         if (BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, &Env)) {
-            Y_VERIFY_DEBUG(IndexSize == ev->Stats.IndexSize.Size);
+            Y_DEBUG_ABORT_UNLESS(IndexSize == ev->Stats.IndexSize.Size);
 
             ctx.Send(ReplyTo, ev.Release());
 

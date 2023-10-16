@@ -27,7 +27,7 @@ public:
 
         size_t yieldCount = 0;
         while (s.LiveInputs) {
-            Y_VERIFY_DEBUG(s.InputIndex < s.LiveInputs);
+            Y_DEBUG_ABORT_UNLESS(s.InputIndex < s.LiveInputs);
             EFetchResult result = s.Inputs[s.InputIndex]->FetchValues(ctx, output);
             yieldCount = (result == EFetchResult::Yield) ? (yieldCount + 1) : 0;
             if (result == EFetchResult::Finish) {

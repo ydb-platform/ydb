@@ -110,7 +110,7 @@ namespace NTable {
             }
 
             if (Touch(other.Rop)) {
-                Y_VERIFY_DEBUG(State.size() == other.State.size());
+                Y_DEBUG_ABORT_UNLESS(State.size() == other.State.size());
                 for (TPos i = 0; i < other.State.size(); ++i) {
                     if (State[i] != ECellOp::Empty || other.State[i] == ECellOp::Empty) {
                         continue;

@@ -89,7 +89,7 @@ namespace NKikimr {
                         lsn,
                         it->Key.LogoBlobID(),
                         it->MemRec.GetIngress());
-                Y_VERIFY_DEBUG(len <= sizeof(buffer));
+                Y_DEBUG_ABORT_UNLESS(len <= sizeof(buffer));
                 SyncLogPtr->PutOne(reinterpret_cast<const TRecordHdr *>(buffer), len);
                 it.Next();
                 ++lsn;

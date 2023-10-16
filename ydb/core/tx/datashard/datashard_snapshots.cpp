@@ -517,7 +517,7 @@ bool TSnapshotManager::ReleaseReference(const TSnapshotKey& key, NTable::TDataba
     auto refIt = References.find(key);
 
     if (Y_UNLIKELY(refIt == References.end() || refIt->second <= 0)) {
-        Y_VERIFY_DEBUG(false, "ReleaseReference underflow, check acquire/release pairs");
+        Y_DEBUG_ABORT_UNLESS(false, "ReleaseReference underflow, check acquire/release pairs");
         return false;
     }
 
@@ -530,7 +530,7 @@ bool TSnapshotManager::ReleaseReference(const TSnapshotKey& key, NTable::TDataba
 
     auto it = Snapshots.find(key);
     if (it == Snapshots.end()) {
-        Y_VERIFY_DEBUG(false, "ReleaseReference on an already deleted snapshot");
+        Y_DEBUG_ABORT_UNLESS(false, "ReleaseReference on an already deleted snapshot");
         return false;
     }
 
@@ -882,7 +882,7 @@ void TSnapshotManager::RenameSnapshots(NTable::TDatabase& db, const TPathId& pre
         TSnapshotKey oldKey = it->first;
         TSnapshotKey newKey(newTableKey.OwnerId, newTableKey.PathId, oldKey.Step, oldKey.TxId);
 
-        Y_VERIFY_DEBUG(!References.contains(oldKey), "Unexpected reference to snapshot during rename");
+        Y_DEBUG_ABORT_UNLESS(!References.contains(oldKey), "Unexpected reference to snapshot during rename");
 
         PersistAddSnapshot(nicedb, newKey, it->second.Name, it->second.Flags, it->second.Timeout);
 

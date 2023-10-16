@@ -116,7 +116,7 @@ namespace NKikimr::NBlobDepot {
                     }
 
                     case NKikimrBlobDepot::TEvResolve::TItem::KEYDESIGNATOR_NOT_SET:
-                        Y_VERIFY_DEBUG(false);
+                        Y_DEBUG_ABORT_UNLESS(false);
                         break;
                 }
             }
@@ -373,7 +373,7 @@ namespace NKikimr::NBlobDepot {
                 cFunc(TEvPrivate::EvTxComplete, HandleTxComplete);
 
                 default:
-                    Y_VERIFY_DEBUG(false, "unexpected event Type# %08" PRIx32, type);
+                    Y_DEBUG_ABORT_UNLESS(false, "unexpected event Type# %08" PRIx32, type);
                     STLOG(PRI_CRIT, BLOB_DEPOT, BDT90, "unexpected event", (Id, Self->GetLogId()), (Type, type));
                     break;
             }

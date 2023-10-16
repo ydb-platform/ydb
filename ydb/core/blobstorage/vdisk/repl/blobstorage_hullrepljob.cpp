@@ -523,7 +523,7 @@ namespace NKikimr {
             }
 
             // merge queue is not empty, but we are waiting for some events from proxies to come
-            Y_VERIFY_DEBUG(MergeHeap.size() <= NumRunningProxies);
+            Y_DEBUG_ABORT_UNLESS(MergeHeap.size() <= NumRunningProxies);
             if (MergeHeap.size() != NumRunningProxies) {
                 return false;
             }
@@ -565,7 +565,7 @@ namespace NKikimr {
                             item.AddData(ReplCtx->VCtx->Top->GetOrderNumber(proxy->VDiskId), id, status, std::move(data));
                         }
                     }
-                    Y_VERIFY_DEBUG(!proxy->Valid() || item.Id < proxy->GenLogoBlobId());
+                    Y_DEBUG_ABORT_UNLESS(!proxy->Valid() || item.Id < proxy->GenLogoBlobId());
 
                     // if proxy is not exhausted yet, then put it back into merge queue
                     if (proxy->Valid()) {

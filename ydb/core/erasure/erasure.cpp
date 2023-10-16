@@ -2453,7 +2453,7 @@ void TErasureType::BlockSplitRange(ECrcMode crcMode, ui64 blobSize, ui64 wholeBe
             }
         }
     }
-    Y_VERIFY_DEBUG(outRange->EndPartIdx != Max<ui64>());
+    Y_DEBUG_ABORT_UNLESS(outRange->EndPartIdx != Max<ui64>());
 }
 
 ui32 TErasureType::BlockSplitPartIndex(ui64 offset, ui64 dataSize, ui64 &outPartOffset) const {
@@ -3022,8 +3022,8 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
         ythrow TWithBackTrace<yexception>() << "Incorrect partSet size, received " << partSet.Parts.size()
             << " while expected " << (erasure.DataParts + erasure.ParityParts);
     }
-    Y_VERIFY_DEBUG(restoreFullData || restoreParts);
-    Y_VERIFY_DEBUG(erasure.Prime <= MAX_LINES_IN_BLOCK);
+    Y_DEBUG_ABORT_UNLESS(restoreFullData || restoreParts);
+    Y_DEBUG_ABORT_UNLESS(erasure.Prime <= MAX_LINES_IN_BLOCK);
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:
             if (restoreParts) {

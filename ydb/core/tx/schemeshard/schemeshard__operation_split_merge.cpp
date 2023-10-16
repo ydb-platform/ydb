@@ -272,7 +272,7 @@ public:
 
                     if (tableInfo->IsTTLEnabled()) {
                         auto& lag = dst.LastCondEraseLag;
-                        Y_VERIFY_DEBUG(!lag.Defined());
+                        Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
                         lag = now - dst.LastCondErase;
                         context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());

@@ -26,7 +26,7 @@ namespace NKikimr {
                 , KeepData(keepData)
                 , KeepByBarrier(keepByBarrier)
             {
-                Y_VERIFY_DEBUG(keepIndex >= keepData);
+                Y_DEBUG_ABORT_UNLESS(keepIndex >= keepData);
             }
 
             TKeepStatus(bool keepWholeRecord)

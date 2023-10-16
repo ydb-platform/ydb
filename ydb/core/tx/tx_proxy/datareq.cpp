@@ -648,8 +648,8 @@ bool TKeySpace::IsFull() const
 
     auto &range = Ranges.front();
 
-    Y_VERIFY_DEBUG(range.FromInclusive);
-    Y_VERIFY_DEBUG(!range.ToInclusive);
+    Y_DEBUG_ABORT_UNLESS(range.FromInclusive);
+    Y_DEBUG_ABORT_UNLESS(!range.ToInclusive);
 
     if (IsGreater(range.From.GetCells(), SpaceRange.From.GetCells()))
         return false;
@@ -660,7 +660,7 @@ bool TKeySpace::IsFull() const
              && SpaceRange.ToInclusive)
         return false;
 
-    Y_VERIFY_DEBUG(!OrderedQueue || !IsGreater(SpaceRange.To.GetCells(), QueuePoint.GetCells()));
+    Y_DEBUG_ABORT_UNLESS(!OrderedQueue || !IsGreater(SpaceRange.To.GetCells(), QueuePoint.GetCells()));
 
     return true;
 }
@@ -2537,7 +2537,7 @@ void TDataReq::HandleResolve(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const T
 
 void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaRequest::TPtr &ev, const TActorContext &ctx)
 {
-    Y_VERIFY_DEBUG(ReadTableRequest);
+    Y_DEBUG_ABORT_UNLESS(ReadTableRequest);
 
     auto id = ReadTableRequest->QuotaRequestId++;
     TReadTableRequest::TQuotaRequest req{ev->Sender, ev->Get()->Record.GetShardId()};
@@ -2547,10 +2547,10 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaRequest::TPtr &ev, const TA
 
 void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaResponse::TPtr &ev, const TActorContext &ctx)
 {
-    Y_VERIFY_DEBUG(ReadTableRequest);
+    Y_DEBUG_ABORT_UNLESS(ReadTableRequest);
 
     auto it = ReadTableRequest->QuotaRequests.find(ev->Cookie);
-    Y_VERIFY_DEBUG(it != ReadTableRequest->QuotaRequests.end());
+    Y_DEBUG_ABORT_UNLESS(it != ReadTableRequest->QuotaRequests.end());
 
     if (ReadTableRequest->RowsLimited)
         ev->Get()->Record.SetRowLimit(ReadTableRequest->RowsRemain);
@@ -2734,7 +2734,7 @@ void TDataReq::MakeFlatMKQLResponse(const TActorContext &ctx, const NCpuTime::TC
 void TDataReq::ProcessStreamResponseData(TEvDataShard::TEvProposeTransactionResult::TPtr &ev,
                                          const TActorContext &ctx)
 {
-    Y_VERIFY_DEBUG(ReadTableRequest);
+    Y_DEBUG_ABORT_UNLESS(ReadTableRequest);
 
     ctx.Send(ev->Sender, new TEvTxProcessing::TEvStreamDataAck);
 
@@ -2766,7 +2766,7 @@ void TDataReq::FinishShardStream(TEvDataShard::TEvProposeTransactionResult::TPtr
     auto &rec = ev->Get()->Record;
     auto shard = rec.GetOrigin();
 
-    Y_VERIFY_DEBUG(ReadTableRequest->StreamingShards.contains(shard));
+    Y_DEBUG_ABORT_UNLESS(ReadTableRequest->StreamingShards.contains(shard));
     ReadTableRequest->StreamingShards.erase(shard);
 
     if (ReadTableRequest->KeySpace.IsFull()
@@ -2986,7 +2986,7 @@ void TDataReq::SendStreamClearanceResponse(ui64 shard, bool cleared, const TActo
 void TDataReq::ProcessNextStreamClearance(bool cleared, const TActorContext &ctx)
 {
     Y_ABORT_UNLESS(ReadTableRequest);
-    Y_VERIFY_DEBUG(!ReadTableRequest->KeySpace.IsShardsQueueEmpty());
+    Y_DEBUG_ABORT_UNLESS(!ReadTableRequest->KeySpace.IsShardsQueueEmpty());
 
     auto shard = ReadTableRequest->KeySpace.ShardsQueueFront();
     ReadTableRequest->KeySpace.ShardsQueuePop();

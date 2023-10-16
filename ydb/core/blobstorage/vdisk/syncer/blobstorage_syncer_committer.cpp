@@ -169,7 +169,7 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
             CHECK_PDISK_RESPONSE(SyncerCtx->VCtx, ev, ctx);
-            Y_VERIFY_DEBUG(!InFly.empty());
+            Y_DEBUG_ABORT_UNLESS(!InFly.empty());
 
             // reply committed on all writes completed
             for (const auto &x: InFly){
@@ -178,7 +178,7 @@ namespace NKikimr {
             InFly.clear();
 
             // advance current entry point lsn
-            Y_VERIFY_DEBUG(ev->Get()->Results.size() == 1);
+            Y_DEBUG_ABORT_UNLESS(ev->Get()->Results.size() == 1);
             CurEntryPointLsn = ev->Get()->Results[0].Lsn;
             LastCommitTime = TAppData::TimeProvider->Now();
 
@@ -190,7 +190,7 @@ namespace NKikimr {
                 // we have some pending messages
                 InFly.swap(Delayed);
                 GenerateCommit(ctx);
-                Y_VERIFY_DEBUG(Delayed.empty());
+                Y_DEBUG_ABORT_UNLESS(Delayed.empty());
             }
         }
 

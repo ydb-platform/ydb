@@ -69,7 +69,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(
         } else {
             auto keyValue = MakeKeyCells(paramValue, tableInfo->KeyColumnTypes, keyColumnIndices,
                 typeEnv, /* copyValues */ true);
-            Y_VERIFY_DEBUG(keyValue.size() == keyLen);
+            Y_DEBUG_ABORT_UNLESS(keyValue.size() == keyLen);
             const ui32 partitionIndex = FindKeyPartitionIndex(keyValue, key.GetPartitions(), tableInfo->KeyColumnTypes,
                 [](const auto& partition) { return *partition.Range; });
 
@@ -96,7 +96,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(
             ui32 sizeBytes = NDq::TDqDataSerializer::EstimateSize(columnValue, columnType);
 
             // Sanity check, we only expect table columns in param values
-            Y_VERIFY_DEBUG(tableInfo->Columns.contains(columnName));
+            Y_DEBUG_ABORT_UNLESS(tableInfo->Columns.contains(columnName));
 
             auto& columnWrite = shardData.ColumnWrites[columnName];
             columnWrite.MaxValueSizeBytes = std::max(columnWrite.MaxValueSizeBytes, sizeBytes);
@@ -161,7 +161,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(
             fromValues.push_back(TCell()); // null
             // skip or toValuesPrefix.push_back(+inf);
         }
-        Y_VERIFY_DEBUG(fromValues.size() == keyLen);
+        Y_DEBUG_ABORT_UNLESS(fromValues.size() == keyLen);
 
         const bool point = toValuesPrefix.size() == keyLen;
 

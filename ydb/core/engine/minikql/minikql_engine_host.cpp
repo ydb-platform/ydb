@@ -232,7 +232,7 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
         Y_ABORT_UNLESS(localTid, "table not exist");
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
 
-        Y_VERIFY_DEBUG(!key.Range.IsAmbiguous(tableInfo->KeyColumns.size()),
+        Y_DEBUG_ABORT_UNLESS(!key.Range.IsAmbiguous(tableInfo->KeyColumns.size()),
             "%s", key.Range.IsAmbiguousReason(tableInfo->KeyColumns.size()));
 
         TSmallVec<TRawTypeValue> keyFrom;
@@ -388,7 +388,7 @@ public:
     }
 
     void Reuse(const TDbTupleRef& dbData) {
-        Y_VERIFY_DEBUG(dbData.ColumnCount == Size());
+        Y_DEBUG_ABORT_UNLESS(dbData.ColumnCount == Size());
         DbData = dbData;
         ClearMask();
     }
@@ -427,7 +427,7 @@ private:
     }
 
     inline void BuildValue(ui32 index) const {
-        Y_VERIFY_DEBUG(MaskSize > 0);
+        Y_DEBUG_ABORT_UNLESS(MaskSize > 0);
 
         if (!TestMask(index)) {
             if (index < DbData.ColumnCount) {
@@ -443,16 +443,16 @@ private:
             }
             SetMask(index);
         }
-        Y_VERIFY_DEBUG(TestMask(index));
+        Y_DEBUG_ABORT_UNLESS(TestMask(index));
     }
 
     inline bool TestMask(ui32 index) const {
-        Y_VERIFY_DEBUG(index / 64 < MaskSize);
+        Y_DEBUG_ABORT_UNLESS(index / 64 < MaskSize);
         return GetMaskPtr()[index / 64] & ((ui64)1 << index % 64);
     }
 
     inline void SetMask(ui32 index) const {
-        Y_VERIFY_DEBUG(index / 64 < MaskSize);
+        Y_DEBUG_ABORT_UNLESS(index / 64 < MaskSize);
         GetMaskPtr()[index / 64] |= ((ui64)1 << index % 64);
     }
 
@@ -549,7 +549,7 @@ public:
                     // TODO: support pg types
 
                     if (List.FirstKey) {
-                        Y_VERIFY_DEBUG(*List.FirstKey == firstKey);
+                        Y_DEBUG_ABORT_UNLESS(*List.FirstKey == firstKey);
                     } else {
                         List.FirstKey = firstKey;
                     }
@@ -588,8 +588,8 @@ public:
             }
 
             if (List.Truncated || List.SizeBytes) {
-                Y_VERIFY_DEBUG(List.Truncated && *List.Truncated == truncated);
-                Y_VERIFY_DEBUG(List.SizeBytes && *List.SizeBytes == Bytes);
+                Y_DEBUG_ABORT_UNLESS(List.Truncated && *List.Truncated == truncated);
+                Y_DEBUG_ABORT_UNLESS(List.SizeBytes && *List.SizeBytes == Bytes);
             } else {
                 List.Truncated = truncated;
                 List.SizeBytes = Bytes;
@@ -662,7 +662,7 @@ public:
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(LocalTid);
         auto tableRange = RangeHolder.ToTableRange();
 
-        Y_VERIFY_DEBUG(!tableRange.IsAmbiguous(tableInfo->KeyColumns.size()),
+        Y_DEBUG_ABORT_UNLESS(!tableRange.IsAmbiguous(tableInfo->KeyColumns.size()),
             "%s", tableRange.IsAmbiguousReason(tableInfo->KeyColumns.size()));
 
         TSmallVec<TRawTypeValue> keyFrom;
@@ -696,7 +696,7 @@ public:
                 continue;
         }
 
-        Y_VERIFY_DEBUG(Truncated);
+        Y_DEBUG_ABORT_UNLESS(Truncated);
         return NUdf::TUnboxedValuePod(*Truncated);
     }
 
@@ -715,7 +715,7 @@ public:
                 continue;
         }
 
-        Y_VERIFY_DEBUG(SizeBytes);
+        Y_DEBUG_ABORT_UNLESS(SizeBytes);
         return NUdf::TUnboxedValuePod(*SizeBytes);
     }
 
@@ -829,11 +829,11 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
 
     // Analyze resultType
     TStructType* outerStructType = AS_TYPE(TStructType, returnType);
-    Y_VERIFY_DEBUG(outerStructType->GetMembersCount() == 2,
+    Y_DEBUG_ABORT_UNLESS(outerStructType->GetMembersCount() == 2,
         "Unexpected type structure of returnType in TEngineHost::SelectRange()");
-    Y_VERIFY_DEBUG(outerStructType->GetMemberName(0) == "List",
+    Y_DEBUG_ABORT_UNLESS(outerStructType->GetMemberName(0) == "List",
         "Unexpected type structure of returnType in TEngineHost::SelectRange()");
-    Y_VERIFY_DEBUG(outerStructType->GetMemberName(1) == "Truncated",
+    Y_DEBUG_ABORT_UNLESS(outerStructType->GetMemberName(1) == "Truncated",
         "Unexpected type structure of returnType in TEngineHost::SelectRange()");
 
     TSmallVec<NTable::TTag> tags;
@@ -1066,7 +1066,7 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type) {
         return NYql::NCommon::PgValueFromNativeBinary(cell.AsBuf(), NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()));
     }
 
-    Y_VERIFY_DEBUG(false, "Unsupported type: %" PRIu16, type.GetTypeId());
+    Y_DEBUG_ABORT_UNLESS(false, "Unsupported type: %" PRIu16, type.GetTypeId());
     return MakeString(NUdf::TStringRef(cell.Data(), cell.Size()));
 }
 

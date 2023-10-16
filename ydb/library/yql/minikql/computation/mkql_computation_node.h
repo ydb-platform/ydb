@@ -87,7 +87,7 @@ struct TComputationMutables {
     std::vector<TWideFieldsInitInfo> WideFieldInitialize;
 
     void DeferWideFieldsInit(ui32 count, std::set<ui32> used) {
-        Y_VERIFY_DEBUG(AllOf(used, [count](ui32 i) { return i < count; }));
+        Y_DEBUG_ABORT_UNLESS(AllOf(used, [count](ui32 i) { return i < count; }));
         WideFieldInitialize.push_back({CurValueIndex, CurWideFieldsIndex, std::move(used)});
         CurValueIndex += count;
         CurWideFieldsIndex += count;

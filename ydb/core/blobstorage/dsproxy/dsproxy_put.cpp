@@ -487,7 +487,7 @@ public:
         , IsAccelerateScheduled(false)
         , IsMultiPutMode(true)
     {
-        Y_VERIFY_DEBUG(events.size() <= MaxBatchedPutRequests);
+        Y_DEBUG_ABORT_UNLESS(events.size() <= MaxBatchedPutRequests);
         for (auto &ev : events) {
             auto& msg = *ev->Get();
             Deadline = Max(Deadline, msg.Deadline);

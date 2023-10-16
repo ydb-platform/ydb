@@ -440,7 +440,7 @@ void TRateAccounting::RemoveOldClients() {
     while (!SortedClients.empty() && SortedClients.begin()->first <= Accounted) {
         ClientToReported.erase(SortedClients.begin()->second);
         SortedClients.erase(SortedClients.begin());
-        Y_VERIFY_DEBUG(SortedClients.size() == ClientToReported.size());
+        Y_DEBUG_ABORT_UNLESS(SortedClients.size() == ClientToReported.size());
     }
 }
 

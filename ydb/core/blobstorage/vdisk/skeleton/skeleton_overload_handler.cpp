@@ -225,7 +225,7 @@ namespace NKikimr {
     }
 
     ui32 TOverloadHandler::GetIntegralRankPercent() const {
-        Y_VERIFY_DEBUG(DynamicPDiskWeightsManager);
+        Y_DEBUG_ABORT_UNLESS(DynamicPDiskWeightsManager);
         ui32 integralRankPercent = ((DynamicPDiskWeightsManager->GetFreshRank()
                     + DynamicPDiskWeightsManager->GetLevelRank()) * 100u).ToUi64();
         return integralRankPercent;

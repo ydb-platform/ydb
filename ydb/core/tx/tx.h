@@ -62,7 +62,7 @@ struct TEvTxProxy {
         TEvProposeTransactionStatus(EStatus status, ui64 txid, ui64 stepId);
 
         EStatus GetStatus() const {
-            Y_VERIFY_DEBUG(Record.HasStatus());
+            Y_DEBUG_ABORT_UNLESS(Record.HasStatus());
             return static_cast<EStatus>(Record.GetStatus());
         }
     };

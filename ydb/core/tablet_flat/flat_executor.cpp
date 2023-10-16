@@ -1270,7 +1270,7 @@ bool TExecutor::ApplyReadyPartSwitches() {
 }
 
 void TExecutor::RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView, const THashSet<NTable::TTag> &stickyColumns) {
-    Y_VERIFY_DEBUG(stickyColumns);
+    Y_DEBUG_ABORT_UNLESS(stickyColumns);
 
     auto rowScheme = RowScheme(tableId);
 
@@ -1621,7 +1621,7 @@ void TExecutor::Enqueue(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
 }
 
 void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx) {
-    Y_VERIFY_DEBUG(!ActiveTransaction);
+    Y_DEBUG_ABORT_UNLESS(!ActiveTransaction);
 
     ActiveTransaction = true;
     ++seat->Retries;
@@ -2369,7 +2369,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
             if (delay.MicroSeconds() == 0) {
                 ctx.Send(ctx.SelfID, new TEvents::TEvFlushLog());
             } else {
-                Y_VERIFY_DEBUG(delay < TDuration::Minutes(1));
+                Y_DEBUG_ABORT_UNLESS(delay < TDuration::Minutes(1));
                 delay = Min(delay, TDuration::Seconds(59));
                 Schedule(delay, new TEvents::TEvFlushLog());
             }
@@ -4097,7 +4097,7 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
 }
 
 const NTable::TScheme& TExecutor::Scheme() const noexcept {
-    Y_VERIFY_DEBUG(Database);
+    Y_DEBUG_ABORT_UNLESS(Database);
     return Database->GetScheme();
 }
 

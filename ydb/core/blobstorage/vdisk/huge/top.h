@@ -14,7 +14,7 @@ template <
 
 public:
     TTop() {
-        Y_VERIFY_DEBUG(NElements > 0);
+        Y_DEBUG_ABORT_UNLESS(NElements > 0);
         Cont.reserve(NElements);
     }
 

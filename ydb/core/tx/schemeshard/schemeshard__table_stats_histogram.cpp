@@ -198,7 +198,7 @@ const char* ToString(ESplitReason splitReason) {
     case ESplitReason::SPLIT_BY_LOAD:
         return "Split by load";
     default:
-        Y_VERIFY_DEBUG(!"Unexpected enum value");
+        Y_DEBUG_ABORT_UNLESS(!"Unexpected enum value");
         return "Unexpected enum value";
     }
 }

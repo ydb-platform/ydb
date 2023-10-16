@@ -188,11 +188,11 @@ void TKqpComputeActor::PassAway() {
 }
 
 void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
-    Y_VERIFY_DEBUG(ScanData);
+    Y_DEBUG_ABORT_UNLESS(ScanData);
 
     auto& msg = ev->Get()->Record;
 
-    Y_VERIFY_DEBUG(SysViewActorId == ActorIdFromProto(msg.GetScanActorId()));
+    Y_DEBUG_ABORT_UNLESS(SysViewActorId == ActorIdFromProto(msg.GetScanActorId()));
 
     CA_LOG_D("Got sysview scan initial event, scan actor: " << SysViewActorId << ", scanId: 0");
     Send(ev->Sender, new TEvKqpCompute::TEvScanDataAck(GetMemoryLimits().ChannelBufferSize));
@@ -200,8 +200,8 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) 
 }
 
 void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
-    Y_VERIFY_DEBUG(ScanData);
-    Y_VERIFY_DEBUG(SysViewActorId == ev->Sender);
+    Y_DEBUG_ABORT_UNLESS(ScanData);
+    Y_DEBUG_ABORT_UNLESS(SysViewActorId == ev->Sender);
 
     auto& msg = *ev->Get();
 
@@ -260,7 +260,7 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
 }
 
 void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) {
-    Y_VERIFY_DEBUG(ScanData);
+    Y_DEBUG_ABORT_UNLESS(ScanData);
 
     TIssues issues;
     Ydb::StatusIds::StatusCode status = ev->Get()->Record.GetStatus();

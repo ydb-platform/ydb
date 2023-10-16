@@ -25,17 +25,17 @@ EEntryType TEntryCursor::GetType() const {
 }
 
 TContainerCursor TEntryCursor::GetContainer() const {
-    Y_VERIFY_DEBUG(Entry.Type == EEntryType::Container, "Expected container type");
+    Y_DEBUG_ABORT_UNLESS(Entry.Type == EEntryType::Container, "Expected container type");
     return TContainerCursor(Reader, Entry.Value);
 }
 
 TStringBuf TEntryCursor::GetString() const {
-    Y_VERIFY_DEBUG(Entry.Type == EEntryType::String, "Expected string type");
+    Y_DEBUG_ABORT_UNLESS(Entry.Type == EEntryType::String, "Expected string type");
     return Reader->ReadString(Entry.Value);
 }
 
 double TEntryCursor::GetNumber() const {
-    Y_VERIFY_DEBUG(Entry.Type == EEntryType::Number, "Expected number type");
+    Y_DEBUG_ABORT_UNLESS(Entry.Type == EEntryType::Number, "Expected number type");
     return Reader->ReadNumber(Entry.Value);
 }
 
@@ -47,7 +47,7 @@ TArrayIterator::TArrayIterator(const TBinaryJsonReaderPtr reader, ui32 startOffs
 }
 
 TEntryCursor TArrayIterator::Next() {
-    Y_VERIFY_DEBUG(HasNext());
+    Y_DEBUG_ABORT_UNLESS(HasNext());
     TEntryCursor element(Reader, Reader->ReadEntry(Offset));
     Offset += sizeof(TEntry);
     return element;
@@ -66,7 +66,7 @@ TObjectIterator::TObjectIterator(const TBinaryJsonReaderPtr reader, ui32 startOf
 }
 
 std::pair<TEntryCursor, TEntryCursor> TObjectIterator::Next() {
-    Y_VERIFY_DEBUG(HasNext());
+    Y_DEBUG_ABORT_UNLESS(HasNext());
     // Here we create fake Entry to return Entry cursor
     const auto stringOffset = static_cast<ui32>(Reader->ReadKeyEntry(KeyOffset));
     TEntryCursor key(Reader, TEntry(EEntryType::String, stringOffset));
@@ -97,14 +97,14 @@ ui32 TContainerCursor::GetSize() const {
 }
 
 TEntryCursor TContainerCursor::GetElement(ui32 index) const {
-    Y_VERIFY_DEBUG(Meta.Type == EContainerType::Array || Meta.Type == EContainerType::TopLevelScalar, "Expected array");
-    Y_VERIFY_DEBUG(index < GetSize(), "Invalid index");
+    Y_DEBUG_ABORT_UNLESS(Meta.Type == EContainerType::Array || Meta.Type == EContainerType::TopLevelScalar, "Expected array");
+    Y_DEBUG_ABORT_UNLESS(index < GetSize(), "Invalid index");
     const ui32 offset = StartOffset + index * sizeof(TEntry);
     return TEntryCursor(Reader, Reader->ReadEntry(offset));
 }
 
 TArrayIterator TContainerCursor::GetArrayIterator() const {
-    Y_VERIFY_DEBUG(Meta.Type == EContainerType::Array || Meta.Type == EContainerType::TopLevelScalar, "Expected array");
+    Y_DEBUG_ABORT_UNLESS(Meta.Type == EContainerType::Array || Meta.Type == EContainerType::TopLevelScalar, "Expected array");
     return TArrayIterator(Reader, StartOffset, Meta.Size);
 }
 
@@ -134,7 +134,7 @@ TMaybe<TEntryCursor> TContainerCursor::Lookup(const TStringBuf key) const {
 }
 
 TObjectIterator TContainerCursor::GetObjectIterator() const {
-    Y_VERIFY_DEBUG(Meta.Type == EContainerType::Object, "Expected object");
+    Y_DEBUG_ABORT_UNLESS(Meta.Type == EContainerType::Object, "Expected object");
     return TObjectIterator(Reader, StartOffset, Meta.Size);
 }
 
@@ -173,22 +173,22 @@ TContainerCursor TBinaryJsonReader::GetRootCursor() {
 }
 
 TMeta TBinaryJsonReader::ReadMeta(ui32 offset) const {
-    Y_VERIFY_DEBUG(TreeStart <= offset && offset < Header.StringOffset, "Offset is not inside Tree section");
+    Y_DEBUG_ABORT_UNLESS(TreeStart <= offset && offset < Header.StringOffset, "Offset is not inside Tree section");
     return ReadPOD<TMeta>(offset);
 }
 
 TEntry TBinaryJsonReader::ReadEntry(ui32 offset) const {
-    Y_VERIFY_DEBUG(TreeStart <= offset && offset < Header.StringOffset, "Offset is not inside Tree section");
+    Y_DEBUG_ABORT_UNLESS(TreeStart <= offset && offset < Header.StringOffset, "Offset is not inside Tree section");
     return ReadPOD<TEntry>(offset);
 }
 
 TKeyEntry TBinaryJsonReader::ReadKeyEntry(ui32 offset) const {
-    Y_VERIFY_DEBUG(TreeStart <= offset && offset < Header.StringOffset, "Offset is not inside Tree section");
+    Y_DEBUG_ABORT_UNLESS(TreeStart <= offset && offset < Header.StringOffset, "Offset is not inside Tree section");
     return ReadPOD<TKeyEntry>(offset);
 }
 
 const TStringBuf TBinaryJsonReader::ReadString(ui32 offset) const {
-    Y_VERIFY_DEBUG(StringSEntryStart <= offset && offset < StringSEntryStart + StringCount * sizeof(TSEntry), "Offset is not inside string index");
+    Y_DEBUG_ABORT_UNLESS(StringSEntryStart <= offset && offset < StringSEntryStart + StringCount * sizeof(TSEntry), "Offset is not inside string index");
     ui32 startOffset = 0;
     if (offset == StringSEntryStart) {
         startOffset = StringSEntryStart + StringCount * sizeof(TSEntry);
@@ -357,7 +357,7 @@ struct TPODReader {
         , Pos(start)
         , End(end)
     {
-        Y_VERIFY_DEBUG(Pos <= End && End <= Buffer.Size());
+        Y_DEBUG_ABORT_UNLESS(Pos <= End && End <= Buffer.Size());
     }
 
     template <typename T>

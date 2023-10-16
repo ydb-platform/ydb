@@ -38,7 +38,7 @@ class TBuildDistributedEraseTxOutRSUnit : public TExecutionUnit {
         for (ui32 pos = 0; pos < tags.size(); ++pos) {
             const auto tag = tags.at(pos);
 
-            Y_VERIFY_DEBUG(!tagToPos.contains(tag));
+            Y_DEBUG_ABORT_UNLESS(!tagToPos.contains(tag));
             tagToPos.emplace(tag, pos);
         }
 

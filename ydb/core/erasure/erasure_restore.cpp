@@ -341,7 +341,7 @@ namespace NKikimr {
                 if (size##I < blockSize) { \
                     a##I = temp + I * 4; \
                     iter##I.ExtractPlainDataAndAdvance(temp + I * 4, blockSize); \
-                    Y_VERIFY_DEBUG(numBytes == blockSize && numBlocks == 1); \
+                    Y_DEBUG_ABORT_UNLESS(numBytes == blockSize && numBlocks == 1); \
                 } else { \
                     a##I = reinterpret_cast<const ui64*>(iter##I.ContiguousData()); \
                     iter##I += numBytes; \
@@ -350,8 +350,8 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(parts[I].IsContiguous()); \
                 auto span = parts[I].GetContiguousSpanMut(); \
                 out##I = reinterpret_cast<ui64*>(span.data() + offset); \
-                Y_VERIFY_DEBUG(offset < span.size()); \
-                Y_VERIFY_DEBUG(numBytes <= span.size() - offset); \
+                Y_DEBUG_ABORT_UNLESS(offset < span.size()); \
+                Y_DEBUG_ABORT_UNLESS(numBytes <= span.size() - offset); \
             } else { \
                 out##I = restore; /* temporary storage */ \
             }

@@ -65,7 +65,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
                 const NUdf::TStringRef& name,
                 NUdf::TUniquePtr<NUdf::IUdfModule> module) override
         {
-            Y_VERIFY_DEBUG(module, "Module is empty");
+            Y_DEBUG_ABORT_UNLESS(module, "Module is empty");
 
             if (!HasError()) {
                 TUdfModule m;
@@ -81,7 +81,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
                 auto i = ModulesMap.insert({ newName, std::move(m) });
                 if (!i.second) {
                     TUdfModule* oldModule = ModulesMap.FindPtr(newName);
-                    Y_VERIFY_DEBUG(oldModule != nullptr);
+                    Y_DEBUG_ABORT_UNLESS(oldModule != nullptr);
                     Error = (TStringBuilder()
                              << "UDF module duplication: name " << TStringBuf(name)
                              << ", already loaded from " << oldModule->LibraryPath

@@ -183,7 +183,7 @@ namespace NKikimr::NDataShard {
             ++stop;
         }
 
-        Y_VERIFY_DEBUG(start != stop);
+        Y_DEBUG_ABORT_UNLESS(start != stop);
 
         // We update the first range
         if (offset > (*start)->MaxOffset) {

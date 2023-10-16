@@ -126,7 +126,7 @@ namespace NPage {
                 // Try a short linear search first
                 for (int linear = 0; linear < 4; ++linear) {
                     auto prev = on - 1;
-                    Y_VERIFY_DEBUG(prev, "Unexpected failure to find an index record");
+                    Y_DEBUG_ABORT_UNLESS(prev, "Unexpected failure to find an index record");
                     if (prev->GetRowId() <= rowId) {
                         return prev;
                     }
@@ -138,7 +138,7 @@ namespace NPage {
             }
 
             --on;
-            Y_VERIFY_DEBUG(on, "Unexpected failure to find an index record");
+            Y_DEBUG_ABORT_UNLESS(on, "Unexpected failure to find an index record");
             return on;
         }
 

@@ -29,7 +29,7 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
     }
 
     auto sendResponse = [&] (TLogWrite *evLog) {
-        Y_VERIFY_DEBUG(evLog->Result);
+        Y_DEBUG_ABORT_UNLESS(evLog->Result);
         ui32 results = evLog->Result->Results.size();
         actorSystem->Send(evLog->Sender, evLog->Result.Release());
         PDisk->Mon.WriteLog.CountMultipleResponses(results);

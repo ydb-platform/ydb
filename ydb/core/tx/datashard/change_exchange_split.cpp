@@ -523,7 +523,7 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
     }
 
     TActorId RegisterWorker(const TPathId& pathId, TWorker& worker) const {
-        Y_VERIFY_DEBUG(!worker.ActorId);
+        Y_DEBUG_ABORT_UNLESS(!worker.ActorId);
         worker.ActorId = RegisterWorker(pathId, worker.Type);
         return worker.ActorId;
     }

@@ -231,7 +231,7 @@ void TSourceIdInfo::Out(IOutputStream& out) const {
 }
 
 bool TSourceIdInfo::IsExpired(TDuration ttl, TInstant now) const {
-    Y_VERIFY_DEBUG(!Explicit);
+    Y_DEBUG_ABORT_UNLESS(!Explicit);
     return !Explicit && ((WriteTimestamp + ttl) <= now);
 }
 

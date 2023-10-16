@@ -1431,7 +1431,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         return Node->Translate(ctx);
     }
 
@@ -1534,7 +1534,7 @@ public:
 
     TAstNode* Translate(TContext& ctx) const override {
         Y_UNUSED(ctx);
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         return Node->Translate(ctx);
     }
 
@@ -2253,7 +2253,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
         if (namedArgs) {
             auto positionalArgsTuple = dynamic_cast<TTupleNode*>(positionalArgs.Get());
-            Y_VERIFY_DEBUG(positionalArgsTuple, "unexpected value at String::SplitToList positional args");
+            Y_DEBUG_ABORT_UNLESS(positionalArgsTuple, "unexpected value at String::SplitToList positional args");
             positionalArgsElements = positionalArgsTuple->Elements();
         } else {
             positionalArgsElements = usedArgs;
@@ -2411,13 +2411,13 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             if (mustUseNamed && *mustUseNamed) {
                 *mustUseNamed = false;
                 YQL_ENSURE(args.size() == 2);
-                Y_VERIFY_DEBUG(dynamic_cast<TTupleNode*>(args[0].Get()));
+                Y_DEBUG_ABORT_UNLESS(dynamic_cast<TTupleNode*>(args[0].Get()));
                 auto posArgs = static_cast<TTupleNode*>(args[0].Get());
                 if (posArgs->IsEmpty()) {
                     if (normalizedName == "asstruct") {
                         return args[1];
                     } else {
-                        Y_VERIFY_DEBUG(dynamic_cast<TStructNode*>(args[1].Get()));
+                        Y_DEBUG_ABORT_UNLESS(dynamic_cast<TStructNode*>(args[1].Get()));
                         auto namedArgs = static_cast<TStructNode*>(args[1].Get());
                         return new TStructTypeNode(pos, namedArgs->GetExprs());
                     }
@@ -2435,8 +2435,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             }
             YQL_ENSURE(args.size() == 2);
             auto posArgs = static_cast<TTupleNode*>(args[0].Get());
-            Y_VERIFY_DEBUG(dynamic_cast<TTupleNode*>(args[0].Get()));
-            Y_VERIFY_DEBUG(dynamic_cast<TStructNode*>(args[1].Get()));
+            Y_DEBUG_ABORT_UNLESS(dynamic_cast<TTupleNode*>(args[0].Get()));
+            Y_DEBUG_ABORT_UNLESS(dynamic_cast<TStructNode*>(args[1].Get()));
             if (posArgs->GetTupleSize() != 1) {
                 return new TInvalidBuiltin(pos, TStringBuilder() << "ExpandStruct requires all arguments except first to be named");
             }

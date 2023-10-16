@@ -25,7 +25,7 @@ namespace NTxMediator {
 
         TBucket& SelectBucket(TTabletId tablet) {
             const ui32 bucketIdx = BucketSelector.Select(tablet);
-            Y_VERIFY_DEBUG(bucketIdx < Buckets.size());
+            Y_DEBUG_ABORT_UNLESS(bucketIdx < Buckets.size());
             return Buckets[bucketIdx];
         }
 

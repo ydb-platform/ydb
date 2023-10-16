@@ -325,7 +325,7 @@ void TAggregatedHistogramCounters::AddCounter(
     IsDerivative.push_back(isDerivative);
 
     auto rangeCount = percentileCounter.GetRangeCount();
-    Y_VERIFY_DEBUG(rangeCount > 0);
+    Y_DEBUG_ABORT_UNLESS(rangeCount > 0);
 
     for (ui32 r = 0; r < rangeCount; ++r) {
         const char* rangeName = percentileCounter.GetRangeName(r);
@@ -458,7 +458,7 @@ void TAggregatedHistogramCounters::SubValues(
     auto snapshot = histogram->Snapshot();
     histogram->Reset();
     for (auto i: xrange(values.size())) {
-        Y_VERIFY_DEBUG(static_cast<ui64>(*percentileRanges[i]) >= values[i]);
+        Y_DEBUG_ABORT_UNLESS(static_cast<ui64>(*percentileRanges[i]) >= values[i]);
         *percentileRanges[i] -= values[i];
 
         ui64 oldValue = snapshot->Value(i);

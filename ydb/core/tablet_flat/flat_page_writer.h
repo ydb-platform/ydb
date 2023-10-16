@@ -76,7 +76,7 @@ namespace NPage {
             if (!Blob)
                 return { };
 
-            Y_VERIFY_DEBUG(BytesUsed() <= PageBytes);
+            Y_DEBUG_ABORT_UNLESS(BytesUsed() <= PageBytes);
 
             Blob.TrimBack(BytesUsed());
 
@@ -156,11 +156,11 @@ namespace NPage {
 
         void PushDelta(TPgSize recordSize) noexcept
         {
-            Y_VERIFY_DEBUG(recordSize > 0);
+            Y_DEBUG_ABORT_UNLESS(recordSize > 0);
 
             if (Deltas.empty()) {
-                Y_VERIFY_DEBUG(recordSize <= Left());
-                Y_VERIFY_DEBUG(BytesUsed() + recordSize <= PageBytes);
+                Y_DEBUG_ABORT_UNLESS(recordSize <= Left());
+                Y_DEBUG_ABORT_UNLESS(BytesUsed() + recordSize <= PageBytes);
                 Offsets.push_back(Max<ui32>());
             } else {
                 Grow(recordSize, 0, 1.5);
@@ -173,9 +173,9 @@ namespace NPage {
         void PushOffset(TPgSize recordSize) noexcept
         {
             if (Deltas.empty()) {
-                Y_VERIFY_DEBUG(recordSize > 0);
-                Y_VERIFY_DEBUG(recordSize <= Left());
-                Y_VERIFY_DEBUG(BytesUsed() + recordSize <= PageBytes);
+                Y_DEBUG_ABORT_UNLESS(recordSize > 0);
+                Y_DEBUG_ABORT_UNLESS(recordSize <= Left());
+                Y_DEBUG_ABORT_UNLESS(BytesUsed() + recordSize <= PageBytes);
                 size_t offset = Offset();
                 Y_ABORT_UNLESS(offset < Max<ui32>(), "Record offset is out of bounds");
                 Offsets.push_back(offset);
@@ -268,7 +268,7 @@ namespace NPage {
             size_t offset = Tail - Blob.mutable_begin();
             size_t available = Blob.size() - offset;
             Y_ABORT_UNLESS(size <= available, "Requested %" PRISZT " bytes, have %" PRISZT " available", size, available);
-            Y_VERIFY_DEBUG(offset + size <= PageBytes, "Requested bytes are out of current page limits");
+            Y_DEBUG_ABORT_UNLESS(offset + size <= PageBytes, "Requested bytes are out of current page limits");
             return std::exchange(Tail, Tail + size);
         }
 

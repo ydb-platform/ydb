@@ -361,9 +361,9 @@ public:
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
 
-        Y_VERIFY_DEBUG(gateway);
-        Y_VERIFY_DEBUG(sessionCtx);
-        Y_VERIFY_DEBUG(queryExecutor);
+        Y_DEBUG_ABORT_UNLESS(gateway);
+        Y_DEBUG_ABORT_UNLESS(sessionCtx);
+        Y_DEBUG_ABORT_UNLESS(queryExecutor);
     }
 
     ~TKikimrDataSink() {}

@@ -243,7 +243,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         const NKikimrTxUserProxy::TTransaction &tx = ev->Get()->Record.GetTransaction();
         if (ev->Get()->HasSchemeProposal()) {
             // todo: in-fly and shutdown
-            Y_VERIFY_DEBUG(txid != 0);
+            Y_DEBUG_ABORT_UNLESS(txid != 0);
             ui64 cookie = ev->Cookie;
             const TString userRequestId = tx.GetUserRequestId();
             TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request = new TEvTxProxyReq::TEvSchemeRequest(ev);
@@ -261,7 +261,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         // otherwise process data transaction
         if (ev->Get()->HasMakeProposal()) {
             // todo: in-fly and shutdown
-            Y_VERIFY_DEBUG(txid != 0);
+            Y_DEBUG_ABORT_UNLESS(txid != 0);
             const TActorId reqId = ctx.ExecutorThread.RegisterActor(CreateTxProxyDataReq(Services, txid, TxProxyMon, RequestControls));
             TxProxyMon->MakeRequest->Inc();
             LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,

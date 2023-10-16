@@ -432,7 +432,7 @@ namespace NKikimr {
             fragment.ForEach(count, count, count, count);
 
             // calculate lsn
-            Y_VERIFY_DEBUG(recordLsn >= recsNum, "recordLsn# %" PRIu64 " recsNum# %" PRIu64,
+            Y_DEBUG_ABORT_UNLESS(recordLsn >= recsNum, "recordLsn# %" PRIu64 " recsNum# %" PRIu64,
                            recordLsn, recsNum);
             ui64 lsn = recordLsn - recsNum + 1;
 

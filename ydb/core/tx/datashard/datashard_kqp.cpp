@@ -373,7 +373,7 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
     switch (rangeKind.Kind_case()) {
         case NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange::kRanges: {
             auto& ranges = rangeKind.GetRanges();
-            Y_VERIFY_DEBUG(ranges.GetKeyRanges().size() + ranges.GetKeyPoints().size() > 0);
+            Y_DEBUG_ABORT_UNLESS(ranges.GetKeyRanges().size() + ranges.GetKeyPoints().size() > 0);
 
             for (auto& range : ranges.GetKeyRanges()) {
                 TSerializedTableRange tableRange;
@@ -384,7 +384,7 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                     << ", task: " << taskId << ", " << (Read ? "read range " : "write range ")
                     << DebugPrintRange(tableInfo->KeyColumnTypes, tableRange.ToTableRange(), typeRegistry));
 
-                Y_VERIFY_DEBUG(!(tableRange.To.GetCells().empty() && tableRange.ToInclusive));
+                Y_DEBUG_ABORT_UNLESS(!(tableRange.To.GetCells().empty() && tableRange.ToInclusive));
 
                 if constexpr (Read) {
                     engineBay.AddReadRange(tableId, GetColumns(*readMeta), tableRange.ToTableRange(),

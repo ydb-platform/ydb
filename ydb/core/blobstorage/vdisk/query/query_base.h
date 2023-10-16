@@ -42,7 +42,7 @@ namespace NKikimr {
             , Result(std::move(result))
             , ReplSchedulerId(replSchedulerId)
         {
-            Y_VERIFY_DEBUG(Result);
+            Y_DEBUG_ABORT_UNLESS(Result);
         }
 
         ui8 PDiskPriority() const {

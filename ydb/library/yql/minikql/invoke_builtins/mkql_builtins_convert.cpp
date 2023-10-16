@@ -367,7 +367,7 @@ struct TDatetimeTzStub {
 struct TStringConvert {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg)
     {
-        Y_VERIFY_DEBUG(!arg.IsBoxed(), "Expected unboxed arg in String::Convert()");
+        Y_DEBUG_ABORT_UNLESS(!arg.IsBoxed(), "Expected unboxed arg in String::Convert()");
         return arg; // handle optional args as well
     }
 

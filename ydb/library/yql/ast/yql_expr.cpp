@@ -42,7 +42,7 @@ namespace {
 
     template <typename T, typename... Args>
     const T* AddType(TExprContext& ctx, Args&&... args) {
-        Y_VERIFY_DEBUG(!ctx.Frozen);
+        Y_DEBUG_ABORT_UNLESS(!ctx.Frozen);
         ctx.TypeNodes.emplace(new T(std::forward<Args>(args)...));
         const auto ins = ctx.TypeSet.emplace(ctx.TypeNodes.top().get());
         return static_cast<const T*>(*ins.first);

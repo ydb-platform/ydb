@@ -60,7 +60,7 @@ private:
         { }
 
         void Back() override {
-            Y_VERIFY_DEBUG(Index > 0);
+            Y_DEBUG_ABORT_UNLESS(Index > 0);
             --Index;
         }
     };
@@ -80,7 +80,7 @@ public:
     }
 
     static inline IChunkDecoder::TPtr ReadNextImpl(const TDataRef& data, const TTypeCodecs* codecs) {
-        Y_VERIFY_DEBUG(data.Size() >= sizeof(TCodecSig));
+        Y_DEBUG_ABORT_UNLESS(data.Size() >= sizeof(TCodecSig));
         const TCodecSig sig = ReadUnaligned<TCodecSig>(data.Data());
         if (Y_LIKELY(sig == Sig())) {
             return new TDerived(data);
@@ -406,7 +406,7 @@ private:
     }
 
     inline TDataRef GetFromCache(size_t index) const {
-        Y_VERIFY_DEBUG(index < Cache.size());
+        Y_DEBUG_ABORT_UNLESS(index < Cache.size());
         return TDataRef((const char*)&Cache[index], sizeof(TType));
     }
 

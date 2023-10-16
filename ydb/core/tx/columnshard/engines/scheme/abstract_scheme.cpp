@@ -90,7 +90,7 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TStr
         return nullptr;
     }
     batch = NArrow::SortBatch(batch, sortingKey, true);
-    Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, sortingKey));
+    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, sortingKey));
     return batch;
 }
 

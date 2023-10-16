@@ -370,8 +370,8 @@ namespace NKikimr {
             : Ctx(ctx)
             , Event(std::move(event))
         {
-            Y_VERIFY_DEBUG(Ctx.ExtQueueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
-            Y_VERIFY_DEBUG(Ctx.IntQueueId != NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown);
+            Y_DEBUG_ABORT_UNLESS(Ctx.ExtQueueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
+            Y_DEBUG_ABORT_UNLESS(Ctx.IntQueueId != NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown);
         }
     };
 
@@ -836,7 +836,7 @@ namespace NKikimr {
         }
 
         ui64 GetBufferBytes(ui64 idx) const {
-            Y_VERIFY_DEBUG(idx < Record.ItemsSize());
+            Y_DEBUG_ABORT_UNLESS(idx < Record.ItemsSize());
             if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
                 return GetPayload(idx).GetSize();
             } else {
@@ -1372,7 +1372,7 @@ namespace NKikimr {
             if (doNotKeep) {
                 r->SetDoNotKeep(true);
             }
-            Y_VERIFY_DEBUG(keep + doNotKeep <= 1);
+            Y_DEBUG_ABORT_UNLESS(keep + doNotKeep <= 1);
         }
 
         void SetBlobData(NKikimrBlobStorage::TQueryResult& item, TRope&& data) {
@@ -1404,7 +1404,7 @@ namespace NKikimr {
             if (doNotKeep) {
                 r->SetDoNotKeep(true);
             }
-            Y_VERIFY_DEBUG(keep + doNotKeep <= 1);
+            Y_DEBUG_ABORT_UNLESS(keep + doNotKeep <= 1);
         }
 
         bool HasBlob(const NKikimrBlobStorage::TQueryResult& result) const {

@@ -264,7 +264,7 @@ TComputationPatternLRUCache::TTicket TComputationPatternLRUCache::FindOrSubscrib
 }
 
 void TComputationPatternLRUCache::EmplacePattern(const TString& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv) {
-    Y_VERIFY_DEBUG(patternWithEnv && patternWithEnv->Pattern);
+    Y_DEBUG_ABORT_UNLESS(patternWithEnv && patternWithEnv->Pattern);
     TMaybe<TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>>> subscribers;
 
     {

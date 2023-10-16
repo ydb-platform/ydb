@@ -22,7 +22,7 @@ public:
         , BufferSize(bufSize)
         , ValueType(vtype)
     {
-        Y_VERIFY_DEBUG(!buf || vtype.GetTypeId() != 0);
+        Y_DEBUG_ABORT_UNLESS(!buf || vtype.GetTypeId() != 0);
     }
 
     TRawTypeValue(TArrayRef<const char> ref, NScheme::TTypeInfo vtype)

@@ -50,7 +50,7 @@ TString TBatchPayloadSerializer::DoSerialize(const std::shared_ptr<arrow::Record
     // Write prepared payload into the resultant string. No extra allocation will be made.
     TStatusValidator::Validate(arrow::ipc::WriteIpcPayload(payload, Options, &out, &metadata_length));
     Y_ABORT_UNLESS(out.GetPosition() == str.size());
-    Y_VERIFY_DEBUG(TBatchPayloadDeserializer(batch->schema()).Deserialize(str).ok());
+    Y_DEBUG_ABORT_UNLESS(TBatchPayloadDeserializer(batch->schema()).Deserialize(str).ok());
     AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "serialize")("size", str.size())("columns", batch->schema()->num_fields());
     return str;
 }

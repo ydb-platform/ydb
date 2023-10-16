@@ -19,8 +19,8 @@ namespace NKikimr {
             ui8 queryPartId,
             ui32 queryShift,
             ui32 querySize) {
-        Y_VERIFY_DEBUG(id.PartId() == 0);
-        Y_VERIFY_DEBUG(!Traversing);
+        Y_DEBUG_ABORT_UNLESS(id.PartId() == 0);
+        Y_DEBUG_ABORT_UNLESS(!Traversing);
         ClearTmpItems();
         CurID = id;
         Cookie = cookie;
@@ -36,7 +36,7 @@ namespace NKikimr {
 
     // We have data on disk
     void TReadBatcher::operator () (const TDiskPart &data, NMatrix::TVectorType parts) {
-        Y_VERIFY_DEBUG(Traversing);
+        Y_DEBUG_ABORT_UNLESS(Traversing);
         FoundDiskItems.emplace_back(data, parts);
     }
 
@@ -68,7 +68,7 @@ namespace NKikimr {
 
     // We have diskBlob in memory
     void TReadBatcher::operator () (const TDiskBlob &diskBlob) {
-        Y_VERIFY_DEBUG(Traversing);
+        Y_DEBUG_ABORT_UNLESS(Traversing);
         FoundInMemItems.push_back(diskBlob);
     }
 
@@ -98,7 +98,7 @@ namespace NKikimr {
 
     // Finish data traverse for a single key
     void TReadBatcher::FinishTraverse(const TIngress &ingress) {
-        Y_VERIFY_DEBUG(Traversing);
+        Y_DEBUG_ABORT_UNLESS(Traversing);
         Traversing = false;
 
         // process found items; first, we process disk items; then, we process in-mem items that may possibly
@@ -143,7 +143,7 @@ namespace NKikimr {
     }
 
     void TReadBatcher::AbortTraverse() {
-        Y_VERIFY_DEBUG(Traversing);
+        Y_DEBUG_ABORT_UNLESS(Traversing);
         Traversing = false;
     }
 
@@ -224,7 +224,7 @@ namespace NKikimr {
         else {
             // prepare read plan
             PrepareReadPlan();
-            Y_VERIFY_DEBUG(!Result->GlueReads.empty());
+            Y_DEBUG_ABORT_UNLESS(!Result->GlueReads.empty());
             // evaluate total read size
             const ui32 blockSize = Ctx->PDiskCtx->Dsk->AppendBlockSize;
             for (const auto& item : Result->GlueReads) {

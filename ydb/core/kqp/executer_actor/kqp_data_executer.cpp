@@ -1253,7 +1253,7 @@ private:
             case TShardState::EState::Prepared: // is it correct?
                 LOG_E("DeliveryProblem to shard " << msg->TabletId << ", notDelivered: " << msg->NotDelivered
                     << ", txPlanned: " << TxPlanned << ", coordinator: " << TxCoordinator);
-                Y_VERIFY_DEBUG(false);
+                Y_DEBUG_ABORT_UNLESS(false);
                 // Proceed with query processing
                 [[fallthrough]];
             case TShardState::EState::Executing: {
@@ -1366,7 +1366,7 @@ private:
         const auto& keyTypes = tableInfo->KeyColumnTypes;
 
         for (auto& op : stage.GetTableOps()) {
-            Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
+            Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.TablePath == op.GetTable().GetPath());
             auto columns = BuildKqpColumns(op, tableInfo);
             switch (op.GetTypeCase()) {
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:

@@ -179,7 +179,7 @@ public:
         } else {
             if (!MvccReadWriteVersion) {
                 auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
-                Y_VERIFY_DEBUG(readVersion == writeVersion);
+                Y_DEBUG_ABORT_UNLESS(readVersion == writeVersion);
                 MvccReadWriteVersion = writeVersion;
             }
 

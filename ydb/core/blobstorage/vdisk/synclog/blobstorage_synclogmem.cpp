@@ -158,7 +158,7 @@ namespace NKikimr {
             } else {
                 // pageFirstLsn >= lsn
                 ui64 pageFirstLsn = PagesIt.Get().GetFirstLsn();
-                Y_VERIFY_DEBUG(pageFirstLsn >= lsn);
+                Y_DEBUG_ABORT_UNLESS(pageFirstLsn >= lsn);
                 TPageIterator firstIt(PagesIt.GetSnap());
                 firstIt.SeekToFirst();
                 if (pageFirstLsn == lsn || PagesIt == firstIt) {
@@ -174,16 +174,16 @@ namespace NKikimr {
             }
 
             // we have found the required page and it is PagesIt
-            Y_VERIFY_DEBUG(PagesIt.Valid());
+            Y_DEBUG_ABORT_UNLESS(PagesIt.Valid());
 
             // find exact position in the page
             SetupHdr();
             while (Hdr->Lsn < lsn) {
                 Hdr = Hdr->Next();
-                Y_VERIFY_DEBUG(Hdr != HdrEnd);
+                Y_DEBUG_ABORT_UNLESS(Hdr != HdrEnd);
             }
 
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
         }
 
         void TMemRecLogSnapshot::TIterator::Next() {
@@ -245,12 +245,12 @@ namespace NKikimr {
         }
 
         void TMemRecLog::PutMany(const void *buf, ui32 size) {
-            Y_VERIFY_DEBUG(size);
+            Y_DEBUG_ABORT_UNLESS(size);
             TRecordHdr *rec = (TRecordHdr*)buf;
             ui32 recSize = 0;
             do {
                 recSize = rec->GetSize();
-                Y_VERIFY_DEBUG(recSize <= size);
+                Y_DEBUG_ABORT_UNLESS(recSize <= size);
                 PutOne(rec, recSize);
                 rec = rec->Next();
                 size -= recSize;

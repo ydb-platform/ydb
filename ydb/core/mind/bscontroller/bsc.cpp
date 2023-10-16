@@ -159,7 +159,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
     if (ev->Get()->SourceType == TEvNodeWardenQueryStorageConfig::EventType) {
-        Y_VERIFY_DEBUG(false);
+        Y_DEBUG_ABORT_UNLESS(false);
     }
 }
 
@@ -239,12 +239,12 @@ void TBlobStorageController::ValidateInternalState() {
         }
         if (vslot->Group) {
             if (vslot->Status == NKikimrBlobStorage::EVDiskStatus::READY) {
-                Y_VERIFY_DEBUG(vslot->IsReady || vslot->IsInVSlotReadyTimestampQ());
+                Y_DEBUG_ABORT_UNLESS(vslot->IsReady || vslot->IsInVSlotReadyTimestampQ());
             } else {
-                Y_VERIFY_DEBUG(!vslot->IsReady && !vslot->IsInVSlotReadyTimestampQ());
+                Y_DEBUG_ABORT_UNLESS(!vslot->IsReady && !vslot->IsInVSlotReadyTimestampQ());
             }
         } else {
-            Y_VERIFY_DEBUG(!vslot->IsInVSlotReadyTimestampQ());
+            Y_DEBUG_ABORT_UNLESS(!vslot->IsInVSlotReadyTimestampQ());
         }
     }
     for (const auto& [groupId, group] : GroupMap) {

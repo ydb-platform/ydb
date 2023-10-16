@@ -222,7 +222,7 @@ public:
 
                 if (groups.HaveValue<T::Metrics>()) {
                     const bool success = group.GroupMetrics.emplace().ParseFromString(groups.GetValue<T::Metrics>());
-                    Y_VERIFY_DEBUG(success);
+                    Y_DEBUG_ABORT_UNLESS(success);
                 }
 
 #undef OPTIONAL

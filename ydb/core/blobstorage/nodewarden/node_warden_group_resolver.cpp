@@ -165,7 +165,7 @@ namespace NKikimr::NStorage {
                     needed.erase(it->second);
                 }
                 if (needed.empty()) {
-                    Y_VERIFY_DEBUG(GetResultingGroupInfo());
+                    Y_DEBUG_ABORT_UNLESS(GetResultingGroupInfo());
                     return false; // information we have is quite conclusive, nothing more to scan
                 }
             }

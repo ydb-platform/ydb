@@ -179,7 +179,7 @@ public:
 
             try {
                 if (kqpResponse.GetYdbResults().size()) {
-                    Y_VERIFY_DEBUG(!kqpResponse.GetYdbResults().GetArena() ||
+                    Y_DEBUG_ABORT_UNLESS(!kqpResponse.GetYdbResults().GetArena() ||
                         queryResult->mutable_result_sets()->GetArena() == kqpResponse.GetYdbResults().GetArena());
                     // https://protobuf.dev/reference/cpp/arenas/#swap
                     // Actualy will be copy in case pf remote execution

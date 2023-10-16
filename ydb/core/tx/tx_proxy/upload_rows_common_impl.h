@@ -1221,7 +1221,7 @@ private:
 
         SetError(status, message);
 
-        Y_VERIFY_DEBUG(ShardRepliesLeft.empty());
+        Y_DEBUG_ABORT_UNLESS(ShardRepliesLeft.empty());
         ReplyIfDone(ctx);
     }
 
@@ -1234,7 +1234,7 @@ private:
         if (LongTxId != NLongTxService::TLongTxId()) {
             // LongTxId is reset after successful commit
             // If it si still there it means we need to rollback
-            Y_VERIFY_DEBUG(status != ::Ydb::StatusIds::SUCCESS);
+            Y_DEBUG_ABORT_UNLESS(status != ::Ydb::StatusIds::SUCCESS);
             RollbackLongTx(ctx);
         }
 

@@ -858,10 +858,10 @@ void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMe
     MemTable().Update(rop, key, ops, apart, rowVersion, CommittedTransactions);
 
     if (!hadTxRef) {
-        Y_VERIFY_DEBUG(memTable.GetTxIdStats().contains(txId));
+        Y_DEBUG_ABORT_UNLESS(memTable.GetTxIdStats().contains(txId));
         AddTxRef(txId);
     } else {
-        Y_VERIFY_DEBUG(TxRefs[txId] > 0);
+        Y_DEBUG_ABORT_UNLESS(TxRefs[txId] > 0);
     }
 }
 
@@ -1167,7 +1167,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
         }
     }
 
-    Y_VERIFY_DEBUG(!snapshot.IsMax() || (stats.InvisibleRowSkips - prevInvisibleRowSkips) == 0);
+    Y_DEBUG_ABORT_UNLESS(!snapshot.IsMax() || (stats.InvisibleRowSkips - prevInvisibleRowSkips) == 0);
 
     if (!ready || row.Need()) {
         return EReady::Page;

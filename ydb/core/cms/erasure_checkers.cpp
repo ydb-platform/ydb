@@ -86,7 +86,7 @@ bool TErasureCounterBase::CheckForMaxAvailability(TClusterInfoPtr info, TErrorIn
 bool TErasureCounterBase::CountVDisk(const TVDiskInfo &vdisk, TClusterInfoPtr info, TDuration retryTime,
         TDuration duration, TErrorInfo &error)
 {
-    Y_VERIFY_DEBUG(vdisk.VDiskId != VDisk.VDiskId);
+    Y_DEBUG_ABORT_UNLESS(vdisk.VDiskId != VDisk.VDiskId);
 
     // Check locks.
     TErrorInfo err;

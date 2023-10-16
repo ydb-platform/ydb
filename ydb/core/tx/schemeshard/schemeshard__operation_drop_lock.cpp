@@ -198,7 +198,7 @@ public:
 
         if (dstPath.Base()->IsTable()) {
             auto table = context.SS->Tables.at(pathId);
-            Y_VERIFY_DEBUG(table->GetSplitOpsInFlight().size() == 0);
+            Y_DEBUG_ABORT_UNLESS(table->GetSplitOpsInFlight().size() == 0);
 
             for (const auto& splitOpId : table->GetSplitOpsInFlight()) {
                 context.OnComplete.Dependence(splitOpId.GetTxId(), OperationId.GetTxId());

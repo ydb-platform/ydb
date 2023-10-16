@@ -96,22 +96,22 @@ public:
     }
 
     void Live(IComputationNode* flow, NUdf::TUnboxedValue&& liveValue) {
-        Y_VERIFY_DEBUG(!IsLive());
-        Y_VERIFY_DEBUG(Count == 0);
+        Y_DEBUG_ABORT_UNLESS(!IsLive());
+        Y_DEBUG_ABORT_UNLESS(Count == 0);
         LiveFlow = flow;
         LiveValue = std::move(liveValue);
     }
 
     void Live(TLiveFetcher&& fetcher, NUdf::TUnboxedValue* liveValues) {
-        Y_VERIFY_DEBUG(!IsLive());
-        Y_VERIFY_DEBUG(Count == 0);
+        Y_DEBUG_ABORT_UNLESS(!IsLive());
+        Y_DEBUG_ABORT_UNLESS(Count == 0);
         Fetcher = std::move(fetcher);
         LiveValues = liveValues;
     }
 
     void Add(NUdf::TUnboxedValue&& value) {
 #ifndef NDEBUG
-        Y_VERIFY_DEBUG(!IsSealed);
+        Y_DEBUG_ABORT_UNLESS(!IsSealed);
 #endif
         if (SingleShot && Count > 0) {
             MKQL_ENSURE(Count == 1, "Counter inconsistent");
@@ -126,7 +126,7 @@ public:
             }
             else {
                 if (Count == DEFAULT_STACK_ITEMS) {
-                    Y_VERIFY_DEBUG(Heap.empty());
+                    Y_DEBUG_ABORT_UNLESS(Heap.empty());
                     Heap.assign(Stack, Stack + DEFAULT_STACK_ITEMS);
                 }
 
@@ -158,7 +158,7 @@ public:
     }
 
     ui64 GetCount() const {
-        Y_VERIFY_DEBUG(!IsLive());
+        Y_DEBUG_ABORT_UNLESS(!IsLive());
         return Count;
     }
 
@@ -168,7 +168,7 @@ public:
 
     NUdf::TUnboxedValue Next(TComputationContext& ctx) {
 #ifndef NDEBUG
-        Y_VERIFY_DEBUG(IsSealed);
+        Y_DEBUG_ABORT_UNLESS(IsSealed);
 #endif
         if (IsLive()) {
             if ((Index + 1) == 0) {
@@ -248,9 +248,9 @@ public:
     }
 
     void Rewind() {
-        Y_VERIFY_DEBUG(!IsLive());
+        Y_DEBUG_ABORT_UNLESS(!IsLive());
 #ifndef NDEBUG
-        Y_VERIFY_DEBUG(IsSealed);
+        Y_DEBUG_ABORT_UNLESS(IsSealed);
 #endif
         Index = ui64(-1);
         if (FileState) {
@@ -275,7 +275,7 @@ private:
     }
 
     void Write(NUdf::TUnboxedValue&& value) {
-        Y_VERIFY_DEBUG(FileState->Output);
+        Y_DEBUG_ABORT_UNLESS(FileState->Output);
         TStringBuf serialized = ItemPacker.Pack(value);
         ui32 length = serialized.size();
         FileState->Output->Write(&length, sizeof(length));
@@ -1413,15 +1413,15 @@ public:
     }
 
     void Live(NUdf::TUnboxedValue& stream, NUdf::TUnboxedValue&& liveValue) {
-        Y_VERIFY_DEBUG(!IsLive());
-        Y_VERIFY_DEBUG(Count == 0);
+        Y_DEBUG_ABORT_UNLESS(!IsLive());
+        Y_DEBUG_ABORT_UNLESS(Count == 0);
         LiveStream = stream;
         LiveValue = std::move(liveValue);
     }
 
     void Add(NUdf::TUnboxedValue&& value) {
 #ifndef NDEBUG
-        Y_VERIFY_DEBUG(!IsSealed);
+        Y_DEBUG_ABORT_UNLESS(!IsSealed);
 #endif
         if (SingleShot && Count > 0) {
             MKQL_ENSURE(Count == 1, "Counter inconsistent");
@@ -1436,7 +1436,7 @@ public:
             }
             else {
                 if (Count == DEFAULT_STACK_ITEMS) {
-                    Y_VERIFY_DEBUG(Heap.empty());
+                    Y_DEBUG_ABORT_UNLESS(Heap.empty());
                     Heap.assign(Stack, Stack + DEFAULT_STACK_ITEMS);
                 }
 
@@ -1468,7 +1468,7 @@ public:
     }
 
     ui64 GetCount() const {
-        Y_VERIFY_DEBUG(!IsLive());
+        Y_DEBUG_ABORT_UNLESS(!IsLive());
         return Count;
     }
 
@@ -1478,7 +1478,7 @@ public:
 
     NUdf::EFetchStatus Next(NUdf::TUnboxedValue& result) {
 #ifndef NDEBUG
-        Y_VERIFY_DEBUG(IsSealed);
+        Y_DEBUG_ABORT_UNLESS(IsSealed);
 #endif
         if (IsLive()) {
             auto status = NUdf::EFetchStatus::Ok;
@@ -1519,9 +1519,9 @@ public:
     }
 
     void Rewind() {
-        Y_VERIFY_DEBUG(!IsLive());
+        Y_DEBUG_ABORT_UNLESS(!IsLive());
 #ifndef NDEBUG
-        Y_VERIFY_DEBUG(IsSealed);
+        Y_DEBUG_ABORT_UNLESS(IsSealed);
 #endif
         Index = ui64(-1);
         if (FileState) {
@@ -1546,7 +1546,7 @@ private:
     }
 
     void Write(NUdf::TUnboxedValue&& value) {
-        Y_VERIFY_DEBUG(FileState->Output);
+        Y_DEBUG_ABORT_UNLESS(FileState->Output);
         TStringBuf serialized = ItemPacker.Pack(value);
         ui32 length = serialized.size();
         FileState->Output->Write(&length, sizeof(length));

@@ -405,7 +405,7 @@ static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSyste
 
 static TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSystemConfig::TScheduler &config) {
     const ui64 resolution = config.HasResolution() ? config.GetResolution() : 1024;
-    Y_VERIFY_DEBUG((resolution & (resolution - 1)) == 0);  // resolution must be power of 2
+    Y_DEBUG_ABORT_UNLESS((resolution & (resolution - 1)) == 0);  // resolution must be power of 2
     const ui64 spinThreshold = config.HasSpinThreshold() ? config.GetSpinThreshold() : 0;
     const ui64 progressThreshold = config.HasProgressThreshold() ? config.GetProgressThreshold() : 10000;
     const bool useSchedulerActor = config.HasUseSchedulerActor() ? config.GetUseSchedulerActor() : false;
@@ -427,7 +427,7 @@ TBasicServicesInitializer::TBasicServicesInitializer(const TKikimrRunConfig& run
 }
 
 static ui32 GetInterconnectThreadPoolId(const NKikimr::TAppData* appData) {
-    Y_VERIFY_DEBUG(appData != nullptr);
+    Y_DEBUG_ABORT_UNLESS(appData != nullptr);
     auto item = appData->ServicePools.find("Interconnect");
     if (item != appData->ServicePools.end())
         return item->second;

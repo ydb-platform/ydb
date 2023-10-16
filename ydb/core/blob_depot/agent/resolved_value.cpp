@@ -8,7 +8,7 @@ namespace NKikimr::NBlobDepot {
         , SubrangeBegin(link.GetSubrangeBegin())
         , SubrangeEnd(link.HasSubrangeEnd() ? link.GetSubrangeEnd() : BlobId.BlobSize())
     {
-        Y_VERIFY_DEBUG(link.HasBlobId() && link.HasGroupId());
+        Y_DEBUG_ABORT_UNLESS(link.HasBlobId() && link.HasGroupId());
     }
 
     void TResolvedValue::TLink::Output(IOutputStream& s) const {

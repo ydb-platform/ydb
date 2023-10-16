@@ -662,7 +662,7 @@ private:
         }
     private:
         static TBlockItem GetBlockItem(IBlockReader& reader, const TChunkedArrayIndex& arrayIndex, ui64 idx) {
-            Y_VERIFY_DEBUG(!arrayIndex.empty());
+            Y_DEBUG_ABORT_UNLESS(!arrayIndex.empty());
             if (arrayIndex.size() == 1) {
                 return reader.GetItem(*arrayIndex.front().Data, idx);
             }

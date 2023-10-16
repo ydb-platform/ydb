@@ -210,7 +210,7 @@ ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
         bytes += column->length() / 8 + 1;
     }
 
-    Y_VERIFY_DEBUG(success, "Unsupported arrow type %s", type->ToString().data());
+    Y_DEBUG_ABORT_UNLESS(success, "Unsupported arrow type %s", type->ToString().data());
     return bytes;
 }
 

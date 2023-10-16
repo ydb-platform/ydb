@@ -406,7 +406,7 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
         return;
     }
 
-    Y_VERIFY_DEBUG(NArrow::IsSorted(batch, sortingKey));
+    Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, sortingKey));
 
     auto keyBatch = ExtractColumns(batch, sortingKey);
     auto& keyColumns = keyBatch->columns();
@@ -419,7 +419,7 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
         if (prev == current) {
             if (!same) {
                 out.push_back(batch->Slice(start, i - start));
-                Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(out.back(), sortingKey));
+                Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(out.back(), sortingKey));
                 same = true;
             }
         } else if (same) {
@@ -432,7 +432,7 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
     } else if (!same) {
         out.push_back(batch->Slice(start, batch->num_rows() - start));
     }
-    Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(out.back(), sortingKey));
+    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(out.back(), sortingKey));
 }
 
 template <bool desc, bool uniq>

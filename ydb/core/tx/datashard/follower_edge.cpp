@@ -4,7 +4,7 @@ namespace NKikimr::NDataShard {
 
 std::tuple<TRowVersion, bool, ui64> TDataShard::CalculateFollowerReadEdge() const {
     Y_ABORT_UNLESS(!IsFollower());
-    Y_VERIFY_DEBUG(IsMvccEnabled());
+    Y_DEBUG_ABORT_UNLESS(IsMvccEnabled());
 
     for (auto order : TransQueue.GetPlan()) {
         // When we have planned operations we assume the first one may be used

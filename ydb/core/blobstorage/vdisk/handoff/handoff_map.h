@@ -112,7 +112,7 @@ namespace NKikimr {
         // Finish transforming items, shutdown proxy
         void Finish(const TActorContext &ctx) {
             // do nothing by default, all work is done in template specialization for logo blobs
-            Y_VERIFY_DEBUG(ProxyID == TActorId());
+            Y_DEBUG_ABORT_UNLESS(ProxyID == TActorId());
             ctx.Send(NotifyID, new TEvHandoffSyncLogFinished(false));
         }
 
@@ -208,7 +208,7 @@ namespace NKikimr {
         } else {
             result = TrRes.SetRaw(key, memRec, dataMerger); // unchanged by default
             if (RunHandoff) {
-                Y_VERIFY_DEBUG(MoveMap.size() == DelMap.size() && Counter < MoveMap.size());
+                Y_DEBUG_ABORT_UNLESS(MoveMap.size() == DelMap.size() && Counter < MoveMap.size());
                 const NMatrix::TVectorType localVec = memRec->GetIngress().LocalParts(Top->GType);
                 ui8 vecSize = Top->GType.TotalPartCount();
                 const NMatrix::TVectorType movePlan(MoveMap.at(Counter), vecSize);
@@ -227,7 +227,7 @@ namespace NKikimr {
                         // iterate via parts
                         for (TDiskBlob::TPartIterator it = blob.begin(), e = blob.end(); it != e; ++it) {
                             ui8 partId = it.GetPartId();
-                            Y_VERIFY_DEBUG(partId > 0);
+                            Y_DEBUG_ABORT_UNLESS(partId > 0);
                             if (moveVec.Get(partId - 1)) {
                                 TLogoBlobID id(key.LogoBlobID(), partId);
                                 TVDiskIdShort vdisk(memRec->GetIngress().GetMainReplica(Top.get(), id));
@@ -371,10 +371,10 @@ namespace NKikimr {
                 "THandoffMap: finished: %s", Stat.ToStringRuntimeStat().data()));
 
         if (RunHandoff) {
-            Y_VERIFY_DEBUG(ProxyID != TActorId());
+            Y_DEBUG_ABORT_UNLESS(ProxyID != TActorId());
             ctx.Send(ProxyID, new TEvHandoffSyncLogDel()); // i.e. finish
         } else {
-            Y_VERIFY_DEBUG(ProxyID == TActorId());
+            Y_DEBUG_ABORT_UNLESS(ProxyID == TActorId());
             ctx.Send(NotifyID, new TEvHandoffSyncLogFinished(false));
         }
     }

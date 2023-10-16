@@ -46,9 +46,9 @@
     #define ENSURE_NOT_FROZEN_CTX \
         YQL_ENSURE(!Frozen, "Change in frozen expr context.");
 #else
-    #define ENSURE_NOT_DELETED Y_VERIFY_DEBUG(!Dead(), "Access to dead node # %lu: %d '%s'", UniqueId_, (int)Type_, TString(ContentUnchecked()).data());
-    #define ENSURE_NOT_FROZEN Y_VERIFY_DEBUG(!Frozen());
-    #define ENSURE_NOT_FROZEN_CTX Y_VERIFY_DEBUG(!Frozen);
+    #define ENSURE_NOT_DELETED Y_DEBUG_ABORT_UNLESS(!Dead(), "Access to dead node # %lu: %d '%s'", UniqueId_, (int)Type_, TString(ContentUnchecked()).data());
+    #define ENSURE_NOT_FROZEN Y_DEBUG_ABORT_UNLESS(!Frozen());
+    #define ENSURE_NOT_FROZEN_CTX Y_DEBUG_ABORT_UNLESS(!Frozen);
 #endif
 
 namespace NYql {
@@ -501,7 +501,7 @@ public:
     }
 
     static ui64 MakeHash(const TVector<const TItemExprType*>& items) {
-        Y_VERIFY_DEBUG(IsSorted(items.begin(), items.end(), TItemLess()));
+        Y_DEBUG_ABORT_UNLESS(IsSorted(items.begin(), items.end(), TItemLess()));
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Struct;
         hash = StreamHash(items.size(), hash);
         for (const auto& item : items) {
@@ -1985,7 +1985,7 @@ public:
     }
 
     ui64 GetHash() const {
-        Y_VERIFY_DEBUG(HashAbove == HashBelow);
+        Y_DEBUG_ABORT_UNLESS(HashAbove == HashBelow);
         return HashAbove;
     }
 
@@ -2026,7 +2026,7 @@ public:
     }
 
     void SetDependencyScope(const TExprNode* outerLambda, const TExprNode* innerLambda) {
-        Y_VERIFY_DEBUG(outerLambda == innerLambda || outerLambda->GetLambdaLevel() < innerLambda->GetLambdaLevel(), "Wrong scope of closures.");
+        Y_DEBUG_ABORT_UNLESS(outerLambda == innerLambda || outerLambda->GetLambdaLevel() < innerLambda->GetLambdaLevel(), "Wrong scope of closures.");
         HasLambdaScope = 1;
         OuterLambda = outerLambda;
         InnerLambda = innerLambda;

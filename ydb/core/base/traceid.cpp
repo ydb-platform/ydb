@@ -57,7 +57,7 @@ bool TTraceID::operator!=(const TTraceID &x) const {
 }
 
 void TraceIDFromTraceID(const TTraceID& src, NKikimrTracing::TTraceID* dest) {
-    Y_VERIFY_DEBUG(dest);
+    Y_DEBUG_ABORT_UNLESS(dest);
     dest->SetCreationTime(src.CreationTime);
     dest->SetRandomID(src.RandomID);
 }

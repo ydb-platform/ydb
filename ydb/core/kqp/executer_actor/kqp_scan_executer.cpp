@@ -264,7 +264,7 @@ private:
 
             LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
 
-            Y_VERIFY_DEBUG(!stage.GetIsEffectsStage());
+            Y_DEBUG_ABORT_UNLESS(!stage.GetIsEffectsStage());
 
             if (stage.SourcesSize() > 0) {
                 switch (stage.GetSources(0).GetTypeCase()) {

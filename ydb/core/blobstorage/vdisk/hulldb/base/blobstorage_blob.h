@@ -169,7 +169,7 @@ namespace NKikimr {
             }
 
             bool operator == (const TPartIterator &i) {
-                Y_VERIFY_DEBUG(Blob == i.Blob);
+                Y_DEBUG_ABORT_UNLESS(Blob == i.Blob);
                 return Part == i.Part;
             }
 

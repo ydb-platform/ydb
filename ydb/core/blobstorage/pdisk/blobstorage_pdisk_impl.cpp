@@ -912,8 +912,8 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
 
 void TPDisk::SendChunkWriteError(TChunkWrite &chunkWrite, const TString &errorReason,
         NKikimrProto::EReplyStatus status) {
-    Y_VERIFY_DEBUG(errorReason);
-    Y_VERIFY_DEBUG(status != NKikimrProto::OK);
+    Y_DEBUG_ABORT_UNLESS(errorReason);
+    Y_DEBUG_ABORT_UNLESS(status != NKikimrProto::OK);
     LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, errorReason);
     Y_ABORT_UNLESS(!chunkWrite.IsReplied);
     NPDisk::TStatusFlags flags = status == NKikimrProto::OUT_OF_SPACE
@@ -1266,7 +1266,7 @@ void TPDisk::ChunkUnlock(TChunkUnlock &evChunkUnlock) {
 TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason) {
     // chunkIdx = 0 is deprecated and will not be soon removed
     TGuard<TMutex> guard(StateMutex);
-    Y_VERIFY_DEBUG(IsOwnerUser(req->Owner));
+    Y_DEBUG_ABORT_UNLESS(IsOwnerUser(req->Owner));
 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
     i64 ownerFree = Keeper.GetOwnerFree(req->Owner);
@@ -1575,7 +1575,7 @@ void TPDisk::CommitLogChunks(TCommitLogChunks &req) {
     for (auto it = req.CommitedLogChunks.begin(); it != req.CommitedLogChunks.end(); ++it) {
         Y_VERIFY_S(ChunkState[*it].OwnerId == OwnerSystem, "Unexpected chunkIdx# " << *it << " ownerId# "
                 << (ui32)ChunkState[*it].OwnerId << " in CommitLogChunks PDiskId# " << PDiskId);
-        Y_VERIFY_DEBUG(ChunkState[*it].CommitState == TChunkState::LOG_RESERVED);
+        Y_DEBUG_ABORT_UNLESS(ChunkState[*it].CommitState == TChunkState::LOG_RESERVED);
         ChunkState[*it].CommitState = TChunkState::LOG_COMMITTED;
     }
 }
@@ -2692,7 +2692,7 @@ NKikimrProto::EReplyStatus TPDisk::ValidateRequest(TLogWrite *logWrite, TStringS
 }
 
 void TPDisk::PrepareLogError(TLogWrite *logWrite, TStringStream& err, NKikimrProto::EReplyStatus status) {
-    Y_VERIFY_DEBUG(status != NKikimrProto::OK);
+    Y_DEBUG_ABORT_UNLESS(status != NKikimrProto::OK);
     if (logWrite->Result && logWrite->Result->Status != NKikimrProto::OK) {
         return;
     }
@@ -2872,7 +2872,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                      delete request;
                      return false;
                  } else {
-                     Y_VERIFY_DEBUG(chunks.size() == 1);
+                     Y_DEBUG_ABORT_UNLESS(chunks.size() == 1);
                      ev.ChunkIdx = chunks.front();
                  }
             }

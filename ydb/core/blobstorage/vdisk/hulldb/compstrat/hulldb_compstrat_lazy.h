@@ -144,7 +144,7 @@ namespace NKikimr {
                 ui32 added = 0;
                 auto it = LevelSnap.SliceSnap.GetLevel0SstIterator();
                 it.SeekToFirst();
-                Y_VERIFY_DEBUG(it.Valid());
+                Y_DEBUG_ABORT_UNLESS(it.Valid());
                 // FIXME: check why we have a limit here
                 while (it.Valid() && added < Boundaries->Level0MaxSstsAtOnce) {
                     // push to the task

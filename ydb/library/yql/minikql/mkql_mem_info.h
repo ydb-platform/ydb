@@ -97,7 +97,7 @@ public:
             }
         }
         auto res = AllocationsMap_.insert({mem, { size, std::move(location), false }});
-        Y_VERIFY_DEBUG(res.second, "Duplicate allocation at: %p, "
+        Y_DEBUG_ABORT_UNLESS(res.second, "Duplicate allocation at: %p, "
                                    "already allocated at: %s", mem, (TStringBuilder() << res.first->second.Location).c_str());
         //Clog << Title_ << " take: " << size << " -> " << mem << " " << AllocationsMap_.size() << Endl;
     }
@@ -116,12 +116,12 @@ public:
         }
 
         if (AllowMissing_) {
-            Y_VERIFY_DEBUG(!it->second.IsDeleted, "Double free at: %p", mem);
+            Y_DEBUG_ABORT_UNLESS(!it->second.IsDeleted, "Double free at: %p", mem);
         } else {
-            Y_VERIFY_DEBUG(it != AllocationsMap_.end(), "Double free at: %p", mem);
+            Y_DEBUG_ABORT_UNLESS(it != AllocationsMap_.end(), "Double free at: %p", mem);
         }
 
-        Y_VERIFY_DEBUG(size == it->second.Size,
+        Y_DEBUG_ABORT_UNLESS(size == it->second.Size,
                     "Deallocating wrong size at: %p, "
                     "allocated at: %s", mem, (TStringBuilder() << it->second.Location).c_str());
         if (AllowMissing_) {
@@ -141,9 +141,9 @@ public:
         }
 
         if (AllowMissing_) {
-            Y_VERIFY_DEBUG(!it->second.IsDeleted, "Double free at: %p", mem);
+            Y_DEBUG_ABORT_UNLESS(!it->second.IsDeleted, "Double free at: %p", mem);
         } else {
-            Y_VERIFY_DEBUG(it != AllocationsMap_.end(), "Double free at: %p", mem);
+            Y_DEBUG_ABORT_UNLESS(it != AllocationsMap_.end(), "Double free at: %p", mem);
         }
 
         Freed_ += it->second.Size;
@@ -186,11 +186,11 @@ public:
         }
 
         if (!AllowMissing_) {
-            Y_VERIFY_DEBUG(GetUsage() == 0,
+            Y_DEBUG_ABORT_UNLESS(GetUsage() == 0,
                     "Allocated: %ld, Freed: %ld, Peak: %ld",
                     GetAllocated(), GetFreed(), GetPeak());
         }
-        Y_VERIFY_DEBUG(!leakCount, "Has no freed memory");
+        Y_DEBUG_ABORT_UNLESS(!leakCount, "Has no freed memory");
 #endif
     }
 

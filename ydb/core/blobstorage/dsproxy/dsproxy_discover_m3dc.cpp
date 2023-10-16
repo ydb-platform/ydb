@@ -51,7 +51,7 @@ class TDiscoverVDiskWorker {
             , Ingress(item.GetIngress())
             , Status(item.GetStatus())
         {
-            Y_VERIFY_DEBUG(item.HasBlobID() && item.HasIngress() && item.HasStatus());
+            Y_DEBUG_ABORT_UNLESS(item.HasBlobID() && item.HasIngress() && item.HasStatus());
         }
     };
 

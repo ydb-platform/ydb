@@ -234,7 +234,7 @@ public:
     }
 
     void HandleResolve(TEvResolveTablesResponse::TPtr& ev, const TActorContext& ctx) {
-        Y_VERIFY_DEBUG(ev->Sender == ResolveActorID);
+        Y_DEBUG_ABORT_UNLESS(ev->Sender == ResolveActorID);
         ResolveActorID = { };
 
         auto* msg = ev->Get();
@@ -963,7 +963,7 @@ public:
         Y_UNUSED(shardId);
 
         ++TabletErrors;
-        Y_VERIFY_DEBUG(TabletsToPrepare > 0);
+        Y_DEBUG_ABORT_UNLESS(TabletsToPrepare > 0);
         if (!--TabletsToPrepare) {
             LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
                 "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
@@ -1275,7 +1275,7 @@ public:
     }
 
     void HandleResolve(TEvResolveTablesResponse::TPtr& ev, const TActorContext& ctx) {
-        Y_VERIFY_DEBUG(ev->Sender == ResolveActorID);
+        Y_DEBUG_ABORT_UNLESS(ev->Sender == ResolveActorID);
         ResolveActorID = { };
 
         auto* msg = ev->Get();
@@ -1488,7 +1488,7 @@ public:
                 break;
         }
 
-        Y_VERIFY_DEBUG(state.Status != TPerShardState::EStatus::Unknown);
+        Y_DEBUG_ABORT_UNLESS(state.Status != TPerShardState::EStatus::Unknown);
 
         if (!TabletsToWait) {
             Finish(ctx);
@@ -1536,7 +1536,7 @@ public:
                 break;
         }
 
-        Y_VERIFY_DEBUG(state.Status != TPerShardState::EStatus::Unknown);
+        Y_DEBUG_ABORT_UNLESS(state.Status != TPerShardState::EStatus::Unknown);
 
         if (!TabletsToWait) {
             Finish(ctx);

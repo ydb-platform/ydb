@@ -291,7 +291,7 @@ private:
             }
         }
 
-        Y_VERIFY_DEBUG(columns.size() == KeyColumnTypes.size() + ValueColumnTypes.size());
+        Y_DEBUG_ABORT_UNLESS(columns.size() == KeyColumnTypes.size() + ValueColumnTypes.size());
 
         {
             TString format = "clickhouse_native";

@@ -31,7 +31,7 @@ TArrayRef<TCell> TKeyRangeCache::AllocateArrayCopy(TSpecialMemoryPool* pool, TAr
 TCell TKeyRangeCache::AllocateCellCopy(TSpecialMemoryPool* pool, const TCell& cell) {
     if (TCell::CanInline(cell.Size())) {
         TCell copy(cell.Data(), cell.Size());
-        Y_VERIFY_DEBUG(copy.IsInline());
+        Y_DEBUG_ABORT_UNLESS(copy.IsInline());
         return copy;
     }
 
@@ -40,7 +40,7 @@ TCell TKeyRangeCache::AllocateCellCopy(TSpecialMemoryPool* pool, const TCell& ce
         ::memcpy(rawData, cell.Data(), cell.Size());
     }
     TCell copy((const char*)rawData, cell.Size());
-    Y_VERIFY_DEBUG(!copy.IsInline());
+    Y_DEBUG_ABORT_UNLESS(!copy.IsInline());
     return copy;
 }
 
@@ -79,7 +79,7 @@ void TKeyRangeCache::DeallocateKey(TArrayRef<TCell> key) {
 }
 
 void TKeyRangeCache::ExtendLeft(const_iterator it, TArrayRef<TCell> newLeft, bool leftInclusive, TRowVersion version) {
-    Y_VERIFY_DEBUG(it != end());
+    Y_DEBUG_ABORT_UNLESS(it != end());
     TKeyRangeEntryLRU& entry = const_cast<TKeyRangeEntryLRU&>(*it);
     DeallocateKey(entry.FromKey);
     entry.FromKey = newLeft;
@@ -88,7 +88,7 @@ void TKeyRangeCache::ExtendLeft(const_iterator it, TArrayRef<TCell> newLeft, boo
 }
 
 void TKeyRangeCache::ExtendRight(const_iterator it, TArrayRef<TCell> newRight, bool rightInclusive, TRowVersion version) {
-    Y_VERIFY_DEBUG(it != end());
+    Y_DEBUG_ABORT_UNLESS(it != end());
     TKeyRangeEntryLRU& entry = const_cast<TKeyRangeEntryLRU&>(*it);
     DeallocateKey(entry.ToKey);
     entry.ToKey = newRight;
@@ -97,9 +97,9 @@ void TKeyRangeCache::ExtendRight(const_iterator it, TArrayRef<TCell> newRight, b
 }
 
 TKeyRangeCache::const_iterator TKeyRangeCache::Merge(const_iterator left, const_iterator right, TRowVersion version) {
-    Y_VERIFY_DEBUG(left != end());
-    Y_VERIFY_DEBUG(right != end());
-    Y_VERIFY_DEBUG(left != right);
+    Y_DEBUG_ABORT_UNLESS(left != end());
+    Y_DEBUG_ABORT_UNLESS(right != end());
+    Y_DEBUG_ABORT_UNLESS(left != right);
     TKeyRangeEntry rightCopy = *right;
     Entries.erase(right);
     DeallocateKey(rightCopy.FromKey);
@@ -109,14 +109,14 @@ TKeyRangeCache::const_iterator TKeyRangeCache::Merge(const_iterator left, const_
 
 TKeyRangeCache::const_iterator TKeyRangeCache::Add(TKeyRangeEntry entry) {
     auto res = Entries.emplace(entry.FromKey, entry.ToKey, entry.FromInclusive, entry.ToInclusive, entry.MaxVersion);
-    Y_VERIFY_DEBUG(res.second);
+    Y_DEBUG_ABORT_UNLESS(res.second);
     TKeyRangeEntryLRU& newEntry = const_cast<TKeyRangeEntryLRU&>(*res.first);
     Fresh.PushBack(&newEntry);
     return res.first;
 }
 
 void TKeyRangeCache::Invalidate(const_iterator it) {
-    Y_VERIFY_DEBUG(it != end());
+    Y_DEBUG_ABORT_UNLESS(it != end());
     TKeyRangeEntry entryCopy = *it;
     Entries.erase(it);
     DeallocateKey(entryCopy.FromKey);
@@ -124,7 +124,7 @@ void TKeyRangeCache::Invalidate(const_iterator it) {
 }
 
 void TKeyRangeCache::Touch(const_iterator it) {
-    Y_VERIFY_DEBUG(it != end());
+    Y_DEBUG_ABORT_UNLESS(it != end());
     TKeyRangeEntryLRU& entry = const_cast<TKeyRangeEntryLRU&>(*it);
     Fresh.PushBack(&entry);
 }
@@ -133,7 +133,7 @@ void TKeyRangeCache::EvictOld() {
     while (OverMemoryLimit() && LRU) {
         auto* entry = LRU.PopFront();
         auto it = Entries.find(*entry);
-        Y_VERIFY_DEBUG(it != end());
+        Y_DEBUG_ABORT_UNLESS(it != end());
         Invalidate(it);
         ++Stats_.Evictions;
     }

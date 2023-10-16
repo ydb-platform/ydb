@@ -81,7 +81,7 @@ namespace NKikimr {
 
             public:
                 TTableId(const char *segName) {
-                    Y_VERIFY_DEBUG(!strcmp(segName, "FCur") || !strcmp(segName, "FDreg") || !strcmp(segName, "FOld"));
+                    Y_DEBUG_ABORT_UNLESS(!strcmp(segName, "FCur") || !strcmp(segName, "FDreg") || !strcmp(segName, "FOld"));
                     switch (segName[1]) {
                         case 'C':
                             Type = ETableType::FCUR;
@@ -204,7 +204,7 @@ namespace NKikimr {
                         : outputRecLen; // the same for other record types
 
                     const ui32 numRecs = front.GetLen() / inputRecLen;
-                    Y_VERIFY_DEBUG(front.GetLen() % inputRecLen == 0);
+                    Y_DEBUG_ABORT_UNLESS(front.GetLen() % inputRecLen == 0);
 
                     if (static_cast<size_t>(end - p) < sizeof(TOutputBlockHeader) + outputRecLen * numRecs) {
                         break; // this block does not fit into the output, exit
@@ -235,7 +235,7 @@ namespace NKikimr {
                                 };
                                 p += sizeof(TOutputLogoBlob);
                             }
-                            Y_VERIFY_DEBUG(input == static_cast<const char*>(front.GetData()) + front.GetLen());
+                            Y_DEBUG_ABORT_UNLESS(input == static_cast<const char*>(front.GetData()) + front.GetLen());
                             break;
                         }
 

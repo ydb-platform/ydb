@@ -121,7 +121,7 @@ namespace NKikimr {
             : Id(id)
             , Data(std::move(data))
         {
-            Y_VERIFY_DEBUG(Id.PartId() != 0);
+            Y_DEBUG_ABORT_UNLESS(Id.PartId() != 0);
         }
 
         size_t ByteSize() const {

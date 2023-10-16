@@ -342,7 +342,7 @@ public:
 
             bool reduced = ResourceBroker->ReduceTaskResourcesInstant(
                 taskIt->second.ResourceBrokerTaskId, {0, resources.Memory}, SelfId);
-            Y_VERIFY_DEBUG(reduced);
+            Y_DEBUG_ABORT_UNLESS(reduced);
 
             txIt->second.TxScanQueryMemory -= resources.Memory;
             txIt->second.TxExecutionUnits -= resources.ExecutionUnits;
@@ -354,8 +354,8 @@ public:
         Counters->RmComputeActors->Sub(resources.ExecutionUnits);
         Counters->RmMemory->Sub(resources.Memory);
 
-        Y_VERIFY_DEBUG(Counters->RmComputeActors->Val() >= 0);
-        Y_VERIFY_DEBUG(Counters->RmMemory->Val() >= 0);
+        Y_DEBUG_ABORT_UNLESS(Counters->RmComputeActors->Val() >= 0);
+        Y_DEBUG_ABORT_UNLESS(Counters->RmMemory->Val() >= 0);
 
         FireResourcesPublishing();
     }
@@ -391,7 +391,7 @@ public:
 
             bool finished = ResourceBroker->FinishTaskInstant(
                 TEvResourceBroker::TEvFinishTask(taskIt->second.ResourceBrokerTaskId), SelfId);
-            Y_VERIFY_DEBUG(finished);
+            Y_DEBUG_ABORT_UNLESS(finished);
 
             remainsTasks = txIt->second.Tasks.size() - 1;
 
@@ -416,8 +416,8 @@ public:
         Counters->RmComputeActors->Sub(releaseExecutionUnits);
         Counters->RmMemory->Sub(releaseScanQueryMemory);
 
-        Y_VERIFY_DEBUG(Counters->RmComputeActors->Val() >= 0);
-        Y_VERIFY_DEBUG(Counters->RmMemory->Val() >= 0);
+        Y_DEBUG_ABORT_UNLESS(Counters->RmComputeActors->Val() >= 0);
+        Y_DEBUG_ABORT_UNLESS(Counters->RmMemory->Val() >= 0);
 
         FireResourcesPublishing();
     }
@@ -444,7 +444,7 @@ public:
             for (auto& [taskId, taskState] : txIt->second.Tasks) {
                 bool finished = ResourceBroker->FinishTaskInstant(
                     TEvResourceBroker::TEvFinishTask(taskState.ResourceBrokerTaskId), SelfId);
-                Y_VERIFY_DEBUG(finished);
+                Y_DEBUG_ABORT_UNLESS(finished);
             }
 
             releaseScanQueryMemory = txIt->second.TxScanQueryMemory;
@@ -465,8 +465,8 @@ public:
         Counters->RmComputeActors->Sub(releaseExecutionUnits);
         Counters->RmMemory->Sub(releaseScanQueryMemory);
 
-        Y_VERIFY_DEBUG(Counters->RmComputeActors->Val() >= 0);
-        Y_VERIFY_DEBUG(Counters->RmMemory->Val() >= 0);
+        Y_DEBUG_ABORT_UNLESS(Counters->RmComputeActors->Val() >= 0);
+        Y_DEBUG_ABORT_UNLESS(Counters->RmMemory->Val() >= 0);
 
         FireResourcesPublishing();
     }
@@ -531,12 +531,12 @@ public:
         } // with_lock (txBucket.Lock)
 
         with_lock (Lock) {
-            Y_VERIFY_DEBUG(ExternalDataQueryMemory >= releaseMemory);
+            Y_DEBUG_ABORT_UNLESS(ExternalDataQueryMemory >= releaseMemory);
             ExternalDataQueryMemory -= releaseMemory;
         } // with_lock (Lock)
 
         Counters->RmExternalMemory->Sub(releaseMemory);
-        Y_VERIFY_DEBUG(Counters->RmExternalMemory->Val() >= 0);
+        Y_DEBUG_ABORT_UNLESS(Counters->RmExternalMemory->Val() >= 0);
 
         FireResourcesPublishing();
     }
@@ -569,12 +569,12 @@ public:
         } // with_lock (txBucket.Lock)
 
         with_lock (Lock) {
-            Y_VERIFY_DEBUG(ExternalDataQueryMemory >= releaseMemory);
+            Y_DEBUG_ABORT_UNLESS(ExternalDataQueryMemory >= releaseMemory);
             ExternalDataQueryMemory -= releaseMemory;
         } // with_lock (Lock)
 
         Counters->RmExternalMemory->Sub(releaseMemory);
-        Y_VERIFY_DEBUG(Counters->RmExternalMemory->Val() >= 0);
+        Y_DEBUG_ABORT_UNLESS(Counters->RmExternalMemory->Val() >= 0);
 
         FireResourcesPublishing();
     }
@@ -598,12 +598,12 @@ public:
         } // with_lock (txBucket.Lock)
 
         with_lock (Lock) {
-            Y_VERIFY_DEBUG(ExternalDataQueryMemory >= releaseMemory);
+            Y_DEBUG_ABORT_UNLESS(ExternalDataQueryMemory >= releaseMemory);
             ExternalDataQueryMemory -= releaseMemory;
         } // with_lock (Lock)
 
         Counters->RmExternalMemory->Sub(releaseMemory);
-        Y_VERIFY_DEBUG(Counters->RmExternalMemory->Val() >= 0);
+        Y_DEBUG_ABORT_UNLESS(Counters->RmExternalMemory->Val() >= 0);
 
         FireResourcesPublishing();
     }

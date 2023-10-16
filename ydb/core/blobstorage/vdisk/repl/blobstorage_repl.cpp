@@ -475,7 +475,7 @@ namespace NKikimr {
             const TInstant timeAtEnd = last->End;
 
             if (workAtBegin < workAtEnd || timeAtEnd < timeAtBegin) {
-                Y_VERIFY_DEBUG(false);
+                Y_DEBUG_ABORT_UNLESS(false);
                 return {};
             }
 
@@ -485,7 +485,7 @@ namespace NKikimr {
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev) {
-            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::ReplId);
+            Y_DEBUG_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::ReplId);
 
             TStringStream str;
             unsigned historySize = HistorySize;

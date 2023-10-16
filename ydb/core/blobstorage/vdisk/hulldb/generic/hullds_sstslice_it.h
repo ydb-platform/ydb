@@ -50,19 +50,19 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             ++CurLevelIt;
             ++CurLevelNum;
         }
 
         void Prev() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             --CurLevelIt;
             --CurLevelNum;
         }
 
         TSortedLevelRef Get() const {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             return { CurLevelNum, *CurLevelIt };
         }
     };
@@ -100,7 +100,7 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             IntraLevelIt.Next();
             if (!IntraLevelIt.Valid()) {
                 ++CurLevelIt;
@@ -110,7 +110,7 @@ namespace NKikimr {
         }
 
         TLevelSstPtr Get() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             return TLevelSstPtr(CurLevelNum, IntraLevelIt.Get());
         }
 
@@ -155,7 +155,7 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             if (Level0It.Valid())
                 Level0It.Next();
             else
@@ -163,7 +163,7 @@ namespace NKikimr {
         }
 
         TLevelSstPtr Get() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             if (Level0It.Valid())
                 return TLevelSstPtr(0, Level0It.Get());
             else

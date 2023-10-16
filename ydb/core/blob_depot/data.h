@@ -199,7 +199,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             const TLogoBlobID& GetBlobId() const {
-                Y_VERIFY_DEBUG(Data.Type == BlobIdType);
+                Y_DEBUG_ABORT_UNLESS(Data.Type == BlobIdType);
                 return reinterpret_cast<const TLogoBlobID&>(Data.Bytes);
             }
 
@@ -237,17 +237,17 @@ namespace NKikimr::NBlobDepot {
             }
 
             const TString& GetString() const {
-                Y_VERIFY_DEBUG(Data.Type == StringType);
+                Y_DEBUG_ABORT_UNLESS(Data.Type == StringType);
                 return reinterpret_cast<const TString&>(Data.Bytes);
             }
 
             TString& GetString() {
-                Y_VERIFY_DEBUG(Data.Type == StringType);
+                Y_DEBUG_ABORT_UNLESS(Data.Type == StringType);
                 return reinterpret_cast<TString&>(Data.Bytes);
             }
 
             static ui8 EncodeInlineStringLenAsTypeByte(size_t len) {
-                Y_VERIFY_DEBUG(len <= MaxInlineStringLen);
+                Y_DEBUG_ABORT_UNLESS(len <= MaxInlineStringLen);
                 return len == MaxInlineStringLen ? 0 : len ? len : MaxInlineStringLen;
             }
 
@@ -509,7 +509,7 @@ namespace NKikimr::NBlobDepot {
                         Processing = Processing && callback(key, *value);
                         *Progress = true;
                     } else {
-                        Y_VERIFY_DEBUG(key == left || key == right);
+                        Y_DEBUG_ABORT_UNLESS(key == left || key == right);
                     }
                     LastProcessedKey.emplace(std::move(key));
                     if (!rowset.Next()) {
@@ -535,8 +535,8 @@ namespace NKikimr::NBlobDepot {
             bool res = true;
 
             auto issue = [&](const TKey& key, const TValue& value) {
-                Y_VERIFY_DEBUG(range.Flags & EScanFlags::INCLUDE_BEGIN ? range.Begin <= key : range.Begin < key);
-                Y_VERIFY_DEBUG(range.Flags & EScanFlags::INCLUDE_END ? key <= range.End : key < range.End);
+                Y_DEBUG_ABORT_UNLESS(range.Flags & EScanFlags::INCLUDE_BEGIN ? range.Begin <= key : range.Begin < key);
+                Y_DEBUG_ABORT_UNLESS(range.Flags & EScanFlags::INCLUDE_END ? key <= range.End : key < range.End);
 #ifndef NDEBUG
                 Y_ABORT_UNLESS(range.KeysInRange.insert(key).second); // ensure that the generated key is unique
 #endif

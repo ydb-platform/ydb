@@ -476,5 +476,5 @@ void TConfiguration::PoisonVDisks() {
 
 void TConfiguration::PoisonPDisks() {
     // FIXME: implement
-    Y_VERIFY_DEBUG(false);
+    Y_DEBUG_ABORT_UNLESS(false);
 }

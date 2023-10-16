@@ -123,7 +123,7 @@ namespace NKikimr {
                 }
 
                 void UpdateCountdown(ui64 costChange) {
-                    Y_VERIFY_DEBUG(costChange);
+                    Y_DEBUG_ABORT_UNLESS(costChange);
                     if (CostChangeUntilFrozenCountdown > 0) {
                         if (CostChangeUntilFrozenCountdown >= costChange) {
                             CostChangeUntilFrozenCountdown -= costChange;
@@ -168,9 +168,9 @@ namespace NKikimr {
 
                 void Push(bool checkMsgId, const TMessageId &msgId, ui64 cost, TWindowStatus *opStatus,
                         TInstant now) {
-                    Y_VERIFY_DEBUG(LowWatermark != 0);
-                    Y_VERIFY_DEBUG(LowWatermark <= HighWatermark);
-                    Y_VERIFY_DEBUG(cost > 0);
+                    Y_DEBUG_ABORT_UNLESS(LowWatermark != 0);
+                    Y_DEBUG_ABORT_UNLESS(LowWatermark <= HighWatermark);
+                    Y_DEBUG_ABORT_UNLESS(cost > 0);
 
                     if ((msgId.MsgId == ExpectedMsgId.MsgId && msgId.SequenceId >= ExpectedMsgId.SequenceId) || !checkMsgId) {
                         // accept if msgId is correct

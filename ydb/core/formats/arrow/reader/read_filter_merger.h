@@ -115,7 +115,7 @@ public:
             Data = std::make_shared<TSortableScanData>(batch, dataColumns);
         }
         Y_ABORT_UNLESS(batch->num_rows());
-        Y_VERIFY_DEBUG(batch->ValidateFull().ok());
+        Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 

@@ -82,7 +82,7 @@ namespace NKikimr {
 
         bool Empty() const {
             bool empty = ChunkIdx == 0;
-            Y_VERIFY_DEBUG((empty && Offset == 0 && Size == 0) || !empty);
+            Y_DEBUG_ABORT_UNLESS((empty && Offset == 0 && Size == 0) || !empty);
             return empty;
         }
 

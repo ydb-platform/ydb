@@ -228,7 +228,7 @@ bool NTableState::CollectSchemaChanged(
 
     if (evRecord.HasOpResult()) {
         // TODO: remove TxBackup handling
-        Y_VERIFY_DEBUG(txState.TxType == TTxState::TxBackup || txState.TxType == TTxState::TxRestore);
+        Y_DEBUG_ABORT_UNLESS(txState.TxType == TTxState::TxBackup || txState.TxType == TTxState::TxRestore);
     }
 
     if (!txState.ReadyForNotifications) {

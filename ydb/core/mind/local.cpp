@@ -174,7 +174,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     void TryToRegister(const TActorContext &ctx) {
         LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::TryToRegister");
 
-        Y_VERIFY_DEBUG(!HivePipeClient);
+        Y_DEBUG_ABORT_UNLESS(!HivePipeClient);
 
         // pipe client is in use for convenience, real info update come from EvPing
         NTabletPipe::TClientConfig pipeConfig;

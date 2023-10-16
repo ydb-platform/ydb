@@ -18,7 +18,7 @@ public:
                 if (pr.Begin == pr.End) {
                     continue; // this part has no data
                 }
-                Y_VERIFY_DEBUG(pr.AlignedBegin <= pr.Begin && pr.End <= pr.AlignedEnd);
+                Y_DEBUG_ABORT_UNLESS(pr.AlignedBegin <= pr.Begin && pr.End <= pr.AlignedEnd);
                 const TIntervalSet<i32> partRange(pr.Begin, pr.End);
                 state.Whole.Data.CopyFrom(state.Parts[i].Data, state.Parts[i].Here() & partRange, pr.WholeBegin - pr.Begin);
             }
@@ -40,7 +40,7 @@ public:
             TIntervalSet<i32> Interval;
 
             std::tuple<ui32, ui32> GetRange() const {
-                Y_VERIFY_DEBUG(Interval);
+                Y_DEBUG_ABORT_UNLESS(Interval);
                 return *Interval.begin();
             }
 

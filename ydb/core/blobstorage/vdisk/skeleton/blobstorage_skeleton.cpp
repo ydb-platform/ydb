@@ -114,7 +114,7 @@ namespace NKikimr {
 
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
-                    Y_VERIFY_DEBUG(false);
+                    Y_DEBUG_ABORT_UNLESS(false);
                     return true;
             }
         }
@@ -360,7 +360,7 @@ namespace NKikimr {
                 ui64 cookie, NLWTrace::TOrbit &&orbit, TVPutInfo &info,
                 std::unique_ptr<TEvResult> result)
         {
-            Y_VERIFY_DEBUG(info.HullStatus.Status == NKikimrProto::OK);
+            Y_DEBUG_ABORT_UNLESS(info.HullStatus.Status == NKikimrProto::OK);
             const TLogoBlobID &id = info.BlobId;
             TRope &buffer = info.Buffer;
             const TLsnSeg &seg = info.Lsn;
@@ -404,7 +404,7 @@ namespace NKikimr {
                 ui64 cookie, bool ignoreBlock, NKikimrBlobStorage::EPutHandleClass handleClass, TVPutInfo &info,
                 std::unique_ptr<TEvBlobStorage::TEvVPutResult> res)
         {
-            Y_VERIFY_DEBUG(info.HullStatus.Status == NKikimrProto::OK);
+            Y_DEBUG_ABORT_UNLESS(info.HullStatus.Status == NKikimrProto::OK);
             info.Buffer = TDiskBlob::Create(info.BlobId.BlobSize(), info.BlobId.PartId(), Db->GType.TotalPartCount(),
                 std::move(info.Buffer), *Arena);
             UpdatePDiskWriteBytes(info.Buffer.GetSize());
@@ -2167,7 +2167,7 @@ namespace NKikimr {
             std::unique_ptr<NPDisk::TEvCutLog> msg(ev->Release().Release());
 
             if (LocalDbInitialized) {
-                Y_VERIFY_DEBUG(msg->Owner == PDiskCtx->Dsk->Owner);
+                Y_DEBUG_ABORT_UNLESS(msg->Owner == PDiskCtx->Dsk->Owner);
                 Y_ABORT_UNLESS(!CutLogDelayedMsg);
                 LOG_DEBUG_S(ctx, BS_LOGCUTTER, VCtx->VDiskLogPrefix
                         << "Handle " << msg->ToString()
@@ -2184,7 +2184,7 @@ namespace NKikimr {
         }
 
         void SpreadCutLog(std::unique_ptr<NPDisk::TEvCutLog> msg, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(msg->Owner == PDiskCtx->Dsk->Owner);
+            Y_DEBUG_ABORT_UNLESS(msg->Owner == PDiskCtx->Dsk->Owner);
 
             ui32 counter = 0;
             // setup FreeUpToLsn for Hull Database
@@ -2233,7 +2233,7 @@ namespace NKikimr {
 
             LocalDbInitialized = true;
             if (CutLogDelayedMsg) {
-                Y_VERIFY_DEBUG(CutLogDelayedMsg->Owner == PDiskCtx->Dsk->Owner);
+                Y_DEBUG_ABORT_UNLESS(CutLogDelayedMsg->Owner == PDiskCtx->Dsk->Owner);
                 SpreadCutLog(std::exchange(CutLogDelayedMsg, nullptr), ctx);
                 Y_ABORT_UNLESS(!CutLogDelayedMsg);
             }

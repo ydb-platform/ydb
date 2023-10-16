@@ -179,9 +179,9 @@ namespace NKikimr {
         }
 
         void Handle(NMon::TEvHttpInfoRes::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(Counter > 0);
+            Y_DEBUG_ABORT_UNLESS(Counter > 0);
             NMon::TEvHttpInfoRes *ptr = dynamic_cast<NMon::TEvHttpInfoRes*>(ev->Get());
-            Y_VERIFY_DEBUG(ptr);
+            Y_DEBUG_ABORT_UNLESS(ptr);
 
             static const std::unordered_map<int, TString TThis::*> names{
                 {TDbMon::SkeletonStateId,          &TThis::SkeletonState},
@@ -1081,8 +1081,8 @@ namespace NKikimr {
 
         void Handle(NMon::TEvHttpInfoRes::TPtr &ev, const TActorContext &ctx) {
             NMon::TEvHttpInfoRes *ptr = dynamic_cast<NMon::TEvHttpInfoRes*>(ev->Get());
-            Y_VERIFY_DEBUG(ptr);
-            Y_VERIFY_DEBUG(ptr->SubRequestId == 0);
+            Y_DEBUG_ABORT_UNLESS(ptr);
+            Y_DEBUG_ABORT_UNLESS(ptr->SubRequestId == 0);
             SkeletonAnswer = ptr->Answer;
             Finish(ctx);
         }

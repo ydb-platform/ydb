@@ -324,7 +324,7 @@ struct TGraph {
                 }
                 if (EdgeIdx[i].test(j)) {
                     auto it = Edges.find(TEdge(i, j));
-                    Y_VERIFY_DEBUG(it != Edges.end());
+                    Y_DEBUG_ABORT_UNLESS(it != Edges.end());
                     return *it;
                 } 
             }

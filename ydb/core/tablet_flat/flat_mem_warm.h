@@ -205,7 +205,7 @@ namespace NMem {
         void Update(ERowOp rop, TRawVals key_, TOpsRef ops, TArrayRef<const TMemGlob> pages, TRowVersion rowVersion,
                     NTable::ITransactionMapSimplePtr committed)
         {
-            Y_VERIFY_DEBUG(
+            Y_DEBUG_ABORT_UNLESS(
                 rop == ERowOp::Upsert || rop == ERowOp::Erase || rop == ERowOp::Reset,
                 "Unexpected row operation");
 

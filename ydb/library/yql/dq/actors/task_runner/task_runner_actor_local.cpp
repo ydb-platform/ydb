@@ -63,7 +63,7 @@ public:
                 hFunc(TEvLoadTaskRunnerFromState, OnLoadTaskRunnerFromState);
                 hFunc(TEvStatistics, OnStatisticsRequest);
                 default: {
-                    Y_VERIFY_DEBUG(false, "%s: unexpected message type 0x%08" PRIx32, __func__, ev->GetTypeRewrite());
+                    Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type 0x%08" PRIx32, __func__, ev->GetTypeRewrite());
                 }
             }
         } catch (const NKikimr::TMemoryLimitExceededException& e) {

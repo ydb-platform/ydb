@@ -353,7 +353,7 @@ struct TSchemeCacheRequest {
         explicit TEntry(THolder<TKeyDesc> keyDesc)
             : KeyDescription(std::move(keyDesc))
         {
-            Y_VERIFY_DEBUG(KeyDescription);
+            Y_DEBUG_ABORT_UNLESS(KeyDescription);
         }
 
         TEntry(TKeyDesc* keyDesc) = delete;

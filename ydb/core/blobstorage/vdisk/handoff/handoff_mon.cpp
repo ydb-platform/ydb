@@ -59,7 +59,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvHandoffProxyMonResult::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(Counter > 0);
+            Y_DEBUG_ABORT_UNLESS(Counter > 0);
 
             auto d = ev->Get();
             Cells[d->VDiskID].Get() = TInfo(d->CountersPtr, d->PrivateProxyStatePtr);
@@ -139,7 +139,7 @@ namespace NKikimr {
         TActiveActors ActiveActors;
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::HandoffMonId);
+            Y_DEBUG_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::HandoffMonId);
             auto actor = std::make_unique<THandoffMonRequestActor>(ctx.SelfID, SelfVDisk, Top, ProxiesPtr, ev);
             auto aid = ctx.Register(actor.release());
             ActiveActors.Insert(aid);

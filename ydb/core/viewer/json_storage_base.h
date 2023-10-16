@@ -106,11 +106,11 @@ protected:
         uint64 Read;
         uint64 Write;
 
-        TGroupRow() 
+        TGroupRow()
             : Used(0)
             , Limit(0)
             , Read(0)
-            , Write(0) 
+            , Write(0)
         {}
     };
     THashMap<TString, TGroupRow> GroupRowsByGroupId;
@@ -279,7 +279,11 @@ public:
                     if (!FilterTenant.empty()) {
                         FilterStoragePools.emplace(storagePoolName);
                     }
-                    StoragePoolInfo[storagePoolName].Kind = storagePool.GetKind();
+                    auto& storagePoolInfo(StoragePoolInfo[storagePoolName]);
+                    if (!storagePoolInfo.Kind.empty()) {
+                        continue;
+                    }
+                    storagePoolInfo.Kind = storagePool.GetKind();
                     THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
                     request->Record.SetReturnAllMatchingGroups(true);
                     request->Record.AddGroupParameters()->MutableStoragePoolSpecifier()->SetName(storagePoolName);

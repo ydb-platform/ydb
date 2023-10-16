@@ -693,8 +693,15 @@ void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
         ActorSystem = actorSystem;
         Register(new TIndexRedirectMonPage(IndexMonPage));
         Register(new NMonitoring::TYdbVersionMonPage);
+        Register(new NMonitoring::TBootstrapCssMonPage);
         Register(new NMonitoring::TTablesorterCssMonPage);
+        Register(new NMonitoring::TBootstrapJsMonPage);
+        Register(new NMonitoring::TJQueryJsMonPage);
         Register(new NMonitoring::TTablesorterJsMonPage);
+        Register(new NMonitoring::TBootstrapFontsEotMonPage);
+        Register(new NMonitoring::TBootstrapFontsSvgMonPage);
+        Register(new NMonitoring::TBootstrapFontsTtfMonPage);
+        Register(new NMonitoring::TBootstrapFontsWoffMonPage);
         NLwTraceMonPage::RegisterPages(IndexMonPage.Get());
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(ACTORLIB_PROVIDER));
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(MONITORING_PROVIDER));

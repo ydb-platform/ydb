@@ -31,6 +31,7 @@ target_link_libraries(cpp-actors-interconnect PUBLIC
   library-cpp-lwtrace
   cpp-monlib-dynamic_counters
   cpp-monlib-metrics
+  service-pages-resources
   service-pages-tablesorter
   cpp-openssl-init
   library-cpp-packedtypes

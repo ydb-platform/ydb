@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(resources)
 add_subdirectory(tablesorter)
 
 add_library(monlib-service-pages)

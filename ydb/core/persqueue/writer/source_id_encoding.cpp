@@ -14,7 +14,7 @@
 
 namespace NKikimr::NPQ {
 
-TString GetSourceIdSelectQueryFromPath(const TString& path, ESourceIdTableGeneration generation) {
+TString GetSelectSourceIdQueryFromPath(const TString& path, ESourceIdTableGeneration generation) {
     switch (generation) {
         case ESourceIdTableGeneration::SrcIdMeta2:
             return TStringBuilder() << "--!syntax_v1\n"
@@ -36,12 +36,12 @@ TString GetSourceIdSelectQueryFromPath(const TString& path, ESourceIdTableGenera
     }
 }
 
-TString GetSourceIdSelectQuery(const TString& root, ESourceIdTableGeneration generation) {
+TString GetSelectSourceIdQuery(const TString& root, ESourceIdTableGeneration generation) {
     switch (generation) {
         case ESourceIdTableGeneration::SrcIdMeta2:
-            return GetSourceIdSelectQueryFromPath(root + "/SourceIdMeta2", generation);
+            return GetSelectSourceIdQueryFromPath(root + "/SourceIdMeta2", generation);
         case ESourceIdTableGeneration::PartitionMapping:
-            return GetUpdateIdSelectQueryFromPath(
+            return GetSelectSourceIdQueryFromPath(
                     NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath(),
                     generation
             );
@@ -50,7 +50,7 @@ TString GetSourceIdSelectQuery(const TString& root, ESourceIdTableGeneration gen
     }
 }
 
-TString GetUpdateIdSelectQueryFromPath(const TString& path, ESourceIdTableGeneration generation) {
+TString GetUpdateSourceIdQueryFromPath(const TString& path, ESourceIdTableGeneration generation) {
     switch (generation) {
         case ESourceIdTableGeneration::SrcIdMeta2:
             return TStringBuilder() << "--!syntax_v1\n"
@@ -78,13 +78,14 @@ TString GetUpdateIdSelectQueryFromPath(const TString& path, ESourceIdTableGenera
     }
 }
 
-TString GetUpdateIdSelectQuery(const TString& root, ESourceIdTableGeneration generation) {
+TString GetUpdateSourceIdQuery(const TString& root, ESourceIdTableGeneration generation) {
     switch (generation) {
         case ESourceIdTableGeneration::SrcIdMeta2:
-            return GetUpdateIdSelectQueryFromPath(root + "/SourceIdMeta2");
+            return GetUpdateSourceIdQueryFromPath(root + "/SourceIdMeta2", generation);
         case ESourceIdTableGeneration::PartitionMapping:
-            return GetUpdateIdSelectQueryFromPath(
-                    NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
+            return GetUpdateSourceIdQueryFromPath(
+                    NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath(),
+                    generation
             );
         default:
             Y_FAIL();

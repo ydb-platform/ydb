@@ -1484,6 +1484,11 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             return node;
         }
 
+        if (node->Head().IsCallable({"ForwardList", "FromFlow"})) {
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+            return ctx.SwapWithHead(*node);
+        }
+
         if (TCoSkip::Match(&node->Head())) {
             YQL_CLOG(DEBUG, Core) << "Fuse " << node->Content() << " over " << node->Head().Content();
             return FusePart<false>(*node, ctx);
@@ -1507,6 +1512,11 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     map["Take"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (!optCtx.IsSingleUsage(node->Head()) && !optCtx.IsPersistentNode(node->Head())) {
             return node;
+        }
+
+        if (node->Head().IsCallable({"ForwardList", "FromFlow"})) {
+            YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+            return ctx.SwapWithHead(*node);
         }
 
         if (node->Head().IsCallable("Sort")) {

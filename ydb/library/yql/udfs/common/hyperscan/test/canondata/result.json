@@ -10,6 +10,8 @@
         }
     ],
     "test.test[Error]": [
-        ""
+        {
+            "uri": "file://test.test_Error_/extracted"
+        }
     ]
 }

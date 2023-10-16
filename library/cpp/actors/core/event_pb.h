@@ -647,7 +647,7 @@ namespace NActors {
     }
 
     inline void ActorIdToProto(const TActorId& src, NActorsProto::TActorId* dest) {
-        Y_VERIFY_DEBUG(dest);
+        Y_DEBUG_ABORT_UNLESS(dest);
         dest->SetRawX1(src.RawX1());
         dest->SetRawX2(src.RawX2());
     }

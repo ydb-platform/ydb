@@ -162,12 +162,12 @@ struct TTcpPacketOutTask : TNonCopyable {
     // Preallocate some space to fill it later.
     NInterconnect::TOutgoingStream::TBookmark Bookmark(size_t len) {
         if (ChecksummingCrc32c()) {
-            Y_VERIFY_DEBUG(!InsideBookmark);
+            Y_DEBUG_ABORT_UNLESS(!InsideBookmark);
             InsideBookmark = true;
             PreBookmarkChecksum = std::exchange(InternalChecksum, 0);
             InternalChecksumLen = 0;
         }
-        Y_VERIFY_DEBUG(len <= GetInternalFreeAmount());
+        Y_DEBUG_ABORT_UNLESS(len <= GetInternalFreeAmount());
         InternalSize += len;
         return OutgoingStream.Bookmark(len);
     }
@@ -175,7 +175,7 @@ struct TTcpPacketOutTask : TNonCopyable {
     // Write previously bookmarked space.
     void WriteBookmark(NInterconnect::TOutgoingStream::TBookmark&& bookmark, const void *buffer, size_t len) {
         if (ChecksummingCrc32c()) {
-            Y_VERIFY_DEBUG(InsideBookmark);
+            Y_DEBUG_ABORT_UNLESS(InsideBookmark);
             InsideBookmark = false;
             const ui32 bookmarkChecksum = Crc32cExtendMSanCompatible(PreBookmarkChecksum, buffer, len);
             InternalChecksum = Crc32cCombine(bookmarkChecksum, InternalChecksum, InternalChecksumLen);
@@ -196,7 +196,7 @@ struct TTcpPacketOutTask : TNonCopyable {
     // Append reference to some data (acquired previously or external pointer).
     template<bool External>
     void Append(const void *buffer, size_t len) {
-        Y_VERIFY_DEBUG(len <= (External ? GetExternalFreeAmount() : GetInternalFreeAmount()));
+        Y_DEBUG_ABORT_UNLESS(len <= (External ? GetExternalFreeAmount() : GetInternalFreeAmount()));
         (External ? ExternalSize : InternalSize) += len;
         (External ? XdcStream : OutgoingStream).Append({static_cast<const char*>(buffer), len});
         ProcessChecksum<External>(buffer, len);
@@ -205,7 +205,7 @@ struct TTcpPacketOutTask : TNonCopyable {
     // Write some data with copying.
     template<bool External>
     void Write(const void *buffer, size_t len) {
-        Y_VERIFY_DEBUG(len <= (External ? GetExternalFreeAmount() : GetInternalFreeAmount()));
+        Y_DEBUG_ABORT_UNLESS(len <= (External ? GetExternalFreeAmount() : GetInternalFreeAmount()));
         (External ? ExternalSize : InternalSize) += len;
         (External ? XdcStream : OutgoingStream).Write({static_cast<const char*>(buffer), len});
         ProcessChecksum<External>(buffer, len);
@@ -246,7 +246,7 @@ struct TTcpPacketOutTask : TNonCopyable {
             });
             header.Checksum = XXH3_64bits_digest(&state);
         } else if (ChecksummingCrc32c()) {
-            Y_VERIFY_DEBUG(!InsideBookmark);
+            Y_DEBUG_ABORT_UNLESS(!InsideBookmark);
             const ui32 headerChecksum = Crc32cExtendMSanCompatible(0, &header, sizeof(header));
             header.Checksum = Crc32cCombine(headerChecksum, InternalChecksum, InternalSize);
         }

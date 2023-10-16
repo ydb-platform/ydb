@@ -155,7 +155,7 @@ namespace NActors {
                 case TMailboxType::TinyReadAsFilled:
                     return TTinyReadAsFilledMailbox::Get(lineHint, x);
                 default:
-                    Y_VERIFY_DEBUG(false);
+                    Y_DEBUG_ABORT_UNLESS(false);
                     break;
             }
         }
@@ -182,7 +182,7 @@ namespace NActors {
                     TSimpleMailbox* const mailbox = TSimpleMailbox::Get(lineHint, x);
                     mailbox->Push(recipient.LocalId());
 #if (!defined(_tsan_enabled_))
-                    Y_VERIFY_DEBUG(mailbox->Type == (ui32)x->MailboxType);
+                    Y_DEBUG_ABORT_UNLESS(mailbox->Type == (ui32)x->MailboxType);
 #endif
                     mailbox->Queue.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
@@ -207,7 +207,7 @@ namespace NActors {
                     TRevolvingMailbox* const mailbox = TRevolvingMailbox::Get(lineHint, x);
                     mailbox->Push(recipient.LocalId());
 #if (!defined(_tsan_enabled_))
-                    Y_VERIFY_DEBUG(mailbox->Type == (ui32)x->MailboxType);
+                    Y_DEBUG_ABORT_UNLESS(mailbox->Type == (ui32)x->MailboxType);
 #endif
                     mailbox->QueueWriter.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
@@ -220,7 +220,7 @@ namespace NActors {
                     THTSwapMailbox* const mailbox = THTSwapMailbox::Get(lineHint, x);
                     mailbox->Push(recipient.LocalId());
 #if (!defined(_tsan_enabled_))
-                    Y_VERIFY_DEBUG(mailbox->Type == (ui32)x->MailboxType);
+                    Y_DEBUG_ABORT_UNLESS(mailbox->Type == (ui32)x->MailboxType);
 #endif
                     mailbox->Queue.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
@@ -236,7 +236,7 @@ namespace NActors {
                     TReadAsFilledMailbox* const mailbox = TReadAsFilledMailbox::Get(lineHint, x);
                     mailbox->Push(recipient.LocalId());
 #if (!defined(_tsan_enabled_))
-                    Y_VERIFY_DEBUG(mailbox->Type == (ui32)x->MailboxType);
+                    Y_DEBUG_ABORT_UNLESS(mailbox->Type == (ui32)x->MailboxType);
 #endif
                     mailbox->Queue.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
@@ -252,7 +252,7 @@ namespace NActors {
                     TTinyReadAsFilledMailbox* const mailbox = TTinyReadAsFilledMailbox::Get(lineHint, x);
                     mailbox->Push(recipient.LocalId());
 #if (!defined(_tsan_enabled_))
-                    Y_VERIFY_DEBUG(mailbox->Type == (ui32)x->MailboxType);
+                    Y_DEBUG_ABORT_UNLESS(mailbox->Type == (ui32)x->MailboxType);
 #endif
                     mailbox->Queue.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {

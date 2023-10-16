@@ -81,7 +81,7 @@ namespace NProtobufJson {
                 }
 
                 default:
-                    Y_VERIFY_DEBUG(false, "Unknown FieldNameMode.");
+                    Y_DEBUG_ABORT_UNLESS(false, "Unknown FieldNameMode.");
             }
         }
 
@@ -187,7 +187,7 @@ namespace NProtobufJson {
             }
 
             default:
-                Y_VERIFY_DEBUG(false, "Unknown EnumMode.");
+                Y_DEBUG_ABORT_UNLESS(false, "Unknown EnumMode.");
         }
     }
 

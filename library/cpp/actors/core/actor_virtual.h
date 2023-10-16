@@ -19,7 +19,7 @@ public:
     TEventContext(std::unique_ptr<IEventHandle> handle)
         : Handle(std::move(handle))
     {
-        Y_VERIFY_DEBUG(dynamic_cast<TEvent*>(Handle->GetBase()));
+        Y_DEBUG_ABORT_UNLESS(dynamic_cast<TEvent*>(Handle->GetBase()));
         Event = static_cast<TEvent*>(Handle->GetBase());
         Y_ABORT_UNLESS(Event);
     }
@@ -29,7 +29,7 @@ template <class TEvent, class TExpectedActor>
 class IEventForActor: public IEventBase {
 protected:
     virtual bool DoExecute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr) override {
-        Y_VERIFY_DEBUG(dynamic_cast<TExpectedActor*>(actor));
+        Y_DEBUG_ABORT_UNLESS(dynamic_cast<TExpectedActor*>(actor));
         auto* actorCorrect = static_cast<TExpectedActor*>(actor);
         TEventContext<TEvent> context(std::move(eventPtr));
         actorCorrect->ProcessEvent(context);

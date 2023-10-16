@@ -364,7 +364,7 @@ namespace NActors {
                     " THIS IS NOT A BUG IN INTERCONNECT, check the event sender instead",
                     ev->Type, ev->GetTypeRewrite(), ev->Sender.ToString().data());
                 LOG_ERROR_IC("ICP03", "%s", msg.data());
-                Y_VERIFY_DEBUG(false, "%s", msg.data());
+                Y_DEBUG_ABORT_UNLESS(false, "%s", msg.data());
             }
 
             Y_ABORT_UNLESS(ev->GetTypeRewrite() != TEvInterconnect::EvForward || ev->Recipient.NodeId() == PeerNodeId,
@@ -499,7 +499,7 @@ namespace NActors {
             auto& msg = *ev->Get();
             if (msg.Subscribe) {
                 if (const auto [it, inserted] = ConnectionSubscriptions.emplace(msg.HandshakeId, ev->Sender); !inserted) {
-                    Y_VERIFY_DEBUG(false);
+                    Y_DEBUG_ABORT_UNLESS(false);
                     ConnectionSubscriptions.erase(it); // collision happened somehow?
                 }
             } else {

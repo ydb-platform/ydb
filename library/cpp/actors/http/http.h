@@ -470,7 +470,7 @@ public:
 
     //THttpRenderer(TStringBuf method, TStringBuf url, TStringBuf protocol, TStringBuf version); // request
     void InitRequest(TStringBuf method, TStringBuf url, TStringBuf protocol, TStringBuf version) {
-        Y_VERIFY_DEBUG(Stage == ERenderStage::Init);
+        Y_DEBUG_ABORT_UNLESS(Stage == ERenderStage::Init);
         AppendParsedValue<&THttpRequest::Method>(method);
         Append(' ');
         AppendParsedValue<&THttpRequest::URL>(url);
@@ -485,7 +485,7 @@ public:
 
     //THttpRenderer(TStringBuf protocol, TStringBuf version, TStringBuf status, TStringBuf message); // response
     void InitResponse(TStringBuf protocol, TStringBuf version, TStringBuf status, TStringBuf message) {
-        Y_VERIFY_DEBUG(Stage == ERenderStage::Init);
+        Y_DEBUG_ABORT_UNLESS(Stage == ERenderStage::Init);
         AppendParsedValue<&THttpResponse::Protocol>(protocol);
         Append('/');
         AppendParsedValue<&THttpResponse::Version>(version);
@@ -516,7 +516,7 @@ public:
 
     template <TStringBuf HeaderType::* name>
     void Set(TStringBuf value) {
-        Y_VERIFY_DEBUG(Stage == ERenderStage::Header);
+        Y_DEBUG_ABORT_UNLESS(Stage == ERenderStage::Header);
         Append(HeaderType::template GetName<name>());
         Append(": ");
         AppendParsedValue<name>(value);
@@ -525,7 +525,7 @@ public:
     }
 
     void Set(TStringBuf name, TStringBuf value) {
-        Y_VERIFY_DEBUG(Stage == ERenderStage::Header);
+        Y_DEBUG_ABORT_UNLESS(Stage == ERenderStage::Header);
         Append(name);
         Append(": ");
         auto data = BufferType::Pos();
@@ -539,7 +539,7 @@ public:
     }
 
     void Set(const THeaders& headers) {
-        Y_VERIFY_DEBUG(Stage == ERenderStage::Header);
+        Y_DEBUG_ABORT_UNLESS(Stage == ERenderStage::Header);
         for (const auto& [name, value] : headers.Headers) {
             Set(name, value);
         }
@@ -549,7 +549,7 @@ public:
     static constexpr TStringBuf ALLOWED_CONTENT_ENCODINGS[] = {"deflate"};
 
     void SetContentEncoding(TStringBuf contentEncoding) {
-        Y_VERIFY_DEBUG(Stage == ERenderStage::Header);
+        Y_DEBUG_ABORT_UNLESS(Stage == ERenderStage::Header);
         if (Count(ALLOWED_CONTENT_ENCODINGS, contentEncoding) != 0) {
             Set("Content-Encoding", contentEncoding);
         }
@@ -562,7 +562,7 @@ public:
     }
 
     void SetBody(TStringBuf body) {
-        Y_VERIFY_DEBUG(Stage == ERenderStage::Header);
+        Y_DEBUG_ABORT_UNLESS(Stage == ERenderStage::Header);
         if (HeaderType::ContentLength.empty()) {
             Set<&HeaderType::ContentLength>(ToString(body.size()));
         }

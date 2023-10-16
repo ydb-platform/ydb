@@ -134,7 +134,7 @@ namespace NInterconnect {
 
         void WriteBookmark(TBookmark&& bookmark, TContiguousSpan in) {
             for (auto& outChunk : bookmark) {
-                Y_VERIFY_DEBUG(outChunk.size() <= in.size());
+                Y_DEBUG_ABORT_UNLESS(outChunk.size() <= in.size());
                 memcpy(outChunk.data(), in.data(), outChunk.size());
                 in = in.SubSpan(outChunk.size(), Max<size_t>());
             }
@@ -167,24 +167,24 @@ namespace NInterconnect {
         }
 
         void Advance(size_t numBytes) { // called when numBytes portion of data has been sent
-            Y_VERIFY_DEBUG(numBytes == 0 || SendQueuePos != SendQueue.size());
-            Y_VERIFY_DEBUG(numBytes <= UnsentBytes);
+            Y_DEBUG_ABORT_UNLESS(numBytes == 0 || SendQueuePos != SendQueue.size());
+            Y_DEBUG_ABORT_UNLESS(numBytes <= UnsentBytes);
             SendOffset += numBytes;
             UnsentBytes -= numBytes;
             for (auto it = SendQueue.begin() + SendQueuePos; SendOffset && it->Span.size() <= SendOffset; ++SendQueuePos, ++it) {
                 SendOffset -= it->Span.size();
-                Y_VERIFY_DEBUG(SendOffset == 0 || SendQueuePos != SendQueue.size() - 1);
+                Y_DEBUG_ABORT_UNLESS(SendOffset == 0 || SendQueuePos != SendQueue.size() - 1);
             }
         }
 
         void DropFront(size_t numBytes) { // drops first numBytes from the queue, freeing buffers when necessary
             while (numBytes) {
-                Y_VERIFY_DEBUG(!SendQueue.empty());
+                Y_DEBUG_ABORT_UNLESS(!SendQueue.empty());
                 auto& front = SendQueue.front();
                 if (numBytes < front.Span.size()) {
                     front.Span = front.Span.SubSpan(numBytes, Max<size_t>());
                     if (SendQueuePos == 0) {
-                        Y_VERIFY_DEBUG(numBytes <= SendOffset, "numBytes# %zu SendOffset# %zu SendQueuePos# %zu"
+                        Y_DEBUG_ABORT_UNLESS(numBytes <= SendOffset, "numBytes# %zu SendOffset# %zu SendQueuePos# %zu"
                             " SendQueue.size# %zu CalculateUnsentSize# %zu", numBytes, SendOffset, SendQueuePos,
                             SendQueue.size(), CalculateUnsentSize());
                         SendOffset -= numBytes;
@@ -193,7 +193,7 @@ namespace NInterconnect {
                 } else {
                     numBytes -= front.Span.size();
                 }
-                Y_VERIFY_DEBUG(!front.Buffer || (front.Span.data() >= front.Buffer->Data &&
+                Y_DEBUG_ABORT_UNLESS(!front.Buffer || (front.Span.data() >= front.Buffer->Data &&
                     front.Span.data() + front.Span.size() <= front.Buffer->Data + BufferSize));
                 DropBufferReference(front.Buffer);
                 SendQueue.pop_front();
@@ -210,7 +210,7 @@ namespace NInterconnect {
             auto it = SendQueue.end();
             ssize_t offset = -numBytes;
             while (offset < 0) {
-                Y_VERIFY_DEBUG(it != SendQueue.begin());
+                Y_DEBUG_ABORT_UNLESS(it != SendQueue.begin());
                 const TSendChunk& chunk = *--it;
                 offset += chunk.Span.size();
             }
@@ -222,10 +222,10 @@ namespace NInterconnect {
     private:
         void AppendAcquiredSpan(TContiguousSpan span) {
             TBuffer *buffer = AppendBuffer;
-            Y_VERIFY_DEBUG(buffer);
-            Y_VERIFY_DEBUG(span.data() == AppendBuffer->Data + AppendOffset);
+            Y_DEBUG_ABORT_UNLESS(buffer);
+            Y_DEBUG_ABORT_UNLESS(span.data() == AppendBuffer->Data + AppendOffset);
             AppendOffset += span.size();
-            Y_VERIFY_DEBUG(AppendOffset <= BufferSize);
+            Y_DEBUG_ABORT_UNLESS(AppendOffset <= BufferSize);
             if (AppendOffset == BufferSize) {
                 AppendBuffer = nullptr;
             } else {
@@ -239,7 +239,7 @@ namespace NInterconnect {
             if (!SendQueue.empty()) {
                 auto& back = SendQueue.back();
                 if (back.Span.data() + back.Span.size() == span.data()) { // check if it is possible just to extend the last span
-                    Y_VERIFY_DEBUG(buffer == back.Buffer);
+                    Y_DEBUG_ABORT_UNLESS(buffer == back.Buffer);
                     if (SendQueuePos == SendQueue.size()) {
                         --SendQueuePos;
                         SendOffset = back.Span.size();
@@ -256,7 +256,7 @@ namespace NInterconnect {
             if (buffer && !--buffer->RefCount) {
                 const size_t index = buffer->Index;
                 auto& cell = Buffers[index];
-                Y_VERIFY_DEBUG(cell.get() == buffer);
+                Y_DEBUG_ABORT_UNLESS(cell.get() == buffer);
                 std::swap(cell, Buffers.back());
                 cell->Index = index;
                 Buffers.pop_back();

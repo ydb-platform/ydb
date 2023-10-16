@@ -41,7 +41,7 @@ namespace NActors {
                             continue;
                         }
                         // We consume the awaiter
-                        Y_VERIFY_DEBUG(ReadyQueue == nullptr, "TaskGroup is awaiting with non-empty ready queue");
+                        Y_DEBUG_ABORT_UNLESS(ReadyQueue == nullptr, "TaskGroup is awaiting with non-empty ready queue");
                         result->Next = ReadyQueue;
                         ReadyQueue = result.release();
                         return std::exchange(Continuation, {});
@@ -66,7 +66,7 @@ namespace NActors {
             }
 
             Y_NO_INLINE std::coroutine_handle<> Suspend(std::coroutine_handle<> h) noexcept {
-                Y_VERIFY_DEBUG(ReadyQueue == nullptr, "Caller suspending with non-empty ready queue");
+                Y_DEBUG_ABORT_UNLESS(ReadyQueue == nullptr, "Caller suspending with non-empty ready queue");
                 Continuation = h;
                 void* currentValue = LastReady.load(std::memory_order_acquire);
                 for (;;) {

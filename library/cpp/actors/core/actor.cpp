@@ -101,7 +101,7 @@ namespace NActors {
     }
 
     TActorId TActivationContext::RegisterWithSameMailbox(IActor* actor, TActorId parentId) {
-        Y_VERIFY_DEBUG(parentId);
+        Y_DEBUG_ABORT_UNLESS(parentId);
         auto& ctx = *TlsActivationContext;
         return ctx.ExecutorThread.RegisterActor(actor, &ctx.Mailbox, parentId.Hint(), parentId);
     }

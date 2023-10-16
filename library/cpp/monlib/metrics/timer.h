@@ -40,7 +40,7 @@ namespace NMonitoring {
         }
 
         void Record() {
-            Y_VERIFY_DEBUG(Metric_);
+            Y_DEBUG_ABORT_UNLESS(Metric_);
             if (Metric_ == nullptr) {
                 return;
             }

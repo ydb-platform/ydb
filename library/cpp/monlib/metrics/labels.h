@@ -141,12 +141,12 @@ namespace NMonitoring {
             }
 
             const ILabel* operator->() const noexcept {
-                Y_VERIFY_DEBUG(Labels_);
+                Y_DEBUG_ABORT_UNLESS(Labels_);
                 return Labels_->Get(Idx_);
             }
 
             const ILabel& operator*() const noexcept {
-                Y_VERIFY_DEBUG(Labels_);
+                Y_DEBUG_ABORT_UNLESS(Labels_);
                 return *Labels_->Get(Idx_);
             }
 

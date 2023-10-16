@@ -1429,7 +1429,7 @@ namespace NActors {
     }
 
     void TUnitedExecutorPool::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Y_VERIFY_DEBUG(workerId < United->GetWorkerCount());
+        Y_DEBUG_ABORT_UNLESS(workerId < United->GetWorkerCount());
         const auto current = ActorSystem->Monotonic();
         if (deadline < current) {
             deadline = current;
@@ -1438,7 +1438,7 @@ namespace NActors {
     }
 
     void TUnitedExecutorPool::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Y_VERIFY_DEBUG(workerId < United->GetWorkerCount());
+        Y_DEBUG_ABORT_UNLESS(workerId < United->GetWorkerCount());
         const auto deadline = ActorSystem->Monotonic() + delta;
         United->GetScheduleWriter(workerId)->Push(deadline.MicroSeconds(), ev.Release(), cookie);
     }

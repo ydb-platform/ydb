@@ -100,7 +100,7 @@ private:
     }
 
     void WriteOne(TLockedWriter& lock, T x) {
-        Y_VERIFY_DEBUG(x != 0);
+        Y_DEBUG_ABORT_UNLESS(x != 0);
 
         const ui32 pos = AtomicLoad(&lock.Slot->WritePosition);
         if (pos != TChunk::EntriesCount) {

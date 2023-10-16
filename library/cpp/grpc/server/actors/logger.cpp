@@ -25,7 +25,7 @@ protected:
     }
 
     void DoWrite(ELogPriority p, const char* format, va_list args) noexcept override {
-        Y_VERIFY_DEBUG(DoIsEnabled(p));
+        Y_DEBUG_ABORT_UNLESS(DoIsEnabled(p));
 
         const auto priority = static_cast<::NActors::NLog::EPriority>(p);
         ::NActors::MemLogAdapter(ActorSystem_, priority, Component_, format, args);

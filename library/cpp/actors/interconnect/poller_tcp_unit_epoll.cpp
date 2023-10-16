@@ -31,7 +31,7 @@ namespace NInterconnect {
         int
         Initialize() {
             const auto epoll = ::epoll_create(10000);
-            Y_VERIFY_DEBUG(epoll > 0);
+            Y_DEBUG_ABORT_UNLESS(epoll > 0);
             return epoll;
         }
 

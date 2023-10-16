@@ -187,12 +187,12 @@ namespace NMonitoring {
         }
 
         TBucket& Bucket(ui32 index) noexcept {
-            Y_VERIFY_DEBUG(index < BucketsCount_);
+            Y_DEBUG_ABORT_UNLESS(index < BucketsCount_);
             return *(reinterpret_cast<TBucket*>(this + 1) + index);
         }
 
         const TBucket& Bucket(ui32 index) const noexcept {
-            Y_VERIFY_DEBUG(index < BucketsCount_);
+            Y_DEBUG_ABORT_UNLESS(index < BucketsCount_);
             return *(reinterpret_cast<const TBucket*>(this + 1) + index);
         }
 

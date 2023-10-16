@@ -24,7 +24,7 @@ namespace NActors {
     protected:
         // for compatibility with virtual actors
         virtual bool DoExecute(IActor* /*actor*/, std::unique_ptr<IEventHandle> /*eventPtr*/) {
-            Y_VERIFY_DEBUG(false);
+            Y_DEBUG_ABORT_UNLESS(false);
             return false;
         }
     public:

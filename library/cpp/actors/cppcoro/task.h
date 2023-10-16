@@ -33,7 +33,7 @@ namespace NActors {
             explicit TTaskAwaiter(TTaskHandle<T> handle)
                 : Handle(handle)
             {
-                Y_VERIFY_DEBUG(Handle);
+                Y_DEBUG_ABORT_UNLESS(Handle);
             }
 
             TTaskAwaiter(TTaskAwaiter&& rhs)
@@ -54,13 +54,13 @@ namespace NActors {
 
             // Some arbitrary continuation c suspended and awaits the task
             TTaskHandle<T> await_suspend(std::coroutine_handle<> c) noexcept {
-                Y_VERIFY_DEBUG(Handle);
+                Y_DEBUG_ABORT_UNLESS(Handle);
                 Handle.promise().SetContinuation(c);
                 return Handle;
             }
 
             TTaskResult<T>&& await_resume() noexcept {
-                Y_VERIFY_DEBUG(Handle);
+                Y_DEBUG_ABORT_UNLESS(Handle);
                 return std::move(Handle.promise().Result);
             }
 
@@ -133,7 +133,7 @@ namespace NActors {
 
                 static std::coroutine_handle<> await_suspend(std::coroutine_handle<TTaskPromise<T>> h) noexcept {
                     auto next = std::exchange(h.promise().Continuation, std::noop_coroutine());
-                    Y_VERIFY_DEBUG(next, "Task finished without a continuation");
+                    Y_DEBUG_ABORT_UNLESS(next, "Task finished without a continuation");
                     return next;
                 }
             };
@@ -142,7 +142,7 @@ namespace NActors {
 
         private:
             void SetContinuation(std::coroutine_handle<> continuation) noexcept {
-                Y_VERIFY_DEBUG(!Continuation, "Task can only be awaited once");
+                Y_DEBUG_ABORT_UNLESS(!Continuation, "Task can only be awaited once");
                 Continuation = continuation;
             }
 
@@ -200,7 +200,7 @@ namespace NActors {
          * Starts task and returns TTaskResult<T> when it completes
          */
         auto WhenDone() && noexcept {
-            Y_VERIFY_DEBUG(Handle, "Cannot await an empty task");
+            Y_DEBUG_ABORT_UNLESS(Handle, "Cannot await an empty task");
             return NDetail::TTaskAwaiter<T>(std::exchange(Handle, {}));
         }
 
@@ -208,7 +208,7 @@ namespace NActors {
          * Starts task and returns its result when it completes
          */
         auto operator co_await() && noexcept {
-            Y_VERIFY_DEBUG(Handle, "Cannot await an empty task");
+            Y_DEBUG_ABORT_UNLESS(Handle, "Cannot await an empty task");
             return NDetail::TTaskResultAwaiter<T>(std::exchange(Handle, {}));
         }
 

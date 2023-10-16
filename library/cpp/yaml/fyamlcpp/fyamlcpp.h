@@ -444,7 +444,7 @@ public:
     explicit TMapping(const TNodeOps<T>& node)
         : TNodeRef(node)
     {
-        Y_VERIFY_DEBUG(Type() == ENodeType::Mapping);
+        Y_DEBUG_ABORT_UNLESS(Type() == ENodeType::Mapping);
     }
 
     TMappingIterator begin() const {
@@ -591,7 +591,7 @@ public:
     explicit TSequence(const TNodeRef& node)
         : TNodeRef(node)
     {
-        Y_VERIFY_DEBUG(Type() == ENodeType::Sequence);
+        Y_DEBUG_ABORT_UNLESS(Type() == ENodeType::Sequence);
     }
 
     TSequenceIterator begin() const {
@@ -692,7 +692,7 @@ public:
 
     template <class... Args>
     size_t Scanf(const char* fmt, Args&& ...args) {
-        Y_VERIFY_DEBUG(Document_);
+        Y_DEBUG_ABORT_UNLESS(Document_);
         return fy_document_scanf(Document_.get(), fmt, std::forward<Args>(args)...);
     }
 
@@ -700,7 +700,7 @@ public:
 
     template <class... Args>
     TNodeRef Buildf(const char* fmt, Args&& ...args) {
-        Y_VERIFY_DEBUG(Document_);
+        Y_DEBUG_ABORT_UNLESS(Document_);
         return fy_node_buildf(Document_.get(), fmt, std::forward<Args>(args)...);
     }
 

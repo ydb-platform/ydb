@@ -216,7 +216,7 @@ namespace NActors {
         }
 
         IActor* DetachActor(ui64 localActorId) noexcept {
-            Y_VERIFY_DEBUG(FindActor(localActorId) != nullptr);
+            Y_DEBUG_ABORT_UNLESS(FindActor(localActorId) != nullptr);
 
             IActor* actorToDestruct = nullptr;
 

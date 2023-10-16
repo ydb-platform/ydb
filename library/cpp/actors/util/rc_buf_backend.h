@@ -157,12 +157,12 @@ public:
 
 private:
     Y_FORCE_INLINE THeader* Header() const noexcept {
-        Y_VERIFY_DEBUG(Data_);
+        Y_DEBUG_ABORT_UNLESS(Data_);
         return reinterpret_cast<THeader*>(Data_);
     }
 
     Y_FORCE_INLINE char* Data() const noexcept {
-        Y_VERIFY_DEBUG(Data_);
+        Y_DEBUG_ABORT_UNLESS(Data_);
         return Data_ + OverheadSize;
     }
 

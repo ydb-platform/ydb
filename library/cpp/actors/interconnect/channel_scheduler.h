@@ -48,7 +48,7 @@ namespace NActors {
         }
 
         void AddToHeap(TEventOutputChannel& channel, ui64 counter) {
-            Y_VERIFY_DEBUG(channel.IsWorking());
+            Y_DEBUG_ABORT_UNLESS(channel.IsWorking());
             ui64 weight = channel.WeightConsumedOnPause;
             weight -= Min(weight, counter - channel.EqualizeCounterOnPause);
             Heap.push_back(THeapItem{&channel, weight});

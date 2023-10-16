@@ -40,14 +40,14 @@ class TChunkList {
         }
 
         void ClearSingleItem() {
-            Y_VERIFY_DEBUG(Next == this && Prev == this);
+            Y_DEBUG_ABORT_UNLESS(Next == this && Prev == this);
             static_cast<TChunk&>(*this) = {};
             Next = Prev = nullptr;
         }
 
         template<typename... TArgs>
         TItem *PrepareForUse(TArgs&&... args) {
-            Y_VERIFY_DEBUG(!IsInUse());
+            Y_DEBUG_ABORT_UNLESS(!IsInUse());
             static_cast<TChunk&>(*this) = TChunk(std::forward<TArgs>(args)...);
             Next = Prev = this;
             Invalidate();
@@ -136,7 +136,7 @@ private:
 
         TIterator& operator++() {
             CheckValid();
-            Y_VERIFY_DEBUG(Item);
+            Y_DEBUG_ABORT_UNLESS(Item);
             Item = Item->Next;
             if (Item == &Cont->Root) {
                 Item = nullptr; // make it end
@@ -154,10 +154,10 @@ private:
         TIterator& operator--() {
             CheckValid();
             if (!Item) {
-                Y_VERIFY_DEBUG(*Cont);
+                Y_DEBUG_ABORT_UNLESS(*Cont);
                 Item = Cont->Root.Prev;
             } else {
-                Y_VERIFY_DEBUG(Item != &Cont->Root);
+                Y_DEBUG_ABORT_UNLESS(Item != &Cont->Root);
                 Item = Item->Prev;
             }
             UpdateValidityToken();
@@ -171,7 +171,7 @@ private:
         }
 
         friend bool operator ==(const TIterator& x, const TIterator& y) {
-            Y_VERIFY_DEBUG(x.Cont == y.Cont);
+            Y_DEBUG_ABORT_UNLESS(x.Cont == y.Cont);
             x.CheckValid();
             y.CheckValid();
             return x.Item == y.Item;
@@ -184,8 +184,8 @@ private:
     private:
         void CheckValid() const {
 #ifndef NDEBUG
-            Y_VERIFY_DEBUG(ValidityToken == (Item ? Item->ValidityToken : 0));
-            Y_VERIFY_DEBUG(Cont && (Item != &Cont->Root || *Cont));
+            Y_DEBUG_ABORT_UNLESS(ValidityToken == (Item ? Item->ValidityToken : 0));
+            Y_DEBUG_ABORT_UNLESS(Cont && (Item != &Cont->Root || *Cont));
 #endif
         }
 
@@ -207,7 +207,7 @@ public:
 
     ~TChunkList() {
         Erase(begin(), end());
-        Y_VERIFY_DEBUG(!*this);
+        Y_DEBUG_ABORT_UNLESS(!*this);
     }
 
     TChunkList(const TChunkList& other) {
@@ -231,7 +231,7 @@ public:
     TChunkList& operator=(TChunkList&& other) {
         if (this != &other) {
             Erase(begin(), end());
-            Y_VERIFY_DEBUG(!*this);
+            Y_DEBUG_ABORT_UNLESS(!*this);
             if (other.Root.IsInUse()) { // do we have something to move?
                 Root.PrepareForUse(std::move(static_cast<TChunk&>(other.Root)));
                 if (other.Root.Next != &other.Root) { // does other contain more than one item?
@@ -290,7 +290,7 @@ public:
     }
 
     void EraseBack() {
-        Y_VERIFY_DEBUG(*this);
+        Y_DEBUG_ABORT_UNLESS(*this);
         if (Root.Prev != &Root) {
             delete Root.Prev;
         } else {
@@ -324,8 +324,8 @@ public:
         if (first != last) {
             --last; // set 'last' pointing to the actual last element of the source range
 
-            Y_VERIFY_DEBUG(first.Item != &from.Root);
-            Y_VERIFY_DEBUG(pos.Item != &Root);
+            Y_DEBUG_ABORT_UNLESS(first.Item != &from.Root);
+            Y_DEBUG_ABORT_UNLESS(pos.Item != &Root);
 
             TItem* const firstItem = first.Item;
             TItem* const lastItem = last.Item;
@@ -347,9 +347,9 @@ public:
 
     operator bool() const { return Root.IsInUse(); }
 
-    TChunk& GetFirstChunk() { Y_VERIFY_DEBUG(*this); return Root; }
-    const TChunk& GetFirstChunk() const { Y_VERIFY_DEBUG(*this); return Root; }
-    TChunk& GetLastChunk() { Y_VERIFY_DEBUG(*this); return *Root.Prev; }
+    TChunk& GetFirstChunk() { Y_DEBUG_ABORT_UNLESS(*this); return Root; }
+    const TChunk& GetFirstChunk() const { Y_DEBUG_ABORT_UNLESS(*this); return Root; }
+    TChunk& GetLastChunk() { Y_DEBUG_ABORT_UNLESS(*this); return *Root.Prev; }
 
     iterator begin() { return *this ? iterator(this, &Root) : end(); }
     const_iterator begin() const { return *this ? const_iterator(this, &Root) : end(); }
@@ -359,14 +359,14 @@ public:
 private:
     TChunk Pop(iterator& pos) {
         pos.CheckValid();
-        Y_VERIFY_DEBUG(pos.Item);
+        Y_DEBUG_ABORT_UNLESS(pos.Item);
 
         if (pos.Item == &Root) {
             TChunk res = PopFront();
             pos = begin();
             return res;
         } else {
-            Y_VERIFY_DEBUG(pos != end());
+            Y_DEBUG_ABORT_UNLESS(pos != end());
             TItem* const item = pos++.Item;
             TChunk res = std::move(static_cast<TChunk&>(*item));
             delete item;
@@ -375,7 +375,7 @@ private:
     }
 
     TChunk PopFront() {
-        Y_VERIFY_DEBUG(*this);
+        Y_DEBUG_ABORT_UNLESS(*this);
         TChunk res = std::move(static_cast<TChunk&>(Root));
         if (Root.Next != &Root) {
             static_cast<TChunk&>(Root) = std::move(static_cast<TChunk&>(*Root.Next));

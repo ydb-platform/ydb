@@ -76,7 +76,7 @@ namespace NActors {
     { }
 
     void TExecutorThread::UnregisterActor(TMailboxHeader* mailbox, TActorId actorId) {
-        Y_VERIFY_DEBUG(IsUnitedWorker || actorId.PoolID() == ExecutorPool->PoolId && ExecutorPool->ResolveMailbox(actorId.Hint()) == mailbox);
+        Y_DEBUG_ABORT_UNLESS(IsUnitedWorker || actorId.PoolID() == ExecutorPool->PoolId && ExecutorPool->ResolveMailbox(actorId.Hint()) == mailbox);
         IActor* actor = mailbox->DetachActor(actorId.LocalId());
         Ctx.DecrementActorsAliveByActivity(actor->GetActivityType());
         DyingActors.push_back(THolder(actor));
@@ -154,7 +154,7 @@ namespace NActors {
 
     template <typename TMailbox>
     bool TExecutorThread::Execute(TMailbox* mailbox, ui32 hint, bool isTailExecution) {
-        Y_VERIFY_DEBUG(DyingActors.empty());
+        Y_DEBUG_ABORT_UNLESS(DyingActors.empty());
 
         bool reclaimAsFree = false;
 

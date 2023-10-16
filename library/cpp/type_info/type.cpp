@@ -229,7 +229,7 @@ namespace NTi {
         }
 
         Y_ABORT_UNLESS(result->GetTypeName() == type->GetTypeName());
-        Y_VERIFY_DEBUG(result->GetHash() == type->GetHash());
+        Y_DEBUG_ABORT_UNLESS(result->GetHash() == type->GetHash());
         return static_cast<const T*>(result);
     }
 

@@ -24,7 +24,7 @@ namespace NActors {
             const char *begin = buffer.data();
             const char *mid = begin + offset;
             const char *end = begin + buffer.size();
-            Y_VERIFY_DEBUG(begin <= mid && mid < end);
+            Y_DEBUG_ABORT_UNLESS(begin <= mid && mid < end);
 
             TRope rope;
             rope.Insert(rope.End(), TRcBuf(TRcBuf::Piece, mid, end, buffer));
@@ -34,16 +34,16 @@ namespace NActors {
 
             DropFront(&rope, buffer.size());
         } else {
-            Y_VERIFY_DEBUG(!XdcCatchBytesRead);
+            Y_DEBUG_ABORT_UNLESS(!XdcCatchBytesRead);
         }
     }
 
     void TReceiveContext::TPerChannelContext::FetchBuffers(ui16 channel, size_t numBytes,
             std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ) {
-        Y_VERIFY_DEBUG(numBytes);
+        Y_DEBUG_ABORT_UNLESS(numBytes);
         auto it = XdcBuffers.begin() + FetchIndex;
         for (;;) {
-            Y_VERIFY_DEBUG(it != XdcBuffers.end());
+            Y_DEBUG_ABORT_UNLESS(it != XdcBuffers.end());
             const TMutableContiguousSpan span = it->SubSpan(FetchOffset, numBytes);
             outQ.emplace_back(channel, span);
             numBytes -= span.size();
@@ -60,7 +60,7 @@ namespace NActors {
     }
 
     void TReceiveContext::TPerChannelContext::DropFront(TRope *from, size_t numBytes) {
-        Y_VERIFY_DEBUG(from || !XdcCatchBuffer);
+        Y_DEBUG_ABORT_UNLESS(from || !XdcCatchBuffer);
 
         size_t n = numBytes;
         for (auto& pendingEvent : PendingEvents) {
@@ -73,7 +73,7 @@ namespace NActors {
         }
 
         while (numBytes) {
-            Y_VERIFY_DEBUG(!XdcBuffers.empty());
+            Y_DEBUG_ABORT_UNLESS(!XdcBuffers.empty());
             auto& front = XdcBuffers.front();
             if (from) {
                 from->ExtractFrontPlain(front.data(), Min(numBytes, front.size()));
@@ -81,13 +81,13 @@ namespace NActors {
             if (numBytes < front.size()) {
                 front = front.SubSpan(numBytes, Max<size_t>());
                 if (!FetchIndex) { // we are sending this very buffer, adjust sending offset
-                    Y_VERIFY_DEBUG(numBytes <= FetchOffset);
+                    Y_DEBUG_ABORT_UNLESS(numBytes <= FetchOffset);
                     FetchOffset -= numBytes;
                 }
                 break;
             } else {
                 numBytes -= front.size();
-                Y_VERIFY_DEBUG(FetchIndex);
+                Y_DEBUG_ABORT_UNLESS(FetchIndex);
                 --FetchIndex;
                 XdcBuffers.pop_front();
             }
@@ -240,7 +240,7 @@ namespace NActors {
                     }
 
                 case EState::PAYLOAD:
-                    Y_VERIFY_DEBUG(PayloadSize);
+                    Y_DEBUG_ABORT_UNLESS(PayloadSize);
                     if (!IncomingData) {
                         break;
                     } else {
@@ -369,7 +369,7 @@ namespace NActors {
         if (PayloadSize) {
             const ui64 expectedMin = Context->GetLastPacketSerialToConfirm() + 1;
             const ui64 expectedMax = Context->LastProcessedSerial + 1;
-            Y_VERIFY_DEBUG(expectedMin <= expectedMax);
+            Y_DEBUG_ABORT_UNLESS(expectedMin <= expectedMax);
             if (CurrentSerial ? serial != CurrentSerial + 1 : (serial == 0 || serial > expectedMin)) {
                 LOG_CRIT_IC_SESSION("ICIS06", "%s", TString(TStringBuilder()
                         << "packet serial number mismatch"
@@ -383,7 +383,7 @@ namespace NActors {
             IgnorePayload = serial != expectedMax;
             CurrentSerial = serial;
             State = EState::PAYLOAD;
-            Y_VERIFY_DEBUG(!Payload);
+            Y_DEBUG_ABORT_UNLESS(!Payload);
         } else if (serial & TTcpPacketBuf::PingRequestMask) {
             Send(SessionId, new TEvProcessPingRequest(serial & ~TTcpPacketBuf::PingRequestMask));
         } else if (serial & TTcpPacketBuf::PingResponseMask) {
@@ -488,10 +488,10 @@ namespace NActors {
 
         // mark packet as processed
         if (IgnorePayload) {
-            Y_VERIFY_DEBUG(CurrentSerial <= Context->LastProcessedSerial);
+            Y_DEBUG_ABORT_UNLESS(CurrentSerial <= Context->LastProcessedSerial);
         } else {
             ++Context->LastProcessedSerial;
-            Y_VERIFY_DEBUG(CurrentSerial == Context->LastProcessedSerial);
+            Y_DEBUG_ABORT_UNLESS(CurrentSerial == Context->LastProcessedSerial);
         }
         XdcCatchStream.Ready = Context->LastProcessedSerial == CurrentSerial;
         ApplyXdcCatchStream();
@@ -515,7 +515,7 @@ namespace NActors {
                 break;
             }
 
-            Y_VERIFY_DEBUG(front.Serial + InboundPacketQ.size() - 1 <= Context->LastProcessedSerial,
+            Y_DEBUG_ABORT_UNLESS(front.Serial + InboundPacketQ.size() - 1 <= Context->LastProcessedSerial,
                 "front.Serial# %" PRIu64 " LastProcessedSerial# %" PRIu64 " InboundPacketQ.size# %zu",
                 front.Serial, Context->LastProcessedSerial, InboundPacketQ.size());
 
@@ -643,7 +643,7 @@ namespace NActors {
                     LOG_CRIT_IC_SESSION("ICIS19", "unprocessed payload remains after shuffling"
                         " Type# 0x%08" PRIx32 " InternalPayload.size# %zu ExternalPayload.size# %zu",
                         descr.Type, pendingEvent.InternalPayload.size(), pendingEvent.ExternalPayload.size());
-                    Y_VERIFY_DEBUG(false);
+                    Y_DEBUG_ABORT_UNLESS(false);
                     throw TExReestablishConnection{TDisconnectReason::FormatError()};
                 }
             }
@@ -800,7 +800,7 @@ namespace NActors {
         if (Buffers.empty()) { // we have read all the data, increase number of buffers
             CurrentBuffers = Min(CurrentBuffers * 2, MaxBuffers);
         } else {
-            Y_VERIFY_DEBUG(numBuffersCovered);
+            Y_DEBUG_ABORT_UNLESS(numBuffersCovered);
 
             const size_t index = numBuffersCovered - 1;
 
@@ -858,7 +858,7 @@ namespace NActors {
             // scatter read data
             const char *in = XdcCatchStream.Buffer.data();
             while (recvres) {
-                Y_VERIFY_DEBUG(!XdcCatchStream.Markup.empty());
+                Y_DEBUG_ABORT_UNLESS(!XdcCatchStream.Markup.empty());
                 auto& [channel, apply, bytes] = XdcCatchStream.Markup.front();
                 size_t bytesInChannel = Min<size_t>(recvres, bytes);
                 bytes -= bytesInChannel;
@@ -893,7 +893,7 @@ namespace NActors {
 
     void TInputSessionTCP::ApplyXdcCatchStream() {
         if (!XdcCatchStream.Applied && XdcCatchStream.Ready && !XdcCatchStream.BytesPending) {
-            Y_VERIFY_DEBUG(XdcCatchStream.Markup.empty());
+            Y_DEBUG_ABORT_UNLESS(XdcCatchStream.Markup.empty());
 
             auto process = [&](auto& context) {
                 context.ApplyCatchBuffer();
@@ -967,7 +967,7 @@ namespace NActors {
                 Y_ABORT_UNLESS(!bytesToCut);
             }
 
-            Y_VERIFY_DEBUG(n);
+            Y_DEBUG_ABORT_UNLESS(n);
             auto& context = GetPerChannelContext(channel);
             context.DropFront(nullptr, n);
             ProcessEvents(context);
@@ -986,7 +986,7 @@ namespace NActors {
             return;
         }
         while (span.size()) {
-            Y_VERIFY_DEBUG(!XdcChecksumQ.empty());
+            Y_DEBUG_ABORT_UNLESS(!XdcChecksumQ.empty());
             auto& [size, expected] = XdcChecksumQ.front();
             const size_t n = Min<size_t>(size, span.size());
             if (Params.UseXxhash) {

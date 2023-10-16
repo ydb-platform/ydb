@@ -346,7 +346,7 @@ namespace NActors {
                             auto ev = WaitForSpecificEvent<TEvReportConnection>("WaitInboundXdcStream");
                             SubscribedForConnection = false;
                             if (ev->Get()->HandshakeId != *HandshakeId) {
-                                Y_VERIFY_DEBUG(false);
+                                Y_DEBUG_ABORT_UNLESS(false);
                                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Mismatching HandshakeId in external data channel");
                             }
                             ExternalDataChannel.GetSocketRef() = std::move(ev->Get()->Socket);
@@ -892,7 +892,7 @@ namespace NActors {
             // extract peer node id from the peer
             PeerNodeId = request.Header.SelfVirtualId.NodeId();
             if (!PeerNodeId) {
-                Y_VERIFY_DEBUG(false, "PeerNodeId is zero request# %s", request.ToString().data());
+                Y_DEBUG_ABORT_UNLESS(false, "PeerNodeId is zero request# %s", request.ToString().data());
                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "SelfVirtualId.NodeId is empty in initial packet");
             }
             UpdatePrefix();

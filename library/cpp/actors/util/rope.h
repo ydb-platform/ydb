@@ -162,7 +162,7 @@ private:
             CheckValid();
 
             while (amount) {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 const size_t max = ContiguousSize();
                 const size_t num = std::min(amount, max);
                 amount -= num;
@@ -189,7 +189,7 @@ private:
                 amount -= num;
                 Ptr -= num;
                 if (amount) {
-                    Y_VERIFY_DEBUG(Iter != GetChainBegin());
+                    Y_DEBUG_ABORT_UNLESS(Iter != GetChainBegin());
                     --Iter;
                     Ptr = Iter->End;
                 }
@@ -253,7 +253,7 @@ private:
         // Advance to next contiguous block of data.
         void AdvanceToNextContiguousBlock() {
             CheckValid();
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             ++Iter;
             Ptr = Iter != GetChainEnd() ? Iter->Begin : nullptr;
         }
@@ -263,7 +263,7 @@ private:
             CheckValid();
 
             while (len) {
-                Y_VERIFY_DEBUG(Ptr);
+                Y_DEBUG_ABORT_UNLESS(Ptr);
 
                 // calculate amount of bytes we need to move
                 const size_t max = ContiguousSize();
@@ -290,7 +290,7 @@ private:
 
         template<bool IsOtherConst>
         bool operator ==(const TIteratorImpl<IsOtherConst>& other) const {
-            Y_VERIFY_DEBUG(Rope == other.Rope);
+            Y_DEBUG_ABORT_UNLESS(Rope == other.Rope);
             CheckValid();
             other.CheckValid();
             return Iter == other.Iter && Ptr == other.Ptr;
@@ -399,7 +399,7 @@ public:
     }
 
     TRope(TConstIterator begin, TConstIterator end) {
-        Y_VERIFY_DEBUG(begin.Rope == end.Rope);
+        Y_DEBUG_ABORT_UNLESS(begin.Rope == end.Rope);
         if (begin.Rope == this) {
             TRope temp(begin, end);
             *this = std::move(temp);
@@ -545,8 +545,8 @@ public:
     }
 
     void Insert(TIterator pos, TRope&& rope) {
-        Y_VERIFY_DEBUG(this == pos.Rope);
-        Y_VERIFY_DEBUG(this != &rope);
+        Y_DEBUG_ABORT_UNLESS(this == pos.Rope);
+        Y_DEBUG_ABORT_UNLESS(this != &rope);
 
         if (!rope) {
             return; // do nothing for empty rope
@@ -595,16 +595,16 @@ public:
         if (rope) { // insert remains
             Chain.Splice(pos.Iter, rope.Chain, rope.Chain.begin(), rope.Chain.end());
         }
-        Y_VERIFY_DEBUG(!rope);
+        Y_DEBUG_ABORT_UNLESS(!rope);
         InvalidateIterators();
     }
 
     void EraseFront(size_t len) {
-        Y_VERIFY_DEBUG(Size >= len);
+        Y_DEBUG_ABORT_UNLESS(Size >= len);
         Size -= len;
 
         while (len) {
-            Y_VERIFY_DEBUG(Chain);
+            Y_DEBUG_ABORT_UNLESS(Chain);
             TRcBuf& item = Chain.GetFirstChunk();
             const size_t itemSize = item.GetSize();
             if (len >= itemSize) {
@@ -620,11 +620,11 @@ public:
     }
 
     void EraseBack(size_t len) {
-        Y_VERIFY_DEBUG(Size >= len);
+        Y_DEBUG_ABORT_UNLESS(Size >= len);
         Size -= len;
 
         while (len) {
-            Y_VERIFY_DEBUG(Chain);
+            Y_DEBUG_ABORT_UNLESS(Chain);
             TRcBuf& item = Chain.GetLastChunk();
             const size_t itemSize = item.GetSize();
             if (len >= itemSize) {
@@ -647,7 +647,7 @@ public:
         Size -= len;
         while (len) {
             auto& chunk = Chain.GetFirstChunk();
-            Y_VERIFY_DEBUG(chunk.Backend);
+            Y_DEBUG_ABORT_UNLESS(chunk.Backend);
             const size_t num = Min(len, chunk.GetSize());
             memcpy(buffer, chunk.Begin, num);
             buffer = static_cast<char*>(buffer) + num;
@@ -848,7 +848,7 @@ public:
 private:
     void Cut(TIterator begin, TIterator end, TRope *target) {
         // ensure all iterators are belong to us
-        Y_VERIFY_DEBUG(this == begin.Rope && this == end.Rope);
+        Y_DEBUG_ABORT_UNLESS(this == begin.Rope && this == end.Rope);
 
         // if begin and end are equal, we do nothing -- checking this case allows us to find out that begin does not
         // point to End(), for example
@@ -886,7 +886,7 @@ private:
             // now drop full blocks
             size_t rangeSize = 0;
             for (auto it = begin.Iter; it != end.Iter; ++it) {
-                Y_VERIFY_DEBUG(it->GetSize());
+                Y_DEBUG_ABORT_UNLESS(it->GetSize());
                 rangeSize += it->GetSize();
             }
             if (rangeSize) {
@@ -927,7 +927,7 @@ public:
         while (len) {
             if (Arena) {
                 auto iter = Arena.Begin();
-                Y_VERIFY_DEBUG(iter.Valid());
+                Y_DEBUG_ABORT_UNLESS(iter.Valid());
                 char *dest = const_cast<char*>(iter.ContiguousData());
                 const size_t bytesToCopy = std::min(len, iter.ContiguousSize());
                 memcpy(dest, buffer, bytesToCopy);
@@ -952,7 +952,7 @@ public:
 struct TRopeUtils {
     static void Memset(TRope::TConstIterator dst, char c, size_t size) {
         while (size) {
-            Y_VERIFY_DEBUG(dst.Valid());
+            Y_DEBUG_ABORT_UNLESS(dst.Valid());
             size_t len = std::min(size, dst.ContiguousSize());
             memset(const_cast<char*>(dst.ContiguousData()), c, len);
             dst += len;
@@ -962,7 +962,7 @@ struct TRopeUtils {
 
     static void Memcpy(TRope::TConstIterator dst, TRope::TConstIterator src, size_t size) {
         while (size) {
-            Y_VERIFY_DEBUG(dst.Valid() && src.Valid(),
+            Y_DEBUG_ABORT_UNLESS(dst.Valid() && src.Valid(),
                     "Invalid iterator in memcpy: dst.Valid() - %" PRIu32 ", src.Valid() - %" PRIu32,
                       (ui32)dst.Valid(), (ui32)src.Valid());
             size_t len = std::min(size, std::min(dst.ContiguousSize(), src.ContiguousSize()));
@@ -975,7 +975,7 @@ struct TRopeUtils {
 
     static void Memcpy(TRope::TConstIterator dst, const char* src, size_t size) {
         while (size) {
-            Y_VERIFY_DEBUG(dst.Valid());
+            Y_DEBUG_ABORT_UNLESS(dst.Valid());
             size_t len = std::min(size, dst.ContiguousSize());
             memcpy(const_cast<char*>(dst.ContiguousData()), src, len);
             size -= len;
@@ -986,7 +986,7 @@ struct TRopeUtils {
 
     static void Memcpy(char* dst, TRope::TConstIterator src, size_t size) {
         while (size) {
-            Y_VERIFY_DEBUG(src.Valid());
+            Y_DEBUG_ABORT_UNLESS(src.Valid());
             size_t len = std::min(size, src.ContiguousSize());
             memcpy(dst, src.ContiguousData(), len);
             size -= len;
@@ -1080,13 +1080,13 @@ class TRopeZeroCopyInput : public IZeroCopyInput {
 
 private:
     size_t DoNext(const void** ptr, size_t len) override {
-        Y_VERIFY_DEBUG(ptr);
+        Y_DEBUG_ABORT_UNLESS(ptr);
         if (Len == 0) {
             if (Iter.Valid()) {
                 Data = Iter.ContiguousData();
                 Len = Iter.ContiguousSize();
-                Y_VERIFY_DEBUG(Len);
-                Y_VERIFY_DEBUG(Data);
+                Y_DEBUG_ABORT_UNLESS(Len);
+                Y_DEBUG_ABORT_UNLESS(Data);
                 ++Iter;
             } else {
                 Data = nullptr;

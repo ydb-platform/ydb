@@ -162,7 +162,7 @@ namespace NActors {
                 if (value & LastPacketSerialToConfirmLockBit) {
                     return false;
                 }
-                Y_VERIFY_DEBUG(value + 1 == nextValue);
+                Y_DEBUG_ABORT_UNLESS(value + 1 == nextValue);
                 if (LastPacketSerialToConfirm.compare_exchange_weak(value, nextValue)) {
                     return true;
                 }

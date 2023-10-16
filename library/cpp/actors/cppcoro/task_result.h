@@ -78,7 +78,7 @@ namespace NActors {
                 }
                 case 2: {
                     std::exception_ptr& e = std::get<2>(Result);
-                    Y_VERIFY_DEBUG(e, "Task exception missing");
+                    Y_DEBUG_ABORT_UNLESS(e, "Task exception missing");
                     std::rethrow_exception(e);
                 }
             }
@@ -99,7 +99,7 @@ namespace NActors {
                 }
                 case 2: {
                     std::exception_ptr& e = std::get<2>(Result);
-                    Y_VERIFY_DEBUG(e, "Task exception missing");
+                    Y_DEBUG_ABORT_UNLESS(e, "Task exception missing");
                     std::rethrow_exception(std::move(e));
                 }
             }

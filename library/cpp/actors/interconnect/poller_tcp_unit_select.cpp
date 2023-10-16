@@ -60,7 +60,7 @@ namespace NInterconnect {
         const auto numberEvents = ::pselect(FD_SETSIZE, &sets[R], &sets[W], &sets[E], &timeout, &sigmask);
 #endif
 
-        Y_VERIFY_DEBUG(numberEvents >= 0);
+        Y_DEBUG_ABORT_UNLESS(numberEvents >= 0);
 
         for (auto it = side.Operations.cbegin(); side.Operations.cend() != it;) {
             if (FD_ISSET(it->first, &sets[O]) || FD_ISSET(it->first, &sets[E]))

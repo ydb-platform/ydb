@@ -69,7 +69,7 @@ public:
     {}
 
     const char& operator[](size_t index) const {
-        Y_VERIFY_DEBUG(index < Size_);
+        Y_DEBUG_ABORT_UNLESS(index < Size_);
         return Data_[index];
     }
 
@@ -639,7 +639,7 @@ class TRcBuf {
             if constexpr (sizeof(TObject) <= sizeof(TBackendHolder)) {
                 TBackendHolder res = TBackend::Empty;
                 new(&res) std::decay_t<TObject>(std::forward<TObject>(object));
-                Y_VERIFY_DEBUG((res.Data[0] & ValueMask) == res.Data[0]);
+                Y_DEBUG_ABORT_UNLESS((res.Data[0] & ValueMask) == res.Data[0]);
                 res.Data[0] = res.Data[0] | static_cast<uintptr_t>(type);
                 return res;
             } else {
@@ -649,7 +649,7 @@ class TRcBuf {
 
         template<typename TOwner, typename TCallback, bool IsConst = std::is_const_v<TOwner>>
         static std::invoke_result_t<TCallback, EType, std::conditional_t<IsConst, const TString&, TString&>> VisitRaw(TOwner& origValue, TCallback&& callback) {
-            Y_VERIFY_DEBUG(origValue);
+            Y_DEBUG_ABORT_UNLESS(origValue);
             const EType type = static_cast<EType>(origValue.Data[0] & TypeMask);
             TBackendHolder value(origValue);
             value.Data[0] = value.Data[0] & ValueMask;

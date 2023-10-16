@@ -28,7 +28,7 @@ namespace NActors {
 
     ui32 TIOExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) {
         i16 workerId = wctx.WorkerId;
-        Y_VERIFY_DEBUG(workerId < PoolThreads);
+        Y_DEBUG_ABORT_UNLESS(workerId < PoolThreads);
 
         NHPTimer::STime elapsed = 0;
         NHPTimer::STime parked = 0;

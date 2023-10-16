@@ -74,7 +74,7 @@ static TString GetFieldName(const google::protobuf::FieldDescriptor& field,
             NProtobufJson::ToSnakeCaseDense(&name);
             break;
         default:
-            Y_VERIFY_DEBUG(false, "Unknown FieldNameMode.");
+            Y_DEBUG_ABORT_UNLESS(false, "Unknown FieldNameMode.");
     }
     return name;
 }

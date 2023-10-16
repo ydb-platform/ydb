@@ -591,7 +591,7 @@ namespace NActors {
         static constexpr size_t maxBytesAtOnce = 256 * 1024;
         size_t bytesToSendInMain = maxBytesAtOnce;
 
-        Y_VERIFY_DEBUG(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream));
+        Y_DEBUG_ABORT_UNLESS(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream));
 
         if (OutOfBandStream) {
             bytesToSendInMain = 0;
@@ -603,7 +603,7 @@ namespace NActors {
             // align send up to packet boundary
             size_t offset = OutgoingOffset;
             for (auto it = sendQueueIt; ForcedWriteLength; ++it, offset = 0) {
-                Y_VERIFY_DEBUG(it != SendQueue.end());
+                Y_DEBUG_ABORT_UNLESS(it != SendQueue.end());
                 bytesToSendInMain += it->PacketSize - offset; // send remainder of current packet
                 ForcedWriteLength -= Min(it->PacketSize - offset, ForcedWriteLength);
             }
@@ -861,7 +861,7 @@ namespace NActors {
         size_t bytesDropped = 0;
         size_t bytesDroppedFromXdc = 0;
         ui64 frontPacketSerial = OutputCounter - SendQueue.size() + 1;
-        Y_VERIFY_DEBUG(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream),
+        Y_DEBUG_ABORT_UNLESS(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream),
             "OutgoingIndex# %zu SendQueue.size# %zu OutgoingOffset# %zu Unsent# %zu Total# %zu",
             OutgoingIndex, SendQueue.size(), OutgoingOffset, OutgoingStream.CalculateUnsentSize(),
             OutgoingStream.CalculateOutgoingSize());
@@ -910,7 +910,7 @@ namespace NActors {
         Y_ABORT_UNLESS(NumEventsInQueue);
         while (NumEventsInQueue) {
             TEventOutputChannel *channel = ChannelScheduler->PickChannelWithLeastConsumedWeight();
-            Y_VERIFY_DEBUG(!channel->IsEmpty());
+            Y_DEBUG_ABORT_UNLESS(!channel->IsEmpty());
 
             // generate some data within this channel
             const ui64 netBefore = channel->GetBufferedAmountOfData();
@@ -918,14 +918,14 @@ namespace NActors {
             const bool eventDone = channel->FeedBuf(task, serial, &gross);
             channel->UnaccountedTraffic += gross;
             const ui64 netAfter = channel->GetBufferedAmountOfData();
-            Y_VERIFY_DEBUG(netAfter <= netBefore); // net amount should shrink
+            Y_DEBUG_ABORT_UNLESS(netAfter <= netBefore); // net amount should shrink
             const ui64 net = netBefore - netAfter; // number of net bytes serialized
 
             // adjust metrics for local and global queue size
             TotalOutputQueueSize -= net;
             Proxy->Metrics->SubOutputBuffersTotalSize(net);
             bytesGenerated += gross;
-            Y_VERIFY_DEBUG(!!net == !!gross && gross >= net, "net# %" PRIu64 " gross# %" PRIu64, net, gross);
+            Y_DEBUG_ABORT_UNLESS(!!net == !!gross && gross >= net, "net# %" PRIu64 " gross# %" PRIu64, net, gross);
 
             // return it back to queue or delete, depending on whether this channel is still working or not
             ChannelScheduler->FinishPick(gross, EqualizeCounter);

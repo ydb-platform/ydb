@@ -90,7 +90,7 @@ namespace NActors {
     }
 
     bool TExecutorPoolBaseMailboxed::Send(TAutoPtr<IEventHandle>& ev) {
-        Y_VERIFY_DEBUG(ev->GetRecipientRewrite().PoolID() == PoolId);
+        Y_DEBUG_ABORT_UNLESS(ev->GetRecipientRewrite().PoolID() == PoolId);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         RelaxedStore(&ev->SendTime, (::NHPTimer::STime)GetCycleCountFast());
 #endif
@@ -98,7 +98,7 @@ namespace NActors {
     }
 
     bool TExecutorPoolBaseMailboxed::SpecificSend(TAutoPtr<IEventHandle>& ev) {
-        Y_VERIFY_DEBUG(ev->GetRecipientRewrite().PoolID() == PoolId);
+        Y_DEBUG_ABORT_UNLESS(ev->GetRecipientRewrite().PoolID() == PoolId);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         RelaxedStore(&ev->SendTime, (::NHPTimer::STime)GetCycleCountFast());
 #endif
@@ -134,7 +134,7 @@ namespace NActors {
         NHPTimer::STime hpstart = GetCycleCountFast();
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         ui32 at = actor->GetActivityType();
-        Y_VERIFY_DEBUG(at < Stats.ActorsAliveByActivity.size());
+        Y_DEBUG_ABORT_UNLESS(at < Stats.ActorsAliveByActivity.size());
         if (at >= Stats.MaxActivityType()) {
             at = TActorTypeOperator::GetActorActivityIncorrectIndex();
             Y_ABORT_UNLESS(at < Stats.ActorsAliveByActivity.size());

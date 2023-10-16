@@ -101,7 +101,7 @@ namespace NMonitoring {
         }
 
         int ExtendUp(int expectedIndex) {
-            Y_VERIFY_DEBUG(expectedIndex >= (int) Buckets_.size());
+            Y_DEBUG_ABORT_UNLESS(expectedIndex >= (int) Buckets_.size());
             const size_t toAdd = expectedIndex - Buckets_.size() + 1;
             const size_t newSize = Buckets_.size() + toAdd;
             if (newSize <= MAX_BUCKETS) {
@@ -126,7 +126,7 @@ namespace NMonitoring {
         }
 
         int ExtendDown(int expectedIndex, int margin) {
-            Y_VERIFY_DEBUG(expectedIndex <= 0);
+            Y_DEBUG_ABORT_UNLESS(expectedIndex <= 0);
             int toAdd = std::min<int>(MAX_BUCKETS - Buckets_.size(), margin - expectedIndex);
             if (toAdd > 0) {
                 Buckets_.insert(Buckets_.begin(), toAdd, 0.0);

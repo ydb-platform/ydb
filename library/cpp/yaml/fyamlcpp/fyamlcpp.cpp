@@ -423,7 +423,7 @@ bool TMapping::Has(TString key) const {
 
 TMappingIterator TMapping::Remove(const TMappingIterator& toRemove) {
     ENSURE_NODE_NOT_EMPTY(Node_);
-    Y_VERIFY_DEBUG(Node_ == toRemove.Node_);
+    Y_DEBUG_ABORT_UNLESS(Node_ == toRemove.Node_);
     TMappingIterator ret = toRemove;
     ++ret;
     fy_node_mapping_remove(Node_, toRemove.NodePair_.Pair_);
@@ -549,7 +549,7 @@ TNode TSequence::Remove(const TNodeRef& toRemove) {
 
 TSequenceIterator TSequence::Remove(const TSequenceIterator& toRemove) {
     ENSURE_NODE_NOT_EMPTY(Node_);
-    Y_VERIFY_DEBUG(Node_ == toRemove.Node_);
+    Y_DEBUG_ABORT_UNLESS(Node_ == toRemove.Node_);
     ENSURE_NODE_NOT_EMPTY(toRemove.IterNode_);
     TSequenceIterator ret = toRemove;
     ++ret;
@@ -560,7 +560,7 @@ TSequenceIterator TSequence::Remove(const TSequenceIterator& toRemove) {
 
 TReverseSequenceIterator TSequence::Remove(const TReverseSequenceIterator& toRemove) {
     ENSURE_NODE_NOT_EMPTY(Node_);
-    Y_VERIFY_DEBUG(Node_ == toRemove.Node_);
+    Y_DEBUG_ABORT_UNLESS(Node_ == toRemove.Node_);
     ENSURE_NODE_NOT_EMPTY(toRemove.IterNode_);
     TReverseSequenceIterator ret = toRemove;
     ++ret;
@@ -820,7 +820,7 @@ bool TNodeOpsBase::IsAlias(fy_node* node) const {
 
 fy_node* TNodeOpsBase::ResolveAlias(fy_node* node) const {
     ENSURE_NODE_NOT_EMPTY(node);
-    Y_VERIFY_DEBUG(IsAlias(node));
+    Y_DEBUG_ABORT_UNLESS(IsAlias(node));
     return fy_node_resolve_alias(node);
 }
 

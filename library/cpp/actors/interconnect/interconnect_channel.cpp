@@ -188,7 +188,7 @@ namespace NActors {
                 task.Append<External>(data, len);
             }
             *bytesSerialized += len;
-            Y_VERIFY_DEBUG(len <= PartLenRemain);
+            Y_DEBUG_ABORT_UNLESS(len <= PartLenRemain);
             PartLenRemain -= len;
 
             event.EventActuallySerialized += len;
@@ -275,7 +275,7 @@ namespace NActors {
         size_t bytesSerialized = 0;
         const bool complete = SerializeEvent<false>(task, event, &bytesSerialized);
 
-        Y_VERIFY_DEBUG(bytesSerialized);
+        Y_DEBUG_ABORT_UNLESS(bytesSerialized);
         Y_ABORT_UNLESS(bytesSerialized <= Max<ui16>());
 
         TChannelPart part{

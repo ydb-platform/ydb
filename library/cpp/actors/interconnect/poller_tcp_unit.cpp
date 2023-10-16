@@ -67,7 +67,7 @@ namespace NInterconnect {
     TPollerUnit::StartReadOperation(
         const TIntrusivePtr<TSharedDescriptor>& stream,
         TFDDelegate&& operation) {
-        Y_VERIFY_DEBUG(stream);
+        Y_DEBUG_ABORT_UNLESS(stream);
         if (AtomicLoad(&StopFlag))
             return;
         GetSide<false>().InputQueue.Push(TSide::TItem(stream, std::move(operation)));
@@ -77,7 +77,7 @@ namespace NInterconnect {
     TPollerUnit::StartWriteOperation(
         const TIntrusivePtr<TSharedDescriptor>& stream,
         TFDDelegate&& operation) {
-        Y_VERIFY_DEBUG(stream);
+        Y_DEBUG_ABORT_UNLESS(stream);
         if (AtomicLoad(&StopFlag))
             return;
         GetSide<true>().InputQueue.Push(TSide::TItem(stream, std::move(operation)));

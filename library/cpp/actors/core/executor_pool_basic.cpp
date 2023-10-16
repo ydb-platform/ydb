@@ -183,7 +183,7 @@ namespace NActors {
             }
         }
 
-        Y_VERIFY_DEBUG(AtomicLoad(&StopFlag) || AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_NONE);
+        Y_DEBUG_ABORT_UNLESS(AtomicLoad(&StopFlag) || AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_NONE);
 
 #if defined ACTORSLIB_COLLECT_EXEC_STATS
         if (AtomicDecrement(ThreadUtilization) == 0) {
@@ -242,7 +242,7 @@ namespace NActors {
 
     ui32 TBasicExecutorPool::GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingCounter) {
         TWorkerId workerId = wctx.WorkerId;
-        Y_VERIFY_DEBUG(workerId < PoolThreads);
+        Y_DEBUG_ABORT_UNLESS(workerId < PoolThreads);
 
         TTimers timers;
 
@@ -303,7 +303,7 @@ namespace NActors {
 
     ui32 TBasicExecutorPool::GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingCounter) {
         TWorkerId workerId = wctx.WorkerId;
-        Y_VERIFY_DEBUG(workerId < static_cast<i32>(PoolThreads));
+        Y_DEBUG_ABORT_UNLESS(workerId < static_cast<i32>(PoolThreads));
 
         if (workerId >= 0 && LocalQueues[workerId].size()) {
             ui32 activation = LocalQueues[workerId].front();
@@ -500,13 +500,13 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Y_VERIFY_DEBUG(workerId < PoolThreads);
+        Y_DEBUG_ABORT_UNLESS(workerId < PoolThreads);
 
         Schedule(deadline - ActorSystem->Timestamp(), ev, cookie, workerId);
     }
 
     void TBasicExecutorPool::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Y_VERIFY_DEBUG(workerId < PoolThreads);
+        Y_DEBUG_ABORT_UNLESS(workerId < PoolThreads);
 
         const auto current = ActorSystem->Monotonic();
         if (deadline < current)
@@ -516,7 +516,7 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Y_VERIFY_DEBUG(workerId < PoolThreads);
+        Y_DEBUG_ABORT_UNLESS(workerId < PoolThreads);
 
         const auto deadline = ActorSystem->Monotonic() + delta;
         ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);

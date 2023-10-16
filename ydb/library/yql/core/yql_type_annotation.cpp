@@ -332,6 +332,7 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         settings.Flags = SqlFlags;
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
+        settings.FileAliasPrefix = FileAliasPrefix;
         astRes = SqlToYql(body, settings);
         if (!astRes.IsOk()) {
             ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to parse SQL: " << fullName), astRes.Issues));
@@ -449,7 +450,15 @@ IModuleResolver::TPtr TModuleResolver::CreateMutableChild() const {
         throw yexception() << "Module resolver should not contain user data and URL loader";
     }
 
-    return std::make_shared<TModuleResolver>(&Modules, LibsContext.NextUniqueId, ClusterMapping, SqlFlags, OptimizeLibraries, KnownPackages, Libs);
+    return std::make_shared<TModuleResolver>(&Modules, LibsContext.NextUniqueId, ClusterMapping, SqlFlags, OptimizeLibraries, KnownPackages, Libs, FileAliasPrefix);
+}
+
+void TModuleResolver::SetFileAliasPrefix(TString&& prefix) {
+    FileAliasPrefix = std::move(prefix);
+}
+
+TString TModuleResolver::GetFileAliasPrefix() const {
+    return FileAliasPrefix;
 }
 
 TString TModuleResolver::SubstParameters(const TString& str) {

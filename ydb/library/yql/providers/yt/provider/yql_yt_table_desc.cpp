@@ -8,6 +8,8 @@
 #include <ydb/library/yql/sql/sql.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
+#include <util/generic/scope.h>
+
 namespace NYql {
 
 namespace {
@@ -163,6 +165,11 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
         return {};
     }
 
+    TString oldAliasPrefix = moduleResolver->GetFileAliasPrefix();
+    moduleResolver->SetFileAliasPrefix(TString{settings.FileAliasPrefix});
+    Y_DEFER {
+        moduleResolver->SetFileAliasPrefix(std::move(oldAliasPrefix));
+    };
     TExprNode::TPtr exprRoot;
     if (!CompileExpr(*sqlRes.Root, exprRoot, ctx, moduleResolver, urlListerManager, false, Max<ui32>(), syntaxVersion)) {
         return {};

@@ -53,7 +53,8 @@ public:
     }
 
     TModuleResolver(const TModulesTable* parentModules, ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString, THashMap<int, TLibraryCohesion>>& libs)
+        const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
+        THashMap<int, TLibraryCohesion>>& libs, const TString& fileAliasPrefix)
         : ParentModules(parentModules)
         , LibsContext(nextUniqueId)
         , KnownPackages(knownPackages)
@@ -61,6 +62,7 @@ public:
         , ClusterMapping(clusterMapping)
         , SqlFlags(sqlFlags)
         , OptimizeLibraries(optimizeLibraries)
+        , FileAliasPrefix(fileAliasPrefix)
     {
     }
 
@@ -93,6 +95,8 @@ public:
     void UpdateNextUniqueId(TExprContext& ctx) const override;
     ui64 GetNextUniqueId() const override;
     IModuleResolver::TPtr CreateMutableChild() const override;
+    void SetFileAliasPrefix(TString&& prefix) override;
+    TString GetFileAliasPrefix() const override;
 
 private:
     bool AddFromMemory(const TString& fullName, const TString& moduleName, bool isYql, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr);
@@ -116,6 +120,7 @@ private:
     const THashSet<TString> SqlFlags;
     const bool OptimizeLibraries;
     THolder<TExprContext::TFreezeGuard> FreezeGuard;
+    TString FileAliasPrefix;
 };
 
 bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName);

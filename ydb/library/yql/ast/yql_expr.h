@@ -2211,6 +2211,8 @@ public:
     Parent resolver should be alive while using child due to raw data sharing.
     */
     virtual IModuleResolver::TPtr CreateMutableChild() const = 0;
+    virtual void SetFileAliasPrefix(TString&& prefix) = 0;
+    virtual TString GetFileAliasPrefix() const = 0;
     virtual ~IModuleResolver() = default;
 };
 

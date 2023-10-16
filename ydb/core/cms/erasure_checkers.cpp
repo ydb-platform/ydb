@@ -244,7 +244,7 @@ TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpe
         case TErasureType::ErasureMirror3dc:
             return TSimpleSharedPtr<IErasureCounter>(new TMirror3dcCounter(vdisk, groupId));
         default:
-            Y_FAIL("Unknown erasure type: %d", es);
+            Y_ABORT("Unknown erasure type: %d", es);
     }
 }
 

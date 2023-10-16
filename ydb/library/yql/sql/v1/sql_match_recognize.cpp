@@ -181,7 +181,7 @@ std::pair<TPosition, ERowsPerMatch> TSqlMatchRecognizeClause::ParseRowsPerMatch(
                     ERowsPerMatch::AllRows
             };
         case TRule_row_pattern_rows_per_match::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 }
 
@@ -222,7 +222,7 @@ std::pair<TPosition, TAfterMatchSkipTo> TSqlMatchRecognizeClause::ParseAfterMatc
                     }
             };
         case TRule_row_pattern_skip_to::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 }
 
@@ -265,7 +265,7 @@ NYql::NMatchRecognize::TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTer
                         << "PERMUTE is not supported yet"; //https://st.yandex-team.ru/YQL-16228
                 break;
             case TRule_row_pattern_primary::ALT_NOT_SET:
-                Y_FAIL("You should change implementation according to grammar changes");
+                Y_ABORT("You should change implementation according to grammar changes");
         }
         uint64_t quantityMin = 1;
         uint64_t quantityMax = 1;
@@ -307,7 +307,7 @@ NYql::NMatchRecognize::TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTer
                     quantityMin = quantityMax = FromString(quantifier.GetAlt_row_pattern_quantifier5().GetRule_integer2().GetToken1().GetValue());
                     break;
                 case TRule_row_pattern_quantifier::ALT_NOT_SET:
-                    Y_FAIL("You should change implementation according to grammar changes");
+                    Y_ABORT("You should change implementation according to grammar changes");
             }
         }
         term.push_back(NYql::NMatchRecognize::TRowPatternFactor{std::move(primary), quantityMin, quantityMax, greedy, output});

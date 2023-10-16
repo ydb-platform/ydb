@@ -188,7 +188,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         Cerr << Flow->DebugString() << Endl;
-        Y_FAIL("bad");
+        Y_ABORT("bad");
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);

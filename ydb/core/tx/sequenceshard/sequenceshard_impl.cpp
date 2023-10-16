@@ -94,7 +94,7 @@ namespace NSequenceShard {
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    Y_FAIL("Unexpected event 0x%x", ev->GetTypeRewrite());
+                    Y_ABORT("Unexpected event 0x%x", ev->GetTypeRewrite());
                 }
                 break;
         }

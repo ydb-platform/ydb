@@ -164,7 +164,7 @@ namespace NKikimr {
                         val.DataSizeMem += memRec.DataSize();
                         break;
                     default:
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                 }
             }
         }

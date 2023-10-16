@@ -26,7 +26,7 @@ namespace {
         case Ydb::Maintenance::AVAILABILITY_MODE_FORCE:
             return NKikimrCms::MODE_FORCE_RESTART;
         default:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 
@@ -39,7 +39,7 @@ namespace {
         case NKikimrCms::MODE_FORCE_RESTART:
             return Ydb::Maintenance::AVAILABILITY_MODE_FORCE;
         default:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 
@@ -154,7 +154,7 @@ class TListClusterNodes: public TAdapterActor<
         case NKikimrCms::DOWN:
             return Ydb::Maintenance::ITEM_STATE_DOWN;
         default:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 
@@ -362,7 +362,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
             cmsAction.SetHost(scope.host());
             break;
         default:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 
@@ -385,7 +385,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
                 if (action.has_lock_action()) {
                     ConvertAction(action.lock_action(), *cmsRequest.AddActions());
                 } else {
-                    Y_FAIL("unreachable");
+                    Y_ABORT("unreachable");
                 }
             }
         }

@@ -105,7 +105,7 @@ namespace {
                 }
             }
 
-            Y_FAIL("Unexpected");
+            Y_ABORT("Unexpected");
         }
 
         THyperscanMatch(

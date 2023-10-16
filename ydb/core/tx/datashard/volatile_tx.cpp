@@ -259,7 +259,7 @@ namespace NKikimr::NDataShard {
                     break;
                 case EVolatileTxState::Aborting:
                     PendingAborts.PushBack(pr.second.get());
-                    Y_FAIL("FIXME: unexpected persistent aborting state");
+                    Y_ABORT("FIXME: unexpected persistent aborting state");
                     break;
             }
         }
@@ -351,7 +351,7 @@ namespace NKikimr::NDataShard {
                 case EVolatileTxState::Aborting: {
                     // Aborting transactions don't have dependencies
                     info->Dependencies.clear();
-                    Y_FAIL("FIXME: unexpected persistent aborting state");
+                    Y_ABORT("FIXME: unexpected persistent aborting state");
                     return;
                 }
             }
@@ -833,7 +833,7 @@ namespace NKikimr::NDataShard {
                         AddPendingCommit(dependentTxId);
                         break;
                     case EVolatileTxState::Aborting:
-                        Y_FAIL("FIXME: unexpected dependency removed from aborting tx");
+                        Y_ABORT("FIXME: unexpected dependency removed from aborting tx");
                         break;
                 }
             }

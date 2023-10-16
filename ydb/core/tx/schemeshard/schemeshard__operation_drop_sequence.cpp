@@ -376,7 +376,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TDropSequence");
+        Y_ABORT("no AbortPropose for TDropSequence");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

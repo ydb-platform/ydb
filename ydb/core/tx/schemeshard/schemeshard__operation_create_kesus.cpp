@@ -410,7 +410,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TCreateKesus");
+        Y_ABORT("no AbortPropose for TCreateKesus");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

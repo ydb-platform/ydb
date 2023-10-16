@@ -64,7 +64,7 @@ EExecutionStatus TMakeScanSnapshotUnit::Execute(TOperation::TPtr op,
     auto &info = *DataShard.GetUserTables().at(tid);
 
     if (record.HasSnapshotStep() && record.HasSnapshotTxId()) {
-        Y_FAIL("Unexpected MakeScanSnapshot on ReadTable from a persistent snapshot");
+        Y_ABORT("Unexpected MakeScanSnapshot on ReadTable from a persistent snapshot");
     }
 
     tx->SetScanSnapshotId(DataShard.MakeScanSnapshot(info.LocalTid));

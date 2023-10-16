@@ -163,13 +163,13 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         return false;
     } catch (const TSchemeErrorTabletException &ex) {
         Y_UNUSED(ex);
-        Y_FAIL();
+        Y_ABORT();
     } catch (const TMemoryLimitExceededException &ex) {
-        Y_FAIL("there must be no leaked exceptions: TMemoryLimitExceededException");
+        Y_ABORT("there must be no leaked exceptions: TMemoryLimitExceededException");
     } catch (const std::exception &e) {
-        Y_FAIL("there must be no leaked exceptions: %s", e.what());
+        Y_ABORT("there must be no leaked exceptions: %s", e.what());
     } catch (...) {
-        Y_FAIL("there must be no leaked exceptions");
+        Y_ABORT("there must be no leaked exceptions");
     }
 }
 

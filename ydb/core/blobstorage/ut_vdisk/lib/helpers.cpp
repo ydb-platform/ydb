@@ -498,7 +498,7 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
             break;
         default:
             // IMPOSSIBLE
-            Y_FAIL();
+            Y_ABORT();
         }
 
         if (Step == MsgNum) {
@@ -599,7 +599,7 @@ class TManyGets : public TActorBootstrapped<TManyGets> {
         if (const auto& s = ev.GetBlobData(q).ConvertToString(); s != MsgData) {
             fprintf(stderr, "Original: %s\n", MsgData.data());
             fprintf(stderr, "Received: %s\n", s.data());
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -703,12 +703,12 @@ class TGet : public TActorBootstrapped<TGet> {
             if (const auto& s = ev.GetBlobData(q).ConvertToString(); s != data.substr(Shift)) {
                 fprintf(stderr, "Original: %s\n", data.data());
                 fprintf(stderr, "Received: %s\n", s.data());
-                Y_FAIL();
+                Y_ABORT();
             }
         }
         auto serial = rec.SerializeAsString();
         if (serial.size() > MaxProtobufSize) {
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -717,14 +717,14 @@ class TGet : public TActorBootstrapped<TGet> {
         switch (status) {
         case NKikimrProto::OK:
             if (WithErrorResponse) {
-                Y_FAIL("Expected ERROR status but given OK");
+                Y_ABORT("Expected ERROR status but given OK");
             }
             Check(ctx, ev->Get()->Record, *ev->Get());
             break;
 
         case NKikimrProto::ERROR:
             if (!WithErrorResponse) {
-                Y_FAIL("Expected OK status but given ERROR");
+                Y_ABORT("Expected OK status but given ERROR");
             }
             break;
 
@@ -1190,7 +1190,7 @@ class TWaitForSync : public TActorBootstrapped<TWaitForSync> {
                 if (InfoVec[idx].VDiskId == vd)
                     return idx;
             }
-            Y_FAIL("nothing found");
+            Y_ABORT("nothing found");
         }
     };
 
@@ -1727,7 +1727,7 @@ void CheckQueryResult(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NA
                 expSet->Finish();
             break;
         }
-        default: Y_FAIL("Impossible case");
+        default: Y_ABORT("Impossible case");
     }
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

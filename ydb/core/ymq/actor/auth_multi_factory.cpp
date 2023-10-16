@@ -351,7 +351,7 @@ public:
             RequestFolderService();
             break;
         default:
-            Y_FAIL("Unknown wakeup tag: %lu", ev->Get()->Tag);
+            Y_ABORT("Unknown wakeup tag: %lu", ev->Get()->Tag);
         }
     }
 

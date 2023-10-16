@@ -275,7 +275,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
             *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeInvalid:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
         };
     }
 
@@ -360,7 +360,7 @@ Ydb::StatusIds::StatusCode TSchemeShard::TIndexBuilder::TTxBase::TranslateStatus
     case NKikimrScheme::StatusTxIsNotCancellable:
     case NKikimrScheme::StatusReserved18:
     case NKikimrScheme::StatusReserved19:
-        Y_FAIL("unreachable");
+        Y_ABORT("unreachable");
     }
 
     return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;

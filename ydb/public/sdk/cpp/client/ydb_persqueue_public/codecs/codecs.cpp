@@ -61,7 +61,7 @@ THolder<IOutputStream> CreateCoder(ECodec codec, TBuffer& result, int quality) {
         case ECodec::ZSTD:
             return MakeHolder<TZstdToStringCompressor>(result, quality);
         default:
-            Y_FAIL("NOT IMPLEMENTED CODEC TYPE");
+            Y_ABORT("NOT IMPLEMENTED CODEC TYPE");
     }
 }
 

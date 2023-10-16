@@ -91,7 +91,7 @@ public:
                 break;
             }
             default:
-                Y_FAIL();
+                Y_ABORT();
             }
         }
     }
@@ -193,7 +193,7 @@ public:
                 break;
             }
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
     }
 };

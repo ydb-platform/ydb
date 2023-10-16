@@ -495,7 +495,7 @@ struct TSchemeShard::TTxPublishTenantAsReadOnly : public TSchemeShard::TRwTxBase
         case TTenantInitState::InvalidState:
         case TTenantInitState::Uninitialized:
         case TTenantInitState::Done:
-            Y_FAIL("Invalid state");
+            Y_ABORT("Invalid state");
         };
     }
 
@@ -556,7 +556,7 @@ struct TSchemeShard::TTxPublishTenant : public TSchemeShard::TRwTxBase {
         case TTenantInitState::InvalidState:
         case TTenantInitState::Uninitialized:
         case TTenantInitState::Inprogress:
-            Y_FAIL("Invalid state");
+            Y_ABORT("Invalid state");
         };
     }
 

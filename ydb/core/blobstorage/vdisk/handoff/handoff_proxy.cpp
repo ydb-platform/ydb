@@ -248,7 +248,7 @@ namespace NKikimr {
                 return;
             }
 
-            Y_FAIL("Unexpected case");
+            Y_ABORT("Unexpected case");
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
@@ -261,7 +261,7 @@ namespace NKikimr {
                 Counters.ReplyUndelivered++;
                 SwitchToBadState(ctx);
             } else
-                Y_FAIL("Unknown undelivered");
+                Y_ABORT("Unknown undelivered");
         }
 
         void HandleWakeup(const TActorContext &ctx) {

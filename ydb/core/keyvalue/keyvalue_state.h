@@ -72,7 +72,7 @@ public:
                 } else if (AddedKeysIterator != KeySet.AddedKeys.end()) {
                     return *AddedKeysIterator;
                 } else {
-                    Y_FAIL("operator*() called on invalid iterator");
+                    Y_ABORT("operator*() called on invalid iterator");
                 }
             }
 
@@ -119,7 +119,7 @@ public:
                 } else if (AddedKeysIterator != KeySet.AddedKeys.end()) {
                     ++AddedKeysIterator;
                 } else {
-                    Y_FAIL("operator++() called on invalid iterator");
+                    Y_ABORT("operator++() called on invalid iterator");
                 }
             }
 

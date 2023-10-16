@@ -71,7 +71,7 @@ TRowsVerifyer RowsVerifyer;
 void Fail() {
     // Note: sleep helps to detect more fails
     std::this_thread::sleep_for(std::chrono::seconds(3));
-    Y_FAIL();
+    Y_ABORT();
 }
 
 void AddResultSet(const NYdb::TResultSet& resultSet, TVector<TRow>& rows) {

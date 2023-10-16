@@ -524,12 +524,12 @@ public:
     }
 
     const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
         return TMaybe<TString>{};
     }
 
     TVector<TStringBuf> FindClientCert() const override {
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
         return {};
     }
 
@@ -541,7 +541,7 @@ public:
     }
 
     void ReplyWithRpcStatus(grpc::StatusCode, const TString&, const TString&) override {
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
     }
 
     void ReplyUnauthenticated(const TString&) override;
@@ -620,20 +620,20 @@ public:
     }
 
     void Pass(const IFacilityProvider&) override {
-        Y_FAIL("unimplemented");
+        Y_ABORT("unimplemented");
     }
 
     void SetAuditLogHook(TAuditLogHook&&) override {
-        Y_FAIL("unimplemented for TRefreshTokenImpl");
+        Y_ABORT("unimplemented for TRefreshTokenImpl");
     }
 
     // IRequestCtxBase
     //
     void AddAuditLogPart(const TStringBuf&, const TString&) override {
-        Y_FAIL("unimplemented for TRefreshTokenImpl");
+        Y_ABORT("unimplemented for TRefreshTokenImpl");
     }
     const TAuditLogParts& GetAuditLogParts() const override {
-        Y_FAIL("unimplemented for TRefreshTokenImpl");
+        Y_ABORT("unimplemented for TRefreshTokenImpl");
     }
 
 private:
@@ -731,7 +731,7 @@ public:
     }
 
     void ReplyWithRpcStatus(grpc::StatusCode, const TString&, const TString&) override {
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
     }
 
     void ReplyUnauthenticated(const TString& in) override {
@@ -837,7 +837,7 @@ public:
     }
 
     TVector<TStringBuf> FindClientCert() const override {
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
         return {};
     }
 
@@ -854,24 +854,24 @@ public:
 
     void SetRespHook(TRespHook&&) override {
         /* cannot add hook to bidirect streaming */
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
     }
 
     void Pass(const IFacilityProvider&) override {
-        Y_FAIL("unimplemented");
+        Y_ABORT("unimplemented");
     }
 
     void SetAuditLogHook(TAuditLogHook&&) override {
-        Y_FAIL("unimplemented for TGRpcRequestBiStreamWrapper");
+        Y_ABORT("unimplemented for TGRpcRequestBiStreamWrapper");
     }
 
     // IRequestCtxBase
     //
     void AddAuditLogPart(const TStringBuf&, const TString&) override {
-        Y_FAIL("unimplemented for TGRpcRequestBiStreamWrapper");
+        Y_ABORT("unimplemented for TGRpcRequestBiStreamWrapper");
     }
     const TAuditLogParts& GetAuditLogParts() const override {
-        Y_FAIL("unimplemented for TGRpcRequestBiStreamWrapper");
+        Y_ABORT("unimplemented for TGRpcRequestBiStreamWrapper");
     }
 
 private:
@@ -1244,7 +1244,7 @@ public:
     }
 
     void Pass(const IFacilityProvider&) override {
-        Y_FAIL("unimplemented");
+        Y_ABORT("unimplemented");
     }
 
     void SetAuditLogHook(TAuditLogHook&& hook) override {

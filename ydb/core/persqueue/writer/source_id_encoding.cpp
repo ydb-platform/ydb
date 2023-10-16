@@ -32,7 +32,7 @@ TString GetSelectSourceIdQueryFromPath(const TString& path, ESourceIdTableGenera
                    << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
                    << "` WHERE Hash == $Hash AND Topic == $Topic AND ProducerId == $SourceId;";
         default:
-            Y_FAIL();
+            Y_ABORT();
     }
 }
 
@@ -46,7 +46,7 @@ TString GetSelectSourceIdQuery(const TString& root, ESourceIdTableGeneration gen
                     generation
             );
         default:
-            Y_FAIL();
+            Y_ABORT();
     }
 }
 
@@ -74,7 +74,7 @@ TString GetUpdateSourceIdQueryFromPath(const TString& path, ESourceIdTableGenera
                     << "` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition) VALUES "
                                               "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition);";
         default:
-            Y_FAIL();
+            Y_ABORT();
     }
 }
 
@@ -88,7 +88,7 @@ TString GetUpdateSourceIdQuery(const TString& root, ESourceIdTableGeneration gen
                     generation
             );
         default:
-            Y_FAIL();
+            Y_ABORT();
     }
 }
 

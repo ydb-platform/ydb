@@ -50,9 +50,9 @@ namespace NTest {
             auto *up = row.Get(NTable::TTag(8));
 
             if (up == nullptr || up->Type != NScheme::NTypeIds::Uint32) {
-                Y_FAIL("Probably got row not from the TMass instance");
+                Y_ABORT("Probably got row not from the TMass instance");
             } else if (up->Cell.Size() != sizeof(ui32) || !up->Cell.Data()) {
-                Y_FAIL("Last saved tow reference TCell is invalid in TRow");
+                Y_ABORT("Last saved tow reference TCell is invalid in TRow");
             } else {
                 return *reinterpret_cast<const ui32*>(up->Cell.Data());
             }

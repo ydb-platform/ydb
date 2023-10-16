@@ -206,7 +206,7 @@ public:
 
             const ui32 version = state.GetValue<Schema::State::SchemaVersion>();
             if (Schema::CurrentSchemaVersion >= Schema::BoxHostMigrationSchemaVersion && version < Schema::BoxHostMigrationSchemaVersion) {
-                Y_FAIL("unsupported schema");
+                Y_ABORT("unsupported schema");
             }
             hasInstanceId = state.HaveValue<Schema::State::InstanceId>();
         }

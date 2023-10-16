@@ -122,7 +122,7 @@ bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TA
     } catch (const TNotReadyTabletException&) {
         return false;
     } catch (...) {
-       Y_FAIL("there must be no leaked exceptions");
+       Y_ABORT("there must be no leaked exceptions");
     }
     return true;
 }
@@ -590,7 +590,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     for (auto& p : PartitionsInfo) {
         if (partitionsInfo.find(p.first) == partitionsInfo.end()) {
-            Y_FAIL("deleting of partitions is not fully supported yet");
+            Y_ABORT("deleting of partitions is not fully supported yet");
             deletedPartitions.push_back(p.first);
         }
     }
@@ -1089,7 +1089,7 @@ void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 group, const THa
 
 void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext&)
 {
-    Y_FAIL("");
+    Y_ABORT("");
     RegisterEvents.push_back(ev->Release().Release());
 }
 

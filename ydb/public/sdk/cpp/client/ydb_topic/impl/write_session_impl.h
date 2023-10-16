@@ -333,7 +333,7 @@ public:
                TMaybe<TInstant> createTimestamp = Nothing()) override {
         Y_UNUSED(seqNo);
         Y_UNUSED(createTimestamp);
-        Y_FAIL("Do not use this method");
+        Y_ABORT("Do not use this method");
     };
 
     void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
@@ -342,7 +342,7 @@ public:
                       TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override {
         Y_UNUSED(seqNo);
         Y_UNUSED(createTimestamp);
-        Y_FAIL("Do not use this method");
+        Y_ABORT("Do not use this method");
     }
 
 
@@ -351,7 +351,7 @@ public:
     // Empty maybe - block till all work is done. Otherwise block at most at closeTimeout duration.
     bool Close(TDuration closeTimeout = TDuration::Max()) override;
 
-    TWriterCounters::TPtr GetCounters() override {Y_FAIL("Unimplemented"); } //ToDo - unimplemented;
+    TWriterCounters::TPtr GetCounters() override {Y_ABORT("Unimplemented"); } //ToDo - unimplemented;
 
     ~TWriteSessionImpl(); // will not call close - destroy everything without acks
 

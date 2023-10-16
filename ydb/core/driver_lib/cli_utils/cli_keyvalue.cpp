@@ -156,7 +156,7 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
                 Y_ABORT_UNLESS(response.GetConcatResult(0).HasStatus());
                 Y_ABORT_UNLESS(response.GetConcatResult(0).GetStatus() == NKikimrProto::OK);
             } else {
-                Y_FAIL("unexpected case");
+                Y_ABORT("unexpected case");
             }
         } else {
             TString str;

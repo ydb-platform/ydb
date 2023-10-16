@@ -381,7 +381,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TDropOlapStore");
+        Y_ABORT("no AbortPropose for TDropOlapStore");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

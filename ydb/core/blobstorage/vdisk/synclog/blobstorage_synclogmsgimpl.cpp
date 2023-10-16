@@ -30,7 +30,7 @@ namespace NKikimr {
                 case Lz4Signature: return ECodec::Lz4;
                 case OrderedLz4Signature: return ECodec::OrderedLz4;
                 case CustomCodecSignature: return ECodec::CustomCodec;
-                default: Y_FAIL("Unknown codec; signature# %" PRIu64, signature);
+                default: Y_ABORT("Unknown codec; signature# %" PRIu64, signature);
             }
         }
 
@@ -325,7 +325,7 @@ namespace NKikimr {
                         LogoBlobsColumns.reset(new TLogoBlobColumnsCustomCodec);
                         break;
                     default:
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                 }
             }
 

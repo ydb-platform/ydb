@@ -551,7 +551,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             } else if (generation) {
                 current = THelpers::TGenerationStep(generation - 1, Max<ui32>());
             } else {
-                Y_FAIL("incorrect BlobId: zero generation and step");
+                Y_ABORT("incorrect BlobId: zero generation and step");
             }
 
             // update minimum barrier value for this channel/group
@@ -745,7 +745,7 @@ void TKeyValueState::Step() {
         NextLogoBlobCookie = 1;
         ++NextLogoBlobStep;
     } else {
-        Y_FAIL("Max step reached!");
+        Y_ABORT("Max step reached!");
     }
 }
 

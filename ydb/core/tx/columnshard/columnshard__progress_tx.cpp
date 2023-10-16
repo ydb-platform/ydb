@@ -128,7 +128,7 @@ public:
                     break;
                 }
                 default: {
-                    Y_FAIL("Unexpected TxKind");
+                    Y_ABORT("Unexpected TxKind");
                 }
             }
 

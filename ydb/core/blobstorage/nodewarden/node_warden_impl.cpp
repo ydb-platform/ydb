@@ -325,11 +325,11 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
             break;
 
         case NKikimrProto::RACE:
-            Y_FAIL("Unexpected# %s", msg.ToString().data());
+            Y_ABORT("Unexpected# %s", msg.ToString().data());
             break;
 
         default:
-            Y_FAIL("Unexpected status# %s", msg.ToString().data());
+            Y_ABORT("Unexpected status# %s", msg.ToString().data());
             break;
     };
 }

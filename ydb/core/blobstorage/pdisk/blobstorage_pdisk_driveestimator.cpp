@@ -181,7 +181,7 @@ ui64 TDriveEstimator::MeasureOperationDuration(const ui32 type, const ui64 size)
                         TReqId(TReqId::EstimatorDurationWrite, 0), nullptr);
                 break;
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
         if (repeat == eventsToSkip) {
             start = HPNow();

@@ -974,7 +974,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TSplitMerge");
+        Y_ABORT("no AbortPropose for TSplitMerge");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

@@ -58,7 +58,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
             case ERestoreDataStatus::Restart:
                 return EExecutionStatus::Restart;
             case ERestoreDataStatus::Error:
-                Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
+                Y_ABORT("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
         }
     }
 

@@ -154,7 +154,7 @@ namespace NKikimr::NBsController {
                         break;
 
                     default:
-                        Y_FAIL();
+                        Y_ABORT();
                 }
 
                 if (const TGroupInfo *group = State.Groups.Find(vslotInfo.GroupId); group && mood != TMood::Delete) {

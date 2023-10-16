@@ -281,7 +281,7 @@ namespace NTest {
                     } else if (room == partStore->Store->GetExternRoom()) {
                         slots.push_back(Settle(partStore, room, MakeExtern(partStore)));
                     } else {
-                        Y_FAIL("Don't know how to work with room %" PRIu32, room);
+                        Y_ABORT("Don't know how to work with room %" PRIu32, room);
                     }
                 }
                 for (ui32 group : xrange(part->HistoricGroupsCount)) {

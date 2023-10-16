@@ -230,7 +230,7 @@ TNodePtr TContext::GetBlockShortcut(const TString& alias) const {
             return shortcutPair.second;
         }
     }
-    Y_FAIL("Expected block shortcut exist");
+    Y_ABORT("Expected block shortcut exist");
 }
 
 TNodePtr TContext::GroundBlockShortcuts(NYql::TPosition pos, TNodePtr groundList) {

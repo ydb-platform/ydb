@@ -377,7 +377,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TCreateRTMR");
+        Y_ABORT("no AbortPropose for TCreateRTMR");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

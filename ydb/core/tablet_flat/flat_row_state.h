@@ -64,7 +64,7 @@ namespace NTable {
                     Rop = (Rop == ERowOp::Absent ? ERowOp::Erase : ERowOp::Reset);
                     return false; /* current row shouldn't be processed */
                 default:
-                    Y_FAIL("Unexpected row rolling operation code: %" PRIu8, ui8(op));
+                    Y_ABORT("Unexpected row rolling operation code: %" PRIu8, ui8(op));
             }
         }
 

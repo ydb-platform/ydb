@@ -501,7 +501,7 @@ public:
                             break;
 
                         default:
-                            Y_FAIL("Unknown kind");
+                            Y_ABORT("Unknown kind");
                         }
 
                         if (OutputMode == EOutputMode::Unknown) {
@@ -555,7 +555,7 @@ public:
                 case EOutputMode::None:
                     return NUdf::TUnboxedValuePod::MakeFinish();
                 default:
-                    Y_FAIL("Unknown output mode");
+                    Y_ABORT("Unknown output mode");
                 }
             }
         }
@@ -945,7 +945,7 @@ public:
                             break;
 
                         default:
-                            Y_FAIL("Unknown kind");
+                            Y_ABORT("Unknown kind");
                         }
 
                         if (OutputMode == EOutputMode::Unknown) {
@@ -1003,7 +1003,7 @@ public:
                 case EOutputMode::None:
                     return EFetchResult::Finish;
                 default:
-                    Y_FAIL("Unknown output mode");
+                    Y_ABORT("Unknown output mode");
                 }
             }
         }
@@ -1774,7 +1774,7 @@ public:
                             break;
 
                         default:
-                            Y_FAIL("Unknown kind");
+                            Y_ABORT("Unknown kind");
                         }
 
                         if (OutputMode == EOutputMode::Unknown) {
@@ -1844,7 +1844,7 @@ public:
                 case EOutputMode::None:
                     return NUdf::EFetchStatus::Finish;
                 default:
-                    Y_FAIL("Unknown output mode");
+                    Y_ABORT("Unknown output mode");
                 }
             }
         }
@@ -2214,7 +2214,7 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
         MAKE_COMMON_JOIN_CORE_WRAPPER(RightSemi)
         MAKE_COMMON_JOIN_CORE_WRAPPER(Cross)
     default:
-        Y_FAIL("Unknown kind");
+        Y_ABORT("Unknown kind");
     }
 #undef MAKE_COMMON_JOIN_CORE_WRAPPER
 }

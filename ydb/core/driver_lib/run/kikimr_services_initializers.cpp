@@ -347,7 +347,7 @@ void AddExecutorPool(
         break;
     }
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -1077,7 +1077,7 @@ void TLocalServiceInitializer::InitializeServices(
 
     TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(Config.GetTenantPoolConfig(), localConfig);
     if (!tenantPoolConfig->IsEnabled && !tenantPoolConfig->StaticSlots.empty())
-        Y_FAIL("Tenant slots are not allowed in disabled pool");
+        Y_ABORT("Tenant slots are not allowed in disabled pool");
 
     setup->LocalServices.push_back(std::make_pair(MakeTenantPoolRootID(),
         TActorSetupCmd(CreateTenantPool(tenantPoolConfig), TMailboxType::ReadAsFilled, 0)));
@@ -1236,7 +1236,7 @@ void TResourceBrokerInitializer::InitializeServices(
     NKikimrResourceBroker::TResourceBrokerConfig config = NResourceBroker::MakeDefaultConfig();
 
     if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasCompactionBroker()) {
-        Y_FAIL("Legacy CompactionBroker configuration is no longer supported");
+        Y_ABORT("Legacy CompactionBroker configuration is no longer supported");
     }
 
     if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasResourceBroker()) {

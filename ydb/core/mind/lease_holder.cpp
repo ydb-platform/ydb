@@ -71,7 +71,7 @@ private:
             IgnoreFunc(TEvNodeBroker::TEvExtendLeaseResponse);
 
         default:
-            Y_FAIL("TLeaseHolder::StateIdle unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("TLeaseHolder::StateIdle unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
         }
     }
@@ -86,7 +86,7 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
 
         default:
-            Y_FAIL("TLeaseHolder::StatePing unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("TLeaseHolder::StatePing unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
         }
     }

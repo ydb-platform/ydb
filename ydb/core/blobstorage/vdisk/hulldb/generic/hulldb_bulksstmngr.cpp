@@ -195,7 +195,7 @@ namespace NKikimr {
                 return *it;
             }
         }
-        Y_FAIL("bulk-formed SSTable not found");
+        Y_ABORT("bulk-formed SSTable not found");
     }
 
     void TBulkFormedSstInfoSet::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {

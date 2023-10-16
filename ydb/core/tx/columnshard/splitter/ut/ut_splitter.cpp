@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     return i.first;
                 }
             }
-            Y_FAIL("cannot find column by id");
+            Y_ABORT("cannot find column by id");
             return "";
         }
     };

@@ -820,7 +820,7 @@ void TTablet::HandleStateStorageInfoResolve(TEvStateStorage::TEvInfo::TPtr &ev) 
     case NKikimrProto::TIMEOUT:
         return LockedInitializationPath();
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -853,7 +853,7 @@ void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
     case NKikimrProto::RACE:
         return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootRace);
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -889,7 +889,7 @@ void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) 
     case NKikimrProto::RACE:
         return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootRace);
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 

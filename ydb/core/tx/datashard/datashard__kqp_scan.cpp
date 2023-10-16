@@ -90,7 +90,7 @@ private:
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
             default:
-                Y_FAIL("TKqpScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                Y_ABORT("TKqpScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
 

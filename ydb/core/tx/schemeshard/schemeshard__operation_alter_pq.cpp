@@ -799,7 +799,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TAlterPQ");
+        Y_ABORT("no AbortPropose for TAlterPQ");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

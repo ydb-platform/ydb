@@ -133,7 +133,7 @@ NKikimr::TTableRange NKikimr::Intersect(TConstArrayRef<NScheme::TTypeInfo> types
                 return TTableRange(second.From, second.InclusiveFrom,
                                    first.To, first.InclusiveTo);
             } else { // if (cmpTF < 0)
-                Y_FAIL("unreachable");
+                Y_ABORT("unreachable");
             }
         } else if (cmpTT == 0) {
             //=================
@@ -184,7 +184,7 @@ NKikimr::TTableRange NKikimr::Intersect(TConstArrayRef<NScheme::TTypeInfo> types
                                    second.To, second.InclusiveTo);
             } else {
                 // cmpTT < 0
-                Y_FAIL("unreachable");
+                Y_ABORT("unreachable");
             }
         } else { // if (cmpFT > 0)
             //=================

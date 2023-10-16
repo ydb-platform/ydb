@@ -458,7 +458,7 @@ public:
             HFunc(TEvResourceBroker::TEvResourceBrokerRequest, Handle);
             HFunc(NMon::TEvHttpInfo, Handle);
         default:
-            Y_FAIL("TResourceBroker::StateWork unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("TResourceBroker::StateWork unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(),
                    ev->ToString().data());
         }

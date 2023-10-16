@@ -394,7 +394,7 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
                         implicitLabel = true;
                         break;
                     case TRule_result_column_TAlt2_TBlock2::ALT_NOT_SET:
-                        Y_FAIL("You should change implementation according to grammar changes");
+                        Y_ABORT("You should change implementation according to grammar changes");
                 }
                 term->SetLabel(label, Ctx.Pos());
                 term->MarkImplicitLabel(implicitLabel);
@@ -547,7 +547,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
                 }
                 break;
             case TRule_named_single_source_TBlock3_TBlock1::ALT_NOT_SET:
-                Y_FAIL("You should change implementation according to grammar changes");
+                Y_ABORT("You should change implementation according to grammar changes");
         }
         singleSource->SetLabel(label);
     }
@@ -601,7 +601,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
             }
             break;
         case TRule_named_single_source::TBlock4::ALT_NOT_SET:
-            Y_FAIL("SampleClause: does not corresond to grammar changes");
+            Y_ABORT("SampleClause: does not corresond to grammar changes");
         }
         if (!singleSource->SetSamplingOptions(Ctx, pos, mode, samplingRateNode, samplingSeedNode)) {
             Ctx.IncrementMonCounter("sql_errors", "IncorrectSampleClause");
@@ -638,7 +638,7 @@ bool TSqlSelect::ColumnName(TVector<TNodePtr>& keys, const TRule_without_column_
             columnName = Id(node.GetAlt_without_column_name2().GetRule_an_id_without1(), *this);
             break;
         case TRule_without_column_name::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 
     if (columnName.empty()) {
@@ -1298,7 +1298,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
             break;
         }
         case TRule_select_kind_TBlock2::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 
     return res;
@@ -1361,7 +1361,7 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
                 Ctx.Error() << "INTERSECT and EXCEPT are not implemented yet";
                 return nullptr;
             case TRule_select_op::ALT_NOT_SET:
-                Y_FAIL("You should change implementation according to grammar changes");
+                Y_ABORT("You should change implementation according to grammar changes");
         }
     }
 

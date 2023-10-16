@@ -19,7 +19,7 @@ namespace NKikimr {
 
             TInfo() = default;
             TInfo(IInputStream &) {
-                Y_FAIL("Not supported");
+                Y_ABORT("Not supported");
             }
             TInfo(const NHandoff::TCountersPtr &c, const NHandoff::TPrivateProxyStatePtr &p)
                 : Cntr(c)

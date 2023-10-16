@@ -104,7 +104,7 @@ void TUserTable::DropIndex(const TPathId& indexPathId) {
         return;
     }
 
-    Y_FAIL("unreachable");
+    Y_ABORT("unreachable");
 }
 
 bool TUserTable::HasAsyncIndexes() const {
@@ -162,7 +162,7 @@ void TUserTable::SwitchCdcStreamState(const TPathId& streamPathId, TCdcStream::E
         return;
     }
 
-    Y_FAIL("unreachable");
+    Y_ABORT("unreachable");
 }
 
 void TUserTable::DropCdcStream(const TPathId& streamPathId) {
@@ -188,7 +188,7 @@ void TUserTable::DropCdcStream(const TPathId& streamPathId) {
         return;
     }
 
-    Y_FAIL("unreachable");
+    Y_ABORT("unreachable");
 }
 
 bool TUserTable::HasCdcStreams() const {

@@ -113,7 +113,7 @@ namespace NKikimr {
                     Stage = NKikimrBlobStorage::Barriers;
                     pres = Process(ctx, FullSnap.BarriersSnap, KeyBarrier, FakeFilter);
                     break;
-                default: Y_FAIL("Unexpected case: stage=%d", Stage);
+                default: Y_ABORT("Unexpected case: stage=%d", Stage);
             }
 
             bool finished = (bool)(pres & EmptyFlag) && Stage == NKikimrBlobStorage::Barriers;

@@ -383,7 +383,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             ReplyOk(ctx, response.GetCookie());
         } else {
-            Y_FAIL("Unexpected message");
+            Y_ABORT("Unexpected message");
         }
         Responses.pop_front();
     }
@@ -1231,7 +1231,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
 
     if (res.second > valueD.size() && res.first.IsHead()) { //change to real size if real packed size is smaller
 
-        Y_FAIL("Can't be here right now, only after merging of small batches");
+        Y_ABORT("Can't be here right now, only after merging of small batches");
 
         for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
             if (it->KeysCount() > 0 ) {

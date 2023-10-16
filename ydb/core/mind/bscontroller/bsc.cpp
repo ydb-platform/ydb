@@ -86,7 +86,7 @@ void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
             } else if (failed.GetNumSetItems()) { // group partially available, but not degraded
                 return NKikimrBlobStorage::TGroupStatus::PARTIAL;
             } else {
-                Y_FAIL("unexpected case");
+                Y_ABORT("unexpected case");
             }
         };
         Status.MakeWorst(deriveStatus(failed), deriveStatus(failed | failedByPDisk));
@@ -372,7 +372,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         }
     }
 
-    Y_FAIL();
+    Y_ABORT();
 }
 
 } // NBsController

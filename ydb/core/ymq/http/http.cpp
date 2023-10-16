@@ -1028,7 +1028,7 @@ void TAsyncHttpServer::Initialize(
 
 void TAsyncHttpServer::Start() {
     if (!THttpServer::Start()) {
-        Y_FAIL("Unable to start http server for SQS service on port %" PRIu16, Options().Port);
+        Y_ABORT("Unable to start http server for SQS service on port %" PRIu16, Options().Port);
     }
 }
 

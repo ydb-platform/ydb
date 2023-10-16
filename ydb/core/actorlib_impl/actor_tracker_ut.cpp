@@ -38,7 +38,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvPoisonPill, HandlePoison);
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
     }
 };
@@ -64,7 +64,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvPoisonPill, TBase::HandlePoison);
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
     }
 };

@@ -50,7 +50,7 @@ namespace NFwd {
             const auto meta = PageCollection->Page(pageId);
 
             if (meta.Type != ui16(type) || meta.Size == 0)
-                Y_FAIL("Got a non-data page while part index traverse");
+                Y_ABORT("Got a non-data page while part index traverse");
 
             Fetch->Pages.emplace_back(pageId);
 
@@ -283,7 +283,7 @@ namespace NFwd {
             if ((q.Grow = got.Grow) || bool(q.Fetch)) {
                 Queue.PushBack(&q);
             } else if (got.Need && got.Page == nullptr) {
-                Y_FAIL("Cache line head don't want to do fetch but should");
+                Y_ABORT("Cache line head don't want to do fetch but should");
             }
 
             return { got.Need, got.Page };

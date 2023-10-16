@@ -1242,7 +1242,7 @@ public:
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
         default:
-            Y_FAIL("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
         }
     }

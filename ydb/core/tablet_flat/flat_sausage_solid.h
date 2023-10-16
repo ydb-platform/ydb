@@ -249,7 +249,7 @@ namespace NPageCollection {
                 return ++BlobsLoaded == Blobs.size();
             }
 
-            Y_FAIL("Apply unknown blob %s", id.ToString().c_str());
+            Y_ABORT("Apply unknown blob %s", id.ToString().c_str());
         }
 
         explicit operator bool() const {

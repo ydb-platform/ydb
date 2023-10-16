@@ -91,7 +91,7 @@ void TNode::Accept(INodeVisitor& visitor) {
 
 #undef APPLY
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -115,7 +115,7 @@ bool TNode::Equals(const TNode& nodeToCompare) const {
 
 #undef APPLY
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -133,7 +133,7 @@ void TNode::UpdateLinks(const THashMap<TNode*, TNode*>& links) {
 
 #undef APPLY
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -151,7 +151,7 @@ TNode* TNode::CloneOnCallableWrite(const TTypeEnvironment& env) const {
 
 #undef APPLY
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -169,7 +169,7 @@ void TNode::Freeze(const TTypeEnvironment& env) {
 
 #undef APPLY
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -227,7 +227,7 @@ void TType::Accept(INodeVisitor& visitor) {
 
 #undef APPLY
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -242,7 +242,7 @@ void TType::UpdateLinks(const THashMap<TNode*, TNode*>& links) {
 
 #undef APPLY
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -257,7 +257,7 @@ TNode* TType::CloneOnCallableWrite(const TTypeEnvironment& env) const {
 
 #undef APPLY
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -272,7 +272,7 @@ void TType::Freeze(const TTypeEnvironment& env) {
 
 #undef APPLY
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -290,7 +290,7 @@ bool TTypeBase::IsSameType(const TTypeBase& typeToCompare) const {
 
 #undef APPLY
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -305,7 +305,7 @@ size_t TTypeBase::CalcHash() const {
 
 #undef APPLY
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -335,7 +335,7 @@ bool TType::IsConvertableTo(const TType& typeToCompare, bool ignoreTagged) const
 
 #undef APPLY
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -2382,7 +2382,7 @@ EValueRepresentation GetValueRepresentation(const TType* type) {
             return GetValueRepresentation(static_cast<const TTaggedType*>(type)->GetBaseType());
 
         default:
-            Y_FAIL("Unsupported type.");
+            Y_ABORT("Unsupported type.");
     }
 }
 

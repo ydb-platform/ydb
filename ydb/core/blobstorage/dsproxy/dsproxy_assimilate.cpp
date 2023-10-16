@@ -201,7 +201,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
         TItemVariant BeginMerge() const {
             return std::visit([](auto value) -> TItemVariant {
                 if constexpr (std::is_same_v<decltype(value), TFinished>) {
-                    Y_FAIL();
+                    Y_ABORT();
                 } else {
                     return TItemVariant(std::in_place_type<std::decay_t<decltype(*value)>>, *value);
                 }
@@ -211,7 +211,7 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
         bool Merge(TItemVariant *to) const {
             return std::visit([to](auto value) -> bool {
                 if constexpr (std::is_same_v<decltype(value), TFinished>) {
-                    Y_FAIL();
+                    Y_ABORT();
                 } else if (auto *toItem = std::get_if<std::decay_t<decltype(*value)>>(to)) {
                     return toItem->Merge(*value);
                 } else {

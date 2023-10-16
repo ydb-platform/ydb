@@ -58,11 +58,11 @@ public:
     {}
 
     ui32 GetReadyActivation(TWorkerContext& /*wctx*/, ui64 /*revolvingCounter*/) override {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void ReclaimMailbox(TMailboxType::EType /*mailboxType*/, ui32 /*hint*/, NActors::TWorkerId /*workerId*/, ui64 /*revolvingCounter*/) override {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     TMailboxHeader *ResolveMailbox(ui32 hint) override {
@@ -99,15 +99,15 @@ public:
     }
 
     void ScheduleActivation(ui32 /*activation*/) override {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void SpecificScheduleActivation(ui32 /*activation*/) override {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void ScheduleActivationEx(ui32 /*activation*/, ui64 /*revolvingCounter*/) override {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     TActorId Register(IActor* actor, TMailboxType::EType /*mailboxType*/, ui64 /*revolvingCounter*/, const TActorId& parentId) override {
@@ -135,7 +135,7 @@ public:
     }
 
     TAffinity* Affinity() const override {
-        Y_FAIL();
+        Y_ABORT();
     }
 };
 

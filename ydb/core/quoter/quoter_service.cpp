@@ -779,7 +779,7 @@ void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, co
             canAllow = false;
             break;
         default:
-            Y_FAIL("unkown initLeafStatus");
+            Y_ABORT("unkown initLeafStatus");
         }
     }
 
@@ -1062,7 +1062,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
     case EStatUpdatePolicy::EveryActiveTick:
         break;
     default:
-        Y_FAIL("not implemented");
+        Y_ABORT("not implemented");
     }
 }
 

@@ -23,7 +23,7 @@ namespace NKikimr {
         switch (gtype.GetErasure()) {
             case TBlobStorageGroupType::ErasureMirror3dc:
             case TBlobStorageGroupType::ErasureMirror3of4:
-                Y_FAIL("inapplicable operation for erasure %s", TBlobStorageGroupType::ErasureSpeciesName(gtype.GetErasure()).data());
+                Y_ABORT("inapplicable operation for erasure %s", TBlobStorageGroupType::ErasureSpeciesName(gtype.GetErasure()).data());
             default: {
                 /*******************************************************************************************************
                  * PerPartStatus is a matrix with bits indicating if the some part is present at specific disk; it looks

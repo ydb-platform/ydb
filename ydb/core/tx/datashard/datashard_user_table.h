@@ -208,7 +208,7 @@ struct TUserTable : public TThrRefBase {
                     return ECodec::LZ4;
                 // keep no default
             }
-            Y_FAIL("unexpected");
+            Y_ABORT("unexpected");
         }
 
         static ECache ExtractDbCache(const NKikimrSchemeOp::TFamilyDescription& family) {
@@ -227,7 +227,7 @@ struct TUserTable : public TThrRefBase {
                     return ECache::Ever;
                 // keep no default
             }
-            Y_FAIL("unexpected");
+            Y_ABORT("unexpected");
         }
     };
 

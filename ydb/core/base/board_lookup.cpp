@@ -187,7 +187,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             WaitForReplicasToSuccess = (Replicas.size() / 2 + 1);
             break;
         default:
-            Y_FAIL("unsupported mode");
+            Y_ABORT("unsupported mode");
         }
 
         Become(&TThis::StateLookup);

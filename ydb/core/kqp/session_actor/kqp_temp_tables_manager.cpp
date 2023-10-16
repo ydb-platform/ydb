@@ -91,7 +91,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvResult, HandleResult);
             default:
-                Y_FAIL("Unexpected event 0x%x at TKqpTempTablesManager::WaitState", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x at TKqpTempTablesManager::WaitState", ev->GetTypeRewrite());
         }
     }
 

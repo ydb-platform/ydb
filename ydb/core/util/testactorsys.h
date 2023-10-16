@@ -520,7 +520,7 @@ public:
             }
 
             if (!item) {
-                Y_FAIL("test actor system stalled -- no progress made"); // ensure we are doing progress
+                Y_ABORT("test actor system stalled -- no progress made"); // ensure we are doing progress
             }
 
             if (item->Cookie && !item->Cookie->Detach()) { // item is not relevant anymore
@@ -756,8 +756,8 @@ private:
 class TFakeSchedulerCookie : public ISchedulerCookie {
 public:
     bool Detach() noexcept override { delete this; return false; }
-    bool DetachEvent() noexcept override { Y_FAIL(); }
-    bool IsArmed() noexcept override { Y_FAIL(); }
+    bool DetachEvent() noexcept override { Y_ABORT(); }
+    bool IsArmed() noexcept override { Y_ABORT(); }
 };
 
 } // NKikimr

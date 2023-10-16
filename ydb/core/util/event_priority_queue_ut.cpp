@@ -34,7 +34,7 @@ public:
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvPriorityTest, Handle);
             default:
-                Y_FAIL("Unexpected event type");
+                Y_ABORT("Unexpected event type");
         }
     }
 

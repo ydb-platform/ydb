@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
                             } else if (item.Level == 18) {
                                 ++num18;
                             } else {
-                                Y_FAIL("unexpected level");
+                                Y_ABORT("unexpected level");
                             }
                         }
                     }

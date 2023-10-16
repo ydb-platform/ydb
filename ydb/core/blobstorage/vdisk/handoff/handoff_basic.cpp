@@ -75,7 +75,7 @@ namespace NKikimr {
         {}
 
         TProxyState::TProxyState(IInputStream &) {
-            Y_FAIL("Not supported");
+            Y_ABORT("Not supported");
         }
 
         void TProxyState::Init(const TVDiskID &selfVDiskID, const TVDiskID &targetVDiskID, ui32 maxElems, ui32 maxBytes) {

@@ -666,12 +666,12 @@ inline EReady TTableItBase<TIteratorOps>::Turn() noexcept
                         break;
 
                     default:
-                        Y_FAIL("Unexpected EReady value");
+                        Y_ABORT("Unexpected EReady value");
                 }
                 break;
             }
             default: {
-                Y_FAIL("Unexpected iterator type");
+                Y_ABORT("Unexpected iterator type");
             }
         }
     }
@@ -758,7 +758,7 @@ inline TRowVersion TTableItBase<TIteratorOps>::GetRowVersion() const noexcept
             return RunIters[ai.Index]->GetRowVersion();
         }
         default:
-            Y_FAIL("Unexpected iterator type");
+            Y_ABORT("Unexpected iterator type");
     }
 }
 
@@ -829,7 +829,7 @@ inline EReady TTableItBase<TIteratorOps>::Snap(TRowVersion rowVersion) noexcept
                 break;
             }
             default:
-                Y_FAIL("Unexpected iterator type");
+                Y_ABORT("Unexpected iterator type");
         }
 
         // The last iterator becomes inactive
@@ -869,7 +869,7 @@ inline EReady TTableItBase<TIteratorOps>::DoSkipUncommitted() noexcept
                 break;
             }
             default:
-                Y_FAIL("Unexpected iterator type");
+                Y_ABORT("Unexpected iterator type");
         }
 
         // The last iterator becomes inactive
@@ -942,7 +942,7 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
                 break;
             }
             default:
-                Y_FAIL("Unexpected iterator type");
+                Y_ABORT("Unexpected iterator type");
         }
 
         if (State.IsFinalized() || !committed)
@@ -980,7 +980,7 @@ inline void TTableItBase<TIteratorOps>::InitLastKey(ERowOp op) noexcept
             break;
         }
         default: {
-            Y_FAIL("Unexpected iterator type");
+            Y_ABORT("Unexpected iterator type");
         }
     }
 
@@ -1073,12 +1073,12 @@ inline bool TTableItBase<TIteratorOps>::SeekInternal(TArrayRef<const TCell> key,
                         break;
 
                     default:
-                        Y_FAIL("Unexpected EReady value");
+                        Y_ABORT("Unexpected EReady value");
                 }
                 break;
             }
             default: {
-                Y_FAIL("Unexpected iterator type");
+                Y_ABORT("Unexpected iterator type");
             }
         }
     }

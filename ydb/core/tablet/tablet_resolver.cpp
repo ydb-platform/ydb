@@ -514,7 +514,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 PushQueue(ev, entry, ctx);
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -566,7 +566,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -609,7 +609,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         switch (entry.State) {
         case TEntry::StInit:
-            Y_FAIL("must not happens");
+            Y_ABORT("must not happens");
         case TEntry::StInitResolve:
             if (success) {
                 if (msg->CurrentLeaderTablet) {
@@ -669,7 +669,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         case TEntry::StNormal:
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -704,7 +704,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -735,7 +735,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -767,7 +767,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 

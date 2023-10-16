@@ -246,7 +246,7 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         } else if constexpr (std::is_same_v<TClient, TTopicClient>) {
             return EnsureClient<TClient, TTopicClientSettings>(TopicClient);
         } else {
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 

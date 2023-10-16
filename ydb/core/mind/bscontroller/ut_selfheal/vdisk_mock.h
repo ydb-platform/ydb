@@ -111,7 +111,7 @@ public:
                 break;
         }
 
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void Report(NKikimrBlobStorage::TEvControllerUpdateDiskStatus *pb) {

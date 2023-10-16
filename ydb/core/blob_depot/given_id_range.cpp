@@ -134,7 +134,7 @@ namespace NKikimr::NBlobDepot {
             if (myIt->first < otherIt->first) {
                 ++myIt;
             } else if (otherIt->first < myIt->first) {
-                Y_FAIL();
+                Y_ABORT();
             } else {
                 TChunk& myChunk = myIt->second;
                 const TChunk& otherChunk = otherIt->second;

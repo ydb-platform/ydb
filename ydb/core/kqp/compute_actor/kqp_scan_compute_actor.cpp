@@ -109,10 +109,10 @@ void TKqpScanComputeActor::HandleEvWakeup(EEvWakeupTag tag) {
             ProcessRlNoResourceAndDie();
             break;
         case TimeoutTag:
-            Y_FAIL("TimeoutTag must be handled in base class");
+            Y_ABORT("TimeoutTag must be handled in base class");
             break;
         case PeriodicStatsTag:
-            Y_FAIL("PeriodicStatsTag must be handled in base class");
+            Y_ABORT("PeriodicStatsTag must be handled in base class");
             break;
     }
 }

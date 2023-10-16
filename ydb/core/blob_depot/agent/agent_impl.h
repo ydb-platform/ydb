@@ -62,7 +62,7 @@ namespace NKikimr::NBlobDepot {
             } else if (auto *error = std::get_if<TError>(&Outcome)) {
                 s << "Error# '" << EscapeC(error->ErrorReason) << '\'';
             } else {
-                Y_FAIL();
+                Y_ABORT();
             }
         }
 

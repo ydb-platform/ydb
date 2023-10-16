@@ -120,7 +120,7 @@ namespace {
                 case EMode::FIND_AND_CONSUME:
                     return findAndconsume;
             }
-            Y_FAIL("Unexpected mode");
+            Y_ABORT("Unexpected mode");
         }
 
         TRe2Udf(
@@ -222,7 +222,7 @@ namespace {
                         return valueBuilder->NewList(matches.data(), matches.size());
                     }
                 }
-                Y_FAIL("Unexpected mode");
+                Y_ABORT("Unexpected mode");
             } else {
                 switch (Mode) {
                     case MATCH:
@@ -237,7 +237,7 @@ namespace {
                     case FIND_AND_CONSUME:
                         return valueBuilder->NewEmptyList();
                 }
-                Y_FAIL("Unexpected mode");
+                Y_ABORT("Unexpected mode");
             }
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());

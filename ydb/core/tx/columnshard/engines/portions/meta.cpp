@@ -83,7 +83,7 @@ std::optional<NKikimrTxColumnShard::TIndexPortionMeta> TPortionMeta::SerializeTo
             portionMeta.SetIsEvicted(true);
             break;
         case TPortionMeta::EProduced::INACTIVE:
-            Y_FAIL("Unexpected inactive case");
+            Y_ABORT("Unexpected inactive case");
             //portionMeta->SetInactive(true);
             break;
     }

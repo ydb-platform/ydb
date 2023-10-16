@@ -43,7 +43,7 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
     } else if (subDomain->GetAlter() && subDomain->GetAlter()->GetResourcesDomainId()) {
         resourcesDomainId = subDomain->GetAlter()->GetResourcesDomainId();
     } else {
-        Y_FAIL("Cannot retrieve resources domain id");
+        Y_ABORT("Cannot retrieve resources domain id");
     }
 
     auto allowedDomain = ev->Record.AddAllowedDomains();
@@ -362,7 +362,7 @@ void NTableState::UpdatePartitioningForTableModification(TOperationId operationI
     } else if (txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
         commonShardOp = TTxState::ConfigureParts;
     } else {
-        Y_FAIL("UNREACHABLE");
+        Y_ABORT("UNREACHABLE");
     }
 
     TBindingsRoomsChanges bindingChanges;
@@ -382,7 +382,7 @@ void NTableState::UpdatePartitioningForTableModification(TOperationId operationI
                 bindingChanges,
                 errStr);
         if (!isOk) {
-            Y_FAIL("Unexpected failure to rebind column families to storage pools: %s", errStr.c_str());
+            Y_ABORT("Unexpected failure to rebind column families to storage pools: %s", errStr.c_str());
         }
     }
 
@@ -500,7 +500,7 @@ void NTableState::UpdatePartitioningForCopyTable(TOperationId operationId, TTxSt
         bool isOk = context.SS->GetBindingsRooms(dstPath->DomainPathId, dstTableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr);
         if (!isOk) {
             errStr = TString("database must have required storage pools to create tablet with storage config, details: ") + errStr;
-            Y_FAIL("%s", errStr.c_str());
+            Y_ABORT("%s", errStr.c_str());
         }
 
         storePerShardConfig = true;
@@ -517,7 +517,7 @@ void NTableState::UpdatePartitioningForCopyTable(TOperationId operationId, TTxSt
         bool isOk = context.SS->GetChannelsBindings(dstPath->DomainPathId, dstTableInfo, channelsBinding, errStr);
         if (!isOk) {
             errStr = TString("database must have required storage pools to create tablet with channel profile, details: ") + errStr;
-            Y_FAIL("%s", errStr.c_str());
+            Y_ABORT("%s", errStr.c_str());
         }
     }
 

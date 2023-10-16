@@ -144,9 +144,9 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     auto *txIdStats = GetPage(TxIdStatsId);
 
     if (scheme == nullptr) {
-        Y_FAIL("Scheme page is not loaded");
+        Y_ABORT("Scheme page is not loaded");
     } else if (ByKeyId != Max<TPageId>() && !byKey) {
-        Y_FAIL("Filter page must be loaded if it exists");
+        Y_ABORT("Filter page must be loaded if it exists");
     } else if (small && Packs.size() != (1 + GroupIndexesIds.size() + 1)) {
         Y_Fail("TPart has small blobs, " << Packs.size() << " page collections");
     }
@@ -238,7 +238,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
     } else if (auto fetches = KeysEnv->GetFetches()) {
         return fetches;
     } else {
-        Y_FAIL("Screen keys loader stalled withoud result");
+        Y_ABORT("Screen keys loader stalled withoud result");
     }
 }
 

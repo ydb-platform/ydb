@@ -87,7 +87,7 @@ public:
         UseLbAccountAlias = metaCacheConfig.GetUseLbAccountAlias();
         DbRoot = metaCacheConfig.GetLbUserDatabaseRoot();
         if (!UseLbAccountAlias) {
-            Y_FAIL("Not supported");
+            Y_ABORT("Not supported");
         }
 
         if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
@@ -266,7 +266,7 @@ private:
             case EQueryType::EGetTopics:
                 return HandleGetTopicsResult(ev, ctx);
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
     }
 

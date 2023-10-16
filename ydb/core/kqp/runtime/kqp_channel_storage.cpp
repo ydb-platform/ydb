@@ -72,7 +72,7 @@ private:
             hFunc(TEvKqpSpilling::TEvReadResult, HandleWork);
             hFunc(TEvKqpSpilling::TEvError, HandleWork);
             default:
-                Y_FAIL("TKqpChannelStorageActor::WorkState unexpected event type: %" PRIx32 " event: %s",
+                Y_ABORT("TKqpChannelStorageActor::WorkState unexpected event type: %" PRIx32 " event: %s",
                     ev->GetTypeRewrite(),
                     ev->ToString().data());
         }

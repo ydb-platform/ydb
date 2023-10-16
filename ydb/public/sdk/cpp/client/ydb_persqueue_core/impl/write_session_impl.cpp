@@ -812,7 +812,7 @@ bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 sequenceNumber) {
         DumpState();
         Cerr << "State on ack with seqNo " << sequenceNumber << " is:\n";
         Cerr << StateStr << "\n\n";
-        Y_FAIL("got unknown ack");
+        Y_ABORT("got unknown ack");
     }
 
     const auto& sentFront = SentOriginalMessages.front();
@@ -1079,7 +1079,7 @@ bool TWriteSessionImpl::IsReadyToSendNextImpl() {
         Cerr << " State before restart was:\n" << StateStr << "\n\n";
         DumpState();
         Cerr << " State after restart is:\n" << StateStr << "\n\n";
-        Y_FAIL("Lost original message(s)");
+        Y_ABORT("Lost original message(s)");
     }
 
     return PackedMessagesToSend.top().Offset == OriginalMessagesToSend.front().SeqNo;

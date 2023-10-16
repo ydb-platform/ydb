@@ -342,7 +342,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
         NDqProto::TComputeActorState state = CombineForeignState(StateLoadPlan, ev->Get()->States, taskIds);
         ComputeActor->LoadState(std::move(state));
     } else {
-        Y_FAIL("Unprocessed state type %s (%d)",
+        Y_ABORT("Unprocessed state type %s (%d)",
             NDqProto::NDqStateLoadPlan::EStateType_Name(StateLoadPlan.GetStateType()).c_str(),
             static_cast<int>(StateLoadPlan.GetStateType()));
     }

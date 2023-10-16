@@ -93,7 +93,7 @@ namespace NKikimr {
                     update(ScrubLsnToKeep, ScrubLastTime, "Scrub");
                     break;
                 default:
-                    Y_FAIL("Unexpected case: %d", msg->Component);
+                    Y_ABORT("Unexpected case: %d", msg->Component);
             }
 
             Process(ctx);

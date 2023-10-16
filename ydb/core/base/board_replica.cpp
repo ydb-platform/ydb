@@ -334,7 +334,7 @@ class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
                 break;
             }
             default:
-                Y_FAIL("Unexpected case");
+                Y_ABORT("Unexpected case");
         }
     }
 

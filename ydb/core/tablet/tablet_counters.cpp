@@ -223,7 +223,7 @@ void TTabletLabeledCountersBase::AggregateWith(const TTabletLabeledCountersBase&
                 Ids[i].Set(0);
                 break;
             default:
-                Y_FAIL("unknown aggregate func");
+                Y_ABORT("unknown aggregate func");
         }
     }
     Drop = Drop || rp.Drop;

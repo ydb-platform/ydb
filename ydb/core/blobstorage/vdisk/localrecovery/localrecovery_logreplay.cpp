@@ -132,7 +132,7 @@ namespace NKikimr {
                     case EDispatchStatus::Async:
                         return; // wait for async call
                     default:
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                 }
             }
 

@@ -188,7 +188,7 @@ public:
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
             hFunc(NHealthCheck::TEvSelfCheckRequestProto, Handle);
-            default: Y_FAIL("Unexpected event: %s", ev->ToString().c_str());
+            default: Y_ABORT("Unexpected event: %s", ev->ToString().c_str());
         }
     }
 
@@ -200,7 +200,7 @@ public:
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
-            default: Y_FAIL("Unexpected event: %s", ev->ToString().c_str());
+            default: Y_ABORT("Unexpected event: %s", ev->ToString().c_str());
         }
     }
 
@@ -212,7 +212,7 @@ public:
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
-            default: Y_FAIL("Unexpected event: %s", ev->ToString().c_str());
+            default: Y_ABORT("Unexpected event: %s", ev->ToString().c_str());
         }
     }
 };

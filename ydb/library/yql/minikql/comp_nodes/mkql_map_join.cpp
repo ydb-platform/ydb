@@ -989,7 +989,7 @@ public:
                         break;
                 }
             default:
-                Y_FAIL("Unreachable");
+                Y_ABORT("Unreachable");
             }
 
             NUdf::TUnboxedValue* items = nullptr;
@@ -1131,7 +1131,7 @@ public:
             break;
         }
         case ERightKind::Many:
-            Y_FAIL("Wrong case");
+            Y_ABORT("Wrong case");
         }
 
         {
@@ -1421,7 +1421,7 @@ private:
                             break;
                     }
                 default:
-                    Y_FAIL("Unreachable");
+                    Y_ABORT("Unreachable");
                 }
 
                 NUdf::TUnboxedValue* items = nullptr;
@@ -1659,7 +1659,7 @@ private:
             break;
         }
         case ERightKind::Many:
-            Y_FAIL("Wrong case");
+            Y_ABORT("Wrong case");
         }
 
         {

@@ -50,7 +50,7 @@ void TBlockIO::Inbox(TEventHandlePtr &eh)
     } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
         PassAway();
     } else {
-        Y_FAIL("Page collection blocks IO actor got an unexpected event");
+        Y_ABORT("Page collection blocks IO actor got an unexpected event");
     }
 }
 
@@ -103,7 +103,7 @@ void TBlockIO::Dispatch() noexcept
             auto glob = Origin->PageCollection->Glob(brick.Blob);
 
             if ((group = (on ? group : glob.Group)) != glob.Group)
-                Y_FAIL("Cannot handle different groups in one request");
+                Y_ABORT("Cannot handle different groups in one request");
 
             query[on].Id = glob.Logo;
             query[on].Shift = brick.Skip;

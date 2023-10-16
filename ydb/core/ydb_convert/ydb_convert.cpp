@@ -147,7 +147,7 @@ void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& 
             break;
         }
         default: {
-            Y_FAIL("Unknown protobuf type: %s", input.DebugString().c_str());
+            Y_ABORT("Unknown protobuf type: %s", input.DebugString().c_str());
         }
     }
 }

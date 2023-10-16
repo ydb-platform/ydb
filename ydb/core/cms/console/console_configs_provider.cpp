@@ -142,7 +142,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -282,7 +282,7 @@ public:
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -326,7 +326,7 @@ public:
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
 
             default:
-                Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+                Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                        ev->GetTypeRewrite(), ev->ToString().data());
                 break;
         }

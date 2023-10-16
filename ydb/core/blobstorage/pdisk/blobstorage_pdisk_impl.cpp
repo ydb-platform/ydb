@@ -3063,7 +3063,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             delete request;
             return false;
         default:
-            Y_FAIL();
+            Y_ABORT();
             break;
     }
     return true;
@@ -3276,7 +3276,7 @@ void TPDisk::ProcessPausedQueue() {
 
             if (ev->Action == NPDisk::TEvYardControl::ActionPause) {
                 if (PreprocessRequest(ev)) {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
                 break;
             }

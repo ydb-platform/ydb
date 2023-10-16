@@ -47,7 +47,7 @@ namespace NKikimr::NTestShard {
                     break;
 
                 default:
-                    Y_FAIL("unexpected Cookie");
+                    Y_ABORT("unexpected Cookie");
             }
             if (!--RepliesPending) {
                 PassAway();

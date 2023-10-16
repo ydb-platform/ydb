@@ -197,9 +197,9 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         return false;
     } catch (const TSchemeErrorTabletException& ex) {
         Y_UNUSED(ex);
-        Y_FAIL();
+        Y_ABORT();
     } catch (...) {
-        Y_FAIL("there must be no leaked exceptions");
+        Y_ABORT("there must be no leaked exceptions");
     }
 
     return true;
@@ -322,7 +322,7 @@ bool TColumnShard::LoadTx(const ui64 txId, const NKikimrTxColumnShard::ETransact
             break;
         }
         default: {
-            Y_FAIL("Unsupported TxKind stored in the TxInfo table");
+            Y_ABORT("Unsupported TxKind stored in the TxInfo table");
         }
     }
     return true;

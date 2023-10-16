@@ -241,7 +241,7 @@ public:
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
         } else {
-            Y_FAIL("unknown action");
+            Y_ABORT("unknown action");
         }
     }
 
@@ -262,7 +262,7 @@ public:
         else if (Action == EAction::REMOVE_SUBSCRIPTION)
             SendSubscriptionRequest(ctx);
         else
-            Y_FAIL("unknown action");
+            Y_ABORT("unknown action");
     }
 
     void Handle(TEvConsole::TEvAddConfigSubscriptionResponse::TPtr &ev, const TActorContext &ctx) {
@@ -350,7 +350,7 @@ public:
             HFunc(TEvents::TEvUndelivered, Handle);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }

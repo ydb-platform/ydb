@@ -209,7 +209,7 @@ namespace {
         {}
 
         NUdf::TUnboxedValuePod DoCalculate(TComputationContext&) const {
-            Y_FAIL("Failed to build value for dummy node");
+            Y_ABORT("Failed to build value for dummy node");
         }
     private:
         void RegisterDependencies() const final {}
@@ -950,7 +950,7 @@ TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData)
             } else if (nameStr == strings.Builtins.Length) {
                 return WrapMergedLength(callable, resultIt, ctx);
             } else {
-                Y_FAIL("Don't know how to merge results for callable: %s", TString(nameStr.Str()).data());
+                Y_ABORT("Don't know how to merge results for callable: %s", TString(nameStr.Str()).data());
             }
         }
 

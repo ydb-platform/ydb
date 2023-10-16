@@ -880,7 +880,7 @@ namespace NKikimr {
                     case NKikimrBlobStorage::StatDb:
                         return CreateStatDbMessageOK(dbStatType, pretty);
                     default:
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                 };
             }
         }
@@ -915,7 +915,7 @@ namespace NKikimr {
                 case NKikimrBlobStorage::StatHugeAction:
                     return CreateStatHugeMessage();
                 default:
-                    Y_FAIL("Unexpected case");
+                    Y_ABORT("Unexpected case");
             }
         }
 

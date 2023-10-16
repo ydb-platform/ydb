@@ -186,7 +186,7 @@ public:
         } else if (auto* p = std::get_if<2>(&value)) {
             Queue2_->push_back(std::move(*(*p)->MutableX()));
         } else {
-            Y_FAIL("invalid variant alternative");
+            Y_ABORT("invalid variant alternative");
         }
     }
 

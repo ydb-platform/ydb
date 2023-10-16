@@ -307,7 +307,7 @@ void TPersQueueBaseRequestProcessor::GetTopicsListOrThrow(
 void TPersQueueBaseRequestProcessor::Handle(
         NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr&, const TActorContext&
 ) {
-    Y_FAIL();
+    Y_ABORT();
 }
 
 void TPersQueueBaseRequestProcessor::Handle(
@@ -883,7 +883,7 @@ public:
             return true;
 
         }
-        Y_FAIL("UNKNOWN request");
+        Y_ABORT("UNKNOWN request");
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {

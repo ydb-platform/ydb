@@ -125,13 +125,13 @@ namespace NTable {
                 auto *other = scheme.ColInfo(col.Tag);
 
                 if (other == nullptr && col.IsKey()) {
-                    Y_FAIL("Key column dropping ins't supported");
+                    Y_ABORT("Key column dropping ins't supported");
                 } else if (other == nullptr) {
                     /* It is ok to drop non-key columns */
                 } else if (col.TypeInfo != other->TypeInfo) {
-                    Y_FAIL("Column type alteration is not supproted");
+                    Y_ABORT("Column type alteration is not supproted");
                 } else if (col.Key != other->Key) {
-                    Y_FAIL("Cannot alter keys order or move col to keys");
+                    Y_ABORT("Cannot alter keys order or move col to keys");
 
                     /* Existing string columns can't be altered to keys as
                         they may hold external blobs references which is not
@@ -143,7 +143,7 @@ namespace NTable {
                 } else {
                     auto &null = (*scheme.RowCellDefaults)[other->Pos];
                     if (CompareTypedCells(null, (*RowCellDefaults)[col.Pos], col.TypeInfo))
-                        Y_FAIL("Cannot alter existing columnt default value");
+                        Y_ABORT("Cannot alter existing columnt default value");
                 }
             }
         }

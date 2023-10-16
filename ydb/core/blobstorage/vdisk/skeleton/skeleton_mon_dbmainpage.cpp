@@ -33,7 +33,7 @@ namespace NKikimr {
             } else if (str == "Barriers") {
                 return TDbMon::DbMainPageBarriers;
             } else {
-                Y_FAIL("Unexpected value: %s", str.data());
+                Y_ABORT("Unexpected value: %s", str.data());
             }
         }
 
@@ -105,7 +105,7 @@ namespace NKikimr {
             } else if (ptr->SubRequestId == TDbMon::Defrag) {
                 DefragAnswer = ptr->Answer;
             } else {
-                Y_FAIL("unexpected SubRequestId# %d", int(ptr->SubRequestId));
+                Y_ABORT("unexpected SubRequestId# %d", int(ptr->SubRequestId));
             }
 
             if (HullCompactionAnswer && DefragAnswer) {

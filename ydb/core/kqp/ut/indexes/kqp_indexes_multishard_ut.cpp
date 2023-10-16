@@ -1702,7 +1702,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
                 }
                 break;
                 default:
-                    Y_FAIL("Unknown id");
+                    Y_ABORT("Unknown id");
             }
         }, 0, 2, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
 
@@ -1746,7 +1746,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
                                 UNIT_ASSERT_VALUES_EQUAL(vp.GetUint32(), (startVal++) + (1u << 31));
                                 break;
                             default:
-                                Y_FAIL("unexpected shard id");
+                                Y_ABORT("unexpected shard id");
                         }
                     }
                 }

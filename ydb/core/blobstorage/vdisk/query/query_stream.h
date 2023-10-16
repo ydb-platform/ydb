@@ -96,7 +96,7 @@ namespace NKikimr {
                             break;
 
                         default:
-                            Y_FAIL();
+                            Y_ABORT();
                     }
                 }
 

@@ -29,7 +29,7 @@ namespace NTest {
             }
 
             TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>&) noexcept override {
-                Y_FAIL("not supported in test scans");
+                Y_ABORT("not supported in test scans");
             }
 
             IPages * const Env = nullptr;
@@ -108,7 +108,7 @@ namespace NTest {
 
                     return eggs;
                 } else if (ready != EReady::Page) {
-                     Y_FAIL("Subset scanner give unexpected cycle result");
+                     Y_ABORT("Subset scanner give unexpected cycle result");
                 } else if (Failed++ > Retries) {
 
                     /* Early termination without any complete result, event
@@ -124,7 +124,7 @@ namespace NTest {
                         until there is some progress.
                      */
 
-                    Y_FAIL("Mocked compaction failied to make any progress");
+                    Y_ABORT("Mocked compaction failied to make any progress");
                 }
             }
         }
@@ -132,7 +132,7 @@ namespace NTest {
     private:
         virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept override
         {
-            Y_FAIL("IScan::Prepare(...) isn't used in test env compaction");
+            Y_ABORT("IScan::Prepare(...) isn't used in test env compaction");
         }
 
         EScan Seek(TLead &lead, ui64 seq) noexcept override
@@ -188,7 +188,7 @@ namespace NTest {
 
         TAutoPtr<IDestructable> Finish(EAbort) noexcept override
         {
-            Y_FAIL("IScan::Finish(...) shouldn't be called in test env");
+            Y_ABORT("IScan::Finish(...) shouldn't be called in test env");
         }
 
         void Describe(IOutputStream &out) const noexcept override

@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
                         return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StringContains, blockStringType, blockStringType, blockBoolType);
                     }
                     default:
-                        Y_FAIL("Not implemented");
+                        Y_ABORT("Not implemented");
 
                 }
             }
@@ -602,7 +602,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             auto expected = result.BuildArrow();
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
         } else {
-            Y_FAIL("Not implemented");
+            Y_ABORT("Not implemented");
         }
     }
 

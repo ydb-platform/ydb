@@ -3076,7 +3076,7 @@ void PgDestroyContext(const std::string_view& contextType, void* ctx) {
     } else if (contextType == "WinAgg") {
         TWithDefaultMiniKQLAlloc::FreeWithSize(ctx, sizeof(WindowAggState));
     } else {
-        Y_FAIL("Unsupported context type");
+        Y_ABORT("Unsupported context type");
     }
 }
 

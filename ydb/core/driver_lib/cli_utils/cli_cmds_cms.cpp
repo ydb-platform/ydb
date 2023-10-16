@@ -360,7 +360,7 @@ public:
                     *action.AddDevices() = param;
                     break;
                 default:
-                    Y_FAIL("Unknown free arg field");
+                    Y_ABORT("Unknown free arg field");
                 }
             }
             if (Duration)
@@ -380,7 +380,7 @@ private:
         case FF_DEVICE:
             return "device";
         default:
-            Y_FAIL("Unknown free arg field");
+            Y_ABORT("Unknown free arg field");
         }
     }
 
@@ -395,7 +395,7 @@ private:
         case FF_DEVICE:
             return "Device name";
         default:
-            Y_FAIL("Unknown free arg field");
+            Y_ABORT("Unknown free arg field");
         }
     }
 };

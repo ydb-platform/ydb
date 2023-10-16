@@ -2018,7 +2018,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             }
             default: break;
         }
-        Y_FAIL("Wrong case.");
+        Y_ABORT("Wrong case.");
     });
 
     AddCallable("CombineByKey", [](const TExprNode& node, TMkqlBuildContext& ctx) {

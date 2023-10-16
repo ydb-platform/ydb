@@ -21,12 +21,12 @@ namespace NTable {
 
         TResult Locate(const TMemTable*, ui64, ui32) noexcept override
         {
-            Y_FAIL("IPages::Locate(TMemTable*, ...) shouldn't be used here");
+            Y_ABORT("IPages::Locate(TMemTable*, ...) shouldn't be used here");
         }
 
         TResult Locate(const TPart*, ui64, ELargeObj) noexcept override
         {
-            Y_FAIL("IPages::Locate(TPart*, ...) shouldn't be used here");
+            Y_ABORT("IPages::Locate(TPart*, ...) shouldn't be used here");
         }
 
         const TSharedData* TryGetPage(const TPart* part, TPageId id, TGroupId groupId) override

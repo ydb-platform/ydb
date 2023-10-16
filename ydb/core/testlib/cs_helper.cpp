@@ -367,7 +367,7 @@ std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 
                     break;
                 }
                 default:
-                    Y_FAIL("unexpected type");
+                    Y_ABORT("unexpected type");
             }
         }
     }

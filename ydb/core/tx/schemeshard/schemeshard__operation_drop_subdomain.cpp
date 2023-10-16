@@ -210,7 +210,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TDropSubdomain");
+        Y_ABORT("no AbortPropose for TDropSubdomain");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

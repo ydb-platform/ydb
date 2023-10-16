@@ -105,12 +105,12 @@ void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmDestroy() {
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::StopReading() {
-    Y_FAIL("Not implemented"); // TODO
+    Y_ABORT("Not implemented"); // TODO
 }
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ResumeReading() {
-    Y_FAIL("Not implemented"); // TODO
+    Y_ABORT("Not implemented"); // TODO
 }
 
 template<bool UseMigrationProtocol>
@@ -1995,7 +1995,7 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
         auto partitionStream = front.PartitionStream;
 
         if (!partitionStream->HasEvents()) {
-            Y_FAIL("can't be here - got events in global queue, but nothing in partition queue");
+            Y_ABORT("can't be here - got events in global queue, but nothing in partition queue");
         }
 
         TMaybe<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent> event;

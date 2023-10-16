@@ -3514,7 +3514,7 @@ public:
         } else if (Error) {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
         } else {
-            Y_FAIL("unexpected state");
+            Y_ABORT("unexpected state");
         }
     }
 };

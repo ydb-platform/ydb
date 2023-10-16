@@ -161,7 +161,7 @@ TTabletTypes::EType BootstrapperTypeToTabletType(ui32 type) {
     case NKikimrConfig::TBootstrap::CONSOLE:
         return TTabletTypes::Console;
     default:
-        Y_FAIL("unknown tablet type");
+        Y_ABORT("unknown tablet type");
     }
     return TTabletTypes::TypeInvalid;
 }

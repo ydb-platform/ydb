@@ -21,7 +21,7 @@ void TResolveClientProtocol::ProtocolFunc(
         break;
 
     default:
-        Y_FAIL("Unknown message type dispatched");
+        Y_ABORT("Unknown message type dispatched");
     }
 }
 

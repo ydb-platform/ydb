@@ -68,7 +68,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 Status = StatusOk;
                 break;
             default:
-                Y_FAIL();
+                Y_ABORT();
             }
         }
 
@@ -88,7 +88,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             case StatusMustBeIgnoredBody:
                 break;
             default:
-                Y_FAIL();
+                Y_ABORT();
             }
         }
 
@@ -152,7 +152,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             case StatusMustBeIgnoredBody:
                 break;
             default:
-                Y_FAIL();
+                Y_ABORT();
             }
         }
 
@@ -639,7 +639,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                     case TLogEntry::StatusUnknown:
                         break;
                     case TLogEntry::StatusOk:
-                        Y_FAIL();
+                        Y_ABORT();
                     case TLogEntry::StatusBody:
                         {
                             bool dependsOk = true;
@@ -705,7 +705,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                         }
                         break;
                     default:
-                        Y_FAIL();
+                        Y_ABORT();
                     }
                 } else {
                     if (step <= gx.Cutoff) {

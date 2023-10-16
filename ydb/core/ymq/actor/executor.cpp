@@ -365,7 +365,7 @@ void TMiniKqlExecutionActor::HandleWakeup(TEvWakeup::TPtr& ev) {
         break;
     }
     default: {
-        Y_FAIL();
+        Y_ABORT();
     }
     }
 }

@@ -89,7 +89,7 @@ struct TColorLimits {
 
             case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
             case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:
-                Y_FAIL();
+                Y_ABORT();
         }
     }
 };

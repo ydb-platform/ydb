@@ -64,7 +64,7 @@ TAutoPtr<TTableIt> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags, E
             }
         }
 
-        Y_FAIL("Don't know how to convert ELookup to ESeek mode");
+        Y_ABORT("Don't know how to convert ELookup to ESeek mode");
     };
 
     IteratedTables.insert(table);
@@ -276,7 +276,7 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
 
     for (size_t index = 0; index < key.size(); ++index) {
         if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
-            Y_FAIL("Key index %" PRISZT " validation failure: %s", index, error.c_str());
+            Y_ABORT("Key index %" PRISZT " validation failure: %s", index, error.c_str());
         }
     }
 
@@ -291,7 +291,7 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
     for (size_t index = 0; index < ModifiedOps.size(); ++index) {
         TUpdateOp& op = ModifiedOps[index];
         if (auto error = NScheme::HasUnexpectedValueSize(op.Value)) {
-            Y_FAIL("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, op.Tag, error.c_str());
+            Y_ABORT("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, op.Tag, error.c_str());
         }
 
         if (op.Value.IsEmpty()) {
@@ -322,7 +322,7 @@ void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const T
 {
     for (size_t index = 0; index < key.size(); ++index) {
         if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
-            Y_FAIL("Key index %" PRISZT " validation failure: %s", index, error.c_str());
+            Y_ABORT("Key index %" PRISZT " validation failure: %s", index, error.c_str());
         }
     }
 
@@ -330,7 +330,7 @@ void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const T
     for (size_t index = 0; index < ModifiedOps.size(); ++index) {
         TUpdateOp& op = ModifiedOps[index];
         if (auto error = NScheme::HasUnexpectedValueSize(op.Value)) {
-            Y_FAIL("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, op.Tag, error.c_str());
+            Y_ABORT("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, op.Tag, error.c_str());
         }
 
         if (op.Value.IsEmpty()) {

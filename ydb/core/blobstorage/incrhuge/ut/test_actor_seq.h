@@ -176,7 +176,7 @@ public:
         } else {
             option -= writeScore;
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void Handle(TEvIncrHugeDeleteResult::TPtr& ev, const TActorContext& ctx) {
@@ -210,7 +210,7 @@ public:
             HFunc(TEvIncrHugeDeleteResult, Handle);
             HFunc(TEvIncrHugeWriteResult, Handle);
             default:
-                Y_FAIL("unexpected message 0x%08" PRIx32, type);
+                Y_ABORT("unexpected message 0x%08" PRIx32, type);
         }
     }
 };

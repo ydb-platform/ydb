@@ -71,7 +71,7 @@ void TSearchEventsProcessor::HandleWakeup(TEvWakeup::TPtr&, const TActorContext&
         case EState::CleanupExecute:
             return RunEventsCleanup(ctx);
         default:
-            Y_FAIL();
+            Y_ABORT();
     }
 }
 
@@ -93,7 +93,7 @@ void TSearchEventsProcessor::HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse:
         case EState::Stopping:
             return StopSession(ctx);
         default:
-            Y_FAIL();
+            Y_ABORT();
     }
 }
 
@@ -114,7 +114,7 @@ void TSearchEventsProcessor::HandleFailure(const TActorContext& ctx) {
         case EState::Stopping:
             return;
         default:
-            Y_FAIL();
+            Y_ABORT();
     }
 }
 

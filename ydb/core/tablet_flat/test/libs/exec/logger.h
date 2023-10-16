@@ -133,7 +133,7 @@ namespace NFake {
                     Send(TWorld::Where(EPath::Root), new NFake::TEvTerm);
 
             } else {
-                Y_FAIL("Test runtime env logger got an unknown event");
+                Y_ABORT("Test runtime env logger got an unknown event");
             }
         }
 

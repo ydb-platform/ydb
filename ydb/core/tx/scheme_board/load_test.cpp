@@ -126,7 +126,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
             return pathId;
         }
 
-        Y_FAIL("Unreachable");
+        Y_ABORT("Unreachable");
     }
 
     void Modify(TPathId pathId) {

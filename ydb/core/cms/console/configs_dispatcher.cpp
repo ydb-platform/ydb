@@ -211,7 +211,7 @@ public:
             // Pretend we got this
             hFuncTraced(TEvConsole::TEvConfigNotificationRequest, Handle);
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -750,7 +750,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev
 {
     // The only reason we can get this response is ambiguous domain
     // So it is okay to fail here
-    Y_FAIL("Can't start Configs Dispatcher: %s",
+    Y_ABORT("Can't start Configs Dispatcher: %s",
             ev->Get()->Record.GetReason().c_str());
 }
 
@@ -762,7 +762,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
         if (!DYNAMIC_KINDS.contains(kind)) {
             TStringStream sstr;
             sstr << static_cast<NKikimrConsole::TConfigItem::EKind>(kind);
-            Y_FAIL("unexpected kind in GetConfigRequest: %s", sstr.Str().data());
+            Y_ABORT("unexpected kind in GetConfigRequest: %s", sstr.Str().data());
         }
     }
 
@@ -784,7 +784,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
         if (!DYNAMIC_KINDS.contains(kind)) {
             TStringStream sstr;
             sstr << static_cast<NKikimrConsole::TConfigItem::EKind>(kind);
-            Y_FAIL("unexpected kind in SetConfigSubscriptionRequest: %s", sstr.Str().data());
+            Y_ABORT("unexpected kind in SetConfigSubscriptionRequest: %s", sstr.Str().data());
         }
 
         if (NON_YAML_KINDS.contains(kind)) {
@@ -795,7 +795,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
     }
 
     if (yamlKinds && nonYamlKinds) {
-        Y_FAIL("both yaml and non yaml kinds in SetConfigSubscriptionRequest");
+        Y_ABORT("both yaml and non yaml kinds in SetConfigSubscriptionRequest");
     }
 
     auto kinds = KindsToBitMap(ev->Get()->ConfigItemKinds);

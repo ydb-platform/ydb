@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSwitchTest) {
                     case 0U: return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.ToString(item), 0U, varOutType); });
                     case 1U: return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.StrictFromString(item, intType), 1U, varOutType); });
                 }
-                Y_FAIL("Wrong case!");
+                Y_ABORT("Wrong case!");
             },
             0ULL,
             pb.NewStreamType(varOutType)
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSwitchTest) {
                     case 0U: return pb.Map(stream, [&](TRuntimeNode item) { return item; });
                     case 1U: return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.StrictFromString(item, intType), 1U, varOutType); });
                 }
-                Y_FAIL("Wrong case!");
+                Y_ABORT("Wrong case!");
             },
             0ULL,
             pb.NewStreamType(varOutType)
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSwitchTest) {
                     case 0U: return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.ToString(item), 0U, varOutType); });
                     case 1U: return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.StrictFromString(item, intType), 1U, varOutType); });
                 }
-                Y_FAIL("Wrong case!");
+                Y_ABORT("Wrong case!");
             },
             0ULL,
             pb.NewFlowType(varOutType)
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSwitchTest) {
                     case 0U: return pb.Map(stream, [&](TRuntimeNode item) { return item; });
                     case 1U: return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.StrictFromString(item, intType), 1U, varOutType); });
                 }
-                Y_FAIL("Wrong case!");
+                Y_ABORT("Wrong case!");
             },
             0ULL,
             pb.NewFlowType(varOutType)

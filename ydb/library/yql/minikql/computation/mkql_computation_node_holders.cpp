@@ -1007,7 +1007,7 @@ private:
             Reverse(Items.begin(), Items.end());
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
 
         Y_DEBUG_ABORT_UNLESS(IsSortedUnique());
@@ -1209,7 +1209,7 @@ private:
             Reverse(Items.begin(), Items.end());
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
 
         Y_DEBUG_ABORT_UNLESS(IsSortedUnique());

@@ -137,7 +137,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (Data.Type == MinType) {
                     return {};
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
             }
 
@@ -193,7 +193,7 @@ namespace NKikimr::NBlobDepot {
                             return 0;
 
                         default:
-                            Y_FAIL();
+                            Y_ABORT();
                     }
                 }
             }
@@ -232,7 +232,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (Data.Type <= MaxInlineStringLen) {
                     return TStringBuf(reinterpret_cast<const char*>(Data.Bytes), DecodeInlineStringLenFromTypeByte(Data.Type));
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
             }
 

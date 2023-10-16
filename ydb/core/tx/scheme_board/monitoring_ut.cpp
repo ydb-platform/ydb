@@ -30,19 +30,19 @@ Y_UNIT_TEST_SUITE(TMonitoringTests) {
             return Params;
         }
 
-        IOutputStream& Output() override { Y_FAIL("Not implemented"); }
-        HTTP_METHOD GetMethod() const override { Y_FAIL("Not implemented"); }
-        TStringBuf GetPath() const override { Y_FAIL("Not implemented"); }
-        TStringBuf GetUri() const override { Y_FAIL("Not implemented"); }
-        const TCgiParameters& GetPostParams() const override { Y_FAIL("Not implemented"); }
-        TStringBuf GetPostContent() const override { Y_FAIL("Not implemented"); }
-        const THttpHeaders& GetHeaders() const override { Y_FAIL("Not implemented"); }
-        TStringBuf GetHeader(TStringBuf) const override { Y_FAIL("Not implemented"); }
-        TStringBuf GetCookie(TStringBuf) const override { Y_FAIL("Not implemented"); }
-        TString GetRemoteAddr() const override { Y_FAIL("Not implemented"); }
-        TString GetServiceTitle() const override { Y_FAIL("Not implemented"); }
-        NMonitoring::IMonPage* GetPage() const override { Y_FAIL("Not implemented"); }
-        NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_FAIL("Not implemented"); }
+        IOutputStream& Output() override { Y_ABORT("Not implemented"); }
+        HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
+        TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
+        TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
+        const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
+        TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
+        const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
+        TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
+        TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
+        TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
+        TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
+        NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
+        NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
 
     private:
         const TString PathInfo;

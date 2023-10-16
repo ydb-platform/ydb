@@ -544,7 +544,7 @@ void TTable::Merge(TPartView partView) noexcept
 
         AddSafe(std::move(partView));
     } else if (it->second->Epoch != partView->Epoch) {
-        Y_FAIL("Got the same labeled parts with different epoch");
+        Y_ABORT("Got the same labeled parts with different epoch");
     } else {
         Levels.Reset();
         it->second.Screen = TScreen::Join(it->second.Screen, partView.Screen);
@@ -716,7 +716,7 @@ TEpoch TTable::Snapshot() noexcept
         Mutable = nullptr; /* have to make new TMemTable on next update */
 
         if (++Epoch == TEpoch::Max()) {
-            Y_FAIL("Table epoch counter has reached infinity value");
+            Y_ABORT("Table epoch counter has reached infinity value");
         }
     }
 

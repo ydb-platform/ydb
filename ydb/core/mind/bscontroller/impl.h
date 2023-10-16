@@ -488,7 +488,7 @@ public:
                 case NKikimrBlobStorage::EDecommitStatus::EDecommitStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
                     break;
             }
-            Y_FAIL("unexpected EDecommitStatus");
+            Y_ABORT("unexpected EDecommitStatus");
         }
 
         bool HasGoodExpectedStatus() const {
@@ -507,7 +507,7 @@ public:
                 case NKikimrBlobStorage::EDriveStatus::EDriveStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
                     break;
             }
-            Y_FAIL("unexpected EDriveStatus");
+            Y_ABORT("unexpected EDriveStatus");
         }
 
         TString PathOrSerial() const {
@@ -1425,7 +1425,7 @@ public:
                     return hostIt->second.Location;
                 }
             }
-            Y_FAIL();
+            Y_ABORT();
         }
 
         TMaybe<TNodeId> ResolveNodeId(const THostId& hostId) const {

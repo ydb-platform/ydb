@@ -149,7 +149,7 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         void Enqueue(TAutoPtr<IEventHandle>& ev) override {
-            Y_FAIL("unexpected event Type# %08" PRIx32, ev->GetTypeRewrite());
+            Y_ABORT("unexpected event Type# %08" PRIx32, ev->GetTypeRewrite());
         }
 
         void DefaultSignalTabletActive(const TActorContext&) override {} // signalled explicitly after load is complete

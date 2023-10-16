@@ -64,10 +64,10 @@ namespace NTable {
                         return EReady::Gone;
 
                     case EScan::Reset:
-                        Y_FAIL("Unexpected EScan::Reset from IScan::Seek(...)");
+                        Y_ABORT("Unexpected EScan::Reset from IScan::Seek(...)");
                 }
 
-                Y_FAIL("Unexpected EScan result from IScan::Seek(...)");
+                Y_ABORT("Unexpected EScan result from IScan::Seek(...)");
             } else if (Seek()) {
                 return NotifyPageFault();
             } else {
@@ -197,9 +197,9 @@ namespace NTable {
                             break;
 
                         case EVersionState::SkipUncommitted:
-                            Y_FAIL("Unexpected callback state SkipUncommitted");
+                            Y_ABORT("Unexpected callback state SkipUncommitted");
                         case EVersionState::SkipVersion:
-                            Y_FAIL("Unexpected callback state SkipVersion");
+                            Y_ABORT("Unexpected callback state SkipVersion");
                     }
 
                     OnPause = (op == EScan::Sleep);
@@ -220,7 +220,7 @@ namespace NTable {
                             return EReady::Gone;
                     }
 
-                    Y_FAIL("Unexpected EScan result from IScan::Feed(...)");
+                    Y_ABORT("Unexpected EScan result from IScan::Feed(...)");
                 }
             }
         }
@@ -273,7 +273,7 @@ namespace NTable {
                     return EReady::Gone;
             }
 
-            Y_FAIL("Unexpected EScan result from IScan::PageFault(...)");
+            Y_ABORT("Unexpected EScan result from IScan::PageFault(...)");
         }
 
         EReady NotifyExhausted() noexcept
@@ -295,10 +295,10 @@ namespace NTable {
                     return EReady::Gone;
 
                 case EScan::Feed:
-                    Y_FAIL("Unexpected EScan::Feed from IScan::Exhausted(...)");
+                    Y_ABORT("Unexpected EScan::Feed from IScan::Exhausted(...)");
             }
 
-            Y_FAIL("Unexpected EScan result from IScan::Exhausted(...)");
+            Y_ABORT("Unexpected EScan result from IScan::Exhausted(...)");
         }
 
         bool Reset() noexcept
@@ -435,7 +435,7 @@ namespace NTable {
                             break;
 
                         default:
-                            Y_FAIL("Unexpected Seek result");
+                            Y_ABORT("Unexpected Seek result");
                     }
                 }
 

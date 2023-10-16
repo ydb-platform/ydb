@@ -184,7 +184,7 @@ public:
         if (tableId.PathId.LocalPathId == TSysTables::SysTableLocks)
             return Locks;
 
-        Y_FAIL("unexpected sys table id");
+        Y_ABORT("unexpected sys table id");
     }
 };
 

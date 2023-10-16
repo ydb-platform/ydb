@@ -464,7 +464,7 @@ bool TSnapshotManager::ChangeMvccState(ui64 step, ui64 txId, TTransactionContext
         }
 
         default:
-            Y_FAIL("Unexpected mvcc state# %d", (ui32)state);
+            Y_ABORT("Unexpected mvcc state# %d", (ui32)state);
     }
 
     txc.DB.OnPersistent([this, edge = CompleteEdge] {

@@ -406,7 +406,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
             break;
         case NBackupRestoreTraits::ECompressionCodec::Invalid:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
 
         ETag = result.GetResult().GetETag();

@@ -118,7 +118,7 @@ void TPageCollectionProtoHelper::Bundle(NKikimrExecutorFlat::TPageCollection *pa
             } else if (auto* body = cache.Lookup(pageId)) {
                 pages.emplace_back(pageId, *body);
             } else {
-                Y_FAIL("index and page collection pages must be kept inmemory");
+                Y_ABORT("index and page collection pages must be kept inmemory");
             }
         }
     }

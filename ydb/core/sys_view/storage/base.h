@@ -84,7 +84,7 @@ namespace NKikimr::NSysView {
                 case NScheme::NTypeIds::Float:     return Convert<float>(value);
                 case NScheme::NTypeIds::Interval:  return Convert<i64>(value);
                 case NScheme::NTypeIds::Timestamp: return Convert<ui64>(value);
-                default: Y_FAIL();
+                default: Y_ABORT();
             }
         }
 
@@ -144,7 +144,7 @@ namespace NKikimr::NSysView {
                 case E::TYPE_GROUP:
                 case E::TYPE_MESSAGE:
                 case E::TYPE_ENUM:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         }
 

@@ -60,7 +60,7 @@ namespace NTest {
 
             void Ver(TRowVersion) override
             {
-                Y_FAIL("unsupported");
+                Y_ABORT("unsupported");
             }
 
             TCooker Cooker;
@@ -139,7 +139,7 @@ namespace NTest {
                     subset->Flatten.push_back(
                                 { eggs.At(0), nullptr, eggs.At(0)->Slices });
                 } else {
-                    Y_FAIL("Unknown IBand writer type, internal error");
+                    Y_ABORT("Unknown IBand writer type, internal error");
                 }
             }
 

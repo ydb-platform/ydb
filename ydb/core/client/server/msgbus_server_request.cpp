@@ -237,7 +237,7 @@ bool TMessageBusServerRequest::AllRequestsCompleted(const TActorContext& ctx) {
     if (transaction.HasMiniKQLTransaction())
         return AllRequestsCompletedMKQL(ctx);
     else
-        Y_FAIL("Unexpected transaction type");
+        Y_ABORT("Unexpected transaction type");
 }
 
 bool TMessageBusServerRequest::AllRequestsCompletedMKQL(const TActorContext& ctx) {
@@ -272,7 +272,7 @@ bool TMessageBusServerRequest::AllRequestsCompletedMKQL(const TActorContext& ctx
             return true;
         }
         default:
-            Y_FAIL("Unknown mkqlTxMode.");
+            Y_ABORT("Unknown mkqlTxMode.");
     }
 }
 

@@ -132,7 +132,7 @@ void TDsProxyNodeMon::CountPutPesponseTime(NPDisk::EDeviceType type, NKikimrBlob
             PutUserDataResponseTimeHist[idx]->Collect(durationMsFloat);
             break;
         default:
-            Y_FAIL("Unexpected case, HandleClass# %" PRIu64, (ui64)cls);
+            Y_ABORT("Unexpected case, HandleClass# %" PRIu64, (ui64)cls);
     }
 }
 
@@ -171,7 +171,7 @@ void TDsProxyNodeMon::CountGetResponseTime(NPDisk::EDeviceType type, NKikimrBlob
             GetLowReadResponseTimeHist[idx]->Collect(durationMsFloat);
             break;
         default:
-            Y_FAIL("Unexpected case, HandleClass# %" PRIu64, (ui64)cls);
+            Y_ABORT("Unexpected case, HandleClass# %" PRIu64, (ui64)cls);
     }
 }
 

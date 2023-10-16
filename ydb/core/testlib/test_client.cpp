@@ -362,7 +362,7 @@ namespace Tests {
                 try {
                     result.GetValue();
                 } catch (const std::exception& ex) {
-                    Y_FAIL("Unable to prepare GRpc service: %s", ex.what());
+                    Y_ABORT("Unable to prepare GRpc service: %s", ex.what());
                 }
             } else {
                 grpcService->Start();

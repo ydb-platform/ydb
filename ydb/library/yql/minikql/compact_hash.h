@@ -305,7 +305,7 @@ public:
         case LARGE_MARK:
             return GetLargeListHeader(list)->Size;
         default:
-            Y_FAIL("Bad list address");
+            Y_ABORT("Bad list address");
         }
         return 0;
     }
@@ -328,7 +328,7 @@ public:
                 return size;
             }
         default:
-            Y_FAIL("Bad list address");
+            Y_ABORT("Bad list address");
         }
         return 0;
     }
@@ -341,7 +341,7 @@ public:
         case LARGE_MARK:
             return GetLargeListHeader(list)->Capacity;
         default:
-            Y_FAIL("Bad list address");
+            Y_ABORT("Bad list address");
         }
         return 0;
     }
@@ -355,7 +355,7 @@ public:
             GetLargeListHeader(list)->Size = size;
             break;
         default:
-            Y_FAIL("Bad list address");
+            Y_ABORT("Bad list address");
         }
     }
 
@@ -516,7 +516,7 @@ public:
             ReturnLargeList<T>(list);
             break;
         default:
-            Y_FAIL("Bad list address");
+            Y_ABORT("Bad list address");
         }
     }
 

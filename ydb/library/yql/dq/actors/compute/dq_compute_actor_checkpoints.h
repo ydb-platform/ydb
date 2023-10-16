@@ -108,7 +108,7 @@ public:
         Y_UNUSED(state);
         Y_UNUSED(outputIndex); // Note that we can have both sink and transform on one output index
         Y_UNUSED(checkpoint);
-        Y_FAIL("Transform states are unimplemented");
+        Y_ABORT("Transform states are unimplemented");
     }
 
     void TryToSavePendingCheckpoint();

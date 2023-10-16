@@ -38,7 +38,7 @@ namespace NKikimr {
                 }
 
                 TSyncPos(IInputStream &) {
-                    Y_FAIL("Not supported");
+                    Y_ABORT("Not supported");
                 }
             };
 

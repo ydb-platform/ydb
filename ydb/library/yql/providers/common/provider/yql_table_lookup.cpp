@@ -567,7 +567,7 @@ TTableLookupBuilder CombineLookupsAnd(TExprBase row, const TVector<TString>& key
     const TTableLookupBuilder* builders, size_t size, const TLookupContext& ctx)
 {
     switch (size) {
-        case 0U: Y_FAIL("Wrong case");
+        case 0U: Y_ABORT("Wrong case");
         case 1U: return *builders;
         case 2U: {
             const auto& left = builders[0U];

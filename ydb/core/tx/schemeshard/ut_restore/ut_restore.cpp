@@ -216,7 +216,7 @@ namespace {
             return GenerateZstdTestData(keyPrefix, count);
         case ECompressionCodec::Invalid:
             UNIT_ASSERT_C(false, "Invalid compression codec");
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 

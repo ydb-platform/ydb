@@ -210,7 +210,7 @@ namespace NKikimr {
                 NReadBatcher::TDataItem::EType t = it->GetType();
                 switch (t) {
                     case NReadBatcher::TDataItem::ET_CLEAN:
-                        Y_FAIL("Impossible case");
+                        Y_ABORT("Impossible case");
                     case NReadBatcher::TDataItem::ET_NODATA:
                         // put NODATA
                         Result->AddResult(NKikimrProto::NODATA, it->Id, cookiePtr, pingr);

@@ -784,7 +784,7 @@ void TPersQueue::ReadTxInfo(const NKikimrClient::TKeyValueResponse::TReadResult&
         break;
     }
     default:
-        Y_FAIL("Unexpected tx info read status: %d", read.GetStatus());
+        Y_ABORT("Unexpected tx info read status: %d", read.GetStatus());
     }
 
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " LastStep " << LastStep << " LastTxId " << LastTxId);
@@ -850,7 +850,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     } else if (read.GetStatus() == NKikimrProto::NODATA) {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " no config, start with empty partitions and default config");
     } else {
-        Y_FAIL("Unexpected config read status: %d", read.GetStatus());
+        Y_ABORT("Unexpected config read status: %d", read.GetStatus());
     }
 
     THashMap<ui32, TVector<TTransaction>> partitionTxs;
@@ -904,7 +904,7 @@ void TPersQueue::ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& 
     } else if (read.GetStatus() == NKikimrProto::NODATA) {
         TabletState = NKikimrPQ::ENormal;
     } else {
-        Y_FAIL("Unexpected state read status: %d", read.GetStatus());
+        Y_ABORT("Unexpected state read status: %d", read.GetStatus());
     }
 }
 
@@ -2236,7 +2236,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         HandleDeregisterMessageGroupRequest(responseCookie, partActor, req, ctx);
     } else if (req.HasCmdSplitMessageGroup()) {
         HandleSplitMessageGroupRequest(responseCookie, partActor, req, ctx);
-    } else Y_FAIL("unknown or empty command");
+    } else Y_ABORT("unknown or empty command");
 }
 
 
@@ -2834,7 +2834,7 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
             ScheduleProposeTransactionResult(tx);
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 }

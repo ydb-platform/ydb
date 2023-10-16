@@ -397,7 +397,7 @@ namespace NTable {
                 return EReady::Data;
             }
 
-            Y_FAIL("Unexpected failure to seek in a non-final data page");
+            Y_ABORT("Unexpected failure to seek in a non-final data page");
         }
 
         using TPartGroupRowIt::IsValid;
@@ -1221,7 +1221,7 @@ namespace NTable {
                         row.Set(pin.To, TCellOp(ECellOp::Null, ELargeObj::Outer), { } /* no useful data */);
                         return;
                     case EReady::Gone:
-                        Y_FAIL("Unexpected failure to find RowId=%" PRIu64 " in group %" PRIu32 "%s",
+                        Y_ABORT("Unexpected failure to find RowId=%" PRIu64 " in group %" PRIu32 "%s",
                                 altRowId, col.Group, SkipMainVersion ? "/history" : "");
                 }
             }
@@ -1245,7 +1245,7 @@ namespace NTable {
                 const auto ref = data->Cell(info).AsValue<ui64>();
 
                 if (ref >> (sizeof(ui32) * 8))
-                    Y_FAIL("Upper bits of ELargeObj ref now isn't used");
+                    Y_ABORT("Upper bits of ELargeObj ref now isn't used");
                 if (auto blob = Env->Locate(Part, ref, op)) {
                     const auto got = NPage::TLabelWrapper().Read(**blob);
 
@@ -1269,7 +1269,7 @@ namespace NTable {
                     row.Set(pin.To, op, TCell::Make((**Part->Blobs)[ref]));
                 }
             } else {
-                Y_FAIL("Got an unknown blob placement reference type");
+                Y_ABORT("Got an unknown blob placement reference type");
             }
         }
 
@@ -1382,7 +1382,7 @@ namespace NTable {
                     break;
 
                 default:
-                    Y_FAIL("Unsupported iterator seek mode");
+                    Y_ABORT("Unsupported iterator seek mode");
             }
 
             if (pos == Run.end()) {
@@ -1471,7 +1471,7 @@ namespace NTable {
                     break;
 
                 default:
-                    Y_FAIL("Unsupported iterator seek mode");
+                    Y_ABORT("Unsupported iterator seek mode");
             }
 
             if (pos == Run.end()) {

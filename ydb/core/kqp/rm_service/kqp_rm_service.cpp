@@ -826,7 +826,7 @@ private:
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
             default: {
-                Y_FAIL("Unexpected event 0x%x at TKqpResourceManagerActor::WorkState", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x at TKqpResourceManagerActor::WorkState", ev->GetTypeRewrite());
             }
         }
     }
@@ -1247,7 +1247,7 @@ std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _no
     }
 
     ui32 nodeId = _nodeId ? *_nodeId : TActivationContext::ActorSystem()->NodeId;
-    Y_FAIL("KqpResourceManager not ready yet, node #%" PRIu32, nodeId);
+    Y_ABORT("KqpResourceManager not ready yet, node #%" PRIu32, nodeId);
 }
 
 std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> _nodeId) {

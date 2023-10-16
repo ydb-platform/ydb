@@ -446,7 +446,7 @@ private:
         const ui64 readCookie = ev->Cookie;
 
         if (ev->Get()->ResponseSz < 1) {
-            Y_FAIL("Unexpected reply from blobstorage");
+            Y_ABORT("Unexpected reply from blobstorage");
         }
 
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {

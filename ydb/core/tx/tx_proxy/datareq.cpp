@@ -1728,7 +1728,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
         TxProxyMon->ResolveKeySetMiniKQLSuccess->Inc();
         ProcessFlatMKQLResolve(request, ctx);
     } else {
-        Y_FAIL("No request");
+        Y_ABORT("No request");
     }
 }
 
@@ -2727,7 +2727,7 @@ void TDataReq::MakeFlatMKQLResponse(const TActorContext &ctx, const NCpuTime::TC
         return Die(ctx);
     }
     default:
-        Y_FAIL("unknown engine status# %" PRIu32 " txid# %" PRIu64, (ui32)FlatMKQLRequest->EngineResponseStatus, (ui64)TxId);
+        Y_ABORT("unknown engine status# %" PRIu32 " txid# %" PRIu64, (ui32)FlatMKQLRequest->EngineResponseStatus, (ui64)TxId);
     }
 }
 
@@ -3058,7 +3058,7 @@ bool TDataReq::IsReadOnlyRequest() const {
         return true;
     }
 
-    Y_FAIL("No request");
+    Y_ABORT("No request");
 }
 
 IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<NKikimr::NTxProxy::TTxProxyMon>& mon,

@@ -158,7 +158,7 @@ namespace NDataShardReadTableTest {
                 break;
 
             default:
-                Y_FAIL("Unhandled");
+                Y_ABORT("Unhandled");
             }
         }
 
@@ -173,7 +173,7 @@ namespace NDataShardReadTableTest {
                 break;
 
             default:
-                Y_FAIL("Unhandled");
+                Y_ABORT("Unhandled");
             }
         }
 

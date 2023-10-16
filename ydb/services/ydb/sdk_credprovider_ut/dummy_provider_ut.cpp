@@ -79,7 +79,7 @@ public:
 
     // Just for compatibility with old interface
     std::shared_ptr<ICredentialsProvider> CreateProvider() const override {
-        Y_FAIL();
+        Y_ABORT();
         return {};
     }
 

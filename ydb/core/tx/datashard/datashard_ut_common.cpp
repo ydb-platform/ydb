@@ -94,7 +94,7 @@ TTester::TTester(ESchema schema, const TString& dispatchName, std::function<void
 
 void TTester::EmptyShardKeyResolver(TKeyDesc& key) {
     Y_UNUSED(key);
-    Y_FAIL();
+    Y_ABORT();
 }
 
 void TTester::SingleShardKeyResolver(TKeyDesc& key) {
@@ -1985,7 +1985,7 @@ namespace {
                 break;
 
             default:
-                Y_FAIL("Unhandled");
+                Y_ABORT("Unhandled");
             }
         }
 
@@ -2005,7 +2005,7 @@ namespace {
             PRINT_PRIMITIVE(DyNumber);
 
             default:
-                Y_FAIL("Unhandled");
+                Y_ABORT("Unhandled");
             }
 
             #undef PRINT_PRIMITIVE

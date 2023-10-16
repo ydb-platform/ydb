@@ -2770,7 +2770,7 @@ void TErasureType::SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDi
             MirrorSplitDiff(*this, diffs, outDiffSet);
             break;
         case TErasureType::ErasureParityStripe:
-            Y_FAIL("Not implemented");
+            Y_ABORT("Not implemented");
             break;
         case TErasureType::ErasureParityBlock:
             Y_ABORT_UNLESS(erasure.ParityParts == 2, "Other is not implemented");
@@ -2851,10 +2851,10 @@ void TErasureType::MakeXorDiff(ECrcMode crcMode, ui32 dataSize, const ui8 *src,
     const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
             break;
         case TErasureType::ErasureParityStripe:
-            Y_FAIL("Not implemented");
+            Y_ABORT("Not implemented");
             break;
         case TErasureType::ErasureParityBlock:
             Y_ABORT_UNLESS(erasure.ParityParts == 2, "Other is not implemented");
@@ -2987,10 +2987,10 @@ void TErasureType::ApplyXorDiff(ECrcMode crcMode, ui32 dataSize, ui8 *dst,
     const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
             break;
         case TErasureType::ErasureParityStripe:
-            Y_FAIL("Not implemented");
+            Y_ABORT("Not implemented");
             break;
         case TErasureType::ErasureParityBlock:
             Y_ABORT_UNLESS(erasure.ParityParts == 2, "Other is not implemented");

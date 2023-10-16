@@ -116,15 +116,15 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TModifyACL");
+        Y_ABORT("no AbortPropose for TModifyACL");
     }
 
     bool ProgressState(TOperationContext&) override {
-        Y_FAIL("no ProgressState for TModifyACL");
+        Y_ABORT("no ProgressState for TModifyACL");
     }
 
     void AbortUnsafe(TTxId, TOperationContext&) override {
-        Y_FAIL("no AbortUnsafe for TModifyACL");
+        Y_ABORT("no AbortUnsafe for TModifyACL");
     }
 };
 

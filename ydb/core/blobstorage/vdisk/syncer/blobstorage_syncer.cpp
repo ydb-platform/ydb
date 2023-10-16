@@ -246,7 +246,7 @@ namespace NKikimr {
                     InconsistentState(ctx);
                     break;
                 default:
-                    Y_FAIL("Unexpected case");
+                    Y_ABORT("Unexpected case");
             }
         }
 
@@ -469,7 +469,7 @@ namespace NKikimr {
                 case TPhaseVal::PhaseRecoverLostData:
                     // no SchedulerId
                     break;
-                default: Y_FAIL("Unexpected case");
+                default: Y_ABORT("Unexpected case");
             }
 
             // print out local info

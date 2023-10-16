@@ -821,7 +821,7 @@ namespace NKikimr {
         // Add already constructed ssts
         ////////////////////////////////////////////////////////////////////////
         void Handle(TEvAddBulkSst::TPtr &ev, const TActorContext &ctx) {
-            Y_FAIL("not implemented yet");
+            Y_ABORT("not implemented yet");
 
             const TLsnSeg seg = Db->LsnMngr->AllocLsnForHull(ev->Get()->Essence.GetLsnRange());
             NPDisk::TCommitRecord commitRecord;

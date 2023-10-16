@@ -342,7 +342,7 @@ public:
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         default:
-            Y_FAIL("TConsoleRequestActor::MainState unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("TConsoleRequestActor::MainState unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(),
                    ev->ToString().data());
         }

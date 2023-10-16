@@ -51,7 +51,7 @@ bool TArrayIterator::Next(TValue& value) {
         }
         return success;
     } else {
-        Y_FAIL("Unexpected variant case in Next");
+        Y_ABORT("Unexpected variant case in Next");
     }
 }
 
@@ -101,7 +101,7 @@ bool TObjectIterator::Next(TValue& key, TValue& value) {
         }
         return success;
     } else {
-        Y_FAIL("Unexpected variant case in Next");
+        Y_ABORT("Unexpected variant case in Next");
     }
 }
 
@@ -157,7 +157,7 @@ EValueType TValue::GetType() const {
             case EEntryType::String:
                 return EValueType::String;
             case EEntryType::Container:
-                Y_FAIL("Logical error: TEntryCursor with Container type must be converted to TContainerCursor");
+                Y_ABORT("Logical error: TEntryCursor with Container type must be converted to TContainerCursor");
         }
     } else if (const auto* value = std::get_if<TContainerCursor>(&Value)) {
         switch (value->GetType()) {
@@ -166,7 +166,7 @@ EValueType TValue::GetType() const {
             case EContainerType::Object:
                 return EValueType::Object;
             case EContainerType::TopLevelScalar:
-                Y_FAIL("Logical error: TContainerCursor with TopLevelScalar type must be converted to TEntryCursor");
+                Y_ABORT("Logical error: TContainerCursor with TopLevelScalar type must be converted to TEntryCursor");
         }
     } else if (const auto* value = std::get_if<TUnboxedValue>(&Value)) {
         switch (GetNodeType(*value)) {
@@ -187,7 +187,7 @@ EValueType TValue::GetType() const {
                 return EValueType::Null;
         }
     } else {
-        Y_FAIL("Unexpected variant case in GetType");
+        Y_ABORT("Unexpected variant case in GetType");
     }
 }
 
@@ -233,7 +233,7 @@ double TValue::GetNumber() const {
             return static_cast<double>(value->Get<ui64>());
         }
     } else {
-        Y_FAIL("Unexpected variant case in GetNumber");
+        Y_ABORT("Unexpected variant case in GetNumber");
     }
 }
 
@@ -245,7 +245,7 @@ bool TValue::GetBool() const {
     } else if (const auto* value = std::get_if<TUnboxedValue>(&Value)) {
         return value->Get<bool>();
     } else {
-        Y_FAIL("Unexpected variant case in GetBool");
+        Y_ABORT("Unexpected variant case in GetBool");
     }
 }
 
@@ -257,7 +257,7 @@ const TStringBuf TValue::GetString() const {
     } else if (const auto* value = std::get_if<TUnboxedValue>(&Value)) {
         return value->AsStringRef();
     } else {
-        Y_FAIL("Unexpected variant case in GetString");
+        Y_ABORT("Unexpected variant case in GetString");
     }
 }
 
@@ -277,7 +277,7 @@ ui32 TValue::GetSize() const {
             return value->GetDictLength();
         }
     } else {
-        Y_FAIL("Unexpected variant case in GetString");
+        Y_ABORT("Unexpected variant case in GetString");
     }
 }
 
@@ -289,7 +289,7 @@ TValue TValue::GetElement(ui32 index) const {
     } else if (const auto* value = std::get_if<TUnboxedValue>(&Value)) {
         return TValue(value->GetElement(index));
     } else {
-        Y_FAIL("Unexpected variant case in GetString");
+        Y_ABORT("Unexpected variant case in GetString");
     }
 }
 
@@ -304,7 +304,7 @@ TArrayIterator TValue::GetArrayIterator() const {
         }
         return TArrayIterator(value->GetListIterator());
     } else {
-        Y_FAIL("Unexpected variant case in GetString");
+        Y_ABORT("Unexpected variant case in GetString");
     }
 }
 
@@ -332,7 +332,7 @@ TMaybe<TValue> TValue::Lookup(const TStringBuf key) const {
             return Nothing();
         }
     } else {
-        Y_FAIL("Unexpected variant case in GetString");
+        Y_ABORT("Unexpected variant case in GetString");
     }
 }
 
@@ -347,7 +347,7 @@ TObjectIterator TValue::GetObjectIterator() const {
         }
         return TObjectIterator(value->GetDictIterator());
     } else {
-        Y_FAIL("Unexpected variant case in GetString");
+        Y_ABORT("Unexpected variant case in GetString");
     }
 }
 
@@ -359,7 +359,7 @@ TUnboxedValue TValue::ConvertToUnboxedValue(const NUdf::IValueBuilder* valueBuil
     } else if (const auto* value = std::get_if<TUnboxedValue>(&Value)) {
         return *value;
     } else {
-        Y_FAIL("Unexpected variant case in ConvertToUnboxedValue");
+        Y_ABORT("Unexpected variant case in ConvertToUnboxedValue");
     }
 }
 

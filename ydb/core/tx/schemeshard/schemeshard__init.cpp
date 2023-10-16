@@ -3617,7 +3617,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     auto settings = tableInfo->BackupSettings.MutableS3Settings();
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, s3SerializedSettings));
                 } else {
-                    Y_FAIL("Unknown settings");
+                    Y_ABORT("Unknown settings");
                 }
 
                 if (scanSettings) {
@@ -4726,11 +4726,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         } catch (const TNotReadyTabletException &) {
             return false;
         } catch (const TSchemeErrorTabletException &ex) {
-            Y_FAIL("there must be no leaked scheme error exceptions: %s", ex.what());
+            Y_ABORT("there must be no leaked scheme error exceptions: %s", ex.what());
         } catch (const std::exception& ex) {
-            Y_FAIL("there must be no leaked exceptions: %s", ex.what());
+            Y_ABORT("there must be no leaked exceptions: %s", ex.what());
         } catch (...) {
-            Y_FAIL("there must be no leaked exceptions");
+            Y_ABORT("there must be no leaked exceptions");
         }
     }
 

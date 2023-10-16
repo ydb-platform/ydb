@@ -212,7 +212,7 @@ private:
             WakeupRetryForwardPingRequest();
             break;
         default:
-            Y_FAIL("Unknow wakeup tag: %lu", ev->Get()->Tag);
+            Y_ABORT("Unknow wakeup tag: %lu", ev->Get()->Tag);
         }
     }
 

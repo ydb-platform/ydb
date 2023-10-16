@@ -300,7 +300,7 @@ private:
             break;
 
         default:
-            Y_FAIL("Unknown kind");
+            Y_ABORT("Unknown kind");
         }
 
         return ctx.HolderFactory.CreateDirectListHolder(std::move(resList));

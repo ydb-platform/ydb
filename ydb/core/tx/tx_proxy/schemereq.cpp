@@ -163,7 +163,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableModifyACL()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions:
-            Y_FAIL("no implementation for ESchemeOpSplitMergeTablePartitions");
+            Y_ABORT("no implementation for ESchemeOpSplitMergeTablePartitions");
 
         case NKikimrSchemeOp::ESchemeOpBackup:
             return *modifyScheme.MutableBackup()->MutableTableName();
@@ -175,7 +175,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableSubDomain()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
-            Y_FAIL("no implementation for ESchemeOpAlterExtSubDomainCreateHive");
+            Y_ABORT("no implementation for ESchemeOpAlterExtSubDomainCreateHive");
 
         case NKikimrSchemeOp::ESchemeOpCreateRtmrVolume:
             return *modifyScheme.MutableCreateRtmrVolume()->MutableName();
@@ -206,10 +206,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableCreateTableIndex()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables:
-            Y_FAIL("no implementation for ESchemeOpCreateConsistentCopyTables");
+            Y_ABORT("no implementation for ESchemeOpCreateConsistentCopyTables");
 
         case NKikimrSchemeOp::ESchemeOp_DEPRECATED_35:
-            Y_FAIL("no implementation for ESchemeOp_DEPRECATED_35");
+            Y_ABORT("no implementation for ESchemeOp_DEPRECATED_35");
 
         case NKikimrSchemeOp::ESchemeOpUpgradeSubDomain:
         case NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision:
@@ -217,19 +217,19 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
-            Y_FAIL("no implementation for ESchemeOpCreateIndexBuild/ESchemeOpCreateColumnBuild");
+            Y_ABORT("no implementation for ESchemeOpCreateIndexBuild/ESchemeOpCreateColumnBuild");
 
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable:
-            Y_FAIL("no implementation for ESchemeOpInitiateBuildIndexMainTable");
+            Y_ABORT("no implementation for ESchemeOpInitiateBuildIndexMainTable");
 
         case NKikimrSchemeOp::ESchemeOpCreateLock:
-            Y_FAIL("no implementation for ESchemeOpCreateLock");
+            Y_ABORT("no implementation for ESchemeOpCreateLock");
 
         case NKikimrSchemeOp::ESchemeOpApplyIndexBuild:
-            Y_FAIL("no implementation for ESchemeOpApplyIndexBuild");
+            Y_ABORT("no implementation for ESchemeOpApplyIndexBuild");
 
         case NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexMainTable:
-            Y_FAIL("no implementation for ESchemeOpFinalizeBuildIndexMainTable");
+            Y_ABORT("no implementation for ESchemeOpFinalizeBuildIndexMainTable");
 
         case NKikimrSchemeOp::ESchemeOpAlterTableIndex:
             return *modifyScheme.MutableAlterTableIndex()->MutableName();
@@ -238,19 +238,19 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableAlterSolomonVolume()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpDropLock:
-            Y_FAIL("no implementation for ESchemeOpDropLock");
+            Y_ABORT("no implementation for ESchemeOpDropLock");
 
         case NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexImplTable:
-            Y_FAIL("no implementation for ESchemeOpFinalizeBuildIndexImplTable");
+            Y_ABORT("no implementation for ESchemeOpFinalizeBuildIndexImplTable");
 
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable:
-            Y_FAIL("no implementation for ESchemeOpInitiateBuildIndexImplTable");
+            Y_ABORT("no implementation for ESchemeOpInitiateBuildIndexImplTable");
 
         case NKikimrSchemeOp::ESchemeOpDropIndex:
             return *modifyScheme.MutableDropIndex()->MutableTableName();
 
         case NKikimrSchemeOp::ESchemeOpDropTableIndexAtMainTable:
-            Y_FAIL("no implementation for ESchemeOpDropTableIndexAtMainTable");
+            Y_ABORT("no implementation for ESchemeOpDropTableIndexAtMainTable");
 
         case NKikimrSchemeOp::ESchemeOpCancelIndexBuild:
             return *modifyScheme.MutableCancelIndexBuild()->MutableTablePath();
@@ -277,13 +277,13 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableAlterColumnTable()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterLogin:
-            Y_FAIL("no implementation for ESchemeOpAlterLogin");
+            Y_ABORT("no implementation for ESchemeOpAlterLogin");
 
         case NKikimrSchemeOp::ESchemeOpCreateCdcStream:
             return *modifyScheme.MutableCreateCdcStream()->MutableTableName();
 
         case NKikimrSchemeOp::ESchemeOpCreateCdcStreamImpl:
-            Y_FAIL("no implementation for ESchemeOpCreateCdcStreamImpl");
+            Y_ABORT("no implementation for ESchemeOpCreateCdcStreamImpl");
 
         case NKikimrSchemeOp::ESchemeOpCreateCdcStreamAtTable:
             return *modifyScheme.MutableCreateCdcStream()->MutableTableName();
@@ -292,7 +292,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableAlterCdcStream()->MutableTableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterCdcStreamImpl:
-            Y_FAIL("no implementation for ESchemeOpAlterCdcStreamImpl");
+            Y_ABORT("no implementation for ESchemeOpAlterCdcStreamImpl");
 
         case NKikimrSchemeOp::ESchemeOpAlterCdcStreamAtTable:
             return *modifyScheme.MutableAlterCdcStream()->MutableTableName();
@@ -301,19 +301,19 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableDropCdcStream()->MutableTableName();
 
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamImpl:
-            Y_FAIL("no implementation for ESchemeOpDropCdcStreamImpl");
+            Y_ABORT("no implementation for ESchemeOpDropCdcStreamImpl");
 
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable:
             return *modifyScheme.MutableDropCdcStream()->MutableTableName();
 
         case NKikimrSchemeOp::ESchemeOpMoveTable:
-            Y_FAIL("no implementation for ESchemeOpMoveTable");
+            Y_ABORT("no implementation for ESchemeOpMoveTable");
 
         case NKikimrSchemeOp::ESchemeOpMoveTableIndex:
-            Y_FAIL("no implementation for ESchemeOpMoveTableIndex");
+            Y_ABORT("no implementation for ESchemeOpMoveTableIndex");
 
         case NKikimrSchemeOp::ESchemeOpMoveIndex:
-            Y_FAIL("no implementation for ESchemeOpMoveIndex");
+            Y_ABORT("no implementation for ESchemeOpMoveIndex");
 
         case NKikimrSchemeOp::ESchemeOpCreateSequence:
         case NKikimrSchemeOp::ESchemeOpAlterSequence:
@@ -331,13 +331,13 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableCreateExternalTable()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterExternalTable:
-            Y_FAIL("no implementation for ESchemeOpAlterExternalTable");
+            Y_ABORT("no implementation for ESchemeOpAlterExternalTable");
 
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
             return *modifyScheme.MutableCreateExternalDataSource()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource:
-            Y_FAIL("no implementation for ESchemeOpAlterExternalDataSource");
+            Y_ABORT("no implementation for ESchemeOpAlterExternalDataSource");
         }
     }
 

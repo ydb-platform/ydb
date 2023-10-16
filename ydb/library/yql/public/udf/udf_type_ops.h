@@ -135,17 +135,17 @@ inline THashType GetValueHash<EDataSlot::Uuid>(const TUnboxedValuePod& value) {
 
 template <>
 inline THashType GetValueHash<EDataSlot::Yson>(const TUnboxedValuePod&) {
-    Y_FAIL("Yson isn't hashable.");
+    Y_ABORT("Yson isn't hashable.");
 }
 
 template <>
 inline THashType GetValueHash<EDataSlot::Json>(const TUnboxedValuePod&) {
-    Y_FAIL("Json isn't hashable.");
+    Y_ABORT("Json isn't hashable.");
 }
 
 template <>
 inline THashType GetValueHash<EDataSlot::JsonDocument>(const TUnboxedValuePod&) {
-    Y_FAIL("JsonDocument isn't hashable.");
+    Y_ABORT("JsonDocument isn't hashable.");
 }
 
 template <>
@@ -346,17 +346,17 @@ inline int CompareValues<EDataSlot::Uuid>(const TUnboxedValuePod& lhs, const TUn
 
 template <>
 inline int CompareValues<EDataSlot::Yson>(const TUnboxedValuePod&, const TUnboxedValuePod&) {
-    Y_FAIL("Yson isn't comparable.");
+    Y_ABORT("Yson isn't comparable.");
 }
 
 template <>
 inline int CompareValues<EDataSlot::Json>(const TUnboxedValuePod&, const TUnboxedValuePod&) {
-    Y_FAIL("Json isn't comparable.");
+    Y_ABORT("Json isn't comparable.");
 }
 
 template <>
 inline int CompareValues<EDataSlot::JsonDocument>(const TUnboxedValuePod&, const TUnboxedValuePod&) {
-    Y_FAIL("JsonDocument isn't comparable.");
+    Y_ABORT("JsonDocument isn't comparable.");
 }
 
 template <>
@@ -536,17 +536,17 @@ inline bool EquateValues<EDataSlot::Uuid>(const TUnboxedValuePod& lhs, const TUn
 
 template <>
 inline bool EquateValues<EDataSlot::Yson>(const TUnboxedValuePod&, const TUnboxedValuePod&) {
-    Y_FAIL("Yson isn't comparable.");
+    Y_ABORT("Yson isn't comparable.");
 }
 
 template <>
 inline bool EquateValues<EDataSlot::Json>(const TUnboxedValuePod&, const TUnboxedValuePod&) {
-    Y_FAIL("Json isn't comparable.");
+    Y_ABORT("Json isn't comparable.");
 }
 
 template <>
 inline bool EquateValues<EDataSlot::JsonDocument>(const TUnboxedValuePod&, const TUnboxedValuePod&) {
-    Y_FAIL("JsonDocument isn't comparable.");
+    Y_ABORT("JsonDocument isn't comparable.");
 }
 
 template <>

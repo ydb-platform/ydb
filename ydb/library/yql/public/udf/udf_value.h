@@ -482,7 +482,7 @@ struct TBoxedValueAccessor
 #undef MAP_HANDLER
         }
 
-        Y_FAIL("unknown method");
+        Y_ABORT("unknown method");
     }
 
     template<EMethod Method> static uintptr_t GetMethodPtr();
@@ -989,17 +989,17 @@ namespace NUdf {
 //////////////////////////////////////////////////////////////////////////////
 inline bool TBoxedValueBase::HasFastListLength() const
 {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline ui64 TBoxedValueBase::GetListLength() const
 {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline ui64 TBoxedValueBase::GetEstimatedListLength() const
 {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline const TOpaqueListRepresentation* TBoxedValueBase::GetListRepresentation() const {
@@ -1030,7 +1030,7 @@ inline IBoxedValuePtr TBoxedValueBase::ToIndexDictImpl(const IValueBuilder& buil
 
 inline ui64 TBoxedValueBase::GetDictLength() const
 {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline TBoxedValue::TBoxedValue()
@@ -1056,22 +1056,22 @@ inline void TBoxedValueLink::Unlink() {
 
 inline TUnboxedValue TBoxedValueBase::GetDictIterator() const
 {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline TUnboxedValue TBoxedValueBase::GetListIterator() const
 {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline TUnboxedValue TBoxedValueBase::GetKeysIterator() const
 {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline TUnboxedValue TBoxedValueBase::GetPayloadsIterator() const
 {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline bool TBoxedValueBase::Skip()
@@ -1082,18 +1082,18 @@ inline bool TBoxedValueBase::Skip()
 
 inline bool TBoxedValueBase::Next(TUnboxedValue&)
 {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline bool TBoxedValueBase::NextPair(TUnboxedValue&, TUnboxedValue&)
 {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline TUnboxedValue TBoxedValueBase::GetElement(ui32 index) const
 {
     Y_UNUSED(index);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline const TUnboxedValue* TBoxedValueBase::GetElements() const
@@ -1103,115 +1103,115 @@ inline const TUnboxedValue* TBoxedValueBase::GetElements() const
 
 inline void TBoxedValueBase::Apply(IApplyContext&) const
 {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline TStringRef TBoxedValueBase::GetResourceTag() const {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void* TBoxedValueBase::GetResource()
 {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline bool TBoxedValueBase::HasListItems() const {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline bool TBoxedValueBase::HasDictItems() const {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline ui32 TBoxedValueBase::GetVariantIndex() const {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline bool TBoxedValueBase::Contains(const TUnboxedValuePod& key) const
 {
     Y_UNUSED(key);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline TUnboxedValue TBoxedValueBase::Lookup(const TUnboxedValuePod& key) const
 {
     Y_UNUSED(key);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline TUnboxedValue TBoxedValueBase::Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const
 {
     Y_UNUSED(valueBuilder);
     Y_UNUSED(args);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline TUnboxedValue TBoxedValueBase::GetVariantItem() const {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline EFetchStatus TBoxedValueBase::Fetch(TUnboxedValue& result) {
     Y_UNUSED(result);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
 inline ui32 TBoxedValueBase::GetTraverseCount() const {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
     return 0;
 }
 
 inline TUnboxedValue TBoxedValueBase::GetTraverseItem(ui32 index) const {
     Y_UNUSED(index);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline TUnboxedValue TBoxedValueBase::Save() const {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TBoxedValueBase::Load(const TStringRef& state) {
     Y_UNUSED(state);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
 inline void TBoxedValueBase::Push(const TUnboxedValuePod& value) {
     Y_UNUSED(value);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12)
 inline bool TBoxedValueBase::IsSortedDict() const {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
 inline void TBoxedValueBase::Unused1() {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TBoxedValueBase::Unused2() {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TBoxedValueBase::Unused3() {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TBoxedValueBase::Unused4() {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TBoxedValueBase::Unused5() {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TBoxedValueBase::Unused6() {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 #endif
 
@@ -1219,7 +1219,7 @@ inline void TBoxedValueBase::Unused6() {
 inline EFetchStatus TBoxedValueBase::WideFetch(TUnboxedValue *result, ui32 width) {
     Y_UNUSED(result);
     Y_UNUSED(width);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 #endif
 

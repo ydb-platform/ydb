@@ -102,7 +102,7 @@ struct TPDiskMockState::TImpl {
     template<typename TQuery>
     std::variant<TOwner*, std::tuple<NKikimrProto::EReplyStatus, TString>> FindOwner(TQuery *msg) {
         if (const auto it = Owners.find(msg->Owner); it == Owners.end()) {
-            Y_FAIL("invalid Owner");
+            Y_ABORT("invalid Owner");
         } else if (it->second.Slain) {
             return std::make_tuple(NKikimrProto::INVALID_OWNER, "VDisk is slain");
         } else if (msg->OwnerRound != it->second.OwnerRound) {
@@ -192,7 +192,7 @@ struct TPDiskMockState::TImpl {
         } else if (owner.CommittedChunks.erase(chunkIdx)) {
             owner.ReservedChunks.insert(chunkIdx);
         } else {
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -501,7 +501,7 @@ public:
                 results.emplace_back(new IEventHandle(recipient, SelfId(), p.release()));
             };
             if (const auto it = Impl.Owners.find(msg->Owner); it == Impl.Owners.end()) {
-                Y_FAIL("invalid Owner");
+                Y_ABORT("invalid Owner");
             } else if (it->second.Slain) {
                 addRes(NKikimrProto::INVALID_OWNER, "VDisk is slain");
             } else if (msg->OwnerRound != it->second.OwnerRound) {
@@ -593,7 +593,7 @@ public:
         NKikimrProto::EReplyStatus status = NKikimrProto::OK;
         TString errorReason;
         if (const auto it = Impl.Owners.find(msg->Owner); it == Impl.Owners.end()) {
-            Y_FAIL("invalid Owner");
+            Y_ABORT("invalid Owner");
         } else if (it->second.Slain) {
             status = NKikimrProto::INVALID_OWNER;
             errorReason = "VDisk is slain";

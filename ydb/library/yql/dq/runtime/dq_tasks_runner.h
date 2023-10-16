@@ -287,7 +287,7 @@ public:
             Task_ = HeapTask_.get();
             Y_ABORT_UNLESS(!task.Arena);
         } else {
-            Y_FAIL("not allowed to copy dq settings for arena allocated messages.");
+            Y_ABORT("not allowed to copy dq settings for arena allocated messages.");
         }
     }
 

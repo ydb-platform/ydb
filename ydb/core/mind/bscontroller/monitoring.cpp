@@ -837,7 +837,7 @@ void TBlobStorageController::ProcessPostQuery(const NActorsProto::TRemoteHttpInf
                     } else if (Accept == "application/json") {
                         google::protobuf::util::MessageToJsonString(response, &data);
                     } else {
-                        Y_FAIL();
+                        Y_ABORT();
                     }
                     s << data;
 

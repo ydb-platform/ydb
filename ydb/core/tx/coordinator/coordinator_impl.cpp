@@ -437,7 +437,7 @@ void TTxCoordinator::DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const
                      , "tablet# " << TabletID()
                     << " HANDLE EvCoordinatorConfiguration Version# " << record.GetVersion()
                     << " recive empty mediators set");
-        Y_FAIL("empty mediators set");
+        Y_ABORT("empty mediators set");
         return;
     }
 

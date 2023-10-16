@@ -89,7 +89,7 @@ namespace NFake {
         {
             const auto *name = eh->GetTypeName().c_str();
 
-            Y_FAIL("Got unexpected event %s on tablet booting", name);
+            Y_ABORT("Got unexpected event %s on tablet booting", name);
         }
 
         void DefaultSignalTabletActive(const TActorContext&) override
@@ -103,7 +103,7 @@ namespace NFake {
                 SignalTabletActive(SelfId());
                 Send(Owner, new NFake::TEvReady(TabletID(), SelfId()));
             } else {
-                Y_FAIL("Received unexpected TExecutor activation");
+                Y_ABORT("Received unexpected TExecutor activation");
             }
         }
 
@@ -130,7 +130,7 @@ namespace NFake {
             if (auto* snapContext = dynamic_cast<TDummySnapshotContext*>(rawSnapContext.Get())) {
                 Send(SelfId(), snapContext->OnFinished());
             } else {
-                Y_FAIL("Unsupported snapshot context");
+                Y_ABORT("Unsupported snapshot context");
             }
         }
 

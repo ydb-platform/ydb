@@ -438,7 +438,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
             break;
 
         default:
-          Y_FAIL("Unknown batch status");
+          Y_ABORT("Unknown batch status");
     }
 }
 

@@ -292,7 +292,7 @@ IComputationNode* WrapDecimalDiv(TCallable& callable, const TComputationNodeFact
         INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_DIV)
 #undef MAKE_PRIMITIVE_TYPE_DIV
         default:
-            Y_FAIL("Unupported type.");
+            Y_ABORT("Unupported type.");
     }
 }
 

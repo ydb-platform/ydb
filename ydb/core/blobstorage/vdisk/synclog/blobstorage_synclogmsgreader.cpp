@@ -31,7 +31,7 @@ namespace NKikimr {
                         fblock2(it->GetBlockV2());
                         break;
                     default:
-                        Y_FAIL("Unknown RecType: %s", it->ToString().data());
+                        Y_ABORT("Unknown RecType: %s", it->ToString().data());
                 }
             }
         }
@@ -177,7 +177,7 @@ namespace NKikimr {
                     Impl.reset(new TCustomCodecFragmentReader(data));
                     break;
                 default:
-                    Y_FAIL("Unknwon codec");
+                    Y_ABORT("Unknwon codec");
             }
         }
 

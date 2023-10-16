@@ -1035,7 +1035,7 @@ IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices& services, const ui6
         return new TCommitWritesReq(services, txid, std::move(ev), mon);
     }
 
-    Y_FAIL("Unexpected transaction proposal");
+    Y_ABORT("Unexpected transaction proposal");
 }
 
 

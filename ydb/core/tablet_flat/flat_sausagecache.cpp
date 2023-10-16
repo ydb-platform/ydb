@@ -219,7 +219,7 @@ std::pair<ui32, ui64> TPrivatePageCache::Request(TVector<ui32> &pages, TPrivateP
             ++it;
             break;
         case TPage::LoadStateLoaded:
-            Y_FAIL("must not request already loaded pages");
+            Y_ABORT("must not request already loaded pages");
         case TPage::LoadStateRequested:
             if (!page->WaitQueue)
                 page->WaitQueue = new TPage::TWaitQueue();

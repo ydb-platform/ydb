@@ -240,7 +240,7 @@ namespace NKikimr {
 
     template <class TKey, class TMemRec>
     inline const TRope& TFreshIndexAndData<TKey, TMemRec>::GetLogoBlobData(const TMemPart& /*memPart*/) const {
-        Y_FAIL("invalid call");
+        Y_ABORT("invalid call");
     }
 
     template <class TKey, class TMemRec>
@@ -260,7 +260,7 @@ namespace NKikimr {
                 HugeDataSize += memRec.DataSize();
                 break;
             default:
-                Y_FAIL("Unexpected type: type# %d", int(type));
+                Y_ABORT("Unexpected type: type# %d", int(type));
         }
         PutPrepared(lsn, key, memRec);
     }

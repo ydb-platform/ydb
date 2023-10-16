@@ -651,7 +651,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     }
                     break;
                 default:
-                    Y_FAIL("must not happens");
+                    Y_ABORT("must not happens");
                 }
             }
 
@@ -835,7 +835,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
                 switch (page->State) {
                 case PageStateNo:
-                    Y_FAIL("unexpected uninitialized page found");
+                    Y_ABORT("unexpected uninitialized page found");
                 case PageStateRequested:
                 case PageStateRequestedAsync:
                 case PageStatePending:
@@ -850,7 +850,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     Evict(Cache.Touch(page));
                     break;
                 default:
-                    Y_FAIL("unknown load state");
+                    Y_ABORT("unknown load state");
                 }
             }
         }

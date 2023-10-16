@@ -334,7 +334,7 @@ void FillTableBoundaryImpl(TYdbProto& out,
             } else if constexpr (std::is_same<TYdbProto, Ydb::Table::CreateTableRequest>::value) {
                 ydbValue = out.mutable_partition_at_keys()->add_split_points();
             } else {
-                Y_FAIL("Unknown proto type");
+                Y_ABORT("Unknown proto type");
             }
 
             ConvertMiniKQLTypeToYdbType(

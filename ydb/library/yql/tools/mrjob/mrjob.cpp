@@ -25,5 +25,5 @@ int main(int argc, const char *argv[]) {
         return -1;
     }
 
-    Y_FAIL("This binary should not be called directly");
+    Y_ABORT("This binary should not be called directly");
 }

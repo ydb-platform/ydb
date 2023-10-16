@@ -83,7 +83,7 @@ namespace NPage {
             auto hdr = TDeref<THeader>::At(ptr, 0);
 
             if (hdr->Skip > got.Page.size())
-                Y_FAIL("NPage::TFrame header is out of its blob");
+                Y_ABORT("NPage::TFrame header is out of its blob");
 
             Stats_.Rows = hdr->Rows;
             Stats_.Size = hdr->Size;
@@ -91,7 +91,7 @@ namespace NPage {
             Stats_.Items = (got.Page.size() - hdr->Skip) / sizeof(TEntry);
 
             if (hdr->Skip < sizeof(THeader) + Stats_.Tags.size() * sizeof(ui32))
-                Y_FAIL("Invalid NPage::TFrame meta info blob header");
+                Y_ABORT("Invalid NPage::TFrame meta info blob header");
 
             Records = { TDeref<TEntry>::At(ptr, hdr->Skip) , Stats_.Items };
         }

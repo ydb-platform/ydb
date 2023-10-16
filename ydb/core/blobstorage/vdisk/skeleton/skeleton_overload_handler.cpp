@@ -147,7 +147,7 @@ namespace NKikimr {
                     break;
                 }
                 default:
-                    Y_FAIL("unexpected event type in emergency queue(%" PRIu64 ")", (ui64)ev->GetTypeRewrite());
+                    Y_ABORT("unexpected event type in emergency queue(%" PRIu64 ")", (ui64)ev->GetTypeRewrite());
             }
         }
     };

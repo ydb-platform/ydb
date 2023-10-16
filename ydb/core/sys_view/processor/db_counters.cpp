@@ -169,7 +169,7 @@ static void ResetLabeledCounters(NKikimrLabeledCounters::TTabletLabeledCounters*
                 counter.SetValue(0);
                 break;
             default:
-                Y_FAIL("bad aggrFunc value");
+                Y_ABORT("bad aggrFunc value");
         }
     }
 }

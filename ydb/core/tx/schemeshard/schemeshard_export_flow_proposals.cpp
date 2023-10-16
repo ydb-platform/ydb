@@ -150,7 +150,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 backupSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTPS);
                 break;
             default:
-                Y_FAIL("Unknown scheme");
+                Y_ABORT("Unknown scheme");
             }
 
             if (const auto region = exportSettings.region()) {

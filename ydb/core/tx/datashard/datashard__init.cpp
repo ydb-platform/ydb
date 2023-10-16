@@ -54,9 +54,9 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         return false;
     } catch (const TSchemeErrorTabletException &ex) {
         Y_UNUSED(ex);
-        Y_FAIL();
+        Y_ABORT();
     } catch (...) {
-        Y_FAIL("there must be no leaked exceptions");
+        Y_ABORT("there must be no leaked exceptions");
     }
 }
 

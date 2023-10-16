@@ -52,15 +52,15 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TReject");
+        Y_ABORT("no AbortPropose for TReject");
     }
 
     bool ProgressState(TOperationContext&) override {
-        Y_FAIL("no ProgressState for TReject");
+        Y_ABORT("no ProgressState for TReject");
     }
 
     void AbortUnsafe(TTxId, TOperationContext&) override {
-        Y_FAIL("no AbortUnsafe for TReject");
+        Y_ABORT("no AbortUnsafe for TReject");
     }
 };
 

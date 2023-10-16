@@ -525,7 +525,7 @@ namespace NKikimr {
                     logPosDelLsn = &LogPos.BarriersDbSlotDelLsn;
                     break;
                 default:
-                    Y_FAIL("Unexpected case");
+                    Y_ABORT("Unexpected case");
             }
             if (lsn > *logPosDelLsn) {
                 // apply

@@ -26,7 +26,7 @@ namespace NRedo {
                     return { std::exchange(On, On + size), size };
             }
 
-            Y_FAIL("Damaged or invalid plainfied db redo log");
+            Y_ABORT("Damaged or invalid plainfied db redo log");
         }
 
     private:
@@ -83,7 +83,7 @@ namespace NRedo {
                     break;
             }
 
-            Y_FAIL("Unexpected rodo log chunk type");
+            Y_ABORT("Unexpected rodo log chunk type");
         }
 
         void HandleLegacy(const TChunk_Legacy* label, const TArrayRef<const char> chunk)
@@ -111,7 +111,7 @@ namespace NRedo {
                     break;
             }
 
-            Y_FAIL("Unexpected rodo log legacy chunk type");
+            Y_ABORT("Unexpected rodo log legacy chunk type");
         }
 
     private:

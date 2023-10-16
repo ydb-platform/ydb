@@ -525,7 +525,7 @@ private:
 inline void TStubTypeVisitor1::OnDataType(TDataTypeId typeId)
 {
     Y_UNUSED(typeId);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TStubTypeVisitor1::OnStruct(
@@ -534,31 +534,31 @@ inline void TStubTypeVisitor1::OnStruct(
         const TType** membersTypes)
 {
     Y_UNUSED(membersCount); Y_UNUSED(membersNames); Y_UNUSED(membersTypes);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TStubTypeVisitor1::OnList(const TType* itemType)
 {
     Y_UNUSED(itemType);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TStubTypeVisitor1::OnOptional(const TType* itemType)
 {
     Y_UNUSED(itemType);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TStubTypeVisitor1::OnTuple(ui32 elementsCount, const TType** elementsTypes)
 {
     Y_UNUSED(elementsCount); Y_UNUSED(elementsTypes);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TStubTypeVisitor1::OnDict(const TType* keyType, const TType* valueType)
 {
     Y_UNUSED(keyType); Y_UNUSED(valueType);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TStubTypeVisitor1::OnCallable(
@@ -570,43 +570,43 @@ inline void TStubTypeVisitor1::OnCallable(
     Y_UNUSED(returnType); Y_UNUSED(argsCount);
     Y_UNUSED(argsTypes); Y_UNUSED(optionalArgsCount);
     Y_UNUSED(payload);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TStubTypeVisitor1::OnVariant(const TType* underlyingType) {
     Y_UNUSED(underlyingType);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 inline void TStubTypeVisitor1::OnStream(const TType* itemType) {
     Y_UNUSED(itemType);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
 inline void TStubTypeVisitor2::OnDecimal(ui8, ui8) {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 #endif
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
 inline void TStubTypeVisitor3::OnResource(TStringRef) {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 #endif
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 inline void TStubTypeVisitor4::OnTagged(const TType*, TStringRef) {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 #endif
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 inline void TStubTypeVisitor5::OnPg(ui32) {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 #endif
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 inline void TStubTypeVisitor6::OnBlock(const TType* itemType, bool isScalar) {
     Y_UNUSED(itemType);
     Y_UNUSED(isScalar);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 #endif
 

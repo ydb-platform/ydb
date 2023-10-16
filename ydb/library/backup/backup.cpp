@@ -135,7 +135,7 @@ void PrintPrimitive(IOutputStream& out, const TValueParser& parser) {
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, Json);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, JsonDocument);
         default:
-            Y_FAIL("Unsupported type");
+            Y_ABORT("Unsupported type");
     }
 }
 #undef CASE_PRINT_PRIMITIVE_STRING_TYPE

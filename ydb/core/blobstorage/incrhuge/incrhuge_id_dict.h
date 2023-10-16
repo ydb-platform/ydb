@@ -101,7 +101,7 @@ namespace NKikimr {
                 try {
                     new(&page->Items[index].Value) TValue(std::move(value));
                 } catch (...) {
-                    Y_FAIL("TValue ctor should not throw");
+                    Y_ABORT("TValue ctor should not throw");
                 }
 
                 return ComposeId(page->PageId, index);
@@ -143,7 +143,7 @@ namespace NKikimr {
                 try {
                     new(&page->Items[index].Value) TValue(std::move(value));
                 } catch (...) {
-                    Y_FAIL("TValue ctor should not throw");
+                    Y_ABORT("TValue ctor should not throw");
                 }
 
                 // adjust usage counter

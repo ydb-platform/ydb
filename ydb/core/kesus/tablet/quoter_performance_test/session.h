@@ -81,7 +81,7 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {

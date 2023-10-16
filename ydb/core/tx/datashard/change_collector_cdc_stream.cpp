@@ -319,7 +319,7 @@ TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowO
     case ERowOp::Erase:
         break;
     default:
-        Y_FAIL("unreachable");
+        Y_ABORT("unreachable");
     }
 
     Y_ABORT_UNLESS(newState.IsFinalized());

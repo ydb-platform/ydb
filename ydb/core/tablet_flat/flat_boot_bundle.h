@@ -75,11 +75,11 @@ namespace NBoot {
             auto *load = step->ConsumeAs<TLoadBlobs>(LeftMetas);
 
             if (Loader) {
-                Y_FAIL("Got an unexpected load blobs result");
+                Y_ABORT("Got an unexpected load blobs result");
             } else if (load->Cookie >= PageCollections.size()) {
-                Y_FAIL("Got blobs load step with an invalid cookie");
+                Y_ABORT("Got blobs load step with an invalid cookie");
             } else if (PageCollections[load->Cookie]) {
-                Y_FAIL("Page collection is already loaded at room %zu", load->Cookie);
+                Y_ABORT("Page collection is already loaded at room %zu", load->Cookie);
             } else {
                 auto *pack = new NPageCollection::TPageCollection(load->LargeGlobId, load->PlainData());
 

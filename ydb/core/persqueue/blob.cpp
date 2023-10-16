@@ -434,7 +434,7 @@ void TBatch::UnpackTo(TVector<TClientBlob> *blobs)
             UnpackToType1(blobs);
             break;
         default:
-        Y_FAIL("uknown type");
+        Y_ABORT("uknown type");
     };
 }
 

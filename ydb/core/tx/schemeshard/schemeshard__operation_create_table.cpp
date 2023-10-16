@@ -697,7 +697,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TCreateTable");
+        Y_ABORT("no AbortPropose for TCreateTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

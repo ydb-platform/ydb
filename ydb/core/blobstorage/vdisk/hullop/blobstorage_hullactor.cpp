@@ -297,7 +297,7 @@ namespace NKikimr {
                     break;
                 }
                 default:
-                    Y_FAIL("Unexpected case");
+                    Y_ABORT("Unexpected case");
             }
 
             RTCtx->LevelIndex->UpdateLevelStat(LevelStat);
@@ -529,7 +529,7 @@ namespace NKikimr {
                 case THullCommitFinished::CommitReplSst:
                     break;
                 default:
-                    Y_FAIL("Unexpected case");
+                    Y_ABORT("Unexpected case");
             }
 
             // notify skeleton about finished compaction

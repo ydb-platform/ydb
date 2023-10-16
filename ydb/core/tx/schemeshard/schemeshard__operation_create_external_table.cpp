@@ -420,7 +420,7 @@ public:
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TCreateExternalTable AbortPropose"
             << ": opId# " << OperationId);
-        Y_FAIL("no AbortPropose for TCreateExternalTable");
+        Y_ABORT("no AbortPropose for TCreateExternalTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

@@ -336,10 +336,10 @@ namespace NOps {
                     return Terminate(EAbort::None);
 
                 case EScan::Sleep:
-                    Y_FAIL("Scan actor got an unexpected EScan::Sleep");
+                    Y_ABORT("Scan actor got an unexpected EScan::Sleep");
             }
 
-            Y_FAIL("Scan actor got an unexpected EScan value");
+            Y_ABORT("Scan actor got an unexpected EScan value");
         }
 
         void Registered(TActorSystem *sys, const TActorId &owner) override

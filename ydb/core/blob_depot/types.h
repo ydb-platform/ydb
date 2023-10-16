@@ -101,7 +101,7 @@ namespace NKikimr::NBlobDepot {
                     return Index << typeBits | static_cast<ui32>(type);
             }
 
-            Y_FAIL();
+            Y_ABORT();
         }
 
         static ui32 IndexFromCookie(ui32 cookie) {

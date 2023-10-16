@@ -82,7 +82,7 @@ class TExpirationCondition: public IEraseRowsCondition {
                 return false;
             }
         default:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
         }
     }
 
@@ -97,7 +97,7 @@ class TExpirationCondition: public IEraseRowsCondition {
                 return false;
             }
         default:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
         }
     }
 

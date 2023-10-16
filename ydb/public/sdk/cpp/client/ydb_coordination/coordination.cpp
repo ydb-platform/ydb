@@ -1401,7 +1401,7 @@ private:
     bool ProcessResponse(const IProcessor::TPtr& processor) {
         switch (Response->response_case()) {
             case TResponse::RESPONSE_NOT_SET: {
-                Y_FAIL("Unexpected empty response received");
+                Y_ABORT("Unexpected empty response received");
             }
             case TResponse::kPing: {
                 const auto& source = Response->ping();
@@ -1701,7 +1701,7 @@ private:
                 break;
         }
 
-        Y_FAIL("Unsupported message received");
+        Y_ABORT("Unsupported message received");
     }
 
     void OnSessionStartTimeout(IQueueClientContextPtr context) {

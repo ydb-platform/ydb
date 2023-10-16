@@ -154,7 +154,7 @@ inline void SetExecutionRelay(IEventBase& ev, std::shared_ptr<TEvBlobStorage::TE
 #undef XX
 
         default:
-            Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);
+            Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);
     }
 }
 
@@ -498,7 +498,7 @@ public:
             XX(Patch)
             XX(Assimilate)
             default:
-                Y_FAIL();
+                Y_ABORT();
 #undef XX
         }
 

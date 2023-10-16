@@ -118,7 +118,7 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
                 out.Finish();
                 Cerr << "Coordinator DB dumped to " << dbDumpFile;
                 Sleep(TDuration::Seconds(10));
-                Y_FAIL("Transaction(s) not found!");
+                Y_ABORT("Transaction(s) not found!");
             }
         }
 

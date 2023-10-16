@@ -31,10 +31,10 @@ void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIn
                 self.IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
                 break;
             case NOlap::TPortionMeta::EProduced::EVICTED:
-                Y_FAIL("Unexpected evicted case");
+                Y_ABORT("Unexpected evicted case");
                 break;
             case NOlap::TPortionMeta::EProduced::INACTIVE:
-                Y_FAIL("Unexpected inactive case");
+                Y_ABORT("Unexpected inactive case");
                 break;
         }
     }

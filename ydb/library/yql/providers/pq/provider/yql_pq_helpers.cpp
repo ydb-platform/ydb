@@ -54,7 +54,7 @@ void FindYdsDbIdsForResolving(
                 TPqWrite write = maybePqWrite.Cast();
                 cluster = write.DataSink().Cluster().StringValue();
             } else {
-                Y_FAIL("Unrecognized pq node");
+                Y_ABORT("Unrecognized pq node");
             }
             YQL_CLOG(INFO, ProviderPq) << "Found cluster: " << cluster;
             const auto& clusterCfgSettings = state->Configuration->ClustersConfigurationSettings;

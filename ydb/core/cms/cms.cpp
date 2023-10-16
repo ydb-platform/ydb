@@ -1345,7 +1345,7 @@ void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev)
         HFuncTraced(TEvCms::TEvGetClusterInfoRequest, Handle);
 
     default:
-        Y_FAIL("Unexpected request type");
+        Y_ABORT("Unexpected request type");
     }
 }
 

@@ -28,7 +28,7 @@ TNodePtr TSqlExpression::Build(const TRule_expr& node) {
                 return TypeNode(node.GetAlt_expr2().GetRule_type_name_composite1());
             }
             case TRule_expr::ALT_NOT_SET:
-                Y_FAIL("You should change implementation according to grammar changes");
+                Y_ABORT("You should change implementation according to grammar changes");
         }
     }
 
@@ -499,7 +499,7 @@ void TSqlExpression::AddJsonVariable(const TRule_json_variable& node, TVector<TN
             break;
         }
         case TRule_json_variable_name::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 
     TNodePtr nameExpr = BuildQuotedAtom(namePos, rawName, nameFlags);
@@ -563,7 +563,7 @@ TNodePtr TSqlExpression::JsonValueCaseHandler(const TRule_json_case_handler& nod
             mode = EJsonValueHandlerMode::DefaultValue;
             return Build(node.GetAlt_json_case_handler3().GetBlock1().GetRule_expr2());
         case TRule_json_case_handler::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 }
 
@@ -745,7 +745,7 @@ EJsonQueryHandler TSqlExpression::JsonQueryHandler(const TRule_json_query_handle
         case TRule_json_query_handler::kAltJsonQueryHandler4:
             return EJsonQueryHandler::EmptyObject;
         case TRule_json_query_handler::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 }
 
@@ -815,7 +815,7 @@ TNodePtr TSqlExpression::JsonApiExpr(const TRule_json_api_expr& node) {
             break;
         }
         case TRule_json_api_expr::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 
     return result;
@@ -870,7 +870,7 @@ TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_u
             }
             break;
         case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
     return TNodePtr{};
 }
@@ -925,7 +925,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             break;
         }
         case TUnaryCasualExprRule::TBlock1::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 
     // bool onlyDots = true;
@@ -1087,7 +1087,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
                     break;
                 }
                 case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::ALT_NOT_SET:
-                    Y_FAIL("You should change implementation according to grammar changes");
+                    Y_ABORT("You should change implementation according to grammar changes");
             }
 
             if (lastExpr) {
@@ -1375,7 +1375,7 @@ TMaybe<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, const
                     break;
                 }
                 case TRule_atom_expr::TAlt7::TBlock3::ALT_NOT_SET:
-                    Y_FAIL("Unsigned number: you should change implementation according to grammar changes");
+                    Y_ABORT("Unsigned number: you should change implementation according to grammar changes");
             }
             result.Expr = BuildCallable(pos, module, name, {});
             break;
@@ -1461,7 +1461,7 @@ TMaybe<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& node, 
                 break;
             }
             case TRule_in_atom_expr::TAlt6::TBlock3::ALT_NOT_SET:
-                Y_FAIL("You should change implementation according to grammar changes");
+                Y_ABORT("You should change implementation according to grammar changes");
             }
             result.Expr = BuildCallable(pos, module, name, {});
             break;
@@ -1598,7 +1598,7 @@ bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_lambda_body& n
                 break;
             }
             case TRule_lambda_stmt::ALT_NOT_SET:
-                Y_FAIL("SampleClause: does not correspond to grammar changes");
+                Y_ABORT("SampleClause: does not correspond to grammar changes");
         }
     }
 
@@ -1645,7 +1645,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
             return expr ? expr->ApplyUnaryOp(Ctx, pos, opName) : expr;
         }
         case TRule_con_subexpr::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
     return nullptr;
 }
@@ -2133,7 +2133,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
                 break;
             }
             case TRule_neq_subexpr_TBlock2_TBlock1::ALT_NOT_SET:
-                Y_FAIL("You should change implementation according to grammar changes");
+                Y_ABORT("You should change implementation according to grammar changes");
         }
 
         partialResult = BuildBinaryOp(Ctx, Ctx.Pos(), opName, partialResult, SubExpr(getNode(*begin), (begin + 1 == end) ? tail : TTrailingQuestions{}));
@@ -2202,7 +2202,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
                 break;
             }
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::ALT_NOT_SET:
-                Y_FAIL("You should change implementation according to grammar changes");
+                Y_ABORT("You should change implementation according to grammar changes");
         }
 
         partialResult = BuildBinaryOp(Ctx, Ctx.Pos(), opName, partialResult, SubExpr(getNode(*begin), (begin + 1 == end) ? tail : TTrailingQuestions{}));

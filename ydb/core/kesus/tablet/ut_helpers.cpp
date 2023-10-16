@@ -298,7 +298,7 @@ void TTestContext::SendAcquireLock(
             count = 1;
             break;
         default:
-            Y_FAIL("Unexpected lock mode %d", mode);
+            Y_ABORT("Unexpected lock mode %d", mode);
     }
     SendFromProxy(proxy, generation, new TEvKesus::TEvAcquireSemaphore("", generation, sessionId, lockName, count, timeoutMillis, data, true), reqId);
 }
@@ -521,7 +521,7 @@ TTestContext::TSimpleLockDescription TTestContext::DescribeLock(const TString& l
                     result.SharedOwners.insert(owner.session_id());
                     break;
                 default:
-                    Y_FAIL("Unexpected count %lu", owner.count());
+                    Y_ABORT("Unexpected count %lu", owner.count());
             }
         }
         UNIT_ASSERT_C(result.ExclusiveOwner != 0 || !result.SharedOwners.empty(), "Lock " << lockName << " is not locked (but exists)");
@@ -536,7 +536,7 @@ TTestContext::TSimpleLockDescription TTestContext::DescribeLock(const TString& l
                     mode = LOCK_MODE_SHARED;
                     break;
                 default:
-                    Y_FAIL("Unexpected count %lu", waiter.count());
+                    Y_ABORT("Unexpected count %lu", waiter.count());
             }
             result.Waiters[waiter.session_id()] = mode;
         }

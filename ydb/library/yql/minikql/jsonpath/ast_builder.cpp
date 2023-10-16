@@ -104,7 +104,7 @@ TString TAstBuilder::BuildIdentifier(const TRule_identifier& node) {
         case TRule_identifier::kAltIdentifier2:
             return node.GetAlt_identifier2().GetRule_keyword1().GetToken1().GetValue();
         case TRule_identifier::ALT_NOT_SET:
-            Y_FAIL("Alternative for 'identifier' rule is not set");
+            Y_ABORT("Alternative for 'identifier' rule is not set");
     }
 }
 
@@ -125,7 +125,7 @@ TAstNodePtr TAstBuilder::BuildMemberAccessor(const TRule_member_accessor& node, 
             break;
         }
         case TRule_member_accessor_TBlock2::ALT_NOT_SET:
-            Y_FAIL("Alternative for 'member_accessor' rule is not set");
+            Y_ABORT("Alternative for 'member_accessor' rule is not set");
     }
 
     return new TMemberAccessNode(GetPos(node.GetToken1()), name, input);
@@ -178,7 +178,7 @@ TAstNodePtr TAstBuilder::BuildAccessorOp(const TRule_accessor_op& node, TAstNode
         case TRule_accessor_op::kAltAccessorOp6:
             return BuildMethod(node.GetAlt_accessor_op6().GetRule_method1(), input);
         case TRule_accessor_op::ALT_NOT_SET:
-            Y_FAIL("Alternative for 'accessor_op' rule is not set");
+            Y_ABORT("Alternative for 'accessor_op' rule is not set");
     }
 }
 
@@ -189,7 +189,7 @@ TAstNodePtr TAstBuilder::BuildPrimary(const TRule_primary& node) {
             const auto& numberString = token.GetValue();
             const double parsedValue = ParseDouble(numberString);
             if (Y_UNLIKELY(std::isnan(parsedValue))) {
-                Y_FAIL("Invalid number was allowed by JsonPath grammar");
+                Y_ABORT("Invalid number was allowed by JsonPath grammar");
             }
             if (Y_UNLIKELY(std::isinf(parsedValue))) {
                 Error(GetPos(token), "Number literal is infinity");
@@ -245,7 +245,7 @@ TAstNodePtr TAstBuilder::BuildPrimary(const TRule_primary& node) {
             return new TFilterObjectNode(GetPos(token));
         }
         case TRule_primary::ALT_NOT_SET:
-            Y_FAIL("Alternative for 'primary' rule is not set");
+            Y_ABORT("Alternative for 'primary' rule is not set");
     }
 }
 
@@ -322,7 +322,7 @@ TAstNodePtr TAstBuilder::BuildPredicateExpr(const TRule_predicate_expr& node) {
                     return BuildLikeRegexExpr(block.GetAlt2().GetRule_like_regex_expr1(), input);
                 }
                 case TRule_predicate_expr_TAlt1_TBlock1_TBlock2::ALT_NOT_SET:
-                    Y_FAIL("Alternative for inner block of 'predicate_expr' rule is not set");
+                    Y_ABORT("Alternative for inner block of 'predicate_expr' rule is not set");
             }
             Y_UNREACHABLE();
         }
@@ -332,7 +332,7 @@ TAstNodePtr TAstBuilder::BuildPredicateExpr(const TRule_predicate_expr& node) {
             return new TExistsPredicateNode(GetPos(predicate.GetToken1()), input);
         }
         case TRule_predicate_expr::ALT_NOT_SET:
-            Y_FAIL("Alternative for 'predicate' rule is not set");
+            Y_ABORT("Alternative for 'predicate' rule is not set");
     }
     Y_UNREACHABLE();
 }

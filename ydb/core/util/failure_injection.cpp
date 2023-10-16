@@ -204,7 +204,7 @@ namespace NKikimr {
 
             void TerminateProcess() {
                 if (EnableFailureInjectionTermination) {
-                    Y_FAIL("Terminating itself from TFailureInjectionActor");
+                    Y_ABORT("Terminating itself from TFailureInjectionActor");
                 }
             }
 

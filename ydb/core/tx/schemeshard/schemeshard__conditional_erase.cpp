@@ -264,7 +264,7 @@ private:
             return std::make_pair(indexImplPathId, Self->Tables.at(indexImplPathId));
         }
 
-        Y_FAIL("Unreachable");
+        Y_ABORT("Unreachable");
     }
 
     static TVector<std::pair<ui32, ui32>> MakeColumnIds(TTableInfo::TPtr mainTable, TTableIndexInfo::TPtr index, TTableInfo::TPtr indexImplTable) {

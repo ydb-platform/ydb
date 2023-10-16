@@ -81,7 +81,7 @@ namespace NKikimr {
                 case EHullDbType::LogoBlobs:    return LogoBlobs->GetSatisfactionRank(s);
                 case EHullDbType::Blocks:       return Blocks->GetSatisfactionRank(s);
                 case EHullDbType::Barriers:     return Barriers->GetSatisfactionRank(s);
-                default:                        Y_FAIL("Unexpected t=%d", int(t));
+                default:                        Y_ABORT("Unexpected t=%d", int(t));
             }
         }
 

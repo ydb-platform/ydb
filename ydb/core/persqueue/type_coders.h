@@ -61,7 +61,7 @@ template <>
 class TCoderMask<false> {
 public:
     inline size_t MaxSize() const { return 0; }
-    inline void AddNull() { Y_FAIL("Null values are not supported."); }
+    inline void AddNull() { Y_ABORT("Null values are not supported."); }
     inline void AddNonNull() { }
     inline void Seal(TBuffer&) { }
 };

@@ -256,7 +256,7 @@ struct TPDiskFailureInjectionTest {
 
                 int fds[2];
                 if (pipe(fds) != 0) {
-                    Y_FAIL("pipe failed");
+                    Y_ABORT("pipe failed");
                 }
 
                 pid_t pid = fork();
@@ -319,7 +319,7 @@ struct TPDiskFailureInjectionTest {
                         ssize_t len = read(fds[0], buffer, sizeof(buffer));
                         if (len == -1) {
                             if (errno != EINTR) {
-                                Y_FAIL("unexpected error: %s", strerror(errno));
+                                Y_ABORT("unexpected error: %s", strerror(errno));
                             }
                             continue;
                         } else if (!len) {
@@ -335,13 +335,13 @@ struct TPDiskFailureInjectionTest {
                     // wait for child to terminate
                     int status = 0;
                     if (waitpid(pid, &status, 0) != pid) {
-                        Y_FAIL("waitpid failed with error: %s", strerror(errno));
+                        Y_ABORT("waitpid failed with error: %s", strerror(errno));
                     }
 
                     if (WIFSIGNALED(status)) {
                         int sig = WTERMSIG(status);
                         if (sig != SIGKILL) {
-                            Y_FAIL("unexpected termination signal: %d pid# %d", sig, (int)pid);
+                            Y_ABORT("unexpected termination signal: %d pid# %d", sig, (int)pid);
                         }
                     }
                 } else {

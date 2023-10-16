@@ -264,7 +264,7 @@ namespace NTest {
             if (const auto *written = eggs.Written.Get()) {
                 mass.Model->Check({ &written->Rows, 1 });
             } else {
-                Y_FAIL("Got part eggs without TWriteStats result");
+                Y_ABORT("Got part eggs without TWriteStats result");
             }
 
             return eggs;

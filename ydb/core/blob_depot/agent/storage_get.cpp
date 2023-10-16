@@ -183,7 +183,7 @@ namespace NKikimr::NBlobDepot {
                         CheckAndFinish();
                     }
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
             }
 

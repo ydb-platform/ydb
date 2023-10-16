@@ -218,7 +218,7 @@ namespace NKikimr {
                 const NMatrix::TVectorType moveVec = movePlan & localVec;
                 if (!moveVec.Empty()) {
                     if (memRec->GetType() == TBlobType::HugeBlob) {
-                        Y_FAIL("Implement"); // FIXME
+                        Y_ABORT("Implement"); // FIXME
                     } else if (memRec->GetType() == TBlobType::DiskBlob) {
                         const auto& merger = dataMerger->GetDiskBlobMerger();
                         const TDiskBlob& blob = merger.GetDiskBlob();
@@ -240,7 +240,7 @@ namespace NKikimr {
                             }
                         }
                     } else
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                 }
 
                 // handle delete (avoid writing some parts)
@@ -252,9 +252,9 @@ namespace NKikimr {
                 if (!delVec.Empty()) {
                     // yes, we ready to delete some parts
                     if (memRec->GetType() == TBlobType::HugeBlob) {
-                        Y_FAIL("Implement"); // FIXME
+                        Y_ABORT("Implement"); // FIXME
                     } else if (memRec->GetType() == TBlobType::ManyHugeBlobs) {
-                        Y_FAIL("Implement"); // FIXME
+                        Y_ABORT("Implement"); // FIXME
                     } else if (memRec->GetType() == TBlobType::DiskBlob) {
                         TIngress ingress = memRec->GetIngress(); // ingress we are going to change
                         const auto& merger = dataMerger->GetDiskBlobMerger();
@@ -290,7 +290,7 @@ namespace NKikimr {
                         TIngress syncLogIngress = ingress.CopyWithoutLocal(Top->GType);
                         ctx.Send(ProxyID, new TEvHandoffSyncLogDel(key.LogoBlobID(), syncLogIngress));
                     } else
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                 }
             }
         }

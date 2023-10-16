@@ -41,7 +41,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
             case NKikimrSchemeOp::TAlterLogin::kRemoveGroup:
                 return "REMOVE GROUP";
             default:
-                Y_FAIL("switch should cover all operation types");
+                Y_ABORT("switch should cover all operation types");
         }
     case NKikimrSchemeOp::EOperationType::ESchemeOp_DEPRECATED_35:
         return "ESchemeOp_DEPRECATED_35";
@@ -221,7 +221,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
         return "ALTER TABLE ADD COLUMN DEFAULT";
     }
-    Y_FAIL("switch should cover all operation types");
+    Y_ABORT("switch should cover all operation types");
 }
 
 TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) {
@@ -598,7 +598,7 @@ TChangeLogin ExtractLoginChange(const NKikimrSchemeOp::TModifyScheme& tx) {
                 result.LoginGroup = tx.GetAlterLogin().GetRemoveGroup().GetGroup();
                 break;
             default:
-                Y_FAIL("switch should cover all operation types");
+                Y_ABORT("switch should cover all operation types");
         }
         return result;
     }

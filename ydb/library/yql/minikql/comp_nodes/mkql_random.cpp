@@ -103,7 +103,7 @@ public:
         }
         }
 
-        Y_FAIL("Unexpected");
+        Y_ABORT("Unexpected");
     }
 
 private:

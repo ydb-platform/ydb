@@ -55,7 +55,7 @@ namespace NKikimr {
                 case EQueueClientType::VPatch:   return "VPatch";
             }
 
-            Y_FAIL("unexpected EQueueClientType");
+            Y_ABORT("unexpected EQueueClientType");
         }
 
         // backpressure queue client identifier; ui32 means NodeId of DS Proxy actor, TVDiskID -- replication job identifier.
@@ -103,7 +103,7 @@ namespace NKikimr {
                         break;
 
                     default:
-                        Y_FAIL("unexpected case");
+                        Y_ABORT("unexpected case");
                 }
             }
 

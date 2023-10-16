@@ -122,9 +122,9 @@ namespace NRedo {
         TWriter& EvUpdate(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, ERedo tag, ui32 tailSize, TCallback&& tailCallback)
         {
             if (TCellOp::HaveNoOps(rop) && ops) {
-                Y_FAIL("Given ERowOp cannot have update operations");
+                Y_ABORT("Given ERowOp cannot have update operations");
             } else if (key.size() + ops.size() > Max<ui16>()) {
-                Y_FAIL("Too large key or too many operations in one ops");
+                Y_ABORT("Too large key or too many operations in one ops");
             }
 
             const ui32 size = sizeof(TEvUpdate) + tailSize + CalcSize(key, ops);

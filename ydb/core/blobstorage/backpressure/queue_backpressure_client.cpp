@@ -239,7 +239,7 @@ private:
                     break;
 
                 default:
-                    Y_FAIL("unexpected message type 0x%08" PRIx32, type);
+                    Y_ABORT("unexpected message type 0x%08" PRIx32, type);
             }
 
             if (ev->GetChannel() != expected) {
@@ -377,7 +377,7 @@ private:
                             break;
 
                         default:
-                            Y_FAIL();
+                            Y_ABORT();
                     }
 
                     Queue.Unwind(msgId, sequenceId, expectedMsgId, expectedSequenceId);
@@ -902,7 +902,7 @@ private:
             DEFINE_EVENTS(XX)
 #undef XX
             default:
-                Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);
+                Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);
         }
 #endif
         switch (type) {
@@ -955,7 +955,7 @@ private:
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
 
             default:
-                Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);
+                Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);
         }
     }
 };

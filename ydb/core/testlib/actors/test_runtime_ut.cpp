@@ -485,7 +485,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
                     HFunc(TEvents::TEvPing, Handle);
                     HFunc(TEvents::TEvPong, Handle);
                     default:
-                        Y_FAIL("unexpected event");
+                        Y_ABORT("unexpected event");
                 }
             }
 
@@ -564,7 +564,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
                 switch (ev->GetTypeRewrite()) {
                     HFunc(TEvents::TEvWakeup, Handle);
                     default:
-                        Y_FAIL("unexpected event");
+                        Y_ABORT("unexpected event");
                 }
             }
         };

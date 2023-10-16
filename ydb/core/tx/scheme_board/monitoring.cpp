@@ -1061,7 +1061,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             return NKikimr::MakeStateStorageProxyID(domain.second->DefaultSchemeBoardGroup);
         }
 
-        Y_FAIL("unreachable");
+        Y_ABORT("unreachable");
     }
 
     template <typename TDerived, typename TEvResponse>
@@ -1157,7 +1157,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             case 1:
                 return new TEvStateStorage::TEvResolveSchemeBoard(std::get<TPathId>(Path));
             default:
-                Y_FAIL("unreachable");
+                Y_ABORT("unreachable");
             }
         }
 
@@ -1228,7 +1228,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             case 1:
                 return new TSchemeBoardMonEvents::TEvDescribeRequest(std::get<TPathId>(Path));
             default:
-                Y_FAIL("unreachable");
+                Y_ABORT("unreachable");
             }
         }
 

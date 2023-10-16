@@ -226,7 +226,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         } else if (status == NKikimrProto::ERROR) {
             ReplicaSelection->MergeReply(TStateStorageInfo::TSelection::StatusNoInfo, &ReplyStatus, cookie, false);
         } else {
-            Y_FAIL();
+            Y_ABORT();
         }
 
         for (ui32 i = 0, end = record.FollowerSize(); i < end; ++i) {
@@ -797,7 +797,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
             break;
 
         default:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
 
         ResolveReplicas(ev, fakeTabletId, SchemeBoardInfo);

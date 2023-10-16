@@ -14,7 +14,7 @@ namespace NKikimr::NBlobDepot {
 
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr /*context*/, TResponse response) override {
                 (void)response;
-                Y_FAIL();
+                Y_ABORT();
             }
         };
 

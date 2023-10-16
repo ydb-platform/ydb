@@ -339,7 +339,7 @@ THolder<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
                     tableId, Backend, Broker, Time, TaskNameSuffix);
 
         default:
-            Y_FAIL("Unsupported strategy %s", NKikimrSchemeOp::ECompactionStrategy_Name(strategy).c_str());
+            Y_ABORT("Unsupported strategy %s", NKikimrSchemeOp::ECompactionStrategy_Name(strategy).c_str());
     }
 }
 
@@ -554,7 +554,7 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
         break;
 
     default:
-        Y_FAIL("Invalid inMem.State");
+        Y_ABORT("Invalid inMem.State");
     }
 
     ui64 forcedCompactionId = 0;
@@ -618,7 +618,7 @@ TCompactionLogic::HandleCompaction(
             inMem.CompactionTask.CompactionId = 0;
             break;
         default:
-            Y_FAIL("must not happens, state=%d", (int)inMem.State);
+            Y_ABORT("must not happens, state=%d", (int)inMem.State);
         }
 
         if (tableInfo->ForcedCompactionState == EForcedCompactionState::CompactingMem) {

@@ -70,7 +70,7 @@ namespace NKikimr {
                 EVENT_TYPE(TEvVGetBarrier)
 #undef EVENT_TYPE
             }
-            Y_FAIL("unsupported event type");
+            Y_ABORT("unsupported event type");
         }
 
         struct TUpdateInQueueTime {
@@ -400,7 +400,7 @@ namespace NKikimr {
                     case EInFlightBytes: return CalculateSignalLight(InFlightBytes, Max<ui64>(), yellow);
                     case EDelayedCount:  return CalculateSignalLight(DelayedCount, 0, red);
                     case EDelayedBytes:  return CalculateSignalLight(DelayedBytes, 0, red);
-                    default: Y_FAIL("Unexpected param");
+                    default: Y_ABORT("Unexpected param");
                 }
             }
 
@@ -856,7 +856,7 @@ namespace NKikimr {
                         Become(&TThis::StateFunc);
                         SendNotifications(ctx);
                         break;
-                    default: Y_FAIL("Unexpected case");
+                    default: Y_ABORT("Unexpected case");
                 }
             }
         }
@@ -1329,7 +1329,7 @@ namespace NKikimr {
                         HandleRequestWithQoS(ctx, ev, "TEvVPut", cost, *IntQueueHugePutsBackground);
                         break;
                     default:
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                 }
             }
         }
@@ -1356,7 +1356,7 @@ namespace NKikimr {
                         HandleRequestWithQoS(ctx, ev, "TEvVMultiPut", cost, *IntQueueHugePutsBackground);
                         break;
                     default:
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                 }
             }
         }
@@ -1381,7 +1381,7 @@ namespace NKikimr {
                     intQueueId = NKikimrBlobStorage::EVDiskInternalQueueId::IntLowRead;
                     break;
                 default:
-                    Y_FAIL("Unexpected case");
+                    Y_ABORT("Unexpected case");
             }
             TIntQueueClass &queue = GetIntQueue(intQueueId);
             HandleRequestWithQoS(ctx, ev, "TEvVGet", cost, queue);
@@ -1678,7 +1678,7 @@ namespace NKikimr {
                 case NKikimrBlobStorage::EVDiskQueueId::GetLowRead:
                     extQueue = &ExtQueueLowGets;
                     break;
-                default: Y_FAIL("Unexpected case extQueueId# %" PRIu32, static_cast<ui32>(extQueueId));
+                default: Y_ABORT("Unexpected case extQueueId# %" PRIu32, static_cast<ui32>(extQueueId));
             }
             return *extQueue;
         }
@@ -1707,7 +1707,7 @@ namespace NKikimr {
                 case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutHugeBackground:
                     intQueue = IntQueueHugePutsBackground.get();
                     break;
-                default: Y_FAIL("Unexpected case");
+                default: Y_ABORT("Unexpected case");
             }
             return *intQueue;
         }

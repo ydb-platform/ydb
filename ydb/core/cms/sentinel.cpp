@@ -361,7 +361,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
             case RetryCookie::CMS:
                 return RequestCMSClusterState();
             default:
-                Y_FAIL("Unexpected case");
+                Y_ABORT("Unexpected case");
         }
     }
 

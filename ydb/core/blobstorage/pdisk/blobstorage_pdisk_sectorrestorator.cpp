@@ -167,7 +167,7 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
                                 << " ReplicationFactor# " << (ui32)ReplicationFactor
                                 << " sectorOffset# " << (ui64)sectorOffset);
                     }
-                    // Y_FAIL("RESTORE");
+                    // Y_ABORT("RESTORE");
                     memcpy(badSector, goodSector, size_t(Format.SectorSize));
                     GoodSectorFlags |= (1 << i);
                     ++GoodSectorCount;

@@ -98,7 +98,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 }
 
                 // For planned transactions errors are not expected
-                Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
+                Y_ABORT("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
         }
     }
 

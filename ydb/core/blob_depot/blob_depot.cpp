@@ -40,7 +40,7 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
 
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
     }
 
@@ -89,7 +89,7 @@ namespace NKikimr::NBlobDepot {
                 if (!ReadyForAgentQueries()) { // we can't handle agent queries now -- enqueue this message
                     info.PostponeQ.emplace_back(ev.Release());
                 } else if (!info.PostponeQ.empty()) {
-                    Y_FAIL("PostponeQ can't be nonempty while agent is running");
+                    Y_ABORT("PostponeQ can't be nonempty while agent is running");
                 } else if (info.InFlightDeliveries++) {
                     TActivationContext::Send(ev.Release());
                 } else { // handle event as delivery one
@@ -130,7 +130,7 @@ namespace NKikimr::NBlobDepot {
 
                 default:
                     if (!HandleDefaultEvents(ev, SelfId())) {
-                        Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);
+                        Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);
                     }
                     break;
             }

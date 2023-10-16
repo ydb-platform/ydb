@@ -25,7 +25,7 @@ namespace NFwd {
                     auto it = std::find_if(Pages.begin(), Pages.end(), pred);
 
                     if (it == Pages.end()) {
-                        Y_FAIL("Failed to locate page within forward trace");
+                        Y_ABORT("Failed to locate page within forward trace");
                     }
 
                     return &it->Data;
@@ -98,9 +98,9 @@ namespace NFwd {
                 }
 
                 if (it == Pages.end() || it->PageId != one.PageId) {
-                    Y_FAIL("Got page that hasn't been requested for load");
+                    Y_ABORT("Got page that hasn't been requested for load");
                 } if (one.Data.size() > OnFetch) {
-                    Y_FAIL("Forward cache ahead counters is out of sync");
+                    Y_ABORT("Forward cache ahead counters is out of sync");
                 }
 
                 Stat.Saved += one.Data.size();
@@ -141,9 +141,9 @@ namespace NFwd {
                 auto &page = Pages.at(Offset);
 
                 if (!Pages || page.PageId != drop.PageId) {
-                    Y_FAIL("Dropping page that is not exist in cache");
+                    Y_ABORT("Dropping page that is not exist in cache");
                 } else if (page.Size == 0) {
-                    Y_FAIL("Dropping page that has not been touched");
+                    Y_ABORT("Dropping page that has not been touched");
                 } else if (page.Usage == EUsage::Keep) {
                     OnHold -= Trace.Emplace(page);
                 } else if (auto size = page.Release().size()) {

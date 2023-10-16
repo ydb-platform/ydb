@@ -388,7 +388,7 @@ void TMock::TProxyActor::DropSessionEvent(std::unique_ptr<IEventHandle> ev) {
             break;
 
         default:
-            Y_FAIL();
+            Y_ABORT();
     }
 }
 

@@ -720,7 +720,7 @@ void TConfigsManager::Handle(TEvConsole::TEvResolveAllConfigRequest::TPtr &ev, c
             case NYamlConfig::TLabel::EType::Empty:
                 return Ydb::DynamicConfig::YamlLabelExt::EMPTY;
             default:
-                Y_FAIL("unexpected enum value");
+                Y_ABORT("unexpected enum value");
             }
         };
 

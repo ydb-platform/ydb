@@ -489,7 +489,7 @@ namespace NKikimr {
                         return false; // we can't proceed right now
 
                     case TReplSstStreamWriter::EState::COLLECT:
-                        Y_FAIL(); // should have exited a few lines above
+                        Y_ABORT(); // should have exited a few lines above
 
                     case TReplSstStreamWriter::EState::COMMIT_PENDING: {
                         // acquire commit message from writer and send to the level index actor, writer state will
@@ -505,10 +505,10 @@ namespace NKikimr {
                         return false; // just waiting for something to happen
 
                     case TReplSstStreamWriter::EState::ERROR:
-                        Y_FAIL("replication failed"); // FIXME: do something sane
+                        Y_ABORT("replication failed"); // FIXME: do something sane
 
                     default:
-                        Y_FAIL("unexpected state");
+                        Y_ABORT("unexpected state");
                 }
             }
 
@@ -615,7 +615,7 @@ namespace NKikimr {
                         case EProcessQueueAction::Exit:
                             return false;
                         default:
-                            Y_FAIL("invalid EProcessQueueAction");
+                            Y_ABORT("invalid EProcessQueueAction");
                     }
                 }
             }
@@ -659,7 +659,7 @@ namespace NKikimr {
                 return false;
             }
 
-            Y_FAIL("incorrect merger state State# %" PRIu32, ui32(Writer.GetState()));
+            Y_ABORT("incorrect merger state State# %" PRIu32, ui32(Writer.GetState()));
         }
 
         void RunPhantomChecks() {
@@ -757,7 +757,7 @@ namespace NKikimr {
                     case TReplSstStreamWriter::EState::COLLECT:
                         break;
                     default:
-                        Y_FAIL("unexpected State# %" PRIu32, static_cast<ui32>(Writer.GetState()));
+                        Y_ABORT("unexpected State# %" PRIu32, static_cast<ui32>(Writer.GetState()));
                 }
 
                 if (Writer.AddRecoveredBlob(front)) {

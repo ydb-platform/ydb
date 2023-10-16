@@ -1811,7 +1811,7 @@ public:
                         break;
                         }
                     default:
-                        Y_FAIL("unknown type");
+                        Y_ABORT("unknown type");
                 }
                 labeledCounter.SetAggregateFunc(NKikimr::TLabeledCounterOptions::EAggregateFunc(g.second->GetAggrFuncs()[i]));
                 labeledCounter.SetType(NKikimr::TLabeledCounterOptions::ECounterType(g.second->GetTypes()[i]));

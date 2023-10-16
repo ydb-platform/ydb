@@ -23,7 +23,7 @@ namespace NKikimr {
             case EWriterDataType::Fresh:       return data ? vctx->CompDataFresh : vctx->CompIndexFresh;
             case EWriterDataType::Comp:        return data ? vctx->CompData : vctx->CompIndex;
             case EWriterDataType::Replication: return vctx->Replication;
-            default:                           Y_FAIL("incorrect EWriterDataType provided");
+            default:                           Y_ABORT("incorrect EWriterDataType provided");
         }
     }
 
@@ -32,7 +32,7 @@ namespace NKikimr {
             case EWriterDataType::Fresh:        return NPriWrite::HullFresh;
             case EWriterDataType::Comp:         return NPriWrite::HullComp;
             case EWriterDataType::Replication:  return NPriWrite::HullComp; // FIXME: add HullRepl priority class
-            default:                            Y_FAIL("incorrect EWriterDataType provided");
+            default:                            Y_ABORT("incorrect EWriterDataType provided");
         }
     }
 
@@ -547,7 +547,7 @@ namespace NKikimr {
                     ItemsWithHugeData++;
                     break;
                 }
-                default: Y_FAIL("Impossible case");
+                default: Y_ABORT("Impossible case");
             }
 
             ++Items;
@@ -872,7 +872,7 @@ namespace NKikimr {
                     }
                     break;
 
-                default: Y_FAIL("Impossible case");
+                default: Y_ABORT("Impossible case");
             }
 
             IndexBuilder.Push(key, memRecToAdd, dataMerger);

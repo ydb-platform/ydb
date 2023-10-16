@@ -303,7 +303,7 @@ public:
                 ctx.Send(LocalID, event.Release());
             }
         } else {
-            Y_FAIL("unexpected tenant status");
+            Y_ABORT("unexpected tenant status");
         }
     }
 
@@ -732,7 +732,7 @@ public:
             IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -871,7 +871,7 @@ public:
             HFunc(NMon::TEvHttpInfo, Handle);
             HFunc(TEvLocal::TEvLocalDrainNode, Handle);
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }

@@ -489,7 +489,7 @@ namespace NKikimr::NColumnShard {
                             return true;
                         }
                     }
-                    Y_FAIL("Unknown type combination");
+                    Y_ABORT("Unknown type combination");
                     return false;
                 });
                 return TRowBuilder(Index + 1, Owner);

@@ -137,7 +137,7 @@ class TFieldGenerator: public TThrRefBase {
             break;
 
         default:
-            Y_FAIL("Unknown limit type");
+            Y_ABORT("Unknown limit type");
         }
 
         printer->Print(vars, "return false;\n");

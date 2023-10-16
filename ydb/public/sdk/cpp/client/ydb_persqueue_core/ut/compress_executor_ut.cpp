@@ -46,11 +46,11 @@ Y_UNIT_TEST_SUITE(CompressExecutor) {
         if (waitEventFuture.HasValue()) {
             auto event = *writer->GetEvent(true);
             if(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event)) {
-                Y_FAIL("ANother ready to accept!");
+                Y_ABORT("ANother ready to accept!");
             }
             if(std::holds_alternative<TSessionClosedEvent>(event)) {
                 Cerr << "Session closed: " << std::get<TSessionClosedEvent>(event).DebugString() << "\n";
-                Y_FAIL("");
+                Y_ABORT("");
             }
         }
         UNIT_ASSERT(!waitEventFuture.HasValue());

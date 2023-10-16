@@ -368,7 +368,7 @@ namespace NTable {
             } else if (op == ELargeObj::Inline) {
                 row.Set(pos, op, up.Value);
             } else if (op != ELargeObj::Extern) {
-                Y_FAIL("Got an unknown ELargeObj reference type");
+                Y_ABORT("Got an unknown ELargeObj reference type");
             } else {
                 const auto ref = up.Value.AsValue<ui64>();
 

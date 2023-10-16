@@ -98,7 +98,7 @@ NKikimrMiniKQL::TValue GetOptional(const NKikimrMiniKQL::TValue& listItem, ui32 
 template<typename T>
 T ExtractValue(const NKikimrMiniKQL::TValue& listItem, ui32 pos) {
     Y_UNUSED(listItem, pos);
-    Y_FAIL("unimplemented");
+    Y_ABORT("unimplemented");
 }
 
 template<>

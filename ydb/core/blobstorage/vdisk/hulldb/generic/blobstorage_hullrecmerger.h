@@ -165,7 +165,7 @@ namespace NKikimr {
                     break;
                 }
                 default:
-                    Y_FAIL("Impossible case");
+                    Y_ABORT("Impossible case");
             }
             VerifyConsistency(memRec, outbound);
         }
@@ -410,7 +410,7 @@ namespace NKikimr {
                         // deduplicate huge blob
                         LastWriteWinsMerger.Add(extr.SwearOne(), v, circaLsn);
                     } else {
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                     }
 
                     break;

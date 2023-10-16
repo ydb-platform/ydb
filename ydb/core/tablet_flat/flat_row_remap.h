@@ -55,7 +55,7 @@ namespace NTable {
                     KeyPins_.push_back({ on, info->Key });
 
                 if (!Tag2Pos.insert(std::make_pair(tags[on], on)).second)
-                    Y_FAIL("Duplicated tag found in remap, isn't allowed");
+                    Y_ABORT("Duplicated tag found in remap, isn't allowed");
             }
         }
 

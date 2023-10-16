@@ -18,7 +18,7 @@ TNodesLimitsCounterBase::ENodeState INodesChecker::NodeState(NKikimrCms::EState 
         case NKikimrCms::RESTART:
             return NODE_STATE_RESTART;
         default:
-            Y_FAIL("Unknown EState");
+            Y_ABORT("Unknown EState");
     }
 }
 
@@ -184,7 +184,7 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
             }
             break;
         default:
-            Y_FAIL("Unknown availability mode");
+            Y_ABORT("Unknown availability mode");
     }
 
     reason = TStringBuilder() << "Cannot lock node '" << nodeId << "'"

@@ -49,7 +49,7 @@ namespace NBoot {
         {
             if (Value > Max<decltype(Value)>() - inc) {
 
-                Y_FAIL("TLeft counter is overflowed");
+                Y_ABORT("TLeft counter is overflowed");
             }
 
             Value += inc;

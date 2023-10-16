@@ -48,7 +48,7 @@ public:
                 return false;
 
             case EExecutionStatus::Reschedule:
-                Y_FAIL("Unexpected Reschedule status while handling a direct operation");
+                Y_ABORT("Unexpected Reschedule status while handling a direct operation");
 
             case EExecutionStatus::Executed:
             case EExecutionStatus::Continue:

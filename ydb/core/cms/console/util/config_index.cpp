@@ -30,7 +30,7 @@ TUsageScope::TUsageScope(const NKikimrConsole::TUsageScope &scope,
     case NKikimrConsole::TUsageScope::FILTER_NOT_SET:
         break;
     default:
-        Y_FAIL("unexpected usage scope filter");
+        Y_ABORT("unexpected usage scope filter");
     }
 }
 
@@ -257,7 +257,7 @@ void TScopedConfig::MergeItem(TConfigItem::TPtr item,
     else if (item->MergeStrategy == NKikimrConsole::TConfigItem::MERGE_OVERWRITE_REPEATED)
         MergeMessageOverwriteRepeated(config, item->Config);
     else
-        Y_FAIL("unexpected merge strategy %d", static_cast<int>(item->MergeStrategy));
+        Y_ABORT("unexpected merge strategy %d", static_cast<int>(item->MergeStrategy));
 
     if (addVersion) {
         auto vItem = config.MutableVersion()->AddItems();
@@ -363,7 +363,7 @@ void TConfigIndex::CollectItemsByScope(const NKikimrConsole::TUsageScope &scope,
             CollectItemsByTenantAndNodeType("", "", kinds, candidates);
         break;
     default:
-        Y_FAIL("unsupported filter case");
+        Y_ABORT("unsupported filter case");
     }
 
     for (auto &item : candidates)

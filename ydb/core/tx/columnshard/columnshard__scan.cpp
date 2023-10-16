@@ -122,7 +122,7 @@ private:
             hFunc(TEvents::TEvWakeup, HandleScan);
             hFunc(NConveyor::TEvExecution::TEvTaskProcessedResult, HandleScan);
             default:
-                Y_FAIL("TColumnShardScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                Y_ABORT("TColumnShardScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
 

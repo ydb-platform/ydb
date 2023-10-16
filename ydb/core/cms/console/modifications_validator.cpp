@@ -268,7 +268,7 @@ TModificationsValidator::ComputeAffectedConfigs(const TDynBitMap &kinds,
         }
     } else {
         if (ValidationLevel == NKikimrConsole::VALIDATE_DOMAIN) {
-            Y_FAIL("Trying to validate unmodified kinds");
+            Y_ABORT("Trying to validate unmodified kinds");
         } else {
             // If tenant was modified but it has no more config items in
             // the resulting config index then its config is equal to

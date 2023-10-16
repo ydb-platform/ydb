@@ -363,7 +363,7 @@ namespace NMem {
                 } else if (TCellOp::HaveNoPayload(ops[it].NormalizedCellOp())) {
                     /* Payloadless ECellOp types may have zero type value */
                 } else if (info->TypeInfo.GetTypeId() != ops[it].Value.Type()) {
-                    Y_FAIL("Got an unexpected column type %" PRIu16 " in cell update for tag %" PRIu32 " (expected %" PRIu16 ")",
+                    Y_ABORT("Got an unexpected column type %" PRIu16 " in cell update for tag %" PRIu32 " (expected %" PRIu16 ")",
                         ops[it].Value.Type(), ops[it].Tag, info->TypeInfo.GetTypeId());
                 }
 
@@ -380,7 +380,7 @@ namespace NMem {
                     cell = TCell::Make<ui64>(ref);
 
                 } else if (ops[it].Op != ELargeObj::Inline) {
-                    Y_FAIL("Got an unexpected ELargeObj reference in update ops");
+                    Y_ABORT("Got an unexpected ELargeObj reference in update ops");
                 } else if (!cell.IsInline()) {
                     cell = Clone(cell.Data(), cell.Size());
                 }

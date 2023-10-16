@@ -827,7 +827,7 @@ public:
             hFunc(TEvBlobStorage::TEvPutResult, Handle);
             IgnoreFunc(TEvBlobStorage::TEvVPatchResult);
         default:
-            Y_FAIL("Received unknown event");
+            Y_ABORT("Received unknown event");
         };
     }
 
@@ -839,7 +839,7 @@ public:
             hFunc(TEvBlobStorage::TEvVMovedPatchResult, Handle);
             IgnoreFunc(TEvBlobStorage::TEvVPatchResult);
         default:
-            Y_FAIL("Received unknown event");
+            Y_ABORT("Received unknown event");
         };
     }
 
@@ -851,7 +851,7 @@ public:
             hFunc(TEvBlobStorage::TEvVPatchFoundParts, Handle);
             hFunc(TEvBlobStorage::TEvVPatchResult, Handle);
         default:
-            Y_FAIL("Received unknown event");
+            Y_ABORT("Received unknown event");
         };
     }
 };

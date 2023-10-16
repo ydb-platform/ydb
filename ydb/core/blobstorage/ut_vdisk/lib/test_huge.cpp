@@ -65,11 +65,11 @@ public:
                 return false;
             }
             case 1:
-                Y_FAIL();
+                Y_ABORT();
             case 2:
                 return true;
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
     }
 

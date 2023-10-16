@@ -286,7 +286,7 @@ namespace NKikimr {
                     break;
 
                 default:
-                    Y_FAIL("unexpected State# %s", StateToStr(State));
+                    Y_ABORT("unexpected State# %s", StateToStr(State));
             }
         }
 

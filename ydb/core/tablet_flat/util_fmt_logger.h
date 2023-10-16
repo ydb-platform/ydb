@@ -59,7 +59,7 @@ namespace NUtil {
             auto *ev = new NLog::TEvLog(stamp, ui32(level), Comp, line);
 
             if (!Sys->Send(Path, ev))
-                Y_FAIL("Cannot send NLog::TEvLog to logger actor");
+                Y_ABORT("Cannot send NLog::TEvLog to logger actor");
         }
 
     private:

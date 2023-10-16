@@ -186,7 +186,7 @@ private:
             HFunc(TEvents::TEvWakeup, Handle);
             HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
             default:
-                Y_FAIL("TRequestHandler: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                Y_ABORT("TRequestHandler: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
 

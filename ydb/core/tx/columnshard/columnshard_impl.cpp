@@ -408,7 +408,7 @@ bool TColumnShard::AbortTx(const ui64 txId, const NKikimrTxColumnShard::ETransac
             break;
         }
         default: {
-            Y_FAIL("Unsupported TxKind");
+            Y_ABORT("Unsupported TxKind");
         }
     }
     return true;
@@ -477,7 +477,7 @@ void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, 
         }
     }
 
-    Y_FAIL("Unsupported schema tx type");
+    Y_ABORT("Unsupported schema tx type");
 }
 
 void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const TRowVersion& version,

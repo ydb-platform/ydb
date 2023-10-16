@@ -356,7 +356,7 @@ namespace NKikimr {
             switch (s) {
                 case ESatisfactionRankType::Fresh: return Fresh.GetSatisfactionRank();
                 case ESatisfactionRankType::Level: return CurSlice->GetSatisfactionRank();
-                default: Y_FAIL("Unexpected rank type");
+                default: Y_ABORT("Unexpected rank type");
             }
         }
 

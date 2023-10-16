@@ -67,7 +67,7 @@ ECodec<UseMigrationProtocol> CodecByName(const TString& codec) {
         if constexpr (!UseMigrationProtocol) {
             return (i32)Ydb::Topic::CODEC_UNSPECIFIED;
         }
-        Y_FAIL("Unsupported codec enum");
+        Y_ABORT("Unsupported codec enum");
     }
     return codecIt->second;
 }
@@ -936,7 +936,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvQueryResp
             LastSourceIdUpdate = ctx.Now();
         }
     } else {
-        Y_FAIL("Wrong state");
+        Y_ABORT("Wrong state");
     }
 }
 

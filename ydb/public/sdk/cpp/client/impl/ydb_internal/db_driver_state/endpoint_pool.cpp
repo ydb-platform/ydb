@@ -21,7 +21,7 @@ TEndpointPool::~TEndpointPool() {
             future.Wait();
         }
     } catch (...) {
-        Y_FAIL("Unexpected exception from endpoint pool dtor");
+        Y_ABORT("Unexpected exception from endpoint pool dtor");
     }
 }
 

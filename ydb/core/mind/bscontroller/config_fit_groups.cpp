@@ -229,7 +229,7 @@ namespace NKikimr {
                                 break;
 
                             default:
-                                Y_FAIL("unexpected drive status");
+                                Y_ABORT("unexpected drive status");
                         }
                     }
 

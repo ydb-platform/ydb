@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(Backpressure) {
                 }
 
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
 
             const TDuration quantum = TDuration::FromValue(minQ.GetValue() + RandomNumber(maxQ.GetValue() - minQ.GetValue() + 1));

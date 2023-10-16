@@ -626,7 +626,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TAlterBlockStoreVolume");
+        Y_ABORT("no AbortPropose for TAlterBlockStoreVolume");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

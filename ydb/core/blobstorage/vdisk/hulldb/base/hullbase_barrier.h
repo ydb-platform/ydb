@@ -161,15 +161,15 @@ namespace NKikimr {
         }
 
         void SetHugeBlob(const TDiskPart &) {
-            Y_FAIL("Must not be called");
+            Y_ABORT("Must not be called");
         }
 
         void SetManyHugeBlobs(ui32, ui32, ui32) {
-            Y_FAIL("Must not be called");
+            Y_ABORT("Must not be called");
         }
 
         void SetMemBlob(ui64, ui32) {
-            Y_FAIL("Must not be called");
+            Y_ABORT("Must not be called");
         }
 
         void SetNoBlob() {
@@ -186,7 +186,7 @@ namespace NKikimr {
         }
 
         TMemPart GetMemData() const {
-            Y_FAIL("Must not be called");
+            Y_ABORT("Must not be called");
         }
 
         NMatrix::TVectorType GetLocalParts(TBlobStorageGroupType) const {

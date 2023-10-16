@@ -63,7 +63,7 @@ namespace NKikimr {
             case EHullDbType::LogoBlobs:  req.CompactLogoBlobs = false; break;
             case EHullDbType::Blocks:     req.CompactBlocks = false; break;
             case EHullDbType::Barriers:   req.CompactBarriers = false; break;
-            default: Y_FAIL("Unexpected case: %d", int(dbType));
+            default: Y_ABORT("Unexpected case: %d", int(dbType));
         }
 
         if (req.AllDone()) {
@@ -104,7 +104,7 @@ namespace NKikimr {
             case TDbMon::DbMainPageLogoBlobs:   traverse(extractLogoBlobs); break;
             case TDbMon::DbMainPageBlocks:      traverse(extractBlocks); break;
             case TDbMon::DbMainPageBarriers:    traverse(extractBarriers); break;
-            default: Y_FAIL("Unxepected case");
+            default: Y_ABORT("Unxepected case");
         }
 
         // convert subId to database name
@@ -113,7 +113,7 @@ namespace NKikimr {
                 case TDbMon::DbMainPageLogoBlobs:   return "LogoBlobs";
                 case TDbMon::DbMainPageBlocks:      return "Blocks";
                 case TDbMon::DbMainPageBarriers:    return "Barriers";
-                default: Y_FAIL("Unxepected case");
+                default: Y_ABORT("Unxepected case");
             }
         };
 

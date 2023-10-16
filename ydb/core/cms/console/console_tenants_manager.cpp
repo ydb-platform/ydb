@@ -323,7 +323,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -336,7 +336,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -349,7 +349,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -362,7 +362,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -878,7 +878,7 @@ public:
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, HandleSubdomain);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -891,7 +891,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -2021,7 +2021,7 @@ void TTenantsManager::ProcessTenantActions(TTenant::TPtr tenant, const TActorCon
     } else if (tenant->State == TTenant::REMOVING_POOLS) {
         DeleteTenantPools(tenant, ctx);
     } else {
-        Y_FAIL("unexpected tenant state %u", (ui32)tenant->State);
+        Y_ABORT("unexpected tenant state %u", (ui32)tenant->State);
     }
 }
 
@@ -2130,7 +2130,7 @@ void TTenantsManager::SendTenantNotifications(TTenant::TPtr tenant,
         else if (action == TTenant::REMOVE)
             Counters.Inc(code, COUNTER_REMOVE_RESPONSES);
         else
-            Y_FAIL("unexpected action value (%" PRIu32 ")", static_cast<ui32>(action));
+            Y_ABORT("unexpected action value (%" PRIu32 ")", static_cast<ui32>(action));
     }
     tenant->Subscribers.clear();
 }

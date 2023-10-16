@@ -58,7 +58,7 @@ size_t TParallelFileInputState::GetTableIndex() const {
 }
 
 size_t TParallelFileInputState::GetRecordIndex() const {
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
     return CurrentRecord_; // returns 1-based index
 }
 

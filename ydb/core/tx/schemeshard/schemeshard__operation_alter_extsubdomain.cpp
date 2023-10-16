@@ -862,7 +862,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TAlterExtSubDomain");
+        Y_ABORT("no AbortPropose for TAlterExtSubDomain");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

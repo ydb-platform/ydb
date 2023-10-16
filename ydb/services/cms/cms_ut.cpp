@@ -439,7 +439,7 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
                 UNIT_ASSERT_VALUES_EQUAL(zone.labels().at("any_data_center"), "true");
                 UNIT_ASSERT_VALUES_EQUAL(zone.labels().at("collocation"), "disabled");
             } else {
-                Y_FAIL("unexpected zone");
+                Y_ABORT("unexpected zone");
             }
             zones.erase(zone.name());
         }

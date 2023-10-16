@@ -397,11 +397,11 @@ public:
     void ApplyResponse(TTabletInfo&,
                       NKikimr::TEvPersQueue::TEvStatusResponse::TPtr&,
                       const TActorContext&) override {
-        Y_FAIL();
+        Y_ABORT();
     }
     virtual void ApplyResponse(TTabletInfo&, TEvPersQueue::TEvReadSessionsInfoResponse::TPtr&,
                                const TActorContext&) override {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void Finalize();

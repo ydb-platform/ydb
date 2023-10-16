@@ -975,7 +975,7 @@ public:
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr ev, const TActorContext& /*ctx*/) {
-        Y_FAIL("TEvUndelivered# 0x%08" PRIx32 " ActorId# %s", ev->Get()->SourceType, ev->Sender.ToString().data());
+        Y_ABORT("TEvUndelivered# 0x%08" PRIx32 " ActorId# %s", ev->Get()->SourceType, ev->Sender.ToString().data());
     }
 
     STRICT_STFUNC(StateFunc,

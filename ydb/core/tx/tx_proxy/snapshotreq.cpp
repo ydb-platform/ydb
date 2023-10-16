@@ -1237,7 +1237,7 @@ public:
             SnapshotStep = params.GetSnapshotStep();
             SnapshotTxId = params.GetSnapshotTxId();
         } else {
-            Y_FAIL("Unexpected op");
+            Y_ABORT("Unexpected op");
         }
 
         ResolveActorID = ctx.RegisterWithSameMailbox(CreateResolveTablesActor(ctx.SelfID, 0, Services, std::move(requests), record.GetDatabaseName()));
@@ -1669,7 +1669,7 @@ IActor* CreateTxProxySnapshotReq(const TTxProxyServices& services, const ui64 tx
         return new TRefreshDiscardSnapshotReq(services, std::move(ev), mon);
     }
 
-    Y_FAIL("Unexpected transaction proposal");
+    Y_ABORT("Unexpected transaction proposal");
 }
 
 } // namespace NTxProxy

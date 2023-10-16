@@ -562,7 +562,7 @@ void TPDisk::ProcessLogReadQueue() {
             break;
         }
         default:
-            Y_FAIL();
+            Y_ABORT();
             break;
         }
         delete req;
@@ -903,7 +903,7 @@ void TPDisk::LogFlush(TCompletionAction *action, TVector<ui32> *logChunksToCommi
     if (!CommonLogger->IsEmptySector()) {
         size_t prevPreallocatedSize = CommonLogger->NextChunks.size();
         if (!PreallocateLogChunks(CommonLogger->SectorBytesFree, OwnerSystem, 0, EOwnerGroupType::Static, true)) {
-            Y_FAIL("Last chunk is over, how did you do that?!");
+            Y_ABORT("Last chunk is over, how did you do that?!");
         }
         size_t nextPreallocatedSize = CommonLogger->NextChunks.size();
         if (nextPreallocatedSize != prevPreallocatedSize && logChunksToCommit) {

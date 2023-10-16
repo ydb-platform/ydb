@@ -325,7 +325,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
             Round->Aliens[alienNodeIdx] = TRound::TAlien(TRound::EAlienState::Disconnected, Max<ui64>());
             return false;
         default:
-            Y_FAIL("unhandled case");
+            Y_ABORT("unhandled case");
         }
     }
 

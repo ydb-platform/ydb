@@ -2779,7 +2779,7 @@ public:
 
     TNodePtr Build(TContext& ctx) override {
         Y_UNUSED(ctx);
-        Y_FAIL("Unexpected call");
+        Y_ABORT("Unexpected call");
     }
 
     const TString* GetWindowName() const override {

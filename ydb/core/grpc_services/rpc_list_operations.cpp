@@ -57,7 +57,7 @@ class TListOperationsRPC: public TRpcOperationRequestActor<TListOperationsRPC, T
         case TOperationId::BUILD_INDEX:
             return new TEvIndexBuilder::TEvListRequest(DatabaseName, request.page_size(), request.page_token());
         default:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 

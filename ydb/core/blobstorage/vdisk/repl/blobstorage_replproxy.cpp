@@ -70,7 +70,7 @@ namespace NKikimr {
                     State = Error;
                     break;
                 default:
-                    Y_FAIL("Unexpected value: %d", portion.Status);
+                    Y_ABORT("Unexpected value: %d", portion.Status);
             }
 
             Y_ABORT_UNLESS(!DataPortion.Valid());
@@ -358,7 +358,7 @@ namespace NKikimr {
                     case NKikimrProto::TRYLATER:
                     case NKikimrProto::TRYLATER_TIME:
                     case NKikimrProto::TRYLATER_SIZE:
-                        Y_FAIL("unexpected Status# %s from BS_QUEUE", EReplyStatus_Name(rec.GetStatus()).data());
+                        Y_ABORT("unexpected Status# %s from BS_QUEUE", EReplyStatus_Name(rec.GetStatus()).data());
                     default:
                         ++Stat.VDiskRespOther;
                         STLOG(PRI_DEBUG, BS_REPL, BSVR24, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,

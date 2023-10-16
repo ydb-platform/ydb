@@ -13,7 +13,7 @@ TLogoBlobID ParseLogoBlobId(TString blobId) {
     TLogoBlobID logoBlobId;
     TString err;
     if (!TLogoBlobID::Parse(logoBlobId, blobId, err)) {
-        Y_FAIL("%s", err.c_str());
+        Y_ABORT("%s", err.c_str());
     }
     return logoBlobId;
 }
@@ -157,7 +157,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
             BlobsToDelete.insert(unifiedBlobId.GetLogoBlobId());
             BlobsManagerCounters.OnDeleteBlobMarker(unifiedBlobId.BlobSize());
         } else {
-            Y_FAIL("Unexpected blob id: %s", unifiedBlobId.ToStringNew().c_str());
+            Y_ABORT("Unexpected blob id: %s", unifiedBlobId.ToStringNew().c_str());
         }
     }
     BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);

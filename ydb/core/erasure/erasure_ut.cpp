@@ -360,7 +360,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                                 isRestoreParts = true;
                                 break;
                             default:
-                                Y_FAIL();
+                                Y_ABORT();
                         }
 
                         partSet = originalPartSet;
@@ -684,7 +684,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                             isRestoreParityParts = true;
                             break;
                         default:
-                            Y_FAIL();
+                            Y_ABORT();
                     }
 
                     partSet = originalPartSet;

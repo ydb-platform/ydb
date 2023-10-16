@@ -191,7 +191,7 @@ namespace {
                 }
                 case EDependencyScope::None:
                 case EDependencyScope::Mixed:
-                    Y_FAIL("Strange argument.");
+                    Y_ABORT("Strange argument.");
             }
             break;
         case TExprNode::World:

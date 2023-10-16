@@ -43,7 +43,7 @@ namespace NKikimr {
                 throw TExPoison();
 
             default:
-                Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);
+                Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);
         }
     }
 

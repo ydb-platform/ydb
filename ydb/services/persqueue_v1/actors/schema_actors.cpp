@@ -803,7 +803,7 @@ void TDescribeTopicActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPer
     Y_UNUSED(ctx);
     Y_UNUSED(tabletInfo);
     Y_UNUSED(ev);
-    Y_FAIL("");
+    Y_ABORT("");
 }
 
 
@@ -1339,7 +1339,7 @@ void TDescribePartitionActor::HandleCacheNavigateResponse(
 }
 
 void TDescribePartitionActor::ApplyResponse(TTabletInfo&, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr&, const TActorContext&) {
-    Y_FAIL("");
+    Y_ABORT("");
 }
 
 void TDescribePartitionActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext&) {

@@ -50,9 +50,9 @@ namespace NTabletFlatExecutor {
                 auto logo = LogoBlobIDFromLogoBlobID(rep.Get(it));
 
                 if (bytes > Max<ui32>() - logo.BlobSize())
-                    Y_FAIL("Got too large TLargeGlobId in ids sequence");
+                    Y_ABORT("Got too large TLargeGlobId in ids sequence");
                 if (lead.Cookie() + it != logo.Cookie())
-                    Y_FAIL("Got an invalid sequence of logo ids");
+                    Y_ABORT("Got an invalid sequence of logo ids");
 
                 bytes += logo.BlobSize();
             }

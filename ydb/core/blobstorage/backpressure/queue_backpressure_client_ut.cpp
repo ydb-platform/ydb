@@ -61,7 +61,7 @@ public:
                 HFunc(TEvBlobStorage::TEvVReadyNotify, HandleBw);
                 HFunc(TEvBlobStorage::TEvVWindowChange, HandleBw);
                 HFunc(TEvBlobStorage::TEvVSyncGuid, HandleForward);
-                default: Y_FAIL("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
+                default: Y_ABORT("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
             }
         }
     }

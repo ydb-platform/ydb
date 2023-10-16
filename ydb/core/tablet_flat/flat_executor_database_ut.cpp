@@ -68,7 +68,7 @@ public:
                 return Fuzzy.EraseRowTx(testDb, txc, table, key);
             };
         } else {
-            Y_FAIL("Random generator produced unexpected action value");
+            Y_ABORT("Random generator produced unexpected action value");
         }
 
         QueueTx(func);
@@ -262,7 +262,7 @@ private:
         } else if (RowCount ==  Rows + 1) {
             QueueTx([this](ITestDb& testDb, TTransactionContext&){ TDbWrapper db(testDb); return this->DoFullScanTx(db); });
         } else if (RowCount > Rows + 1) {
-            Y_FAIL("Shouldn't request more task after EDo::Stop");
+            Y_ABORT("Shouldn't request more task after EDo::Stop");
         }
 
         return RowCount <= Rows ? EDo::More : EDo::Stop;

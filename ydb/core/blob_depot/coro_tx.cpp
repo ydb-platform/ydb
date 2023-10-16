@@ -145,7 +145,7 @@ namespace NKikimr::NBlobDepot {
                 return false;
 
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
     }
 
@@ -170,7 +170,7 @@ namespace NKikimr::NBlobDepot {
                 break;
 
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
     }
 

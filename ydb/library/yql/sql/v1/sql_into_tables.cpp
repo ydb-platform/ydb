@@ -57,7 +57,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             modeTokens = {modeBlock.GetAlt6().GetToken1()};
             break;
         case TRule_into_table_stmt_TBlock1::AltCase::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 
     TVector<TString> modeStrings;
@@ -135,7 +135,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             break;
         }
         case TRule_simple_table_ref_core::AltCase::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 
     bool withTruncate = false;

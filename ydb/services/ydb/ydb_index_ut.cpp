@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
             driver.Stop(true);
         } catch (const std::exception& ex) {
             Cerr << ex.what() << Endl;
-            Y_FAIL("test failed with exception");
+            Y_ABORT("test failed with exception");
         }
     }
 

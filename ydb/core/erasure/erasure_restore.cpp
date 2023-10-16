@@ -470,7 +470,7 @@ namespace NKikimr {
             DOUBLE(4, 5)
 
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
 
         if (whole) {

@@ -1786,7 +1786,7 @@ void TDataShard::SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnaps
         return;
     }
 
-    Y_FAIL("Unexpected table snapshot context");
+    Y_ABORT("Unexpected table snapshot context");
 }
 
 TUserTable::TSpecialUpdate TDataShard::SpecialUpdates(const NTable::TDatabase& db, const TTableId& tableId) const {
@@ -2035,7 +2035,7 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
         }
     }
 
-    Y_FAIL("unreachable");
+    Y_ABORT("unreachable");
 }
 
 TReadWriteVersions TDataShard::GetReadWriteVersions(TOperation* op) const {

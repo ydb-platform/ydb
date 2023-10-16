@@ -111,9 +111,9 @@ static NJson::TJsonValue ToJson(const TCell& cell, NScheme::TTypeInfo type) {
         return YsonToJson(cell.AsBuf());
     case NScheme::NTypeIds::Pg:
         // TODO: support pg types
-        Y_FAIL("pg types are not supported");
+        Y_ABORT("pg types are not supported");
     default:
-        Y_FAIL("Unexpected type");
+        Y_ABORT("Unexpected type");
     }
 }
 
@@ -425,7 +425,7 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
         }
 
         case EKind::CdcHeartbeat: {
-            Y_FAIL("Not supported");
+            Y_ABORT("Not supported");
         }
     }
 
@@ -457,7 +457,7 @@ TString TChangeRecord::GetPartitionKey() const {
 
         case EKind::CdcHeartbeat:
         case EKind::AsyncIndex: {
-            Y_FAIL("Not supported");
+            Y_ABORT("Not supported");
         }
     }
 

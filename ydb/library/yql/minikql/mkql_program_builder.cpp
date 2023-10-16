@@ -414,7 +414,7 @@ TRuntimeNode TProgramBuilder::AddMember(TRuntimeNode structObj, const std::strin
         }
     }
 
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TRuntimeNode TProgramBuilder::RemoveMember(TRuntimeNode structObj, const std::string_view& memberName, bool forced) {

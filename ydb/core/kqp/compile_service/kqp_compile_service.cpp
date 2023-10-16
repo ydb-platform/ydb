@@ -379,7 +379,7 @@ private:
             CFunc(TEvents::TSystem::Wakeup, HandleTtlTimer);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         default:
-            Y_FAIL("TKqpCompileService: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+            Y_ABORT("TKqpCompileService: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
 

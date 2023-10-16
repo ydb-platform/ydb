@@ -36,7 +36,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     } else if (buildInfo->IsBuildColumn()) {
         buildInfo->SerializeToProto(ss, modifyScheme.MutableInitiateColumnBuild());
     } else {
-        Y_FAIL("Unknown operation kind while building LockPropose");
+        Y_ABORT("Unknown operation kind while building LockPropose");
     }
 
     return propose;
@@ -66,7 +66,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
 
         buildInfo->SerializeToProto(ss, modifyScheme.MutableInitiateColumnBuild());
     } else {
-        Y_FAIL("Unknown operation kind while building InitiatePropose");
+        Y_ABORT("Unknown operation kind while building InitiatePropose");
     }
 
     return propose;
@@ -92,7 +92,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
             TString error;
             if (!ExtractColumnTypeInfo(typeInfo, typeMod, colInfo.DefaultFromLiteral.type(), status, error)) {
                 // todo gvit fix that
-                Y_FAIL("failed to extract column type info");
+                Y_ABORT("failed to extract column type info");
             }
 
             col->SetType(NScheme::TypeName(typeInfo, typeMod));
@@ -100,7 +100,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
         }
 
     } else {
-        Y_FAIL("Unknown operation kind while building AlterMainTablePropose");
+        Y_ABORT("Unknown operation kind while building AlterMainTablePropose");
     }
 
     return propose;
@@ -202,7 +202,7 @@ public:
 
         switch (buildInfo->State) {
         case TIndexBuildInfo::EState::Invalid:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::AlterMainTable:
             if (buildInfo->AlterMainTableTxId == InvalidTxId) {
@@ -286,7 +286,7 @@ public:
                         break;
                     case NKikimrTxDataShard::TEvBuildIndexProgressResponse::BUILD_ERROR:
                     case NKikimrTxDataShard::TEvBuildIndexProgressResponse::BAD_REQUEST:
-                        Y_FAIL("Unreachable");
+                        Y_ABORT("Unreachable");
                         break;
                     }
                 }
@@ -633,7 +633,7 @@ public:
         case TIndexBuildInfo::EState::Locking:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Initiating:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::Filling:
         {
             // reschedule shard
@@ -651,7 +651,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -701,7 +701,7 @@ public:
         case TIndexBuildInfo::EState::Locking:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Initiating:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::Filling:
         {
             TIndexBuildInfo::TShardStatus& shardStatus = buildInfo->Shards.at(shardIdx);
@@ -765,7 +765,7 @@ public:
 
             switch (shardStatus.Status) {
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::INVALID:
-                Y_FAIL("Unreachable");
+                Y_ABORT("Unreachable");
 
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::ACCEPTED:
             case  NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS:
@@ -822,7 +822,7 @@ public:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
         case TIndexBuildInfo::EState::Cancelled:
@@ -859,7 +859,7 @@ public:
 
         switch (buildInfo->State) {
         case TIndexBuildInfo::EState::Invalid:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::AlterMainTable:
         {
@@ -882,7 +882,7 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::GatheringStatistics:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::Initiating:
         {
@@ -895,7 +895,7 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Filling:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::Applying:
         {
             Y_ABORT_UNLESS(txId == buildInfo->ApplyTxId);
@@ -917,7 +917,7 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
         case TIndexBuildInfo::EState::Cancellation_Applying:
         {
             Y_ABORT_UNLESS(txId == buildInfo->ApplyTxId);
@@ -939,7 +939,7 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Cancelled:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::Rejection_Applying:
         {
@@ -962,7 +962,7 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Rejected:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
         }
 
         Progress(buildId);
@@ -1023,7 +1023,7 @@ public:
 
         switch (buildInfo->State) {
         case TIndexBuildInfo::EState::Invalid:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::AlterMainTable:
         {
@@ -1078,7 +1078,7 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::GatheringStatistics:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::Initiating:
         {
@@ -1091,7 +1091,7 @@ public:
             if (record.GetStatus() == NKikimrScheme::StatusAccepted) {
                 // no op
             } else if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists) {
-                Y_FAIL("NEED MORE TESTING");
+                Y_ABORT("NEED MORE TESTING");
                // no op
             } else {
                 buildInfo->Issue += TStringBuilder()
@@ -1105,7 +1105,7 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Filling:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::Applying:
         {
@@ -1118,7 +1118,7 @@ public:
             if (record.GetStatus() == NKikimrScheme::StatusAccepted) {
                 // no op
             } else if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists) {
-                Y_FAIL("NEED MORE TESTING");
+                Y_ABORT("NEED MORE TESTING");
                 // no op
             } else {
                 buildInfo->Issue += TStringBuilder()
@@ -1155,7 +1155,7 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::Cancellation_Applying:
         {
@@ -1168,7 +1168,7 @@ public:
             if (record.GetStatus() == NKikimrScheme::StatusAccepted) {
                 // no op
             } else if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists) {
-                Y_FAIL("NEED MORE TESTING");
+                Y_ABORT("NEED MORE TESTING");
                 // no op
             } else {
                 buildInfo->Issue += TStringBuilder()
@@ -1205,7 +1205,7 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Cancelled:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::Rejection_Applying:
         {
@@ -1218,7 +1218,7 @@ public:
             if (record.GetStatus() == NKikimrScheme::StatusAccepted) {
                 // no op
             } else if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists) {
-                Y_FAIL("NEED MORE TESTING");
+                Y_ABORT("NEED MORE TESTING");
                 // no op
             } else {
                 buildInfo->Issue += TStringBuilder()
@@ -1255,7 +1255,7 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Rejected:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
         }
 
         Progress(buildId);
@@ -1279,7 +1279,7 @@ public:
 
         switch (buildInfo->State) {
         case TIndexBuildInfo::EState::Invalid:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::AlterMainTable:
             if (!buildInfo->AlterMainTableTxId) {
@@ -1299,7 +1299,7 @@ public:
             break;
 
         case TIndexBuildInfo::EState::GatheringStatistics:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::Initiating:
             if (!buildInfo->InitiateTxId) {
@@ -1310,7 +1310,7 @@ public:
             break;
 
         case TIndexBuildInfo::EState::Filling:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::Applying:
             if (!buildInfo->ApplyTxId) {
@@ -1329,7 +1329,7 @@ public:
             break;
 
         case TIndexBuildInfo::EState::Done:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::Cancellation_Applying:
             if (!buildInfo->ApplyTxId) {
@@ -1348,7 +1348,7 @@ public:
             break;
 
         case TIndexBuildInfo::EState::Cancelled:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
 
         case TIndexBuildInfo::EState::Rejection_Applying:
             if (!buildInfo->ApplyTxId) {
@@ -1366,7 +1366,7 @@ public:
             break;
 
         case TIndexBuildInfo::EState::Rejected:
-            Y_FAIL("Unreachable");
+            Y_ABORT("Unreachable");
         }
 
         Progress(buildId);

@@ -151,7 +151,7 @@ namespace NKikimr {
                     break;
 
                 default:
-                    Y_FAIL("unexpected case");
+                    Y_ABORT("unexpected case");
             }
         }
 

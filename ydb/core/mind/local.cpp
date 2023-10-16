@@ -1413,7 +1413,7 @@ public:
 
             HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain);
         default:
-            Y_FAIL("Unexpected event for TDomainLocal");
+            Y_ABORT("Unexpected event for TDomainLocal");
             break;
         }
     }

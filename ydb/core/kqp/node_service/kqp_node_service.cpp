@@ -185,7 +185,7 @@ private:
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
             default: {
-                Y_FAIL("Unexpected event 0x%x for TKqpResourceManagerService", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x for TKqpResourceManagerService", ev->GetTypeRewrite());
             }
         }
     }

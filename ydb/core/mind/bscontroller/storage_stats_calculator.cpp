@@ -50,7 +50,7 @@ public:
                 throw TExPoison();
         }
 
-        Y_FAIL("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
+        Y_ABORT("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
     }
 
     void Run() override {

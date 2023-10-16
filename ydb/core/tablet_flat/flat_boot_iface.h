@@ -74,12 +74,12 @@ namespace NBoot {
 
         virtual bool HandleBio(NSharedCache::TEvResult&) noexcept
         {
-            Y_FAIL("Boot IStep got an unhandled NSharedCache::TEvResult event");
+            Y_ABORT("Boot IStep got an unhandled NSharedCache::TEvResult event");
         }
 
         virtual void HandleStep(TIntrusivePtr<IStep>) noexcept
         {
-            Y_FAIL("Boot IStep got an unhandled child step result");
+            Y_ABORT("Boot IStep got an unhandled child step result");
         }
 
         template<typename TStep, typename ... TArgs>
@@ -104,7 +104,7 @@ namespace NBoot {
             if (typeid(*this) == typeid(TStep)) {
                 return static_cast<TStep*>(this);
             } else if (require) {
-                Y_FAIL("Cannot cast IStep to particular unit");
+                Y_ABORT("Cannot cast IStep to particular unit");
             } else {
                 return nullptr;
             }

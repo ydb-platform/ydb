@@ -1205,7 +1205,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 } else if (auto* context = std::get_if<TResolveContextPtr>(&contextVariant)) {
                     ProcessInFlightNoCheck(*context, requests);
                 } else {
-                    Y_FAIL("unknown context type");
+                    Y_ABORT("unknown context type");
                 }
             }
         }
@@ -1309,7 +1309,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 } else if (auto* context = std::get_if<TResolveContextPtr>(&kv.first)) {
                     ProcessInFlight(context->Get(), kv.second, response);
                 } else {
-                    Y_FAIL("unknown context type");
+                    Y_ABORT("unknown context type");
                 }
 
                 return kv.second.empty();
@@ -2436,7 +2436,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     Complete(*context);
                 }
             } else {
-                Y_FAIL("unknown context type");
+                Y_ABORT("unknown context type");
             }
         }
     }

@@ -60,7 +60,7 @@ static NActors::TTestActorRuntime& AsKikimrRuntime(NActors::TTestActorRuntimeBas
         return dynamic_cast<NActors::TTestBasicRuntime&>(r);
     } catch (const std::bad_cast& e) {
         Cerr << e.what() << Endl;
-        Y_FAIL("Failed to cast to TTestActorRuntime: %s", e.what());
+        Y_ABORT("Failed to cast to TTestActorRuntime: %s", e.what());
     }
 }
 
@@ -496,7 +496,7 @@ namespace NKikimr {
                 CurrentItems.push_back(currentItem->DelayedExecution.Get());
                 return TTestActorRuntime::EEventAction::RESCHEDULE;
             } else {
-                Y_FAIL();
+                Y_ABORT();
             }
         }
 

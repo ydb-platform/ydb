@@ -690,7 +690,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                         result.GetValue();
                     }
                     catch (const std::exception& ex) {
-                        Y_FAIL("Unable to prepare GRpc service: %s", ex.what());
+                        Y_ABORT("Unable to prepare GRpc service: %s", ex.what());
                     }
                 }
                 else {
@@ -1144,7 +1144,7 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
     } else if (logConfig.GetFormat() == "json") {
         LogSettings->Format = NLog::TSettings::JSON_FORMAT;
     } else {
-        Y_FAIL("Unknown log format: \"%s\"", logConfig.GetFormat().data());
+        Y_ABORT("Unknown log format: \"%s\"", logConfig.GetFormat().data());
     }
 
     if (logConfig.HasAllowDropEntries()) {

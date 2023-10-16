@@ -87,7 +87,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TAlterUserAttrs");
+        Y_ABORT("no AbortPropose for TAlterUserAttrs");
     }
 
     bool ProgressState(TOperationContext& context) override {

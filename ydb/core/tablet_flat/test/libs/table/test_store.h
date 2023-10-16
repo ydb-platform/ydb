@@ -115,7 +115,7 @@ namespace NTest {
         TEggs LegacyEggs() const noexcept
         {
             if (PageCollectionPagesCount(MainPageCollection) == 0) {
-                Y_FAIL("Cannot construct an empty part");
+                Y_ABORT("Cannot construct an empty part");
             }
 
             Y_ABORT_UNLESS(!Rooted, "Legacy store must not be rooted");
@@ -142,11 +142,11 @@ namespace NTest {
             NUtil::NBin::TOut out(stream);
 
             if (Groups > 1) {
-                Y_FAIL("Cannot dump TStore with multiple column groups");
+                Y_ABORT("Cannot dump TStore with multiple column groups");
             } else if (!PageCollections[MainPageCollection]) {
-                Y_FAIL("Cannot dump TStore with empty leader page collection");
+                Y_ABORT("Cannot dump TStore with empty leader page collection");
             } else if (PageCollections[GetOuterRoom()] || PageCollections[GetExternRoom()]) {
-                Y_FAIL("TStore has auxillary rooms, cannot be dumped");
+                Y_ABORT("TStore has auxillary rooms, cannot be dumped");
             }
 
             /* Dump pages as is, without any special markup as it already
@@ -180,7 +180,7 @@ namespace NTest {
                 got = in.Load(begin,  to.mutable_end() - begin);
 
                 if (got + sizeof(NPage::TLabel) != label.Size) {
-                    Y_FAIL("Stausage loading stalled in middle of page");
+                    Y_ABORT("Stausage loading stalled in middle of page");
                 } else if (label.Type == EPage::Scheme) {
                     /* Required for Read(Evolution < 16), hack for old style
                         scheme pages without leading label. It was ecoded in

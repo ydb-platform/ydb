@@ -150,7 +150,7 @@ private:
             cFunc(IContext::TEvNotifiedWhenDone::EventType, PassAway);
 
             default:
-                Y_FAIL("Unexpected event 0x%x for TGRpcSessionActor", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x for TGRpcSessionActor", ev->GetTypeRewrite());
         }
     }
 
@@ -215,7 +215,7 @@ private:
             hFunc(TEvKesusProxy::TEvAttachProxyActor, HandleResolve);
 
             default:
-                Y_FAIL("Unexpected event 0x%x for TGRpcSessionActor", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x for TGRpcSessionActor", ev->GetTypeRewrite());
         }
     }
 
@@ -248,7 +248,7 @@ private:
             hFunc(TEvKesus::TEvAttachSessionResult, HandleAttach);
 
             default:
-                Y_FAIL("Unexpected event 0x%x for TGRpcSessionActor", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x for TGRpcSessionActor", ev->GetTypeRewrite());
         }
     }
 
@@ -574,7 +574,7 @@ private:
             hFunc(TEvPrivate::TEvPingScheduled, Handle);
 
             default:
-                Y_FAIL("Unexpected event 0x%x for TGRpcSessionActor", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x for TGRpcSessionActor", ev->GetTypeRewrite());
         }
     }
 

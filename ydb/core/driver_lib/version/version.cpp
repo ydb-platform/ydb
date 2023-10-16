@@ -507,7 +507,7 @@ TString GetTagString() {
 
 bool TCompatibilityInfo::CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInfo& current) {
     if (current.GetApplication() == "trunk") {
-        Y_FAIL("Cannot complete trunk version");
+        Y_ABORT("Cannot complete trunk version");
     }
 
     TString tag = GetTagString();
@@ -561,7 +561,7 @@ void CheckVersionTag() {
         const char* arcadia_url = GetArcadiaSourceUrl();
 
         if ((branch.StartsWith("releases/") || branch.StartsWith("tags/releases/")) && VERSION->Tag == "trunk") {
-            Y_FAIL("release branch %s with ARCADIA_SOURCE_URL# %s contains VersionTag# trunk", branch.data(), arcadia_url);
+            Y_ABORT("release branch %s with ARCADIA_SOURCE_URL# %s contains VersionTag# trunk", branch.data(), arcadia_url);
         }
     }
 }

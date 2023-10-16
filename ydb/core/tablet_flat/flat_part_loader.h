@@ -117,7 +117,7 @@ namespace NTable {
                 }
             }
 
-            Y_FAIL("Cannot locate part metadata in page collections of PartComponents");
+            Y_ABORT("Cannot locate part metadata in page collections of PartComponents");
         }
 
         static TLogoBlobID BlobsLabelFor(const TLogoBlobID &base) noexcept

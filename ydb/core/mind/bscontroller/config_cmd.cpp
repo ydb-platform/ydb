@@ -353,7 +353,7 @@ namespace NKikimr::NBsController {
                         throw TExError() << "unsupported command";
                 }
 
-                Y_FAIL();
+                Y_ABORT();
             }
 
             void Complete(const TActorContext&) override {

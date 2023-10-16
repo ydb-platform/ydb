@@ -17,7 +17,7 @@ void TNodeWarden::Handle(TEvents::TEvInvokeResult::TPtr ev) {
     try {
         ev->Get()->Process(ActorContext());
     } catch (const std::exception&) {
-        Y_FAIL("Exception while executing sync callback: %s", CurrentExceptionMessage().data());
+        Y_ABORT("Exception while executing sync callback: %s", CurrentExceptionMessage().data());
     }
 
     // issue other operation if pending (and if not already issued)

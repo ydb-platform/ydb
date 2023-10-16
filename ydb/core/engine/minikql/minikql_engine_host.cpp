@@ -766,7 +766,7 @@ private:
             case 3: return list->GetSizeBytes();
         }
 
-        Y_FAIL("TSelectRangeResult: Index out of range.");
+        Y_ABORT("TSelectRangeResult: Index out of range.");
     }
 
     NUdf::TUnboxedValue List;

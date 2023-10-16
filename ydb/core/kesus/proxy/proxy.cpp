@@ -212,7 +212,7 @@ private:
             hFunc(TEvPrivate::TEvResolveResult, Handle);
 
             default:
-                Y_FAIL("Unexpected event 0x%x for TKesusProxyService", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x for TKesusProxyService", ev->GetTypeRewrite());
         }
     }
 };
@@ -257,7 +257,7 @@ private:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
 
             default:
-                Y_FAIL("Unexpected event 0x%x for TKesusProxyService::TResolveActor", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x for TKesusProxyService::TResolveActor", ev->GetTypeRewrite());
         }
     }
 };

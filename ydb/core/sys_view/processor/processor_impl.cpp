@@ -467,7 +467,7 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvProcess::TPtr&) {
                 TEvSysView::TEvGetQueryStatsResponse>(*req);
         }
     } else {
-        Y_FAIL("unknown SVP request");
+        Y_ABORT("unknown SVP request");
     }
 }
 

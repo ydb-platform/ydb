@@ -1500,7 +1500,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(IDbSchemeResolver::TEvents::TEvResolveTablesResult, Handle)
             default:
-                Y_FAIL("Unknown event");
+                Y_ABORT("Unknown event");
         }
     }
 

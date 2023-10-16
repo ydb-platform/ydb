@@ -72,7 +72,7 @@ std::vector<std::tuple<ui64, std::string, std::string, double, double, double, d
             case 2U: return std::make_tuple(dates(gen), "N", "F", prices(gen), taxes(gen), discs(gen), qntts(gen));
             case 3U: return std::make_tuple(dates(gen), "R", "F", prices(gen), taxes(gen), discs(gen), qntts(gen));
         }
-        Y_FAIL("Unexpected");
+        Y_ABORT("Unexpected");
     });
     return samples;
 }

@@ -206,7 +206,7 @@ void TGRpcRequestProxySimple::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvListEndpointsRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);
         default:
-            Y_FAIL("Unknown request: %u\n", ev->GetTypeRewrite());
+            Y_ABORT("Unknown request: %u\n", ev->GetTypeRewrite());
         break;
     }
 }

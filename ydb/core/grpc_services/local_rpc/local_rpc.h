@@ -68,12 +68,12 @@ public:
     }
 
     const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
         return TMaybe<TString>{};
     }
 
     TVector<TStringBuf> FindClientCert() const override {
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
         return {};
     }
 
@@ -176,15 +176,15 @@ public:
     }
 
     void SetStreamingNotify(NGrpc::IRequestContextBase::TOnNextReply&&) override {
-        Y_FAIL("Unimplemented for local rpc");
+        Y_ABORT("Unimplemented for local rpc");
     }
 
     void FinishStream(ui32) override {
-        Y_FAIL("Unimplemented for local rpc");
+        Y_ABORT("Unimplemented for local rpc");
     }
 
     virtual void SendSerializedResult(TString&&, Ydb::StatusIds::StatusCode) override {
-        Y_FAIL("Unimplemented for local rpc");
+        Y_ABORT("Unimplemented for local rpc");
     }
 
     TMaybe<TString> GetTraceId() const override {
@@ -231,7 +231,7 @@ public:
     //
     void AddAuditLogPart(const TStringBuf&, const TString&) override {}
     const NGRpcService::TAuditLogParts& GetAuditLogParts() const override {
-        Y_FAIL("unimplemented for local rpc");
+        Y_ABORT("unimplemented for local rpc");
     }
 
 private:

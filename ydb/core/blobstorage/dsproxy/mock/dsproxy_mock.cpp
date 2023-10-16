@@ -80,7 +80,7 @@ namespace NKikimr {
                     hFunc(TEvents::TEvPoisonPill, HandlePoison);
 
                     default:
-                        Y_FAIL("unexpected event 0x%08" PRIx32, type);
+                        Y_ABORT("unexpected event 0x%08" PRIx32, type);
                 }
             }
 

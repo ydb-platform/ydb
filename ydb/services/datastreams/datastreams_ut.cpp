@@ -1667,7 +1667,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 UNIT_ASSERT(false);
                 break;
             } else {
-                Y_FAIL("not a data!");
+                Y_ABORT("not a data!");
             }
         }
     }

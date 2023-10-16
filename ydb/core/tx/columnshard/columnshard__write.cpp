@@ -26,7 +26,7 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
             CSCounters.OnOverloadShard(writeData.GetSize());
             break;
         case EOverloadStatus::None:
-            Y_FAIL("invalid function usage");
+            Y_ABORT("invalid function usage");
     }
 
     LOG_S_INFO("Write (overload) " << writeData.GetSize() << " bytes into pathId " << writeData.GetWriteMeta().GetTableId()

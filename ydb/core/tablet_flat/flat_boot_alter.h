@@ -39,7 +39,7 @@ namespace NBoot {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
             if (load->Cookie < Skip || load->Cookie - Skip >= Queue.size())
-                Y_FAIL("Got TLoadBlobs result cookie out of queue range");
+                Y_ABORT("Got TLoadBlobs result cookie out of queue range");
 
             Queue.at(load->Cookie - Skip).Body = load->Plain();
 

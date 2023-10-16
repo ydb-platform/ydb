@@ -147,7 +147,7 @@ private:
 template<bool Fast>
 std::pair<ui32, bool> SkipEmbeddedLength(TChunkedInputBuffer& buf, size_t totalBufSize) {
     if constexpr (Fast) {
-        Y_FAIL("Should not be called");
+        Y_ABORT("Should not be called");
     }
     ui32 length = 0;
     bool emptySingleOptional = false;

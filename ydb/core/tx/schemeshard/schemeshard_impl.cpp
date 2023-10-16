@@ -1434,7 +1434,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxMergeTablePartition:
         break;
     case TTxState::TxFillIndex:
-        Y_FAIL("deprecated");
+        Y_ABORT("deprecated");
     case TTxState::TxModifyACL:
     case TTxState::TxInvalid:
     case TTxState::TxAssignBlockStoreVolume:
@@ -4742,7 +4742,7 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         TabletCounters->Simple()[COUNTER_EXTERNAL_DATA_SOURCE_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeInvalid:
-        Y_FAIL("impossible path type");
+        Y_ABORT("impossible path type");
     }
 }
 
@@ -4835,7 +4835,7 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             // and all operations have been completed.
             break;
         case TPathElement::EPathType::EPathTypeBlobDepot:
-            Y_FAIL("not implemented");
+            Y_ABORT("not implemented");
         default:
             // not all path types support removal
             break;

@@ -588,7 +588,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TAlterTable");
+        Y_ABORT("no AbortPropose for TAlterTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

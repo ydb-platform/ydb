@@ -694,7 +694,7 @@ public:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                //Y_FAIL("TFakeHive::StateWork unexpected event type: %" PRIx32 " event: %s",
+                //Y_ABORT("TFakeHive::StateWork unexpected event type: %" PRIx32 " event: %s",
                 //       ev->GetTypeRewrite(), ev->HasEvent() ? ~ev->GetBase()->ToString() : "serialized?");
             }
         }

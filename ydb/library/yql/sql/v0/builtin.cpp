@@ -311,7 +311,7 @@ public:
                 }
                 break;
             default:
-                Y_FAIL("Unexpected data slot");
+                Y_ABORT("Unexpected data slot");
             }
 
             if (NUdf::GetDataTypeInfo(*slot).Features & NUdf::TzDateType) {

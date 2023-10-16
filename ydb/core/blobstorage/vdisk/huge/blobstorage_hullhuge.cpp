@@ -799,7 +799,7 @@ namespace NKikimr {
                     checkAndSet(State.Pers->LogPos.BarriersDbSlotDelLsn);
                     break;
                 default:
-                    Y_FAIL("Impossible case");
+                    Y_ABORT("Impossible case");
             }
             ProcessQueue(ctx);
             FreeChunks(ctx);

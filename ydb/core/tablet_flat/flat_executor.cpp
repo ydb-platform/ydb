@@ -484,7 +484,7 @@ void TExecutor::TranscriptBootOpResult(ui32 res, const TActorContext &ctx) {
 
         return Broken();
     default:
-        Y_FAIL("unknown boot result");
+        Y_ABORT("unknown boot result");
     }
 }
 
@@ -503,7 +503,7 @@ void TExecutor::TranscriptFollowerBootOpResult(ui32 res, const TActorContext &ct
 
         return Broken();
     default:
-        Y_FAIL("unknown boot result");
+        Y_ABORT("unknown boot result");
     }
 }
 
@@ -801,7 +801,7 @@ void TExecutor::FollowerSyncComplete() {
     else if (BootLogic)
         BootLogic->FollowersSyncComplete();
     else
-        Y_FAIL("must not happens");
+        Y_ABORT("must not happens");
 }
 
 void TExecutor::FollowerGcApplied(ui32 step, TDuration followerSyncDelay) {
@@ -905,7 +905,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
                 // ignore
                 break;
             default:
-                Y_FAIL("unsupported blob kind");
+                Y_ABORT("unsupported blob kind");
             }
         }
     }
@@ -1141,7 +1141,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
         return false;
     }
 
-    Y_FAIL("Unexpected PrepareExternalPart called");
+    Y_ABORT("Unexpected PrepareExternalPart called");
 }
 
 bool TExecutor::PrepareExternalTxStatus(
@@ -1174,7 +1174,7 @@ bool TExecutor::PrepareExternalTxStatus(TPendingPartSwitch &partSwitch, TPending
         return false;
     }
 
-    Y_FAIL("Unexpected PrepareExternalTxStatus call");
+    Y_ABORT("Unexpected PrepareExternalTxStatus call");
 }
 
 void TExecutor::OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) {
@@ -1211,7 +1211,7 @@ void TExecutor::OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cook
             }
             continue;
         }
-        Y_FAIL("Loaded blob %s for an unsupported waiter", id.ToString().c_str());
+        Y_ABORT("Loaded blob %s for an unsupported waiter", id.ToString().c_str());
     }
 
     PendingBlobQueue.SendRequests(SelfId());
@@ -1368,9 +1368,9 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         auto subset = Database->Subset(partSwitch.TableId, partSwitch.Leaving, partSwitch.Head);
 
         if (partSwitch.Head != subset->Head) {
-            Y_FAIL("Follower table epoch head has diverged from leader");
+            Y_ABORT("Follower table epoch head has diverged from leader");
         } else if (*subset && !subset->IsStickedToHead()) {
-            Y_FAIL("Follower table replace subset isn't sticked to head");
+            Y_ABORT("Follower table replace subset isn't sticked to head");
         }
 
         Y_ABORT_UNLESS(newColdParts.empty(), "Unexpected cold part at a follower");
@@ -2865,7 +2865,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     case ECommit::Misc:
         break;
     default:
-        Y_FAIL("unknown event cookie");
+        Y_ABORT("unknown event cookie");
     }
 
     CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels));
@@ -2902,7 +2902,7 @@ void TExecutor::Handle(TEvResourceBroker::TEvResourceAllocated::TPtr &ev) {
     case TResource::ESource::Scan:
         return StartScan(msg->TaskId, cookie);
     default:
-        Y_FAIL("unexpected resource source");
+        Y_ABORT("unexpected resource source");
     }
 }
 
@@ -3080,7 +3080,7 @@ void TExecutor::UtilizeSubset(const NTable::TSubset &subset,
 
         seen.Sieve.back().MaterializeTo(commit->GcDelta.Deleted);
     } else if (seen.Sieve.size() != subset.Flatten.size()) {
-        Y_FAIL("Got an unexpected TSieve items count after compaction");
+        Y_ABORT("Got an unexpected TSieve items count after compaction");
     }
 
     for (auto it : xrange(subset.Flatten.size())) {
@@ -3817,7 +3817,7 @@ void TExecutor::AllowBorrowedGarbageCompaction(ui32 tableId) {
 
 STFUNC(TExecutor::StateInit) {
     Y_UNUSED(ev);
-    Y_FAIL("must be no events before boot processing");
+    Y_ABORT("must be no events before boot processing");
 }
 
 STFUNC(TExecutor::StateBoot) {

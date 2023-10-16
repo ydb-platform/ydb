@@ -1666,7 +1666,7 @@ void TPath::MaterializeLeaf(const TString& owner, const TPathId& newPathId, bool
     auto result = MaterializeImpl(owner, newPathId);
     switch (result) {
     case EAttachChildResult::Undefined:
-        Y_FAIL("unexpected result: Undefined");
+        Y_ABORT("unexpected result: Undefined");
         break;
 
     case EAttachChildResult::AttachedAsOnlyOne:

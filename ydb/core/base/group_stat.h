@@ -258,7 +258,7 @@ namespace NKikimr {
                 case EKind::GET_FAST:
                     return GetFast;
             }
-            Y_FAIL("unexpected TGroupStat::EKind value");
+            Y_ABORT("unexpected TGroupStat::EKind value");
         }
     };
 

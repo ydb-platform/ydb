@@ -16,7 +16,7 @@ namespace NPageCollection {
             , Meta(std::move(raw), LargeGlobId.Group)
         {
             if (!Meta.Raw || LargeGlobId.Bytes != Meta.Raw.size() || LargeGlobId.Group == TLargeGlobId::InvalidGroup)
-                Y_FAIL("Invalid TLargeGlobId of page collection meta blob");
+                Y_ABORT("Invalid TLargeGlobId of page collection meta blob");
         }
 
         const TLogoBlobID& Label() const noexcept override

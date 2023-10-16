@@ -52,7 +52,7 @@ namespace NKikimr {
                             break;
 
                         default:
-                            Y_FAIL();
+                            Y_ABORT();
                     }
                     group.NumSlowDisks += state.Disks[diskIdx].IsSlow;
                 }
@@ -81,7 +81,7 @@ namespace NKikimr {
                         break;
 
                     case TBlobState::ESituation::Sent:
-                        Y_FAIL();
+                        Y_ABORT();
                 }
             }
 
@@ -142,7 +142,7 @@ namespace NKikimr {
                             break;
 
                         case TBlobState::ESituation::Sent: // incorrect state
-                            Y_FAIL();
+                            Y_ABORT();
 
                         case TBlobState::ESituation::Absent:
                             break;

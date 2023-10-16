@@ -129,7 +129,7 @@ namespace NKikimr {
                         return i + 1;
                     }
                 }
-                Y_FAIL("free level not found");
+                Y_ABORT("free level not found");
                 return -1;
             }
 
@@ -640,7 +640,7 @@ namespace NKikimr {
                     return ActCompactSsts;
                 }
 
-                Y_FAIL("impossible case");
+                Y_ABORT("impossible case");
             }
         };
 

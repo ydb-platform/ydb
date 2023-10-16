@@ -2370,7 +2370,7 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
         case NKikimrBlobStorage::EPutHandleClass::UserData:
             return NKikimrBlobStorage::EVDiskQueueId::PutUserData;
         default:
-            Y_FAIL("Unexpected case");
+            Y_ABORT("Unexpected case");
     }
 }
 
@@ -2386,7 +2386,7 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
             case NKikimrBlobStorage::EGetHandleClass::LowRead:
                 return NKikimrBlobStorage::EVDiskQueueId::GetLowRead;
             default:
-                Y_FAIL("Unexpected case");
+                Y_ABORT("Unexpected case");
         }
     }
 

@@ -44,7 +44,7 @@ namespace NPage {
             Header = TDeref<THeader>::At(got.Page.data(), 0);
 
             if (Header->Skip > got.Page.size())
-                Y_FAIL("NPage::TExtBlobs header is out of its blob");
+                Y_ABORT("NPage::TExtBlobs header is out of its blob");
 
             auto *ptr = TDeref<TEntry>::At(got.Page.data(), Header->Skip);
 

@@ -458,7 +458,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     break;
                 }
                 case TRule_alter_user_stmt_TBlock4::ALT_NOT_SET:
-                    Y_FAIL("You should change implementation according to grammar changes");
+                    Y_ABORT("You should change implementation according to grammar changes");
             }
 
             AddStatementToBlocks(blocks, stmt);
@@ -543,7 +543,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     break;
                 }
                 case TRule_alter_group_stmt_TBlock4::ALT_NOT_SET:
-                    Y_FAIL("You should change implementation according to grammar changes");
+                    Y_ABORT("You should change implementation according to grammar changes");
             }
 
             AddStatementToBlocks(blocks, stmt);
@@ -2357,7 +2357,7 @@ namespace {
             case TRule_type_name_or_bind::kAltTypeNameOrBind2:
                 return false;
             case TRule_type_name_or_bind::ALT_NOT_SET:
-                Y_FAIL("You should change implementation according to grammar changes");
+                Y_ABORT("You should change implementation according to grammar changes");
         }
 
         result["NAME"] = TDeferredAtom(pos, columnName);
@@ -2393,7 +2393,7 @@ bool TSqlQuery::ParseTableStoreFeatures(std::map<TString, TDeferredAtom> & resul
             break;
         }
         case TRule_alter_table_store_action::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
     return true;
 }

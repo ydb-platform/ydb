@@ -648,7 +648,7 @@ void TAggregatedLabeledCounters::Recalc(ui32 idx) const {
                 aggrVal.first += tValue.first;
                 break;
             default:
-                Y_FAIL("bad aggrFunc value");
+                Y_ABORT("bad aggrFunc value");
         };
     }
 

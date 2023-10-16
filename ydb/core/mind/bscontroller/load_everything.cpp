@@ -260,7 +260,7 @@ public:
                             host.BoxId, host.Fqdn.data(), host.IcPort, drive.Path.data());
                     }
                 } else {
-                    Y_FAIL("HostConfigId# %" PRIu64 " not found in BoxId# %" PRIu64 " FQDN# %s IcPort# %d",
+                    Y_ABORT("HostConfigId# %" PRIu64 " not found in BoxId# %" PRIu64 " FQDN# %s IcPort# %d",
                         value.HostConfigId, host.BoxId, host.Fqdn.data(), host.IcPort);
                 }
             }
@@ -299,7 +299,7 @@ public:
                 if (const auto& x = Self->HostRecords->GetHostId(disks.GetValue<T::NodeID>())) {
                     hostId = *x;
                 } else {
-                    Y_FAIL("unknown node NodeId# %" PRIu32, disks.GetValue<T::NodeID>());
+                    Y_ABORT("unknown node NodeId# %" PRIu32, disks.GetValue<T::NodeID>());
                 }
 
                 // find the owning box
@@ -307,7 +307,7 @@ public:
                     boxId = it->second;
                     driveToBox.erase(it);
                 } else {
-                    Y_FAIL("PDisk NodeId# %" PRIu32 " PDiskId# %" PRIu32 " not belonging to a box",
+                    Y_ABORT("PDisk NodeId# %" PRIu32 " PDiskId# %" PRIu32 " not belonging to a box",
                         disks.GetValue<T::NodeID>(), disks.GetValue<T::PDiskID>());
                 }
 

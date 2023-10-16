@@ -101,13 +101,13 @@ namespace NKikimr {
     template <>
     inline TAddBulkSstEssence::TSstAndRecsNum<TLevelSegment<TKeyBlock, TMemRecBlock>>
     TAddBulkSstEssence::EnsureOnlyOneSst<TKeyBlock, TMemRecBlock>() const {
-        Y_FAIL("Must not be called");
+        Y_ABORT("Must not be called");
     }
 
     template <>
     inline TAddBulkSstEssence::TSstAndRecsNum<TLevelSegment<TKeyBarrier, TMemRecBarrier>>
     TAddBulkSstEssence::EnsureOnlyOneSst<TKeyBarrier, TMemRecBarrier>() const {
-        Y_FAIL("Must not be called");
+        Y_ABORT("Must not be called");
     }
 
     ////////////////////////////////////////////////////////////////////////////////

@@ -178,7 +178,7 @@ private:
                 action.SetType(TAction::SHUTDOWN_HOST);
                 action.SetDuration(TDuration::Max().GetValue());
             } else
-                Y_FAIL("Unknown action");
+                Y_ABORT("Unknown action");
 
             for (auto &host : task.GetHosts()) {
                 auto &hostAction = *request->Record.AddActions();

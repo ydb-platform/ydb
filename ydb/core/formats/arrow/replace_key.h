@@ -286,7 +286,7 @@ private:
             case arrow::Type::MAX_ID:
             case arrow::Type::SPARSE_UNION:
             case arrow::Type::STRUCT:
-                Y_FAIL("not implemented");
+                Y_ABORT("not implemented");
                 break;
         }
         return 0;
@@ -353,7 +353,7 @@ private:
             case arrow::Type::MAX_ID:
             case arrow::Type::SPARSE_UNION:
             case arrow::Type::STRUCT:
-                Y_FAIL("not implemented");
+                Y_ABORT("not implemented");
                 break;
         }
         return std::partial_ordering::equivalent;

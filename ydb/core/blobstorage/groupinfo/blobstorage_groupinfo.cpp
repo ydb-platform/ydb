@@ -475,10 +475,10 @@ IBlobToDiskMapper *TBlobStorageGroupInfo::TTopology::CreateMapper(TBlobStorageGr
             return IBlobToDiskMapper::CreateMirror3dcMapper(topology);
 
         default:
-            Y_FAIL("unexpected erasure type 0x%08" PRIx32, static_cast<ui32>(gtype.GetErasure()));
+            Y_ABORT("unexpected erasure type 0x%08" PRIx32, static_cast<ui32>(gtype.GetErasure()));
     }
 
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQuorumChecker(const TTopology *topology) {
@@ -509,11 +509,11 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
             return new TQuorumCheckerMirror3of4(topology);
 
         default:
-            Y_FAIL("unexpected erasure type 0x%08" PRIx32,
+            Y_ABORT("unexpected erasure type 0x%08" PRIx32,
                    static_cast<ui32>(topology->GType.GetErasure()));
     }
 
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TString TBlobStorageGroupInfo::TTopology::ToString() const {
@@ -750,7 +750,7 @@ bool TBlobStorageGroupInfo::DecryptGroupKey(TBlobStorageGroupInfo::EEncryptionMo
                 return isHashGood;
             }
     }
-    Y_FAIL("Unexpected Encryption Mode# %" PRIu64, (ui64)encryptionMode);
+    Y_ABORT("Unexpected Encryption Mode# %" PRIu64, (ui64)encryptionMode);
 }
 
 const TBlobStorageGroupInfo::IQuorumChecker& TBlobStorageGroupInfo::GetQuorumChecker() const {
@@ -1111,7 +1111,7 @@ bool TFailDomain::IsDifferentAt(const TLevelIds &id, const TFailDomain &other) c
     while (key != id.Ids.end()) {
         while (true) {
             if (a == Levels.end()) {
-                Y_FAIL("Not enough a levels for FailDomain comparison");
+                Y_ABORT("Not enough a levels for FailDomain comparison");
             }
             if (a->first < *key) {
                 ++a;
@@ -1119,7 +1119,7 @@ bool TFailDomain::IsDifferentAt(const TLevelIds &id, const TFailDomain &other) c
 
                 while (true) {
                     if (b == other.Levels.end()) {
-                        Y_FAIL("Not enough b levels for FailDomain comparison");
+                        Y_ABORT("Not enough b levels for FailDomain comparison");
                     }
                     if (b->first < *key) {
                         ++b;
@@ -1132,12 +1132,12 @@ bool TFailDomain::IsDifferentAt(const TLevelIds &id, const TFailDomain &other) c
                         ++b;
                         break;
                     } else {
-                        Y_FAIL("Missing b level for FailDomain comparison");
+                        Y_ABORT("Missing b level for FailDomain comparison");
                     }
                 }
                 break;
             } else {
-                Y_FAIL("Missing a level for FailDomain comparison");
+                Y_ABORT("Missing a level for FailDomain comparison");
             }
         }
     }

@@ -489,7 +489,7 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
         }
     }
 
-    Y_FAIL("Unexpected");
+    Y_ABORT("Unexpected");
 }
 } //namespace
 

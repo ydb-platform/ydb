@@ -432,7 +432,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvents::TEvUndelivered::TPtr& ev) {
             }
             return;
     }
-    Y_FAIL("UNEXPECTED EVENT TYPE");
+    Y_ABORT("UNEXPECTED EVENT TYPE");
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {

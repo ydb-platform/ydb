@@ -242,7 +242,7 @@ namespace {
             break;
 
         default:
-            Y_FAIL("Unknown format");
+            Y_ABORT("Unknown format");
         }
     }
 
@@ -270,7 +270,7 @@ namespace {
             break;
 
         default:
-            Y_FAIL("Unknown format");
+            Y_ABORT("Unknown format");
         }
     }
 

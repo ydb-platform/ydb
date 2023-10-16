@@ -233,7 +233,7 @@ private:
                 stats.Add(rel.Size, channel);
                 ++prevPage;
             } else if (!rel.IsHead()) {
-                Y_FAIL("Got unaligned NPage::TFrames head record");
+                Y_ABORT("Got unaligned NPage::TFrames head record");
             } else {
                 break;
             }

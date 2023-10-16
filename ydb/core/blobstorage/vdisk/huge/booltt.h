@@ -38,7 +38,7 @@ public:
                 TDuration d = now - Start;
                 Top.Push(TRec(now, d));
             } else
-                Y_FAIL("Unexpected case: curValue# %d newValue# %d", int(curValue), int(newValue));
+                Y_ABORT("Unexpected case: curValue# %d newValue# %d", int(curValue), int(newValue));
         }
 
         void Output(IOutputStream &str) {

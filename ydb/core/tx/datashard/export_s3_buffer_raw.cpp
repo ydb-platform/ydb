@@ -123,9 +123,9 @@ void TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
             break;
         case NScheme::NTypeIds::Pg:
             // TODO: support pg types
-            Y_FAIL("Unsupported pg type");
+            Y_ABORT("Unsupported pg type");
         default:
-            Y_FAIL("Unsupported type");
+            Y_ABORT("Unsupported type");
         }
     }
 
@@ -161,7 +161,7 @@ bool TS3BufferRaw::IsFilled() const {
 }
 
 TString TS3BufferRaw::GetError() const {
-    Y_FAIL("unreachable");
+    Y_ABORT("unreachable");
 }
 
 TMaybe<TBuffer> TS3BufferRaw::Flush(bool) {

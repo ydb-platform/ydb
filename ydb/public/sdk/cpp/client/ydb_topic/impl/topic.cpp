@@ -182,7 +182,7 @@ const TVector<TConsumer>& TTopicDescription::GetConsumers() const {
 
 void TTopicDescription::SerializeTo(Ydb::Topic::CreateTopicRequest& request) const {
     Y_UNUSED(request);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 const Ydb::Topic::DescribeTopicResult& TTopicDescription::GetProto() const {

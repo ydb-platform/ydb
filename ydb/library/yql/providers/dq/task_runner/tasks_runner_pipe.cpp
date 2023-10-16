@@ -629,11 +629,11 @@ public:
     }
 
     void Pause() override {
-        Y_FAIL("Checkpoints are not supported");
+        Y_ABORT("Checkpoints are not supported");
     }
 
     void Resume() override {
-        Y_FAIL("Checkpoints are not supported");
+        Y_ABORT("Checkpoints are not supported");
     }
 
     bool IsPaused() const override {
@@ -809,11 +809,11 @@ public:
     }
 
     void Pause() override {
-        Y_FAIL("Checkpoints are not supported");
+        Y_ABORT("Checkpoints are not supported");
     }
 
     void Resume() override {
-        Y_FAIL("Checkpoints are not supported");
+        Y_ABORT("Checkpoints are not supported");
     }
 
     bool IsPaused() const override {
@@ -1012,7 +1012,7 @@ public:
     }
 
     NKikimr::NMiniKQL::TType* GetOutputType() const override {
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
         return nullptr;
     }
 
@@ -1192,46 +1192,46 @@ public:
     }
 
     void Finish() override {
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
     }
 
     bool Pop(NDqProto::TWatermark& watermark) override {
         Y_UNUSED(watermark);
-        Y_FAIL("Watermarks are not supported");
+        Y_ABORT("Watermarks are not supported");
     }
 
     bool Pop(NDqProto::TCheckpoint& checkpoint) override {
         Y_UNUSED(checkpoint);
-        Y_FAIL("Checkpoints are not supported");
+        Y_ABORT("Checkpoints are not supported");
     }
 
     bool IsFull() const override {
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
     }
 
     void Push(NUdf::TUnboxedValue&& value) override {
         Y_UNUSED(value);
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
     }
 
     void WidePush(NUdf::TUnboxedValue* values, ui32 count) override {
         Y_UNUSED(values);
         Y_UNUSED(count);
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
     }
 
     void Push(NDqProto::TWatermark&& watermark) override {
         Y_UNUSED(watermark);
-        Y_FAIL("Watermarks are not supported");
+        Y_ABORT("Watermarks are not supported");
     }
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
         Y_UNUSED(checkpoint);
-        Y_FAIL("Checkpoints are not supported");
+        Y_ABORT("Checkpoints are not supported");
     }
 
     bool HasData() const override {
-        Y_FAIL("Unimplemented");
+        Y_ABORT("Unimplemented");
     }
 
 private:

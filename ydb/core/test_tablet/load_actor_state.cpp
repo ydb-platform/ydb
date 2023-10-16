@@ -77,7 +77,7 @@ namespace NKikimr::NTestShard {
                 return;
 
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
 
         // obtain current key

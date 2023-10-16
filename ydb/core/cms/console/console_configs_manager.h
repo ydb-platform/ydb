@@ -208,7 +208,7 @@ private:
             CFunc(TEvPrivate::EvCleanupLog, CleanupLog);
 
         default:
-            Y_FAIL("TConfigsManager::StateWork unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("TConfigsManager::StateWork unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
         }
     }

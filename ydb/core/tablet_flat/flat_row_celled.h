@@ -21,7 +21,7 @@ namespace NTable {
                 if (it >= key.size()) {
                     Cells[it] = keyDefaults[it];
                 } else if (key[it] && key[it].Type() != keyDefaults.Types[it].GetTypeId()) {
-                    Y_FAIL("Key does not comply table schema");
+                    Y_ABORT("Key does not comply table schema");
                 } else {
                     Cells[it] = TCell((char*)key[it].Data(), key[it].Size());
                 }

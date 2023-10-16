@@ -462,7 +462,7 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
             Blackboard.AddPutOkResponse(blob, orderNumber);
             break;
         default:
-        Y_FAIL("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
+        Y_ABORT("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
     }
     Step(logCtx, outVGets, outVPuts, outGetResult);
 }
@@ -507,7 +507,7 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVMultiPutRes
                 Blackboard.AddPutOkResponse(blob, orderNumber);
                 break;
             default:
-            Y_FAIL("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
+            Y_ABORT("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
         }
     }
     Step(logCtx, outVGets, outVMultiPuts, outGetResult);

@@ -252,7 +252,7 @@ namespace NKikimr {
                         case EWindowState::Fading:
                         case EWindowState::Frozen:
                             break;
-                        default: Y_FAIL("Unexpected case");
+                        default: Y_ABORT("Unexpected case");
                     }
                     UpdateCountdown(costChange);
                 }
@@ -348,7 +348,7 @@ namespace NKikimr {
                             break;
                         }
                         default:
-                            Y_FAIL("Unexpected case");
+                            Y_ABORT("Unexpected case");
                     }
                 }
 

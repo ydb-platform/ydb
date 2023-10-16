@@ -538,7 +538,7 @@ class TTablet : public TActor<TTablet> {
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TEvBootstrap::EventType, Bootstrap);
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -546,7 +546,7 @@ class TTablet : public TActor<TTablet> {
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TEvBootstrap::EventType, BootstrapFollower);
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 

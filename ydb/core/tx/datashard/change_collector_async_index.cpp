@@ -227,7 +227,7 @@ TArrayRef<TTag> TAsyncIndexChangeCollector::GetTagsToSelect(const TTableId& tabl
     case ERowOp::Reset:
         return it->second.IndexColumns;
     default:
-        Y_FAIL("unreachable");
+        Y_ABORT("unreachable");
     }
 }
 

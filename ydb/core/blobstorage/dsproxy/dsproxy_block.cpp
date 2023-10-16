@@ -85,7 +85,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
             }
 
             default:
-                Y_FAIL("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
+                Y_ABORT("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
         }
         for (const TVDiskID& vdiskId : queryStatus) {
             SendToQueue(std::make_unique<TEvBlobStorage::TEvVStatus>(vdiskId), 0);

@@ -1798,7 +1798,7 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
         case NUdf::EDataSlot::Datetime64:
         case NUdf::EDataSlot::Timestamp64:
         case NUdf::EDataSlot::Interval64:
-            Y_FAIL("TODO");
+            Y_ABORT("TODO");
 
         default:
             ;
@@ -1913,7 +1913,7 @@ NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRe
     case NUdf::EDataSlot::Datetime64:
     case NUdf::EDataSlot::Timestamp64:
     case NUdf::EDataSlot::Interval64:
-        Y_FAIL("TODO");
+        Y_ABORT("TODO");
     }
 
     MKQL_ENSURE(false, "SimpleValueFromYson: Incorrect typeid: " << type);

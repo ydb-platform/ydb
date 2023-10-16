@@ -3048,48 +3048,45 @@ TExprNode::TPtr Normalize(const TCoAggregate& node, TExprContext& ctx) {
         TExprNode::TPtr aggTupleNode = aggTuple.Ptr();
         if (needRebuildNames && aggTuple.Trait().Maybe<TCoAggregationTraits>()) {
             auto traits = aggTuple.Trait().Cast<TCoAggregationTraits>();
-            const TTypeAnnotationNode* finishType = traits.FinishHandler().Ref().GetTypeAnn();
-            if (finishType->GetKind() == ETypeAnnotationKind::Tuple && finishType->Cast<TTupleExprType>()->GetSize() == names.size()) {
-                needRebuild = true;
-                TMap<TStringBuf, size_t> originalIndexes;
-                for (size_t i = 0; i < names.size(); ++i) {
-                    YQL_ENSURE(originalIndexes.insert({ names[i], i}).second);
-                }
-                YQL_ENSURE(names.size() == originalIndexes.size());
-
-                TExprNodeList nameNodes;
-                TExprNodeList finishBody;
-                TExprNode::TPtr arg = ctx.NewArgument(traits.FinishHandler().Pos(), "arg");
-                auto originalTuple = ctx.Builder(traits.FinishHandler().Pos())
-                    .Apply(traits.FinishHandler().Ref())
-                        .With(0, arg)
-                    .Seal()
-                    .Build();
-                
-                for (auto& [name, idx] : originalIndexes) {
-                    nameNodes.emplace_back(ctx.NewAtom(aggTuple.ColumnName().Pos(), name));
-                    finishBody.emplace_back(ctx.Builder(traits.FinishHandler().Pos())
-                        .Callable("Nth")
-                            .Add(0, originalTuple)
-                            .Atom(1, idx)
-                        .Seal()
-                        .Build());
-                }
-
-                auto finishLambda = ctx.NewLambda(traits.FinishHandler().Pos(),
-                    ctx.NewArguments(traits.FinishHandler().Pos(), { arg }),
-                    (originalIndexes.size() == 1) ? finishBody.front() : ctx.NewList(traits.FinishHandler().Pos(), std::move(finishBody)));
-
-                aggTupleNode = Build<TCoAggregateTuple>(ctx, aggTuple.Pos())
-                    .InitFrom(aggTuple)
-                    .ColumnName((originalIndexes.size() == 1) ? nameNodes.front() : ctx.NewList(aggTuple.ColumnName().Pos(), std::move(nameNodes)))
-                    .Trait<TCoAggregationTraits>()
-                        .InitFrom(traits)
-                        .FinishHandler(finishLambda)
-                    .Build()
-                    .Done().Ptr();
-                Sort(names);
+            needRebuild = true;
+            TMap<TStringBuf, size_t> originalIndexes;
+            for (size_t i = 0; i < names.size(); ++i) {
+                YQL_ENSURE(originalIndexes.insert({ names[i], i}).second);
             }
+            YQL_ENSURE(names.size() == originalIndexes.size());
+
+            TExprNodeList nameNodes;
+            TExprNodeList finishBody;
+            TExprNode::TPtr arg = ctx.NewArgument(traits.FinishHandler().Pos(), "arg");
+            auto originalTuple = ctx.Builder(traits.FinishHandler().Pos())
+                .Apply(traits.FinishHandler().Ref())
+                    .With(0, arg)
+                .Seal()
+                .Build();
+                
+            for (auto& [name, idx] : originalIndexes) {
+                nameNodes.emplace_back(ctx.NewAtom(aggTuple.ColumnName().Pos(), name));
+                finishBody.emplace_back(ctx.Builder(traits.FinishHandler().Pos())
+                    .Callable("Nth")
+                        .Add(0, originalTuple)
+                        .Atom(1, idx)
+                    .Seal()
+                    .Build());
+            }
+
+            auto finishLambda = ctx.NewLambda(traits.FinishHandler().Pos(),
+                ctx.NewArguments(traits.FinishHandler().Pos(), { arg }),
+                (originalIndexes.size() == 1) ? finishBody.front() : ctx.NewList(traits.FinishHandler().Pos(), std::move(finishBody)));
+
+            aggTupleNode = Build<TCoAggregateTuple>(ctx, aggTuple.Pos())
+                .InitFrom(aggTuple)
+                .ColumnName((originalIndexes.size() == 1) ? nameNodes.front() : ctx.NewList(aggTuple.ColumnName().Pos(), std::move(nameNodes)))
+                .Trait<TCoAggregationTraits>()
+                    .InitFrom(traits)
+                    .FinishHandler(finishLambda)
+                .Build()
+                .Done().Ptr();
+            Sort(names);
         }
 
         YQL_ENSURE(!names.empty());

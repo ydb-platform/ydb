@@ -88,6 +88,8 @@ template <
 >
 class TGenericTypedServiceContext;
 
+struct THandlerInvocationOptions;
+
 class TServiceContextWrapper;
 
 template <class TRequestMessage, class TResponseMessage>

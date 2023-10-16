@@ -102,6 +102,11 @@ runs:
       run: |
         echo "10 [Test history](${TESTMO_URL}/automation/runs/view/${{steps.th.outputs.runid}})" >> $SUMMARY_LINKS
 
+    - name: set environment variables required by some tests
+      shell: bash
+      run: |
+        echo "PSQL_BINARY=/usr/bin/psql" >> $GITHUB_ENV
+
     - name: ya test
       shell: bash
       run: |

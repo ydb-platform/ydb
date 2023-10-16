@@ -49,7 +49,6 @@ SRCS(
     mkql_match_recognize_nfa_ut.cpp
     mkql_safe_circular_buffer_ut.cpp
     mkql_sort_ut.cpp
-    mkql_simd_ut.cpp
     mkql_switch_ut.cpp
     mkql_todict_ut.cpp
     mkql_variant_ut.cpp

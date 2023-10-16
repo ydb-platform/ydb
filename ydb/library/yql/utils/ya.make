@@ -60,6 +60,7 @@ RECURSE(
     failure_injector
     fetch
     log
+    simd
     test_http_server
     threading
 )

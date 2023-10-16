@@ -3,11 +3,8 @@
 #include <cstdint>
 #include <immintrin.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
-namespace NBlockJoin {
+namespace NSimd {
 namespace NAVX2 {
-namespace NSIMD {
 
 template <typename T>
 struct TSimd8;
@@ -317,8 +314,5 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
     }
 };
 
-}
-}
-}
 }
 }

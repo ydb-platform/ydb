@@ -13,6 +13,7 @@ target_link_libraries(services-persqueue_v1-actors PUBLIC
   yutil
   cpp-actors-core
   cpp-containers-disjoint_interval_tree
+  cpp-string_utils-base64
   ydb-core-base
   ydb-core-grpc_services
   ydb-core-persqueue

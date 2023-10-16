@@ -4448,6 +4448,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPersQueue::TEvProposeTransactionAttachResult, Handle);
 
         HFuncTraced(TEvPrivate::TEvProcessStatistics, Handle);
+        HFuncTraced(TEvPrivate::TEvStatFastBroadcastCheck, Handle);
         HFuncTraced(NStat::TEvStatistics::TEvRegisterNode, Handle);
 
     default:

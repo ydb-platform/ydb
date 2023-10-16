@@ -595,8 +595,6 @@ private:
         QueueLeader_ = ev->Get()->QueueLeader;
         QuoterResources_ = std::move(ev->Get()->QuoterResources);
 
-        Y_ABORT_UNLESS(SchemeCache_);
-
         RLOG_SQS_TRACE("Got configuration. Root url: " << RootUrl_
                         << ", Shards: " << Shards_
                         << ", Fail: " << ev->Get()->Fail);
@@ -616,6 +614,12 @@ private:
             if (QueueAttributes_.Defined()) {
                 RLOG_SQS_TRACE("Got configuration. Attributes: " << *QueueAttributes_);
             }
+        }
+
+        if (ev->Get()->Throttled) {
+            MakeError(MutableErrorDesc(), NErrors::THROTTLING_EXCEPTION, "Too many requests for nonexistent queue.");
+            SendReplyAndDie();
+            return;
         }
 
         if (ev->Get()->Fail) {
@@ -646,6 +650,8 @@ private:
                 SendReplyAndDie();
                 return;
             }
+
+            Y_ABORT_UNLESS(SchemeCache_);
 
             RequestSchemeCache(GetActionACLSourcePath()); // this also checks that requested queue (if any) does exist
             RequestTicketParser();

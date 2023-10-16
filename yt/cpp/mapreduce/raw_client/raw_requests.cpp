@@ -422,6 +422,18 @@ TOperationAttributes GetOperation(
     return ParseOperationAttributes(NodeFromYsonString(result.Response));
 }
 
+TOperationAttributes GetOperation(
+    const IRequestRetryPolicyPtr& retryPolicy,
+    const TClientContext& context,
+    const TString& alias,
+    const TGetOperationOptions& options)
+{
+    THttpHeader header("GET", "get_operation");
+    header.MergeParameters(SerializeParamsForGetOperation(alias, options));
+    auto result = RetryRequestWithPolicy(retryPolicy, context, header);
+    return ParseOperationAttributes(NodeFromYsonString(result.Response));
+}
+
 void AbortOperation(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,

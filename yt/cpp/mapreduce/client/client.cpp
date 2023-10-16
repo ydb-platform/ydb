@@ -1116,6 +1116,14 @@ TOperationAttributes TClient::GetOperation(
     return NRawClient::GetOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, options);
 }
 
+TOperationAttributes TClient::GetOperation(
+    const TString& alias,
+    const TGetOperationOptions& options)
+{
+    CheckShutdown();
+    return NRawClient::GetOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, alias, options);
+}
+
 TListOperationsResult TClient::ListOperations(
     const TListOperationsOptions& options)
 {

@@ -2349,6 +2349,8 @@ struct TGetOperationOptions
     ///
     /// @brief What attributes to request (if omitted, the default set of attributes will be requested).
     FLUENT_FIELD_OPTION(TOperationAttributeFilter, AttributeFilter);
+
+    FLUENT_FIELD_OPTION(bool, IncludeRuntime);
 };
 
 ///

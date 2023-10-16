@@ -163,6 +163,12 @@ TOperationAttributes GetOperation(
     const TOperationId& operationId,
     const TGetOperationOptions& options = TGetOperationOptions());
 
+TOperationAttributes GetOperation(
+    const IRequestRetryPolicyPtr& retryPolicy,
+    const TClientContext& context,
+    const TString& operationId,
+    const TGetOperationOptions& options = TGetOperationOptions());
+
 void AbortOperation(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,

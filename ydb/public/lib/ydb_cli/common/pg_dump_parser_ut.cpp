@@ -96,7 +96,9 @@ Y_UNIT_TEST_SUITE(PgDumpParserTests) {
             "ALTER TABLE ONLY public.pgbench_accounts\n"
             "    ADD CONSTRAINT pgbench_accounts_pkey PRIMARY KEY (aid);\n"
             "ALTER TABLE ONLY public.pgbench_branches\n"
-            "    ADD CONSTRAINT pgbench_branches_pkey PRIMARY KEY (bid);\n";
+            "    ADD CONSTRAINT pgbench_branches_pkey PRIMARY KEY (bid);\n"
+            "ALTER TABLE ONLY public.pgbench_accounts\n"
+            "    ADD CONSTRAINT c_widget_field_6 FOREIGN KEY (value_sysmapid) REFERENCES public.sysmaps(sysmapid) ON DELETE CASCADE;\n";
         TString result = 
             "CREATE TABLE pgbench_accounts (\n"
             "    aid integer NOT NULL,\n"
@@ -124,7 +126,9 @@ Y_UNIT_TEST_SUITE(PgDumpParserTests) {
             "-- ALTER TABLE ONLY public.pgbench_accounts\n"
             "--     ADD CONSTRAINT pgbench_accounts_pkey PRIMARY KEY (aid);\n"
             "-- ALTER TABLE ONLY public.pgbench_branches\n"
-            "--     ADD CONSTRAINT pgbench_branches_pkey PRIMARY KEY (bid);\n";
+            "--     ADD CONSTRAINT pgbench_branches_pkey PRIMARY KEY (bid);\n"
+            "-- ALTER TABLE ONLY public.pgbench_accounts\n"
+            "--     ADD CONSTRAINT c_widget_field_6 FOREIGN KEY (value_sysmapid) REFERENCES public.sysmaps(sysmapid) ON DELETE CASCADE;\n";
         UNIT_ASSERT_EQUAL(ParseDump(data), result);
         UNIT_ASSERT_EQUAL(ParseDumpFixedString(data), result);
     }

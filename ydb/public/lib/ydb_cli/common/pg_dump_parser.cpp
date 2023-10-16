@@ -164,6 +164,7 @@ void TPgDumpParser::ApplyToken(TSQLCommandNode* root) {
 void TPgDumpParser::PrimaryKeyCheck() {
     if (IsPrimaryKey) {
         PrimaryKeyByTable[TableName] = PrimaryKeyName;
+        IsPrimaryKey = false;
     }
 }
 

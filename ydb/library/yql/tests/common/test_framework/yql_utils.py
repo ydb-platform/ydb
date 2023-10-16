@@ -18,6 +18,7 @@ from threading import Lock
 
 import pytest
 import yatest.common
+import cyson
 
 import logging
 import getpass
@@ -39,6 +40,18 @@ def get_param(name, default=None):
 def get_gateway_cfg_suffix():
     default_suffix = None
     return get_param('gateway_config_suffix', default_suffix) or ''
+
+
+def do_custom_query_check(res, sql_query):
+    custom_check = re.search(r"/\* custom check:(.*)\*/", sql_query)
+    if not custom_check:
+        return False
+    custom_check = custom_check.group(1)
+    yt_res_yson = res.results
+    yt_res_yson = cyson.loads(yt_res_yson) if yt_res_yson else cyson.loads("[]")
+    yt_res_yson = replace_vals(yt_res_yson)
+    assert eval(custom_check), 'Condition "%(custom_check)s" fails\nResult:\n %(yt_res_yson)s\n' % locals()
+    return True
 
 
 def get_gateway_cfg_filename():

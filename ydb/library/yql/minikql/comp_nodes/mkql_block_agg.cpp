@@ -7,6 +7,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
@@ -461,7 +462,7 @@ public:
         IComputationWideFlowNode* flow,
         std::optional<ui32> filterColumn,
         size_t width,
-        TVector<TAggParams<IBlockAggregatorCombineAll>>&& aggsParams)
+        std::vector<TAggParams<IBlockAggregatorCombineAll>>&& aggsParams)
         : TStatefulWideFlowComputationNode(mutables, flow, EValueRepresentation::Any)
         , Flow_(flow)
         , FilterColumn_(filterColumn)
@@ -543,14 +544,14 @@ public:
 
 private:
     struct TState : public TComputationValue<TState> {
-        TVector<NUdf::TUnboxedValue> Values_;
-        TVector<NUdf::TUnboxedValue*> ValuePointers_;
-        TVector<std::unique_ptr<IBlockAggregatorCombineAll>> Aggs_;
+        std::vector<NUdf::TUnboxedValue> Values_;
+        std::vector<NUdf::TUnboxedValue*> ValuePointers_;
+        std::vector<std::unique_ptr<IBlockAggregatorCombineAll>> Aggs_;
         bool IsFinished_ = false;
         bool HasValues_ = false;
-        TVector<char> AggStates_;
+        std::vector<char> AggStates_;
 
-        TState(TMemoryUsageInfo* memInfo, size_t width, std::optional<ui32>, const TVector<TAggParams<IBlockAggregatorCombineAll>>& params, TComputationContext& ctx)
+        TState(TMemoryUsageInfo* memInfo, size_t width, std::optional<ui32>, const std::vector<TAggParams<IBlockAggregatorCombineAll>>& params, TComputationContext& ctx)
             : TComputationValue(memInfo)
             , Values_(width)
             , ValuePointers_(width)
@@ -595,7 +596,7 @@ private:
     IComputationWideFlowNode* Flow_;
     std::optional<ui32> FilterColumn_;
     const size_t Width_;
-    const TVector<TAggParams<IBlockAggregatorCombineAll>> AggsParams_;
+    const std::vector<TAggParams<IBlockAggregatorCombineAll>> AggsParams_;
 };
 
 template <typename T>
@@ -679,13 +680,10 @@ std::hash<TExternalFixedSizeKey> MakeHash(ui32 keyLength) {
 }
 
 template <typename TKey, typename TAggregator, typename TFixedAggState, bool UseSet, bool UseFilter, bool Finalize, bool Many, typename TDerived>
-class THashedWrapperBase : public TStatefulWideFlowBlockComputationNode<TDerived> {
-public:
-    using TSelf = THashedWrapperBase<TKey, TAggregator, TFixedAggState, UseSet, UseFilter, Finalize, Many, TDerived>;
-    using TBase = TStatefulWideFlowBlockComputationNode<TDerived>;
-
+class THashedWrapperBase : public TStatefulWideFlowCodegeneratorNode<TDerived> {
+    using TComputationBase = TStatefulWideFlowCodegeneratorNode<TDerived>;
     static constexpr bool UseArena = !InlineAggState && std::is_same<TFixedAggState, TStateArena>::value;
-
+public:
     THashedWrapperBase(TComputationMutables& mutables,
         IComputationWideFlowNode* flow,
         std::optional<ui32> filterColumn,
@@ -693,14 +691,15 @@ public:
         const std::vector<TKeyParams>& keys,
         size_t maxBlockLen,
         ui32 keyLength,
-        TVector<TAggParams<TAggregator>>&& aggsParams,
+        std::vector<TAggParams<TAggregator>>&& aggsParams,
         ui32 streamIndex,
-        TVector<TVector<ui32>>&& streams)
-        : TBase(mutables, flow, keys.size() + aggsParams.size() + 1)
+        std::vector<std::vector<ui32>>&& streams)
+        : TComputationBase(mutables, flow, EValueRepresentation::Boxed)
         , Flow_(flow)
         , FilterColumn_(filterColumn)
         , Width_(width)
         , OutputWidth_(keys.size() + aggsParams.size() + 1)
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(width))
         , Keys_(keys)
         , MaxBlockLen_(maxBlockLen)
         , AggsParams_(std::move(aggsParams))
@@ -722,262 +721,228 @@ public:
         NUdf::TUnboxedValue*const* output) const
     {
         auto& s = GetState(state, ctx);
-        if (s.IsFinished_) {
-            return EFetchResult::Finish;
-        }
+        if (!s.Count) {
+            if (s.IsFinished_)
+                return EFetchResult::Finish;
 
-        while (!s.WritingOutput_) {
-            auto result = Flow_->FetchValues(ctx, s.ValuePointers_.data());
-            if (result == EFetchResult::Yield) {
-                return result;
-            } else if (result == EFetchResult::One) {
-                ++s.BatchNum_;
-                ui64 batchLength = GetBatchLength(s.Values_.data());
-                if (!batchLength) {
-                    continue;
-                }
-
-                const ui8* filterBitmap = nullptr;
-                if constexpr (UseFilter) {
-                    auto filterDatum = TArrowBlock::From(s.Values_[*FilterColumn_]).GetDatum();
-                    if (filterDatum.is_scalar()) {
-                        if (!filterDatum.template scalar_as<arrow::UInt8Scalar>().value) {
-                            continue;
-                        }
-                    } else {
-                        const auto& arr = filterDatum.array();
-                        filterBitmap = arr->template GetValues<ui8>(1);
-                        ui64 popCount = GetBitmapPopCount(arr);
-                        if (popCount == 0) {
-                            continue;
-                        }
-                    }
-                }
-
-                const ui32* streamIndexData = nullptr;
-                TMaybe<ui32> streamIndexScalar;
-                if constexpr (Many) {
-                    auto streamIndexDatum = TArrowBlock::From(s.Values_[StreamIndex_]).GetDatum();
-                    if (streamIndexDatum.is_scalar()) {
-                        streamIndexScalar = streamIndexDatum.template scalar_as<arrow::UInt32Scalar>().value;
-                    } else {
-                        MKQL_ENSURE(streamIndexDatum.is_array(), "Expected array");
-                        streamIndexData = streamIndexDatum.array()->template GetValues<ui32>(1);
-                    }
-                    s.UnwrappedValues_ = s.Values_;
-                    for (const auto& p : AggsParams_) {
-                        const auto& columnDatum = TArrowBlock::From(s.UnwrappedValues_[p.Column_]).GetDatum();
-                        MKQL_ENSURE(columnDatum.is_array(), "Expected array");
-                        s.UnwrappedValues_[p.Column_] = ctx.HolderFactory.CreateArrowBlock(Unwrap(*columnDatum.array(), p.StateType_));
-                    }
-                }
-
-                s.HasValues_ = true;
-                TVector<arrow::Datum> keysDatum;
-                keysDatum.reserve(Keys_.size());
-                for (ui32 i = 0; i < Keys_.size(); ++i) {
-                    keysDatum.emplace_back(TArrowBlock::From(s.Values_[Keys_[i].Index]).GetDatum());
-                }
-
-                std::array<TOutputBuffer, PrefetchBatchSize> out;
-                for (ui32 i = 0; i < PrefetchBatchSize; ++i) {
-                    out[i].Resize(sizeof(TKey));
-                }
-
-                std::array<TRobinHoodBatchRequestItem<TKey>, PrefetchBatchSize> insertBatch;
-                std::array<ui64, PrefetchBatchSize> insertBatchRows;
-                std::array<char*, PrefetchBatchSize> insertBatchPayloads;
-                std::array<bool, PrefetchBatchSize> insertBatchIsNew;
-                ui32 insertBatchLen = 0;
-
-                auto processInsertBatch = [&]() {
-                    for (ui32 i = 0; i < insertBatchLen; ++i) {
-                        auto& r = insertBatch[i];
-                        TStringBuf str = out[i].Finish();
-                        TKey key = MakeKey<TKey>(str, KeyLength_);
-                        r.ConstructKey(key);
-                    }
-
-                    if constexpr (UseSet) {
-                        s.HashSet_->BatchInsert({insertBatch.data(), insertBatchLen},[&](size_t index, typename TState::TSetImpl::iterator iter, bool isNew) {
-                            Y_UNUSED(index);
-                            if (isNew) {
-                                if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                                    MoveKeyToArena(s.HashSet_->GetKey(iter), s.Arena_, KeyLength_);
-                                }
-                            }
-                        });
-                    } else {
-                        using THashTable = std::conditional_t<InlineAggState, typename TState::TDynMapImpl, typename TState::TFixedMapImpl>;
-                        THashTable* hash;
-                        if constexpr (!InlineAggState) {
-                            hash = s.HashFixedMap_.get();
-                        } else {
-                            hash = s.HashMap_.get();
-                        }
-
-                        hash->BatchInsert({insertBatch.data(), insertBatchLen}, [&](size_t index, typename THashTable::iterator iter, bool isNew) {
-                            if (isNew) {
-                                if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                                    MoveKeyToArena(hash->GetKey(iter), s.Arena_, KeyLength_);
-                                }
-                            }
-
-                            if constexpr (UseArena) {
-                                // prefetch payloads only
-                                auto payload = hash->GetPayload(iter);
-                                char* ptr;
-                                if (isNew) {
-                                    ptr = (char*)s.Arena_.Alloc(s.TotalStateSize_);
-                                    *(char**)payload = ptr;
-                                } else {
-                                    ptr = *(char**)payload;
-                                }
-
-                                insertBatchIsNew[index] = isNew;
-                                insertBatchPayloads[index] = ptr;
-                                NYql::PrefetchForWrite(ptr);
-                            } else {
-                                // process insert
-                                auto payload = (char*)hash->GetPayload(iter);
-                                auto row = insertBatchRows[index];
-                                ui32 streamIndex = 0;
-                                if constexpr (Many) {
-                                    streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
-                                }
-
-                                Insert(row, payload, isNew, streamIndex, output, s);
-                            }
-                        });
-
-                        if constexpr (UseArena) {
-                            for (ui32 i = 0; i < insertBatchLen; ++i) {
-                                auto row = insertBatchRows[i];
-                                ui32 streamIndex = 0;
-                                if constexpr (Many) {
-                                    streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
-                                }
-
-                                bool isNew = insertBatchIsNew[i];
-                                char* payload = insertBatchPayloads[i];
-                                Insert(row, payload, isNew, streamIndex, output, s);
-                            }
-                        }
-                    }
-                };
-
-                for (ui64 row = 0; row < batchLength; ++row) {
-                    if constexpr (UseFilter) {
-                        if (filterBitmap && !filterBitmap[row]) {
-                            continue;
-                        }
-                    }
-
-                    // encode key
-                    out[insertBatchLen].Rewind();
-                    for (ui32 i = 0; i < keysDatum.size(); ++i) {
-                        if (keysDatum[i].is_scalar()) {
-                            // TODO: more efficient code when grouping by scalar
-                            s.Readers_[i]->SaveScalarItem(*keysDatum[i].scalar(), out[insertBatchLen]);
-                        } else {
-                            s.Readers_[i]->SaveItem(*keysDatum[i].array(), row, out[insertBatchLen]);
-                        }
-                    }
-
-                    insertBatchRows[insertBatchLen] = row;
-                    ++insertBatchLen;
-                    if (insertBatchLen == PrefetchBatchSize) {
-                        processInsertBatch();
-                        insertBatchLen = 0;
-                    }
-                }
-
-                processInsertBatch();
-            } else {
-                if (!s.HasValues_) {
-                    s.IsFinished_ = true;
-                    return EFetchResult::Finish;
-                }
-
-                s.WritingOutput_ = true;
-                s.OutputBlockSize_ = 0;
-                s.PrepareAggBuilders(MaxBlockLen_);
-
-                if constexpr (UseSet) {
-                    s.HashSetIt_ = s.HashSet_->Begin();
-                } else {
-                    if (!InlineAggState) {
-                        s.HashFixedMapIt_ = s.HashFixedMap_->Begin();
-                    } else {
-                        s.HashMapIt_ = s.HashMap_->Begin();
-                    }
-                }
-            }
-        }
-
-        while (s.WritingOutput_) {
-            if constexpr (UseSet) {
-                for (; s.HashSetIt_ != s.HashSet_->End(); s.HashSet_->Advance(s.HashSetIt_)) {
-                    if (!s.HashSet_->IsValid(s.HashSetIt_)) {
+            while (!s.WritingOutput_) {
+                const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
+                s.Values_.assign(s.Values_.size(), NUdf::TUnboxedValuePod());
+                switch (Flow_->FetchValues(ctx, fields)) {
+                    case EFetchResult::Yield:
+                        return EFetchResult::Yield;
+                    case EFetchResult::One:
+                        s.ProcessInput(ctx.HolderFactory);
                         continue;
-                    }
-
-                    if (s.OutputBlockSize_ == MaxBlockLen_) {
-                        s.Flush(output, MaxBlockLen_, false, ctx);
-                        return EFetchResult::One;
-                    }
-
-                    const TKey& key = s.HashSet_->GetKey(s.HashSetIt_);
-                    TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
-                    for (auto& kb : s.Builders_) {
-                        kb->Add(in);
-                    }
-                    s.OutputBlockSize_++;
+                    case EFetchResult::Finish:
+                        break;
                 }
-                break;
-            } else {
-                bool done = InlineAggState ?
-                    Iterate(*s.HashMap_, s.HashMapIt_, output, s) :
-                    Iterate(*s.HashFixedMap_, s.HashFixedMapIt_, output, s);
-                if (done) {
+
+                if (s.Finish())
                     break;
-                }
-                s.Flush(output, MaxBlockLen_, false, ctx);
-                return EFetchResult::One;
+                else
+                    return EFetchResult::Finish;
+            }
+
+            if (!s.FillOutput(ctx.HolderFactory))
+                return EFetchResult::Finish;
+        }
+
+        const auto sliceSize = s.Slice();
+        for (size_t i = 0; i < OutputWidth_; ++i) {
+            if (const auto out = output[i]) {
+                *out = s.Get(sliceSize, ctx.HolderFactory, i);
             }
         }
-
-        s.IsFinished_ = true;
-        s.WritingOutput_ = false;
-        if (s.OutputBlockSize_) {
-            s.Flush(output, MaxBlockLen_, true, ctx);
-            return EFetchResult::One;
-        }
-        return EFetchResult::Finish;
+        return EFetchResult::One;
     }
+#ifndef MKQL_DISABLE_CODEGEN
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+        auto& context = ctx.Codegen.GetContext();
 
+        const auto valueType = Type::getInt128Ty(context);
+        const auto ptrValueType = PointerType::getUnqual(valueType);
+        const auto statusType = Type::getInt32Ty(context);
+        const auto indexType = Type::getInt64Ty(context);
+        const auto flagType = Type::getInt1Ty(context);
+        const auto arrayType = ArrayType::get(valueType, Width_);
+        const auto ptrValuesType = PointerType::getUnqual(arrayType);
+
+        TLLVMFieldsStructureState stateFields(context, Width_);
+        const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
+        const auto statePtrType = PointerType::getUnqual(stateType);
+
+        const auto atTop = &ctx.Func->getEntryBlock().back();
+
+        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Get));
+        const auto getType = FunctionType::get(valueType, {statePtrType, indexType, ctx.GetFactory()->getType(), indexType}, false);
+        const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", atTop);
+
+        const auto heightPtr = new AllocaInst(indexType, 0U, "height_ptr", atTop);
+        const auto stateOnStack = new AllocaInst(statePtrType, 0U, "state_on_stack", atTop);
+
+        new StoreInst(ConstantInt::get(indexType, 0), heightPtr, atTop);
+        new StoreInst(ConstantPointerNull::get(statePtrType), stateOnStack, atTop);
+
+        const auto make = BasicBlock::Create(context, "make", ctx.Func);
+        const auto main = BasicBlock::Create(context, "main", ctx.Func);
+        const auto more = BasicBlock::Create(context, "more", ctx.Func);
+        const auto test = BasicBlock::Create(context, "test", ctx.Func);
+        const auto read = BasicBlock::Create(context, "read", ctx.Func);
+        const auto good = BasicBlock::Create(context, "good", ctx.Func);
+        const auto stop = BasicBlock::Create(context, "stop", ctx.Func);
+        const auto work = BasicBlock::Create(context, "work", ctx.Func);
+        const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
+        const auto over = BasicBlock::Create(context, "over", ctx.Func);
+
+        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        block = make;
+
+        const auto ptrType = PointerType::getUnqual(StructType::get(context));
+        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THashedWrapperBase::MakeState));
+        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), statePtr->getType(), ctx.Ctx->getType()}, false);
+        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
+        CallInst::Create(makeType, makeFuncPtr, {self, statePtr, ctx.Ctx}, "", block);
+
+        BranchInst::Create(main, block);
+
+        block = main;
+
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
+        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
+        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
+        const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetCount() }, "count_ptr", block);
+
+        const auto count = new LoadInst(indexType, countPtr, "count", block);
+        const auto none = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, count, ConstantInt::get(indexType, 0), "none", block);
+
+        BranchInst::Create(more, fill, none, block);
+
+        block = more;
+
+        const auto finishedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIsFinished() }, "is_finished_ptr", block);
+        const auto finished = new LoadInst(flagType, finishedPtr, "finished", block);
+
+        const auto result = PHINode::Create(statusType, 5U, "result", over);
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
+
+        BranchInst::Create(over, test, finished, block);
+
+        block = test;
+
+        const auto writingOutputPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetWritingOutput() }, "writing_output_ptr", block);
+        const auto writingOutput = new LoadInst(flagType, writingOutputPtr, "writing_output", block);
+
+        BranchInst::Create(work, read, writingOutput, block);
+
+        block = read;
+
+        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
+        const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
+        SafeUnRefUnboxed(values, ctx, block);
+
+        const auto getres = GetNodeValues(Flow_, ctx, block);
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
+
+        const auto way = SwitchInst::Create(getres.first, good, 2U, block);
+        way->addCase(ConstantInt::get(statusType, i32(EFetchResult::Finish)), stop);
+        way->addCase(ConstantInt::get(statusType, i32(EFetchResult::Yield)), over);
+
+        block = good;
+
+        Value* array = UndefValue::get(arrayType);
+        for (auto idx = 0U; idx < getres.second.size(); ++idx) {
+            const auto value = getres.second[idx](ctx, block);
+            AddRefBoxed(value, ctx, block);
+            array = InsertValueInst::Create(array, value, {idx}, (TString("value_") += ToString(idx)).c_str(), block);
+        }
+        new StoreInst(array, values, block);
+
+        const auto processBlockFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::ProcessInput));
+        const auto processBlockType = FunctionType::get(Type::getVoidTy(context), {statePtrType, ctx.GetFactory()->getType()}, false);
+        const auto processBlockPtr = CastInst::Create(Instruction::IntToPtr, processBlockFunc, PointerType::getUnqual(processBlockType), "process_inputs_func", block);
+        CallInst::Create(processBlockType, processBlockPtr, {stateArg, ctx.GetFactory()}, "", block);
+
+        BranchInst::Create(read, block);
+
+        block = stop;
+
+        const auto finishFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Finish));
+        const auto finishType = FunctionType::get(flagType, {statePtrType}, false);
+        const auto finishPtr = CastInst::Create(Instruction::IntToPtr, finishFunc, PointerType::getUnqual(finishType), "finish_func", block);
+        const auto hasOutput = CallInst::Create(finishType, finishPtr, {stateArg}, "has_output", block);
+
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
+
+        BranchInst::Create(work, over, hasOutput, block);
+
+        block = work;
+
+        const auto fillBlockFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::FillOutput));
+        const auto fillBlockType = FunctionType::get(flagType, {statePtrType, ctx.GetFactory()->getType()}, false);
+        const auto fillBlockPtr = CastInst::Create(Instruction::IntToPtr, fillBlockFunc, PointerType::getUnqual(fillBlockType), "fill_output_func", block);
+        const auto hasData = CallInst::Create(fillBlockType, fillBlockPtr, {stateArg, ctx.GetFactory()}, "fill_output", block);
+
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
+
+        BranchInst::Create(fill, over, hasData, block);
+
+        block = fill;
+
+        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Slice));
+        const auto sliceType = FunctionType::get(indexType, {statePtrType}, false);
+        const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice_func", block);
+        const auto slice = CallInst::Create(sliceType, slicePtr, {stateArg}, "slice", block);
+        new StoreInst(slice, heightPtr, block);
+        new StoreInst(stateArg, stateOnStack, block);
+
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
+
+        BranchInst::Create(over, block);
+
+        block = over;
+
+        ICodegeneratorInlineWideNode::TGettersList getters(OutputWidth_);
+        for (size_t idx = 0U; idx < getters.size(); ++idx) {
+            getters[idx] = [idx, getType, getPtr, heightPtr, indexType, statePtrType, stateOnStack](const TCodegenContext& ctx, BasicBlock*& block) {
+                const auto stateArg = new LoadInst(statePtrType, stateOnStack, "state", block);
+                const auto heightArg = new LoadInst(indexType, heightPtr, "height", block);
+                return CallInst::Create(getType, getPtr, {stateArg, heightArg, ctx.GetFactory(), ConstantInt::get(indexType, idx)}, "get", block);
+            };
+        }
+        return {result, std::move(getters)};
+    }
+#endif
 private:
-    struct TState : public TComputationValue<TState> {
+    struct TState : public TBlockState {
+        bool WritingOutput_ = false;
+        bool IsFinished_ = false;
+
+        const std::optional<ui32> FilterColumn_;
+        const std::vector<TKeyParams> Keys_;
+        const std::vector<TAggParams<TAggregator>>& AggsParams_;
+        const ui32 KeyLength_;
+        const ui32 StreamIndex_;
+        const std::vector<std::vector<ui32>> Streams_;
+        const size_t MaxBlockLen_;
+
         template<typename TKeyType>
         struct THashSettings {
             static constexpr bool CacheHash = std::is_same_v<TKeyType, TSSOKey>;
         };
-        using TBase = TComputationValue<TState>;
         using TDynMapImpl = TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
         using TSetImpl = THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
         using TFixedMapImpl = TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
 
         ui64 BatchNum_ = 0;
-        TVector<NUdf::TUnboxedValue> Values_;
-        TVector<NUdf::TUnboxedValue*> ValuePointers_;
-        TVector<std::unique_ptr<TAggregator>> Aggs_;
-        TVector<ui32> AggStateOffsets_;
-        TVector<NUdf::TUnboxedValue> UnwrappedValues_;
-        TVector<std::unique_ptr<IBlockReader>> Readers_;
-        TVector<std::unique_ptr<IArrayBuilder>> Builders_;
-        TVector<std::unique_ptr<IAggColumnBuilder>> AggBuilders_;
-        bool WritingOutput_ = false;
-        bool IsFinished_ = false;
+        TUnboxedValueVector Values_;
+        std::vector<std::unique_ptr<TAggregator>> Aggs_;
+        std::vector<ui32> AggStateOffsets_;
+        TUnboxedValueVector UnwrappedValues_;
+        std::vector<std::unique_ptr<IBlockReader>> Readers_;
+        std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
+        std::vector<std::unique_ptr<IAggColumnBuilder>> AggBuilders_;
         bool HasValues_ = false;
         ui32 TotalStateSize_ = 0;
         size_t OutputBlockSize_ = 0;
@@ -989,39 +954,42 @@ private:
         typename TFixedMapImpl::const_iterator HashFixedMapIt_;
         TPagedArena Arena_;
 
-        TState(TMemoryUsageInfo* memInfo, ui32 keyLength, size_t width, std::optional<ui32>, const TVector<TAggParams<TAggregator>>& params,
-            const TVector<TVector<ui32>>& streams, const std::vector<TKeyParams>& keys, size_t maxBlockLen, TComputationContext& ctx)
-            : TBase(memInfo)
+        TState(TMemoryUsageInfo* memInfo, ui32 keyLength, ui32 streamIndex, size_t width, size_t outputWidth, std::optional<ui32> filterColumn, const std::vector<TAggParams<TAggregator>>& params,
+            const std::vector<std::vector<ui32>>& streams, const std::vector<TKeyParams>& keys, size_t maxBlockLen, TComputationContext& ctx)
+            : TBlockState(memInfo, outputWidth)
+            , FilterColumn_(filterColumn)
+            , Keys_(keys)
+            , AggsParams_(params)
+            , KeyLength_(keyLength)
+            , StreamIndex_(streamIndex)
+            , Streams_(streams)
+            , MaxBlockLen_(maxBlockLen)
             , Values_(width)
-            , ValuePointers_(width)
             , UnwrappedValues_(width)
             , Readers_(keys.size())
             , Builders_(keys.size())
             , Arena_(TlsAllocState)
         {
-            for (size_t i = 0; i < width; ++i) {
-                ValuePointers_[i] = &Values_[i];
-            }
-
-            for (size_t i = 0; i < keys.size(); ++i) {
-                auto itemType = AS_TYPE(TBlockType, keys[i].Type)->GetItemType();
+            Pointer_ = Values_.data();
+            for (size_t i = 0; i < Keys_.size(); ++i) {
+                auto itemType = AS_TYPE(TBlockType, Keys_[i].Type)->GetItemType();
                 Readers_[i] = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
-                Builders_[i] = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, ctx.ArrowMemoryPool, maxBlockLen, &ctx.Builder->GetPgBuilder());
+                Builders_[i] = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, ctx.ArrowMemoryPool, MaxBlockLen_, &ctx.Builder->GetPgBuilder());
             }
 
             if constexpr (Many) {
-                TotalStateSize_ += streams.size();
+                TotalStateSize_ += Streams_.size();
             }
 
-            for (const auto& p : params) {
+            for (const auto& p : AggsParams_) {
                 Aggs_.emplace_back(p.Prepared_->Make(ctx));
                 MKQL_ENSURE(Aggs_.back()->StateSize == p.Prepared_->StateSize, "State size mismatch");
                 AggStateOffsets_.emplace_back(TotalStateSize_);
                 TotalStateSize_ += Aggs_.back()->StateSize;
             }
 
-            auto equal = MakeEqual<TKey>(keyLength);
-            auto hasher = MakeHash<TKey>(keyLength);
+            auto equal = MakeEqual<TKey>(KeyLength_);
+            auto hasher = MakeHash<TKey>(KeyLength_);
             if constexpr (UseSet) {
                 MKQL_ENSURE(params.empty(), "Only keys are supported");
                 HashSet_ = std::make_unique<THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(hasher, equal);
@@ -1034,217 +1002,476 @@ private:
             }
         }
 
-        void PrepareAggBuilders(size_t maxBlockSize) {
+        void ProcessInput(const THolderFactory& holderFactory) {
+            ++BatchNum_;
+            const auto batchLength = TArrowBlock::From(Values_.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+            if (!batchLength) {
+                return;
+            }
+
+            const ui8* filterBitmap = nullptr;
+            if constexpr (UseFilter) {
+                auto filterDatum = TArrowBlock::From(Values_[*FilterColumn_]).GetDatum();
+                if (filterDatum.is_scalar()) {
+                    if (!filterDatum.template scalar_as<arrow::UInt8Scalar>().value) {
+                        return;
+                    }
+                } else {
+                    const auto& arr = filterDatum.array();
+                    filterBitmap = arr->template GetValues<ui8>(1);
+                    ui64 popCount = GetBitmapPopCount(arr);
+                    if (popCount == 0) {
+                        return;
+                    }
+                }
+            }
+
+            const ui32* streamIndexData = nullptr;
+            TMaybe<ui32> streamIndexScalar;
+            if constexpr (Many) {
+                auto streamIndexDatum = TArrowBlock::From(Values_[StreamIndex_]).GetDatum();
+                if (streamIndexDatum.is_scalar()) {
+                    streamIndexScalar = streamIndexDatum.template scalar_as<arrow::UInt32Scalar>().value;
+                } else {
+                    MKQL_ENSURE(streamIndexDatum.is_array(), "Expected array");
+                    streamIndexData = streamIndexDatum.array()->template GetValues<ui32>(1);
+                }
+                UnwrappedValues_ = Values_;
+                for (const auto& p : AggsParams_) {
+                    const auto& columnDatum = TArrowBlock::From(UnwrappedValues_[p.Column_]).GetDatum();
+                    MKQL_ENSURE(columnDatum.is_array(), "Expected array");
+                    UnwrappedValues_[p.Column_] = holderFactory.CreateArrowBlock(Unwrap(*columnDatum.array(), p.StateType_));
+                }
+            }
+
+            HasValues_ = true;
+            std::vector<arrow::Datum> keysDatum;
+            keysDatum.reserve(Keys_.size());
+            for (ui32 i = 0; i < Keys_.size(); ++i) {
+                keysDatum.emplace_back(TArrowBlock::From(Values_[Keys_[i].Index]).GetDatum());
+            }
+
+            std::array<TOutputBuffer, PrefetchBatchSize> out;
+            for (ui32 i = 0; i < PrefetchBatchSize; ++i) {
+                out[i].Resize(sizeof(TKey));
+            }
+
+            std::array<TRobinHoodBatchRequestItem<TKey>, PrefetchBatchSize> insertBatch;
+            std::array<ui64, PrefetchBatchSize> insertBatchRows;
+            std::array<char*, PrefetchBatchSize> insertBatchPayloads;
+            std::array<bool, PrefetchBatchSize> insertBatchIsNew;
+            ui32 insertBatchLen = 0;
+
+            const auto processInsertBatch = [&]() {
+                for (ui32 i = 0; i < insertBatchLen; ++i) {
+                    auto& r = insertBatch[i];
+                    TStringBuf str = out[i].Finish();
+                    TKey key = MakeKey<TKey>(str, KeyLength_);
+                    r.ConstructKey(key);
+                }
+
+                if constexpr (UseSet) {
+                    HashSet_->BatchInsert({insertBatch.data(), insertBatchLen},[&](size_t index, typename TState::TSetImpl::iterator iter, bool isNew) {
+                        Y_UNUSED(index);
+                        if (isNew) {
+                            if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                                MoveKeyToArena(HashSet_->GetKey(iter), Arena_, KeyLength_);
+                            }
+                        }
+                    });
+                } else {
+                    using THashTable = std::conditional_t<InlineAggState, typename TState::TDynMapImpl, typename TState::TFixedMapImpl>;
+                    THashTable* hash;
+                    if constexpr (!InlineAggState) {
+                        hash = HashFixedMap_.get();
+                    } else {
+                        hash = HashMap_.get();
+                    }
+
+                    hash->BatchInsert({insertBatch.data(), insertBatchLen}, [&](size_t index, typename THashTable::iterator iter, bool isNew) {
+                        if (isNew) {
+                            if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                                MoveKeyToArena(hash->GetKey(iter), Arena_, KeyLength_);
+                            }
+                        }
+
+                        if constexpr (UseArena) {
+                            // prefetch payloads only
+                            auto payload = hash->GetPayload(iter);
+                            char* ptr;
+                            if (isNew) {
+                                ptr = (char*)Arena_.Alloc(TotalStateSize_);
+                                *(char**)payload = ptr;
+                            } else {
+                                ptr = *(char**)payload;
+                            }
+
+                            insertBatchIsNew[index] = isNew;
+                            insertBatchPayloads[index] = ptr;
+                            NYql::PrefetchForWrite(ptr);
+                        } else {
+                            // process insert
+                            auto payload = (char*)hash->GetPayload(iter);
+                            auto row = insertBatchRows[index];
+                            ui32 streamIndex = 0;
+                            if constexpr (Many) {
+                                streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
+                            }
+
+                            Insert(row, payload, isNew, streamIndex);
+                        }
+                    });
+
+                    if constexpr (UseArena) {
+                        for (ui32 i = 0; i < insertBatchLen; ++i) {
+                            auto row = insertBatchRows[i];
+                            ui32 streamIndex = 0;
+                            if constexpr (Many) {
+                                streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
+                            }
+
+                            bool isNew = insertBatchIsNew[i];
+                            char* payload = insertBatchPayloads[i];
+                            Insert(row, payload, isNew, streamIndex);
+                        }
+                    }
+                }
+            };
+
+            for (ui64 row = 0; row < batchLength; ++row) {
+                if constexpr (UseFilter) {
+                    if (filterBitmap && !filterBitmap[row]) {
+                        continue;
+                    }
+                }
+
+                // encode key
+                out[insertBatchLen].Rewind();
+                for (ui32 i = 0; i < keysDatum.size(); ++i) {
+                    if (keysDatum[i].is_scalar()) {
+                        // TODO: more efficient code when grouping by scalar
+                        Readers_[i]->SaveScalarItem(*keysDatum[i].scalar(), out[insertBatchLen]);
+                    } else {
+                        Readers_[i]->SaveItem(*keysDatum[i].array(), row, out[insertBatchLen]);
+                    }
+                }
+
+                insertBatchRows[insertBatchLen] = row;
+                ++insertBatchLen;
+                if (insertBatchLen == PrefetchBatchSize) {
+                    processInsertBatch();
+                    insertBatchLen = 0;
+                }
+            }
+
+            processInsertBatch();
+        }
+
+        bool Finish() {
+            if (!HasValues_) {
+                IsFinished_ = true;
+                return false;
+            }
+
+            WritingOutput_ = true;
+            OutputBlockSize_ = 0;
+            PrepareAggBuilders();
+
+            if constexpr (UseSet) {
+                HashSetIt_ = HashSet_->Begin();
+            } else {
+                if constexpr (!InlineAggState) {
+                    HashFixedMapIt_ = HashFixedMap_->Begin();
+                } else {
+                    HashMapIt_ = HashMap_->Begin();
+                }
+            }
+            return true;
+        }
+
+        bool FillOutput(const THolderFactory& holderFactory) {
+            bool exit = false;
+            while (WritingOutput_) {
+                if constexpr (UseSet) {
+                    for (;!exit && HashSetIt_ != HashSet_->End(); HashSet_->Advance(HashSetIt_)) {
+                        if (!HashSet_->IsValid(HashSetIt_)) {
+                            continue;
+                        }
+
+                        if (OutputBlockSize_ == MaxBlockLen_) {
+                            Flush(false, holderFactory);
+                            //return EFetchResult::One;
+                            exit = true;
+                            break;
+                        }
+
+                        const TKey& key = HashSet_->GetKey(HashSetIt_);
+                        TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
+                        for (auto& kb : Builders_) {
+                            kb->Add(in);
+                        }
+                        ++OutputBlockSize_;
+                    }
+                    break;
+                } else {
+                    const bool done = InlineAggState ?
+                        Iterate(*HashMap_, HashMapIt_) :
+                        Iterate(*HashFixedMap_, HashFixedMapIt_);
+                    if (done) {
+                        break;
+                    }
+                    Flush(false, holderFactory);
+                    exit = true;
+                    break;
+                }
+            }
+
+            if (!exit) {
+                IsFinished_ = true;
+                WritingOutput_ = false;
+                if (!OutputBlockSize_)
+                    return false;
+                Flush(true, holderFactory);
+            }
+
+            FillArrays();
+            return true;
+        }
+    private:
+        void PrepareAggBuilders() {
             if constexpr (!UseSet) {
                 AggBuilders_.clear();
                 AggBuilders_.reserve(Aggs_.size());
                 for (const auto& a : Aggs_) {
                     if constexpr (Finalize) {
-                        AggBuilders_.emplace_back(a->MakeResultBuilder(maxBlockSize));
+                        AggBuilders_.emplace_back(a->MakeResultBuilder(MaxBlockLen_));
                     } else {
-                        AggBuilders_.emplace_back(a->MakeStateBuilder(maxBlockSize));
+                        AggBuilders_.emplace_back(a->MakeStateBuilder(MaxBlockLen_));
                     }
                 }
             }
         }
 
-        void Flush(NUdf::TUnboxedValue*const* output, size_t maxBlockSize, bool final, TComputationContext& ctx) {
-            if (OutputBlockSize_ == 0) {
+        void Flush(bool final, const THolderFactory& holderFactory) {
+            if (!OutputBlockSize_) {
                 return;
             }
 
             for (size_t i = 0; i < Builders_.size(); ++i) {
-                if (output[i]) {
-                    *output[i] = ctx.HolderFactory.CreateArrowBlock(Builders_[i]->Build(final));
-                }
+                Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(final));
             }
 
             if constexpr (!UseSet) {
                 for (size_t i = 0; i < Aggs_.size(); ++i) {
-                    if (output[Builders_.size() + i]) {
-                        *output[Builders_.size() + i] = AggBuilders_[i]->Build();
-                    }
+                    Values[Builders_.size() + i] = AggBuilders_[i]->Build();
                 }
                 if (!final) {
-                    PrepareAggBuilders(maxBlockSize);
+                    PrepareAggBuilders();
                 }
             }
 
-            size_t outputWidth = Builders_.size() + Aggs_.size() + 1;
-            MKQL_ENSURE(output[outputWidth - 1], "Block size should not be marked as unused");
-            *output[outputWidth - 1] = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputBlockSize_)));
+            Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputBlockSize_)));
             OutputBlockSize_ = 0;
         }
-    };
 
+        void Insert(ui64 row, char* payload, bool isNew, ui32 currentStreamIndex) const {
+            char* ptr = payload;
+
+            if (isNew) {
+                if constexpr (Many) {
+                    static_assert(Finalize);
+                    MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
+                    memset(ptr, 0, Streams_.size());
+                    ptr[currentStreamIndex] = 1;
+
+                    for (auto i : Streams_[currentStreamIndex]) {
+
+                        Aggs_[i]->LoadState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
+                    }
+                } else {
+                    for (size_t i = 0; i < Aggs_.size(); ++i) {
+                        if constexpr (Finalize) {
+                            Aggs_[i]->LoadState(ptr, BatchNum_, Values_.data(), row);
+                        } else {
+                            Aggs_[i]->InitKey(ptr, BatchNum_, Values_.data(), row);
+                        }
+
+                        ptr += Aggs_[i]->StateSize;
+                    }
+                }
+            } else {
+                if constexpr (Many) {
+                    static_assert(Finalize);
+                    MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
+
+                    bool isNewStream = !ptr[currentStreamIndex];
+                    ptr[currentStreamIndex] = 1;
+
+                    for (auto i : Streams_[currentStreamIndex]) {
+
+                        if (isNewStream) {
+                            Aggs_[i]->LoadState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
+                        } else {
+                            Aggs_[i]->UpdateState(ptr + AggStateOffsets_[i], BatchNum_, UnwrappedValues_.data(), row);
+                        }
+                    }
+                } else {
+                    for (size_t i = 0; i < Aggs_.size(); ++i) {
+                        if constexpr (Finalize) {
+                            Aggs_[i]->UpdateState(ptr, BatchNum_, Values_.data(), row);
+                        } else {
+                            Aggs_[i]->UpdateKey(ptr, BatchNum_, Values_.data(), row);
+                        }
+
+                        ptr += Aggs_[i]->StateSize;
+                    }
+                }
+            }
+        }
+
+        template <typename THash>
+        bool Iterate(THash& hash, typename THash::const_iterator& iter) {
+            MKQL_ENSURE(WritingOutput_, "Supposed to be called at the end");
+            std::array<typename THash::const_iterator, PrefetchBatchSize> iters;
+            ui32 itersLen = 0;
+            auto iterateBatch = [&]() {
+                for (ui32 i = 0; i < itersLen; ++i) {
+                    auto iter = iters[i];
+                    const TKey& key = hash.GetKey(iter);
+                    auto payload = (char*)hash.GetPayload(iter);
+                    char* ptr;
+                    if constexpr (UseArena) {
+                        ptr = *(char**)payload;
+                    } else {
+                        ptr = payload;
+                    }
+
+                    TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
+                    for (auto& kb : Builders_) {
+                        kb->Add(in);
+                    }
+
+                    if constexpr (Many) {
+                        for (ui32 i = 0; i < Streams_.size(); ++i) {
+                            MKQL_ENSURE(ptr[i], "Missing partial aggregation state");
+                        }
+
+                        ptr += Streams_.size();
+                    }
+
+                    for (size_t i = 0; i < Aggs_.size(); ++i) {
+                        AggBuilders_[i]->Add(ptr);
+                        Aggs_[i]->DestroyState(ptr);
+
+                        ptr += Aggs_[i]->StateSize;
+                    }
+                }
+            };
+
+            for (; iter != hash.End(); hash.Advance(iter)) {
+                if (!hash.IsValid(iter)) {
+                    continue;
+                }
+
+                if (OutputBlockSize_ == MaxBlockLen_) {
+                    iterateBatch();
+                    return false;
+                }
+
+                if (itersLen == iters.size()) {
+                    iterateBatch();
+                    itersLen = 0;
+                }
+
+                iters[itersLen] = iter;
+                ++itersLen;
+                ++OutputBlockSize_;
+                if constexpr (UseArena) {
+                    auto payload = (char*)hash.GetPayload(iter);
+                    auto ptr = *(char**)payload;
+                    NYql::PrefetchForWrite(ptr);
+                }
+
+                if constexpr (std::is_same<TKey, TSSOKey>::value) {
+                    const auto& key = hash.GetKey(iter);
+                    if (!key.IsInplace()) {
+                        NYql::PrefetchForRead(key.AsView().Data());
+                    }
+                } else if constexpr (std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                    const auto& key = hash.GetKey(iter);
+                    NYql::PrefetchForRead(key.Data);
+                }
+            }
+
+            iterateBatch();
+            return true;
+        }
+    };
 private:
+#ifndef MKQL_DISABLE_CODEGEN
+    class TLLVMFieldsStructureState: public TLLVMFieldsStructureBlockState {
+    private:
+        using TBase = TLLVMFieldsStructureBlockState;
+        llvm::IntegerType*const WritingOutputType;
+        llvm::IntegerType*const IsFinishedType;
+    protected:
+        using TBase::Context;
+    public:
+        std::vector<llvm::Type*> GetFieldsArray() {
+            std::vector<llvm::Type*> result = TBase::GetFieldsArray();
+            result.emplace_back(WritingOutputType);
+            result.emplace_back(IsFinishedType);
+            return result;
+        }
+
+        llvm::Constant* GetWritingOutput() {
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + BaseFields);
+        }
+
+        llvm::Constant* GetIsFinished() {
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + BaseFields + 1);
+        }
+
+        TLLVMFieldsStructureState(llvm::LLVMContext& context, size_t width)
+            : TBase(context, width)
+            , WritingOutputType(Type::getInt1Ty(Context))
+            , IsFinishedType(Type::getInt1Ty(Context))
+        {}
+    };
+#endif
     void RegisterDependencies() const final {
         this->FlowDependsOn(Flow_);
     }
 
+    void MakeState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
+        state = ctx.HolderFactory.Create<TState>(KeyLength_, StreamIndex_, Width_, OutputWidth_, FilterColumn_, AggsParams_, Streams_, Keys_, MaxBlockLen_, ctx);
+    }
+
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (!state.HasValue()) {
-            state = ctx.HolderFactory.Create<TState>(KeyLength_, Width_, FilterColumn_, AggsParams_, Streams_, Keys_, MaxBlockLen_, ctx);
+            MakeState(state, ctx);
+
+            auto& s = *static_cast<TState*>(state.AsBoxed().Get());
+            const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
+            for (size_t i = 0; i < s.Values_.size(); ++i) {
+                fields[i] = &s.Values_[i];
+            }
+            return s;
         }
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
-    void Insert(ui64 row, char* payload, bool isNew, ui32 currentStreamIndex, NUdf::TUnboxedValue*const* output, TState& s) const {
-        char* ptr = payload;
-
-        if (isNew) {
-            if constexpr (Many) {
-                static_assert(Finalize);
-                MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
-                memset(ptr, 0, Streams_.size());
-                ptr[currentStreamIndex] = 1;
-
-                for (auto i : Streams_[currentStreamIndex]) {
-                    if (output[Keys_.size() + i]) {
-                        s.Aggs_[i]->LoadState(ptr + s.AggStateOffsets_[i], s.BatchNum_, s.UnwrappedValues_.data(), row);
-                    }
-                }
-            } else {
-                for (size_t i = 0; i < s.Aggs_.size(); ++i) {
-                    if (output[Keys_.size() + i]) {
-                        if constexpr (Finalize) {
-                            s.Aggs_[i]->LoadState(ptr, s.BatchNum_, s.Values_.data(), row);
-                        } else {
-                            s.Aggs_[i]->InitKey(ptr, s.BatchNum_, s.Values_.data(), row);
-                        }
-                    }
-
-                    ptr += s.Aggs_[i]->StateSize;
-                }
-            }
-        } else {
-            if constexpr (Many) {
-                static_assert(Finalize);
-                MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
-
-                bool isNewStream = !ptr[currentStreamIndex];
-                ptr[currentStreamIndex] = 1;
-
-                for (auto i : Streams_[currentStreamIndex]) {
-                    if (output[Keys_.size() + i]) {
-                        if (isNewStream) {
-                            s.Aggs_[i]->LoadState(ptr + s.AggStateOffsets_[i], s.BatchNum_, s.UnwrappedValues_.data(), row);
-                        } else {
-                            s.Aggs_[i]->UpdateState(ptr + s.AggStateOffsets_[i], s.BatchNum_, s.UnwrappedValues_.data(), row);
-                        }
-                    }
-                }
-            } else {
-                for (size_t i = 0; i < s.Aggs_.size(); ++i) {
-                    if (output[Keys_.size() + i]) {
-                        if constexpr (Finalize) {
-                            s.Aggs_[i]->UpdateState(ptr, s.BatchNum_, s.Values_.data(), row);
-                        } else {
-                            s.Aggs_[i]->UpdateKey(ptr, s.BatchNum_, s.Values_.data(), row);
-                        }
-                    }
-
-                    ptr += s.Aggs_[i]->StateSize;
-                }
-            }
-        }
-    }
-
-    template <typename THash>
-    bool Iterate(THash& hash, typename THash::const_iterator& iter, NUdf::TUnboxedValue*const* output, TState& s) const {
-        MKQL_ENSURE(s.WritingOutput_, "Supposed to be called at the end");
-        std::array<typename THash::const_iterator, PrefetchBatchSize> iters;
-        ui32 itersLen = 0;
-        auto iterateBatch = [&]() {
-            for (ui32 i = 0; i < itersLen; ++i) {
-                auto iter = iters[i];
-                const TKey& key = hash.GetKey(iter);
-                auto payload = (char*)hash.GetPayload(iter);
-                char* ptr;
-                if constexpr (UseArena) {
-                    ptr = *(char**)payload;
-                } else {
-                    ptr = payload;
-                }
-
-                TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
-                for (auto& kb : s.Builders_) {
-                    kb->Add(in);
-                }
-
-                if constexpr (Many) {
-                    for (ui32 i = 0; i < Streams_.size(); ++i) {
-                        MKQL_ENSURE(ptr[i], "Missing partial aggregation state");
-                    }
-
-                    ptr += Streams_.size();
-                }
-
-                for (size_t i = 0; i < s.Aggs_.size(); ++i) {
-                    if (output[Keys_.size() + i]) {
-                        s.AggBuilders_[i]->Add(ptr);
-                        s.Aggs_[i]->DestroyState(ptr);
-                    }
-
-                    ptr += s.Aggs_[i]->StateSize;
-                }
-            }
-        };
-
-        for (; iter != hash.End(); hash.Advance(iter)) {
-            if (!hash.IsValid(iter)) {
-                continue;
-            }
-
-            if (s.OutputBlockSize_ == MaxBlockLen_) {
-                iterateBatch();
-                return false;
-            }
-
-            if (itersLen == iters.size()) {
-                iterateBatch();
-                itersLen = 0;
-            }
-
-            iters[itersLen] = iter;
-            ++itersLen;
-            s.OutputBlockSize_++;
-            if constexpr (UseArena) {
-                auto payload = (char*)hash.GetPayload(iter);
-                auto ptr = *(char**)payload;
-                NYql::PrefetchForWrite(ptr);
-            }
-
-            if constexpr (std::is_same<TKey, TSSOKey>::value) {
-                const auto& key = hash.GetKey(iter);
-                if (!key.IsInplace()) {
-                    NYql::PrefetchForRead(key.AsView().Data());
-                }
-            } else if constexpr (std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                const auto& key = hash.GetKey(iter);
-                NYql::PrefetchForRead(key.Data);
-            }
-        }
-
-        iterateBatch();
-        return true;
-    }
-
-    ui64 GetBatchLength(const NUdf::TUnboxedValue* columns) const {
-        return TArrowBlock::From(columns[Width_ - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
-    }
-
-private:
-    IComputationWideFlowNode* Flow_;
-    std::optional<ui32> FilterColumn_;
+    IComputationWideFlowNode *const Flow_;
+    const std::optional<ui32> FilterColumn_;
     const size_t Width_;
     const size_t OutputWidth_;
+    const size_t WideFieldsIndex_;
     const std::vector<TKeyParams> Keys_;
     const size_t MaxBlockLen_;
-    const TVector<TAggParams<TAggregator>> AggsParams_;
+    const std::vector<TAggParams<TAggregator>> AggsParams_;
     const ui32 KeyLength_;
     const ui32 StreamIndex_;
-    const TVector<TVector<ui32>> Streams_;
+    const std::vector<std::vector<ui32>> Streams_;
 };
 
 template <typename TKey, typename TFixedAggState, bool UseSet, bool UseFilter>
@@ -1260,7 +1487,7 @@ public:
         const std::vector<TKeyParams>& keys,
         size_t maxBlockLen,
         ui32 keyLength,
-        TVector<TAggParams<IBlockAggregatorCombineKeys>>&& aggsParams)
+        std::vector<TAggParams<IBlockAggregatorCombineKeys>>&& aggsParams)
         : TBase(mutables, flow, filterColumn, width, keys, maxBlockLen, keyLength, std::move(aggsParams), 0, {})
     {}
 };
@@ -1277,7 +1504,7 @@ public:
         const std::vector<TKeyParams>& keys,
         size_t maxBlockLen,
         ui32 keyLength,
-        TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams)
+        std::vector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams)
         : TBase(mutables, flow, {}, width, keys, maxBlockLen, keyLength, std::move(aggsParams), 0, {})
     {}
 };
@@ -1294,8 +1521,8 @@ public:
         const std::vector<TKeyParams>& keys,
         size_t maxBlockLen,
         ui32 keyLength,
-        TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams,
-        ui32 streamIndex, TVector<TVector<ui32>>&& streams)
+        std::vector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams,
+        ui32 streamIndex, std::vector<std::vector<ui32>>&& streams)
         : TBase(mutables, flow, {}, width, keys, maxBlockLen, keyLength, std::move(aggsParams), streamIndex, std::move(streams))
     {}
 };
@@ -1344,11 +1571,11 @@ std::unique_ptr<IPreparedBlockAggregator<IBlockAggregatorFinalizeKeys>> PrepareB
 }
 
 template <typename TAggregator>
-ui32 FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<ui32> filterColumn, TVector<TAggParams<TAggregator>>& aggsParams,
+ui32 FillAggParams(TTupleLiteral* aggsVal, TTupleType* tupleType, std::optional<ui32> filterColumn, std::vector<TAggParams<TAggregator>>& aggsParams,
     const TTypeEnvironment& env, bool overState, bool many, TArrayRef<TType* const> returnTypes, ui32 keysCount) {
     TTupleType* unwrappedTupleType = tupleType;
     if (many) {
-        TVector<TType*> unwrappedTypes(tupleType->GetElementsCount());
+        std::vector<TType*> unwrappedTypes(tupleType->GetElementsCount());
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
             unwrappedTypes[i] = tupleType->GetElementType(i);
         }
@@ -1406,7 +1633,7 @@ IComputationNode* MakeBlockCombineHashedWrapper(
     size_t width,
     const std::vector<TKeyParams>& keys,
     size_t maxBlockLen,
-    TVector<TAggParams<IBlockAggregatorCombineKeys>>&& aggsParams) {
+    std::vector<TAggParams<IBlockAggregatorCombineKeys>>&& aggsParams) {
     if (totalStateSize <= sizeof(TState8)) {
         return new TBlockCombineHashedWrapper<TKey, TState8, UseSet, UseFilter>(mutables, flow, filterColumn, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
     }
@@ -1429,7 +1656,7 @@ IComputationNode* MakeBlockCombineHashedWrapper(
     size_t width,
     const std::vector<TKeyParams>& keys,
     size_t maxBlockLen,
-    TVector<TAggParams<IBlockAggregatorCombineKeys>>&& aggsParams) {
+    std::vector<TAggParams<IBlockAggregatorCombineKeys>>&& aggsParams) {
     if (totalKeysSize && *totalKeysSize <= sizeof(ui32)) {
         return MakeBlockCombineHashedWrapper<UseSet, UseFilter, ui32>(*totalKeysSize, totalStateSize, mutables, flow, filterColumn, width, keys, maxBlockLen, std::move(aggsParams));
     }
@@ -1458,7 +1685,7 @@ IComputationNode* MakeBlockMergeFinalizeHashedWrapper(
     size_t width,
     const std::vector<TKeyParams>& keys,
     size_t maxBlockLen,
-    TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams) {
+    std::vector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams) {
 
     if (totalStateSize <= sizeof(TState8)) {
         return new TBlockMergeFinalizeHashedWrapper<TKey, TState8, UseSet>(mutables, flow, width, keys, maxBlockLen, keyLength, std::move(aggsParams));
@@ -1481,7 +1708,7 @@ IComputationNode* MakeBlockMergeFinalizeHashedWrapper(
     size_t width,
     const std::vector<TKeyParams>& keys,
     size_t maxBlockLen,
-    TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams) {
+    std::vector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams) {
     if (totalKeysSize && *totalKeysSize <= sizeof(ui32)) {
         return MakeBlockMergeFinalizeHashedWrapper<ui32, UseSet>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, maxBlockLen, std::move(aggsParams));
     }
@@ -1510,9 +1737,9 @@ IComputationNode* MakeBlockMergeManyFinalizeHashedWrapper(
     size_t width,
     const std::vector<TKeyParams>& keys,
     size_t maxBlockLen,
-    TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams,
+    std::vector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams,
     ui32 streamIndex,
-    TVector<TVector<ui32>>&& streams) {
+    std::vector<std::vector<ui32>>&& streams) {
 
     if (totalStateSize <= sizeof(TState8)) {
         return new TBlockMergeManyFinalizeHashedWrapper<TKey, TState8>(mutables, flow, width, keys, maxBlockLen, keyLength, std::move(aggsParams), streamIndex, std::move(streams));
@@ -1534,9 +1761,9 @@ IComputationNode* MakeBlockMergeManyFinalizeHashedWrapper(
     size_t width,
     const std::vector<TKeyParams>& keys,
     size_t maxBlockLen,
-    TVector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams,
+    std::vector<TAggParams<IBlockAggregatorFinalizeKeys>>&& aggsParams,
     ui32 streamIndex,
-    TVector<TVector<ui32>>&& streams) {
+    std::vector<std::vector<ui32>>&& streams) {
     if (totalKeysSize && *totalKeysSize <= sizeof(ui32)) {
         return MakeBlockMergeManyFinalizeHashedWrapper<ui32>(*totalKeysSize, totalStateSize, mutables, flow, width, keys, maxBlockLen, std::move(aggsParams), streamIndex, std::move(streams));
     }
@@ -1567,7 +1794,7 @@ void PrepareKeys(const std::vector<TKeyParams>& keys, TMaybe<ui32>& totalKeysSiz
     totalKeysSize = props.MaxSize;
 }
 
-void FillAggStreams(TRuntimeNode streamsNode, TVector<TVector<ui32>>& streams) {
+void FillAggStreams(TRuntimeNode streamsNode, std::vector<std::vector<ui32>>& streams) {
     auto streamsVal = AS_VALUE(TTupleLiteral, streamsNode);
     for (ui32 i = 0; i < streamsVal->GetValuesCount(); ++i) {
         streams.emplace_back();
@@ -1600,7 +1827,7 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
     }
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
-    TVector<TAggParams<IBlockAggregatorCombineAll>> aggsParams;
+    std::vector<TAggParams<IBlockAggregatorCombineAll>> aggsParams;
     FillAggParams<IBlockAggregatorCombineAll>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false, false, returnWideComponents, 0);
     return new TBlockCombineAllWrapper(ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), std::move(aggsParams));
 }
@@ -1630,7 +1857,7 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
     }
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(3));
-    TVector<TAggParams<IBlockAggregatorCombineKeys>> aggsParams;
+    std::vector<TAggParams<IBlockAggregatorCombineKeys>> aggsParams;
     ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, false, false, returnWideComponents, keys.size());
 
     TMaybe<ui32> totalKeysSize;
@@ -1639,13 +1866,13 @@ IComputationNode* WrapBlockCombineHashed(TCallable& callable, const TComputation
 
     const size_t maxBlockLen = CalcMaxBlockLenForOutput(callable.GetType()->GetReturnType());
     if (filterColumn) {
-        if (aggsParams.size() == 0) {
+        if (aggsParams.empty()) {
             return MakeBlockCombineHashedWrapper<true, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
         } else {
             return MakeBlockCombineHashedWrapper<false, true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
         }
     } else {
-        if (aggsParams.size() == 0) {
+        if (aggsParams.empty()) {
             return MakeBlockCombineHashedWrapper<true, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
         } else {
             return MakeBlockCombineHashedWrapper<false, false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
@@ -1672,7 +1899,7 @@ IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TCompu
     }
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
-    TVector<TAggParams<IBlockAggregatorFinalizeKeys>> aggsParams;
+    std::vector<TAggParams<IBlockAggregatorFinalizeKeys>> aggsParams;
     ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true, false, returnWideComponents, keys.size());
 
     TMaybe<ui32> totalKeysSize;
@@ -1680,7 +1907,7 @@ IComputationNode* WrapBlockMergeFinalizeHashed(TCallable& callable, const TCompu
     PrepareKeys(keys, totalKeysSize, isFixed);
 
     const size_t maxBlockLen = CalcMaxBlockLenForOutput(callable.GetType()->GetReturnType());
-    if (aggsParams.size() == 0) {
+    if (aggsParams.empty()) {
         return MakeBlockMergeFinalizeHashedWrapper<true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
     } else {
         return MakeBlockMergeFinalizeHashedWrapper<false>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, tupleType->GetElementsCount(), keys, maxBlockLen, std::move(aggsParams));
@@ -1695,7 +1922,7 @@ IComputationNode* WrapBlockMergeManyFinalizeHashed(TCallable& callable, const TC
     const auto returnFlowType = AS_TYPE(TFlowType, callable.GetType()->GetReturnType());
     const auto returnWideComponents = GetWideComponents(returnFlowType);
 
-    auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
+    const auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
 
     auto keysVal = AS_VALUE(TTupleLiteral, callable.GetInput(1));
@@ -1705,21 +1932,21 @@ IComputationNode* WrapBlockMergeManyFinalizeHashed(TCallable& callable, const TC
         keys.emplace_back(TKeyParams{ index, tupleType->GetElementType(index) });
     }
 
-    auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
-    TVector<TAggParams<IBlockAggregatorFinalizeKeys>> aggsParams;
+    const auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
+    std::vector<TAggParams<IBlockAggregatorFinalizeKeys>> aggsParams;
     ui32 totalStateSize = FillAggParams<IBlockAggregatorFinalizeKeys>(aggsVal, tupleType, {}, aggsParams, ctx.Env, true, true, returnWideComponents, keys.size());
 
     TMaybe<ui32> totalKeysSize;
     bool isFixed = false;
     PrepareKeys(keys, totalKeysSize, isFixed);
 
-    ui32 streamIndex = AS_VALUE(TDataLiteral, callable.GetInput(3))->AsValue().Get<ui32>();
-    TVector<TVector<ui32>> streams;
+    const ui32 streamIndex = AS_VALUE(TDataLiteral, callable.GetInput(3))->AsValue().Get<ui32>();
+    std::vector<std::vector<ui32>> streams;
     FillAggStreams(callable.GetInput(4), streams);
     totalStateSize += streams.size();
 
     const size_t maxBlockLen = CalcMaxBlockLenForOutput(callable.GetType()->GetReturnType());
-    if (aggsParams.size() == 0) {
+    if (aggsParams.empty()) {
         return MakeBlockMergeFinalizeHashedWrapper<true>(totalKeysSize, isFixed, totalStateSize, ctx.Mutables, wideFlow, tupleType->GetElementsCount(),
             keys, maxBlockLen, std::move(aggsParams));
     } else {

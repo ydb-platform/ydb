@@ -6,7 +6,6 @@ ENDIF()
 
 SRCS(
     decodeunknownplane.cpp
-    iconv.cpp
     recyr.hh
     recyr_int.hh
     wide.cpp
@@ -14,8 +13,20 @@ SRCS(
 
 PEERDIR(
     library/cpp/charset/lite
-    contrib/libs/libiconv
 )
+
+IF (OS_ANDROID OR OS_IOS OR LIBRARY_CHARSET_WITHOUT_LIBICONV)
+    SRCS(
+        iconv_mock.cpp
+    )
+ELSE()
+    SRCS(
+        iconv.cpp
+    )
+    PEERDIR(
+        contrib/libs/libiconv
+    )
+ENDIF()
 
 END()
 

@@ -13,6 +13,14 @@ BUILTIN_PROTO = 'builtin_proto'
 DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
 
 
+def _split_macro_call(macro_call, data, item_size, chunk_size=1024):
+    index = 0
+    length = len(data)
+    offset = item_size*chunk_size
+    while index + 1 < length:
+        macro_call(data[index:index+offset])
+        index += offset
+
 def is_arc_src(src, unit):
     return (
         src.startswith('${ARCADIA_ROOT}/')
@@ -559,7 +567,7 @@ def onpy_srcs(unit, *args):
                     ns_res += ['-', '{}="{}"'.format(key, namespaces)]
                 unit.onresource(ns_res)
 
-            unit.onresource_files(res)
+            _split_macro_call(unit.onresource_files, res, (3 if with_py else 0) + (3 if with_pyc else 0))
             add_python_lint_checks(
                 unit, 3, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()
             )
@@ -580,7 +588,7 @@ def onpy_srcs(unit, *args):
                     unit.on_py_compile_bytecode([root_rel_path + '-', src, dst])
                     res += [dst + '.yapyc', '/py_code/' + mod]
 
-            unit.onresource(res)
+            _split_macro_call(unit.onresource, res, (4 if with_py else 0) + (2 if with_pyc else 0))
             add_python_lint_checks(
                 unit, 2, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()
             )

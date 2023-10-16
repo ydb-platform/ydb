@@ -33,4 +33,32 @@ void TLogExprTransformer::LogExpr(const TExprNode& input, TExprContext& ctx, con
     YQL_CVLOG(level, component) << description << ":\n" << KqpExprToPrettyString(input, ctx);
 }
 
+class TSaveExplainTransformerInputTransformer : public TSyncTransformerBase {
+public:
+    TSaveExplainTransformerInputTransformer(TKqlTransformContext& transformCtx)
+        : TransformCtx(transformCtx)
+    {
+    }
+
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        output = input;
+        if (!TransformCtx.ExplainTransformerInput) {
+            TransformCtx.ExplainTransformerInput = input;
+        }
+        return TStatus::Ok;
+    }
+
+    void Rewind() override {
+        TransformCtx.ExplainTransformerInput = nullptr;
+    }
+
+private:
+    TKqlTransformContext& TransformCtx;
+};
+
+TAutoPtr<IGraphTransformer> CreateSaveExplainTransformerInput(TKqlTransformContext& transformCtx) {
+    return new TSaveExplainTransformerInputTransformer(transformCtx);
+}
+
 } // namespace NKikimr::NKqp

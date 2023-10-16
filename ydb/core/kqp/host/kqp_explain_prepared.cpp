@@ -28,6 +28,11 @@ public:
     }
 
     TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) override {
+        if (!TransformCtx->ExplainTransformerInput) {
+            ctx.IssueManager.RaiseIssue(TIssue("No input nodes for explain transformer"));
+            return TStatus::Error;
+        }
+
         output = input;
         auto preparedQueryCopy = std::make_unique<NKikimrKqp::TPreparedQuery>(*TransformCtx->QueryCtx->PreparingQuery);
         TPreparedQueryHolder::TConstPtr queryConstPtr = std::make_shared<TPreparedQueryHolder>(
@@ -58,10 +63,11 @@ public:
             ++CurrentTxIndex;
         }
 
-        PhyQuerySetTxPlans(query, TKqpPhysicalQuery(input), std::move(TxResults),
+        PhyQuerySetTxPlans(query, TKqpPhysicalQuery(TransformCtx->ExplainTransformerInput), std::move(TxResults),
             ctx, Cluster, TransformCtx->Tables, TransformCtx->Config, TypeCtx);
-        query.SetQueryAst(KqpExprToPrettyString(*input, ctx));
+        query.SetQueryAst(KqpExprToPrettyString(*TransformCtx->ExplainTransformerInput, ctx));
 
+        TransformCtx->ExplainTransformerInput = nullptr;
         return TStatus::Ok;
     }
 
@@ -120,11 +126,8 @@ private:
 
 TAutoPtr<IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
-    TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider,
     TTypeAnnotationContext& typeCtx)
 {
-    Y_UNUSED(randomProvider);
-    Y_UNUSED(timeProvider);
     return new TKqpExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx);
 }
 

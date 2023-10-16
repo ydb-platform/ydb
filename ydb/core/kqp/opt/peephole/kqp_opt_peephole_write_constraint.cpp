@@ -29,7 +29,7 @@ TExprBase KqpRewriteWriteConstraint(const TExprBase& node, TExprContext& ctx) {
         .Done();
 
         auto errorMessage = TStringBuilder()
-            << "Tried no insert NULL value into NOT NULL column: "
+            << "Tried to insert NULL value into NOT NULL column: "
             << column;
 
         chainEnsure = Build<TKqpEnsure>(ctx, node.Pos())

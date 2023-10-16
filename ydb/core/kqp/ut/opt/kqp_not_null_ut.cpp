@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
             UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
-            "    <main>: Error: Tried no insert NULL value into NOT NULL column: key, code: 2031\n");
+            "    <main>: Error: Tried to insert NULL value into NOT NULL column: key, code: 2031\n");
         }
 
         {   /* set NULL to nullable column */
@@ -521,7 +521,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
             UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
-            "    <main>: Error: Tried no insert NULL value into NOT NULL column: Value, code: 2031\n");
+            "    <main>: Error: Tried to insert NULL value into NOT NULL column: Value, code: 2031\n");
         }
     }
 

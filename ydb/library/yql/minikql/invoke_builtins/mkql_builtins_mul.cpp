@@ -38,7 +38,7 @@ struct TNumMulInterval {
         const auto lv = static_cast<TOutput>(left.template Get<TLeft>());
         const auto rv = static_cast<TOutput>(right.template Get<TRight>());
         const auto ret = lv * rv;
-        return IsBadInterval(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(FromScaledDate<TOutput>(ret));;
+        return IsBadInterval(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

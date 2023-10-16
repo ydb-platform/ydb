@@ -159,11 +159,11 @@ struct TGreaterOp<TLeft, TRight, bool> : public TGreater<TLeft, TRight, false> {
 };
 
 template<typename TLeft, typename TRight, bool Aggr>
-struct TDiffDateGreater : public TCompareArithmeticBinary<TLeft, TRight, TDiffDateGreater<TLeft, TRight, Aggr>>, public TAggrGreater {
-    static bool Do(TLeft left, TRight right)
+struct TDiffDateGreater : public TCompareArithmeticBinary<typename TLeft::TLayout, typename TRight::TLayout, TDiffDateGreater<TLeft, TRight, Aggr>>, public TAggrGreater {
+    static bool Do(typename TLeft::TLayout left, typename TRight::TLayout right)
     {
         return std::is_same<TLeft, TRight>::value ?
-            Greater<TLeft, TRight, Aggr>(left, right):
+            Greater<typename TLeft::TLayout, typename TRight::TLayout, Aggr>(left, right):
             Greater<TScaledDate, TScaledDate, Aggr>(ToScaledDate<TLeft>(left), ToScaledDate<TRight>(right));
     }
 
@@ -172,7 +172,7 @@ struct TDiffDateGreater : public TCompareArithmeticBinary<TLeft, TRight, TDiffDa
     {
         auto& context = ctx.Codegen.GetContext();
         return std::is_same<TLeft, TRight>::value ?
-            GenGreater<TLeft, TRight, Aggr>(left, right, context, block):
+            GenGreater<typename TLeft::TLayout, typename TRight::TLayout, Aggr>(left, right, context, block):
             GenGreater<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
     }
 #endif
@@ -182,7 +182,7 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TDiffDateGreaterOp;
 
 template<typename TLeft, typename TRight>
-struct TDiffDateGreaterOp<TLeft, TRight, bool> : public TDiffDateGreater<TLeft, TRight, false> {
+struct TDiffDateGreaterOp<TLeft, TRight, NUdf::TDataType<bool>> : public TDiffDateGreater<TLeft, TRight, false> {
     static constexpr bool DefaultNulls = true;
 };
 
@@ -278,6 +278,7 @@ void RegisterGreater(IBuiltinFunctionRegistry& registry) {
 
     RegisterComparePrimitive<TGreater, TCompareArgsOpt>(registry, name);
     RegisterCompareDatetime<TDiffDateGreater, TCompareArgsOpt>(registry, name);
+    RegisterCompareBigDatetime<TDiffDateGreater, TCompareArgsOpt>(registry, name);
 
     RegisterCompareStrings<TCustomGreater, TCompareArgsOpt>(registry, name);
     RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, TDecimalGreater, TCompareArgsOpt>(registry, name);

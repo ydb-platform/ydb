@@ -100,7 +100,7 @@ struct TNumDivInterval {
         }
 
         const auto ret = lv / rv;
-        return IsBadInterval(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(FromScaledDate<TOutput>(ret));;
+        return IsBadInterval(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

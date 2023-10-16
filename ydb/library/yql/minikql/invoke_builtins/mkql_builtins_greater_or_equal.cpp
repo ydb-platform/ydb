@@ -159,11 +159,11 @@ struct TGreaterOrEqualOp<TLeft, TRight, bool> : public TGreaterOrEqual<TLeft, TR
 };
 
 template<typename TLeft, typename TRight, bool Aggr>
-struct TDiffDateGreaterOrEqual : public TCompareArithmeticBinary<TLeft, TRight, TDiffDateGreaterOrEqual<TLeft, TRight, Aggr>>, public TAggrGreaterOrEqual {
-    static bool Do(TLeft left, TRight right)
+struct TDiffDateGreaterOrEqual : public TCompareArithmeticBinary<typename TLeft::TLayout, typename TRight::TLayout, TDiffDateGreaterOrEqual<TLeft, TRight, Aggr>>, public TAggrGreaterOrEqual {
+    static bool Do(typename TLeft::TLayout left, typename TRight::TLayout right)
     {
         return std::is_same<TLeft, TRight>::value ?
-            GreaterOrEqual<TLeft, TRight, Aggr>(left, right):
+            GreaterOrEqual<typename TLeft::TLayout, typename TRight::TLayout, Aggr>(left, right):
             GreaterOrEqual<TScaledDate, TScaledDate, Aggr>(ToScaledDate<TLeft>(left), ToScaledDate<TRight>(right));
     }
 
@@ -172,7 +172,7 @@ struct TDiffDateGreaterOrEqual : public TCompareArithmeticBinary<TLeft, TRight, 
     {
         auto& context = ctx.Codegen.GetContext();
         return std::is_same<TLeft, TRight>::value ?
-            GenGreaterOrEqual<TLeft, TRight, Aggr>(left, right, context, block):
+            GenGreaterOrEqual<typename TLeft::TLayout, typename TRight::TLayout, Aggr>(left, right, context, block):
             GenGreaterOrEqual<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
     }
 #endif
@@ -182,7 +182,7 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TDiffDateGreaterOrEqualOp;
 
 template<typename TLeft, typename TRight>
-struct TDiffDateGreaterOrEqualOp<TLeft, TRight, bool> : public TDiffDateGreaterOrEqual<TLeft, TRight, false> {
+struct TDiffDateGreaterOrEqualOp<TLeft, TRight, NUdf::TDataType<bool>> : public TDiffDateGreaterOrEqual<TLeft, TRight, false> {
     static constexpr bool DefaultNulls = true;
 };
 
@@ -278,6 +278,7 @@ void RegisterGreaterOrEqual(IBuiltinFunctionRegistry& registry) {
 
     RegisterComparePrimitive<TGreaterOrEqual, TCompareArgsOpt>(registry, name);
     RegisterCompareDatetime<TDiffDateGreaterOrEqual, TCompareArgsOpt>(registry, name);
+    RegisterCompareBigDatetime<TDiffDateGreaterOrEqual, TCompareArgsOpt>(registry, name);
 
     RegisterCompareStrings<TCustomGreaterOrEqual, TCompareArgsOpt>(registry, name);
     RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, TDecimalGreaterOrEqual, TCompareArgsOpt>(registry, name);

@@ -23,22 +23,29 @@ using TNfaTransition = std::variant<
     TQuantityExitTransition
 >;
 
-class TNfaTransitionGraph {
-public:
+struct TNfaTransitionGraph {
+    std::vector<TNfaTransition> Transitions;
+    size_t Input;
+    size_t Output;
+
     using TPtr = std::shared_ptr<TNfaTransitionGraph>;
-    static TPtr Create(const TRowPattern& pattern, const THashMap<TString, size_t>& varNameToIndex) {
-        auto result = TPtr(new TNfaTransitionGraph());
-        auto item = result->BuildTerms(pattern, varNameToIndex);
-        result->Input = item.Input;
-        result->Output = item.Output;
-        return result;
-    }
-    friend class TNfa;
+};
+
+class TNfaTransitionGraphBuilder {
 private:
     struct TNfaItem {
         size_t Input;
         size_t Output;
     };
+
+    TNfaTransitionGraphBuilder(TNfaTransitionGraph::TPtr graph)
+        : Graph(graph) {}
+
+    size_t AddNode() {
+        Graph->Transitions.resize(Graph->Transitions.size() + 1);
+        return Graph->Transitions.size() - 1;
+    }
+
     TNfaItem BuildTerms(const std::vector<TRowPatternTerm>& terms, const THashMap<TString, size_t>& varNameToIndex) {
         auto input = AddNode();
         auto output = AddNode();
@@ -46,9 +53,9 @@ private:
         for (const auto& t: terms) {
             auto a = BuildTerm(t, varNameToIndex);
             fromInput.push_back(a.Input);
-            Transitions[a.Output] = TEpsilonTransitions({output});
+            Graph->Transitions[a.Output] = TEpsilonTransitions({output});
         }
-        Transitions[input] = std::move(fromInput);
+        Graph->Transitions[input] = std::move(fromInput);
         return {input, output};
     }
     TNfaItem BuildTerm(const TRowPatternTerm& term, const THashMap<TString, size_t>& varNameToIndex) {
@@ -59,10 +66,10 @@ private:
             automata.push_back(BuildFactor(f, varNameToIndex));
         }
         for (size_t i = 0; i != automata.size() - 1; ++i) {
-            Transitions[automata[i].Output] = TEpsilonTransitions({automata[i+1].Input});
+            Graph->Transitions[automata[i].Output] = TEpsilonTransitions({automata[i + 1].Input});
         }
-        Transitions[input] = TEpsilonTransitions({automata.front().Input});
-        Transitions[automata.back().Output] = TEpsilonTransitions({output});
+        Graph->Transitions[input] = TEpsilonTransitions({automata.front().Input});
+        Graph->Transitions[automata.back().Output] = TEpsilonTransitions({output});
         return {input, output};
     }
     TNfaItem BuildFactor(const TRowPatternFactor& factor, const THashMap<TString, size_t>& varNameToIndex) {
@@ -75,28 +82,31 @@ private:
         auto fromInput = TEpsilonTransitions{interim};
         if (factor.QuantityMin == 0)
             fromInput.push_back(output);
-        Transitions[input] =  fromInput;
-        Transitions[interim] = TQuantityEnterTransition{item.Input};
-        Transitions[item.Output] = std::pair{std::pair{factor.QuantityMin, factor.QuantityMax}, std::pair{item.Input, output}};
+        Graph->Transitions[input] = fromInput;
+        Graph->Transitions[interim] = TQuantityEnterTransition{item.Input};
+        Graph->Transitions[item.Output] = std::pair{std::pair{factor.QuantityMin, factor.QuantityMax}, std::pair{item.Input, output}};
         return {input, output};
     }
     TNfaItem BuildVar(ui32 varIndex) {
         auto input = AddNode();
         auto matchVar = AddNode();
         auto output = AddNode();
-        Transitions[input] = TEpsilonTransitions({matchVar});
-        Transitions[matchVar] = std::pair{varIndex, output};
+        Graph->Transitions[input] = TEpsilonTransitions({matchVar});
+        Graph->Transitions[matchVar] = std::pair{varIndex, output};
         return {input, output};
     }
-
-    size_t AddNode() {
-        Transitions.resize(Transitions.size() + 1);
-        return Transitions.size() - 1;
+public:
+    using TPatternConfigurationPtr = TNfaTransitionGraph::TPtr;
+    static TPatternConfigurationPtr Create(const TRowPattern& pattern, const THashMap<TString, size_t>& varNameToIndex) {
+        auto result = std::make_shared<TNfaTransitionGraph>();
+        TNfaTransitionGraphBuilder builder(result);
+        auto item = builder.BuildTerms(pattern, varNameToIndex);
+        result->Input = item.Input;
+        result->Output = item.Output;
+        return result;
     }
 private:
-    std::vector<TNfaTransition> Transitions;
-    size_t Input;
-    size_t Output;
+    TNfaTransitionGraph::TPtr Graph;
 };
 
 class TNfa {
@@ -106,28 +116,26 @@ class TNfa {
         TState(size_t index, const TMatchedVars& vars, std::stack<ui64>&& quantifiers)
             : Index(index)
             , Vars(vars)
-            , Quantifiers(quantifiers)
-        {}
+            , Quantifiers(quantifiers) {}
         const size_t Index;
         TMatchedVars Vars;
         std::stack<ui64> Quantifiers; //get rid of this
 
-        friend inline bool operator < (const TState& lhs, const TState& rhs) {
+        friend inline bool operator<(const TState& lhs, const TState& rhs) {
             return std::tie(lhs.Index, lhs.Quantifiers, lhs.Vars) < std::tie(rhs.Index, rhs.Quantifiers, rhs.Vars);
         }
-        friend inline bool operator == (const TState& lhs, const TState& rhs) {
+        friend inline bool operator==(const TState& lhs, const TState& rhs) {
             return std::tie(lhs.Index, lhs.Quantifiers, lhs.Vars) == std::tie(rhs.Index, rhs.Quantifiers, rhs.Vars);
         }
     };
 public:
     TNfa(TNfaTransitionGraph::TPtr transitionGraph, IComputationExternalNode* matchedRangesArg, const TComputationNodePtrVector& defines)
-            : TransitionGraph(transitionGraph)
-            , MatchedRangesArg(matchedRangesArg)
-            , Defines(defines)
-    {
+        : TransitionGraph(transitionGraph)
+        , MatchedRangesArg(matchedRangesArg)
+        , Defines(defines) {
     }
 
-    void ProcessRow(TSparseList::TRange&& currentRowLock, TComputationContext& ctx){
+    void ProcessRow(TSparseList::TRange&& currentRowLock, TComputationContext& ctx) {
         ActiveStates.emplace(TransitionGraph->Input, TMatchedVars(Defines.size()), std::stack<ui64>{});
         MakeEpsilonTransitions();
         std::set<TState> newStates;
@@ -157,7 +165,7 @@ public:
 
     bool HasMatched() const {
         for (auto& s: ActiveStates) {
-            if (s.Index == TransitionGraph->Output){
+            if (s.Index == TransitionGraph->Output) {
                 return true;
             }
         }
@@ -166,7 +174,7 @@ public:
 
     std::optional<TMatchedVars> GetMatched() {
         for (auto& s: ActiveStates) {
-            if (s.Index == TransitionGraph->Output){
+            if (s.Index == TransitionGraph->Output) {
                 auto result = s.Vars;
                 ActiveStates.erase(s);
                 return result;
@@ -179,11 +187,10 @@ private:
     //TODO (zverevgeny): Consider to change to std::vector for the sake of perf
     using TStateSet = std::set<TState>;
     struct TTransitionVisitor {
-        TTransitionVisitor(const TState& state,  TStateSet& newStates, TStateSet& deletedStates)
+        TTransitionVisitor(const TState& state, TStateSet& newStates, TStateSet& deletedStates)
             : State(state)
             , NewStates(newStates)
-            , DeletedStates(deletedStates)
-        {}
+            , DeletedStates(deletedStates) {}
         void operator()(const TMatchedVarTransition& var) {
             //Transitions of TMatchedVarTransition type are handled in ProcessRow method
             Y_UNUSED(var);

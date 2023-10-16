@@ -49,7 +49,7 @@ struct TNfaSetup {
         for(size_t i = 0; i != vars.size(); ++i) {
             varNameLookup[varVec[i]] = i;
         }
-        const auto& transitionGraph = TNfaTransitionGraph::Create(pattern, varNameLookup);
+        const auto& transitionGraph = TNfaTransitionGraphBuilder::Create(pattern, varNameLookup);
         TComputationNodePtrVector defines;
         defines.reserve(Defines.size());
         for (auto& d: Defines) {

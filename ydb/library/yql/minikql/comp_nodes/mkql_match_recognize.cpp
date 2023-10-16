@@ -41,9 +41,12 @@ class TBackTrackingMatchRecognize {
     using TMatchedVars = TMatchedVars<TRange>;
 public:
     //TODO(YQL-16486): create a tree for backtracking(replace var names with indexes)
-    struct TPatternConfiguration {
-        using TPtr = std::shared_ptr<TPatternConfiguration>;
-        static TPtr Create(const TRowPattern& pattern, const THashMap<TString, size_t>& varNameToIndex) {
+
+    struct TPatternConfiguration {};
+
+    struct TPatternConfigurationBuilder {
+        using TPatternConfigurationPtr = std::shared_ptr<TPatternConfiguration>;
+        static TPatternConfigurationPtr Create(const TRowPattern& pattern, const THashMap<TString, size_t>& varNameToIndex) {
             Y_UNUSED(pattern);
             Y_UNUSED(varNameToIndex);
             return std::make_shared<TPatternConfiguration>();
@@ -53,7 +56,7 @@ public:
     TBackTrackingMatchRecognize(
         NUdf::TUnboxedValue&& partitionKey,
         const TMatchRecognizeProcessorParameters& parameters,
-        const TPatternConfiguration::TPtr pattern,
+        const TPatternConfigurationBuilder::TPatternConfigurationPtr pattern,
         const TContainerCacheOnContext& cache
     )
     : PartitionKey(std::move(partitionKey))
@@ -135,7 +138,7 @@ class TStreamingMatchRecognize {
     using TRange = TPartitionList::TRange;
     using TMatchedVars = TMatchedVars<TRange>;
 public:
-    using TPatternConfiguration = TNfaTransitionGraph;
+    using TPatternConfigurationBuilder = TNfaTransitionGraphBuilder;
     TStreamingMatchRecognize(
         NUdf::TUnboxedValue&& partitionKey,
         const TMatchRecognizeProcessorParameters& parameters,
@@ -198,7 +201,7 @@ template <typename Algo>
 class TStateForNonInterleavedPartitions
     : public TComputationValue<TStateForNonInterleavedPartitions<Algo>>
 {
-    using TRowPatternConfiguration = typename Algo::TPatternConfiguration;
+    using TRowPatternConfigurationBuilder = typename Algo::TPatternConfigurationBuilder;
 public:
     TStateForNonInterleavedPartitions(
             TMemoryUsageInfo* memInfo,
@@ -213,7 +216,7 @@ public:
     , PartitionKey(partitionKey)
     , PartitionKeyPacker(true, partitionKeyType)
     , Parameters(parameters)
-    , RowPatternConfiguration(TRowPatternConfiguration::Create(parameters.Pattern, parameters.VarNamesLookup))
+    , RowPatternConfiguration(TRowPatternConfigurationBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
     , Cache(cache)
     , Terminating(false)
     {}
@@ -280,7 +283,7 @@ private:
     IComputationNode* PartitionKey;
     TValuePackerGeneric<false> PartitionKeyPacker;
     const TMatchRecognizeProcessorParameters& Parameters;
-    const typename TRowPatternConfiguration::TPtr RowPatternConfiguration;
+    const typename TRowPatternConfigurationBuilder::TPatternConfigurationPtr RowPatternConfiguration;
     const TContainerCacheOnContext& Cache;
     NUdf::TUnboxedValue DelayedRow;
     bool Terminating;
@@ -304,7 +307,7 @@ public:
     , PartitionKey(partitionKey)
     , PartitionKeyPacker(true, partitionKeyType)
     , Parameters(parameters)
-    , NfaTransitionGraph(TNfaTransitionGraph::Create(parameters.Pattern, parameters.VarNamesLookup))
+    , NfaTransitionGraph(TNfaTransitionGraphBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
     , Cache(cache)
 {
 }

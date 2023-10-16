@@ -915,8 +915,6 @@ class TRopeArena {
 
     TAllocateCallback Allocator;
     TRope Arena;
-    size_t Size = 0;
-    THashSet<const void*> AccountedBuffers;
 
 public:
     TRopeArena(TAllocateCallback&& allocator)
@@ -948,16 +946,6 @@ public:
         }
 
         return res;
-    }
-
-    size_t GetSize() const {
-        return Size;
-    }
-
-    void AccountChunk(const TRcBuf& chunk) {
-        if (AccountedBuffers.insert(chunk.Backend.UniqueId()).second) {
-            Size += chunk.GetOccupiedMemorySize();
-        }
     }
 };
 
@@ -1131,9 +1119,6 @@ inline TRope TRope::CopySpaceOptimized(TRope&& origin, size_t worstRatioPer1k, T
     }
     res.Size = origin.Size;
     origin = TRope();
-    for (const TRcBuf& chunk : res.Chain) {
-        arena.AccountChunk(chunk);
-    }
     return res;
 }
 

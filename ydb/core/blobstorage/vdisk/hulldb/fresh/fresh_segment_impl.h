@@ -201,12 +201,10 @@ namespace NKikimr {
     inline void TFreshIndexAndData<TKeyLogoBlob, TMemRecLogoBlob>::PutLogoBlobWithData(ui64 lsn,
             const TKeyLogoBlob &key, ui8 partId, const TIngress &ingress, TRope buffer) {
         TMemRecLogoBlob memRec(ingress);
-        const size_t before = Arena->GetSize();
         buffer = TRope::CopySpaceOptimized(std::move(buffer), 128, *Arena);
         const ui64 fullDataSize = key.LogoBlobID().BlobSize();
+        const size_t delta = buffer.size();
         TRope blob = TDiskBlob::Create(fullDataSize, partId, HullCtx->VCtx->Top->GType.TotalPartCount(), std::move(buffer), *Arena);
-        const size_t after = Arena->GetSize();
-        const size_t delta = after - before;
         FreshDataMemConsumer.Add(delta);
         const ui32 blobSize = blob.GetSize();
 

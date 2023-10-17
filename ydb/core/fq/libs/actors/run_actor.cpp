@@ -2239,7 +2239,8 @@ IActor* CreateRunActor(
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
     TRunActorParams&& params
 ) {
-    return new NYql::NDq::TLogWrapReceive(new TRunActor(fetcherId, serviceCounters, std::move(params)), params.QueryId);
+    auto queryId = params.QueryId;
+    return new NYql::NDq::TLogWrapReceive(new TRunActor(fetcherId, serviceCounters, std::move(params)), queryId);
 }
 
 } /* NFq */

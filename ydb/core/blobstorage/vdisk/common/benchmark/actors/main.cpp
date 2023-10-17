@@ -118,7 +118,8 @@ public:
 
 namespace NLocalBench {
 
-THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 threads, ui32 pools) {
+THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 pools) {
+    constexpr static auto threads = 1;
     Y_ABORT_UNLESS(threads > 0 && threads < 100);
     Y_ABORT_UNLESS(pools > 0 && pools < 10);
 
@@ -144,13 +145,15 @@ int test() {
     signal(SIGINT, &OnTerminate);
     signal(SIGTERM, &OnTerminate);
 
-    THolder<TActorSystemSetup> actorSystemSetup = BuildActorSystemSetup(1, 2);
+    constexpr static auto pools = 2;
+
+    THolder<TActorSystemSetup> actorSystemSetup = BuildActorSystemSetup(pools);
     TActorSystem actorSystem(actorSystemSetup);
 
     actorSystem.Start();
 
-    TActorId receiver = actorSystem.Register(new TReceiverActor(), TMailboxType::HTSwap, 0);
-    TActorId sender = actorSystem.Register(new TSenderActor(receiver), TMailboxType::HTSwap, 1);
+    TActorId receiver = actorSystem.Register(new TReceiverActor(), TMailboxType::HTSwap, std::min(pools - 1, 0));
+    TActorId sender = actorSystem.Register(new TSenderActor(receiver), TMailboxType::HTSwap, std::min(pools - 1, 1));
     Y_UNUSED(sender);
 
     while (ShouldContinue.PollState() == TProgramShouldContinue::Continue) {

@@ -77,6 +77,10 @@ namespace NKikimr {
             return PerPartStatus[partIdx];
         }
 
+        void Mask(ui32 partIdx, ui32 disks) {
+            PerPartStatus[partIdx] &= disks;
+        }
+
         std::pair<ui32, ui32> GetMirror3of4State() const {
             const ui32 data = PerPartStatus[0] | PerPartStatus[1];
             const ui32 meta = PerPartStatus[2];

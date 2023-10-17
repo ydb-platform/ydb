@@ -81,19 +81,21 @@ public:
             .ai_family = 0,
             .ai_socktype = SOCK_STREAM,
         };
+        int result = 0;
         struct addrinfo* gai_res = nullptr;
         int gai_ret = getaddrinfo(address.data(), nullptr, &hints, &gai_res);
         if (gai_ret == 0 && gai_res->ai_addr) {
             switch (gai_res->ai_addr->sa_family) {
                 case AF_INET:
                 case AF_INET6:
-                    return gai_res->ai_addr->sa_family;
+                    result = gai_res->ai_addr->sa_family;
+                    break;
             }
         }
         if (gai_res) {
             freeaddrinfo(gai_res);
         }
-        return 0;
+        return result;
     }
 
     static std::shared_ptr<ISockAddr> MakeAddress(const sockaddr_storage& storage) {

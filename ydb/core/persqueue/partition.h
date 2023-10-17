@@ -176,8 +176,8 @@ private:
     void ProcessTimestampsForNewData(const ui64 prevEndOffset, const TActorContext& ctx);
 
     void ReadTimestampForOffset(const TString& user, TUserInfo& ui, const TActorContext& ctx);
-    void ReportCounters(const TActorContext& ctx);
-    bool UpdateCounters(const TActorContext& ctx);
+    void ReportCounters(const TActorContext& ctx, bool force = false);
+    bool UpdateCounters(const TActorContext& ctx, bool force = false);
     void ScheduleUpdateAvailableSize(const TActorContext& ctx);
     void SetDeadlinesForWrites(const TActorContext& ctx);
 
@@ -614,6 +614,7 @@ private:
 
     TTabletCountersBase TabletCounters;
     THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
+    TInstant LastCountersUpdate;
 
     TSubscriber Subscriber;
 

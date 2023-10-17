@@ -187,12 +187,12 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 offset, TTestCo
 }
 
 void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map, const ui64 ssId,
-                       TTestContext& context, const bool requireAuth) {
-    PQBalancerPrepare(topic, map, ssId, *context.Runtime, context.BalancerTabletId, context.Edge, requireAuth);
+                       TTestContext& context, const bool requireAuth, bool kill) {
+    PQBalancerPrepare(topic, map, ssId, *context.Runtime, context.BalancerTabletId, context.Edge, requireAuth, kill);
 }
 
 void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map, const ui64 ssId,
-                       TTestActorRuntime& runtime, ui64 balancerTabletId, TActorId edge, const bool requireAuth) {
+                       TTestActorRuntime& runtime, ui64 balancerTabletId, TActorId edge, const bool requireAuth, bool kill) {
     TAutoPtr<IEventHandle> handle;
     static int version = 0;
     ++version;
@@ -237,10 +237,12 @@ void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::p
         }
     }
     //TODO: check state
-    ForwardToTablet(runtime, balancerTabletId, edge, new TEvents::TEvPoisonPill());
-    TDispatchOptions rebootOptions;
-    rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
-    runtime.DispatchEvents(rebootOptions);
+    if (kill) {
+        ForwardToTablet(runtime, balancerTabletId, edge, new TEvents::TEvPoisonPill());
+        TDispatchOptions rebootOptions;
+        rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
+        runtime.DispatchEvents(rebootOptions);
+    }
 }
 
 void PQGetPartInfo(ui64 startOffset, ui64 endOffset, TTestContext& tc) {

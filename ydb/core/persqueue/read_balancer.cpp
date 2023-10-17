@@ -182,9 +182,10 @@ void TPersQueueReadBalancer::TTxWrite::Complete(const TActorContext &ctx) {
     Self->WaitingResponse.clear();
 
     Self->NoGroupsInBase = false;
-
-    Self->Inited = true;
-    Self->InitDone(ctx);
+    if (!Self->Inited) {
+        Self->Inited = true;
+        Self->InitDone(ctx);
+    }
 }
 
 struct TPersQueueReadBalancer::TTxWritePartitionStats : public ITransaction {
@@ -504,6 +505,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         res->Record.SetTxId(ev->Get()->Record.GetTxId());
         res->Record.SetOrigin(TabletID());
         ctx.Send(ev->Sender, res.Release());
+        return;
     }
     WaitingResponse.push_back(ev->Sender);
 

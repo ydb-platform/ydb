@@ -950,7 +950,7 @@ void TPartition::HandleSetOffsetResponse(ui64 cookie, const TActorContext& ctx) 
     TxIdHasChanged = false;
 
     if (ChangeConfig) {
-        ReportCounters(ctx);
+        ReportCounters(ctx, true);
         ChangeConfig = nullptr;
     }
 

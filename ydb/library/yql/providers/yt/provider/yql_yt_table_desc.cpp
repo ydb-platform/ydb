@@ -159,6 +159,7 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
     settings.SyntaxVersion = syntaxVersion;
     settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
     settings.FileAliasPrefix = "view_" + randomProvider.GenUuid4().AsGuidString() + "/";
+    settings.FileAliasPrefix.clear(); // disable FileAliasPrefix while preserving number of randomProvider calls
     NYql::TAstParseResult sqlRes = NSQLTranslation::SqlToYql(sql, settings);
     ctx.IssueManager.RaiseIssues(sqlRes.Issues);
     if (!sqlRes.IsOk()) {

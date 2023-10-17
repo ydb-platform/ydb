@@ -69,6 +69,8 @@ struct TOwnerData {
     TOwnerRound OwnerRound = 0;
     TInstant AskedToCutLogAt;
     ui64 AskedFreeUpToLsn = 0;
+    size_t LogChunkCountBeforeCut = 0;
+    size_t AskedLogChunkToCut = 0;
     TInstant CutLogAt;
     ui64 LastSeenLsn = 0;
     bool HasAlreadyLoggedThisIncarnation = false;

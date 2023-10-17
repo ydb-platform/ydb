@@ -14,6 +14,8 @@
 #include <yt/yt/core/yson/protobuf_interop.h>
 #include <yt/yt/core/yson/pull_parser_deserialize.h>
 
+#include <library/cpp/yt/misc/cast.h>
+
 #include <optional>
 #include <numeric>
 
@@ -505,7 +507,19 @@ void Deserialize(T& value, INodePtr node)
                     node->GetType());
         }
     } else {
-        value = ParseEnum<T>(node->GetValue<TString>());
+        switch (node->GetType()) {
+            case ENodeType::String: {
+                value = ParseEnum<T>(node->GetValue<TString>());
+                break;
+            }
+            case ENodeType::Int64: {
+                value = CheckedEnumCast<T>(node->AsInt64()->GetValue());
+                break;
+            }
+            default:
+                THROW_ERROR_EXCEPTION("Cannot deserialize enum from %Qlv node",
+                    node->GetType());
+        }
     }
 }
 

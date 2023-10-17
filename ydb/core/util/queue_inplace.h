@@ -33,7 +33,7 @@ public:
     {}
 
     ~TQueueInplace() {
-        Y_VERIFY_DEBUG(Head() == nullptr && Size == 0);
+        Y_DEBUG_ABORT_UNLESS(Head() == nullptr && Size == 0);
         delete ReadFrom;
     }
 

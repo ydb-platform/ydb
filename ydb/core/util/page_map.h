@@ -65,14 +65,14 @@ namespace NKikimr {
 
             reference operator*() const {
                 if (Self->Mask) {
-                    Y_VERIFY_DEBUG(Index < Self->Entries.size());
+                    Y_DEBUG_ABORT_UNLESS(Index < Self->Entries.size());
                     const auto& entry = Self->Entries[Index];
-                    Y_VERIFY_DEBUG(entry.Page != InvalidPageId);
+                    Y_DEBUG_ABORT_UNLESS(entry.Page != InvalidPageId);
                     return { entry.Page, entry.Value };
                 } else {
-                    Y_VERIFY_DEBUG(Index < Self->Pages.size());
+                    Y_DEBUG_ABORT_UNLESS(Index < Self->Pages.size());
                     const auto& value = Self->Pages[Index];
-                    Y_VERIFY_DEBUG(value);
+                    Y_DEBUG_ABORT_UNLESS(value);
                     return { Index, value };
                 }
             }
@@ -143,7 +143,7 @@ namespace NKikimr {
         }
 
         const TPointer& operator[](ui32 page) const {
-            Y_VERIFY_DEBUG(page < MaxPages,
+            Y_DEBUG_ABORT_UNLESS(page < MaxPages,
                 "Trying to lookup page %" PRIu32 ", size is %" PRISZT,
                 page, MaxPages);
 
@@ -151,11 +151,11 @@ namespace NKikimr {
         }
 
         bool emplace(ui32 page, TPointer value) {
-            Y_VERIFY_DEBUG(page < MaxPages,
+            Y_DEBUG_ABORT_UNLESS(page < MaxPages,
                 "Trying to insert page %" PRIu32 ", size is %" PRISZT,
                 page, MaxPages);
 
-            Y_VERIFY_DEBUG(value,
+            Y_DEBUG_ABORT_UNLESS(value,
                 "Trying to insert page %" PRIu32 " with an empty value",
                 page);
 
@@ -170,7 +170,7 @@ namespace NKikimr {
         }
 
         bool erase(ui32 page) {
-            Y_VERIFY_DEBUG(page < MaxPages,
+            Y_DEBUG_ABORT_UNLESS(page < MaxPages,
                 "Trying to erase page %" PRIu32 ", size is %" PRISZT,
                 page, MaxPages);
 
@@ -198,7 +198,7 @@ namespace NKikimr {
                 "Decreasing virtual size from %" PRISZT " to %" PRISZT " not supported",
                 MaxPages, max_pages);
 
-            Y_VERIFY_DEBUG(max_pages < InvalidPageId,
+            Y_DEBUG_ABORT_UNLESS(max_pages < InvalidPageId,
                 "Cannot resize to %" PRISZT " pages (must be less than %" PRIu32 ")",
                 max_pages, InvalidPageId);
 
@@ -248,7 +248,7 @@ namespace NKikimr {
             size_t index = ExpectedIndex(page);
             ui32 distance = 0;
             for (;;) {
-                Y_VERIFY_DEBUG(index < Entries.size());
+                Y_DEBUG_ABORT_UNLESS(index < Entries.size());
                 auto& entry = Entries[index];
                 if (entry.Page == page) {
                     return entry.Value; // found
@@ -263,7 +263,7 @@ namespace NKikimr {
 
         bool EmplacePage(ui32 page, TPointer value) {
             if (!Mask) {
-                Y_VERIFY_DEBUG(page < Pages.size());
+                Y_DEBUG_ABORT_UNLESS(page < Pages.size());
                 if (!Pages[page]) {
                     Pages[page] = std::move(value);
                     return true;
@@ -275,7 +275,7 @@ namespace NKikimr {
             size_t index = ExpectedIndex(page);
             ui32 distance = 0;
             for (;;) {
-                Y_VERIFY_DEBUG(index < Entries.size());
+                Y_DEBUG_ABORT_UNLESS(index < Entries.size());
                 auto& entry = Entries[index];
                 if (entry.Page == page) {
                     // Found existing page, cannot emplace
@@ -303,7 +303,7 @@ namespace NKikimr {
             for (;;) {
                 index = (index + 1) & Mask;
                 ++distance;
-                Y_VERIFY_DEBUG(index < Entries.size());
+                Y_DEBUG_ABORT_UNLESS(index < Entries.size());
                 auto& entry = Entries[index];
                 if (entry.Page == InvalidPageId) {
                     entry.Page = page;
@@ -334,7 +334,7 @@ namespace NKikimr {
             size_t index = ExpectedIndex(page);
             size_t distance = 0;
             for (;;) {
-                Y_VERIFY_DEBUG(index < Entries.size());
+                Y_DEBUG_ABORT_UNLESS(index < Entries.size());
                 auto& entry = Entries[index];
                 if (entry.Page == page) {
                     entry.Page = InvalidPageId;
@@ -350,11 +350,11 @@ namespace NKikimr {
 
             // We now have a hole at index, move stuff up
             for (;;) {
-                Y_VERIFY_DEBUG(index < Entries.size());
+                Y_DEBUG_ABORT_UNLESS(index < Entries.size());
                 auto& entry = Entries[index];
-                Y_VERIFY_DEBUG(entry.Page == InvalidPageId);
+                Y_DEBUG_ABORT_UNLESS(entry.Page == InvalidPageId);
                 index = (index + 1) & Mask;
-                Y_VERIFY_DEBUG(index < Entries.size());
+                Y_DEBUG_ABORT_UNLESS(index < Entries.size());
                 auto& next = Entries[index];
                 if (next.Page == InvalidPageId || !next.Distance) {
                     break;
@@ -397,7 +397,7 @@ namespace NKikimr {
 
             size_t entries = FastClp2(min_entries);
             if (entries && entries <= MaxEntries) {
-                Y_VERIFY_DEBUG(entries >= 2);
+                Y_DEBUG_ABORT_UNLESS(entries >= 2);
                 Mask = entries - 1;
                 Entries.resize(entries);
             } else {
@@ -419,12 +419,12 @@ namespace NKikimr {
             Init(min_entries);
             for (auto& entry : entries) {
                 if (entry.Page != InvalidPageId) {
-                    Y_VERIFY_DEBUG(Used < min_entries);
+                    Y_DEBUG_ABORT_UNLESS(Used < min_entries);
                     Y_ABORT_UNLESS(EmplacePage(entry.Page, std::move(entry.Value)));
                     ++Used;
                 }
             }
-            Y_VERIFY_DEBUG(Used == prevUsed);
+            Y_DEBUG_ABORT_UNLESS(Used == prevUsed);
         }
 
         void Rehash(size_t min_entries, TVector<TPointer> pages) {
@@ -433,13 +433,13 @@ namespace NKikimr {
             ui32 page = 0;
             for (auto& value : pages) {
                 if (value) {
-                    Y_VERIFY_DEBUG(Used < min_entries);
+                    Y_DEBUG_ABORT_UNLESS(Used < min_entries);
                     Y_ABORT_UNLESS(EmplacePage(page, std::move(value)));
                     ++Used;
                 }
                 ++page;
             }
-            Y_VERIFY_DEBUG(Used == prevUsed);
+            Y_DEBUG_ABORT_UNLESS(Used == prevUsed);
         }
 
         template<class T>

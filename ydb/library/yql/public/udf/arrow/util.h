@@ -90,20 +90,20 @@ public:
     }
 
     inline void UnsafeAppend(const T* values, size_t count) {
-        Y_VERIFY_DEBUG(count + Length() <= Buffer->capacity() / sizeof(T));
+        Y_DEBUG_ABORT_UNLESS(count + Length() <= Buffer->capacity() / sizeof(T));
         std::memcpy(End(), values, count * sizeof(T));
         UnsafeAdvance(count);
     }
 
     inline void UnsafeAppend(size_t count, const T& value) {
-        Y_VERIFY_DEBUG(count + Length() <= Buffer->capacity() / sizeof(T));
+        Y_DEBUG_ABORT_UNLESS(count + Length() <= Buffer->capacity() / sizeof(T));
         T* target = End();
         std::fill(target, target + count, value);
         UnsafeAdvance(count);
     }
 
     inline void UnsafeAppend(T&& value) {
-        Y_VERIFY_DEBUG(1 + Length() <= Buffer->capacity() / sizeof(T));
+        Y_DEBUG_ABORT_UNLESS(1 + Length() <= Buffer->capacity() / sizeof(T));
         *End() = std::move(value);
         UnsafeAdvance(1);
     }

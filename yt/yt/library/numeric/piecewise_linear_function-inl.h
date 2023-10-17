@@ -146,14 +146,14 @@ TPiecewiseSegment<TValue> TPiecewiseSegment<TValue>::Shift(double deltaBound, co
 template <class TValue>
 TValue TPiecewiseSegment<TValue>::InterpolateAt(double x) const
 {
-    Y_VERIFY_DEBUG(IsDefinedAt(x));
-    Y_VERIFY_DEBUG(LeftBound_ != RightBound_);
+    Y_DEBUG_ABORT_UNLESS(IsDefinedAt(x));
+    Y_DEBUG_ABORT_UNLESS(LeftBound_ != RightBound_);
 
     // The value of t is monotonic and is exact at bounds.
     double t = (x - LeftBound()) / (RightBound() - LeftBound());
 
-    Y_VERIFY_DEBUG(x != LeftBound() || t == 0);
-    Y_VERIFY_DEBUG(x != RightBound() || t == 1);
+    Y_DEBUG_ABORT_UNLESS(x != LeftBound() || t == 0);
+    Y_DEBUG_ABORT_UNLESS(x != RightBound() || t == 1);
 
     return InterpolateNormalized(t);
 }
@@ -408,8 +408,8 @@ TPiecewiseLinearFunction<TValue> TPiecewiseLinearFunction<TValue>::Create(
 
     TSelf result = builder.Finish();
 
-    Y_VERIFY_DEBUG(result.LeftFunctionBound() == leftBound);
-    Y_VERIFY_DEBUG(result.RightFunctionBound() == rightBound);
+    Y_DEBUG_ABORT_UNLESS(result.LeftFunctionBound() == leftBound);
+    Y_DEBUG_ABORT_UNLESS(result.RightFunctionBound() == rightBound);
 
     return result;
 }
@@ -542,7 +542,7 @@ bool TPiecewiseLinearFunction<TValue>::IsTrimmedRight() const
 template <class TValue>
 const TPiecewiseSegment<TValue>& TPiecewiseLinearFunction<TValue>::LeftSegmentAt(double x, int* segmentIndex) const
 {
-    Y_VERIFY_DEBUG(IsDefinedAt(x));
+    Y_DEBUG_ABORT_UNLESS(IsDefinedAt(x));
 
     // Finds first element with |RightBound() >= x|.
     auto it = LowerBoundBy(
@@ -550,7 +550,7 @@ const TPiecewiseSegment<TValue>& TPiecewiseLinearFunction<TValue>::LeftSegmentAt
         end(Segments_),
         /* value */ x,
         [] (const auto& segment) { return segment.RightBound(); });
-    Y_VERIFY_DEBUG(it != end(Segments_));
+    Y_DEBUG_ABORT_UNLESS(it != end(Segments_));
 
     if (segmentIndex != nullptr) {
         *segmentIndex = it - begin(Segments_);
@@ -561,7 +561,7 @@ const TPiecewiseSegment<TValue>& TPiecewiseLinearFunction<TValue>::LeftSegmentAt
 template <class TValue>
 const TPiecewiseSegment<TValue>& TPiecewiseLinearFunction<TValue>::RightSegmentAt(double x, int* segmentIndex) const
 {
-    Y_VERIFY_DEBUG(IsDefinedAt(x));
+    Y_DEBUG_ABORT_UNLESS(IsDefinedAt(x));
 
     // Returns first element with LeftBound() > x.
     auto it = UpperBoundBy(
@@ -582,7 +582,7 @@ const TPiecewiseSegment<TValue>& TPiecewiseLinearFunction<TValue>::RightSegmentA
 template <class TValue>
 const TPiecewiseSegment<TValue>& TPiecewiseLinearFunction<TValue>::SegmentAt(double x, int* segmentIndex) const
 {
-    Y_VERIFY_DEBUG(IsDefinedAt(x));
+    Y_DEBUG_ABORT_UNLESS(IsDefinedAt(x));
 
     // Finds first element with |RightBound() >= x|.
     auto it = LowerBoundBy(
@@ -590,11 +590,11 @@ const TPiecewiseSegment<TValue>& TPiecewiseLinearFunction<TValue>::SegmentAt(dou
         end(Segments_),
         /* value */ x,
         [] (const auto& segment) { return segment.RightBound(); });
-    Y_VERIFY_DEBUG(it != end(Segments_));
+    Y_DEBUG_ABORT_UNLESS(it != end(Segments_));
 
     auto next = it + 1;
     if (it->RightBound() == x && next != end(Segments_) && next->IsVertical()) {
-        Y_VERIFY_DEBUG(next->LeftBound() == x);
+        Y_DEBUG_ABORT_UNLESS(next->LeftBound() == x);
         it = next;
     }
 
@@ -950,8 +950,8 @@ TPiecewiseLinearFunction<TValue> TPiecewiseLinearFunction<TValue>::Compose(const
     }
 
     Sort(begin(criticalPoints), end(criticalPoints));
-    Y_VERIFY_DEBUG(IsSortedBy(begin(criticalPoints), end(criticalPoints), [] (const auto& pair) { return pair.second; }));
-    Y_VERIFY_DEBUG(Unique(begin(criticalPoints), end(criticalPoints)) == end(criticalPoints));
+    Y_DEBUG_ABORT_UNLESS(IsSortedBy(begin(criticalPoints), end(criticalPoints), [] (const auto& pair) { return pair.second; }));
+    Y_DEBUG_ABORT_UNLESS(Unique(begin(criticalPoints), end(criticalPoints)) == end(criticalPoints));
 
     // Finally, build the resulting function.
     TBuilder builder;
@@ -1040,14 +1040,14 @@ TPiecewiseLinearFunction<TValue>::TLeftToRightTraverser::TLeftToRightTraverser(
     , Cur_(Function_->Segments().begin() + segmentIndex)
     , End_(Function_->Segments().end())
 {
-    Y_VERIFY_DEBUG(segmentIndex < std::ssize(Function_->Segments()));
+    Y_DEBUG_ABORT_UNLESS(segmentIndex < std::ssize(Function_->Segments()));
 }
 
 template <class TValue>
 const TPiecewiseSegment<TValue>& TPiecewiseLinearFunction<TValue>::TLeftToRightTraverser::LeftSegmentAt(double x)
 {
-    Y_VERIFY_DEBUG(Function_->IsDefinedAt(x));
-    Y_VERIFY_DEBUG(Cur_ == Function_->Segments().begin() || (Cur_ - 1)->RightBound() < x);
+    Y_DEBUG_ABORT_UNLESS(Function_->IsDefinedAt(x));
+    Y_DEBUG_ABORT_UNLESS(Cur_ == Function_->Segments().begin() || (Cur_ - 1)->RightBound() < x);
 
     // Note that since |Function_->IsDefinedAt(x)| holds, we do not need to check that |Cur_ != End_|.
     while (Cur_->RightBound() < x) {
@@ -1061,8 +1061,8 @@ const TPiecewiseSegment<TValue>& TPiecewiseLinearFunction<TValue>::TLeftToRightT
 template <class TValue>
 const TPiecewiseSegment<TValue>& TPiecewiseLinearFunction<TValue>::TLeftToRightTraverser::RightSegmentAt(double x)
 {
-    Y_VERIFY_DEBUG(Function_->IsDefinedAt(x));
-    Y_VERIFY_DEBUG(Cur_->LeftBound() <= x);
+    Y_DEBUG_ABORT_UNLESS(Function_->IsDefinedAt(x));
+    Y_DEBUG_ABORT_UNLESS(Cur_->LeftBound() <= x);
 
     while (true) {
         auto next = Cur_ + 1;
@@ -1081,8 +1081,8 @@ const TPiecewiseSegment<TValue>& TPiecewiseLinearFunction<TValue>::TLeftToRightT
 template <class TValue>
 const TPiecewiseSegment<TValue>& TPiecewiseLinearFunction<TValue>::TLeftToRightTraverser::SegmentAt(double x)
 {
-    Y_VERIFY_DEBUG(Function_->IsDefinedAt(x));
-    Y_VERIFY_DEBUG(Cur_->LeftBound() <= x);
+    Y_DEBUG_ABORT_UNLESS(Function_->IsDefinedAt(x));
+    Y_DEBUG_ABORT_UNLESS(Cur_->LeftBound() <= x);
     // Note that since |Function_->IsDefinedAt(x)| holds, we do not need to check that |Cur_ != End_|.
     while (Cur_->RightBound() < x) {
         ++Cur_;
@@ -1091,7 +1091,7 @@ const TPiecewiseSegment<TValue>& TPiecewiseLinearFunction<TValue>::TLeftToRightT
 
     auto next = Cur_ + 1;
     if (Cur_->RightBound() == x && next != End_ && next->IsVertical()) {
-        Y_VERIFY_DEBUG(next->LeftBound() == x);
+        Y_DEBUG_ABORT_UNLESS(next->LeftBound() == x);
         Cur_ = next;
     }
 

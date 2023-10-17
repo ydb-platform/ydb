@@ -30,7 +30,7 @@ bool THyperLogCounter::Increment(IRandomProvider& randomProvider) {
         return false;
 
     ++Value;
-    Y_VERIFY_DEBUG(Value < 64);
+    Y_DEBUG_ABORT_UNLESS(Value < 64);
     return true;
 }
 
@@ -76,7 +76,7 @@ bool THyperLogCounter::Add(ui64 addend, IRandomProvider& randomProvider) {
         remain >>= 1;
     }
 
-    Y_VERIFY_DEBUG(Value < 64);
+    Y_DEBUG_ABORT_UNLESS(Value < 64);
     return (oldValue != Value);
 }
 

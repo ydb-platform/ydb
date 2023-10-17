@@ -111,12 +111,12 @@ namespace NKikimr {
             }
 
             static TLeafPage* From(TPage* page) {
-                Y_VERIFY_DEBUG(page && page->GetTag() == ETag::Leaf);
+                Y_DEBUG_ABORT_UNLESS(page && page->GetTag() == ETag::Leaf);
                 return static_cast<TLeafPage*>(page);
             }
 
             static const TLeafPage* From(const TPage* page) {
-                Y_VERIFY_DEBUG(page && page->GetTag() == ETag::Leaf);
+                Y_DEBUG_ABORT_UNLESS(page && page->GetTag() == ETag::Leaf);
                 return static_cast<const TLeafPage*>(page);
             }
 
@@ -152,12 +152,12 @@ namespace NKikimr {
             }
 
             static TInnerPage* From(TPage* page) {
-                Y_VERIFY_DEBUG(page && page->GetTag() == ETag::Inner);
+                Y_DEBUG_ABORT_UNLESS(page && page->GetTag() == ETag::Inner);
                 return static_cast<TInnerPage*>(page);
             }
 
             static const TInnerPage* From(const TPage* page) {
-                Y_VERIFY_DEBUG(page && page->GetTag() == ETag::Inner);
+                Y_DEBUG_ABORT_UNLESS(page && page->GetTag() == ETag::Inner);
                 return static_cast<const TInnerPage*>(page);
             }
 
@@ -232,10 +232,10 @@ namespace NKikimr {
             }
 
             void LinkAfter(TSnapshotContext* last) {
-                Y_VERIFY_DEBUG(this != last);
-                Y_VERIFY_DEBUG(Prev == nullptr && Next == nullptr);
+                Y_DEBUG_ABORT_UNLESS(this != last);
+                Y_DEBUG_ABORT_UNLESS(Prev == nullptr && Next == nullptr);
                 if (last) {
-                    Y_VERIFY_DEBUG(last->Next == nullptr);
+                    Y_DEBUG_ABORT_UNLESS(last->Next == nullptr);
                     Prev = last;
                     last->Next = this;
                 }
@@ -253,7 +253,7 @@ namespace NKikimr {
             }
 
             void AddDroppedPage(TPage* page) {
-                Y_VERIFY_DEBUG(page->NextDroppedPage == nullptr);
+                Y_DEBUG_ABORT_UNLESS(page->NextDroppedPage == nullptr);
                 page->NextDroppedPage = LastDroppedPage;
                 LastDroppedPage = page;
             }
@@ -299,9 +299,9 @@ namespace NKikimr {
                 , Context(context)
                 , GCList(std::move(gcList))
             {
-                Y_VERIFY_DEBUG(Tree && Context && GCList, "Explicit constructor got unexpected values");
+                Y_DEBUG_ABORT_UNLESS(Tree && Context && GCList, "Explicit constructor got unexpected values");
                 const size_t count = Context->Ref();
-                Y_VERIFY_DEBUG(count == 1, "Explicit constructor must be the first reference");
+                Y_DEBUG_ABORT_UNLESS(count == 1, "Explicit constructor must be the first reference");
             }
 
             explicit TTreeHandle(const TCowBTree* tree) noexcept
@@ -327,9 +327,9 @@ namespace NKikimr {
                 , GCList(rhs.GCList)
             {
                 if (Tree && Context) {
-                    Y_VERIFY_DEBUG(GCList, "Handle fields are out of sync");
+                    Y_DEBUG_ABORT_UNLESS(GCList, "Handle fields are out of sync");
                     const size_t count = Context->Ref();
-                    Y_VERIFY_DEBUG(count > 1, "Unexpected refcount in copy constructor");
+                    Y_DEBUG_ABORT_UNLESS(count > 1, "Unexpected refcount in copy constructor");
                 }
             }
 
@@ -345,7 +345,7 @@ namespace NKikimr {
             void Reset() noexcept {
                 if (Tree) {
                     if (Context) {
-                        Y_VERIFY_DEBUG(GCList, "Handle fields are out of sync");
+                        Y_DEBUG_ABORT_UNLESS(GCList, "Handle fields are out of sync");
                         TSnapshotContext* context = std::exchange(Context, nullptr);
                         TIntrusivePtr<TSnapshotGCList> gcList = std::move(GCList);
                         if (context->UnRef() == 0) {
@@ -363,9 +363,9 @@ namespace NKikimr {
                     Context = rhs.Context;
                     GCList = rhs.GCList;
                     if (Tree && Context) {
-                        Y_VERIFY_DEBUG(GCList, "Handle fields are out of sync");
+                        Y_DEBUG_ABORT_UNLESS(GCList, "Handle fields are out of sync");
                         const size_t count = Context->Ref();
-                        Y_VERIFY_DEBUG(count > 1, "Unexpected refcount in copy assignment");
+                        Y_DEBUG_ABORT_UNLESS(count > 1, "Unexpected refcount in copy assignment");
                     }
                 }
 
@@ -445,7 +445,7 @@ namespace NKikimr {
 
                 const auto* page = FollowLeftMost(Root);
                 const size_t count = page->Count;
-                Y_VERIFY_DEBUG(count > 0);
+                Y_DEBUG_ABORT_UNLESS(count > 0);
 
                 CurrentPage = page;
                 CurrentIndex = 0;
@@ -466,7 +466,7 @@ namespace NKikimr {
 
                 const auto* page = FollowRightMost(Root);
                 const size_t count = page->Count;
-                Y_VERIFY_DEBUG(count > 0);
+                Y_DEBUG_ABORT_UNLESS(count > 0);
 
                 CurrentPage = page;
                 CurrentIndex = count - 1;
@@ -495,19 +495,19 @@ namespace NKikimr {
                 while (current->GetTag() == ETag::Inner) {
                     const auto* inner = TInnerPage::From(current);
                     const size_t count = inner->Count;
-                    Y_VERIFY_DEBUG(count > 0);
+                    Y_DEBUG_ABORT_UNLESS(count > 0);
                     auto* keysBegin = inner->Keys();
                     auto* keysEnd = keysBegin + count;
                     size_t index = std::lower_bound(keysBegin, keysEnd, key, Tree->key_comp()) - keysBegin;
                     // Follow the left edge, which includes keys <= our search key
                     Path.push_back(TEntry{ inner, index });
                     current = inner->Edges()[index];
-                    Y_VERIFY_DEBUG(current);
+                    Y_DEBUG_ABORT_UNLESS(current);
                 }
 
                 const auto* page = TLeafPage::From(current);
                 const size_t count = page->Count;
-                Y_VERIFY_DEBUG(count > 0);
+                Y_DEBUG_ABORT_UNLESS(count > 0);
 
                 auto* keysBegin = page->Keys();
                 auto* keysEnd = keysBegin + count;
@@ -540,19 +540,19 @@ namespace NKikimr {
                 while (current->GetTag() == ETag::Inner) {
                     const auto* inner = TInnerPage::From(current);
                     const size_t count = inner->Count;
-                    Y_VERIFY_DEBUG(count > 0);
+                    Y_DEBUG_ABORT_UNLESS(count > 0);
                     auto* keysBegin = inner->Keys();
                     auto* keysEnd = keysBegin + count;
                     size_t index = std::upper_bound(keysBegin, keysEnd, key, Tree->key_comp()) - keysBegin;
                     // Follow the left edge, which includes keys >= our search key
                     Path.push_back(TEntry{ inner, index });
                     current = inner->Edges()[index];
-                    Y_VERIFY_DEBUG(current);
+                    Y_DEBUG_ABORT_UNLESS(current);
                 }
 
                 const auto* page = TLeafPage::From(current);
                 const size_t count = page->Count;
-                Y_VERIFY_DEBUG(count > 0);
+                Y_DEBUG_ABORT_UNLESS(count > 0);
 
                 auto* keysBegin = page->Keys();
                 auto* keysEnd = keysBegin + count;
@@ -603,7 +603,7 @@ namespace NKikimr {
             }
 
             bool Prev() {
-                Y_VERIFY_DEBUG(IsValid());
+                Y_DEBUG_ABORT_UNLESS(IsValid());
 
                 if (CurrentIndex > 0) {
                     // We have more keys on the current page
@@ -615,7 +615,7 @@ namespace NKikimr {
             }
 
             bool Next() {
-                Y_VERIFY_DEBUG(IsValid());
+                Y_DEBUG_ABORT_UNLESS(IsValid());
 
                 if (++CurrentIndex < CurrentCount) {
                     // We have more keys on the current page
@@ -630,13 +630,13 @@ namespace NKikimr {
             }
 
             const TKey& GetKey() const {
-                Y_VERIFY_DEBUG(IsValid());
+                Y_DEBUG_ABORT_UNLESS(IsValid());
 
                 return CurrentPage->Keys()[CurrentIndex];
             }
 
             const TValue& GetValue() const {
-                Y_VERIFY_DEBUG(IsValid());
+                Y_DEBUG_ABORT_UNLESS(IsValid());
 
                 return CurrentPage->Values()[CurrentIndex];
             }
@@ -652,28 +652,28 @@ namespace NKikimr {
 
         private:
             const TLeafPage* FollowLeftMost(const TPage* current) {
-                Y_VERIFY_DEBUG(current);
+                Y_DEBUG_ABORT_UNLESS(current);
                 while (current->GetTag() == ETag::Inner) {
                     const auto* inner = TInnerPage::From(current);
                     const size_t count = inner->Count;
-                    Y_VERIFY_DEBUG(count > 0);
+                    Y_DEBUG_ABORT_UNLESS(count > 0);
                     Path.push_back(TEntry{ inner, 0 });
                     current = inner->Edges()[0];
-                    Y_VERIFY_DEBUG(current);
+                    Y_DEBUG_ABORT_UNLESS(current);
                 }
 
                 return TLeafPage::From(current);
             }
 
             const TLeafPage* FollowRightMost(const TPage* current) {
-                Y_VERIFY_DEBUG(current);
+                Y_DEBUG_ABORT_UNLESS(current);
                 while (current->GetTag() == ETag::Inner) {
                     const auto* inner = TInnerPage::From(current);
                     const size_t count = inner->Count;
-                    Y_VERIFY_DEBUG(count > 0);
+                    Y_DEBUG_ABORT_UNLESS(count > 0);
                     Path.push_back(TEntry{ inner, count });
                     current = inner->Edges()[count];
-                    Y_VERIFY_DEBUG(current);
+                    Y_DEBUG_ABORT_UNLESS(current);
                 }
 
                 return TLeafPage::From(current);
@@ -719,7 +719,7 @@ namespace NKikimr {
                         return false;
                     }
                     index = count = page->Count;
-                    Y_VERIFY_DEBUG(count > 0, "Unexpected empty prev page");
+                    Y_DEBUG_ABORT_UNLESS(count > 0, "Unexpected empty prev page");
                 }
                 CurrentPage = page;
                 CurrentIndex = index - 1;
@@ -738,7 +738,7 @@ namespace NKikimr {
                     }
                     index = 0;
                     count = page->Count;
-                    Y_VERIFY_DEBUG(count > 0, "Unexpected empty next page");
+                    Y_DEBUG_ABORT_UNLESS(count > 0, "Unexpected empty next page");
                 }
                 CurrentPage = page;
                 CurrentIndex = index;
@@ -849,8 +849,8 @@ namespace NKikimr {
                 Root = nullptr;
             }
 
-            Y_VERIFY_DEBUG(DroppedPages_ == 0, "Unexpected dropped pages at destructor");
-            Y_VERIFY_DEBUG(AllocatedPages_ == 0, "Unexpected allocated pages at destructor");
+            Y_DEBUG_ABORT_UNLESS(DroppedPages_ == 0, "Unexpected dropped pages at destructor");
+            Y_DEBUG_ABORT_UNLESS(AllocatedPages_ == 0, "Unexpected allocated pages at destructor");
         }
 
         const TCompare& key_comp() const {
@@ -875,7 +875,7 @@ namespace NKikimr {
         void CollectGarbage() {
             if (auto* garbage = GCList->CollectDroppedSnapshots()) {
                 do {
-                    Y_VERIFY_DEBUG(garbage->RefCount() == 0);
+                    Y_DEBUG_ABORT_UNLESS(garbage->RefCount() == 0);
                     THolder<TSnapshotContext> context(garbage);
                     garbage = std::exchange(context->NextDroppedSnapshot, nullptr);
                     DropSnapshot(context.Get());
@@ -945,7 +945,7 @@ namespace NKikimr {
                 while (TPage* page = *nextDropped) {
                     if (page->Epoch <= epoch) {
                         // Remove it from the list of dropped pages
-                        Y_VERIFY_DEBUG(DroppedPages_ > 0);
+                        Y_DEBUG_ABORT_UNLESS(DroppedPages_ > 0);
                         *nextDropped = page->NextDroppedPage;
                         page->NextDroppedPage = nullptr;
                         --DroppedPages_;
@@ -1008,19 +1008,19 @@ namespace NKikimr {
             while (current->GetTag() == ETag::Inner) {
                 auto* inner = TInnerPage::From(current);
                 size_t count = inner->Count;
-                Y_VERIFY_DEBUG(count > 0);
+                Y_DEBUG_ABORT_UNLESS(count > 0);
                 auto* keysBegin = inner->Keys();
                 auto* keysEnd = keysBegin + count;
                 size_t index = std::upper_bound(keysBegin, keysEnd, key, key_comp()) - keysBegin;
                 // We follow the left edge, towards the first entry > search key
                 InsertPath.push_back(TInsertPath{ current, index });
                 current = inner->Edges()[index];
-                Y_VERIFY_DEBUG(current);
+                Y_DEBUG_ABORT_UNLESS(current);
             }
 
             auto* leaf = TLeafPage::From(current);
             size_t count = leaf->Count;
-            Y_VERIFY_DEBUG(count > 0);
+            Y_DEBUG_ABORT_UNLESS(count > 0);
             // Insert position is before the upper bound
             auto* keysBegin = leaf->Keys();
             auto* keysEnd = keysBegin + count;
@@ -1036,7 +1036,7 @@ namespace NKikimr {
                 // index == 0 on a leaf page, is if search key is less than
                 // all already existing keys.
                 for (const auto& path : InsertPath) {
-                    Y_VERIFY_DEBUG(path.Index == 0);
+                    Y_DEBUG_ABORT_UNLESS(path.Index == 0);
                 }
                 return nullptr;
             }
@@ -1059,8 +1059,8 @@ namespace NKikimr {
         TValue* UpdateUnsafe() {
             CollectGarbage();
 
-            Y_VERIFY_DEBUG(PagesToDrop.empty());
-            Y_VERIFY_DEBUG(KeysToDrop.empty());
+            Y_DEBUG_ABORT_UNLESS(PagesToDrop.empty());
+            Y_DEBUG_ABORT_UNLESS(KeysToDrop.empty());
 
             Y_ABORT_UNLESS(!InsertPath.empty() && InsertPath.back().Page->GetTag() == ETag::Leaf);
             TLeafPage* const leaf = TLeafPage::From(InsertPath.back().Page);
@@ -1091,12 +1091,12 @@ namespace NKikimr {
         TValue* EmplaceUnsafe(TKeyArg&& key, TValueArgs&&... valueArgs) {
             CollectGarbage();
 
-            Y_VERIFY_DEBUG(PagesToDrop.empty());
-            Y_VERIFY_DEBUG(KeysToDrop.empty());
+            Y_DEBUG_ABORT_UNLESS(PagesToDrop.empty());
+            Y_DEBUG_ABORT_UNLESS(KeysToDrop.empty());
 
             if (!Root) {
                 // First value for an empty tree, create a new leaf page
-                Y_VERIFY_DEBUG(InsertPath.empty());
+                Y_DEBUG_ABORT_UNLESS(InsertPath.empty());
                 TLeafPage* const newRoot = NewLeafPage();
                 new (newRoot->Keys()) TKey(std::forward<TKeyArg>(key));
                 new (newRoot->Values()) TValue(std::forward<TValueArgs>(valueArgs)...);
@@ -1156,7 +1156,7 @@ namespace NKikimr {
                 currentMiddle = newInner.Middle;
             }
 
-            Y_VERIFY_DEBUG(currentLeft == currentRight);
+            Y_DEBUG_ABORT_UNLESS(currentLeft == currentRight);
 
             if (currentLeft) {
                 PropagateReplace(currentLeft);
@@ -1164,7 +1164,7 @@ namespace NKikimr {
             PropagateEpoch();
             PropagateDrop();
 
-            Y_VERIFY_DEBUG(InsertPath.empty());
+            Y_DEBUG_ABORT_UNLESS(InsertPath.empty());
 
             ++Size_;
             return newLeaf.Value;
@@ -1205,7 +1205,7 @@ namespace NKikimr {
 
     private:
         void PropagateReplace(TPage* current) {
-            Y_VERIFY_DEBUG(current);
+            Y_DEBUG_ABORT_UNLESS(current);
             while (!InsertPath.empty()) {
                 TInnerPage* const inner = TInnerPage::From(InsertPath.back().Page);
                 const size_t innerIndex = InsertPath.back().Index;
@@ -1232,7 +1232,7 @@ namespace NKikimr {
             while (!InsertPath.empty()) {
                 TInnerPage* const inner = TInnerPage::From(InsertPath.back().Page);
                 InsertPath.pop_back();
-                Y_VERIFY_DEBUG(LastSnapshotEpoch < inner->Epoch);
+                Y_DEBUG_ABORT_UNLESS(LastSnapshotEpoch < inner->Epoch);
                 inner->Epoch = CurrentEpoch;
             }
         }
@@ -1301,7 +1301,7 @@ namespace NKikimr {
                 TKeyArg&& key, TValueArgs&&... valueArgs)
         {
             const size_t count = leaf->Count;
-            Y_VERIFY_DEBUG(index <= count);
+            Y_DEBUG_ABORT_UNLESS(index <= count);
             const size_t newCount = count + 1;
 
             // Case #1: create a new leaf page that has new item inserted
@@ -1336,7 +1336,7 @@ namespace NKikimr {
             // Case #2: we must perform a split
             const size_t rightCount = newCount / 2; // we want less on the right leaf
             const size_t leftCount = newCount - rightCount; // we want more on the left leaf
-            Y_VERIFY_DEBUG(leftCount > 0 && rightCount > 0);
+            Y_DEBUG_ABORT_UNLESS(leftCount > 0 && rightCount > 0);
 
             auto* newLeft = NewLeafPage();
             auto* newRight = NewLeafPage();
@@ -1417,7 +1417,7 @@ namespace NKikimr {
             }
 
             const size_t count = leaf->Count;
-            Y_VERIFY_DEBUG(index <= count);
+            Y_DEBUG_ABORT_UNLESS(index <= count);
             const size_t newCount = count + 1;
 
             // Case #1: reuse current page and insert inplace
@@ -1436,7 +1436,7 @@ namespace NKikimr {
             // Case #2: we must perform a split
             const size_t rightCount = newCount / 2; // we want less on the right leaf
             const size_t leftCount = newCount - rightCount; // we want more on the left leaf
-            Y_VERIFY_DEBUG(leftCount > 0 && rightCount > 0);
+            Y_DEBUG_ABORT_UNLESS(leftCount > 0 && rightCount > 0);
 
             auto* newRight = NewLeafPage();
             TValue* newValue;
@@ -1470,7 +1470,7 @@ namespace NKikimr {
                 auto* newValues = newRight->Values();
                 size_t rightIndex = index - leftCount;
 
-                Y_VERIFY_DEBUG(rightIndex < rightCount);
+                Y_DEBUG_ABORT_UNLESS(rightIndex < rightCount);
                 for (size_t pos = 0; pos < rightCount; ++pos) {
                     if (pos == rightIndex) {
                         new (newKeys++) TKey(std::forward<TKeyArg>(key));
@@ -1521,7 +1521,7 @@ namespace NKikimr {
                             return Middle;
                         }
                     }
-                    Y_VERIFY_DEBUG(Current != End);
+                    Y_DEBUG_ABORT_UNLESS(Current != End);
                     return Current++;
                 }
 
@@ -1542,7 +1542,7 @@ namespace NKikimr {
                     , Replacements{ left, right }
                     , NextReplacement(0)
                 {
-                    Y_VERIFY_DEBUG(Skipped != End);
+                    Y_DEBUG_ABORT_UNLESS(Skipped != End);
                 }
 
                 TEdge Read() {
@@ -1552,7 +1552,7 @@ namespace NKikimr {
                         }
                         ++Current;
                     }
-                    Y_VERIFY_DEBUG(Current != End);
+                    Y_DEBUG_ABORT_UNLESS(Current != End);
                     return *(Current++);
                 }
 
@@ -1565,7 +1565,7 @@ namespace NKikimr {
             };
 
             const size_t count = inner->Count;
-            Y_VERIFY_DEBUG(index <= count);
+            Y_DEBUG_ABORT_UNLESS(index <= count);
             const size_t newCount = count + 1;
 
             TKeysReader keysReader(inner->Keys(), index, count, middle);
@@ -1596,7 +1596,7 @@ namespace NKikimr {
             // Case #2: create two new pages and copy items there
             const size_t rightCount = (newCount - 1) / 2; // less keys on the right side
             const size_t leftCount = (newCount - 1) - rightCount; // more keys on the left side
-            Y_VERIFY_DEBUG(leftCount > 0 && rightCount > 0);
+            Y_DEBUG_ABORT_UNLESS(leftCount > 0 && rightCount > 0);
 
             auto* newLeft = NewInnerPage();
             auto* newRight = NewInnerPage();
@@ -1658,7 +1658,7 @@ namespace NKikimr {
             }
 
             const size_t count = inner->Count;
-            Y_VERIFY_DEBUG(index <= count);
+            Y_DEBUG_ABORT_UNLESS(index <= count);
             const size_t newCount = count + 1;
 
             // Case #1: reuse current page and insert new key inplace
@@ -1680,8 +1680,8 @@ namespace NKikimr {
             // Case #2: we need to split with some new middle key bubbling up
             const size_t rightCount = (newCount - 1) / 2; // less keys on the right side
             const size_t leftCount = (newCount - 1) - rightCount; // more keys on the left side
-            Y_VERIFY_DEBUG(leftCount > 0 && rightCount > 0);
-            Y_VERIFY_DEBUG(leftCount < InnerPageCapacity);
+            Y_DEBUG_ABORT_UNLESS(leftCount > 0 && rightCount > 0);
+            Y_DEBUG_ABORT_UNLESS(leftCount < InnerPageCapacity);
 
             auto* newRight = NewInnerPage();
             const TKey* newMiddle;
@@ -1727,7 +1727,7 @@ namespace NKikimr {
                 auto* newEdges = newRight->Edges();
                 size_t rightIndex = index - leftCount - 1;
 
-                Y_VERIFY_DEBUG(rightIndex < rightCount);
+                Y_DEBUG_ABORT_UNLESS(rightIndex < rightCount);
                 for (size_t pos = 0; pos < rightCount; ++pos) {
                     if (pos == rightIndex) {
                         new (newKeys++) TKey(*middle);
@@ -1795,11 +1795,11 @@ namespace NKikimr {
 
             if (!context->Next) {
                 // This is the last snapshot in our linked list
-                Y_VERIFY_DEBUG(LastSnapshot == context);
+                Y_DEBUG_ABORT_UNLESS(LastSnapshot == context);
                 LastSnapshot = context->Prev;
                 LastSnapshotEpoch = LastSnapshot ? LastSnapshot->Epoch : 0;
             } else {
-                Y_VERIFY_DEBUG(LastSnapshot != context);
+                Y_DEBUG_ABORT_UNLESS(LastSnapshot != context);
             }
 
             context->Unlink();

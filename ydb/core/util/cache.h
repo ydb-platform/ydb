@@ -525,7 +525,7 @@ public:
         ui64 size = TSelf::Measure(item->Key, item->Value);
         this->OnEvict(item->Key, item->Value, size);
         auto itemIt = Index.find(*item);
-        Y_VERIFY_DEBUG(itemIt != Index.end());
+        Y_DEBUG_ABORT_UNLESS(itemIt != Index.end());
         Index.erase(itemIt);
         return true;
     }
@@ -683,14 +683,14 @@ public:
             ui64 size = TSelf::Measure(inItem->Key, inItem->Value);
             this->OnEvict(inItem->Key, inItem->Value, size);
             auto inItemIt = InIndex.find(*inItem);
-            Y_VERIFY_DEBUG(inItemIt != InIndex.end());
+            Y_DEBUG_ABORT_UNLESS(inItemIt != InIndex.end());
             InIndex.erase(inItemIt);
             InSize -= size;
 
             if (OutIndex.size() > Config->OutKeyRatio * TSelf::GetCount()) {
                 auto outItem = OutList.PopBack();
                 auto outItemIt = OutIndex.find(*outItem);
-                Y_VERIFY_DEBUG(outItemIt != OutIndex.end());
+                Y_DEBUG_ABORT_UNLESS(outItemIt != OutIndex.end());
                 this->OnKeyEvict(outItemIt->Key);
                 OutIndex.erase(outItemIt);
             }
@@ -703,7 +703,7 @@ public:
             ui64 size = TSelf::Measure(item->Key, item->Value);
             this->OnEvict(item->Key, item->Value, size);
             auto mainIndexIt = MainIndex.find(*item);
-            Y_VERIFY_DEBUG(mainIndexIt != MainIndex.end());
+            Y_DEBUG_ABORT_UNLESS(mainIndexIt != MainIndex.end());
             MainIndex.erase(mainIndexIt);
             return true;
         }

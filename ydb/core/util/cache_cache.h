@@ -122,7 +122,7 @@ public:
             WarmList.PushFront(xitem);
             break;
         default:
-            Y_VERIFY_DEBUG(false, "unknown/broken cache generation");
+            Y_DEBUG_ABORT_UNLESS(false, "unknown/broken cache generation");
             break;
         }
 
@@ -152,7 +152,7 @@ public:
                 *Config.ReportedWarm = WarmWeight;
             break;
         default:
-            Y_VERIFY_DEBUG(false, "unknown cache generaton");
+            Y_DEBUG_ABORT_UNLESS(false, "unknown cache generaton");
         }
     }
 
@@ -181,7 +181,7 @@ public:
                 *Config.ReportedWarm = WarmWeight;
             break;
         default:
-            Y_VERIFY_DEBUG(false, "unknown cache generaton");
+            Y_DEBUG_ABORT_UNLESS(false, "unknown cache generaton");
         }
     }
 
@@ -197,7 +197,7 @@ private:
         item->Unlink();
 
         const ui64 elementWeight = WeightOp.Get(item);
-        Y_VERIFY_DEBUG(elementWeight <= weight);
+        Y_DEBUG_ABORT_UNLESS(elementWeight <= weight);
         weight -= elementWeight;
     }
 
@@ -237,7 +237,7 @@ private:
 
     void LimitFresh(TIntrusiveList<TItem>& evictedList) {
         while (FreshWeight > Config.FreshLimit) {
-            Y_VERIFY_DEBUG(!FreshList.Empty());
+            Y_DEBUG_ABORT_UNLESS(!FreshList.Empty());
             TItem *x = FreshList.PopBack();
             Y_ABORT_UNLESS(GenerationOp.Get(x) == TCacheCacheConfig::CacheGenFresh, "malformed entry in fresh cache. %" PRIu32, (ui32)GenerationOp.Get(x));
             Unlink(x, FreshWeight);
@@ -247,7 +247,7 @@ private:
 
     void LimitWarm(TIntrusiveList<TItem>& evictedList) {
         while (WarmWeight > Config.WarmLimit) {
-            Y_VERIFY_DEBUG(!WarmList.Empty());
+            Y_DEBUG_ABORT_UNLESS(!WarmList.Empty());
             TItem *x = WarmList.PopBack();
             Y_ABORT_UNLESS(GenerationOp.Get(x) == TCacheCacheConfig::CacheGenWarm, "malformed entry in warm cache. %" PRIu32, (ui32)GenerationOp.Get(x));
             Unlink(x, WarmWeight);
@@ -257,7 +257,7 @@ private:
 
     void LimitStaging(TIntrusiveList<TItem>& evictedList) {
         while (StagingWeight > Config.StagingLimit) {
-            Y_VERIFY_DEBUG(!StagingList.Empty());
+            Y_DEBUG_ABORT_UNLESS(!StagingList.Empty());
             TItem *evicted = StagingList.PopBack();
             Y_ABORT_UNLESS(GenerationOp.Get(evicted) == TCacheCacheConfig::CacheGenStaging, "malformed entry in staging cache %" PRIu32, (ui32)GenerationOp.Get(evicted));
             Unlink(evicted, StagingWeight);
@@ -267,7 +267,7 @@ private:
     }
 
     TItem* EvictNext(TIntrusiveList<TItem>& list, ui64& weight) {
-        Y_VERIFY_DEBUG(!list.Empty());
+        Y_DEBUG_ABORT_UNLESS(!list.Empty());
 
         TItem *evicted = list.PopBack();
         Unlink(evicted, weight);

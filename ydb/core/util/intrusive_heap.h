@@ -62,7 +62,7 @@ public:
             }
 
             T* cvalue = Data[child];
-            Y_VERIFY_DEBUG(HeapIndex(cvalue) == child, "Heap index is out of sync");
+            Y_DEBUG_ABORT_UNLESS(HeapIndex(cvalue) == child, "Heap index is out of sync");
 
             // Move the smallest Data[child] up
             Data[index] = cvalue;
@@ -72,7 +72,7 @@ public:
 
         if (size_t last = Data.size() - 1; index != last) {
             T* lvalue = Data[last];
-            Y_VERIFY_DEBUG(HeapIndex(lvalue) == last, "Heap index is out of sync");
+            Y_DEBUG_ABORT_UNLESS(HeapIndex(lvalue) == last, "Heap index is out of sync");
             // Move the last item to the vacant slot
             Data[index] = lvalue;
             HeapIndex(lvalue) = index;
@@ -100,7 +100,7 @@ public:
             }
 
             T* cvalue = Data[child];
-            Y_VERIFY_DEBUG(HeapIndex(cvalue) == child, "Heap index is out of sync");
+            Y_DEBUG_ABORT_UNLESS(HeapIndex(cvalue) == child, "Heap index is out of sync");
 
             if (!Compare(cvalue, value)) {
                 break; // already correct
@@ -130,7 +130,7 @@ public:
         while (index > 0) {
             size_t parent = (index - 1) >> 1;
             T* pvalue = Data[parent];
-            Y_VERIFY_DEBUG(HeapIndex(pvalue) == parent, "Heap index is out of sync");
+            Y_DEBUG_ABORT_UNLESS(HeapIndex(pvalue) == parent, "Heap index is out of sync");
 
             if (!Compare(value, pvalue)) {
                 break; // already correct

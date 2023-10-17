@@ -38,7 +38,7 @@ inline TString FastGenDataForLZ4(size_t size, ui64 seed) {
     for (i = 0; i < runLen; i += sizeof(ui32)) {
         reinterpret_cast<ui32&>(i[run]) = rng();
     }
-    Y_VERIFY_DEBUG(i == runLen);
+    Y_DEBUG_ABORT_UNLESS(i == runLen);
 
     char *ptr = data.Detach();
     for (; size >= runLen; size -= runLen, ptr += runLen) {

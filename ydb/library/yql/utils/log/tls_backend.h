@@ -20,7 +20,7 @@ public:
     TTlsLogBackend(TAutoPtr<TLogBackend> defaultBackend)
         : DefaultBackend_(defaultBackend)
     {
-        Y_VERIFY_DEBUG(DefaultBackend_, "default backend is not set");
+        Y_DEBUG_ABORT_UNLESS(DefaultBackend_, "default backend is not set");
     }
 
     void WriteData(const TLogRecord& rec) override;

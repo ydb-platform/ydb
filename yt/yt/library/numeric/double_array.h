@@ -40,7 +40,7 @@ public:
 
     constexpr TDoubleArrayBase(std::initializer_list<double> values)
     {
-        Y_VERIFY_DEBUG(values.size() == Size);
+        Y_DEBUG_ABORT_UNLESS(values.size() == Size);
         std::copy(std::begin(values), std::end(values), std::begin(Values_));
     }
 

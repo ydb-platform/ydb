@@ -728,7 +728,7 @@ TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TP
 bool UpdateStructMembers(TExprContext& ctx, const TExprNode::TPtr& node, const TStringBuf& goal, TExprNode::TListType& members, MemberUpdaterFunc updaterFunc, const TTypeAnnotationNode* nodeType) {
     if (!nodeType) {
         nodeType = node->GetTypeAnn();
-        Y_VERIFY_DEBUG(nodeType || !"Unset node type for UpdateStructMembers");
+        Y_DEBUG_ABORT_UNLESS(nodeType || !"Unset node type for UpdateStructMembers");
     }
     bool filtered = false;
     if (node->IsCallable("AsStruct")) {

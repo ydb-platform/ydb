@@ -1920,7 +1920,7 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
         auto mapLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {std::move(listArg)}), std::move(joined));
         if (const auto premap = GetPremapLambda(leftLeaf)) {
             TExprNode::TPtr placeHolder;
-            std::tie(placeHolder, mapLambda) = ReplaceDependsOn(std::move(mapLambda), ctx, state->Types);
+            std::tie(placeHolder, mapLambda) = ReplaceDependsOn(mapLambda, ctx, state->Types);
 
             mapLambda = ctx.Builder(mapLambda->Pos())
                 .Lambda()
@@ -1941,7 +1941,7 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
         // since premap doesn't affect key columns we can apply lookup join filter before premap
         if (lookupJoinFilterLambda) {
             TExprNode::TPtr placeHolder;
-            std::tie(placeHolder, mapLambda) = ReplaceDependsOn(std::move(mapLambda), ctx, state->Types);
+            std::tie(placeHolder, mapLambda) = ReplaceDependsOn(mapLambda, ctx, state->Types);
 
             mapLambda = ctx.Builder(mapLambda->Pos())
                 .Lambda()

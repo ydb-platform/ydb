@@ -446,7 +446,7 @@ Json2RepeatedField(const NJson::TJsonValue& json,
     Y_ASSERT(!!reflection);
 
     if (isMap) {
-        const THashMap<TString, NJson::TJsonValue> jsonMap = fieldJson.GetMap();
+        const THashMap<TString, NJson::TJsonValue>& jsonMap = fieldJson.GetMap();
         for (const auto& x : jsonMap) {
             const TString& key = x.first;
             const NJson::TJsonValue& jsonValue = x.second;

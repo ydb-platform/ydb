@@ -2505,6 +2505,13 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1925821/ec9ae1e25388a76d5f7a0df27259196bc4217c7e/resource.tar.gz#test_sql2yql.test_aggregate-percentile_interval_/sql.yql"
         }
     ],
+    "test_sql2yql.test[aggregate-percentiles_containers]": [
+        {
+            "checksum": "6769c75a2308dcc142c7ff777b855721",
+            "size": 6031,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1784117/5fac73a22f194fa5439186fe33ef2e6bf62271e1/resource.tar.gz#test_sql2yql.test_aggregate-percentiles_containers_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[aggregate-percentiles_grouped]": [
         {
             "checksum": "ebde86f573b7ae4e2377b469d7808202",
@@ -19401,6 +19408,13 @@
             "checksum": "4ac316ccc67eefd8098be963b4ecc5b7",
             "size": 1254,
             "uri": "https://storage.yandex-team.ru/get-devtools/1599023/4bd7e6892a9762eec433e60bda88f20cddadc74c/resource.tar.gz#test_sql_format.test_aggregate-percentile_interval_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggregate-percentiles_containers]": [
+        {
+            "checksum": "cc2cb2011f3026190a876c533f069785",
+            "size": 657,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1784117/5fac73a22f194fa5439186fe33ef2e6bf62271e1/resource.tar.gz#test_sql_format.test_aggregate-percentiles_containers_/formatted.sql"
         }
     ],
     "test_sql_format.test[aggregate-percentiles_grouped]": [

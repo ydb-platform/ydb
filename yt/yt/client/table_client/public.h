@@ -30,6 +30,7 @@ class TSortColumnsExt;
 class TBoundaryKeysExt;
 class TBlockIndexesExt;
 class TDataBlockMetaExt;
+class TColumnGroupInfosExt;
 class TSystemBlockMetaExt;
 class TColumnarStatisticsExt;
 class TDataBlockMeta;
@@ -49,6 +50,11 @@ class TVersionedRowDigestExt;
 
 using TRefCountedDataBlockMeta = TRefCountedProto<NProto::TDataBlockMetaExt>;
 using TRefCountedDataBlockMetaPtr = TIntrusivePtr<TRefCountedDataBlockMeta>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TRefCountedColumnGroupInfosExt = TRefCountedProto<NProto::TColumnGroupInfosExt>;
+using TRefCountedColumnGroupInfosExtPtr = TIntrusivePtr<TRefCountedColumnGroupInfosExt>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

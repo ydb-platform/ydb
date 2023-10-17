@@ -368,6 +368,8 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("enable_row_count_in_columnar_statistics", &TThis::EnableRowCountInColumnarStatistics)
         .Default(true);
+    registrar.Parameter("enable_segment_meta_in_blocks", &TThis::EnableSegmentMetaInBlocks)
+        .Default(false);
 
     registrar.Parameter("schema_modification", &TThis::SchemaModification)
         .Default(ETableSchemaModification::None);

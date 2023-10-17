@@ -340,6 +340,8 @@ public:
     bool SingleColumnGroupByDefault = false;
     bool EnableColumnarValueStatistics;
     bool EnableRowCountInColumnarStatistics;
+    bool EnableSegmentMetaInBlocks;
+
     NYTree::INodePtr CastAnyToCompositeNode;
 
     ETableSchemaModification SchemaModification;

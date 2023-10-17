@@ -257,6 +257,9 @@
   - __algorithm/ranges_find.h:                    contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find.h
   - __algorithm/ranges_find_if.h:                 contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find_if.h
   - __algorithm/ranges_find_if_not.h:             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find_if_not.h
+  - __algorithm/ranges_for_each.h:                contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_for_each.h
+  - __algorithm/ranges_for_each_n.h:              contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_for_each_n.h
+  - __algorithm/ranges_is_partitioned.h:          contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_is_partitioned.h
   - __algorithm/ranges_max.h:                     contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_max.h
   - __algorithm/ranges_max_element.h:             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_max_element.h
   - __algorithm/ranges_min.h:                     contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_min.h
@@ -356,6 +359,7 @@
   - __concepts/swappable.h:                       contrib/libs/cxxsupp/libcxx/include/__concepts/swappable.h
   - __concepts/totally_ordered.h:                 contrib/libs/cxxsupp/libcxx/include/__concepts/totally_ordered.h
   - __filesystem/file_time_type.h:                contrib/libs/cxxsupp/libcxx/include/__filesystem/file_time_type.h
+  - __format/concepts.h:                          contrib/libs/cxxsupp/libcxx/include/__format/concepts.h
   - __format/enable_insertable.h:                 contrib/libs/cxxsupp/libcxx/include/__format/enable_insertable.h
   - __functional/binary_function.h:               contrib/libs/cxxsupp/libcxx/include/__functional/binary_function.h
   - __functional/binary_negate.h:                 contrib/libs/cxxsupp/libcxx/include/__functional/binary_negate.h
@@ -383,6 +387,8 @@
   - __functional/unary_negate.h:                  contrib/libs/cxxsupp/libcxx/include/__functional/unary_negate.h
   - __functional/unwrap_ref.h:                    contrib/libs/cxxsupp/libcxx/include/__functional/unwrap_ref.h
   - __functional/weak_result_type.h:              contrib/libs/cxxsupp/libcxx/include/__functional/weak_result_type.h
+  - __fwd/span.h:                                 contrib/libs/cxxsupp/libcxx/include/__fwd/span.h
+  - __fwd/string_view.h:                          contrib/libs/cxxsupp/libcxx/include/__fwd/string_view.h
   - __ios/fpos.h:                                 contrib/libs/cxxsupp/libcxx/include/__ios/fpos.h
   - __iterator/access.h:                          contrib/libs/cxxsupp/libcxx/include/__iterator/access.h
   - __iterator/advance.h:                         contrib/libs/cxxsupp/libcxx/include/__iterator/advance.h

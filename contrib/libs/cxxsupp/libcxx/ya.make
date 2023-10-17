@@ -13,9 +13,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2022-05-01)
+VERSION(2022-05-18)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/639b9618f46d75f4dabd2082b3f6ba8433c287bf.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/f0e61029506fd63bb300f2dbbd65ba792e4ef3a2.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
@@ -100,9 +100,7 @@ IF (OS_LINUX)
 ENDIF()
 
 IF (CLANG)
-    CXXFLAGS(
-        GLOBAL -nostdinc++
-    )
+    CXXFLAGS(GLOBAL -nostdinc++)
 ENDIF()
 
 # The CXX_RT variable controls which C++ runtime is used.

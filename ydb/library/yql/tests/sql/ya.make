@@ -1,0 +1,4 @@
+RECURSE(
+    sql2yql
+)
+

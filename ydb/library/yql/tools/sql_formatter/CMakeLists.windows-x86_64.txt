@@ -6,9 +6,20 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(astdiff)
-add_subdirectory(dqrun)
-add_subdirectory(mrjob)
-add_subdirectory(sql2yql)
-add_subdirectory(sql_formatter)
-add_subdirectory(yqlrun)
+
+add_executable(sql_formatter)
+target_link_libraries(sql_formatter PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  library-cpp-getopt
+  contrib-libs-protobuf
+  sql-v1-format
+)
+target_sources(sql_formatter PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/sql_formatter/sql_formatter.cpp
+)
+target_allocator(sql_formatter
+  system_allocator
+)
+vcs_info(sql_formatter)

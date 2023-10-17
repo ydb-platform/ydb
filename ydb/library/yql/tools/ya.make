@@ -3,5 +3,6 @@ RECURSE(
     dqrun
     mrjob
     sql2yql
+    sql_formatter
     yqlrun
 )

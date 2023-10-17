@@ -16,10 +16,10 @@ namespace NYT::NProfiling {
 TSummaryPolicyConflicts GetSummaryPolicyConflicts(ESummaryPolicy policy)
 {
     bool isAllPolicy = Any(policy & ESummaryPolicy::All);
-    int specifiedAggregateCount = Any(policy & ESummaryPolicy::Sum) +
-        Any(policy & ESummaryPolicy::Min) +
-        Any(policy & ESummaryPolicy::Max) +
-        Any(policy & ESummaryPolicy::Avg);
+    int specifiedAggregateCount = static_cast<int>(Any(policy & ESummaryPolicy::Sum)) +
+        static_cast<int>(Any(policy & ESummaryPolicy::Min)) +
+        static_cast<int>(Any(policy & ESummaryPolicy::Max)) +
+        static_cast<int>(Any(policy & ESummaryPolicy::Avg));
 
     return {
         .AllPolicyWithSpecifiedAggregates = isAllPolicy && specifiedAggregateCount > 0,

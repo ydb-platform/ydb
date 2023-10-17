@@ -995,12 +995,12 @@ void TSolomonExporter::ValidateSummaryPolicy(ESummaryPolicy policy)
     auto summaryPolicyConflicts = GetSummaryPolicyConflicts(policy);
     if (summaryPolicyConflicts.AllPolicyWithSpecifiedAggregates) {
         THROW_ERROR SummaryPolicyError
-            << TError("%Qv policy can be used only without specified policies", ESummaryPolicy::All)
+            << TError("%Qlv policy can be used only without specified policies", ESummaryPolicy::All)
             << TErrorAttribute("policy", policy);
     }
     if (summaryPolicyConflicts.OmitNameLabelSuffixWithSeveralAggregates) {
         THROW_ERROR SummaryPolicyError
-            << TError("%Qv option can be used only with single specified policy", ESummaryPolicy::OmitNameLabelSuffix)
+            << TError("%Qlv option can be used only with single specified policy", ESummaryPolicy::OmitNameLabelSuffix)
             << TErrorAttribute("policy", policy);
     }
 }

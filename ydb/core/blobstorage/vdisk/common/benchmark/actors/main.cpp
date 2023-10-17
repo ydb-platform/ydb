@@ -14,9 +14,12 @@
 #include <util/system/sigset.h>
 #include <util/system/types.h>
 
+#include "library/cpp/actors/dnsresolver/dnsresolver.h"
+#include "library/cpp/actors/interconnect/interconnect_tcp_proxy.h"
+#include "library/cpp/actors/interconnect/interconnect_tcp_server.h"
 #include "ydb/core/base/blobstorage.h"
-#include "ydb/core/protos/blobstorage.pb.h"
 #include "ydb/core/blobstorage/vdisk/common/vdisk_events.h"
+#include "ydb/core/protos/blobstorage.pb.h"
 
 namespace {
 
@@ -168,9 +171,9 @@ int test() {
 
 } // namespace NLocalBench
 
-namespace NHttpBench {
+namespace NRemoteBench {
 
-THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId) {
+THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId, ui32 totalNodes, ui32 basePort, NMonitoring::TDynamicCounters& counters) {
     constexpr static auto pools = 1;
     constexpr static auto threads = 1;
 
@@ -186,6 +189,42 @@ THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId) {
 
     setup->Scheduler = new TBasicSchedulerThread(TSchedulerConfig(512, 0));
 
+    setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, 0));
+
+    TIntrusivePtr<TTableNameserverSetup> nameserverTable = new TTableNameserverSetup();
+    for (ui32 xnode : xrange<ui32>(1, totalNodes + 1)) {
+        nameserverTable->StaticNodeTable[xnode] = std::make_pair("127.0.0.1", basePort + xnode);
+    }
+
+    setup->LocalServices.emplace_back(
+        NDnsResolver::MakeDnsResolverActorId(),
+        TActorSetupCmd(NDnsResolver::CreateOnDemandDnsResolver(), TMailboxType::ReadAsFilled, 0)
+    );
+
+    setup->LocalServices.emplace_back(
+        GetNameserviceActorId(),
+        TActorSetupCmd(CreateNameserverTable(nameserverTable), TMailboxType::ReadAsFilled, 0)
+    );
+
+    TIntrusivePtr<TInterconnectProxyCommon> icCommon = new TInterconnectProxyCommon();
+    icCommon->TechnicalSelfHostName = "127.0.0.1";
+    icCommon->MonCounters = counters.GetSubgroup("counters", "interconnect");
+    icCommon->NameserviceId = GetNameserviceActorId();
+
+    setup->Interconnect.ProxyActors.resize(totalNodes + 1);
+    for (ui32 xnode : xrange<ui32>(1, totalNodes + 1)) {
+        if (xnode != nodeId) {
+            IActor *actor = new TInterconnectProxyTCP(xnode, icCommon);
+            setup->Interconnect.ProxyActors[xnode] = TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0);
+        } else {
+            IActor *listener = new TInterconnectListenerTCP("127.0.0.1", basePort + xnode, icCommon);
+            setup->LocalServices.emplace_back(
+                MakeInterconnectListenerActorId(false),
+                TActorSetupCmd(listener, TMailboxType::ReadAsFilled, 0)
+            );
+        }
+    }
+
     return setup;
 }
 
@@ -196,8 +235,15 @@ int test() {
     signal(SIGINT, &OnTerminate);
     signal(SIGTERM, &OnTerminate);
 
-    auto node1 = BuildActorSystemSetup(1);
-    auto node2 = BuildActorSystemSetup(2);
+    constexpr static auto totalNodes = 2;
+    constexpr static auto basePort = 9876;
+
+    TVector<TIntrusivePtr<NMonitoring::TDynamicCounters>> countersHolder;
+    countersHolder.emplace_back(new NMonitoring::TDynamicCounters());
+    countersHolder.emplace_back(new NMonitoring::TDynamicCounters());
+
+    auto node1 = BuildActorSystemSetup(1, totalNodes, basePort, *countersHolder[0]);
+    auto node2 = BuildActorSystemSetup(2, totalNodes, basePort, *countersHolder[1]);
 
     TActorSystem sys1(node1);
     TActorSystem sys2(node2);
@@ -206,8 +252,9 @@ int test() {
     sys2.Start();
 
     TActorId receiver = sys1.Register(new TReceiverActor());
+    Cerr << "Receiver: " << receiver << Endl;
     TActorId sender = sys2.Register(new TSenderActor(receiver));
-    Y_UNUSED(sender);
+    Cerr << "Sender: " << sender << Endl;
 
     while (ShouldContinue.PollState() == TProgramShouldContinue::Continue) {
         Sleep(TDuration::MilliSeconds(200));
@@ -221,10 +268,10 @@ int test() {
     return ShouldContinue.GetReturnCode();
 }
 
-} // namespace NHttpBench
+} // namespace NRemoteBench
 
 } // namespace
 
 int main() {
-    return NLocalBench::test();
+    return NRemoteBench::test();
 }

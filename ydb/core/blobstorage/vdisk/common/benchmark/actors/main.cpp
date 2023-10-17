@@ -116,6 +116,8 @@ public:
     }
 };
 
+namespace NLocalBench {
+
 THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 threads, ui32 pools) {
     Y_ABORT_UNLESS(threads > 0 && threads < 100);
     Y_ABORT_UNLESS(pools > 0 && pools < 10);
@@ -135,9 +137,7 @@ THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 threads, ui32 pools) {
     return setup;
 }
 
-} // namespace
-
-int main() {
+int test() {
 #ifdef _unix_
     signal(SIGPIPE, SIG_IGN);
 #endif
@@ -161,4 +161,67 @@ int main() {
     actorSystem.Cleanup();
 
     return ShouldContinue.GetReturnCode();
+}
+
+} // namespace NLocalBench
+
+namespace NHttpBench {
+
+THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId) {
+    constexpr static auto pools = 1;
+    constexpr static auto threads = 1;
+
+    auto setup = MakeHolder<TActorSystemSetup>();
+
+    setup->NodeId = nodeId;
+
+    setup->ExecutorsCount = 1;
+    setup->Executors.Reset(new TAutoPtr<IExecutorPool>[pools]);
+    for (ui32 idx : xrange(pools)) {
+        setup->Executors[idx] = new TBasicExecutorPool(idx, threads, 50);
+    }
+
+    setup->Scheduler = new TBasicSchedulerThread(TSchedulerConfig(512, 0));
+
+    return setup;
+}
+
+int test() {
+#ifdef _unix_
+    signal(SIGPIPE, SIG_IGN);
+#endif
+    signal(SIGINT, &OnTerminate);
+    signal(SIGTERM, &OnTerminate);
+
+    auto node1 = BuildActorSystemSetup(1);
+    auto node2 = BuildActorSystemSetup(2);
+
+    TActorSystem sys1(node1);
+    TActorSystem sys2(node2);
+
+    sys1.Start();
+    sys2.Start();
+
+    TActorId receiver = sys1.Register(new TReceiverActor());
+    TActorId sender = sys2.Register(new TSenderActor(receiver));
+    Y_UNUSED(sender);
+
+    while (ShouldContinue.PollState() == TProgramShouldContinue::Continue) {
+        Sleep(TDuration::MilliSeconds(200));
+    }
+
+    sys1.Stop();
+    sys2.Stop();
+    sys1.Cleanup();
+    sys2.Cleanup();
+
+    return ShouldContinue.GetReturnCode();
+}
+
+} // namespace NHttpBench
+
+} // namespace
+
+int main() {
+    return NLocalBench::test();
 }

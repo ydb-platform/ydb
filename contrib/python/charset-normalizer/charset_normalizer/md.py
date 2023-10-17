@@ -9,7 +9,6 @@ from .constant import (
 )
 from .utils import (
     is_accentuated,
-    is_ascii,
     is_case_variable,
     is_cjk,
     is_emoticon,
@@ -419,7 +418,7 @@ class ArchaicUpperLowerPlugin(MessDetectorPlugin):
 
             return
 
-        if self._current_ascii_only is True and is_ascii(character) is False:
+        if self._current_ascii_only is True and character.isascii() is False:
             self._current_ascii_only = False
 
         if self._last_alpha_seen is not None:

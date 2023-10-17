@@ -6,10 +6,25 @@
     <img src="https://img.shields.io/pypi/pyversions/charset_normalizer.svg?orange=blue" />
   </a>
   <a href="https://pepy.tech/project/charset-normalizer/">
-    <img alt="Download Count Total" src="https://pepy.tech/badge/charset-normalizer/month" />
+    <img alt="Download Count Total" src="https://static.pepy.tech/badge/charset-normalizer/month" />
   </a>
   <a href="https://bestpractices.coreinfrastructure.org/projects/7297">
     <img src="https://bestpractices.coreinfrastructure.org/projects/7297/badge">
+  </a>
+</p>
+<p align="center">
+  <sup><i>Featured Packages</i></sup><br>
+  <a href="https://github.com/jawah/niquests">
+   <img alt="Static Badge" src="https://img.shields.io/badge/Niquests-HTTP_1.1%2C%202%2C_and_3_Client-cyan">
+  </a>
+  <a href="https://github.com/jawah/wassima">
+   <img alt="Static Badge" src="https://img.shields.io/badge/Wassima-Certifi_Killer-cyan">
+  </a>
+</p>
+<p align="center">
+  <sup><i>In other language (unofficial port - by the community)</i></sup><br>
+  <a href="https://github.com/nickspring/charset-normalizer-rs">
+   <img alt="Static Badge" src="https://img.shields.io/badge/Rust-red">
   </a>
 </p>
 
@@ -23,21 +38,22 @@
 
 This project offers you an alternative to **Universal Charset Encoding Detector**, also known as **Chardet**.
 
-| Feature                                          | [Chardet](https://github.com/chardet/chardet) |                                           Charset Normalizer                                           | [cChardet](https://github.com/PyYoshi/cChardet) |
-|--------------------------------------------------|:---------------------------------------------:|:------------------------------------------------------------------------------------------------------:|:-----------------------------------------------:|
-| `Fast`                                           |                     ❌<br>                     |                                                 ✅<br>                                                  |                     ✅ <br>                      |
-| `Universal**`                                    |                       ❌                       |                                                   ✅                                                    |                        ❌                        |
-| `Reliable` **without** distinguishable standards |                       ❌                       |                                                   ✅                                                    |                        ✅                        |
-| `Reliable` **with** distinguishable standards    |                       ✅                       |                                                   ✅                                                    |                        ✅                        |
-| `License`                                        |           LGPL-2.1<br>_restrictive_           |                                                  MIT                                                   |            MPL-1.1<br>_restrictive_             |
-| `Native Python`                                  |                       ✅                       |                                                   ✅                                                    |                        ❌                        |
-| `Detect spoken language`                         |                       ❌                       |                                                   ✅                                                    |                       N/A                       |
-| `UnicodeDecodeError Safety`                      |                       ❌                       |                                                   ✅                                                    |                        ❌                        |
-| `Whl Size`                                       |                   193.6 kB                    |                                                 40 kB                                                  |                     ~200 kB                     |
-| `Supported Encoding`                             |                      33                       | 🎉 [90](https://charset-normalizer.readthedocs.io/en/latest/user/support.html#supported-encodings) |                       40                        |
+| Feature                                          | [Chardet](https://github.com/chardet/chardet) |                                         Charset Normalizer                                         | [cChardet](https://github.com/PyYoshi/cChardet) |
+|--------------------------------------------------|:---------------------------------------------:|:--------------------------------------------------------------------------------------------------:|:-----------------------------------------------:|
+| `Fast`                                           |                       ❌                       |                                                 ✅                                                  |                        ✅                        |
+| `Universal**`                                    |                       ❌                       |                                                 ✅                                                  |                        ❌                        |
+| `Reliable` **without** distinguishable standards |                       ❌                       |                                                 ✅                                                  |                        ✅                        |
+| `Reliable` **with** distinguishable standards    |                       ✅                       |                                                 ✅                                                  |                        ✅                        |
+| `License`                                        |           LGPL-2.1<br>_restrictive_           |                                                MIT                                                 |            MPL-1.1<br>_restrictive_             |
+| `Native Python`                                  |                       ✅                       |                                                 ✅                                                  |                        ❌                        |
+| `Detect spoken language`                         |                       ❌                       |                                                 ✅                                                  |                       N/A                       |
+| `UnicodeDecodeError Safety`                      |                       ❌                       |                                                 ✅                                                  |                        ❌                        |
+| `Whl Size (min)`                                 |                   193.6 kB                    |                                               42 kB                                                |                     ~200 kB                     |
+| `Supported Encoding`                             |                      33                       | 🎉 [99](https://charset-normalizer.readthedocs.io/en/latest/user/support.html#supported-encodings) |                       40                        |
 
 <p align="center">
 <img src="https://i.imgflip.com/373iay.gif" alt="Reading Normalized Text" width="226"/><img src="https://media.tenor.com/images/c0180f70732a18b4965448d33adba3d0/tenor.gif" alt="Cat Reading Text" width="200"/>
+</p>
 
 *\*\* : They are clearly using specific code for a specific encoding even if covering most of used one*<br> 
 Did you got there because of the logs? See [https://charset-normalizer.readthedocs.io/en/latest/user/miscellaneous.html](https://charset-normalizer.readthedocs.io/en/latest/user/miscellaneous.html)
@@ -110,6 +126,12 @@ optional arguments:
 
 ```bash
 normalizer ./data/sample.1.fr.srt
+```
+
+or
+
+```bash
+python -m charset_normalizer ./data/sample.1.fr.srt
 ```
 
 🎉 Since version 1.4.0 the CLI produce easily usable stdout result in JSON format.
@@ -208,6 +230,7 @@ that intel is worth something here. So I use those records against decoded text 
 - Python >=2.7,<3.5: Unsupported
 - Python 3.5: charset-normalizer < 2.1
 - Python 3.6: charset-normalizer < 3.1
+- Python 3.7: charset-normalizer < 4.0
 
 Upgrade your Python interpreter as soon as possible.
 

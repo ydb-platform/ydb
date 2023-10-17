@@ -133,7 +133,7 @@ IF (PROVIDE_REALLOCARRAY)
         reallocarray/reallocarray.c
     )
     ADDINCL(
-        ONE_LEVEL contrib/libs/libc_compat/reallocarray
+        GLOBAL contrib/libs/libc_compat/reallocarray
     )
 ENDIF()
 
@@ -146,7 +146,7 @@ IF (PROVIDE_GETRANDOM_GETENTROPY)
         random/getentropy.c
     )
     ADDINCL(
-        ONE_LEVEL contrib/libs/libc_compat/random
+        GLOBAL contrib/libs/libc_compat/random
     )
 ENDIF()
 

@@ -87,7 +87,7 @@ namespace NYql::NConnector {
         return out;
     }
 
-    std::shared_ptr<arrow::RecordBatch> APIReadSplitsResponseToArrowRecordBatch(const NApi::TReadSplitsResponse& response) {
+    std::shared_ptr<arrow::RecordBatch> ReadSplitsResponseToArrowRecordBatch(const NApi::TReadSplitsResponse& response) {
         const auto t = response.payload_case();
         switch (t) {
             case NApi::TReadSplitsResponse::PayloadCase::kColumnSet:

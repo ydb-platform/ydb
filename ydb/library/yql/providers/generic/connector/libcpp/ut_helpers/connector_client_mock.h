@@ -1,9 +1,12 @@
 #pragma once
-#include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/defaults.h>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/defaults.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/stream_iterator_mock.h>
 
 #include <library/cpp/testing/gmock_in_unittest/gmock.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -105,20 +108,20 @@ namespace NYql::NConnector::NTest {
         }
     };
 
-    template <class TParent, class TResultPtrType>
+    template <class TParent, class TResultType>
     struct TResponseBuilder: public TWithParentBuilder<TParent> {
-        explicit TResponseBuilder(TResultPtrType result = std::make_shared<typename TResultPtrType::element_type>(), TParent* parent = nullptr)
+        explicit TResponseBuilder(std::shared_ptr<TResultType> result = nullptr, TParent* parent = nullptr)
             : TWithParentBuilder<TParent>(parent)
             , Result_(std::move(result))
         {
         }
 
-        TResultPtrType GetResult() {
-            return Result_;
+        NThreading::TFuture<TResultType> GetResult() {
+            return NThreading::MakeFuture<TResultType>(Result_);
         }
 
     protected:
-        TResultPtrType Result_;
+        std::shared_ptr<TResultType> Result_;
     };
 
     template <class TParent, class TProto>
@@ -164,9 +167,9 @@ namespace NYql::NConnector::NTest {
 
     class TConnectorClientMock: public NYql::NConnector::IClient {
     public:
-        MOCK_METHOD(TDescribeTableResult::TPtr, DescribeTable, (const NApi::TDescribeTableRequest& request), (override));
-        MOCK_METHOD(TListSplitsResult::TPtr, ListSplits, (const NApi::TListSplitsRequest& request), (override));
-        MOCK_METHOD(TReadSplitsResult::TPtr, ReadSplits, (const NApi::TReadSplitsRequest& request), (override));
+        MOCK_METHOD(TDescribeTableAsyncResult, DescribeTable, (const NApi::TDescribeTableRequest& request), (override));
+        MOCK_METHOD(TIteratorAsyncResult<IListSplitsStreamIterator>, ListSplits, (const NApi::TListSplitsRequest& request), (override));
+        MOCK_METHOD(TIteratorAsyncResult<IReadSplitsStreamIterator>, ReadSplits, (const NApi::TReadSplitsRequest& request), (override));
 
         //
         // Expectation helpers
@@ -238,20 +241,25 @@ namespace NYql::NConnector::NTest {
         };
 
         template <class TParent = void /* no parent by default */>
-        struct TDescribeTableResultBuilder: public TResponseBuilder<TParent, TDescribeTableResult::TPtr> {
+        struct TDescribeTableResultBuilder: public TResponseBuilder<TParent, NApi::TDescribeTableResponse> {
             using TBuilder = TDescribeTableResultBuilder<TParent>;
 
-            explicit TDescribeTableResultBuilder(TDescribeTableResult::TPtr result = std::make_shared<TDescribeTableResult>(), TParent* parent = nullptr)
-                : TResponseBuilder<TParent, TDescribeTableResult::TPtr>(std::move(result), parent)
+            explicit TDescribeTableResultBuilder(
+                std::shared_ptr<NApi::TDescribeTableResponse> result,
+                TParent* parent = nullptr)
+                : TResponseBuilder<TParent, NApi::TDescribeTableResponse>(std::move(result), parent)
             {
                 FillWithDefaults();
             }
 
-            EXPR_SETTER(Status, Error.set_status);
+            TBuilder& Status(const Ydb::StatusIds_StatusCode value) {
+                this->Result_->mutable_error()->set_status(value);
+                return static_cast<TBuilder&>(*this);
+            };
 
             // TODO: add nonprimitive types
             TBuilder& Column(const TString& name, Ydb::Type::PrimitiveTypeId typeId) {
-                auto* col = this->Result_->Schema.add_columns();
+                auto* col = this->Result_->mutable_schema()->add_columns();
                 col->set_name(name);
                 col->mutable_type()->set_type_id(typeId);
                 return *this;
@@ -295,13 +303,15 @@ namespace NYql::NConnector::NTest {
 
         private:
             void SetExpectation() {
+                auto future = NThreading::MakeFuture<TResult<NApi::TDescribeTableResponse>>({NGrpc::TGrpcStatus(), *ResponseResult_});
+
                 EXPECT_CALL(*Mock_, DescribeTable(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(ResponseResult_));
+                    .WillOnce(Return(future));
             }
 
         private:
             TConnectorClientMock* Mock_ = nullptr;
-            TDescribeTableResult::TPtr ResponseResult_ = std::make_shared<TDescribeTableResult>();
+            std::shared_ptr<NApi::TDescribeTableResponse> ResponseResult_ = std::make_shared<NApi::TDescribeTableResponse>();
         };
 
         template <class TParent = void /* no parent by default */>
@@ -364,23 +374,25 @@ namespace NYql::NConnector::NTest {
         };
 
         template <class TParent = void /* no parent by default */>
-        struct TListSplitsResultBuilder: public TResponseBuilder<TParent, TListSplitsResult::TPtr> {
+        struct TListSplitsResultBuilder: public TResponseBuilder<TParent, TListSplitsStreamIteratorMock> {
             using TBuilder = TListSplitsResultBuilder<TParent>;
 
-            explicit TListSplitsResultBuilder(TListSplitsResult::TPtr result = std::make_shared<TListSplitsResult>(), TParent* parent = nullptr)
-                : TResponseBuilder<TParent, TListSplitsResult::TPtr>(std::move(result), parent)
+            explicit TListSplitsResultBuilder(
+                TListSplitsStreamIteratorMock::TPtr result = std::make_shared<TListSplitsStreamIteratorMock>(),
+                TParent* parent = nullptr)
+                : TResponseBuilder<TParent, TListSplitsStreamIteratorMock>(std::move(result), parent)
             {
                 FillWithDefaults();
             }
 
-            EXPR_SETTER(Status, Error.set_status);
-
-            TSplitBuilder<TBuilder> Split() {
-                return TSplitBuilder<TBuilder>(&this->Result_->Splits.emplace_back(), this);
+            TSplitBuilder<TBuilder> AddResponse(const NApi::TError& error) {
+                auto& response = this->Result_->Responses().emplace_back();
+                response.mutable_error()->CopyFrom(error);
+                auto split = response.mutable_splits()->Add();
+                return TSplitBuilder<TBuilder>(split, this);
             }
 
             void FillWithDefaults() {
-                Status(Ydb::StatusIds::SUCCESS);
             }
         };
 
@@ -406,40 +418,50 @@ namespace NYql::NConnector::NTest {
 
             SUBPROTO_BUILDER(Select, add_selects, NApi::TSelect, TSelectBuilder<TBuilder>);
 
-            TListSplitsResultBuilder<TBuilder> Response() {
+            TListSplitsResultBuilder<TBuilder> Result() {
                 return TListSplitsResultBuilder<TBuilder>(ResponseResult_, this);
             }
 
             void FillWithDefaults() {
-                Response();
+                Result();
             }
 
         private:
             void SetExpectation() {
+                auto future = NThreading::MakeFuture<TIteratorResult<IListSplitsStreamIterator>>(
+                    TIteratorResult<IListSplitsStreamIterator>{NGrpc::TGrpcStatus(), ResponseResult_});
                 EXPECT_CALL(*Mock_, ListSplits(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(ResponseResult_));
+                    .WillOnce(Return(future));
             }
 
         private:
             TConnectorClientMock* Mock_ = nullptr;
-            TListSplitsResult::TPtr ResponseResult_ = std::make_shared<TListSplitsResult>();
+            TListSplitsStreamIteratorMock::TPtr ResponseResult_ = std::make_shared<TListSplitsStreamIteratorMock>();
         };
 
         template <class TParent = void /* no parent by default */>
-        struct TReadSplitsResultBuilder: public TResponseBuilder<TParent, TReadSplitsResult::TPtr> {
+        struct TReadSplitsResultBuilder: public TResponseBuilder<TParent, TReadSplitsStreamIteratorMock> {
             using TBuilder = TReadSplitsResultBuilder<TParent>;
 
-            explicit TReadSplitsResultBuilder(TReadSplitsResult::TPtr result = std::make_shared<TReadSplitsResult>(), TParent* parent = nullptr)
-                : TResponseBuilder<TParent, TReadSplitsResult::TPtr>(std::move(result), parent)
+            explicit TReadSplitsResultBuilder(
+                TReadSplitsStreamIteratorMock::TPtr result = std::make_shared<TReadSplitsStreamIteratorMock>(),
+                TParent* parent = nullptr)
+                : TResponseBuilder<TParent, TReadSplitsStreamIteratorMock>(std::move(result), parent)
             {
                 FillWithDefaults();
             }
 
-            EXPR_SETTER(Status, Error.set_status);
-            EXPR_SETTER(RecordBatch, RecordBatches.push_back);
+            TBuilder& AddResponse(
+                const std::shared_ptr<arrow::RecordBatch>& recordBatch,
+                const NApi::TError& error) {
+                NKikimr::NArrow::NSerialization::TFullDataSerializer ser(arrow::ipc::IpcWriteOptions::Defaults());
+                auto& response = this->Result_->Responses().emplace_back();
+                response.mutable_error()->CopyFrom(error);
+                response.set_arrow_ipc_streaming(ser.Serialize(recordBatch));
+                return static_cast<TBuilder&>(*this);
+            };
 
             void FillWithDefaults() {
-                Status(Ydb::StatusIds::SUCCESS);
             }
         };
 
@@ -467,7 +489,7 @@ namespace NYql::NConnector::NTest {
             SUBPROTO_BUILDER(Split, add_splits, NApi::TSplit, TSplitBuilder<TBuilder>);
             SETTER(Format, format);
 
-            TReadSplitsResultBuilder<TBuilder> Response() {
+            TReadSplitsResultBuilder<TBuilder> Result() {
                 return TReadSplitsResultBuilder<TBuilder>(ResponseResult_, this);
             }
 
@@ -477,13 +499,15 @@ namespace NYql::NConnector::NTest {
 
         private:
             void SetExpectation() {
+                auto future = NThreading::MakeFuture<TIteratorResult<IReadSplitsStreamIterator>>(
+                    TIteratorResult<IReadSplitsStreamIterator>{NGrpc::TGrpcStatus(), ResponseResult_});
                 EXPECT_CALL(*Mock_, ReadSplits(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(ResponseResult_));
+                    .WillOnce(Return(future));
             }
 
         private:
             TConnectorClientMock* Mock_ = nullptr;
-            TReadSplitsResult::TPtr ResponseResult_ = std::make_shared<TReadSplitsResult>();
+            TReadSplitsStreamIteratorMock::TPtr ResponseResult_ = std::make_shared<TReadSplitsStreamIteratorMock>();
         };
 
         TDescribeTableExpectationBuilder ExpectDescribeTable() {

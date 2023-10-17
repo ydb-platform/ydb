@@ -44,7 +44,6 @@ inline TString DatabaseTypeToMdbUrlPath(EDatabaseType databaseType) {
 
     switch (databaseType) {
         case EDatabaseType::ClickHouse:
-            return dump;
         case EDatabaseType::PostgreSQL:
             return dump;
         default:

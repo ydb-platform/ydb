@@ -25,21 +25,14 @@ namespace NYql {
     using namespace NKikimr::NMiniKQL;
 
     struct TGenericTableDescription {
-        TGenericTableDescription() = delete;
-
-        TGenericTableDescription(const NConnector::NApi::TDataSourceInstance& dsi,
-                                 NConnector::TDescribeTableResult::TPtr&& result)
-            : DataSourceInstance(dsi)
-            , Result(std::move(result))
-        {
-        }
+        using TPtr = std::shared_ptr<TGenericTableDescription>;
 
         NConnector::NApi::TDataSourceInstance DataSourceInstance;
-        NConnector::TDescribeTableResult::TPtr Result;
+        NConnector::NApi::TDescribeTableResponse Response;
     };
 
     class TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
-        using TMapType = std::unordered_map<TGenericState::TTableAddress, TGenericTableDescription, THash<TGenericState::TTableAddress>>;
+        using TMapType = std::unordered_map<TGenericState::TTableAddress, TGenericTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
 
     public:
         TGenericLoadTableMetadataTransformer(TGenericState::TPtr state)
@@ -146,13 +139,28 @@ namespace NYql {
                 dsi->set_database(TString(dbNameTarget));
                 request.set_table(TString(tableName));
 
-                // NOTE: errors will be checked further in DoApplyAsyncChanges
-                Results_.emplace(item, TGenericTableDescription(request.data_source_instance(), State_->GenericClient->DescribeTable(request)));
-
-                // FIXME: for the sake of simplicity, asynchronous workflow is broken now. Fix it some day.
                 auto promise = NThreading::NewPromise();
                 handles.emplace_back(promise.GetFuture());
-                promise.SetValue();
+
+                // preserve data source instance for the further usage
+                auto emplaceIt = Results_.emplace(std::make_pair(item, std::make_shared<TGenericTableDescription>()));
+                auto desc = emplaceIt.first->second;
+                desc->DataSourceInstance = request.data_source_instance();
+
+                State_->GenericClient->DescribeTable(request).Subscribe(
+                    [desc = std::move(desc), promise = std::move(promise)](const NConnector::TDescribeTableAsyncResult& f1) mutable {
+                        NConnector::TDescribeTableAsyncResult f2(f1);
+                        auto result = f2.ExtractValueSync();
+
+                        // Check only transport errors;
+                        // logic errors will be checked later in DoApplyAsyncChanges
+                        if (result.Status.Ok()) {
+                            desc->Response = std::move(*result.Response);
+                            promise.SetValue();
+                        } else {
+                            promise.SetException(result.Status.ToDebugString());
+                        }
+                    });
             }
 
             if (handles.empty()) {
@@ -188,12 +196,12 @@ namespace NYql {
 
                 const auto it = Results_.find(TGenericState::TTableAddress(clusterName, tableName));
                 if (Results_.cend() != it) {
-                    const auto& result = it->second.Result;
-                    const auto& error = result->Error;
-                    if (NConnector::ErrorIsSuccess(error)) {
+                    const auto& response = it->second->Response;
+                    const auto& error = response.error();
+                    if (NConnector::IsSuccess(error)) {
                         TGenericState::TTableMeta tableMeta;
-                        tableMeta.Schema = result->Schema;
-                        tableMeta.DataSourceInstance = it->second.DataSourceInstance;
+                        tableMeta.Schema = response.schema();
+                        tableMeta.DataSourceInstance = it->second->DataSourceInstance;
 
                         const auto& parse = ParseTableMeta(tableMeta.Schema, clusterName, tableName, ctx, tableMeta.ColumnOrder);
 

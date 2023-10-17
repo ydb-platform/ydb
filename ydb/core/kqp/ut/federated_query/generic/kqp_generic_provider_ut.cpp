@@ -59,6 +59,7 @@ namespace NKikimr::NKqp {
             const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
 
             // step 1: DescribeTable
+            // clang-format off
             clientMock->ExpectDescribeTable()
                 .DataSourceInstance(dataSourceInstance)
                 .Response()
@@ -72,8 +73,8 @@ namespace NKikimr::NKqp {
                         .Column("col1", Ydb::Type::UINT16)
                         .Done()
                     .Done()
-                .Response()
-                    .Split()
+                .Result()
+                    .AddResponse(NewSuccess())
                         .Description("some binary description")
                         .Select()
                             .DataSourceInstance(dataSourceInstance)
@@ -93,8 +94,11 @@ namespace NKikimr::NKqp {
                             .Done()
                         .Done()
                     .Done()
-                .Response()
-                    .RecordBatch(MakeRecordBatch<arrow::UInt16Builder>("col1", colData, arrow::uint16()));
+                .Result()
+                    .AddResponse(
+                        MakeRecordBatch<arrow::UInt16Builder>("col1", colData, arrow::uint16()),
+                        NewSuccess());
+            // clang-format on
 
             // prepare database resolver mock
             std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
@@ -151,6 +155,7 @@ namespace NKikimr::NKqp {
             constexpr size_t ROWS_COUNT = 5;
 
             // step 1: DescribeTable
+            // clang-format off
             clientMock->ExpectDescribeTable()
                 .DataSourceInstance(dataSourceInstance)
                 .Response()
@@ -165,8 +170,8 @@ namespace NKikimr::NKqp {
                         // Empty
                         .Done()
                     .Done()
-                .Response()
-                    .Split()
+                .Result()
+                    .AddResponse(NewSuccess())
                         .Description("some binary description")
                         .Select()
                             .DataSourceInstance(dataSourceInstance)
@@ -183,8 +188,9 @@ namespace NKikimr::NKqp {
                             .Done()
                         .Done()
                     .Done()
-                .Response()
-                    .RecordBatch(MakeEmptyRecordBatch(ROWS_COUNT));
+                .Result()
+                    .AddResponse(MakeEmptyRecordBatch(ROWS_COUNT), NewSuccess());
+            // clang-format on
 
             // prepare database resolver mock
             std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
@@ -239,6 +245,7 @@ namespace NKikimr::NKqp {
 
             constexpr size_t ROWS_COUNT = 5;
 
+            // clang-format off
             // step 1: DescribeTable
             clientMock->ExpectDescribeTable()
                 .DataSourceInstance(dataSourceInstance)
@@ -254,8 +261,8 @@ namespace NKikimr::NKqp {
                         // Empty
                         .Done()
                     .Done()
-                .Response()
-                    .Split()
+                .Result()
+                    .AddResponse(NewSuccess())
                         .Description("some binary description")
                         .Select()
                             .DataSourceInstance(dataSourceInstance)
@@ -272,8 +279,9 @@ namespace NKikimr::NKqp {
                             .Done()
                         .Done()
                     .Done()
-                .Response()
-                    .RecordBatch(MakeEmptyRecordBatch(ROWS_COUNT));
+                .Result()
+                    .AddResponse(MakeEmptyRecordBatch(ROWS_COUNT), NewSuccess());
+            // clang-format on
 
             // prepare database resolver mock
             std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
@@ -304,7 +312,7 @@ namespace NKikimr::NKqp {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
 
             // check every row
-            std::vector<ui64> result = { ROWS_COUNT };
+            std::vector<ui64> result = {ROWS_COUNT};
             MATCH_RESULT_WITH_INPUT(result, resultSet, GetUint64);
         }
 

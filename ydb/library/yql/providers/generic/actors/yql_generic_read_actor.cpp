@@ -5,15 +5,17 @@
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/log.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
 #include <ydb/library/yql/providers/generic/proto/range.pb.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 
 namespace NYql::NDq {
 
@@ -25,31 +27,70 @@ namespace NYql::NDq {
             // Event ids
             enum EEv: ui32 {
                 EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
-
-                EvReadResult = EvBegin,
-                EvReadError,
-
+                EvListSplitsIterator = EvBegin,
+                EvListSplitsPart,
+                EvListSplitsFinished,
+                EvReadSplitsIterator,
+                EvReadSplitsPart,
+                EvReadSplitsFinished,
                 EvEnd
             };
 
             static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
             // Events
-            struct TEvReadResult: public TEventLocal<TEvReadResult, EvReadResult> {
-                TEvReadResult(const NConnector::TReadSplitsResult::TPtr& result)
-                    : Result(result)
+            struct TEvListSplitsIterator: public TEventLocal<TEvListSplitsIterator, EvListSplitsIterator> {
+                explicit TEvListSplitsIterator(NConnector::IListSplitsStreamIterator::TPtr&& iterator)
+                    : Iterator(std::move(iterator))
                 {
                 }
 
-                NConnector::TReadSplitsResult::TPtr Result;
+                NConnector::IListSplitsStreamIterator::TPtr Iterator;
             };
 
-            struct TEvReadError: public TEventLocal<TEvReadError, EvReadError> {
-                TEvReadError(const NYql::NConnector::NApi::TError& error)
-                    : Error(error)
+            struct TEvListSplitsPart: public TEventLocal<TEvListSplitsPart, EvListSplitsPart> {
+                explicit TEvListSplitsPart(NConnector::NApi::TListSplitsResponse&& response)
+                    : Response(std::move(response))
                 {
                 }
-                NYql::NConnector::NApi::TError Error;
+
+                NConnector::NApi::TListSplitsResponse Response;
+            };
+
+            struct TEvListSplitsFinished: public TEventLocal<TEvListSplitsFinished, EvListSplitsFinished> {
+                explicit TEvListSplitsFinished(NGrpc::TGrpcStatus&& status)
+                    : Status(std::move(status))
+                {
+                }
+
+                NGrpc::TGrpcStatus Status;
+            };
+
+            struct TEvReadSplitsIterator: public TEventLocal<TEvReadSplitsIterator, EvReadSplitsIterator> {
+                explicit TEvReadSplitsIterator(NConnector::IReadSplitsStreamIterator::TPtr&& iterator)
+                    : Iterator(std::move(iterator))
+                {
+                }
+
+                NConnector::IReadSplitsStreamIterator::TPtr Iterator;
+            };
+
+            struct TEvReadSplitsPart: public TEventLocal<TEvReadSplitsPart, EvReadSplitsPart> {
+                explicit TEvReadSplitsPart(NConnector::NApi::TReadSplitsResponse&& response)
+                    : Response(std::move(response))
+                {
+                }
+
+                NConnector::NApi::TReadSplitsResponse Response;
+            };
+
+            struct TEvReadSplitsFinished: public TEventLocal<TEvReadSplitsFinished, EvReadSplitsFinished> {
+                explicit TEvReadSplitsFinished(NGrpc::TGrpcStatus&& status)
+                    : Status(std::move(status))
+                {
+                }
+
+                NGrpc::TGrpcStatus Status;
             };
         };
 
@@ -57,13 +98,16 @@ namespace NYql::NDq {
 
     class TGenericReadActor: public TActorBootstrapped<TGenericReadActor>, public IDqComputeActorAsyncInput {
     public:
-        TGenericReadActor(ui64 inputIndex, NConnector::IClient::TPtr genericClient, const NConnector::NApi::TSelect& select,
-                          const NConnector::NApi::TDataSourceInstance& dataSourceInstance,
-                          const NActors::TActorId& computeActorId, const NKikimr::NMiniKQL::THolderFactory& holderFactory)
+        TGenericReadActor(
+            ui64 inputIndex,
+            NConnector::IClient::TPtr client,
+            const NConnector::NApi::TSelect& select,
+            const NConnector::NApi::TDataSourceInstance& dataSourceInstance,
+            const NActors::TActorId& computeActorId,
+            const NKikimr::NMiniKQL::THolderFactory& holderFactory)
             : InputIndex_(inputIndex)
             , ComputeActorId_(computeActorId)
-            , ActorSystem_(TActivationContext::ActorSystem())
-            , ConnectorClient_(genericClient)
+            , Client_(std::move(client))
             , HolderFactory_(holderFactory)
             , Select_(select)
             , DataSourceInstance_(dataSourceInstance)
@@ -72,123 +116,315 @@ namespace NYql::NDq {
 
         void Bootstrap() {
             Become(&TGenericReadActor::StateFunc);
-
-            NConnector::NApi::TListSplitsRequest listSplitsRequest;
-            listSplitsRequest.mutable_selects()->Add()->CopyFrom(Select_);
-
-            auto listSplitsResult = ConnectorClient_->ListSplits(listSplitsRequest);
-            if (!NConnector::ErrorIsSuccess(listSplitsResult->Error)) {
-                YQL_CLOG(ERROR, ProviderGeneric) << "ListSplits failure: " << listSplitsResult->Error.DebugString();
-                ActorSystem_->Send(new IEventHandle(
-                    SelfId(), TActorId(), new TEvPrivate::TEvReadError(listSplitsResult->Error)));
-                return;
-            }
-
-            YQL_CLOG(INFO, ProviderGeneric) << "ListSplits success, total splits: " << listSplitsResult->Splits.size();
-
-            NConnector::NApi::TReadSplitsRequest readSplitsRequest;
-            readSplitsRequest.set_format(NConnector::NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
-            readSplitsRequest.mutable_splits()->Reserve(listSplitsResult->Splits.size());
-            std::for_each(
-                listSplitsResult->Splits.cbegin(), listSplitsResult->Splits.cend(),
-                [&](const NConnector::NApi::TSplit& split) { readSplitsRequest.mutable_splits()->Add()->CopyFrom(split); });
-            readSplitsRequest.mutable_data_source_instance()->CopyFrom(DataSourceInstance_);
-
-            auto readSplitsResult = ConnectorClient_->ReadSplits(readSplitsRequest);
-            if (!NConnector::ErrorIsSuccess(readSplitsResult->Error)) {
-                YQL_CLOG(ERROR, ProviderGeneric) << "ReadSplits failure: " << readSplitsResult->Error.DebugString();
-                ActorSystem_->Send(new IEventHandle(
-                    SelfId(), TActorId(), new TEvPrivate::TEvReadError(readSplitsResult->Error)));
-                return;
-            }
-
-            YQL_CLOG(INFO, ProviderGeneric) << "ReadSplits success, total batches: "
-                                            << readSplitsResult->RecordBatches.size();
-
-            ActorSystem_->Send(new IEventHandle(SelfId(), TActorId(), new TEvPrivate::TEvReadResult(readSplitsResult)));
+            InitSplitsListing();
         }
 
-        static constexpr char ActorName[] = "Generic_READ_ACTOR";
+        static constexpr char ActorName[] = "GENERIC_READ_ACTOR";
 
     private:
-        void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {
-        }
-        void LoadState(const NDqProto::TSourceState&) final {
-        }
-        void CommitState(const NDqProto::TCheckpoint&) final {
-        }
-        ui64 GetInputIndex() const final {
-            return InputIndex_;
-        }
-
+        // TODO: make two different states
+        // clang-format off
         STRICT_STFUNC(StateFunc,
-                      hFunc(TEvPrivate::TEvReadResult, Handle);
-                      hFunc(TEvPrivate::TEvReadError, Handle);)
+                      hFunc(TEvPrivate::TEvListSplitsIterator, Handle);
+                      hFunc(TEvPrivate::TEvListSplitsPart, Handle);
+                      hFunc(TEvPrivate::TEvListSplitsFinished, Handle);
+                      hFunc(TEvPrivate::TEvReadSplitsIterator, Handle);
+                      hFunc(TEvPrivate::TEvReadSplitsPart, Handle);
+                      hFunc(TEvPrivate::TEvReadSplitsFinished, Handle);
+        )
+        // clang-format on
 
-        i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>&, bool& finished,
-                              i64 /*freeSpace*/) final {
-            YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
-            if (Result_) {
-                NUdf::TUnboxedValue value;
+        // ListSplits
 
-                ui64 total = 0;
+        void InitSplitsListing() {
+            YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits listing";
 
-                // It's very important to fill UV columns in the alphabet order,
-                // paying attention to the scalar field containing block length.
-                TVector<TString> fieldNames;
-                std::transform(Select_.what().items().cbegin(), Select_.what().items().cend(),
-                               std::back_inserter(fieldNames), [](const auto& item) { return item.column().name(); });
+            // Prepare request
+            NConnector::NApi::TListSplitsRequest request;
+            *request.mutable_selects()->Add() = Select_;
 
-                fieldNames.push_back(std::string(BlockLengthColumnName));
-                std::sort(fieldNames.begin(), fieldNames.end());
-                std::map<TStringBuf, std::size_t> fieldNameOrder;
-                for (std::size_t i = 0; i < fieldNames.size(); i++) {
-                    fieldNameOrder[fieldNames[i]] = i;
-                }
+            // Initialize stream
+            Client_->ListSplits(request).Subscribe(
+                [actorSystem = TActivationContext::ActorSystem(),
+                 selfId = SelfId(),
+                 computeActorId = ComputeActorId_,
+                 inputIndex = InputIndex_](
+                    const NConnector::TListSplitsStreamIteratorAsyncResult& future) {
+                    AwaitIterator<
+                        NConnector::TListSplitsStreamIteratorAsyncResult,
+                        TEvPrivate::TEvListSplitsIterator>(
+                        actorSystem, selfId, computeActorId, inputIndex, future);
+                });
+        }
 
-                for (const auto& batch : Result_->RecordBatches) {
-                    total += NUdf::GetSizeOfArrowBatchInBytes(*batch);
+        void Handle(TEvPrivate::TEvListSplitsIterator::TPtr& ev) {
+            ListSplitsIterator_ = std::move(ev->Get()->Iterator);
 
-                    NUdf::TUnboxedValue* structItems = nullptr;
-                    auto structObj = ArrowRowContainerCache_.NewArray(HolderFactory_, fieldNames.size(), structItems);
-                    for (int i = 0; i < batch->num_columns(); ++i) {
-                        const auto& columnName = batch->schema()->field(i)->name();
-                        const auto ix = fieldNameOrder[columnName];
-                        structItems[ix] = HolderFactory_.CreateArrowBlock(arrow::Datum(batch->column(i)));
-                    }
+            AwaitNextStreamItem<NConnector::IListSplitsStreamIterator,
+                                TEvPrivate::TEvListSplitsPart,
+                                TEvPrivate::TEvListSplitsFinished>(ListSplitsIterator_);
+        }
 
-                    structItems[fieldNameOrder[BlockLengthColumnName]] = HolderFactory_.CreateArrowBlock(
-                        arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch->num_rows())));
-                    value = structObj;
+        void Handle(TEvPrivate::TEvListSplitsPart::TPtr& ev) {
+            auto& response = ev->Get()->Response;
+            YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvListSplitsPart :: event handling started"
+                                             << ": splits_size=" << response.splits().size();
 
-                    buffer.emplace_back(std::move(value));
-                }
-
-                // freeSpace -= size;
-                finished = true;
-                Result_.reset();
-
-                // TODO: check it, because in S3 the generic cache clearing happens only when LastFileWasProcessed:
-                // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/s3/actors/yql_s3_read_actor.cpp?rev=r11543410#L2497
-                ArrowRowContainerCache_.Clear();
-
-                return total;
+            if (!NConnector::IsSuccess(response.error())) {
+                return NotifyComputeActorWithError(
+                    TActivationContext::ActorSystem(),
+                    ComputeActorId_,
+                    InputIndex_,
+                    response.error());
             }
 
-            return 0LL;
+            // Save splits for the further usage
+            Splits_.insert(
+                Splits_.end(),
+                std::move_iterator(response.mutable_splits()->begin()),
+                std::move_iterator(response.mutable_splits()->end()));
+
+            // ask for next stream message
+            AwaitNextStreamItem<NConnector::IListSplitsStreamIterator,
+                                TEvPrivate::TEvListSplitsPart,
+                                TEvPrivate::TEvListSplitsFinished>(ListSplitsIterator_);
+
+            YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvListSplitsPart :: event handling finished";
         }
 
-        void Handle(TEvPrivate::TEvReadResult::TPtr& evReadResult) {
-            Result_ = evReadResult->Get()->Result;
+        void Handle(TEvPrivate::TEvListSplitsFinished::TPtr& ev) {
+            const auto& status = ev->Get()->Status;
+
+            YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvListSplitsFinished :: event handling started: ";
+
+            // Server sent EOF, now we are ready to start splits reading
+            if (NConnector::GrpcStatusEndOfStream(status)) {
+                YQL_CLOG(DEBUG, ProviderGeneric) << "Handle :: EvListSplitsFinished :: last message was reached, start data reading";
+                return InitSplitsReading();
+            }
+
+            // Server temporary failure
+            if (NConnector::GrpcStatusNeedsRetry(status)) {
+                YQL_CLOG(WARN, ProviderGeneric) << "Handle :: EvListSplitsFinished :: you should retry your operation due to '"
+                                                << status.ToDebugString() << "' error";
+                // TODO: retry
+            }
+
+            return NotifyComputeActorWithError(
+                TActivationContext::ActorSystem(),
+                ComputeActorId_,
+                InputIndex_,
+                NConnector::ErrorFromGRPCStatus(status));
+        }
+
+        // ReadSplits
+        void InitSplitsReading() {
+            YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits reading";
+
+            if (Splits_.empty()) {
+                YQL_CLOG(WARN, ProviderGeneric) << "Accumulated empty list of splits";
+                ReadSplitsFinished_ = true;
+                return NotifyComputeActorWithData();
+            }
+
+            // Prepare request
+            NConnector::NApi::TReadSplitsRequest request;
+            request.set_format(NConnector::NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
+            request.mutable_splits()->Reserve(Splits_.size());
+
+            std::for_each(
+                Splits_.cbegin(), Splits_.cend(),
+                [&](const NConnector::NApi::TSplit& split) { request.mutable_splits()->Add()->CopyFrom(split); });
+            request.mutable_data_source_instance()->CopyFrom(DataSourceInstance_);
+
+            // Start streaming
+            Client_->ReadSplits(request).Subscribe(
+                [actorSystem = TActivationContext::ActorSystem(),
+                 selfId = SelfId(),
+                 computeActorId = ComputeActorId_,
+                 inputIndex = InputIndex_](
+                    const NConnector::TReadSplitsStreamIteratorAsyncResult& future) {
+                    AwaitIterator<
+                        NConnector::TReadSplitsStreamIteratorAsyncResult,
+                        TEvPrivate::TEvReadSplitsIterator>(
+                        actorSystem, selfId, computeActorId, inputIndex, future);
+                });
+        }
+
+        void Handle(TEvPrivate::TEvReadSplitsIterator::TPtr& ev) {
+            ReadSplitsIterator_ = std::move(ev->Get()->Iterator);
+
+            AwaitNextStreamItem<NConnector::IReadSplitsStreamIterator,
+                                TEvPrivate::TEvReadSplitsPart,
+                                TEvPrivate::TEvReadSplitsFinished>(ReadSplitsIterator_);
+        }
+
+        void Handle(TEvPrivate::TEvReadSplitsPart::TPtr& ev) {
+            auto& response = ev->Get()->Response;
+            YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling started"
+                                             << ": part_size=" << response.arrow_ipc_streaming().size();
+
+            if (!NConnector::IsSuccess(response.error())) {
+                return NotifyComputeActorWithError(
+                    TActivationContext::ActorSystem(),
+                    ComputeActorId_,
+                    InputIndex_,
+                    response.error());
+            }
+
+            YQL_ENSURE(response.arrow_ipc_streaming().size(), "empty data");
+
+            // Preserve stream message to return it to ComputeActor later
+            LastReadSplitsResponse_ = std::move(ev->Get()->Response);
+            NotifyComputeActorWithData();
+
+            YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling finished";
+        }
+
+        void Handle(TEvPrivate::TEvReadSplitsFinished::TPtr& ev) {
+            const auto& status = ev->Get()->Status;
+
+            YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsFinished :: event handling started: " << status.ToDebugString();
+
+            // Server sent EOF, no more data is expected, so ask compute actor to come for the last time
+            if (NConnector::GrpcStatusEndOfStream(status)) {
+                YQL_CLOG(DEBUG, ProviderGeneric) << "Handle :: EvReadSplitsFinished :: last message was reached, finish data reading";
+                ReadSplitsFinished_ = true;
+                return NotifyComputeActorWithData();
+            }
+
+            // Server temporary failure
+            if (NConnector::GrpcStatusNeedsRetry(status)) {
+                YQL_CLOG(WARN, ProviderGeneric) << "Handle :: EvReadSplitsFinished :: you should retry your operation due to '"
+                                                << status.ToDebugString() << "' error";
+                // TODO: retry
+            }
+
+            return NotifyComputeActorWithError(
+                TActivationContext::ActorSystem(),
+                ComputeActorId_,
+                InputIndex_,
+                NConnector::ErrorFromGRPCStatus(status));
+        }
+
+        template <typename TIterator, typename TEventPart, typename TEventFinished>
+        void AwaitNextStreamItem(const typename TIterator::TPtr& iterator) {
+            YQL_ENSURE(iterator, "iterator was not initialized");
+
+            iterator->ReadNext().Subscribe(
+                [actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](
+                    const typename TIterator::TResult& f1) {
+                    typename TIterator::TResult f2(f1);
+                    auto result = f2.ExtractValueSync();
+                    if (result.Status.Ok()) {
+                        YQL_ENSURE(result.Response, "empty response");
+                        auto ev = new TEventPart(std::move(*result.Response));
+                        actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
+                    } else {
+                        auto ev = new TEventFinished(std::move(result.Status));
+                        actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
+                    }
+                });
+        }
+
+        template <typename TAsyncResult, typename TIteratorEvent>
+        static void AwaitIterator(TActorSystem* actorSystem, TActorId selfId, TActorId computeActorId, ui64 inputIndex, const TAsyncResult& f1) {
+            TAsyncResult f2(f1);
+            auto result = f2.ExtractValueSync();
+            if (result.Status.Ok()) {
+                YQL_ENSURE(result.Iterator, "uninitialized iterator");
+                auto ev = new TIteratorEvent(std::move(result.Iterator));
+                actorSystem->Send(new NActors::IEventHandle(selfId, {}, ev));
+            } else {
+                NotifyComputeActorWithError(
+                    actorSystem,
+                    computeActorId,
+                    inputIndex,
+                    NConnector::ErrorFromGRPCStatus(result.Status));
+            }
+        }
+
+        void NotifyComputeActorWithData() {
             Send(ComputeActorId_, new TEvNewAsyncInputDataArrived(InputIndex_));
         }
 
-        void Handle(TEvPrivate::TEvReadError::TPtr& result) {
-            Send(ComputeActorId_,
-                 new TEvAsyncInputError(
-                     InputIndex_,
-                     NConnector::ErrorToIssues(result->Get()->Error),
-                     NConnector::ErrorToDqStatus(result->Get()->Error)));
+        static void NotifyComputeActorWithError(
+            TActorSystem* actorSystem,
+            const NActors::TActorId computeActorId,
+            const ui64 inputIndex,
+            const NConnector::NApi::TError& error) {
+            actorSystem->Send(computeActorId,
+                              new TEvAsyncInputError(
+                                  inputIndex,
+                                  NConnector::ErrorToIssues(error),
+                                  NConnector::ErrorToDqStatus(error)));
+            return;
+        }
+
+        i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer,
+                              TMaybe<TInstant>&,
+                              bool& finished,
+                              i64 /*freeSpace*/) final {
+            YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
+
+            // Stream is finished
+            if (!LastReadSplitsResponse_) {
+                finished = ReadSplitsFinished_;
+                return 0;
+            }
+
+            // Stream is not finished, process next message
+            NUdf::TUnboxedValue value;
+            ui64 total = 0;
+
+            // It's very important to fill UV columns in the alphabet order,
+            // paying attention to the scalar field containing block length.
+            TVector<TString> fieldNames;
+            std::transform(Select_.what().items().cbegin(),
+                           Select_.what().items().cend(),
+                           std::back_inserter(fieldNames),
+                           [](const auto& item) { return item.column().name(); });
+
+            fieldNames.push_back(std::string(BlockLengthColumnName));
+            std::sort(fieldNames.begin(), fieldNames.end());
+            std::map<TStringBuf, std::size_t> fieldNameOrder;
+            for (std::size_t i = 0; i < fieldNames.size(); i++) {
+                fieldNameOrder[fieldNames[i]] = i;
+            }
+
+            // TODO: avoid copying from Protobuf to Arrow
+            auto batch = NConnector::ReadSplitsResponseToArrowRecordBatch(*LastReadSplitsResponse_);
+
+            total += NUdf::GetSizeOfArrowBatchInBytes(*batch);
+
+            NUdf::TUnboxedValue* structItems = nullptr;
+            auto structObj = ArrowRowContainerCache_.NewArray(HolderFactory_, fieldNames.size(), structItems);
+            for (int i = 0; i < batch->num_columns(); ++i) {
+                const auto& columnName = batch->schema()->field(i)->name();
+                const auto ix = fieldNameOrder[columnName];
+                structItems[ix] = HolderFactory_.CreateArrowBlock(arrow::Datum(batch->column(i)));
+            }
+
+            structItems[fieldNameOrder[BlockLengthColumnName]] = HolderFactory_.CreateArrowBlock(
+                arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch->num_rows())));
+            value = structObj;
+
+            buffer.emplace_back(std::move(value));
+
+            // freeSpace -= size;
+            finished = true;
+            LastReadSplitsResponse_ = std::nullopt;
+
+            // TODO: check it, because in S3 the generic cache clearing happens only when LastFileWasProcessed:
+            // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/s3/actors/yql_s3_read_actor.cpp?rev=r11543410#L2497
+            ArrowRowContainerCache_.Clear();
+
+            // Request server for the next data block
+            AwaitNextStreamItem<NConnector::IReadSplitsStreamIterator,
+                                TEvPrivate::TEvReadSplitsPart,
+                                TEvPrivate::TEvReadSplitsFinished>(ReadSplitsIterator_);
+
+            return total;
         }
 
         // IActor & IDqComputeActorAsyncInput
@@ -196,14 +432,30 @@ namespace NYql::NDq {
             TActorBootstrapped<TGenericReadActor>::PassAway();
         }
 
+        void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {
+        }
+
+        void LoadState(const NDqProto::TSourceState&) final {
+        }
+
+        void CommitState(const NDqProto::TCheckpoint&) final {
+        }
+
+        ui64 GetInputIndex() const final {
+            return InputIndex_;
+        }
+
+    private:
         const ui64 InputIndex_;
         const NActors::TActorId ComputeActorId_;
 
-        TActorSystem* const ActorSystem_;
+        NConnector::IClient::TPtr Client_;
+        NConnector::IListSplitsStreamIterator::TPtr ListSplitsIterator_;
+        TVector<NConnector::NApi::TSplit> Splits_; // accumulated list of table splits
+        NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator_;
+        std::optional<NConnector::NApi::TReadSplitsResponse> LastReadSplitsResponse_;
+        bool ReadSplitsFinished_ = false;
 
-        // Changed:
-        NConnector::IClient::TPtr ConnectorClient_;
-        NConnector::TReadSplitsResult::TPtr Result_;
         NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache_;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
         const NYql::NConnector::NApi::TSelect Select_;
@@ -211,9 +463,12 @@ namespace NYql::NDq {
     };
 
     std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>
-    CreateGenericReadActor(NConnector::IClient::TPtr genericClient, Generic::TSource&& params, ui64 inputIndex,
+    CreateGenericReadActor(NConnector::IClient::TPtr genericClient,
+                           Generic::TSource&& params,
+                           ui64 inputIndex,
                            const THashMap<TString, TString>& /*secureParams*/,
-                           const THashMap<TString, TString>& /*taskParams*/, const NActors::TActorId& computeActorId,
+                           const THashMap<TString, TString>& /*taskParams*/,
+                           const NActors::TActorId& computeActorId,
                            ISecuredServiceAccountCredentialsFactory::TPtr /*credentialsFactory*/,
                            const NKikimr::NMiniKQL::THolderFactory& holderFactory)
     {

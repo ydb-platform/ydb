@@ -5,7 +5,7 @@
 
 namespace NYql::NConnector {
 
-    std::shared_ptr<arrow::RecordBatch> APIReadSplitsResponseToArrowRecordBatch(const NApi::TReadSplitsResponse& resp);
+    std::shared_ptr<arrow::RecordBatch> ReadSplitsResponseToArrowRecordBatch(const NApi::TReadSplitsResponse& resp);
     Ydb::Type GetColumnTypeByName(const NApi::TSchema& schema, const TString& name);
 
 }

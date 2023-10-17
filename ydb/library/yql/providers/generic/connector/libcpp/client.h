@@ -1,76 +1,102 @@
 #pragma once
 
-#include <arrow/api.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <library/cpp/threading/future/core/future.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 
 namespace NYql::NConnector {
-    struct TDescribeTableResult {
-        NApi::TSchema Schema;
-        NApi::TError Error;
-
-        using TPtr = std::shared_ptr<TDescribeTableResult>;
+    template <typename TResponse>
+    struct TResult {
+        NGrpc::TGrpcStatus Status;
+        std::optional<TResponse> Response;
     };
 
-    struct TListSplitsResult {
-        std::vector<NApi::TSplit> Splits;
-        NApi::TError Error;
+    template <class TResponse>
+    using TAsyncResult = NThreading::TFuture<TResult<TResponse>>;
 
-        using TPtr = std::shared_ptr<TListSplitsResult>;
+    using TDescribeTableAsyncResult = TAsyncResult<NApi::TDescribeTableResponse>;
+    // using TListSplitsAsyncResult = TAsyncResult<NApi::TListSplitsResponse>;
+    // using TReadSplitsAsyncResult = TAsyncResult<NApi::TReadSplitsResponse>;
+
+    template <class TResponse>
+    class TStreamer {
+    public:
+        using TSelf = TStreamer;
+
+        using TStreamProcessorPtr = typename NGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
+
+        TStreamer(TStreamProcessorPtr streamProcessor)
+            : StreamProcessor_(streamProcessor)
+            , Finished_(false)
+                  {};
+
+        TAsyncResult<TResponse> ReadNext(std::shared_ptr<TSelf> self) {
+            auto promise = NThreading::NewPromise<TResult<TResponse>>();
+            auto readCallback = [self = std::move(self), promise](NGrpc::TGrpcStatus&& status) mutable {
+                if (!status.Ok()) {
+                    promise.SetValue({std::move(status), std::nullopt});
+                    self->Finished_ = true;
+                } else {
+                    promise.SetValue({std::move(status), std::move(self->Response_)});
+                }
+            };
+
+            StreamProcessor_->Read(&Response_, readCallback);
+            return promise.GetFuture();
+        }
+
+        ~TStreamer() {
+            StreamProcessor_->Cancel();
+        }
+
+        bool IsFinished() const {
+            return Finished_;
+        }
+
+    private:
+        TStreamProcessorPtr StreamProcessor_;
+        TResponse Response_;
+        bool Finished_;
     };
 
-    struct TReadSplitsResult {
-        std::vector<std::shared_ptr<arrow::RecordBatch>> RecordBatches;
-        NApi::TError Error;
+    template <class TResponse>
+    class IStreamIterator {
+    public:
+        using TPtr = std::shared_ptr<IStreamIterator<TResponse>>;
+        using TResult = TAsyncResult<TResponse>;
 
-        using TPtr = std::shared_ptr<TReadSplitsResult>;
+        virtual TAsyncResult<TResponse> ReadNext() = 0;
+
+        virtual ~IStreamIterator(){};
     };
 
-    // IClient is an abstraction that hides some parts of GRPC interface.
-    // For now we completely ignore the streaming nature of the Connector and buffer all the results.
+    using IListSplitsStreamIterator = IStreamIterator<NApi::TListSplitsResponse>;
+    using IReadSplitsStreamIterator = IStreamIterator<NApi::TReadSplitsResponse>;
+
+    template <class TIterator>
+    struct TIteratorResult {
+        NGrpc::TGrpcStatus Status;
+        typename TIterator::TPtr Iterator;
+    };
+
+    template <class TIterator>
+    using TIteratorAsyncResult = NThreading::TFuture<TIteratorResult<TIterator>>;
+
+    using TListSplitsStreamIteratorAsyncResult = TIteratorAsyncResult<IListSplitsStreamIterator>;
+    using TReadSplitsStreamIteratorAsyncResult = TIteratorAsyncResult<IReadSplitsStreamIterator>;
+
     class IClient {
     public:
         using TPtr = std::shared_ptr<IClient>;
 
-        virtual TDescribeTableResult::TPtr DescribeTable(const NApi::TDescribeTableRequest& request) = 0;
-        virtual TListSplitsResult::TPtr ListSplits(const NApi::TListSplitsRequest& request) = 0;
-        virtual TReadSplitsResult::TPtr ReadSplits(const NApi::TReadSplitsRequest& request) = 0;
+        virtual TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request) = 0;
+        virtual TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request) = 0;
+        virtual TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request) = 0;
         virtual ~IClient() {
         }
     };
 
-    // ClientGRPC - client interacting with Connector server via network
-    class TClientGRPC: public IClient {
-    public:
-        TClientGRPC() = delete;
-        TClientGRPC(const TGenericConnectorConfig& config);
-        virtual TDescribeTableResult::TPtr DescribeTable(const NApi::TDescribeTableRequest& request) override;
-        virtual TListSplitsResult::TPtr ListSplits(const NApi::TListSplitsRequest& request) override;
-        virtual TReadSplitsResult::TPtr ReadSplits(const NApi::TReadSplitsRequest& request) override;
-        ~TClientGRPC() {
-        }
-
-    private:
-        std::unique_ptr<NApi::Connector::Stub> Stub_;
-    };
-
-    IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& config);
-
-    // ClientMock is a stub client that returns predefined data.
-    class TClientMock: public IClient {
-    public:
-        virtual TDescribeTableResult::TPtr DescribeTable(const NApi::TDescribeTableRequest& request) override;
-        virtual TListSplitsResult::TPtr ListSplits(const NApi::TListSplitsRequest& request) override;
-        virtual TReadSplitsResult::TPtr ReadSplits(const NApi::TReadSplitsRequest& request) override;
-        ~TClientMock() {
-        }
-
-    private:
-        arrow::Status PrepareRecordBatch(std::shared_ptr<arrow::RecordBatch>& table);
-    };
-
-    IClient::TPtr MakeClientMock();
-
-} // namespace NYql::NConnector
+    IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& cfg);
+}

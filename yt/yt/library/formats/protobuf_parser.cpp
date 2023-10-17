@@ -634,7 +634,7 @@ private:
                         GetPathString())
                         << TErrorAttribute("table_index", TableIndex_);
                 case EProtobufType::EmbeddedMessage:
-                    Y_FAIL();
+                    Y_ABORT();
             }
             YT_ABORT();
         }();

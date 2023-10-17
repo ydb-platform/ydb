@@ -42,7 +42,7 @@ const TString& TCommandRawJob::GetCommand() const
 
 void TCommandRawJob::Do(const TRawJobContext& /* jobContext */)
 {
-    Y_FAIL("TCommandRawJob::Do must not be called");
+    Y_ABORT("TCommandRawJob::Do must not be called");
 }
 
 REGISTER_NAMED_RAW_JOB("NYT::TCommandRawJob", TCommandRawJob)
@@ -60,7 +60,7 @@ const TString& TCommandVanillaJob::GetCommand() const
 
 void TCommandVanillaJob::Do()
 {
-    Y_FAIL("TCommandVanillaJob::Do must not be called");
+    Y_ABORT("TCommandVanillaJob::Do must not be called");
 }
 
 REGISTER_NAMED_VANILLA_JOB("NYT::TCommandVanillaJob", TCommandVanillaJob);

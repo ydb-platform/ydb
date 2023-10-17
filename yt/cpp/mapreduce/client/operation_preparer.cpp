@@ -720,7 +720,7 @@ TString TJobPreparer::UploadToCache(const IItemToUpload& itemToUpload) const
             result = UploadToRandomPath(itemToUpload);
             break;
         default:
-            Y_FAIL("Unknown file cache mode: %d", static_cast<int>(Options_.FileCacheMode_));
+            Y_ABORT("Unknown file cache mode: %d", static_cast<int>(Options_.FileCacheMode_));
     }
 
     YT_LOG_INFO("Complete uploading file (FileName: %v; PreparationId: %v)",
@@ -805,7 +805,7 @@ void TJobPreparer::UploadBinary(const TJobBinaryConfig& jobBinary)
         }
         UseFileInCypress(ytPath.FileName("cppbinary").Executable(true));
     } else {
-        Y_FAIL("%s", (::TStringBuilder() << "Unexpected jobBinary tag: " << jobBinary.index()).data());
+        Y_ABORT("%s", (::TStringBuilder() << "Unexpected jobBinary tag: " << jobBinary.index()).data());
     }
 }
 

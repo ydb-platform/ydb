@@ -98,7 +98,7 @@ TFieldOption FieldFlagToOption(EWrapperFieldFlag::Enum flag)
         case EFlag::ENUM_CHECK_VALUES:
             return EProtobufEnumWritingMode::CheckValues;
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TMessageOption MessageFlagToOption(EWrapperMessageFlag::Enum flag)
@@ -110,7 +110,7 @@ TMessageOption MessageFlagToOption(EWrapperMessageFlag::Enum flag)
         case EFlag::SORT_FIELDS_BY_FIELD_NUMBER:
             return EProtobufFieldSortOrder::ByFieldNumber;
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TOneofOption OneofFlagToOption(EWrapperOneofFlag::Enum flag)
@@ -122,7 +122,7 @@ TOneofOption OneofFlagToOption(EWrapperOneofFlag::Enum flag)
         case EFlag::VARIANT:
             return EProtobufOneofMode::Variant;
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
@@ -142,7 +142,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
                 case EProtobufType::EnumString:
                     return EFlag::ENUM_STRING;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
         EFlag::Enum operator() (EProtobufSerializationMode serializationMode)
         {
@@ -154,7 +154,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
                 case EProtobufSerializationMode::Embedded:
                     return EFlag::EMBEDDED;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
         EFlag::Enum operator() (EProtobufListMode listMode)
         {
@@ -164,7 +164,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
                 case EProtobufListMode::Required:
                     return EFlag::REQUIRED_LIST;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
         EFlag::Enum operator() (EProtobufMapMode mapMode)
         {
@@ -178,7 +178,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
                 case EProtobufMapMode::OptionalDict:
                     return EFlag::MAP_AS_OPTIONAL_DICT;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
         EFlag::Enum operator() (EProtobufEnumWritingMode enumWritingMode)
         {
@@ -188,7 +188,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
                 case EProtobufEnumWritingMode::CheckValues:
                     return EFlag::ENUM_CHECK_VALUES;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
     };
 
@@ -208,7 +208,7 @@ EWrapperMessageFlag::Enum OptionToMessageFlag(TMessageOption option)
                 case EProtobufFieldSortOrder::ByFieldNumber:
                     return EFlag::SORT_FIELDS_BY_FIELD_NUMBER;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
     };
 
@@ -228,7 +228,7 @@ EWrapperOneofFlag::Enum OptionToOneofFlag(TOneofOption option)
                 case EProtobufOneofMode::Variant:
                     return EFlag::VARIANT;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
     };
 
@@ -410,12 +410,12 @@ TProtobufOneofOptions GetDefaultOneofOptions(const Descriptor* descriptor)
                 case EProtobufSerializationMode::Embedded:
                     return defaultOneofOptions;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
         case EProtobufOneofMode::SeparateFields:
             return defaultOneofOptions;
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -444,7 +444,7 @@ void ValidateProtobufType(const FieldDescriptor& fieldDescriptor, EProtobufType 
             ensureType(FieldDescriptor::TYPE_ENUM);
             return;
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -588,11 +588,11 @@ TString DeduceProtobufType(
                 case EProtobufSerializationMode::Embedded:
                     return "embedded_message";
             }
-            Y_FAIL();
+            Y_ABORT();
         default:
             return fieldDescriptor->type_name();
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TString GetColumnName(const ::google::protobuf::FieldDescriptor& field)
@@ -648,7 +648,7 @@ TNode MakeMapFieldsConfig(
                 cycleChecker);
         }
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TNode MakeProtoFormatFieldConfig(
@@ -736,7 +736,7 @@ void MakeProtoFormatOneofConfig(
             return;
         }
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TNode MakeProtoFormatMessageFieldsConfig(
@@ -1029,7 +1029,7 @@ TValueTypeOrOtherColumns GetScalarFieldType(
             case EProtobufType::OtherColumns:
                 return TOtherColumns{};
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     switch (fieldDescriptor.cpp_type()) {
@@ -1074,7 +1074,7 @@ void SortFields(TVector<const FieldDescriptor*>& fieldDescriptors, EProtobufFiel
             });
             return;
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 NTi::TTypePtr CreateStruct(TStringBuf fieldName, TVector<TMember> members)
@@ -1217,7 +1217,7 @@ void TTableSchemaInferrer::ProcessOneofField(
             return;
         }
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TVector<TMember> TTableSchemaInferrer::GetMessageMembers(
@@ -1335,7 +1335,7 @@ NTi::TTypePtr TTableSchemaInferrer::GetMapType(
                 case EProtobufListMode::Optional:
                     return NTi::Optional(std::move(list));
             }
-            Y_FAIL();
+            Y_ABORT();
         }
         case EProtobufMapMode::Dict:
         case EProtobufMapMode::OptionalDict: {
@@ -1396,7 +1396,7 @@ TTypePtrOrOtherColumns TTableSchemaInferrer::GetFieldType(
                     case EProtobufListMode::Optional:
                         return NTi::TTypePtr(NTi::Optional(NTi::List(*type)));
                 }
-                Y_FAIL();
+                Y_ABORT();
             }
             case FieldDescriptor::Label::LABEL_OPTIONAL:
                 return std::visit(TOverloaded{
@@ -1413,7 +1413,7 @@ TTypePtrOrOtherColumns TTableSchemaInferrer::GetFieldType(
                 return *type;
             }
         }
-        Y_FAIL();
+        Y_ABORT();
     };
 
     switch (fieldOptions.SerializationMode) {
@@ -1433,7 +1433,7 @@ TTypePtrOrOtherColumns TTableSchemaInferrer::GetFieldType(
             ythrow yexception() << "EMBEDDED field is not allowed for field "
                 << fieldDescriptor.full_name();
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TTableSchema TTableSchemaInferrer::InferSchema(const Descriptor& messageDescriptor)

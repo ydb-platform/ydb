@@ -263,7 +263,7 @@ TStructuredRowStreamDescription GetJobStreamDescription(
         case EIODirection::Output:
             return job.GetOutputRowStreamDescription();
         default:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
     }
 }
 
@@ -275,7 +275,7 @@ TString GetSuffix(EIODirection direction)
         case EIODirection::Output:
             return "_output";
     }
-    Y_FAIL("unreachable");
+    Y_ABORT("unreachable");
 }
 
 TString GetAddIOMethodName(EIODirection direction)
@@ -286,7 +286,7 @@ TString GetAddIOMethodName(EIODirection direction)
         case EIODirection::Output:
             return "AddOutput<>";
     }
-    Y_FAIL("unreachable");
+    Y_ABORT("unreachable");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

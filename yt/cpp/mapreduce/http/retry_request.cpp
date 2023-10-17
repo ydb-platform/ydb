@@ -140,7 +140,7 @@ TResponseInfo RetryRequestWithPolicy(
         }
     }
 
-    Y_FAIL("Retries must have either succeeded or thrown an exception");
+    Y_ABORT("Retries must have either succeeded or thrown an exception");
 }
 
 ///////////////////////////////////////////////////////////////////////////////

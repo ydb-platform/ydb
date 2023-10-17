@@ -282,7 +282,7 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
                 case ENodeReaderFormat::Auto:
                     return nullptr;
                 default:
-                    Y_FAIL("Unexpected node reader format: %d", static_cast<int>(nodeReaderFormat));
+                    Y_ABORT("Unexpected node reader format: %d", static_cast<int>(nodeReaderFormat));
             }
         }
     }
@@ -325,7 +325,7 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
                 }
                 break;
             default:
-                Y_FAIL("Unexpected node reader format: %d", static_cast<int>(nodeReaderFormat));
+                Y_ABORT("Unexpected node reader format: %d", static_cast<int>(nodeReaderFormat));
         }
 
         NSkiff::TSkiffSchemaPtr curSkiffSchema;

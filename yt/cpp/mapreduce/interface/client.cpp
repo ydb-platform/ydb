@@ -11,7 +11,7 @@ void ILock::Wait(TDuration timeout)
 
 void ITransaction::Detach()
 {
-    Y_FAIL("ITransaction::Detach() is not implemented");
+    Y_ABORT("ITransaction::Detach() is not implemented");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

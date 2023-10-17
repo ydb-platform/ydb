@@ -116,7 +116,7 @@ void ReadMessageFromNode(const TNode& node, Message* row)
                     valueDesc = fieldDesc->enum_type()->FindValueByNumber(value);
                     stringValue = ToString(value);
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
 
                 if (valueDesc == nullptr) {

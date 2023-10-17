@@ -541,7 +541,7 @@ static EProtobufType SpecialToProtobufType(ESpecialProtobufType specialType)
         case ESpecialProtobufType::OtherColumns:
             return EProtobufType::OtherColumns;
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 class TCycleChecker
@@ -634,7 +634,7 @@ private:
                     descriptor,
                     TProtobufFieldOptions{.SerializationMode = EProtobufSerializationMode::Yt});
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     TProtobufTypeConfigPtr CreateFieldTypeConfig(
@@ -747,7 +747,7 @@ private:
                 return {field};
             }
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     // NB: This function does not caches the created config!

@@ -1429,7 +1429,7 @@ bool IsComparable(const TLogicalTypePtr& type)
                 case ESimpleLogicalValueType::Json:
                     return false;
             }
-            Y_FAIL();
+            Y_ABORT();
         case ELogicalMetatype::Decimal:
             return true;
         case ELogicalMetatype::Optional:

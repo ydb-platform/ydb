@@ -563,7 +563,7 @@ int RunRawJob(size_t outputTableCount, IInputStream& jobStateStream)
 template <>
 inline int RunRawJob<TCommandRawJob>(size_t /* outputTableCount */, IInputStream& /* jobStateStream */)
 {
-    Y_FAIL();
+    Y_ABORT();
 }
 
 template <class TVanillaJob>
@@ -599,7 +599,7 @@ int RunVanillaJob(size_t outputTableCount, IInputStream& jobStateStream)
 template <>
 inline int RunVanillaJob<TCommandVanillaJob>(size_t /* outputTableCount */, IInputStream& /* jobStateStream */)
 {
-    Y_FAIL();
+    Y_ABORT();
 }
 
 template <class TJob>

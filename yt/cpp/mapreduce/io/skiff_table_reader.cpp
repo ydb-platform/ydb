@@ -244,7 +244,7 @@ void TSkiffTableReader::ReadRow()
             case NSkiff::EWireType::Nothing:
                 return TNode::CreateEntity();
             default:
-                Y_FAIL("Bad column wire type: '%s'", ::ToString(wireType).data());
+                Y_ABORT("Bad column wire type: '%s'", ::ToString(wireType).data());
         }
     };
 
@@ -278,7 +278,7 @@ void TSkiffTableReader::ReadRow()
                 RowIndex_ = value.AsInt64();
                 break;
             default:
-                Y_FAIL("Bad column type: %d", static_cast<int>(columnSchema.Type));
+                Y_ABORT("Bad column type: %d", static_cast<int>(columnSchema.Type));
         }
     }
 

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.15.1)
+VERSION(1.16.0)
 
 LICENSE(MIT)
 
@@ -30,6 +30,8 @@ PY_REGISTER(
 PY_SRCS(
     TOP_LEVEL
     cffi/__init__.py
+    cffi/_imp_emulation.py
+    cffi/_shimmed_dist_utils.py
     cffi/api.py
     cffi/backend_ctypes.py
     cffi/cffi_opcode.py

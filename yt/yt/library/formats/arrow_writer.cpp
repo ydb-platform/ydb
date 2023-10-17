@@ -672,7 +672,7 @@ private:
     {
         Messages_.clear();
         TypedColumns_.clear();
-        NumberOfRows_ = 0;
+        RowCount_ = 0;
     }
 
     void DoWrite(TRange<TUnversionedRow> rows) override
@@ -686,7 +686,7 @@ private:
         for (ssize_t columnIndex = 0; columnIndex < std::ssize(convertedColumns); columnIndex++) {
             rootColumns.push_back(convertedColumns[columnIndex].RootColumn);
         }
-        NumberOfRows_ = rows.size();
+        RowCount_ = rows.size();
         PrepareColumns(rootColumns);
         Encode();
     }
@@ -700,7 +700,7 @@ private:
         } else {
             YT_LOG_DEBUG("Encoding columnar batch (RowCount: %v)", rowBatch->GetRowCount());
             Reset();
-            NumberOfRows_ = rowBatch->GetRowCount();
+            RowCount_ = rowBatch->GetRowCount();
             PrepareColumns(columnarBatch->MaterializeColumns());
             Encode();
         }
@@ -726,7 +726,7 @@ private:
 
 private:
     bool IsFirstBatch_ = true;
-    size_t NumberOfRows_ = 0;
+    i64 RowCount_ = 0;
     std::vector<TTypedBatchColumn> TypedColumns_;
     std::vector<TColumnSchema> ColumnSchemas_;
     std::vector<IUnversionedColumnarRowBatch::TDictionaryId> ArrowDictionaryIds_;
@@ -763,7 +763,7 @@ private:
                 SchemaExistenceFlags_[columnIndex] = false;
                 return TColumnSchema(TString(name), EValueType::Null);
             }
-            THROW_ERROR_EXCEPTION("Column %v has no schema", name);
+            THROW_ERROR_EXCEPTION("Column %Qv has no schema", name);
         }
         return *columnSchema;
     }
@@ -775,8 +775,9 @@ private:
             if (SchemaExistenceFlags_[column->Id]) {
                 YT_VERIFY(column->Id >= 0 && column->Id < std::ssize(ColumnSchemas_));
                 TypedColumns_.push_back(TTypedBatchColumn{
-                        column,
-                        ColumnSchemas_[column->Id].LogicalType()});
+                    column,
+                    ColumnSchemas_[column->Id].LogicalType()
+                });
             }
         }
     }
@@ -979,7 +980,7 @@ private:
 
         auto [recordBatchOffset, bodySize, bodyWriter] = SerializeRecordBatch(
             &flatbufBuilder,
-            NumberOfRows_,
+            RowCount_,
             TypedColumns_);
 
         auto messageOffset = org::apache::arrow::flatbuf::CreateMessage(

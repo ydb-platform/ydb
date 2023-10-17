@@ -192,6 +192,7 @@ namespace NYql::NDqs {
 
         SET_VALUE(MessagePendingSize);
         SET_VALUE(MaxSerializedEventSize);
+        SET_VALUE(EnableExternalDataChannel);
 
 #undef SET_DURATION
 #undef SET_VALUE

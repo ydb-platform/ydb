@@ -18,6 +18,8 @@ target_link_libraries(ydb-core-fq-libs-db_id_async_resolver_impl-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   fq-libs-db_id_async_resolver_impl
+  udf-service-exception_policy
+  yql-sql-pg_dummy
 )
 target_link_options(ydb-core-fq-libs-db_id_async_resolver_impl-ut PRIVATE
   -ldl

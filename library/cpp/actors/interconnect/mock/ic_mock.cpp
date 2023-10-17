@@ -89,7 +89,7 @@ namespace NActors {
                 } else if (nodeId == ui32(Key >> 32)) {
                     return PeerInfo + 1;
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
             }
         };
@@ -236,7 +236,7 @@ namespace NActors {
                                 break;
 
                             default:
-                                Y_FAIL();
+                                Y_ABORT();
                         }
                     }
                 }

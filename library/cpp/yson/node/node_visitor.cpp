@@ -83,7 +83,7 @@ void TNodeVisitor::VisitAny(const TNode& node)
         case TNode::Undefined:
             ythrow TNode::TTypeError() << "unable to visit TNode of type " << node.GetType();
         default:
-            Y_FAIL("Unexpected type: %d", node.GetType());
+            Y_ABORT("Unexpected type: %d", node.GetType());
     }
 }
 

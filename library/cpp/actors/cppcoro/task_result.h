@@ -67,7 +67,7 @@ namespace NActors {
         typename NDetail::TLValue<T>::TType Value() & {
             switch (Result.index()) {
                 case 0: {
-                    Y_FAIL("Task result has no value");
+                    Y_ABORT("Task result has no value");
                 }
                 case 1: {
                     if constexpr (std::same_as<T, void>) {
@@ -82,13 +82,13 @@ namespace NActors {
                     std::rethrow_exception(e);
                 }
             }
-            Y_FAIL("Task result has an invalid state");
+            Y_ABORT("Task result has an invalid state");
         }
 
         typename NDetail::TRValue<T>::TType Value() && {
             switch (Result.index()) {
                 case 0: {
-                    Y_FAIL("Task result has no value");
+                    Y_ABORT("Task result has no value");
                 }
                 case 1: {
                     if constexpr (std::same_as<T, void>) {
@@ -103,7 +103,7 @@ namespace NActors {
                     std::rethrow_exception(std::move(e));
                 }
             }
-            Y_FAIL("Task result has an invalid state");
+            Y_ABORT("Task result has an invalid state");
         }
 
     private:

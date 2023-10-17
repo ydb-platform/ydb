@@ -143,7 +143,7 @@ namespace NBus {
         }
 
         void TRemoteConnection::TryConnect() {
-            Y_FAIL("TryConnect is client connection only operation");
+            Y_ABORT("TryConnect is client connection only operation");
         }
 
         void TRemoteConnection::ScheduleRead() {

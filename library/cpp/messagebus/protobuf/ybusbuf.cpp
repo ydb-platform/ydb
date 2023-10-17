@@ -47,7 +47,7 @@ void TBusBufferProtocol::Serialize(const TBusMessage* mess, TBuffer& data) {
     const TBusHeader* header = mess->GetHeader();
 
     if (!IsRegisteredType(header->Type)) {
-        Y_FAIL("unknown message type: %d", int(header->Type));
+        Y_ABORT("unknown message type: %d", int(header->Type));
         return;
     }
 
@@ -69,7 +69,7 @@ TAutoPtr<TBusMessage> TBusBufferProtocol::Deserialize(ui16 messageType, TArrayRe
     TBusBufferBase* messageTemplate = FindType(messageType);
     if (messageTemplate == nullptr) {
         return nullptr;
-        //Y_FAIL("unknown message type: %d", unsigned(messageType));
+        //Y_ABORT("unknown message type: %d", unsigned(messageType));
     }
 
     // clone the base

@@ -83,7 +83,7 @@ void TExampleProtocol::Serialize(const TBusMessage* message, TBuffer& buffer) {
     } else if (const TExampleResponse* exampleReply = dynamic_cast<const TExampleResponse*>(message)) {
         buffer.Append(exampleReply->Data.data(), exampleReply->Data.size());
     } else {
-        Y_FAIL("unknown message type");
+        Y_ABORT("unknown message type");
     }
 }
 
@@ -204,7 +204,7 @@ void TExampleClient::OnReply(TAutoPtr<TBusMessage> mess, TAutoPtr<TBusMessage> r
 
 void TExampleClient::OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) {
     if (CrashOnError) {
-        Y_FAIL("client failed: %s", ToCString(status));
+        Y_ABORT("client failed: %s", ToCString(status));
     }
 
     Y_UNUSED(mess);

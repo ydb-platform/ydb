@@ -86,7 +86,7 @@ namespace NMonitoring {
                 return TStringBuf();
         }
 
-        Y_FAIL(); // for GCC
+        Y_ABORT(); // for GCC
     }
 
     ECompression CompressionFromAcceptEncodingHeader(TStringBuf value) {
@@ -111,7 +111,7 @@ namespace NMonitoring {
                 return TStringBuf();
         }
 
-        Y_FAIL(); // for GCC
+        Y_ABORT(); // for GCC
     }
 
 }
@@ -165,7 +165,7 @@ void Out<NMonitoring::EFormat>(IOutputStream& o, NMonitoring::EFormat f) {
             return;
     }
 
-    Y_FAIL(); // for GCC
+    Y_ABORT(); // for GCC
 }
 
 template <>
@@ -207,5 +207,5 @@ void Out<NMonitoring::ECompression>(IOutputStream& o, NMonitoring::ECompression 
             return;
     }
 
-    Y_FAIL(); // for GCC
+    Y_ABORT(); // for GCC
 }

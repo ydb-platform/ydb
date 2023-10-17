@@ -120,7 +120,7 @@ namespace NInterconnect {
             do {
                 auto sock = InputQueue.Top().first->GetDescriptor();
                 if (!Operations.emplace(sock, std::move(InputQueue.Top())).second)
-                    Y_FAIL("Descriptor is already in pooler.");
+                    Y_ABORT("Descriptor is already in pooler.");
             } while (InputQueue.Pop());
     }
 }

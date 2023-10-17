@@ -35,7 +35,7 @@ struct IValidatorNode
 
     virtual void OnChildDone(TValidatorNodeStack* /*validatorNodeStack*/)
     {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     virtual void OnSimpleType(TValidatorNodeStack* /*validatorNodeStack*/, EWireType wireType)
@@ -388,7 +388,7 @@ std::shared_ptr<IValidatorNode> CreateUsageValidatorNode(const std::shared_ptr<T
         case EWireType::RepeatedVariant16:
             return std::make_shared<TRepeatedVariant16TypeUsageValidator>(CreateUsageValidatorNodeList(skiffSchema->GetChildren()));
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -177,7 +177,7 @@ namespace NActors {
 
             struct TFinalSuspend {
                 static bool await_ready() noexcept { return false; }
-                static void await_resume() noexcept { Y_FAIL("unexpected coroutine resume"); }
+                static void await_resume() noexcept { Y_ABORT("unexpected coroutine resume"); }
 
                 Y_NO_INLINE
                 static std::coroutine_handle<> await_suspend(std::coroutine_handle<TTaskGroupPromise<T>> h) noexcept {

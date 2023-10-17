@@ -296,7 +296,7 @@ namespace NActors {
             } catch (const TExPoison&) {
                 // just stop execution, do nothing
             } catch (...) {
-                Y_FAIL("unhandled exception");
+                Y_ABORT("unhandled exception");
             }
             if (SubscribedForConnection) {
                 SendToProxy(MakeHolder<TEvSubscribeForConnection>(*HandshakeId, false));
@@ -439,7 +439,7 @@ namespace NActors {
                    throw TExPoison();
 
                 default:
-                    Y_FAIL("unexpected event 0x%08" PRIx32, type);
+                    Y_ABORT("unexpected event 0x%08" PRIx32, type);
             }
         }
 
@@ -1097,7 +1097,7 @@ namespace NActors {
                     SendExBlock(MainChannel, ev->Record, "ExReply");
                     ProgramInfo.Clear(); // do not issue reply to the proxy
                 } else {
-                    Y_FAIL("unexpected event Type# 0x%08" PRIx32, reply->GetTypeRewrite());
+                    Y_ABORT("unexpected event Type# 0x%08" PRIx32, reply->GetTypeRewrite());
                 }
             }
         }

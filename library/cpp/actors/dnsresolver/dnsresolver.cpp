@@ -91,7 +91,7 @@ namespace NDnsResolver {
                 if (WSAGetLastError() == WSAEWOULDBLOCK) {
                     break;
                 }
-                Y_FAIL("Unexpected recv error");
+                Y_ABORT("Unexpected recv error");
 #else
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     break;
@@ -320,7 +320,7 @@ namespace NDnsResolver {
                                     break;
                                 }
                                 default:
-                                    Y_FAIL("unknown address family in ares callback");
+                                    Y_ABORT("unknown address family in ares callback");
                             }
                         }
                     } else {
@@ -349,7 +349,7 @@ namespace NDnsResolver {
                                 break;
                             }
                             default:
-                                Y_FAIL("unknown address family in ares callback");
+                                Y_ABORT("unknown address family in ares callback");
                         }
                     } else {
                         result->ErrorText = ares_strerror(status);

@@ -14,7 +14,7 @@ inline TStringBuf operator +(TStringBuf l, TStringBuf r) {
     if (r.end() == l.begin()) {
         return TStringBuf(r.data(), l.size() + r.size());
     }
-    Y_FAIL("oops");
+    Y_ABORT("oops");
     return TStringBuf();
 }
 
@@ -203,7 +203,7 @@ void THttpParser<THttpRequest, TSocketBuffer>::Advance(size_t len) {
                 break;
             }
             default:
-                Y_FAIL("Invalid processing sequence");
+                Y_ABORT("Invalid processing sequence");
                 break;
         }
     }
@@ -590,10 +590,10 @@ THttpOutgoingRequest::THttpOutgoingRequest(TStringBuf method, TStringBuf scheme,
 THttpOutgoingRequest::THttpOutgoingRequest(TStringBuf method, TStringBuf url, TStringBuf protocol, TStringBuf version) {
     TStringBuf scheme, host, uri;
     if (!CrackURL(url, scheme, host, uri)) {
-        Y_FAIL("Invalid URL specified");
+        Y_ABORT("Invalid URL specified");
     }
     if (!scheme.empty() && scheme != "http" && scheme != "https") {
-        Y_FAIL("Invalid URL specified");
+        Y_ABORT("Invalid URL specified");
     }
     Secure = (scheme == "https");
     TString urie = UrlEscapeRet(uri);

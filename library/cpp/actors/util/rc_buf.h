@@ -679,7 +679,7 @@ class TRcBuf {
                 case EType::INTERNAL_BACKEND:                return wrapper(reinterpret_cast<std::conditional_t<IsConst, const TInternalBackend&, TInternalBackend&>>(value));
                 case EType::EXTERNAL_BACKEND:                return wrapper(reinterpret_cast<std::conditional_t<IsConst, const IContiguousChunk::TPtr&, IContiguousChunk::TPtr&>>(value));
             }
-            Y_FAIL("Unexpected type# %" PRIu64, static_cast<ui64>(type));
+            Y_ABORT("Unexpected type# %" PRIu64, static_cast<ui64>(type));
         }
 
         template<typename TOwner, typename TCallback, bool IsConst = std::is_const_v<TOwner>>
@@ -1039,7 +1039,7 @@ public:
             return EResizeResult::NoAlloc;
         } else {
             if (strategy == EResizeStrategy::FailOnCopy && static_cast<bool>(Backend)) {
-                Y_FAIL("Fail on grow");
+                Y_ABORT("Fail on grow");
             }
             auto newData = TRcBuf::Uninitialized(size + GetSize(), UnsafeHeadroom() > size ? UnsafeHeadroom() - size : 0, UnsafeTailroom());
             if (auto data = GetData(); data) {
@@ -1056,7 +1056,7 @@ public:
             return EResizeResult::NoAlloc;
         } else {
             if (strategy == EResizeStrategy::FailOnCopy && static_cast<bool>(Backend)) {
-                Y_FAIL("Fail on grow");
+                Y_ABORT("Fail on grow");
             }
             auto newData = TRcBuf::Uninitialized(size + GetSize(), UnsafeHeadroom(), UnsafeTailroom() > size ? UnsafeTailroom() - size : 0);
             if (auto data = GetData(); data) {

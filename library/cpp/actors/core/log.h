@@ -524,7 +524,7 @@ namespace NActors {
 
         ~TVerifyFormattedRecordWriter() {
             const TString data = TBase::GetResult();
-            Y_FAIL("%s", data.data());
+            Y_ABORT("%s", data.data());
         }
     };
 }

@@ -194,7 +194,7 @@ namespace NTi {
         if (Y_LIKELY(IsRc(factoryOrRc))) {
             size_t rc = FactoryOrRc_.fetch_sub(2, std::memory_order_acq_rel);
             if (rc == 2) {
-                Y_FAIL("DecRef isn't supposed to drop");
+                Y_ABORT("DecRef isn't supposed to drop");
             }
         } else if (Y_LIKELY(IsFactory(factoryOrRc))) {
             auto factory = CastToFactory(factoryOrRc);

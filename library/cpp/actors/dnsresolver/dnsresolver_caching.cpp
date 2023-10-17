@@ -58,7 +58,7 @@ namespace NDnsResolver {
                     case AF_UNSPEC:
                         return OutgoingInFlightUnspec;
                     default:
-                        Y_FAIL("Unexpected family %d", family);
+                        Y_ABORT("Unexpected family %d", family);
                 }
             }
 
@@ -71,7 +71,7 @@ namespace NDnsResolver {
                     case AF_UNSPEC:
                         return OutgoingErrorsUnspec;
                     default:
-                        Y_FAIL("Unexpected family %d", family);
+                        Y_ABORT("Unexpected family %d", family);
                 }
             }
 
@@ -84,7 +84,7 @@ namespace NDnsResolver {
                     case AF_UNSPEC:
                         return OutgoingTotalUnspec;
                     default:
-                        Y_FAIL("Unexpected family %d", family);
+                        Y_ABORT("Unexpected family %d", family);
                 }
             }
         };
@@ -153,7 +153,7 @@ namespace NDnsResolver {
                     break;
 
                 default:
-                    Y_FAIL("Unexpected request family %d", waitingInfo.Family);
+                    Y_ABORT("Unexpected request family %d", waitingInfo.Family);
             }
         }
 
@@ -173,14 +173,14 @@ namespace NDnsResolver {
                             break;
 
                         default:
-                            Y_FAIL("Unexpected request family %d", waitingInfo.Family);
+                            Y_ABORT("Unexpected request family %d", waitingInfo.Family);
                     }
 
                     break;
                 }
 
                 default:
-                    Y_FAIL("Unexpected TEvUndelievered, type=%" PRIu32, ev->Get()->SourceType);
+                    Y_ABORT("Unexpected TEvUndelievered, type=%" PRIu32, ev->Get()->SourceType);
             }
         }
 
@@ -329,7 +329,7 @@ namespace NDnsResolver {
                     case AF_INET:
                         return StateIPv4;
                     default:
-                        Y_FAIL("Unsupported family %d", family);
+                        Y_ABORT("Unsupported family %d", family);
                 }
             }
 
@@ -342,7 +342,7 @@ namespace NDnsResolver {
                     case AF_INET:
                         return StateIPv4;
                     default:
-                        Y_FAIL("Unsupported family %d", family);
+                        Y_ABORT("Unsupported family %d", family);
                 }
             }
         };
@@ -456,7 +456,7 @@ namespace NDnsResolver {
                     PushSoftV4(it, newDeadline);
                     break;
                 default:
-                    Y_FAIL("Unexpected family %d", family);
+                    Y_ABORT("Unexpected family %d", family);
             }
         }
 
@@ -472,7 +472,7 @@ namespace NDnsResolver {
                     PushHardV4(it, newDeadline);
                     break;
                 default:
-                    Y_FAIL("Unexpected family %d", family);
+                    Y_ABORT("Unexpected family %d", family);
             }
         }
 
@@ -638,7 +638,7 @@ namespace NDnsResolver {
                     } else if (!addrs4.empty()) {
                         reply->Addr = addrs4.front();
                     } else {
-                        Y_FAIL("Unexpected reply with empty address list");
+                        Y_ABORT("Unexpected reply with empty address list");
                     }
                     Send(req->Sender, reply.Release(), 0, req->Cookie);
                     break;

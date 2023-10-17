@@ -70,7 +70,7 @@ public:
     }
 
     virtual bool SerializeToArcadiaStream(TChunkSerializer* /*serializer*/) const override {
-        Y_FAIL("Serialization of local event %s->%s", typeid(TEvent).name(), typeid(TActor).name());
+        Y_ABORT("Serialization of local event %s->%s", typeid(TEvent).name(), typeid(TActor).name());
     }
 
     virtual bool IsSerializable() const override {
@@ -78,7 +78,7 @@ public:
     }
 
     static IEventBase* Load(TEventSerializedData*) {
-        Y_FAIL("Loading of local event %s->%s", typeid(TEvent).name(), typeid(TActor).name());
+        Y_ABORT("Loading of local event %s->%s", typeid(TEvent).name(), typeid(TActor).name());
     }
 };
 

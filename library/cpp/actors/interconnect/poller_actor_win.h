@@ -53,7 +53,7 @@ namespace NActors {
                 if (err == EINTR) {
                     return false; // try a bit later
                 } else {
-                    Y_FAIL("select() failed with %s", strerror(err));
+                    Y_ABORT("select() failed with %s", strerror(err));
                 }
             }
 

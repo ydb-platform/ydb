@@ -71,7 +71,7 @@ int ComputeTypeComplexity(const TType* type)
             return 1 + ComputeTypeComplexity(type->AsTaggedRaw()->GetItemType());
         }
     }
-    Y_FAIL("internal error: unreachable code");
+    Y_ABORT("internal error: unreachable code");
 }
 
 } // namespace NTi

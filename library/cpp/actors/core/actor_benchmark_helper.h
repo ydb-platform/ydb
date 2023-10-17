@@ -325,7 +325,7 @@ struct TActorBenchmark {
             }
             return setup;
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     static double BenchSendReceive(bool allocation, NActors::TMailboxType::EType mType, EPoolType poolType, ESendingType sendingType) {

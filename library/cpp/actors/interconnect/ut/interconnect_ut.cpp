@@ -64,7 +64,7 @@ public:
             Y_ABORT_UNLESS(it->second == ev->GetChainBuffer()->GetString());
             Tentative.erase(it);
         } else {
-            Y_FAIL("Cookie# %" PRIu64, ev->Cookie);
+            Y_ABORT("Cookie# %" PRIu64, ev->Cookie);
         }
         IssueQueries();
     }
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(Interconnect) {
                     break;
 
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
 
             Sleep(TDuration::MilliSeconds(RandomNumber<ui32>(500) + 100));

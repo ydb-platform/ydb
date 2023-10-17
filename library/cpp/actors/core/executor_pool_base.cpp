@@ -206,7 +206,7 @@ namespace NActors {
                 UnlockFromExecution((TMailboxTable::TTinyReadAsFilledMailbox*)mailbox, this, false, hint, MaxWorkers, ++revolvingWriteCounter);
                 break;
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
 
         NHPTimer::STime elapsed = GetCycleCountFast() - hpstart;

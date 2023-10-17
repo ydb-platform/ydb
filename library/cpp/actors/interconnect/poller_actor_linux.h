@@ -19,7 +19,7 @@ namespace NActors {
             event.data.ptr = nullptr;
             event.events = EPOLLIN;
             if (epoll_ctl(EpollDescriptor, EPOLL_CTL_ADD, ReadEnd, &event) == -1) {
-                Y_FAIL("epoll_ctl(EPOLL_CTL_ADD) failed with %s", strerror(errno));
+                Y_ABORT("epoll_ctl(EPOLL_CTL_ADD) failed with %s", strerror(errno));
             }
 
             ISimpleThread::Start(); // start poller thread
@@ -44,7 +44,7 @@ namespace NActors {
                 if (errno == EINTR) {
                     return false; // restart the call a bit later
                 } else {
-                    Y_FAIL("epoll_wait() failed with %s", strerror(errno));
+                    Y_ABORT("epoll_wait() failed with %s", strerror(errno));
                 }
             }
 
@@ -69,7 +69,7 @@ namespace NActors {
                         event.events = EPOLLONESHOT | EPOLLRDHUP | flags;
                         event.data.ptr = record;
                         if (epoll_ctl(EpollDescriptor, EPOLL_CTL_MOD, record->Socket->GetDescriptor(), &event) == -1) {
-                            Y_FAIL("epoll_ctl(EPOLL_CTL_MOD) failed with %s", strerror(errno));
+                            Y_ABORT("epoll_ctl(EPOLL_CTL_MOD) failed with %s", strerror(errno));
                         }
                     }
 
@@ -85,7 +85,7 @@ namespace NActors {
 
         void UnregisterSocketInLoop(const TIntrusivePtr<TSharedDescriptor>& socket) {
             if (epoll_ctl(EpollDescriptor, EPOLL_CTL_DEL, socket->GetDescriptor(), nullptr) == -1) {
-                Y_FAIL("epoll_ctl(EPOLL_CTL_DEL) failed with %s", strerror(errno));
+                Y_ABORT("epoll_ctl(EPOLL_CTL_DEL) failed with %s", strerror(errno));
             }
         }
 
@@ -94,7 +94,7 @@ namespace NActors {
             event.events = EPOLLONESHOT | EPOLLRDHUP;
             event.data.ptr = record.Get();
             if (epoll_ctl(EpollDescriptor, EPOLL_CTL_ADD, record->Socket->GetDescriptor(), &event) == -1) {
-                Y_FAIL("epoll_ctl(EPOLL_CTL_ADD) failed with %s", strerror(errno));
+                Y_ABORT("epoll_ctl(EPOLL_CTL_ADD) failed with %s", strerror(errno));
             }
         }
 
@@ -109,7 +109,7 @@ namespace NActors {
                 event.events = EPOLLONESHOT | EPOLLRDHUP | flags;
                 event.data.ptr = record.Get();
                 if (epoll_ctl(EpollDescriptor, EPOLL_CTL_MOD, record->Socket->GetDescriptor(), &event) == -1) {
-                    Y_FAIL("epoll_ctl(EPOLL_CTL_MOD) failed with %s", strerror(errno));
+                    Y_ABORT("epoll_ctl(EPOLL_CTL_MOD) failed with %s", strerror(errno));
                 }
             }
         }

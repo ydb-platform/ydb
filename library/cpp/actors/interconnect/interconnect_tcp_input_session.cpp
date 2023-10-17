@@ -307,7 +307,7 @@ namespace NActors {
                         break;
 
                     default:
-                        Y_FAIL("unexpected state");
+                        Y_ABORT("unexpected state");
                 }
                 break;
             }

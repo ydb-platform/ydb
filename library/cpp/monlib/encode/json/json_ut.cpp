@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
                         break;
                     }
                     default:
-                        Y_FAIL("unexpected metric type [%s]", ToString(metricType).c_str());
+                        Y_ABORT("unexpected metric type [%s]", ToString(metricType).c_str());
                 }
 
                 encoder->OnMetricEnd();

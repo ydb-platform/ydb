@@ -53,7 +53,7 @@ namespace NActors {
                 if (errno == EINTR) {
                     return false;
                 } else {
-                    Y_FAIL("kevent() failed with %s", strerror(errno));
+                    Y_ABORT("kevent() failed with %s", strerror(errno));
                 }
             }
 

@@ -864,7 +864,7 @@ fy_event_type GetOpenEventType(ENodeType type) {
     case ENodeType::Sequence:
         return FYET_SEQUENCE_START;
     default:
-        Y_FAIL("Not a brackets type");
+        Y_ABORT("Not a brackets type");
     }
 }
 
@@ -875,7 +875,7 @@ fy_event_type GetCloseEventType(ENodeType type) {
     case ENodeType::Sequence:
         return FYET_SEQUENCE_END;
     default:
-        Y_FAIL("Not a brackets type");
+        Y_ABORT("Not a brackets type");
     }
 }
 

@@ -50,13 +50,13 @@ namespace NInterconnect {
             return;
         switch (LastSocketError()) {
             case EBADF:
-                Y_FAIL("Close bad descriptor");
+                Y_ABORT("Close bad descriptor");
             case EINTR:
                 break;
             case EIO:
-                Y_FAIL("EIO");
+                Y_ABORT("EIO");
             default:
-                Y_FAIL("It's something unexpected");
+                Y_ABORT("It's something unexpected");
         }
     }
 
@@ -136,7 +136,7 @@ namespace NInterconnect {
             return -LastSocketError();
         return ret;
 #else
-        Y_FAIL("WriteV() unsupported on Windows");
+        Y_ABORT("WriteV() unsupported on Windows");
 #endif
     }
 
@@ -148,7 +148,7 @@ namespace NInterconnect {
             return -LastSocketError();
         return ret;
 #else
-        Y_FAIL("ReadV() unsupported on Windows");
+        Y_ABORT("ReadV() unsupported on Windows");
 #endif
     }
 
@@ -481,7 +481,7 @@ namespace NInterconnect {
                     }
                 }
             }
-            Y_FAIL();
+            Y_ABORT();
         }
 
         std::optional<std::pair<const void*, size_t>> BlockedSend;
@@ -585,7 +585,7 @@ namespace NInterconnect {
                     return -EPROTO;
 
                 default:
-                    Y_FAIL("unexpected SSL_get_error() status# %d", status);
+                    Y_ABORT("unexpected SSL_get_error() status# %d", status);
             }
         }
     };
@@ -616,11 +616,11 @@ namespace NInterconnect {
     }
 
     ssize_t TSecureSocket::WriteV(const struct iovec* /*iov*/, int /*iovcnt*/) const {
-        Y_FAIL("unsupported on SSL sockets");
+        Y_ABORT("unsupported on SSL sockets");
     }
 
     ssize_t TSecureSocket::ReadV(const struct iovec* /*iov*/, int /*iovcnt*/) const {
-        Y_FAIL("unsupported on SSL sockets");
+        Y_ABORT("unsupported on SSL sockets");
     }
 
     TString TSecureSocket::GetCipherName() const {

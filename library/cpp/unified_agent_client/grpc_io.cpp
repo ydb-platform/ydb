@@ -106,7 +106,7 @@ namespace NUnifiedAgent {
                 try {
                     static_cast<IIOCallback*>(tag)->OnIOCompleted(ok ? EIOStatus::Ok : EIOStatus::Error);
                 } catch (...) {
-                    Y_FAIL("unexpected exception [%s]", CurrentExceptionMessage().c_str());
+                    Y_ABORT("unexpected exception [%s]", CurrentExceptionMessage().c_str());
                 }
             }
         });

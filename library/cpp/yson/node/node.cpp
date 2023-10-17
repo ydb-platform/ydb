@@ -71,7 +71,7 @@ bool operator<(const TNode& lhs, const TNode& rhs)
         case TNode::Undefined:
             return false;
         default:
-            Y_FAIL("Unexpected type: %d", lhs.GetType());
+            Y_ABORT("Unexpected type: %d", lhs.GetType());
     }
 }
 

@@ -44,15 +44,15 @@ std::pair<TTestSocketPtr, TTestSocketPtr> TcpSockets() {
     addr.sin_port = 0;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     if (bind(server, (sockaddr*)&addr, sizeof(addr)) == -1) {
-        Y_FAIL("bind() failed with %s", strerror(errno));
+        Y_ABORT("bind() failed with %s", strerror(errno));
     } else if (listen(server, 1) == -1) {
-        Y_FAIL("listen() failed with %s", strerror(errno));
+        Y_ABORT("listen() failed with %s", strerror(errno));
     }
 
     // obtain local address for client
     socklen_t len = sizeof(addr);
     if (getsockname(server, (sockaddr*)&addr, &len) == -1) {
-        Y_FAIL("getsockname() failed with %s", strerror(errno));
+        Y_ABORT("getsockname() failed with %s", strerror(errno));
     }
 
     // create client socket
@@ -61,7 +61,7 @@ std::pair<TTestSocketPtr, TTestSocketPtr> TcpSockets() {
 
     // connect to server
     if (connect(client, (sockaddr*)&addr, len) == -1) {
-        Y_FAIL("connect() failed with %s", strerror(errno));
+        Y_ABORT("connect() failed with %s", strerror(errno));
     }
 
     // accept connection from the other side

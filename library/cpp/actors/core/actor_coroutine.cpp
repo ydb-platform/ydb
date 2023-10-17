@@ -67,7 +67,7 @@ namespace NActors {
                 return nullptr; // it is not a race -- we've got timeout exactly for our current wait
             }
         }
-        Y_FAIL("no pending event");
+        Y_ABORT("no pending event");
     }
 
     bool TActorCoroImpl::ProcessEvent(THolder<IEventHandle> ev) {
@@ -127,12 +127,12 @@ namespace NActors {
                 Run();
             } catch (const TDtorException& /*ex*/) {
                 if (!AllowUnhandledDtor) {
-                    Y_FAIL("unhandled TDtorException");
+                    Y_ABORT("unhandled TDtorException");
                 }
             } catch (const std::exception& ex) {
-                Y_FAIL("unhandled exception of type %s", TypeName(ex).data());
+                Y_ABORT("unhandled exception of type %s", TypeName(ex).data());
             } catch (...) {
-                Y_FAIL("unhandled exception of type not derived from std::exception");
+                Y_ABORT("unhandled exception of type not derived from std::exception");
             }
         }
         Finished = true;

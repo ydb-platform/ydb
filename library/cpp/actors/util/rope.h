@@ -39,7 +39,7 @@ public:
     }
 
     void *operator new(size_t) {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void *operator new(size_t, void *ptr) {

@@ -36,7 +36,7 @@ namespace NActors {
             case TMailboxHeader::TExecutionState::FreeLeavingMarked:
                 return false;
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
     }
 
@@ -84,7 +84,7 @@ namespace NActors {
                         DestructMailboxLine<TTinyReadAsFilledMailbox>((ui8*)lineHeader + 64, (ui8*)lineHeader + LineSize);
                         break;
                     default:
-                        Y_FAIL();
+                        Y_ABORT();
                 }
 
                 lineHeader->~TMailboxLineHeader();
@@ -126,7 +126,7 @@ namespace NActors {
                         done &= CleanupMailboxLine<TTinyReadAsFilledMailbox>((ui8*)lineHeader + 64, (ui8*)lineHeader + LineSize);
                         break;
                     default:
-                        Y_FAIL();
+                        Y_ABORT();
                 }
             }
         }
@@ -262,7 +262,7 @@ namespace NActors {
                 }
                     return true;
                 default:
-                    Y_FAIL("unknown mailbox type");
+                    Y_ABORT("unknown mailbox type");
             }
         }
 
@@ -319,7 +319,7 @@ namespace NActors {
                 } while (AtomicGet(CachedTinyReadAsFilledMailboxes) > (MailboxCacheTinyReadAsFilled.Concurrency * 512));
                 return 0;
             default:
-                Y_FAIL("Unknown mailbox type");
+                Y_ABORT("Unknown mailbox type");
         }
     }
 
@@ -353,7 +353,7 @@ namespace NActors {
                     AtomicIncrement(CachedTinyReadAsFilledMailboxes);
                     break;
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         }
     }
@@ -557,7 +557,7 @@ namespace NActors {
                 counter = &CachedTinyReadAsFilledMailboxes;
                 break;
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
 
         AtomicStore(Lines + lineIndex, header);

@@ -221,7 +221,7 @@ namespace NActors {
             }
             complete = !Iter.Valid();
         } else {
-            Y_FAIL();
+            Y_ABORT();
         }
         Y_ABORT_UNLESS(!complete || event.EventActuallySerialized == event.EventSerializedSize,
             "EventActuallySerialized# %" PRIu32 " EventSerializedSize# %" PRIu32 " Type# 0x%08" PRIx32,

@@ -143,7 +143,7 @@ namespace NMonitoring {
         try {
             Listener.Bind(TIpAddress(bindAddr, port));
         } catch (yexception e) {
-            Y_FAIL("TCoHttpServer::TCoHttpServer: couldn't bind to %s:%d\n", bindAddr.data(), port);
+            Y_ABORT("TCoHttpServer::TCoHttpServer: couldn't bind to %s:%d\n", bindAddr.data(), port);
         }
     }
 

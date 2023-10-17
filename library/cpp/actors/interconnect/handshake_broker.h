@@ -73,7 +73,7 @@ namespace NActors {
                 }
 
                 default:
-                    Y_FAIL("Unimplimented selection strategy");
+                    Y_ABORT("Unimplimented selection strategy");
                 }
 
                 const size_t n = WaiterLookup.erase(waiter);
@@ -136,7 +136,7 @@ namespace NActors {
                 hFunc(TEvHandshakeBrokerFree, Handle);
 
             default:
-                Y_FAIL("unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                Y_ABORT("unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
             }
         }
 

@@ -298,7 +298,7 @@ namespace NActors {
         ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override {
             Y_UNUSED(wctx);
             Y_UNUSED(revolvingCounter);
-            Y_FAIL();
+            Y_ABORT();
         }
 
         void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) override {
@@ -458,7 +458,7 @@ namespace NActors {
 
         // generic
         TAffinity* Affinity() const override {
-            Y_FAIL();
+            Y_ABORT();
         }
 
     private:
@@ -812,7 +812,7 @@ namespace NActors {
             TString explanation;
             auto status = node->LogSettings->SetLevel(priority, component, explanation);
             if (status) {
-                Y_FAIL("SetLogPriority failed: %s", explanation.c_str());
+                Y_ABORT("SetLogPriority failed: %s", explanation.c_str());
             }
         }
     }
@@ -956,7 +956,7 @@ namespace NActors {
             UnlockFromExecution((TMailboxTable::TTinyReadAsFilledMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
             break;
         default:
-            Y_FAIL("Unsupported mailbox type");
+            Y_ABORT("Unsupported mailbox type");
         }
 
         return actorId;
@@ -1250,7 +1250,7 @@ namespace NActors {
                                             break;
                                         }
                                         default:
-                                            Y_FAIL("Unknown action");
+                                            Y_ABORT("Unknown action");
                                     }
                                 }
                             }
@@ -1753,7 +1753,7 @@ namespace NActors {
         for (auto& x : Nodes) {
             return x.second->ActorSystem.Get();
         }
-        Y_FAIL("Don't use this method.");
+        Y_ABORT("Don't use this method.");
     }
 
     TActorSystem* TTestActorRuntimeBase::GetActorSystem(ui32 nodeId) {

@@ -49,7 +49,7 @@ namespace NGreedyDict {
             case EST_SIMPLE_NORM:
                 return SimpleTestNorm(modelp, countAB, total);
         }
-        Y_FAIL("no way!");
+        Y_ABORT("no way!");
         return 0;
     }
 
@@ -72,7 +72,7 @@ namespace NGreedyDict {
             case ES_SOLAR:
                 return SolarTest(modelp, count, total);
         }
-        Y_FAIL("no way!");
+        Y_ABORT("no way!");
         return 0;
     }
 

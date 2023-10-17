@@ -555,7 +555,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
                 TAutoPtr<TExampleResponse> resp(new TExampleResponse(&Proto.ResponseCount, 10));
                 req.SendReplyMove(resp);
             } else {
-                Y_FAIL("wrong");
+                Y_ABORT("wrong");
             }
         }
     };

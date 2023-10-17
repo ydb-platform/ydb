@@ -122,7 +122,7 @@ namespace NActors {
                     return p.PoolName;
                 }
             }
-            Y_FAIL("undefined pool id: %" PRIu32, (ui32)poolId);
+            Y_ABORT("undefined pool id: %" PRIu32, (ui32)poolId);
         }
 
         std::optional<ui32> GetThreadsOptional(ui32 poolId) const {

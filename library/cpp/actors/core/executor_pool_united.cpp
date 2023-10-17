@@ -526,7 +526,7 @@ namespace NActors {
                             FastWorkerSleep(GetCycleCountFast() + Config.SoftLimitTs);
                             break;
                         case Stopped: return false;
-                        default: Y_FAIL();
+                        default: Y_ABORT();
                         }
                     }
                 } else if (wctx.Lease.IsNeverExpiring()) { // if idle-worker
@@ -542,7 +542,7 @@ namespace NActors {
                         idleTimer->Wait();
                         break;
                     case Stopped: return false;
-                    default: Y_FAIL();
+                    default: Y_ABORT();
                     }
                 } else { // lease has expired and hard preemption occured, so we are executing in a slow-worker
                     wctx.IncrementPreemptedEvents();
@@ -556,7 +556,7 @@ namespace NActors {
                         idleTimer = nullptr;
                         break;
                     case Stopped: return false;
-                    default: Y_FAIL();
+                    default: Y_ABORT();
                     }
                 }
             }
@@ -693,7 +693,7 @@ namespace NActors {
                         return;
                     }
                 } else {
-                    Y_FAIL("two slow-workers executing the same pool on the same core");
+                    Y_ABORT("two slow-workers executing the same pool on the same core");
                     return; // pool is already slow
                 }
             }
@@ -706,7 +706,7 @@ namespace NActors {
         void EndHardPreemption(TWorkerId to) {
             ATOMIC_COMPILER_BARRIER();
             if (!AtomicCas(&CurrentLease, TLease(to, NeverExpire), HardPreemptionLease)) {
-                Y_FAIL("hard preemption failed");
+                Y_ABORT("hard preemption failed");
             }
         }
 
@@ -717,7 +717,7 @@ namespace NActors {
         void EnablePreemptionAndGrant(TLease lease) {
             ATOMIC_COMPILER_BARRIER();
             if (!AtomicCas(&CurrentLease, lease, lease.NeverExpire())) {
-                Y_FAIL("lease grant failed");
+                Y_ABORT("lease grant failed");
             }
         }
 
@@ -789,7 +789,7 @@ namespace NActors {
             switch (ret) {
                 case 0: return;
                 case EINVAL:
-                    Y_FAIL("sched_setscheduler(%" PRIu64 ", %d, %d) -> EINVAL", tid, policy, param.sched_priority);
+                    Y_ABORT("sched_setscheduler(%" PRIu64 ", %d, %d) -> EINVAL", tid, policy, param.sched_priority);
                 case EPERM:
                     // Requirements:
                     //  * CAP_SYS_NICE capability to run real-time processes and set cpu affinity.
@@ -802,11 +802,11 @@ namespace NActors {
                     //       echo -1 > /sys/fs/cgroup/cpu/[cgroup]/cpu.rt_runtime_us
                     //       (also set the same value for every parent cgroup)
                     //    https://www.kernel.org/doc/Documentation/scheduler/sched-rt-group.txt
-                    Y_FAIL("sched_setscheduler(%" PRIu64 ", %d, %d) -> EPERM", tid, policy, param.sched_priority);
+                    Y_ABORT("sched_setscheduler(%" PRIu64 ", %d, %d) -> EPERM", tid, policy, param.sched_priority);
                 case ESRCH:
-                    Y_FAIL("sched_setscheduler(%" PRIu64 ", %d, %d) -> ESRCH", tid, policy, param.sched_priority);
+                    Y_ABORT("sched_setscheduler(%" PRIu64 ", %d, %d) -> ESRCH", tid, policy, param.sched_priority);
                 default:
-                    Y_FAIL("sched_setscheduler(%" PRIu64 ", %d, %d) -> %d", tid, policy, param.sched_priority, ret);
+                    Y_ABORT("sched_setscheduler(%" PRIu64 ", %d, %d) -> %d", tid, policy, param.sched_priority, ret);
             }
 #else
             Y_UNUSED(tid);
@@ -865,23 +865,23 @@ namespace NActors {
         }
 
         // Should never be called
-        void ReclaimMailbox(TMailboxType::EType, ui32, TWorkerId, ui64) override { Y_FAIL(); }
-        TMailboxHeader *ResolveMailbox(ui32) override { Y_FAIL(); }
-        void Schedule(TInstant, TAutoPtr<IEventHandle>, ISchedulerCookie*, TWorkerId) override { Y_FAIL(); }
-        void Schedule(TMonotonic, TAutoPtr<IEventHandle>, ISchedulerCookie*, TWorkerId) override { Y_FAIL(); }
-        void Schedule(TDuration, TAutoPtr<IEventHandle>, ISchedulerCookie*, TWorkerId) override { Y_FAIL(); }
-        bool Send(TAutoPtr<IEventHandle>&) override { Y_FAIL(); }
-        bool SpecificSend(TAutoPtr<IEventHandle>&) override { Y_FAIL(); }
-        void ScheduleActivation(ui32) override { Y_FAIL(); }
-        void SpecificScheduleActivation(ui32) override { Y_FAIL(); }
-        void ScheduleActivationEx(ui32, ui64) override { Y_FAIL(); }
-        TActorId Register(IActor*, TMailboxType::EType, ui64, const TActorId&) override { Y_FAIL(); }
-        TActorId Register(IActor*, TMailboxHeader*, ui32, const TActorId&) override { Y_FAIL(); }
-        void Prepare(TActorSystem*, NSchedulerQueue::TReader**, ui32*) override { Y_FAIL(); }
-        void Start() override { Y_FAIL(); }
-        void PrepareStop() override { Y_FAIL(); }
-        void Shutdown() override { Y_FAIL(); }
-        bool Cleanup() override { Y_FAIL(); }
+        void ReclaimMailbox(TMailboxType::EType, ui32, TWorkerId, ui64) override { Y_ABORT(); }
+        TMailboxHeader *ResolveMailbox(ui32) override { Y_ABORT(); }
+        void Schedule(TInstant, TAutoPtr<IEventHandle>, ISchedulerCookie*, TWorkerId) override { Y_ABORT(); }
+        void Schedule(TMonotonic, TAutoPtr<IEventHandle>, ISchedulerCookie*, TWorkerId) override { Y_ABORT(); }
+        void Schedule(TDuration, TAutoPtr<IEventHandle>, ISchedulerCookie*, TWorkerId) override { Y_ABORT(); }
+        bool Send(TAutoPtr<IEventHandle>&) override { Y_ABORT(); }
+        bool SpecificSend(TAutoPtr<IEventHandle>&) override { Y_ABORT(); }
+        void ScheduleActivation(ui32) override { Y_ABORT(); }
+        void SpecificScheduleActivation(ui32) override { Y_ABORT(); }
+        void ScheduleActivationEx(ui32, ui64) override { Y_ABORT(); }
+        TActorId Register(IActor*, TMailboxType::EType, ui64, const TActorId&) override { Y_ABORT(); }
+        TActorId Register(IActor*, TMailboxHeader*, ui32, const TActorId&) override { Y_ABORT(); }
+        void Prepare(TActorSystem*, NSchedulerQueue::TReader**, ui32*) override { Y_ABORT(); }
+        void Start() override { Y_ABORT(); }
+        void PrepareStop() override { Y_ABORT(); }
+        void Shutdown() override { Y_ABORT(); }
+        bool Cleanup() override { Y_ABORT(); }
     };
 
     // Proxy executor pool working with cpu-local scheduler (aka actorsystem 2.0)
@@ -1058,7 +1058,7 @@ namespace NActors {
                 return token;
             }
             case TCpuState::Forbidden:
-                Y_FAIL();
+                Y_ABORT();
             case TCpuState::Stopped:
                 return CpuStopped;
             }
@@ -1401,7 +1401,7 @@ namespace NActors {
     }
 
     TAffinity* TUnitedExecutorPool::Affinity() const {
-        Y_FAIL(); // should never be called, TCpuExecutorPool is used instead
+        Y_ABORT(); // should never be called, TCpuExecutorPool is used instead
     }
 
     ui32 TUnitedExecutorPool::GetThreads() const {
@@ -1409,7 +1409,7 @@ namespace NActors {
     }
 
     ui32 TUnitedExecutorPool::GetReadyActivation(TWorkerContext&, ui64) {
-        Y_FAIL(); // should never be called, TCpu*ExecutorPool is used instead
+        Y_ABORT(); // should never be called, TCpu*ExecutorPool is used instead
     }
 
     inline void TUnitedExecutorPool::ScheduleActivation(ui32 activation) {

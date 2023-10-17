@@ -225,9 +225,9 @@ private:
                 } else {
                     return false; // param not found
                 }
-            case TrackDuration: Y_FAIL();
-            case TrackBeginTime: Y_FAIL();
-            case TrackEndTime: Y_FAIL();
+            case TrackDuration: Y_ABORT();
+            case TrackBeginTime: Y_ABORT();
+            case TrackEndTime: Y_ABORT();
             case ElapsedDuration: break;
             case SliceDuration: break;
             case ThreadTime: break;
@@ -240,9 +240,9 @@ private:
             case NotSpecial:
                 Result = NLWTrace::TTypedParam(Item->GetParam(Query.ParamName));
                 return true;
-            case TrackDuration: Y_FAIL();
-            case TrackBeginTime: Y_FAIL();
-            case TrackEndTime: Y_FAIL();
+            case TrackDuration: Y_ABORT();
+            case TrackBeginTime: Y_ABORT();
+            case TrackEndTime: Y_ABORT();
             case ElapsedDuration:
                 Result = NLWTrace::TTypedParam(Query.Duration(
                     Log->GetTimestampCycles(),

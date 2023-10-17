@@ -213,7 +213,7 @@ namespace NActors {
                 if (const auto& info = input->GetSerializationInfo(); info.IsExtendedFormat) {
                     // check marker
                     if (!iter.Valid() || (*iter.ContiguousData() != PayloadMarker && *iter.ContiguousData() != ExtendedPayloadMarker)) {
-                        Y_FAIL("invalid event");
+                        Y_ABORT("invalid event");
                     }
 
                     const bool dataIsSeparate = *iter.ContiguousData() == ExtendedPayloadMarker; // ropes go after sizes
@@ -232,7 +232,7 @@ namespace NActors {
                     // parse number of payload ropes
                     size_t numRopes = DeserializeNumber(iter, size);
                     if (numRopes == Max<size_t>()) {
-                        Y_FAIL("invalid event");
+                        Y_ABORT("invalid event");
                     }
                     TStackVec<size_t, 16> ropeLens;
                     if (dataIsSeparate) {
@@ -242,7 +242,7 @@ namespace NActors {
                         // parse length of the rope
                         const size_t len = DeserializeNumber(iter, size);
                         if (len == Max<size_t>() || size < len) {
-                            Y_FAIL("invalid event len# %zu size# %" PRIu64, len, size);
+                            Y_ABORT("invalid event len# %zu size# %" PRIu64, len, size);
                         }
                         // extract the rope
                         if (dataIsSeparate) {
@@ -259,7 +259,7 @@ namespace NActors {
                 // parse the protobuf
                 TRopeStream stream(iter, size);
                 if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
-                    Y_FAIL("Failed to parse protobuf event type %" PRIu32 " class %s", TEventType, TypeName(ev->Record).data());
+                    Y_ABORT("Failed to parse protobuf event type %" PRIu32 " class %s", TEventType, TypeName(ev->Record).data());
                 }
             }
             ev->CachedByteSize = input->GetSize();

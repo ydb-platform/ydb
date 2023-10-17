@@ -100,7 +100,7 @@ namespace NInterconnect {
                     const char *bufferBegin = buffer->Data;
                     const char *bufferEnd = bufferBegin + BufferSize;
                     if (bufferBegin < end && begin < bufferEnd) {
-                        Y_FAIL();
+                        Y_ABORT();
                     }
                 }
 #endif

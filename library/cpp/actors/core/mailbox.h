@@ -168,7 +168,7 @@ namespace NActors {
                     break;
                 }
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
             return nullptr;
         }
@@ -211,7 +211,7 @@ namespace NActors {
                     break;
                 }
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         }
 

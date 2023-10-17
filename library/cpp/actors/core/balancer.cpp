@@ -294,7 +294,7 @@ namespace NActors {
                 return;
             }
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void TBalancer::Unlock() {

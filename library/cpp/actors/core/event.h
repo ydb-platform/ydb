@@ -75,7 +75,7 @@ namespace NActors {
         template <typename TEventType>
         TEventType* Get() {
             if (Type != TEventType::EventType)
-                Y_FAIL("Event type %" PRIu32 " doesn't match the expected type %" PRIu32, Type, TEventType::EventType);
+                Y_ABORT("Event type %" PRIu32 " doesn't match the expected type %" PRIu32, Type, TEventType::EventType);
 
             if (!Event) {
                 static TEventSerializedData empty;
@@ -86,7 +86,7 @@ namespace NActors {
                 return static_cast<TEventType*>(Event.Get());
             }
 
-            Y_FAIL("Failed to Load() event type %" PRIu32 " class %s", Type, TypeName<TEventType>().data());
+            Y_ABORT("Failed to Load() event type %" PRIu32 " class %s", Type, TypeName<TEventType>().data());
         }
 
         template <typename T>
@@ -364,10 +364,10 @@ namespace NActors {
         return TString(header);                                         \
     }                                                                   \
     bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
-        Y_FAIL("Local event " #eventType " is not serializable");       \
+        Y_ABORT("Local event " #eventType " is not serializable");       \
     }                                                                   \
     static IEventBase* Load(NActors::TEventSerializedData*) {           \
-        Y_FAIL("Local event " #eventType " has no load method");        \
+        Y_ABORT("Local event " #eventType " has no load method");        \
     }                                                                   \
     bool IsSerializable() const override {                              \
         return false;                                                   \

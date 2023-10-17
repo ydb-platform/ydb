@@ -112,7 +112,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::PassAway() {
-        Y_FAIL("TInterconnectSessionTCP::PassAway() can't be called directly");
+        Y_ABORT("TInterconnectSessionTCP::PassAway() can't be called directly");
     }
 
     void TInterconnectSessionTCP::Forward(STATEFN_SIG) {
@@ -326,7 +326,7 @@ namespace NActors {
                 switch (EUpdateState state = ReceiveContext->UpdateState) {
                     case EUpdateState::NONE:
                     case EUpdateState::CONFIRMING:
-                        Y_FAIL("unexpected state");
+                        Y_ABORT("unexpected state");
 
                     case EUpdateState::INFLIGHT:
                         // this message we are processing was the only one in flight, so we can reset state to NONE here

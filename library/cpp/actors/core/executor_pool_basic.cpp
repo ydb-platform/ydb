@@ -352,7 +352,7 @@ namespace NActors {
                     }
                     break;
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         }
     }
@@ -530,7 +530,7 @@ namespace NActors {
             pthread_t threadSelf = pthread_self();
             sched_param param = {RealtimePriority};
             if (pthread_setschedparam(threadSelf, SCHED_FIFO, &param)) {
-                Y_FAIL("Cannot set realtime priority");
+                Y_ABORT("Cannot set realtime priority");
             }
         }
 #else

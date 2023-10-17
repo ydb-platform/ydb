@@ -129,7 +129,7 @@ namespace NActors {
                 hFunc(TEvSubscribeForConnection, Handle);                                       \
                 hFunc(TEvReportConnection, Handle);                                             \
                 default:                                                                        \
-                    Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);                        \
+                    Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);                        \
             }                                                                                   \
         }                                                                                       \
         if (profiled) {                                                                         \
@@ -316,7 +316,7 @@ namespace NActors {
                 hFunc(TEvHandshakeAsk, IncomingHandshake);
                 hFunc(TEvHandshakeRequest, IncomingHandshake);
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         }
         void IncomingHandshake(TEvHandshakeAsk::TPtr& ev);

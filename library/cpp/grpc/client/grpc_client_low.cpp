@@ -568,7 +568,7 @@ void TGRpcClientLow::ForgetContext(TContextImpl* context) {
         std::unique_lock<std::mutex> guard(Mtx_);
 
         if (!Contexts_.erase(context)) {
-            Y_FAIL("Unexpected ForgetContext(%p)", context);
+            Y_ABORT("Unexpected ForgetContext(%p)", context);
         }
 
         if (Contexts_.empty()) {

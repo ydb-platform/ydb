@@ -129,7 +129,7 @@ namespace NActors {
 
             struct TFinalSuspend {
                 static bool await_ready() noexcept { return false; }
-                static void await_resume() noexcept { Y_FAIL("unexpected coroutine resume"); }
+                static void await_resume() noexcept { Y_ABORT("unexpected coroutine resume"); }
 
                 static std::coroutine_handle<> await_suspend(std::coroutine_handle<TTaskPromise<T>> h) noexcept {
                     auto next = std::exchange(h.promise().Continuation, std::noop_coroutine());

@@ -213,6 +213,25 @@ protected:
         }
     };
 
+protected:
+    using IActorOps::Register;
+    using IActorOps::Send;
+    using IActorOps::Schedule;
+
+    NKikimrProto::TAuthConfig Config;
+    TDuration ExpireTime = TDuration::Hours(24); // after what time ticket will expired and removed from cache
+
+    template <typename TTokenRecord>
+    TInstant GetExpireTime(const TTokenRecord& record, TInstant now) const {
+        if ((record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey) && record.Signature.AccessKeyId) {
+            return GetAsSignatureExpireTime(now);
+        }
+        if (record.TokenType == TDerived::ETokenType::Login) {
+            return record.ExpireTime;
+        }
+        return now + ExpireTime;
+    }
+
 private:
     TString DomainName;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsReceived;
@@ -232,6 +251,7 @@ private:
     TDuration MinErrorRefreshTime = TDuration::Seconds(1); // between this and next time we will try to refresh retryable error
     TDuration MaxErrorRefreshTime = TDuration::Minutes(1);
     TDuration LifeTime = TDuration::Hours(1); // for how long ticket will remain in the cache after last access
+    TDuration AsSignatureExpireTime = TDuration::Minutes(1);
 
     TActorId AccessServiceValidator;
     TActorId UserAccountService;
@@ -280,8 +300,8 @@ private:
         return key.Str();
     }
 
-    TInstant GetExpireTime(TInstant now) const {
-        return now + ExpireTime;
+    TInstant GetAsSignatureExpireTime(TInstant now) const {
+        return now + AsSignatureExpireTime;
     }
 
     TInstant GetRefreshTime(TInstant now) const {
@@ -1015,13 +1035,6 @@ private:
     }
 
 protected:
-    using IActorOps::Register;
-    using IActorOps::Send;
-    using IActorOps::Schedule;
-
-    NKikimrProto::TAuthConfig Config;
-    TDuration ExpireTime = TDuration::Hours(24); // after what time ticket will expired and removed from cache
-
     auto ParseTokenType(const TStringBuf tokenType) const {
         if (tokenType == "Login") {
             if (UseLoginProvider) {
@@ -1123,7 +1136,7 @@ protected:
         TInstant now = TlsActivationContext->Now();
         record.InitTime = now;
         record.AccessTime = now;
-        record.ExpireTime = GetExpireTime(now);
+        record.ExpireTime = GetExpireTime(record, now);
         record.RefreshTime = GetRefreshTime(now);
 
         if (record.Error) {
@@ -1147,9 +1160,7 @@ protected:
         if (!token->GetUserSID().empty()) {
             record.Subject = token->GetUserSID();
         }
-        if (!record.ExpireTime) {
-            record.ExpireTime = GetExpireTime(now);
-        }
+        record.ExpireTime = GetExpireTime(record, now);
         if (record.NeedsRefresh()) {
             record.SetOkRefreshTime(this, now);
         } else {
@@ -1168,7 +1179,7 @@ protected:
         record.Error = error;
         TInstant now = TlsActivationContext->Now();
         if (record.Error.Retryable) {
-            record.ExpireTime = GetExpireTime(now);
+            record.ExpireTime = GetExpireTime(record, now);
             record.SetErrorRefreshTime(this, now);
             CounterTicketsErrorsRetryable->Inc();
             BLOG_D("Ticket " << MaskTicket(record.Ticket) << " ("
@@ -1480,6 +1491,7 @@ protected:
         MaxErrorRefreshTime = TDuration::Parse(Config.GetMaxErrorRefreshTime());
         LifeTime = TDuration::Parse(Config.GetLifeTime());
         ExpireTime = TDuration::Parse(Config.GetExpireTime());
+        AsSignatureExpireTime = TDuration::Parse(Config.GetAsSignatureExpireTime());
     }
 
     void PassAway() override {

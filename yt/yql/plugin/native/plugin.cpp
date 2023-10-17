@@ -40,7 +40,6 @@
 #include <util/stream/file.h>
 #include <util/string/builder.h>
 #include <util/system/fs.h>
-#include <util/system/user.h>
 
 namespace NYT::NYqlPlugin {
 namespace NNative {
@@ -287,14 +286,14 @@ public:
             };
         }
 
-        if (!program->Compile(GetUsername())) {
+        if (!program->Compile(impersonationUser)) {
             return TQueryResult{
                 .YsonError = IssuesToYtErrorYson(program->Issues()),
             };
         }
 
         NYql::TProgram::TStatus status = NYql::TProgram::TStatus::Error;
-        status = program->RunWithConfig(GetUsername(), pipelineConfigurator);
+        status = program->RunWithConfig(impersonationUser, pipelineConfigurator);
 
         if (status == NYql::TProgram::TStatus::Error) {
             return TQueryResult{

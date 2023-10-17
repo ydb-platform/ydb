@@ -1510,7 +1510,6 @@ private:
             switch (input.GetTypeCase()) {
                 case NKqpProto::TKqpPhyConnection::kHashShuffle: {
                     partitionsCount = std::max(partitionsCount, (ui32)originStageInfo.Tasks.size());
-                    partitionsCount = std::min(partitionsCount, 24u);
                     break;
                 }
 

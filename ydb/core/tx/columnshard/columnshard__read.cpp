@@ -140,7 +140,7 @@ void TTxRead::Complete(const TActorContext& ctx) {
         Self->IncCounter(COUNTER_READ_INDEX_BYTES, statsDelta.Bytes);
 
         TInstant deadline = TInstant::Max(); // TODO
-        ctx.Register(CreateReadActor(Self->TabletID(), Self->GetBlobsReadActorId(), Ev->Get()->GetSource(),
+        ctx.Register(CreateReadActor(Self->TabletID(), Self->SelfId(), Ev->Get()->GetSource(),
             Self->GetStoragesManager(), std::move(Result), ReadMetadata, deadline, Self->SelfId(), requestCookie, Self->ReadCounters));
     }
 }

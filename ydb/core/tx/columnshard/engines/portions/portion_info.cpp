@@ -28,7 +28,8 @@ const TColumnRecord& TPortionInfo::AppendOneChunkColumn(TColumnRecord&& record) 
 
 void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch, const TString& tierName) {
     Y_ABORT_UNLESS(batch->num_rows() == NumRows());
-    AddMetadata(snapshotSchema, NArrow::TFirstLastSpecialKeys(batch), NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), tierName);
+    AddMetadata(snapshotSchema, NArrow::TFirstLastSpecialKeys(NArrow::ExtractColumns(batch, snapshotSchema.GetIndexInfo().GetReplaceKey())),
+        NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), tierName);
 }
 
 void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TString& tierName) {
@@ -108,13 +109,19 @@ int TPortionInfo::CompareMinByPk(const TPortionInfo& item, const TIndexInfo& inf
     return CompareMinByColumnIds(item, info.KeyColumns);
 }
 
-TString TPortionInfo::DebugString() const {
+TString TPortionInfo::DebugString(const bool withDetails) const {
     TStringBuilder sb;
     sb << "(portion_id:" << Portion << ";" <<
         "granule_id:" << Granule << ";records_count:" << NumRows() << ";"
-        "min_snapshot:(" << MinSnapshot.DebugString() << ");" <<
-//        "from:" << IndexKeyStart().DebugString() << ";" <<
-//        "to:" << IndexKeyEnd().DebugString() << ";" <<
+        "min_schema_snapshot:(" << MinSnapshot.DebugString() << ");";
+    if (withDetails) {
+        sb <<
+            "records_snapshot_min:(" << RecordSnapshotMin().DebugString() << ");" <<
+            "records_snapshot_max:(" << RecordSnapshotMax().DebugString() << ");" <<
+            "from:" << IndexKeyStart().DebugString() << ";" <<
+            "to:" << IndexKeyEnd().DebugString() << ";";
+    }
+    sb <<
         "size:" << BlobsBytes() << ";" <<
         "meta:(" << Meta.DebugString() << ");";
     if (RemoveSnapshot.Valid()) {

@@ -73,8 +73,13 @@ const NKikimr::NOlap::TPathInfo* TInsertionSummary::GetPathInfoOptional(const ui
     return &it->second;
 }
 
-bool TInsertionSummary::IsOverloaded(const ui64 /*pathId*/) const {
-    return StatsCommitted.Bytes > TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID;
+bool TInsertionSummary::IsOverloaded(const ui64 pathId) const {
+    auto* pathInfo = GetPathInfoOptional(pathId);
+    if (!pathInfo) {
+        return false;
+    } else {
+        return (ui64)pathInfo->GetCommittedSize() > TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID;
+    }
 }
 
 void TInsertionSummary::OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const bool load) noexcept {

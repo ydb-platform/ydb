@@ -63,10 +63,12 @@ public:
                     currentBatchSplitting = nullptr;
                 } else {
                     auto currentSlice = currentBatchSplitting->Slice(0, maxRecordsInResult - currentRecordsCount);
+                    AFL_VERIFY(currentSlice);
                     if (!currentBatch) {
                         currentBatch = currentSlice;
                     } else {
                         currentBatch = NArrow::CombineBatches({currentBatch, currentSlice});
+                        AFL_VERIFY(currentBatch);
                     }
                     result.emplace_back(TPartialReadResult(nullptr, currentBatch));
                     currentBatch = nullptr;

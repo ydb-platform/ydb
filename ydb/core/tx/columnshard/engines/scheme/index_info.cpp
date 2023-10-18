@@ -231,11 +231,7 @@ void TIndexInfo::SetAllKeys() {
         SortingKey = ArrowSchema(primaryKeyNames);
         ReplaceKey = SortingKey;
         fields = ReplaceKey->fields();
-        if (CompositeIndexKey) {
-            IndexKey = ReplaceKey;
-        } else {
-            IndexKey = std::make_shared<arrow::Schema>(arrow::FieldVector({ fields[0] }));
-        }
+        IndexKey = ReplaceKey;
     }
 
     fields.push_back(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()));
@@ -386,13 +382,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     }
 
     Version = schema.GetVersion();
-    CompositeMarks = schema.GetCompositeMarks();
-    CompositeIndexKey = AppData()->FeatureFlags.GetForceColumnTablesCompositeMarks() ? true : CompositeMarks;
     return true;
-}
-
-bool TIndexInfo::CheckAlterScheme(const NKikimrSchemeOp::TColumnTableSchema& scheme) const {
-    return CompositeMarks == scheme.GetCompositeMarks();
 }
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, bool withSpecials) {

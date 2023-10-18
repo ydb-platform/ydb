@@ -15,7 +15,6 @@ namespace NKikimr::NColumnShard {
 
 void TColumnShard::CleanupActors(const TActorContext& ctx)
 {
-    ctx.Send(BlobsReadActor, new TEvents::TEvPoisonPill);
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     StoragesManager->Stop();
     if (Tiers) {
@@ -34,7 +33,6 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
 
-    BlobsReadActor = ctx.Register(new NOlap::NBlobOperations::NRead::TActor(TabletID(), SelfId()));
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
 
     for (auto&& i : TablesManager.GetTables()) {

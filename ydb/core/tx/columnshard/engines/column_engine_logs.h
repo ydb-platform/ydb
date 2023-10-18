@@ -124,11 +124,7 @@ public:
     }
 
     TString SerializeMark(const NArrow::TReplaceKey& key) const override {
-        if (UseCompositeMarks()) {
-            return TMark::SerializeComposite(key, MarkSchema());
-        } else {
-            return TMark::SerializeScalar(key, MarkSchema());
-        }
+        return TMark::SerializeComposite(key, MarkSchema());
     }
 
     NArrow::TReplaceKey DeserializeMark(const TString& key, std::optional<ui32> markNumKeys) const override {
@@ -137,9 +133,7 @@ public:
             return TMark::DeserializeComposite(key, MarkSchema());
         } else {
             NArrow::TReplaceKey markKey = TMark::DeserializeScalar(key, MarkSchema());
-            if (UseCompositeMarks()) {
-                return TMark::ExtendBorder(markKey, MarkSchema());
-            }
+            return TMark::ExtendBorder(markKey, MarkSchema());
             return markKey;
         }
     }
@@ -236,10 +230,6 @@ private:
             CachedDefaultMark = TMark(TMark::MinBorder(MarkSchema()));
         }
         return *CachedDefaultMark;
-    }
-
-    bool UseCompositeMarks() const noexcept {
-        return VersionedIndex.GetLastSchema()->GetIndexInfo().IsCompositeIndexKey();
     }
 
     bool LoadGranules(IDbWrapper& db);

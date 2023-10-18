@@ -86,6 +86,7 @@ void TPortionDataSource::DoStartFilterStage() {
     auto& columnIds = FetchingPlan->GetFilterStage()->GetColumnIds();
 
     auto readAction = Portion->GetBlobsStorage()->StartReadingAction("CS::READ::FILTER");
+    readAction->SetIsBackgroundProcess(false);
     THashMap<TBlobRange, ui32> nullBlocks;
     NeedFetchColumns(columnIds, readAction, nullBlocks, nullptr);
 
@@ -95,13 +96,14 @@ void TPortionDataSource::DoStartFilterStage() {
 }
 
 void TPortionDataSource::DoStartFetchStage() {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoStartFetchStage");
     Y_ABORT_UNLESS(!FetchStageData);
     Y_ABORT_UNLESS(FilterStageData);
     if (FetchingPlan->GetFetchingStage()->GetSize() && !FilterStageData->IsEmptyFilter()) {
         auto& columnIds = FetchingPlan->GetFetchingStage()->GetColumnIds();
 
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "RealStartFetchStage")("fetching_info", FetchingPlan->DebugString());
         auto readAction = Portion->GetBlobsStorage()->StartReadingAction("CS::READ::FETCHING");
+        readAction->SetIsBackgroundProcess(false);
         THashMap<TBlobRange, ui32> nullBlocks;
         NeedFetchColumns(columnIds, readAction, nullBlocks, GetFilterStageData().GetActualFilter());
         if (readAction->GetExpectedBlobsCount()) {
@@ -110,6 +112,8 @@ void TPortionDataSource::DoStartFetchStage() {
             ReadData.AddForFetch(GetSourceIdx(), constructor, true);
             return;
         }
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DontStartFetchStage")("fetching_info", FetchingPlan->DebugString());
     }
     InitFetchStageData(nullptr);
 }
@@ -125,6 +129,7 @@ void TCommittedDataSource::DoFetch() {
 
         std::shared_ptr<IBlobsStorageOperator> storageOperator = ReadData.GetContext().GetStoragesManager()->GetInsertOperator();
         auto readAction = storageOperator->StartReadingAction("CS::READ::COMMITTED");
+        readAction->SetIsBackgroundProcess(false);
         readAction->AddRange(CommittedBlob.GetBlobRange());
 
         THashMap<TBlobRange, ui32> nullBlocks;

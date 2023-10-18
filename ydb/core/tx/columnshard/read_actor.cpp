@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
+#include "blobs_reader/actor.h"
 
 namespace NKikimr::NColumnShard {
 namespace {
@@ -165,7 +166,7 @@ public:
             ctx.Send(SelfId(), new TEvents::TEvPoisonPill());
         } else {
             while (auto task = IndexedData->ExtractNextReadTask(false)) {
-                Send(ReadBlobsActor, std::make_unique<NOlap::NBlobOperations::NRead::TEvStartReadTask>(task));
+                Register(new NOlap::NBlobOperations::NRead::TActor(task));
             }
             BuildResult(ctx);
         }

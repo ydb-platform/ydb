@@ -48,8 +48,8 @@ void TCommittedColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NReso
         ReadMetadata, SourceIdx, CommittedBlob));
 }
 
-bool IFetchTaskConstructor::DoOnError(const TBlobRange& range) {
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error_on_blob_reading", range.ToString())("scan_actor_id", ScanActorId);
+bool IFetchTaskConstructor::DoOnError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error_on_blob_reading", range.ToString())("scan_actor_id", ScanActorId)("status", status.GetErrorMessage())("status_code", status.GetStatus());
     NActors::TActorContext::AsActorContext().Send(ScanActorId, std::make_unique<NConveyor::TEvExecution::TEvTaskProcessedResult>(TConclusionStatus::Fail("cannot read blob range " + range.ToString())));
     return false;
 }

@@ -389,7 +389,6 @@ private:
     TInstant LastAccessTime;
     TInstant LastStatsReport;
 
-    TActorId BlobsReadActor;
     TActorId ResourceSubscribeActor;
     TActorId StatsReportPipe;
 
@@ -476,10 +475,6 @@ private:
     ui64 MemoryUsage() const;
     void SendPeriodicStats();
 public:
-    const TActorId& GetBlobsReadActorId() const {
-        return BlobsReadActor;
-    }
-
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {
         return StoragesManager;
     }

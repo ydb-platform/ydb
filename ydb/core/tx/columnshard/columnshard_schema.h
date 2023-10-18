@@ -510,12 +510,11 @@ struct Schema : NIceDb::Schema {
                                     const TGranuleRecord& row) {
         TString metaStr;
         const auto& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
-        if (indexInfo.IsCompositeIndexKey()) {
-            NKikimrTxColumnShard::TIndexGranuleMeta meta;
-            Y_ABORT_UNLESS(indexInfo.GetIndexKey());
-            meta.SetMarkSize(indexInfo.GetIndexKey()->num_fields());
-            Y_ABORT_UNLESS(meta.SerializeToString(&metaStr));
-        }
+
+        NKikimrTxColumnShard::TIndexGranuleMeta meta;
+        Y_ABORT_UNLESS(indexInfo.GetIndexKey());
+        meta.SetMarkSize(indexInfo.GetIndexKey()->num_fields());
+        Y_ABORT_UNLESS(meta.SerializeToString(&metaStr));
 
         db.Table<IndexGranules>().Key(index, row.PathId, engine.SerializeMark(row.Mark)).Update(
             NIceDb::TUpdate<IndexGranules::Granule>(row.Granule),

@@ -1,6 +1,7 @@
 #include "task.h"
 #include "events.h"
 #include <library/cpp/actors/core/log.h>
+#include "actor.h"
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
@@ -24,7 +25,7 @@ bool ITask::AddError(const TBlobRange& range, const IBlobsReadingAction::TErrorS
         it->second->OnReadError(range, status);
         BlobsWaiting.erase(it);
     }
-    if (!OnError(range)) {
+    if (!OnError(range, status)) {
         TaskFinishedWithError = true;
         return false;
     }
@@ -58,20 +59,23 @@ void ITask::StartBlobsFetching(const THashSet<TBlobRange>& rangesInProgress) {
     ACFL_TRACE("task_id", ExternalTaskId)("event", "start");
     Y_ABORT_UNLESS(!BlobsFetchingStarted);
     BlobsFetchingStarted = true;
-    ui64 size = 0;
-    ui64 count = 0;
+    ui64 allRangesSize = 0;
+    ui64 allRangesCount = 0;
+    ui64 readRangesCount = 0;
     for (auto&& agent : Agents) {
-        size += agent->GetExpectedBlobsSize();
-        count += agent->GetExpectedBlobsCount();
+        allRangesSize += agent->GetExpectedBlobsSize();
+        allRangesCount += agent->GetExpectedBlobsCount();
         for (auto&& b : agent->GetRangesForRead()) {
             for (auto&& r : b.second) {
                 BlobsWaiting.emplace(r, agent);
+                ++readRangesCount;
             }
         }
         agent->Start(rangesInProgress);
     }
-    WaitBlobsCount = count;
-    WaitBlobsSize = size;
+    ReadRangesCount = readRangesCount;
+    AllRangesCount = allRangesCount;
+    AllRangesSize = allRangesSize;
     if (BlobsWaiting.empty()) {
         OnDataReady();
     }
@@ -84,7 +88,7 @@ TAtomicCounter TaskIdentifierBuilder = 0;
 
 void ITask::TReadSubscriber::DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
     Task->ResourcesGuard = guard;
-    TActorContext::AsActorContext().Send(ReadActorId, std::make_unique<TEvStartReadTask>(Task));
+    TActorContext::AsActorContext().Register(new NRead::TActor(Task));
 }
 
 ITask::ITask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions, const TString& taskCustomer, const TString& externalTaskId)
@@ -117,9 +121,9 @@ void ITask::OnDataReady() {
     DoOnDataReady(ResourcesGuard);
 }
 
-bool ITask::OnError(const TBlobRange& range) {
+bool ITask::OnError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
     ACFL_DEBUG("event", "OnError")("task", DebugString());
-    return DoOnError(range);
+    return DoOnError(range, status);
 }
 
 ITask::~ITask() {

@@ -24,8 +24,51 @@ private:
     TPortionMeta Meta;
     std::shared_ptr<NOlap::IBlobsStorageOperator> BlobsOperator;
 public:
+    bool OlderThen(const TPortionInfo& info) const {
+        return RecordSnapshotMin() < info.RecordSnapshotMin();
+    }
+
+    bool CrossPKWith(const TPortionInfo& info) const {
+        return CrossPKWith(info.IndexKeyStart(), info.IndexKeyEnd());
+    }
+
+    bool CrossPKWith(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const {
+        if (from < IndexKeyStart()) {
+            if (to < IndexKeyEnd()) {
+                return IndexKeyStart() <= to;
+            } else {
+                return true;
+            }
+        } else {
+            if (to < IndexKeyEnd()) {
+                return true;
+            } else {
+                return from <= IndexKeyEnd();
+            }
+        }
+    }
+
+    ui64 GetPortionId() const {
+        return Portion;
+    }
+
     bool HasStorageOperator() const {
         return !!BlobsOperator;
+    }
+
+    NJson::TJsonValue SerializeToJsonVisual() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("id", Portion);
+        result.InsertValue("s_max", RecordSnapshotMax().GetPlanStep() / 1000);
+        /*
+        result.InsertValue("s_min", RecordSnapshotMin().GetPlanStep());
+        result.InsertValue("tx_min", RecordSnapshotMin().GetTxId());
+        result.InsertValue("s_max", RecordSnapshotMax().GetPlanStep());
+        result.InsertValue("tx_max", RecordSnapshotMax().GetTxId());
+        result.InsertValue("pk_min", IndexKeyStart().DebugString());
+        result.InsertValue("pk_max", IndexKeyEnd().DebugString());
+        */
+        return result;
     }
 
     void InitOperator(const std::shared_ptr<NOlap::IBlobsStorageOperator>& bOperator, const bool rewrite) {
@@ -105,7 +148,7 @@ public:
     {
     }
 
-    TString DebugString() const;
+    TString DebugString(const bool withDetails = false) const;
 
     bool HasRemoveSnapshot() const {
         return RemoveSnapshot.Valid();
@@ -248,7 +291,15 @@ public:
         return *Meta.RecordSnapshotMax;
     }
 
-    ui32 NumRows() const {
+    THashSet<TUnifiedBlobId> GetBlobIds() const {
+        THashSet<TUnifiedBlobId> result;
+        for (auto&& i : Records) {
+            result.emplace(i.BlobRange.BlobId);
+        }
+        return result;
+    }
+
+    ui32 GetRecordsCount() const {
         ui32 result = 0;
         std::optional<ui32> columnIdFirst;
         for (auto&& i : Records) {
@@ -258,6 +309,10 @@ public:
             }
         }
         return result;
+    }
+
+    ui32 NumRows() const {
+        return GetRecordsCount();
     }
 
     ui32 NumRows(const ui32 columnId) const {

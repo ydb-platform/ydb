@@ -386,7 +386,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                 continue;
             }
             if (context.BusyPortions.contains(info->GetAddress())) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip ttl through busy granule")("granule_id", info->GetGranule());
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip ttl through busy portion")("portion_id", info->GetAddress().DebugString());
                 continue;
             }
 
@@ -646,7 +646,6 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     }
     out->Granules.reserve(pathGranules.size());
     std::optional<TMarksMap::const_iterator> previousIterator;
-    const bool compositeMark = UseCompositeMarks();
 
     for (auto&& filter : pkRangesFilter) {
         std::optional<NArrow::TReplaceKey> indexKeyFrom = filter.KeyFrom(GetIndexKey());
@@ -665,10 +664,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
         if (keyFrom) {
             it = pathGranules.lower_bound(*keyFrom);
             if (it != pathGranules.begin()) {
-                if (it == pathGranules.end() || compositeMark || *keyFrom != it->first) {
-                    // TODO: better check if we really need an additional granule before the range
-                    --it;
-                }
+                --it;
             }
         }
 

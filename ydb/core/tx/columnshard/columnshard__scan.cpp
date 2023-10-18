@@ -20,6 +20,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/services/metadata/request/common.h>
 #include <util/generic/noncopyable.h>
+#include "blobs_reader/actor.h"
 
 namespace NKikimr::NColumnShard {
 
@@ -64,14 +65,13 @@ public:
     }
 
 public:
-    TColumnShardScan(const TActorId& readBlobsActorId, const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
+    TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
                      const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
                      ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie,
                      ui64 tabletId, TDuration timeout, std::vector<TTxScan::TReadMetadataPtr>&& readMetadataList,
                      NKikimrTxDataShard::EScanDataFormat dataFormat, const TScanCounters& scanCountersPool)
         : StoragesManager(storagesManager)
         , ColumnShardActorId(columnShardActorId)
-        , ReadBlobsActorId(readBlobsActorId)
         , ScanComputeActorId(scanComputeActorId)
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
         , ScanId(scanId)
@@ -134,7 +134,7 @@ private:
             }
             ++InFlightReads;
             Stats.RequestSent(task->GetExpectedRanges());
-            Send(ReadBlobsActorId, std::make_unique<NOlap::NBlobOperations::NRead::TEvStartReadTask>(task));
+            Register(new NOlap::NBlobOperations::NRead::TActor(task));
         }
         return true;
     }
@@ -964,7 +964,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     Self->IncCounter(COUNTER_READ_INDEX_ROWS, statsDelta.Rows);
     Self->IncCounter(COUNTER_READ_INDEX_BYTES, statsDelta.Bytes);
 
-    auto scanActor = ctx.Register(new TColumnShardScan(Self->GetBlobsReadActorId(), Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
+    auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
         scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, std::move(ReadMetadataRanges), dataFormat, Self->ScanCounters));
 
     LOG_S_DEBUG("TTxScan starting " << scanActor

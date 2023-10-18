@@ -163,7 +163,7 @@ bool TTablesManager::HasTable(const ui64 pathId) const {
 }
 
 bool TTablesManager::IsReadyForWrite(const ui64 pathId) const {
-    return HasPrimaryIndex() &&  HasTable(pathId);
+    return HasPrimaryIndex() && HasTable(pathId);
 }
 
 bool TTablesManager::HasPreset(const ui32 presetId) const {

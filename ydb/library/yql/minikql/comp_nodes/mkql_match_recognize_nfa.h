@@ -194,6 +194,10 @@ public:
         return std::nullopt;
     }
 
+    size_t GetActiveStatesCount() const {
+        return ActiveStates.size();
+    }
+
 private:
     //TODO (zverevgeny): Consider to change to std::vector for the sake of perf
     using TStateSet = std::set<TState>;

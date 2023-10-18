@@ -335,6 +335,10 @@ const TString& TLongTxServiceActor::GetDatabaseNameOrLegacyDefault(const TString
 }
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr& ev) {
+    if (Settings.Counters) {
+        Settings.Counters->AcquireReadSnapshotInRequests->Inc();
+    }
+
     auto* msg = ev->Get();
     const TString& databaseName = GetDatabaseNameOrLegacyDefault(msg->Record.GetDatabaseName());
     TXLOG_DEBUG("Received TEvAcquireReadSnapshot from " << ev->Sender << " for database " << databaseName);
@@ -357,6 +361,11 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
         req.Cookie = ev->Cookie;
         req.Orbit = std::move(msg->Orbit);
     }
+
+    if (Settings.Counters) {
+        Settings.Counters->AcquireReadSnapshotInInFlight->Inc();
+    }
+
     ScheduleAcquireSnapshot(databaseName, state);
 }
 
@@ -380,6 +389,11 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFlush::TPtr& ev) 
     Y_ABORT_UNLESS(state.FlushPending);
     Y_ABORT_UNLESS(state.PendingUserRequests || state.PendingBeginTxRequests);
     state.FlushPending = false;
+
+    if (Settings.Counters) {
+        Settings.Counters->AcquireReadSnapshotOutRequests->Inc();
+        Settings.Counters->AcquireReadSnapshotOutInFlight->Inc();
+    }
 
     StartAcquireSnapshotActor(msg->DatabaseName, state);
 }
@@ -423,6 +437,11 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
         for (auto& beginReq : req->BeginTxRequests) {
             Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(msg->Status, msg->Issues), 0, beginReq.Cookie);
         }
+    }
+
+    if (Settings.Counters) {
+        Settings.Counters->AcquireReadSnapshotInInFlight->Sub(req->UserRequests.size());
+        Settings.Counters->AcquireReadSnapshotOutInFlight->Dec();
     }
 
     state->ActiveRequests.erase(ev->Cookie);

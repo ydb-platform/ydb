@@ -6,6 +6,8 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
+#include <util/random/random.h>
+
 #define TXLOG_LOG(priority, stream) \
     LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::LONG_TX_SERVICE, LogPrefix << stream)
 #define TXLOG_DEBUG(stream) TXLOG_LOG(NActors::NLog::PRI_DEBUG, stream)
@@ -99,13 +101,21 @@ namespace NLongTxService {
             if (!entry.DomainInfo) {
                 return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Missing domain info for a resolved database");
             }
-            if (entry.DomainInfo->Coordinators.List().empty()) {
+
+            const TVector<ui64>& coordinators = entry.DomainInfo->Coordinators.List();
+            if (coordinators.empty()) {
                 return ReplyError(Ydb::StatusIds::UNAVAILABLE, TStringBuilder()
                     << "The specified database '" << DatabaseName << "' has no coordinators");
             }
 
-            for (ui64 coordinator : entry.DomainInfo->Coordinators.List()) {
-                SendAcquireStep(coordinator);
+            // Prefer a single random coordinator for each request
+            ui64 primary = coordinators[RandomNumber<ui64>(coordinators.size())];
+            for (ui64 coordinator : coordinators) {
+                if (coordinator == primary) {
+                    SendAcquireStep(coordinator);
+                } else {
+                    BackupCoordinators.insert(coordinator);
+                }
             }
 
             Become(&TThis::StateWaitStep);
@@ -135,6 +145,12 @@ namespace NLongTxService {
                 << " NotDelivered# " << msg->NotDelivered);
 
             WaitingCoordinators.erase(tabletId);
+            if (WaitingCoordinators.empty() && !BackupCoordinators.empty()) {
+                for (ui64 coordinator : BackupCoordinators) {
+                    SendAcquireStep(coordinator);
+                }
+                BackupCoordinators.clear();
+            }
             if (WaitingCoordinators.empty()) {
                 return ReplyError(Ydb::StatusIds::UNAVAILABLE, "Database coordinators are unavailable");
             }
@@ -175,6 +191,7 @@ namespace NLongTxService {
         const TActorId LeaderPipeCache;
         TString LogPrefix;
         THashSet<ui64> WaitingCoordinators;
+        THashSet<ui64> BackupCoordinators;
     };
 
     void TLongTxServiceActor::StartAcquireSnapshotActor(const TString& databaseName, TDatabaseSnapshotState& state) {

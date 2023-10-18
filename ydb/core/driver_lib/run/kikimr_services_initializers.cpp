@@ -2326,7 +2326,16 @@ TLongTxServiceInitializer::TLongTxServiceInitializer(const TKikimrRunConfig &run
 void TLongTxServiceInitializer::InitializeServices(TActorSystemSetup *setup,
                                                    const TAppData *appData)
 {
-    auto* actor = NLongTxService::CreateLongTxService();
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> longTxGroup = tabletGroup->GetSubgroup("type", "LONG_TX");
+
+    auto counters = MakeIntrusive<NLongTxService::TLongTxServiceCounters>(longTxGroup);
+
+    NLongTxService::TLongTxServiceSettings settings{
+        .Counters = counters,
+    };
+
+    auto* actor = NLongTxService::CreateLongTxService(settings);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NLongTxService::MakeLongTxServiceID(NodeId),
             TActorSetupCmd(actor, TMailboxType::ReadAsFilled, appData->UserPoolId)));

@@ -1420,11 +1420,12 @@ void ValidateSystemColumnSchema(
     bool allowUnversionedUpdateColumns)
 {
     static const auto allowedSortedTablesSystemColumns = THashMap<TString, ESimpleLogicalValueType>{
+        {EmptyValueColumnName, ESimpleLogicalValueType::Int64},
     };
 
     static const auto allowedOrderedTablesSystemColumns = THashMap<TString, ESimpleLogicalValueType>{
         {TimestampColumnName, ESimpleLogicalValueType::Uint64},
-        {CumulativeDataWeightColumnName, ESimpleLogicalValueType::Int64}
+        {CumulativeDataWeightColumnName, ESimpleLogicalValueType::Int64},
     };
 
     auto validateType = [&] (ESimpleLogicalValueType expected) {

@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ydb-platform/ydb/blob/main/LICENSE)
 [![Release](https://img.shields.io/github/v/release/ydb-platform/ydb.svg?style=flat-square)](https://github.com/ydb-platform/ydb/releases)
-[![Discord](https://img.shields.io/discord/1158573985894772827?logo=discord&logoColor=%23fff)](https://discord.gg/vnhG5akD)
+[![Discord](https://img.shields.io/discord/1158573985894772827?logo=discord&logoColor=%23fff)](https://discord.gg/R5MvZTESWc)
 
 ## YDB
 
@@ -11,7 +11,7 @@
 [Official Repository](https://github.com/ydb-platform/ydb) |
 [Blog](https://blog-redirect.ydb.tech) |
 [YouTube](https://www.youtube.com/c/YDBPlatform) |
-[Discord](https://discord.gg/vnhG5akD) |
+[Discord](https://discord.gg/R5MvZTESWc) |
 [Telegram](https://t.me/ydb_en) |
 [LinkedIn](https://www.linkedin.com/company/ydb-platform) |
 [X](https://x.com/YDBPlatform) 

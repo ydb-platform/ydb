@@ -1068,7 +1068,7 @@ ISchemalessFormatWriterPtr CreateWriterForSkiff(
 
         auto copySchemas = schemas;
         if (config->OverrideIntermediateTableSchema) {
-            Y_ABORT_UNLESS(!schemas.empty());
+            YT_VERIFY(!schemas.empty());
             if (!IsTrivialIntermediateSchema(*schemas[0])) {
                 THROW_ERROR_EXCEPTION("Cannot use \"override_intermediate_table_schema\" since input table #0 has nontrivial schema")
                     << TErrorAttribute("schema", *schemas[0]);

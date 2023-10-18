@@ -17,6 +17,7 @@ CHECK_DEPENDENT_DIRS(
     contrib
     library
     util
+    library/cpp/yt/assert
     library/cpp/yt/small_containers
 )
 

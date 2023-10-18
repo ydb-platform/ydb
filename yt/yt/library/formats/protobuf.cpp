@@ -573,7 +573,7 @@ public:
     [[nodiscard]] TGuard Enter(const Descriptor* descriptor)
     {
         if (ActiveVertices_.contains(descriptor)) {
-            Y_ABORT_UNLESS(!Stack_.empty());
+            YT_VERIFY(!Stack_.empty());
             THROW_ERROR_EXCEPTION("Cyclic reference found for protobuf messages. "
                 "Consider removing %Qv flag somewhere on the cycle containing %Qv and %Qv",
                 EWrapperFieldFlag_Enum_Name(EWrapperFieldFlag::SERIALIZATION_YT),
@@ -622,7 +622,7 @@ private:
         const FieldDescriptor* fieldDescriptor,
         const TProtobufFieldOptions& fieldOptions)
     {
-        Y_ABORT_UNLESS(fieldDescriptor->is_map());
+        YT_VERIFY(fieldDescriptor->is_map());
         const auto* descriptor = fieldDescriptor->message_type();
         switch (fieldOptions.MapMode) {
             case EProtobufMapMode::ListOfStructsLegacy:

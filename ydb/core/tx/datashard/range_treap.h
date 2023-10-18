@@ -485,7 +485,7 @@ namespace NDataShard {
 
             // N.B. we avoid comparison with RightKey when it is equal to MaxRightKey.
             if ((wentLeft && t->MaxRightTrivial) ||
-                (cmp = CompareBorders(leftBorder, t->RightBorder()) <= 0))
+                CompareBorders(leftBorder, t->RightBorder()) <= 0)
             {
                 callback(t->ToRange(), t->Value);
             }

@@ -1834,6 +1834,7 @@ public:
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOffset, const TPathId& pathId);
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
     void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records);
+    void UpdateChangeDeliveryLag(TInstant now);
     void CreateChangeSender(const TActorContext& ctx);
     void KillChangeSender(const TActorContext& ctx);
     void MaybeActivateChangeSender(const TActorContext& ctx);
@@ -2675,28 +2676,31 @@ private:
         }
     };
 
-    struct TEnqueuedRecord {
+    struct TEnqueuedRecordTag {};
+    struct TEnqueuedRecord: public TIntrusiveListItem<TEnqueuedRecord, TEnqueuedRecordTag> {
         ui64 BodySize;
         TPathId TableId;
         ui64 SchemaVersion;
         bool SchemaSnapshotAcquired;
+        TInstant EnqueuedAt;
         ui64 LockId;
         ui64 LockOffset;
 
         explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId,
-                ui64 schemaVersion, ui64 lockId = 0, ui64 lockOffset = 0)
+                ui64 schemaVersion, TInstant now, ui64 lockId = 0, ui64 lockOffset = 0)
             : BodySize(bodySize)
             , TableId(tableId)
             , SchemaVersion(schemaVersion)
             , SchemaSnapshotAcquired(false)
+            , EnqueuedAt(now)
             , LockId(lockId)
             , LockOffset(lockOffset)
         {
         }
 
-        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record)
-            : TEnqueuedRecord(record.BodySize, record.TableId,
-                    record.SchemaVersion, record.LockId, record.LockOffset)
+        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record, TInstant now)
+            : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion, now,
+                record.LockId, record.LockOffset)
         {
         }
     };
@@ -2714,6 +2718,7 @@ private:
     bool RequestChangeRecordsInFly = false;
     bool RemoveChangeRecordsInFly = false;
     THashMap<ui64, TEnqueuedRecord> ChangesQueue; // ui64 is order
+    TIntrusiveList<TEnqueuedRecord, TEnqueuedRecordTag> ChangesList;
     ui64 ChangesQueueBytes = 0;
     TActorId OutChangeSender;
     bool OutChangeSenderSuspended = false;

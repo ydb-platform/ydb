@@ -145,9 +145,9 @@ private:
                 newResolutionTable.emplace(
                     std::move(hostname), std::move(resolvedAddress));
             } else {
-                if (DnsResolutionTable.contains(hostname)) {
-                    newResolutionTable.emplace(
-                        std::move(hostname), DnsResolutionTable.at(hostname));
+                auto it = DnsResolutionTable.find(hostname);
+                if (it != DnsResolutionTable.end()) {
+                    newResolutionTable.emplace(std::move(hostname), it->second);
                 }
             }
         }

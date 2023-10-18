@@ -32,7 +32,7 @@ ENDIF()
     )
     PEERDIR(
         ydb/library/yql/tests/common/test_framework
-        devtools/swag/lib
+        library/python/testing/swag/lib
     )
 
 

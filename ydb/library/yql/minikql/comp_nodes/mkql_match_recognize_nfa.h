@@ -11,12 +11,14 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 using namespace NYql::NMatchRecognize;
 
+struct TVoidTransition{};
 using TEpsilonTransition = size_t; //to
 using TEpsilonTransitions = std::vector<TEpsilonTransition>;
 using TMatchedVarTransition = std::pair<ui32, size_t>; //{varIndex, to}
 using TQuantityEnterTransition = size_t; //to
 using TQuantityExitTransition = std::pair<std::pair<ui64, ui64>, std::pair<size_t, size_t>>; //{{min, max}, {foFindMore, toMatched}}
 using TNfaTransition = std::variant<
+    TVoidTransition,
     TMatchedVarTransition,
     TEpsilonTransitions,
     TQuantityEnterTransition,
@@ -141,17 +143,17 @@ public:
         std::set<TState> newStates;
         std::set<TState> deletedStates;
         for (const auto& s: ActiveStates) {
-            const auto& t = TransitionGraph->Transitions[s.Index];
-            if (t.index() == 0) { //Here we handle only transitions of TMatchedVarTransition type, all other transtitions are handled in MakeEpsilonTransitions
+            //Here we handle only transitions of TMatchedVarTransition type,
+            //all other transitions are handled in MakeEpsilonTransitions
+            if (const auto* matchedVarTransition = std::get_if<TMatchedVarTransition>(&TransitionGraph->Transitions[s.Index])) {
                 MatchedRangesArg->SetValue(ctx, ctx.HolderFactory.Create<TMatchedVarsValue<TRange>>(ctx.HolderFactory, s.Vars));
-                const auto& matchedVarTransition = std::get<0>(t);
-                const auto varIndex = matchedVarTransition.first;
+                const auto varIndex = matchedVarTransition->first;
                 const auto& v = Defines[varIndex]->GetValue(ctx);
                 if (v && v.Get<bool>()) {
                     auto vars = s.Vars; //TODO get rid of this copy
                     auto& matchedVar = vars[varIndex];
                     Extend(matchedVar, currentRowLock);
-                    newStates.emplace(matchedVarTransition.second, std::move(vars), std::stack<ui64>(s.Quantifiers));
+                    newStates.emplace(matchedVarTransition->second, std::move(vars), std::stack<ui64>(s.Quantifiers));
                 }
                 deletedStates.insert(s);
             }
@@ -190,7 +192,11 @@ private:
         TTransitionVisitor(const TState& state, TStateSet& newStates, TStateSet& deletedStates)
             : State(state)
             , NewStates(newStates)
-            , DeletedStates(deletedStates) {}
+            , DeletedStates(deletedStates)
+        {}
+        void operator()(const TVoidTransition&) {
+            //Do nothing for void
+        }
         void operator()(const TMatchedVarTransition& var) {
             //Transitions of TMatchedVarTransition type are handled in ProcessRow method
             Y_UNUSED(var);

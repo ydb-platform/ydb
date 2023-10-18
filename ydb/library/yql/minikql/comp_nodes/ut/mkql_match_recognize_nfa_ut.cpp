@@ -95,10 +95,18 @@ struct TNfaSetup {
 } //namespace
 
 Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
+
+    Y_UNIT_TEST(OutputStateHasNoOutputEdges) {
+        const TRowPattern pattern{{TRowPatternFactor{"A", 1, 1, false, false}}};
+        const auto transitionGraph = TNfaTransitionGraphBuilder::Create(pattern, {{"A", 0}});
+        const auto& output = transitionGraph->Transitions.at(transitionGraph->Output);
+        UNIT_ASSERT(std::get_if<TVoidTransition>(&output));
+    }
+
     //Tests for NFA-based engine for MATCH_RECOGNIZE
     //In the full implementation pattern variables are calculated as lambda predicates on input partition
-    //For the sake of simplificationa in these tests predicates are replaced with bool literal values,
-    //that can be set explicitly in the tests body. So, the values of input rows are irrelevat and not used.
+    //For the sake of simplification, in these tests predicates are replaced with bool literal values,
+    //that can be set explicitly in the tests body. So, the values of input rows are irrelevant and not used.
     TMemoryUsageInfo memUsage("MatchedVars");
     Y_UNIT_TEST(SingleVarAcceptNothing) {
         TScopedAlloc alloc(__LOCATION__);

@@ -645,7 +645,7 @@ void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         },
         *ActorSystem_,
         "Coordination/Session",
-        getCounterBlock("coordination", "Session", true, true),
+        getCounterBlock("coordination", "Session", true),
         /* TODO: limiter */ nullptr);
 }
 

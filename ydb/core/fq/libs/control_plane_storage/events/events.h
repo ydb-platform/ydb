@@ -32,8 +32,8 @@ struct TAuditDetails {
 
     size_t GetByteSize() const {
         return sizeof(*this)
-                + Before.Empty() ? 0 : Before->ByteSizeLong()
-                + After.Empty() ? 0 : After->ByteSizeLong()
+                + (Before.Empty() ? 0 : Before->ByteSizeLong())
+                + (After.Empty() ? 0 : After->ByteSizeLong())
                 + CloudId.Size();
     }
 };

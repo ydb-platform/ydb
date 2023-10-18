@@ -1487,6 +1487,12 @@ public:
                 State == TShardState::Frozen;
     }
 
+    bool IsStateNewReadAllowed() const {
+        return State == TShardState::Ready ||
+                State == TShardState::Readonly ||
+                State == TShardState::Frozen;
+    }
+
     bool IsStateFrozen() const {
         return State == TShardState::Frozen;
     }

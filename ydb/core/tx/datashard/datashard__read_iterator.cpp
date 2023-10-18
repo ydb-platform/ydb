@@ -2545,7 +2545,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         return;
     }
 
-    if (!IsStateActive()) {
+    if (!IsStateNewReadAllowed()) {
         replyWithError(
             Ydb::StatusIds::OVERLOADED,
             TStringBuilder() << "Shard " << TabletID() << " is splitting/merging");

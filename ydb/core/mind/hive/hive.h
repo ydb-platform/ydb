@@ -46,6 +46,7 @@ using TStorageGroupId = ui32;
 using TFullTabletId = std::pair<TTabletId, TFollowerId>;
 using TObjectId = ui64; // schema object id, used to organize tablets of the same schema object
 using TOwnerId = ui64;
+using TFullObjectId = std::pair<TOwnerId, TObjectId>;
 using TResourceRawValues = std::tuple<i64, i64, i64, i64>; // CPU, Memory, Network, Counter
 using TResourceNormalizedValues = std::tuple<double, double, double, double>;
 using TOwnerIdxType = NScheme::TPairUi64Ui64;
@@ -255,7 +256,7 @@ struct TBalancerSettings {
     ui64 MaxInFlight = 1;
     const std::vector<TNodeId> FilterNodeIds = {};
     EResourceToBalance ResourceToBalance = EResourceToBalance::Dominant;
-    std::optional<TObjectId> FilterObjectId;
+    std::optional<TFullObjectId> FilterObjectId;
 };
 
 struct TBalancerStats {

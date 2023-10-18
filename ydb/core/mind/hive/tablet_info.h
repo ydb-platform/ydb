@@ -191,7 +191,7 @@ public:
     TFollowerTabletInfo& AsFollower();
     const TFollowerTabletInfo& AsFollower() const;
     std::pair<TTabletId, TFollowerId> GetFullTabletId() const;
-    TObjectId GetObjectId() const;
+    TFullObjectId GetObjectId() const;
     TTabletTypes::EType GetTabletType() const;
     TString ToString() const;
     TString StateString() const;

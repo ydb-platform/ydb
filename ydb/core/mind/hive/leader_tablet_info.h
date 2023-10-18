@@ -28,7 +28,7 @@ public:
     TTabletId Id;
     ETabletState State;
     TTabletTypes::EType Type;
-    TObjectId ObjectId;
+    TFullObjectId ObjectId;
     TSubDomainKey ObjectDomain;
     TVector<TNodeId> AllowedNodes;
     TVector<TDataCenterId> AllowedDataCenters;
@@ -57,7 +57,7 @@ public:
         , Id(id)
         , State(ETabletState::Unknown)
         , Type(TTabletTypes::TypeInvalid)
-        , ObjectId(0)
+        , ObjectId(0, 0)
         , ChannelProfileReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO)
         , KnownGeneration(0)
         , Category(nullptr)

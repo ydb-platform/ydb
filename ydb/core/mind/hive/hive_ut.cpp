@@ -4265,6 +4265,76 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(updatedOnFirstNode, 2);
     }
 
+    Y_UNIT_TEST(TestSpreadNeighboursDifferentOwners) {
+        static constexpr ui64 TABLETS_PER_OWNER = 6;
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+        TActorId senderA = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        // wait for creation of nodes
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 2);
+            runtime.DispatchEvents(options);
+        }
+
+        struct TTestOwner {
+            const ui64 Id;
+            ui64 Idx = 0;
+
+            TTestOwner(ui64 id) : Id(id) {}
+
+            ui64 CreateNewTablet(TTestBasicRuntime& runtime, ui64 hiveTablet) {
+                auto ev = MakeHolder<TEvHive::TEvCreateTablet>(Id, ++Idx, TTabletTypes::Dummy, BINDED_CHANNELS);
+                ev->Record.SetObjectId(1);
+                return SendCreateTestTablet(runtime, hiveTablet, Id, std::move(ev), 0, true);
+            }
+        };
+
+        TTestOwner owner1(MakeDefaultHiveID(1));
+        TTestOwner owner2(MakeDefaultHiveID(2));
+
+        for (ui64 i = 0; i < TABLETS_PER_OWNER; ++i) {
+            ui64 tablet1;
+            ui64 tablet2;
+            if (i * 2 < TABLETS_PER_OWNER) {
+                tablet1 = owner1.CreateNewTablet(runtime, hiveTablet);
+                tablet2 = owner2.CreateNewTablet(runtime, hiveTablet);
+            } else {
+                tablet1 = owner2.CreateNewTablet(runtime, hiveTablet);
+                tablet2 = owner1.CreateNewTablet(runtime, hiveTablet);
+            }
+            MakeSureTabletIsUp(runtime, tablet1, 0);
+            MakeSureTabletIsUp(runtime, tablet2, 0);
+        }
+
+        runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveInfo());
+        TAutoPtr<IEventHandle> handle;
+        TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+
+        struct TTestTabletInfo {
+            ui64 OwnerId;
+            ui64 NodeId;
+
+            bool operator<(const TTestTabletInfo& other) const {
+                return std::tie(OwnerId, NodeId) < std::tie(other.OwnerId, other.NodeId);
+            }
+        };
+        std::map<TTestTabletInfo, ui64> distribution;
+
+        for (const auto& tablet : response->Record.GetTablets()) {
+            distribution[{tablet.GetTabletOwner().GetOwner(), tablet.GetNodeID()}]++;
+        }
+
+        // Each node should have half tablet from each owner
+        for (const auto& p : distribution) {
+            UNIT_ASSERT_VALUES_EQUAL(p.second, TABLETS_PER_OWNER / 2);
+        }
+    }
+
     Y_UNIT_TEST(TestHiveBalancerDifferentResources) {
         static constexpr ui64 TABLETS_PER_NODE = 4;
         TTestBasicRuntime runtime(2, false);

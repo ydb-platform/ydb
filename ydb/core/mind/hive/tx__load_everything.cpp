@@ -373,7 +373,13 @@ public:
                             std::tuple<TTabletId, THive&>(tabletId, *Self)).first->second;
                 tablet.State = tabletRowset.GetValue<Schema::Tablet::State>();
                 tablet.Type = tabletRowset.GetValue<Schema::Tablet::TabletType>();
-                tablet.ObjectId = tabletRowset.GetValueOrDefault<Schema::Tablet::ObjectID>();
+
+                TObjectId objectId = tabletRowset.GetValueOrDefault<Schema::Tablet::ObjectID>();
+                TOwnerIdxType::TValueType owner = tabletRowset.GetValue<Schema::Tablet::Owner>();
+                Self->OwnerToTablet.emplace(owner, tabletId);
+                tablet.Owner = owner;
+                tablet.ObjectId = {owner.first, objectId};
+
                 Self->ObjectToTabletMetrics[tablet.ObjectId].IncreaseCount();
                 Self->TabletTypeToTabletMetrics[tablet.Type].IncreaseCount();
                 tablet.AllowedNodes = tabletRowset.GetValue<Schema::Tablet::AllowedNodes>();
@@ -442,10 +448,6 @@ public:
                     }
                 }
                 tablet.InitTabletMetrics();
-
-                TOwnerIdxType::TValueType owner = tabletRowset.GetValue<Schema::Tablet::Owner>();
-                Self->OwnerToTablet.emplace(owner, tabletId);
-                tablet.Owner = owner;
 
                 tablet.TabletStorageInfo.Reset(new TTabletStorageInfo(tabletId, tablet.Type));
                 tablet.TabletStorageInfo->Version = tabletRowset.GetValueOrDefault<Schema::Tablet::TabletStorageVersion>();

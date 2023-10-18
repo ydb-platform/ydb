@@ -301,7 +301,9 @@ message TEvResponseHiveDomainStats {
 message TEvRequestHiveNodeStats {
     optional bool ReturnMetrics = 5;
     optional bool ReturnExtendedTabletInfo = 6;
+    // The next 2 fields should always be used together
     optional uint64 FilterTabletsByPathId = 7;
+    optional uint64 FilterTabletsBySchemeShardId = 8;
 }
 
 message THiveNodeStats {

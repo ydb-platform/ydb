@@ -388,6 +388,10 @@ bool IsValidTabletType(TTabletTypes::EType type) {
             );
 }
 
+bool IsValidObjectId(const TFullObjectId& objectId) {
+    return objectId.second != 0;
+}
+
 NJson::TJsonValue THive::GetBalancerProgressJson() {
     NJson::TJsonValue result;
     for (const auto& stats : BalancerStats) {

@@ -68,7 +68,7 @@ std::pair<TTabletId, TFollowerId> TTabletInfo::GetFullTabletId() const {
     }
 }
 
-TObjectId TTabletInfo::GetObjectId() const {
+TFullObjectId TTabletInfo::GetObjectId() const {
     return GetLeader().ObjectId;
 }
 

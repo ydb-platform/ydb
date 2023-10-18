@@ -13,11 +13,11 @@ namespace NHive {
 struct TObjectDistribution {
     std::multiset<i64> SortedDistribution;
     std::unordered_map<TNodeId, i64> Distribution;
-    const TObjectId Id;
+    const TFullObjectId Id;
     double Mean = 0;
     double VarianceNumerator = 0;
 
-    TObjectDistribution(TObjectId id) : Id(id) {}
+    TObjectDistribution(TFullObjectId id) : Id(id) {}
 
     double GetImbalance() const {
         if (SortedDistribution.empty()) {
@@ -84,7 +84,7 @@ struct TObjectDistribution {
 
 struct TObjectDistributions {
     std::multiset<TObjectDistribution> SortedDistributions;
-    std::unordered_map<TObjectId, std::multiset<TObjectDistribution>::iterator> Distributions;
+    std::unordered_map<TFullObjectId, std::multiset<TObjectDistribution>::iterator> Distributions;
     ui64 ImbalancedObjects = 0;
     std::unordered_set<TNodeId> Nodes;
     bool Enabled = true;
@@ -97,16 +97,16 @@ struct TObjectDistributions {
     }
 
     struct TObjectToBalance {
-        TObjectId ObjectId;
+        TFullObjectId ObjectId;
         std::vector<TNodeId> Nodes;
 
-        TObjectToBalance(TObjectId objectId) : ObjectId(objectId) {}
+        TObjectToBalance(TFullObjectId objectId) : ObjectId(objectId) {}
     };
 
     TObjectToBalance GetObjectToBalance() {
         Y_DEBUG_ABORT_UNLESS(!SortedDistributions.empty());
         if (SortedDistributions.empty()) {
-            return TObjectToBalance(0);
+            return TObjectToBalance(TFullObjectId());
         }
         const auto& dist = *SortedDistributions.rbegin();
         i64 maxCnt = *dist.SortedDistribution.rbegin();
@@ -134,7 +134,7 @@ struct TObjectDistributions {
     }
 
     template <typename F>
-    bool UpdateDistribution(TObjectId object, F updateFunc) {
+    bool UpdateDistribution(TFullObjectId object, F updateFunc) {
         auto distIt = Distributions.find(object);
         if (distIt == Distributions.end()) {
             return false;
@@ -162,7 +162,7 @@ struct TObjectDistributions {
     }
 
 
-    void UpdateCount(TObjectId object, TNodeId node, i64 diff) {
+    void UpdateCount(TFullObjectId object, TNodeId node, i64 diff) {
         if (!Enabled) {
             return;
         }

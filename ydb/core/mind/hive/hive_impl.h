@@ -148,6 +148,7 @@ TString LongToShortTabletName(const TString& longTabletName);
 TString GetLocationString(const NActors::TNodeLocation& location);
 void MakeTabletTypeSet(std::vector<TTabletTypes::EType>& list);
 bool IsValidTabletType(TTabletTypes::EType type);
+bool IsValidObjectId(const TFullObjectId& objectId);
 TString GetRunningTabletsText(ui64 runningTablets, ui64 totalTablets, bool warmUp);
 
 class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveSharedSettings {
@@ -351,7 +352,7 @@ protected:
         }
     };
 
-    std::unordered_map<TObjectId, TAggregateMetrics> ObjectToTabletMetrics;
+    std::unordered_map<TFullObjectId, TAggregateMetrics> ObjectToTabletMetrics;
     std::unordered_map<TTabletTypes::EType, TAggregateMetrics> TabletTypeToTabletMetrics;
 
     TBootQueue BootQueue;
@@ -658,8 +659,8 @@ public:
     void ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     void UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     TDuration GetBalancerCooldown() const;
-    void UpdateObjectCount(TObjectId object, TNodeId node, i64 diff);
-    ui64 GetObjectImbalance(TObjectId object);
+    void UpdateObjectCount(TFullObjectId object, TNodeId node, i64 diff);
+    ui64 GetObjectImbalance(TFullObjectId object);
 
     ui32 GetEventPriority(IEventHandle* ev);
     void PushProcessIncomingEvent();
@@ -929,7 +930,7 @@ protected:
     THiveStats GetStats() const;
     void RemoveSubActor(ISubActor* subActor);
     const NKikimrLocal::TLocalConfig &GetLocalConfig() const { return LocalConfig; }
-    NKikimrTabletBase::TMetrics GetDefaultResourceValuesForObject(TObjectId objectId);
+    NKikimrTabletBase::TMetrics GetDefaultResourceValuesForObject(TFullObjectId objectId);
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForTabletType(TTabletTypes::EType type);
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForProfile(TTabletTypes::EType type, const TString& resourceProfile);
     static void AggregateMetricsMax(NKikimrTabletBase::TMetrics& aggregate, const NKikimrTabletBase::TMetrics& value);

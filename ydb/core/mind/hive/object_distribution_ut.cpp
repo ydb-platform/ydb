@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
         static constexpr size_t NUM_OBJECTS = 250;
         static constexpr size_t NUM_OPERATIONS = 10'000;
 
-        std::map<std::pair<TNodeId, TObjectId>, ui64> trueDistribution;
+        std::map<std::pair<TNodeId, TFullObjectId>, ui64> trueDistribution;
 
         std::mt19937 engine(42);
         std::uniform_int_distribution<TObjectId> pickObject(0, NUM_OBJECTS - 1);
@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
         }
 
         for (size_t i = 0; i < NUM_OPERATIONS; i++) {
-            TObjectId object = pickObject(engine);
+            TFullObjectId object = {0, pickObject(engine)};
             TNodeId node = pickNode(engine);
             ui64& curCount = trueDistribution[{node, object}];
             i64 diff = 1;

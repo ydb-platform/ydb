@@ -32,7 +32,7 @@ public:
             tablet.State = static_cast<ETabletState>(protoTabletInfo.GetState());
             tablet.Owner = owner;
             tablet.BootMode = protoTabletInfo.GetTabletBootMode();
-            tablet.ObjectId = protoTabletInfo.GetObjectId();
+            tablet.ObjectId = {owner.first, protoTabletInfo.GetObjectId()};
 
             TVector<TSubDomainKey> allowedDomains;
             for (const auto& allowedDomain : protoTabletInfo.GetAllowedDomains()) {

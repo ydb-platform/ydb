@@ -25,20 +25,24 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         ui64 tabletsUpdated = 0;
-        auto& newObjectMetrics = Self->ObjectToTabletMetrics[objectId];
+        THive::TAggregateMetrics* newObjectMetrics = nullptr;
         for (auto tabletId : msg->Record.GetTabletIds()) {
             auto tablet = Self->FindTablet(tabletId);
             if (tablet == nullptr) {
                 continue;
             }
-            auto oldObject = tablet->ObjectId;
-            if (oldObject == objectId) {
+            auto oldObject = tablet->GetObjectId();
+            tablet->ObjectId.second = objectId;
+            auto newObject = tablet->GetObjectId(); // It should be the same on every iteration
+            if (oldObject == newObject) {
                 continue;
             }
-            tablet->ObjectId = objectId;
             ++tabletsUpdated;
+            if (!newObjectMetrics) {
+                newObjectMetrics = &Self->ObjectToTabletMetrics[newObject];
+            }
 
-            newObjectMetrics.AggregateDiff({}, tablet->GetResourceValues(), tablet);
+            newObjectMetrics->AggregateDiff({}, tablet->GetResourceValues(), tablet);
             if (auto itObj = Self->ObjectToTabletMetrics.find(oldObject); itObj != Self->ObjectToTabletMetrics.end()) {
                 auto& oldObjectMetrics = itObj->second;
                 oldObjectMetrics.DecreaseCount();
@@ -51,16 +55,18 @@ public:
 
             if (auto node = tablet->GetNode(); node != nullptr) {
                 node->TabletsOfObject[oldObject].erase(tablet);
-                node->TabletsOfObject[objectId].emplace(tablet);
+                node->TabletsOfObject[newObject].emplace(tablet);
                 if (tablet->HasCounter()) {
                     Self->UpdateObjectCount(oldObject, node->Id, -1);
-                    Self->UpdateObjectCount(objectId, node->Id, +1);
+                    Self->UpdateObjectCount(newObject, node->Id, +1);
                 }
             }
 
             db.Table<Schema::Tablet>().Key(tabletId).Update<Schema::Tablet::ObjectID>(objectId);
         }
-        newObjectMetrics.IncreaseCount(tabletsUpdated);
+        if (newObjectMetrics) {
+            newObjectMetrics->IncreaseCount(tabletsUpdated);
+        }
 
         auto response = std::make_unique<TEvHive::TEvUpdateTabletsObjectReply>(NKikimrProto::OK);
         response->Record.SetTxId(Event->Get()->Record.GetTxId());

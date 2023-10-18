@@ -270,7 +270,7 @@ public:
                     tablet->AssignDomains(ObjectDomain, AllowedDomains);
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::ObjectDomain>(ObjectDomain);
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::AllowedDomains>(AllowedDomains);
-                    tablet->ObjectId = ObjectId;
+                    tablet->ObjectId = {OwnerId, ObjectId};
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::ObjectID>(ObjectId);
                     tablet->BootMode = BootMode;
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::BootMode>(BootMode);
@@ -371,7 +371,7 @@ public:
         tablet.AllowedDataCenters = AllowedDataCenterIds;
         tablet.DataCentersPreference = DataCentersPreference;
         tablet.BootMode = BootMode;
-        tablet.ObjectId = ObjectId;
+        tablet.ObjectId = {OwnerId, ObjectId};
         tablet.AssignDomains(ObjectDomain, AllowedDomains);
         tablet.Statistics.SetLastAliveTimestamp(now.MilliSeconds());
         tablet.BalancerPolicy = BalancerPolicy;
@@ -392,7 +392,7 @@ public:
                                                         NIceDb::TUpdate<Schema::Tablet::DataCentersPreference>(tablet.DataCentersPreference),
                                                         NIceDb::TUpdate<Schema::Tablet::AllowedDomains>(AllowedDomains),
                                                         NIceDb::TUpdate<Schema::Tablet::BootMode>(tablet.BootMode),
-                                                        NIceDb::TUpdate<Schema::Tablet::ObjectID>(tablet.ObjectId),
+                                                        NIceDb::TUpdate<Schema::Tablet::ObjectID>(tablet.ObjectId.second),
                                                         NIceDb::TUpdate<Schema::Tablet::ObjectDomain>(ObjectDomain),
                                                         NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet.Statistics),
                                                         NIceDb::TUpdate<Schema::Tablet::BalancerPolicy>(tablet.BalancerPolicy));
@@ -426,7 +426,7 @@ public:
 
         resourceValues.CopyFrom(Self->GetDefaultResourceValuesForTabletType(tablet.Type));
         BLOG_D("THive::TTxCreateTablet::Execute; Default resources after merge for type " << tablet.Type << ": {" << resourceValues.ShortDebugString() << "}");
-        if (tablet.ObjectId != 0) {
+        if (IsValidObjectId(tablet.ObjectId)) {
             resourceValues.MergeFrom(Self->GetDefaultResourceValuesForObject(tablet.ObjectId));
             BLOG_D("THive::TTxCreateTablet::Execute; Default resources after merge for object " << tablet.ObjectId << ": {" << resourceValues.ShortDebugString() << "}");
         }

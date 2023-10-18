@@ -301,15 +301,15 @@ public:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         if (ev->Get()->Request->ResultSet.size() == 1 && ev->Get()->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             const NSchemeCache::TSchemeCacheNavigate::TEntry& result(ev->Get()->Request->ResultSet.front());
-            ui64 pathId = 0;
+            TPathId pathId;
             if (!Path.empty() && result.Self) {
                 switch (result.Self->Info.GetPathType()) {
                     case NKikimrSchemeOp::EPathTypeSubDomain:
                     case NKikimrSchemeOp::EPathTypeExtSubDomain:
-                        pathId = 0;
+                        pathId = TPathId();
                         break;
                     default:
-                        pathId = result.Self->Info.GetPathId();
+                        pathId = TPathId(result.Self->Info.GetSchemeshardId(), result.Self->Info.GetPathId());
                         break;
                 }
             }

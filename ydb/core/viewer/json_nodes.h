@@ -83,7 +83,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
 
     bool Storage = false;
     bool Tablets = false;
-    ui64 FilterPathId = 0;
+    TPathId FilterPathId;
     bool ResolveGroupsToNodes = false;
     TNodeId MinAllowedNodeId = std::numeric_limits<TNodeId>::min();
     TNodeId MaxAllowedNodeId = std::numeric_limits<TNodeId>::max();
@@ -312,7 +312,7 @@ public:
                 SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvPDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
                 SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvVDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
             }
-            if (Tablets && FilterPathId == 0) {
+            if (Tablets && FilterPathId == TPathId()) {
                 BLOG_TRACE("SendTabletStateRequest to " << nodeId);
                 auto request = std::make_unique<TEvWhiteboard::TEvTabletStateRequest>();
                 request->Record.SetGroupBy("Type,State");
@@ -431,14 +431,14 @@ public:
                     RequestSchemeCacheNavigate(domainKey);
                     ++RequestsBeforeNodeList;
 
-                    if (!FilterPath.empty() && Tablets && FilterPathId == 0) {
-                        FilterPathId = entry.Self->Info.GetPathId();
+                    if (!FilterPath.empty() && Tablets && FilterPathId == TPathId()) {
+                        FilterPathId = TPathId(entry.Self->Info.GetSchemeshardId(), entry.Self->Info.GetPathId());
                     }
                 }
             }
             NavigateResult.emplace(path, std::move(entry));
 
-            if (HiveId != 0 && FilterPathId != 0) {
+            if (HiveId != 0 && FilterPathId != TPathId()) {
                 BLOG_TRACE("Requesting hive " << HiveId << " for path id " << FilterPathId);
                 RequestHiveNodeStats(HiveId, FilterPathId);
             }

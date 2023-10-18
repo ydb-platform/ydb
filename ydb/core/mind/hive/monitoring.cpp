@@ -3355,7 +3355,7 @@ public:
         result["Id"] = TStringBuilder() << tablet.Id;
         result["State"] = ETabletStateName(tablet.State);
         result["Type"] = TTabletTypes::EType_Name(tablet.Type);
-        result["ObjectId"] = tablet.ObjectId;
+        result["ObjectId"] = TStringBuilder() << tablet.ObjectId;
         result["ObjectDomain"] = TStringBuilder() << tablet.ObjectDomain;
         result["AllowedNodes"] = MakeFrom(tablet.AllowedNodes);
         result["AllowedDataCenters"] = MakeFrom(tablet.AllowedDataCenters);
@@ -3420,7 +3420,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_OBJECT_STATS; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        std::map<ui64, std::vector<std::pair<ui64, ui64>>> distributionOfObjects;
+        std::map<TFullObjectId, std::vector<std::pair<ui64, ui64>>> distributionOfObjects;
         for (const auto& node : Self->Nodes) {
             for (const auto& obj : node.second.TabletsOfObject) {
                 distributionOfObjects[obj.first].emplace_back(node.first, obj.second.size());
@@ -3430,7 +3430,7 @@ public:
         Result.SetType(NJson::JSON_ARRAY);
         for (const auto& [key, val] : distributionOfObjects) {
             NJson::TJsonValue listItem;
-            listItem["objectId"] = key;
+            listItem["objectId"] = TStringBuilder() << key;
             NJson::TJsonValue& distribution = listItem["distribution"];
             for (const auto& [node, cnt] : val) {
                 distribution[TStringBuilder() << node] = cnt;

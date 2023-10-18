@@ -1715,7 +1715,7 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
         auto& tabletInfo = *response.AddTablets();
         tabletInfo.SetTabletID(tabletId);
         tabletInfo.SetTabletType(info->Type);
-        tabletInfo.SetObjectId(info->ObjectId);
+        tabletInfo.SetObjectId(info->ObjectId.second);
         tabletInfo.SetState(static_cast<ui32>(info->State));
         tabletInfo.SetTabletBootMode(info->BootMode);
         tabletInfo.SetVolatileState(info->GetVolatileState());
@@ -1899,7 +1899,7 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         }
         if (request.GetReturnExtendedTabletInfo()) {
             if (request.HasFilterTabletsByPathId()) {
-                auto itTabletsOfObject = node.TabletsOfObject.find(request.GetFilterTabletsByPathId());
+                auto itTabletsOfObject = node.TabletsOfObject.find({request.GetFilterTabletsBySchemeShardId(), request.GetFilterTabletsByPathId()});
                 if (itTabletsOfObject != node.TabletsOfObject.end()) {
                     std::vector<std::vector<ui32>> tabletStateToTypeToCount;
                     tabletStateToTypeToCount.resize(NKikimrHive::ETabletVolatileState_ARRAYSIZE);
@@ -2396,7 +2396,7 @@ void THive::DivideMetrics(NKikimrTabletBase::TMetrics& metrics, ui64 divider) {
     metrics.SetWriteThroughput(metrics.GetWriteThroughput() / divider);
 }
 
-NKikimrTabletBase::TMetrics THive::GetDefaultResourceValuesForObject(TObjectId objectId) {
+NKikimrTabletBase::TMetrics THive::GetDefaultResourceValuesForObject(TFullObjectId objectId) {
     NKikimrTabletBase::TMetrics metrics;
     auto itTablets = ObjectToTabletMetrics.find(objectId);
     if (itTablets != ObjectToTabletMetrics.end()) {
@@ -2584,7 +2584,7 @@ TDuration THive::GetBalancerCooldown() const {
     }
 }
 
-void THive::UpdateObjectCount(TObjectId object, TNodeId node, i64 diff) {
+void THive::UpdateObjectCount(TFullObjectId object, TNodeId node, i64 diff) {
     if (!GetSpreadNeighbours()) {
         return;
     }
@@ -2594,7 +2594,7 @@ void THive::UpdateObjectCount(TObjectId object, TNodeId node, i64 diff) {
     BLOG_TRACE("UpdateObjectCount " << "for " << object << " on " << node << " (" << diff << ") ~> Imbalance: " << ObjectDistributions.GetMaxImbalance());
 }
 
-ui64 THive::GetObjectImbalance(TObjectId object) {
+ui64 THive::GetObjectImbalance(TFullObjectId object) {
     auto it = ObjectDistributions.Distributions.find(object);
     if (it == ObjectDistributions.Distributions.end()) {
         return 0;

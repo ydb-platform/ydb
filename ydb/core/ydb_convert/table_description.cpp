@@ -3,6 +3,7 @@
 #include "table_settings.h"
 #include "ydb_convert.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
@@ -32,6 +33,322 @@ static void FillStoragePool(TStoragePoolHolder* out, TAddStoragePoolFunc<TStorag
 
     std::invoke(func, out)->set_media(in.GetPreferredPoolKind());
 }
+
+THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTableRequest* req) {
+    THashSet<EAlterOperationKind> ops;
+
+    if (req->add_columns_size() || req->drop_columns_size() ||
+        req->alter_columns_size() ||
+        req->ttl_action_case() !=
+            Ydb::Table::AlterTableRequest::TTL_ACTION_NOT_SET ||
+        req->tiering_action_case() !=
+            Ydb::Table::AlterTableRequest::TIERING_ACTION_NOT_SET ||
+        req->has_alter_storage_settings() || req->add_column_families_size() ||
+        req->alter_column_families_size() || req->set_compaction_policy() ||
+        req->has_alter_partitioning_settings() ||
+        req->set_key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED ||
+        req->has_set_read_replicas_settings())
+    {
+        ops.emplace(EAlterOperationKind::Common);
+    }
+
+    if (req->add_indexes_size()) {
+        ops.emplace(EAlterOperationKind::AddIndex);
+    }
+
+    if (req->drop_indexes_size()) {
+        ops.emplace(EAlterOperationKind::DropIndex);
+    }
+
+    if (req->add_changefeeds_size()) {
+        ops.emplace(EAlterOperationKind::AddChangefeed);
+    }
+
+    if (req->drop_changefeeds_size()) {
+        ops.emplace(EAlterOperationKind::DropChangefeed);
+    }
+
+    if (req->alter_attributes_size()) {
+        ops.emplace(EAlterOperationKind::Attribute);
+    }
+
+    if (req->rename_indexes_size()) {
+        ops.emplace(EAlterOperationKind::RenameIndex);
+    }
+
+    return ops;
+}
+
+namespace {
+
+std::pair<TString, TString> SplitPathIntoWorkingDirAndName(const TString& path) {
+    auto splitPos = path.find_last_of('/');
+    if (splitPos == path.npos || splitPos + 1 == path.size()) {
+        ythrow yexception() << "wrong path format '" << path << "'" ;
+    }
+    return {path.substr(0, splitPos), path.substr(splitPos + 1)};
+}
+
+}
+
+
+bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
+    const Ydb::Table::AlterTableRequest& in, const TTableProfiles& profiles,
+    Ydb::StatusIds::StatusCode& code, TString& error, const TAppData* appData) {
+
+    bool changed = false;
+    auto &partitionConfig = *out.MutablePartitionConfig();
+
+    if (in.set_compaction_policy()) {
+        if (!profiles.ApplyCompactionPolicy(in.set_compaction_policy(), partitionConfig, code, error, appData)) {
+            return false;
+        }
+
+        changed = true;
+    }
+
+    return NKikimr::FillAlterTableSettingsDesc(out, in, code, error, changed);
+}
+
+bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NKikimrIndexBuilder::TIndexBuildSettings* settings,
+    ui64 flags,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    const auto ops = GetAlterOperationKinds(req);
+    if (ops.size() != 1 || *ops.begin() != EAlterOperationKind::AddIndex) {
+        code = Ydb::StatusIds::INTERNAL_ERROR;
+        error = "Unexpected build alter table add index call.";
+        return false;
+    }
+
+    if (req->add_indexes_size() != 1) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = "Only one index can be added by one operation";
+        return false;
+    }
+
+    const auto desc = req->add_indexes(0);
+
+    if (!desc.name()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Index must have a name";
+        return false;
+    }
+
+    if (!desc.index_columns_size()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "At least one column must be specified";
+        return false;
+    }
+
+    if (!desc.data_columns().empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = "Data column feature is not supported yet";
+        return false;
+    }
+
+    if (flags & NKqpProto::TKqpSchemeOperation::FLAG_PG_MODE) {
+        settings->set_pg_mode(true);
+    }
+    
+    if (flags & NKqpProto::TKqpSchemeOperation::FLAG_IF_NOT_EXISTS) {
+        settings->set_if_not_exist(true);
+    }
+    
+    settings->set_source_path(req->path());
+    auto tableIndex = settings->mutable_index();
+    tableIndex->CopyFrom(req->add_indexes(0));
+
+    return true;
+}
+
+bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, const TTableProfiles& profiles,
+    const TPathId& resolvedPathId,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    std::pair<TString, TString> pathPair;
+    const auto ops = GetAlterOperationKinds(req);
+    if (ops.empty()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Empty alter";
+        return false;
+    }
+
+    if (ops.size() > 1) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = "Mixed alter is unsupported";
+        return false;
+    }
+
+    const auto OpType = *ops.begin();
+
+    try {
+        pathPair = SplitPathIntoWorkingDirAndName(req->path());
+    } catch (const std::exception&) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        return false;
+    }
+
+    if (!AppData()->FeatureFlags.GetEnableChangefeeds() && OpType == EAlterOperationKind::AddChangefeed) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error =  "Changefeeds are not supported yet";
+        return false;
+    }
+
+    if (req->rename_indexes_size() != 1 && OpType == EAlterOperationKind::RenameIndex) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = "Only one index can be renamed by one operation";
+        return false;
+    }
+
+    if (req->drop_changefeeds_size() != 1 && OpType == EAlterOperationKind::DropChangefeed) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = "Only one changefeed can be removed by one operation";
+        return false;
+    }
+
+    if (req->add_changefeeds_size() != 1 && OpType == EAlterOperationKind::AddChangefeed) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = "Only one changefeed can be added by one operation";
+        return false;
+    }
+
+    if (req->drop_indexes_size() != 1 && OpType == EAlterOperationKind::DropIndex) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = "Only one index can be removed by one operation";
+        return false;
+    }
+
+    const auto& workingDir = pathPair.first;
+    const auto& name = pathPair.second;
+    modifyScheme->SetWorkingDir(workingDir);
+
+    for(const auto& rename: req->rename_indexes()) {
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
+        auto& alter = *modifyScheme->MutableMoveIndex();
+        alter.SetTablePath(req->path());
+        alter.SetSrcPath(rename.source_name());
+        alter.SetDstPath(rename.destination_name());
+        alter.SetAllowOverwrite(rename.replace_destination());
+    }
+
+    for (const auto& drop : req->drop_changefeeds()) {
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream);
+        auto op = modifyScheme->MutableDropCdcStream();
+        op->SetStreamName(drop);
+        op->SetTableName(name);
+    }
+
+    for (const auto &add : req->add_changefeeds()) {
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
+        auto op = modifyScheme->MutableCreateCdcStream();
+        op->SetTableName(name);
+
+        if (add.has_retention_period()) {
+            op->SetRetentionPeriodSeconds(add.retention_period().seconds());
+        }
+
+        if (add.has_topic_partitioning_settings()) {
+            i64 minActivePartitions =
+                add.topic_partitioning_settings().min_active_partitions();
+            if (minActivePartitions < 0) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "Topic partitions count must be positive";
+                return false;
+            } else if (minActivePartitions == 0) {
+                minActivePartitions = 1;
+            }
+            op->SetTopicPartitions(minActivePartitions);
+        }
+
+        if (!FillChangefeedDescription(*op->MutableStreamDescription(), add, code, error)) {
+            return false;
+        }
+    }
+
+    for (const auto& drop : req->drop_indexes()) {
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex);
+        auto desc = modifyScheme->MutableDropIndex();
+        desc->SetIndexName(drop);
+        desc->SetTableName(name);
+    }
+
+    if (OpType == EAlterOperationKind::Common) {
+        modifyScheme->SetOperationType(
+            NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+
+        auto desc = modifyScheme->MutableAlterTable();
+        desc->SetName(name);
+
+        for (const auto &drop : req->drop_columns()) {
+            desc->AddDropColumns()->SetName(drop);
+        }
+
+        if (!FillColumnDescription(*desc, req->add_columns(), code, error)) {
+            return false;
+        }
+
+        for (const auto &alter : req->alter_columns()) {
+            auto column = desc->AddColumns();
+            column->SetName(alter.name());
+            if (!alter.family().empty()) {
+                column->SetFamilyName(alter.family());
+            }
+        }
+
+        bool hadPartitionConfig = desc->HasPartitionConfig();
+        TColumnFamilyManager families(desc->MutablePartitionConfig());
+
+        // Apply storage settings to the default column family
+        if (req->has_alter_storage_settings()) {
+            if (!families.ApplyStorageSettings(req->alter_storage_settings(), &code,
+                                            &error)) {
+                return false;
+            }
+        }
+
+        for (const auto &familySettings : req->add_column_families()) {
+            if (!families.ApplyFamilySettings(familySettings, &code, &error)) {
+                return false;
+            }
+        }
+
+        for (const auto &familySettings : req->alter_column_families()) {
+            if (!families.ApplyFamilySettings(familySettings, &code, &error)) {
+                return false;
+            }
+        }
+
+        // Avoid altering partition config unless we changed something
+        if (!families.Modified && !hadPartitionConfig) {
+            desc->ClearPartitionConfig();
+        }
+
+        if (!FillAlterTableSettingsDesc(*desc, *req, profiles, code, error,
+                                        AppData())) {
+            return false;
+        }
+    }
+
+    if (OpType == EAlterOperationKind::Attribute) {
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
+        modifyScheme->AddApplyIf()->SetPathId(resolvedPathId.LocalPathId);
+
+        auto& alter = *modifyScheme->MutableAlterUserAttributes();
+        alter.SetPathName(name);
+
+        for (auto [key, value] : req->alter_attributes()) {
+            auto& attr = *alter.AddUserAttributes();
+            attr.SetKey(key);
+            if (value) {
+                attr.SetValue(value);
+            }
+        }
+    }
+
+    return true;
+}
+
 
 template <typename TColumn>
 static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& column) {

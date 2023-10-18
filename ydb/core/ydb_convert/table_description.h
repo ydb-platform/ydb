@@ -9,6 +9,38 @@
 
 namespace NKikimr {
 
+enum class EAlterOperationKind {
+    // columns, column families, storage, ttl
+    Common,
+    // add indices
+    AddIndex,
+    // drop indices
+    DropIndex,
+    // add/alter/drop attributes
+    Attribute,
+    // add changefeeds
+    AddChangefeed,
+    // drop changefeeds
+    DropChangefeed,
+    // rename index
+    RenameIndex,
+};
+
+
+
+THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTableRequest* req); 
+bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    const TTableProfiles& profiles, const TPathId& resolvedPathId,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+
+bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
+    const Ydb::Table::AlterTableRequest& in, const TTableProfiles& profiles,
+    Ydb::StatusIds::StatusCode& code, TString& error, const TAppData* appData);
+
+bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NKikimrIndexBuilder::TIndexBuildSettings* settings,
+    ui64 flags,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+
 // out
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out,
     NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in);

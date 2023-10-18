@@ -10,9 +10,6 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
     Ydb::StatusIds::StatusCode& code, TString& error, TList<TString>& warnings);
 
-bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
-    const Ydb::Table::AlterTableRequest& in, const TTableProfiles& profiles,
-    Ydb::StatusIds::StatusCode& code, TString& error, const TAppData* appData);
 
 } // namespace NGRpcService
 } // namespace NKikimr

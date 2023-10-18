@@ -52,27 +52,12 @@ static bool CheckAccess(const NACLib::TUserToken& userToken, const NSchemeCache:
     return true;
 }
 
-static std::pair<StatusIds::StatusCode, TString> CheckAddIndexDesc(const Ydb::Table::TableIndex& desc) {
-    if (!desc.name()) {
-        return {StatusIds::BAD_REQUEST, "Index must have a name"};
-    }
-
-    if (!desc.index_columns_size()) {
-        return {StatusIds::BAD_REQUEST, "At least one column must be specified"};
-    }
-
-    if (!desc.data_columns().empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
-        return {StatusIds::UNSUPPORTED, "Data column feature is not supported yet"};
-    }
-
-    return {StatusIds::SUCCESS, ""};
-}
-
 using TEvAlterTableRequest = TGrpcRequestOperationCall<Ydb::Table::AlterTableRequest,
     Ydb::Table::AlterTableResponse>;
 
 class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTableRequest> {
     using TBase = TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTableRequest>;
+    using EOp = NKikimr::EAlterOperationKind;
 
     void PassAway() override {
         if (SSPipeClient) {
@@ -80,65 +65,6 @@ class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTab
             SSPipeClient = TActorId();
         }
         IActor::PassAway();
-    }
-
-    enum class EOp {
-        // columns, column families, storage, ttl
-        Common,
-        // add indices
-        AddIndex,
-        // drop indices
-        DropIndex,
-        // add/alter/drop attributes
-        Attribute,
-        // add changefeeds
-        AddChangefeed,
-        // drop changefeeds
-        DropChangefeed,
-        // rename index
-        RenameIndex,
-    };
-
-    THashSet<EOp> GetOps() const {
-        const auto& req = GetProtoRequest();
-        THashSet<EOp> ops;
-
-        if (req->add_columns_size() || req->drop_columns_size() || req->alter_columns_size()
-            || req->ttl_action_case() != Ydb::Table::AlterTableRequest::TTL_ACTION_NOT_SET
-            || req->tiering_action_case() != Ydb::Table::AlterTableRequest::TIERING_ACTION_NOT_SET
-            || req->has_alter_storage_settings()
-            || req->add_column_families_size() || req->alter_column_families_size()
-            || req->set_compaction_policy() || req->has_alter_partitioning_settings()
-            || req->set_key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED
-            || req->has_set_read_replicas_settings()) {
-            ops.emplace(EOp::Common);
-        }
-
-        if (req->add_indexes_size()) {
-            ops.emplace(EOp::AddIndex);
-        }
-
-        if (req->drop_indexes_size()) {
-            ops.emplace(EOp::DropIndex);
-        }
-
-        if (req->add_changefeeds_size()) {
-            ops.emplace(EOp::AddChangefeed);
-        }
-
-        if (req->drop_changefeeds_size()) {
-            ops.emplace(EOp::DropChangefeed);
-        }
-
-        if (req->alter_attributes_size()) {
-            ops.emplace(EOp::Attribute);
-        }
-
-        if (req->rename_indexes_size()) {
-            ops.emplace(EOp::RenameIndex);
-        }
-
-        return ops;
     }
 
 public:
@@ -156,10 +82,10 @@ public:
         }
 
         if (!Request_->GetSerializedToken().empty()) {
-            UserToken = MakeHolder<NACLib::TUserToken>(Request_->GetSerializedToken());
+            UserToken = Request_->GetInternalToken();
         }
 
-        auto ops = GetOps();
+        auto ops = GetAlterOperationKinds(req);
         if (!ops) {
             return Reply(StatusIds::BAD_REQUEST, "Empty alter",
                 NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
@@ -170,6 +96,10 @@ public:
         }
 
         OpType = *ops.begin();
+
+        Ydb::StatusIds::StatusCode code;
+        TString error;
+
         switch (OpType) {
         case EOp::Common:
             // Altering table settings will need table profiles
@@ -179,62 +109,23 @@ public:
             return;
 
         case EOp::AddIndex:
-            if (req->add_indexes_size() == 1) {
-                const auto& index = req->add_indexes(0);
-                auto [status, issues] = CheckAddIndexDesc(index);
-                if (status == StatusIds::SUCCESS) {
-                    PrepareAlterTableAddIndex();
-                } else {
-                    return Reply(status, issues, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-                }
-            } else {
-                return Reply(StatusIds::UNSUPPORTED, "Only one index can be added by one operation",
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+            if (!BuildAlterTableAddIndexRequest(req, &IndexBuildSettings, Flags, code, error)) {
+                Reply(code, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                return;
             }
-            break;
 
-        case EOp::DropIndex:
-            if (req->drop_indexes_size() == 1) {
-                DropIndex(ctx);
-            } else {
-                return Reply(StatusIds::UNSUPPORTED, "Only one index can be removed by one operation",
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-            }
-            break;
-
-        case EOp::AddChangefeed:
-            if (!AppData()->FeatureFlags.GetEnableChangefeeds()) {
-                return Reply(StatusIds::UNSUPPORTED, "Changefeeds are not supported yet",
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-            }
-            if (req->add_changefeeds_size() == 1) {
-                AddChangefeed(ctx);
-            } else {
-                return Reply(StatusIds::UNSUPPORTED, "Only one changefeed can be added by one operation",
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-            }
-            break;
-
-        case EOp::DropChangefeed:
-            if (req->drop_changefeeds_size() == 1) {
-                DropChangefeed(ctx);
-            } else {
-                return Reply(StatusIds::UNSUPPORTED, "Only one changefeed can be removed by one operation",
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-            }
+            PrepareAlterTableAddIndex();
             break;
 
         case EOp::Attribute:
             PrepareAlterUserAttrubutes();
             break;
 
+        case EOp::AddChangefeed:
+        case EOp::DropIndex:
+        case EOp::DropChangefeed:
         case EOp::RenameIndex:
-            if (req->rename_indexes_size() == 1) {
-                RenameIndex(ctx);
-            } else {
-                return Reply(StatusIds::UNSUPPORTED, "Only one index can be renamed by one operation",
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-            }
+            AlterTable(ctx);
             break;
         }
 
@@ -374,7 +265,8 @@ private:
             return AlterTableAddIndexOp(resp, ctx);
         case EOp::Attribute:
             Y_ABORT_UNLESS(!resp->ResultSet.empty());
-            return AlterUserAttributes(resp->ResultSet.back().TableId.PathId, ctx);
+            ResolvedPathId = resp->ResultSet.back().TableId.PathId;
+            return AlterTable(ctx);
         default:
             TXLOG_E("Got unexpected cache response");
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
@@ -399,20 +291,7 @@ private:
     }
 
     void SendAddIndexOpToSS(const TActorContext& ctx) {
-        const auto& req = *GetProtoRequest();
-
-        NKikimrIndexBuilder::TIndexBuildSettings settings;
-        if (Flags & NKqpProto::TKqpSchemeOperation::FLAG_PG_MODE) {
-            settings.set_pg_mode(true);
-        }
-        if (Flags & NKqpProto::TKqpSchemeOperation::FLAG_IF_NOT_EXISTS) {
-            settings.set_if_not_exist(true);
-        }
-        settings.set_source_path(req.path());
-        auto tableIndex = settings.mutable_index();
-        tableIndex->CopyFrom(req.add_indexes(0));
-        auto ev = new NSchemeShard::TEvIndexBuilder::TEvCreateRequest(TxId, DatabaseName, std::move(settings));
-
+        auto ev = new NSchemeShard::TEvIndexBuilder::TEvCreateRequest(TxId, DatabaseName, std::move(IndexBuildSettings));
         NTabletPipe::SendData(ctx, SSPipeClient, ev);
     }
 
@@ -450,259 +329,17 @@ private:
         }
     }
 
-    void DropIndex(const TActorContext &ctx) {
-        const auto req = GetProtoRequest();
-        std::pair<TString, TString> pathPair;
-        try {
-            pathPair = SplitPath(req->path());
-        } catch (const std::exception&) {
-            return ReplyWithStatus(StatusIds::BAD_REQUEST, ctx);
-        }
-
-        const auto& workingDir = pathPair.first;
-        const auto& name = pathPair.second;
-
-        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
-        NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme->SetWorkingDir(workingDir);
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex);
-
-        for (const auto& drop : req->drop_indexes()) {
-            auto desc = modifyScheme->MutableDropIndex();
-            desc->SetIndexName(drop);
-            desc->SetTableName(name);
-        }
-
-        ctx.Send(MakeTxProxyID(), proposeRequest.release());
-    }
-
-    void AddChangefeed(const TActorContext &ctx) {
-        const auto req = GetProtoRequest();
-        std::pair<TString, TString> pathPair;
-        try {
-            pathPair = SplitPath(req->path());
-        } catch (const std::exception&) {
-            return ReplyWithStatus(StatusIds::BAD_REQUEST, ctx);
-        }
-
-        const auto& workingDir = pathPair.first;
-        const auto& name = pathPair.second;
-
-        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
-        NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme->SetWorkingDir(workingDir);
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
-
-        for (const auto& add : req->add_changefeeds()) {
-            auto op = modifyScheme->MutableCreateCdcStream();
-            op->SetTableName(name);
-
-            if (add.has_retention_period()) {
-                op->SetRetentionPeriodSeconds(add.retention_period().seconds());
-            }
-
-            if (add.has_topic_partitioning_settings()) {
-                i64 minActivePartitions = add.topic_partitioning_settings().min_active_partitions();
-                if (minActivePartitions < 0) {
-                    NYql::TIssues issues;
-                    issues.AddIssue(NYql::TIssue("Topic partitions count must be positive"));
-                    return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
-                } else if (minActivePartitions == 0) {
-                    minActivePartitions = 1;
-                }
-                op->SetTopicPartitions(minActivePartitions);
-            }
-
-            StatusIds::StatusCode code;
-            TString error;
-            if (!FillChangefeedDescription(*op->MutableStreamDescription(), add, code, error)) {
-                NYql::TIssues issues;
-                issues.AddIssue(NYql::TIssue(error));
-                return Reply(code, issues, ctx);
-            }
-        }
-
-        ctx.Send(MakeTxProxyID(), proposeRequest.release());
-    }
-
-    void DropChangefeed(const TActorContext &ctx) {
-        const auto req = GetProtoRequest();
-        std::pair<TString, TString> pathPair;
-        try {
-            pathPair = SplitPath(req->path());
-        } catch (const std::exception&) {
-            return ReplyWithStatus(StatusIds::BAD_REQUEST, ctx);
-        }
-
-        const auto& workingDir = pathPair.first;
-        const auto& name = pathPair.second;
-
-        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
-        NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme->SetWorkingDir(workingDir);
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream);
-
-        for (const auto& drop : req->drop_changefeeds()) {
-            auto op = modifyScheme->MutableDropCdcStream();
-            op->SetStreamName(drop);
-            op->SetTableName(name);
-        }
-
-        ctx.Send(MakeTxProxyID(), proposeRequest.release());
-    }
-
     void AlterTable(const TActorContext &ctx) {
         const auto req = GetProtoRequest();
-        std::pair<TString, TString> pathPair;
-        try {
-            pathPair = SplitPath(req->path());
-        } catch (const std::exception&) {
-            return ReplyWithStatus(StatusIds::BAD_REQUEST, ctx);
-        }
-
-        const auto& workingDir = pathPair.first;
-        const auto& name = pathPair.second;
-
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
-        NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme->SetWorkingDir(workingDir);
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
-
-        auto desc = modifyScheme->MutableAlterTable();
-        desc->SetName(name);
-
-        for (const auto& drop : req->drop_columns()) {
-            desc->AddDropColumns()->SetName(drop);
-        }
-
-        StatusIds::StatusCode code = StatusIds::SUCCESS;
+        auto modifyScheme = proposeRequest->Record.MutableTransaction()->MutableModifyScheme();
+        Ydb::StatusIds::StatusCode code;
         TString error;
-
-        if (!FillColumnDescription(*desc, req->add_columns(), code, error)) {
+        if (!BuildAlterTableModifyScheme(req, modifyScheme, Profiles, ResolvedPathId, code, error)) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);
         }
-
-        for (const auto& alter : req->alter_columns()) {
-            auto column = desc->AddColumns();
-            column->SetName(alter.name());
-            if (!alter.family().empty()) {
-                column->SetFamilyName(alter.family());
-            }
-        }
-
-        bool hadPartitionConfig = desc->HasPartitionConfig();
-        TColumnFamilyManager families(desc->MutablePartitionConfig());
-
-        // Apply storage settings to the default column family
-        if (req->has_alter_storage_settings()) {
-            Ydb::StatusIds::StatusCode code;
-            TString error;
-            if (!families.ApplyStorageSettings(req->alter_storage_settings(), &code, &error)) {
-                NYql::TIssues issues;
-                issues.AddIssue(NYql::TIssue(error));
-                return Reply(code, issues, ctx);
-            }
-        }
-
-        for (const auto& familySettings : req->add_column_families()) {
-            Ydb::StatusIds::StatusCode code;
-            TString error;
-            if (!families.ApplyFamilySettings(familySettings, &code, &error)) {
-                NYql::TIssues issues;
-                issues.AddIssue(NYql::TIssue(error));
-                return Reply(code, issues, ctx);
-            }
-        }
-
-        for (const auto& familySettings : req->alter_column_families()) {
-            Ydb::StatusIds::StatusCode code;
-            TString error;
-            if (!families.ApplyFamilySettings(familySettings, &code, &error)) {
-                NYql::TIssues issues;
-                issues.AddIssue(NYql::TIssue(error));
-                return Reply(code, issues, ctx);
-            }
-        }
-
-        // Avoid altering partition config unless we changed something
-        if (!families.Modified && !hadPartitionConfig) {
-            desc->ClearPartitionConfig();
-        }
-
-        if (!FillAlterTableSettingsDesc(*desc, *req, Profiles, code, error, AppData())) {
-            NYql::TIssues issues;
-            issues.AddIssue(NYql::TIssue(error));
-            return Reply(code, issues, ctx);
-        }
-
-        ctx.Send(MakeTxProxyID(), proposeRequest.release());
-    }
-
-    void AlterUserAttributes(const TPathId& pathId, const TActorContext &ctx) {
-        const auto req = GetProtoRequest();
-
-        std::pair<TString, TString> pathPair;
-        try {
-            pathPair = SplitPath(req->path());
-        } catch (const std::exception&) {
-            return ReplyWithStatus(StatusIds::BAD_REQUEST, ctx);
-        }
-
-        const auto& workingDir = pathPair.first;
-        const auto& name = pathPair.second;
-
-        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
-        auto& record = proposeRequest->Record;
-        auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
-
-        modifyScheme.SetWorkingDir(workingDir);
-        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
-        modifyScheme.AddApplyIf()->SetPathId(pathId.LocalPathId);
-
-        auto& alter = *modifyScheme.MutableAlterUserAttributes();
-        alter.SetPathName(name);
-
-        for (auto [key, value] : req->alter_attributes()) {
-            auto& attr = *alter.AddUserAttributes();
-            attr.SetKey(key);
-            if (value) {
-                attr.SetValue(value);
-            }
-        }
-
-        ctx.Send(MakeTxProxyID(), proposeRequest.release());
-    }
-
-    void RenameIndex(const TActorContext &ctx) {
-        const auto req = GetProtoRequest();
-
-        std::pair<TString, TString> pathPair;
-        try {
-            pathPair = SplitPath(req->path());
-        } catch (const std::exception&) {
-            return ReplyWithStatus(StatusIds::BAD_REQUEST, ctx);
-        }
-
-        const auto& workingDir = pathPair.first;
-
-        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
-        auto& record = proposeRequest->Record;
-        auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
-
-        modifyScheme.SetWorkingDir(workingDir);
-        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
-
-        auto& alter = *modifyScheme.MutableMoveIndex();
-        alter.SetTablePath(req->path());
-        alter.SetSrcPath(req->rename_indexes(0).source_name());
-        alter.SetDstPath(req->rename_indexes(0).destination_name());
-        alter.SetAllowOverwrite(req->rename_indexes(0).replace_destination());
 
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
@@ -719,9 +356,11 @@ private:
     TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
     TString LogPrefix;
     TActorId SSPipeClient;
-    THolder<const NACLib::TUserToken> UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TPathId ResolvedPathId;
     TTableProfiles Profiles;
     EOp OpType;
+    NKikimrIndexBuilder::TIndexBuildSettings IndexBuildSettings;
 
     const ui64 Flags;
 };

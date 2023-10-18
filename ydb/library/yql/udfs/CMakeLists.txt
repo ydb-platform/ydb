@@ -7,4 +7,6 @@
 
 
 add_subdirectory(common)
+add_subdirectory(examples)
 add_subdirectory(logs)
+add_subdirectory(test)

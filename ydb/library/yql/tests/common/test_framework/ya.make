@@ -16,3 +16,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    udfs_deps
+)

@@ -1,0 +1,14 @@
+<tmp_path>/program.yql:<main>: Error: Type annotation
+
+    <tmp_path>/program.yql:<main>:14:13: Error: At function: RemovePrefixMembers
+    	(let world (Write! world res_sink (Key) scheme '('('type))))
+	            ^
+        <tmp_path>/program.yql:<main>:11:14: Error: At function: TypeOf
+        	(let scheme (Right! x))
+	             ^
+            <tmp_path>/program.yql:<main>:5:9: Error: At function: Merge, At function: YtReadTable!
+            	(let x (Read! world mr_source
+	        ^
+                <tmp_path>/program.yql:<main>:5:9: Error: Table "Input" does not have any scheme attribute supported by YQL, you can add "PRAGMA yt.InferSchema = '1';" to your query in order to use types of first data row as scheme.
+                	(let x (Read! world mr_source
+	        ^

@@ -1,0 +1,8 @@
+<tmp_path>/program.yql:<main>: Error: Type annotation
+
+    <tmp_path>/program.yql:<main>:22:13: Error: At function: YtWriteTable!
+    	(let world (Write! world sink (Key '('table (String 'Output))) out '('('mode 'append))))
+	            ^
+        <tmp_path>/program.yql:<main>:22:13: Error: Table Output is modified and dropped in the same transaction
+        	(let world (Write! world sink (Key '('table (String 'Output))) out '('('mode 'append))))
+	            ^

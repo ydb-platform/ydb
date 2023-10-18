@@ -1,0 +1,14 @@
+<tmp_path>/program.yql:<main>: Error: Type annotation
+
+    <tmp_path>/program.yql:<main>:16:13: Error: At function: RemovePrefixMembers
+    	(let world (Write! world res_sink (Key) testcase '('('type))))
+	            ^
+        <tmp_path>/program.yql:<main>:14:16: Error: At function: Append
+        	(let testcase (Append testcase test))
+	               ^
+            <tmp_path>/program.yql:<main>:12:12: Error: Failed to convert type: Variant<Int32,Int32,Int32> to Variant<Int32,Int32,Int32,Int32>
+            	(let test (Variant (Int32 '0) '1 testType))
+	           ^
+            <tmp_path>/program.yql:<main>:12:12: Error: Mismatch type of item being appended and list
+            	(let test (Variant (Int32 '0) '1 testType))
+	           ^

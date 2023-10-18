@@ -680,16 +680,21 @@ def get_udfs_path(extra_paths=None):
     except Exception:
         udfs_project_path = None
 
+    try:
+        ydb_udfs_project_path = yql_binary_path('ydb/library/yql/test/common/test_framework/udfs_deps')
+    except Exception:
+        ydb_udfs_project_path = None
+
     merged_udfs_path = yql_output_path('yql_udfs')
     with udfs_lock:
         if not os.path.isdir(merged_udfs_path):
             os.mkdir(merged_udfs_path)
 
-        udfs_paths = [udfs_project_path, udfs_bin_path, udfs_build_path, ydb_udfs_build_path, contrib_ydb_udfs_build_path, rthub_udfs_build_path, kwyt_udfs_build_path]
+        udfs_paths = [udfs_project_path, ydb_udfs_project_path, udfs_bin_path, udfs_build_path, ydb_udfs_build_path, contrib_ydb_udfs_build_path, rthub_udfs_build_path, kwyt_udfs_build_path]
         if extra_paths is not None:
             udfs_paths += extra_paths
 
-        log('process search UDF in: %s, %s, %s' % (udfs_project_path, udfs_bin_path, udfs_build_path))
+        log('process search UDF in: %s, %s, %s, %s' % (udfs_project_path, ydb_udfs_project_path, udfs_bin_path, udfs_build_path))
         for _udfs_path in udfs_paths:
             if _udfs_path:
                 for dirpath, dnames, fnames in os.walk(_udfs_path):

@@ -101,8 +101,8 @@ class TLogReader : public TLogReaderBase {
     ui64 EndSectorIdx;
     ui64 SectorsToSkip;
     ui64 ExpectedOffset;
-    ui32 LogEndChunkIdx;
-    ui64 LogEndSectorIdx;
+    const ui32 LogEndChunkIdx;
+    const ui64 LogEndSectorIdx;
     TReqId ReqId;
     TVector<TLogChunkItem> ChunksToRead;
     TVector<TLogChunkItem>::iterator CurrentChunkToRead;

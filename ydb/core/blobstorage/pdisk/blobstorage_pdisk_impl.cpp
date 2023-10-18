@@ -1790,6 +1790,9 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(ownerData.OperationLog, "YardInitForKnownVDisk, OwnerId# " << owner
             << ", evYardInit# " << evYardInit.ToString());
 
+    TFirstUncommitted firstUncommitted = CommonLogger->FirstUncommitted.load();
+    ownerData.LogEndPosition = TOwnerData::TLogEndPosition(firstUncommitted.ChunkIdx, firstUncommitted.SectorIdx);
+
     ownerData.OwnerRound = evYardInit.OwnerRound;
     TOwnerRound ownerRound = evYardInit.OwnerRound;
     TVector<TChunkIdx> ownedChunks;

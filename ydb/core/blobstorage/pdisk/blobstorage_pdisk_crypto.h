@@ -59,7 +59,7 @@ public:
 
     bool CheckSectorHash(const ui64 sectorOffset, const ui64 magic, const ui8 *sector,
             const ui32 sectorSize, const ui64 sectorHash) {
-        // On production servers may be to versions.
+        // On production servers may be two versions.
         // If by default used OldHash version, then use it first
         // If by default used T1ha0NoAvx version, then use it
         if (UseT1ha0Hasher) {

@@ -829,28 +829,23 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
                 continue;
 
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown: {
-                TxProxyMon->ResolveKeySetWrongRequest->Inc();
-
-                ui32 access = NACLib::EAccessRights::DescribeSchema;
-                if (UserToken && access != 0 && entry.SecurityObject != nullptr) {
-                    if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
-                        LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
-                                    "Access denied for " << UserToken->GetUserSID()
-                                    << " with access " << NACLib::AccessRightsToString(access)
-                                    << " to path " << JoinPath(entry.Path) << " because the base path");
-                        const TString errString = TStringBuilder()
-                            << "Access denied for " << UserToken->GetUserSID()
-                            << " to path " << JoinPath(entry.Path);
-                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
-                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
-                        break;
-                    }
-                }
-
-                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
+                const ui32 access = NACLib::EAccessRights::DescribeSchema;
+                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
+                            "Access denied for " << (UserToken ? UserToken->GetUserSID() : "empty")
+                            << " with access " << NACLib::AccessRightsToString(access)
+                            << " to path " << JoinPath(entry.Path) << " because the base path");
+                const TString errString = TStringBuilder()
+                    << "Access denied for " << (UserToken ? UserToken->GetUserSID() : "empty")
+                    << " to path " << JoinPath(entry.Path);
+                auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
                 break;
             }
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+                TxProxyMon->ResolveKeySetWrongRequest->Inc();
+                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
+                break;
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
                 TxProxyMon->ResolveKeySetWrongRequest->Inc();

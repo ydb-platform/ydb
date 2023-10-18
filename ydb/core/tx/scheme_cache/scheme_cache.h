@@ -101,6 +101,7 @@ struct TSchemeCacheNavigate {
         TableCreationNotComplete = 5,
         LookupError = 6,
         RedirectLookupError = 7,
+        AccessDenied = 8,
         Ok = 128,
     };
 
@@ -319,6 +320,7 @@ struct TSchemeCacheRequest {
         PathErrorUnknown = 3,
         PathErrorNotExist = 4,
         LookupError = 5,
+        AccessDenied = 6,
         OkScheme = 128,
         OkData = 129,
     };

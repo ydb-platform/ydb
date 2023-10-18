@@ -95,6 +95,9 @@ namespace NLongTxService {
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
                     return ReplyError(Ydb::StatusIds::UNAVAILABLE, "Schema service unavailable");
+                
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+                    return ReplyError(Ydb::StatusIds::UNAUTHORIZED, "Access denied");
             }
 
             // FIXME: make sure we actually resolved a database, and not something else

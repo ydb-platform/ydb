@@ -140,6 +140,8 @@ public:
                 [[fallthrough]];
             case EStatus::PathNotPath:
                 [[fallthrough]];
+            case EStatus::AccessDenied:
+                [[fallthrough]];
             case EStatus::RedirectLookupError:
                 Fail(result.Status);
                 break;

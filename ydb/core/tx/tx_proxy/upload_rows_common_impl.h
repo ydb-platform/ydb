@@ -605,6 +605,8 @@ private:
                 return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "unknown table", ctx);
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
                 return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "unknown database", ctx);
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+                return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, LogPrefix() << "access denied", ctx);
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
                 return ReplyWithError(Ydb::StatusIds::GENERIC_ERROR, LogPrefix() << "unknown error", ctx);
         }

@@ -75,6 +75,8 @@ protected:
             switch (entry.Status) {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
                 break;
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+                return this->Reply(Ydb::StatusIds::UNAUTHORIZED, NKikimrIssues::TIssuesIds::ACCESS_DENIED);
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
                 return this->Reply(Ydb::StatusIds::SCHEME_ERROR, NKikimrIssues::TIssuesIds::PATH_NOT_EXIST);

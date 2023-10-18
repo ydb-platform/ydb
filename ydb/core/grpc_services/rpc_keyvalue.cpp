@@ -531,6 +531,9 @@ protected:
         switch (request->ResultSet[0].Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+            self->Reply(StatusIds::UNAUTHORIZED, "Access denied.", NKikimrIssues::TIssuesIds::ACCESS_DENIED, ctx);
+            return false;
         case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
         case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
             self->Reply(StatusIds::SCHEME_ERROR, "Path isn't exist.", NKikimrIssues::TIssuesIds::PATH_NOT_EXIST, ctx);

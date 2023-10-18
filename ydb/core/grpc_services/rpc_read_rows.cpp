@@ -372,6 +372,8 @@ public:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
                 return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Sprintf("Table '%s' unavaliable", GetTable().c_str()));
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+                return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Sprintf("Access denied to table '%s'", GetTable().c_str()));
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:

@@ -311,19 +311,16 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
 
     if (navigate->ErrorCount > 0) {
         switch (entry.Status) {
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
+            const ui32 access = NACLib::EAccessRights::DescribeSchema;
+            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
+                        "Access denied for " << (UserToken ? UserToken->GetUserSID() : "empty")
+                        << " with access " << NACLib::AccessRightsToString(access)
+                        << " to path " << JoinPath(entry.Path) << " because base path");
+            ReportError(NKikimrScheme::StatusAccessDenied, "Access denied", ctx);
+            break;
+        }
         case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-            if (UserToken != nullptr && entry.SecurityObject != nullptr) {
-                ui32 access = NACLib::EAccessRights::DescribeSchema;
-                if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
-                                "Access denied for " << UserToken->GetUserSID()
-                                << " with access " << NACLib::AccessRightsToString(access)
-                                << " to path " << JoinPath(entry.Path) << " because base path");
-                    ReportError(NKikimrScheme::StatusAccessDenied, "Access denied", ctx);
-                    break;
-                }
-            }
-
             ReportError(NKikimrScheme::StatusPathDoesNotExist, "Path not found", ctx);
             break;
         case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:

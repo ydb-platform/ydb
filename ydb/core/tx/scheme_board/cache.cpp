@@ -193,8 +193,16 @@ namespace {
             return entry.Access;
         }
 
-        static void SetErrorAndClear(TNavigateContext* context, TNavigate::TEntry& entry) {
-            SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+        static ui32 GetAccessForEnhancedError() {
+            return NACLib::EAccessRights::DescribeSchema;
+        }
+
+        static void SetErrorAndClear(TNavigateContext* context, TNavigate::TEntry& entry, const bool isDescribeDenied) {
+            if (isDescribeDenied) {
+                SetError(context, entry, TNavigate::EStatus::AccessDenied);
+            } else {
+                SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+            }
 
             switch (entry.RequestType) {
             case TNavigate::TEntry::ERequestType::ByPath:
@@ -230,8 +238,12 @@ namespace {
             entry.FileStoreInfo.Drop();
         }
 
-        static void SetErrorAndClear(TResolveContext* context, TResolve::TEntry& entry) {
-            SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
+        static void SetErrorAndClear(TResolveContext* context, TResolve::TEntry& entry, const bool isDescribeDenied) {
+            if (isDescribeDenied) {
+                SetError(context, entry, TResolve::EStatus::AccessDenied, TKeyDesc::EStatus::NotExists);
+            } else {
+                SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
+            }
 
             entry.Kind = TResolve::KindUnknown;
             entry.DomainInfo.Drop();
@@ -269,7 +281,7 @@ namespace {
                             << ", domain# " << Context->ResolvedDomainInfo->DomainKey
                             << ", path's domain# " << entry.DomainInfo->DomainKey);
 
-                        SetErrorAndClear(Context.Get(), entry);
+                        SetErrorAndClear(Context.Get(), entry, false);
                     }
                 }
 
@@ -286,7 +298,10 @@ namespace {
                             << ", for# " << Context->Request->UserToken->GetUserSID()
                             << ", access# " << NACLib::AccessRightsToString(access));
 
-                        SetErrorAndClear(Context.Get(), entry);
+                        SetErrorAndClear(
+                            Context.Get(),
+                            entry,
+                            securityObject->CheckAccess(GetAccessForEnhancedError(), *Context->Request->UserToken));
                     }
                 }
             }

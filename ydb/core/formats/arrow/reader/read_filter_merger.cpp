@@ -15,56 +15,33 @@ NJson::TJsonValue TSortableBatchPosition::DebugJson() const {
     return result;
 }
 
-std::optional<ui64> TSortableBatchPosition::FindPosition(std::shared_ptr<arrow::RecordBatch> batch, const TSortableBatchPosition& forFound, const bool greater, const bool include) {
+std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindPosition(std::shared_ptr<arrow::RecordBatch> batch, const TSortableBatchPosition& forFound, const bool greater) {
     if (!batch || !batch->num_rows()) {
         return {};
     }
 
-    const auto checkEqualBorder = [batch, greater, include](const i64 position) ->std::optional<i64> {
-        if (include) {
-            return position;
-        } else if (greater) {
-            if (batch->num_rows() > position + 1) {
-                return position + 1;
-            } else {
-                return {};
-            }
-        } else {
-            if (position) {
-                return position - 1;
-            } else {
-                return {};
-            }
-        }
-    };
-
     i64 posStart = 0;
     i64 posFinish = batch->num_rows() - 1;
+    if (forFound.IsReverseSort()) {
+        std::swap(posStart, posFinish);
+    }
     TSortableBatchPosition position = forFound.BuildSame(batch, posStart);
     {
         position.InitPosition(posStart);
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::greater) {
-            if (greater) {
-                return posStart;
-            } else {
-                return {};
-            }
+            return TFoundPosition::Greater(posStart);
         } else if (cmp == std::partial_ordering::equivalent) {
-            return checkEqualBorder(posStart);
+            return TFoundPosition::Equal(posStart);
         }
     }
     {
         position.InitPosition(posFinish);
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::less) {
-            if (greater) {
-                return {};
-            } else {
-                return posFinish;
-            }
+            return TFoundPosition::Less(posFinish);
         } else if (cmp == std::partial_ordering::equivalent) {
-            return checkEqualBorder(posFinish);
+            return TFoundPosition::Equal(posFinish);
         }
     }
     while (posFinish > posStart + 1) {
@@ -75,15 +52,27 @@ std::optional<ui64> TSortableBatchPosition::FindPosition(std::shared_ptr<arrow::
         } else if (comparision == std::partial_ordering::greater) {
             posFinish = position.Position;
         } else {
-            return checkEqualBorder(position.Position);
+            return TFoundPosition::Equal(position.Position);
         }
     }
     Y_ABORT_UNLESS(posFinish != posStart);
     if (greater) {
-        return posFinish;
+        return TFoundPosition::Greater(posFinish);
     } else {
-        return posStart;
+        return TFoundPosition::Less(posStart);
     }
+}
+
+TSortableBatchPosition::TFoundPosition TSortableBatchPosition::SkipToLower(const TSortableBatchPosition& forFound) {
+    auto pos = FindPosition(Batch, forFound, true);
+    AFL_VERIFY(pos)("batch", NArrow::DebugJson(Batch, 1, 1))("found", forFound.DebugJson());
+    if (ReverseSort) {
+        AFL_VERIFY(pos->GetPosition() <= Position)("pos", Position)("pos_skip", pos->GetPosition())("reverse", true);
+    } else {
+        AFL_VERIFY(Position <= pos->GetPosition())("pos", Position)("pos_skip", pos->GetPosition())("reverse", false);
+    }
+    AFL_VERIFY(InitPosition(pos->GetPosition()));
+    return *pos;
 }
 
 TSortableScanData::TSortableScanData(std::shared_ptr<arrow::RecordBatch> batch, const std::vector<std::string>& columns) {

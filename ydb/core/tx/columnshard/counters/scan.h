@@ -55,6 +55,13 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr ScanDuration;
 
+    NMonitoring::TDynamicCounters::TCounterPtr NoScanRecords;
+    NMonitoring::TDynamicCounters::TCounterPtr NoScanIntervals;
+    NMonitoring::TDynamicCounters::TCounterPtr LinearScanRecords;
+    NMonitoring::TDynamicCounters::TCounterPtr LinearScanIntervals;
+    NMonitoring::TDynamicCounters::TCounterPtr LogScanRecords;
+    NMonitoring::TDynamicCounters::TCounterPtr LogScanIntervals;
+
 public:
     NMonitoring::TDynamicCounters::TCounterPtr PortionBytes;
     NMonitoring::TDynamicCounters::TCounterPtr FilterBytes;
@@ -93,6 +100,21 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedBytes;
 
     TScanCounters(const TString& module = "Scan");
+
+    void OnNoScanInterval(const ui32 recordsCount) const {
+        NoScanRecords->Add(recordsCount);
+        NoScanIntervals->Add(1);
+    }
+
+    void OnLinearScanInterval(const ui32 recordsCount) const {
+        LinearScanRecords->Add(recordsCount);
+        LinearScanIntervals->Add(1);
+    }
+
+    void OnLogScanInterval(const ui32 recordsCount) const {
+        LogScanRecords->Add(recordsCount);
+        LogScanIntervals->Add(1);
+    }
 
     void OnScanDuration(const TDuration d) const {
         ScanDuration->Add(d.MicroSeconds());

@@ -40,7 +40,7 @@ EOperation ValidateOperation(EOperation op, ui32 argsSize);
 struct TDatumBatch {
     std::shared_ptr<arrow::Schema> Schema;
     std::vector<arrow::Datum> Datums;
-    int64_t Rows{};
+    int64_t Rows = 0;
 
     arrow::Status AddColumn(const std::string& name, arrow::Datum&& column);
     arrow::Result<arrow::Datum> GetColumnByName(const std::string& name) const;

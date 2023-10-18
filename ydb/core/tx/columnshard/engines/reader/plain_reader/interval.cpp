@@ -11,33 +11,36 @@ void TFetchingInterval::ConstructResult() {
     if (!Merger || !IsSourcesReady()) {
         return;
     }
-    if (!IsExclusiveSource()) {
-        for (auto&& [_, i] : Sources) {
-            if (i->GetStart().Compare(Start) == std::partial_ordering::equivalent && !i->IsMergingStarted()) {
-                auto rb = i->GetBatch();
-                if (rb) {
-                    Merger->AddSource(rb, i->GetFilterStageData().GetNotAppliedEarlyFilter());
-                }
-                i->StartMerging();
+    for (auto&& [_, i] : Sources) {
+        if (i->GetStart().Compare(Start) == std::partial_ordering::equivalent && !i->IsMergingStarted()) {
+            if (auto rb = i->GetBatch()) {
+                Merger->AddSource(rb, i->GetFilterStageData().GetNotAppliedEarlyFilter());
             }
+            i->StartMerging();
         }
-        Merger->DrainCurrentTo(*RBBuilder, Finish, IncludeFinish);
-        Scanner.OnIntervalResult(RBBuilder->Finalize(), GetIntervalIdx());
-    } else {
-        Y_ABORT_UNLESS(Merger->IsEmpty());
-        Sources.begin()->second->StartMerging();
-        auto batch = Sources.begin()->second->GetBatch();
-        if (batch && batch->num_rows()) {
-            if (Scanner.IsReverse()) {
-                auto permutation = NArrow::MakePermutation(batch->num_rows(), true);
-                batch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(batch, permutation)).record_batch();
-            }
-            batch = NArrow::ExtractExistedColumns(batch, RBBuilder->GetFields());
-            AFL_VERIFY((ui32)batch->num_columns() == RBBuilder->GetFields().size())("batch", batch->num_columns())("builder", RBBuilder->GetFields().size())
-                ("batch_columns", JoinSeq(",", batch->schema()->field_names()))("builder_columns", RBBuilder->GetColumnNames());
-        }
-        Scanner.OnIntervalResult(batch, GetIntervalIdx());
     }
+    std::shared_ptr<arrow::RecordBatch> simpleBatch;
+    AFL_VERIFY(Merger->GetSourcesCount() <= Sources.size());
+    if (Sources.size() == 1) {
+        simpleBatch = Merger->SingleSourceDrain(Finish, IncludeFinish);
+        if (simpleBatch) {
+            if (IsExclusiveSource()) {
+                Scanner.GetContext().GetCounters().OnNoScanInterval(simpleBatch->num_rows());
+            } else {
+                Scanner.GetContext().GetCounters().OnLogScanInterval(simpleBatch->num_rows());
+            }
+            simpleBatch = NArrow::ExtractColumnsValidate(simpleBatch, Scanner.GetResultFieldNames());
+            AFL_VERIFY(simpleBatch);
+        }
+        if (IncludeFinish) {
+            Y_ABORT_UNLESS(Merger->IsEmpty());
+        }
+    } else {
+        Merger->DrainCurrentTo(*RBBuilder, Finish, IncludeFinish);
+        Scanner.GetContext().GetCounters().OnLinearScanInterval(RBBuilder->GetRecordsCount());
+        simpleBatch = RBBuilder->Finalize();
+    }
+    Scanner.OnIntervalResult(simpleBatch, GetIntervalIdx());
 }
 
 void TFetchingInterval::OnSourceFetchStageReady(const ui32 /*sourceIdx*/) {

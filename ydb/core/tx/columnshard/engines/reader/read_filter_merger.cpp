@@ -75,6 +75,51 @@ bool TMergePartialStream::DrainCurrentTo(TRecordBatchBuilder& builder, const TSo
     return false;
 }
 
+std::shared_ptr<arrow::RecordBatch> TMergePartialStream::SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish) {
+    std::shared_ptr<arrow::RecordBatch> result;
+    if (SortHeap.Empty()) {
+        return result;
+    }
+    const ui32 startPos = SortHeap.Current().GetKeyColumns().GetPosition();
+    const TSortableBatchPosition::TFoundPosition pos = SortHeap.MutableCurrent().SkipToLower(readTo);
+    bool finished = false;
+    const i32 delta = Reverse ? startPos - pos.GetPosition() : pos.GetPosition() - startPos;
+    if (delta == 0 && pos.IsGreater()) {
+        return nullptr;
+    }
+    bool include = false;
+    AFL_VERIFY(delta >= 0);
+    if (pos.IsEqual()) {
+        if (includeFinish) {
+            finished = !SortHeap.MutableCurrent().Next();
+            include = true;
+        } else {
+            finished = false;
+        }
+    } else if (pos.IsGreater()) {
+        finished = false;
+    } else {
+        finished = true;
+        include = true;
+    }
+    if (Reverse) {
+        result = SortHeap.Current().GetKeyColumns().GetBatch()->Slice(pos.GetPosition() + (include ? 0 : 1), delta + (include ? 1 : 0));
+    } else {
+        result = SortHeap.Current().GetKeyColumns().GetBatch()->Slice(startPos, delta + (include ? 1 : 0));
+    }
+    if (Reverse) {
+        auto permutation = NArrow::MakePermutation(result->num_rows(), true);
+        result = NArrow::TStatusValidator::GetValid(arrow::compute::Take(result, permutation)).record_batch();
+    }
+
+    if (finished) {
+        SortHeap.RemoveTop();
+    } else {
+        SortHeap.UpdateTop();
+    }
+    return result;
+}
+
 bool TMergePartialStream::DrainAll(TRecordBatchBuilder& builder) {
     Y_ABORT_UNLESS((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
     while (SortHeap.Size()) {
@@ -87,8 +132,8 @@ bool TMergePartialStream::DrainAll(TRecordBatchBuilder& builder) {
 }
 
 std::optional<TSortableBatchPosition> TMergePartialStream::DrainCurrentPosition() {
-    Y_ABORT_UNLESS(SortHeap.Size());
-    Y_ABORT_UNLESS(!SortHeap.Current().IsControlPoint());
+    Y_DEBUG_ABORT_UNLESS(SortHeap.Size());
+    Y_DEBUG_ABORT_UNLESS(!SortHeap.Current().IsControlPoint());
     TSortableBatchPosition result = SortHeap.Current().GetKeyColumns();
     TSortableBatchPosition resultVersion = SortHeap.Current().GetVersionColumns();
     bool isFirst = true;
@@ -96,8 +141,13 @@ std::optional<TSortableBatchPosition> TMergePartialStream::DrainCurrentPosition(
     while (SortHeap.Size() && (isFirst || result.Compare(SortHeap.Current().GetKeyColumns()) == std::partial_ordering::equivalent)) {
         auto& anotherIterator = SortHeap.Current();
         if (!isFirst) {
-            AFL_VERIFY(resultVersion.Compare(anotherIterator.GetVersionColumns()) != std::partial_ordering::less)("r", resultVersion.DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())
-                ("key", result.DebugJson());
+            if (PossibleSameVersionFlag) {
+                AFL_VERIFY(resultVersion.Compare(anotherIterator.GetVersionColumns()) != std::partial_ordering::less)("r", resultVersion.DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())
+                    ("key", result.DebugJson());
+            } else {
+                AFL_VERIFY(resultVersion.Compare(anotherIterator.GetVersionColumns()) == std::partial_ordering::greater)("r", resultVersion.DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())
+                    ("key", result.DebugJson());
+            }
         }
         SortHeap.Next();
         isFirst = false;

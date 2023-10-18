@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/formats/arrow/replace_key.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <util/generic/hash.h>
 #include <util/string/join.h>
@@ -68,11 +69,46 @@ protected:
     bool ReverseSort = false;
     std::shared_ptr<TSortableScanData> Sorting;
     std::shared_ptr<TSortableScanData> Data;
-    std::shared_ptr<arrow::RecordBatch> Batch;
-    static std::optional<ui64> FindPosition(std::shared_ptr<arrow::RecordBatch> batch, const TSortableBatchPosition& forFound, const bool needGreater, const bool include);
-
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
 public:
     TSortableBatchPosition() = default;
+
+    class TFoundPosition {
+    private:
+        YDB_READONLY(ui32, Position, 0);
+        std::optional<bool> GreaterIfNotEqual;
+        explicit TFoundPosition(const ui32 pos, const bool greater)
+            : Position(pos) {
+            GreaterIfNotEqual = greater;
+        }
+        explicit TFoundPosition(const ui32 pos)
+            : Position(pos) {
+        }
+    public:
+        bool IsEqual() const {
+            return !GreaterIfNotEqual;
+        }
+        bool IsGreater() const {
+            return !!GreaterIfNotEqual && *GreaterIfNotEqual;
+        }
+
+        static TFoundPosition Less(const ui32 pos) {
+            return TFoundPosition(pos, false);
+        }
+        static TFoundPosition Greater(const ui32 pos) {
+            return TFoundPosition(pos, true);
+        }
+        static TFoundPosition Equal(const ui32 pos) {
+            return TFoundPosition(pos);
+        }
+    };
+
+    static std::optional<TFoundPosition> FindPosition(std::shared_ptr<arrow::RecordBatch> batch, const TSortableBatchPosition& forFound, const bool needGreater);
+    TSortableBatchPosition::TFoundPosition SkipToLower(const TSortableBatchPosition& forFound);
+
+    NArrow::TReplaceKey BuildReplaceKey() const {
+        return NArrow::TReplaceKey::FromBatch(Batch, Position);
+    }
 
     const TSortableScanData& GetData() const {
         return *Data;
@@ -84,24 +120,15 @@ public:
     NJson::TJsonValue DebugJson() const;
 
     TSortableBatchPosition BuildSame(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position) const {
-        return TSortableBatchPosition(batch, position, Sorting->GetFieldNames(), Data->GetFieldNames(), ReverseSort);
+        std::vector<std::string> dataColumns;
+        if (Data) {
+            dataColumns = Data->GetFieldNames();
+        }
+        return TSortableBatchPosition(batch, position, Sorting->GetFieldNames(), dataColumns, ReverseSort);
     }
 
     bool IsSameSortingSchema(const std::shared_ptr<arrow::Schema>& schema) {
         return Sorting->IsSameSchema(schema);
-    }
-
-    static std::shared_ptr<arrow::RecordBatch> SelectInterval(std::shared_ptr<arrow::RecordBatch> batch, const TSortableBatchPosition& from, const TSortableBatchPosition& to, const bool includeFrom, const bool includeTo) {
-        if (!batch) {
-            return nullptr;
-        }
-        Y_ABORT_UNLESS(from.Compare(to) != std::partial_ordering::greater);
-        const std::optional<ui32> idxFrom = FindPosition(batch, from, true, includeFrom);
-        const std::optional<ui32> idxTo = FindPosition(batch, to, false, includeTo);
-        if (!idxFrom || !idxTo || *idxTo < *idxFrom) {
-            return nullptr;
-        }
-        return batch->Slice(*idxFrom, *idxTo - *idxFrom + 1);
     }
 
     TSortableBatchPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position, const std::vector<std::string>& sortingColumns, const std::vector<std::string>& dataColumns, const bool reverseSort)

@@ -20,6 +20,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, TPlainR
     auto resultSchema = reader.GetReadMetadata()->GetLoadSchema(reader.GetReadMetadata()->GetSnapshot());
     for (auto&& f : reader.GetReadMetadata()->GetAllColumns()) {
         ResultFields.emplace_back(resultSchema->GetFieldByColumnIdVerified(f));
+        ResultFieldNames.emplace_back(ResultFields.back()->name());
     }
     Merger = std::make_shared<NIndexedReader::TMergePartialStream>(reader.GetReadMetadata()->GetReplaceKey(), std::make_shared<arrow::Schema>(ResultFields), reader.GetReadMetadata()->IsDescSorted());
     DrainSources();
@@ -52,7 +53,7 @@ bool TScanHead::BuildNextInterval() {
         BorderPoints.erase(BorderPoints.begin());
         if (CurrentSegments.size()) {
             Y_ABORT_UNLESS(BorderPoints.size());
-            const bool includeFinish = BorderPoints.begin()->second.GetFinishSources().size() == CurrentSegments.size() && !BorderPoints.begin()->second.GetStartSources().size();
+            const bool includeFinish = BorderPoints.begin()->second.GetStartSources().empty();
             FetchingIntervals.emplace_back(
                 *CurrentStart, BorderPoints.begin()->first, SegmentIdxCounter++, CurrentSegments,
                 *this, std::make_shared<NIndexedReader::TRecordBatchBuilder>(ResultFields), includeFinish, isIncludeStart);

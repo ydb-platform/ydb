@@ -25,6 +25,7 @@ private:
     TPlainReadData& Reader;
     std::deque<std::shared_ptr<IDataSource>> Sources;
     std::vector<std::shared_ptr<arrow::Field>> ResultFields;
+    YDB_READONLY_DEF(std::vector<TString>, ResultFieldNames);
     THashMap<ui32, std::shared_ptr<IDataSource>> SourceByIdx;
     std::map<NIndexedReader::TSortableBatchPosition, TDataSourceEndpoint> BorderPoints;
     std::map<ui32, std::shared_ptr<IDataSource>> CurrentSegments;

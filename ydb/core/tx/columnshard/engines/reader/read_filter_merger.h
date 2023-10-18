@@ -31,6 +31,7 @@ public:
     }
 
     const TSortCursor& Current() const { return Queue.front(); }
+    TSortCursor& MutableCurrent() { return Queue.front(); }
     size_t Size() const { return Queue.size(); }
     bool Empty() const { return Queue.empty(); }
     TSortCursor& NextChild() { return Queue[NextChildIndex()]; }
@@ -63,22 +64,6 @@ public:
             result.AppendValue(i.DebugJson());
         }
         return result;
-    }
-
-private:
-    std::vector<TSortCursor> Queue;
-    /// Cache comparison between first and second child if the order in queue has not been changed.
-    size_t NextIdx = 0;
-
-    size_t NextChildIndex() {
-        if (NextIdx == 0) {
-            NextIdx = 1;
-            if (Queue.size() > 2 && Queue[1] < Queue[2]) {
-                ++NextIdx;
-            }
-        }
-
-        return NextIdx;
     }
 
     /// This is adapted version of the function __sift_down from libc++.
@@ -126,6 +111,22 @@ private:
         } while (!(*child_it < top));
         *curr_it = std::move(top);
     }
+private:
+    std::vector<TSortCursor> Queue;
+    /// Cache comparison between first and second child if the order in queue has not been changed.
+    size_t NextIdx = 0;
+
+    size_t NextChildIndex() {
+        if (NextIdx == 0) {
+            NextIdx = 1;
+            if (Queue.size() > 2 && Queue[1] < Queue[2]) {
+                ++NextIdx;
+            }
+        }
+
+        return NextIdx;
+    }
+
 };
 
 class TMergePartialStream {
@@ -133,6 +134,8 @@ private:
 #ifndef NDEBUG
     std::optional<TSortableBatchPosition> CurrentKeyColumns;
 #endif
+    bool PossibleSameVersionFlag = false;
+
     class TBatchIterator {
     private:
         bool ControlPointFlag;
@@ -194,11 +197,27 @@ private:
             return KeyColumns.Compare(nextIterator.KeyColumns) == std::partial_ordering::less;
         }
 
+        bool IsReverse() const {
+            return ReverseSortKff < 0;
+        }
+
         bool IsDeleted() const {
             if (!FilterIterator) {
                 return false;
             }
             return !FilterIterator->GetCurrentAcceptance();
+        }
+
+        TSortableBatchPosition::TFoundPosition SkipToLower(const TSortableBatchPosition& pos) {
+            const ui32 posStart = KeyColumns.GetPosition();
+            auto result = KeyColumns.SkipToLower(pos);
+            const i32 delta = IsReverse() ? (posStart - KeyColumns.GetPosition()) : (KeyColumns.GetPosition() - posStart);
+            AFL_VERIFY(delta >= 0);
+            AFL_VERIFY(VersionColumns.InitPosition(KeyColumns.GetPosition()));
+            if (FilterIterator && delta) {
+                AFL_VERIFY(FilterIterator->Next(delta));
+            }
+            return result;
         }
 
         bool Next() {
@@ -272,7 +291,15 @@ public:
         Y_ABORT_UNLESS(!DataSchema || DataSchema->num_fields());
     }
 
+    void SetPossibleSameVersion(const bool value) {
+        PossibleSameVersionFlag = value;
+    }
+
     bool IsValid() const {
+        return SortHeap.Size();
+    }
+
+    bool GetSourcesCount() const {
         return SortHeap.Size();
     }
 
@@ -291,6 +318,7 @@ public:
     }
 
     bool DrainAll(TRecordBatchBuilder& builder);
+    std::shared_ptr<arrow::RecordBatch> SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish);
     bool DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish);
     std::vector<std::shared_ptr<arrow::RecordBatch>> DrainAllParts(const std::map<TSortableBatchPosition, bool>& positions,
         const std::vector<std::shared_ptr<arrow::Field>>& resultFields);
@@ -327,11 +355,18 @@ public:
         return result;
     }
 
-    TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow::Field>>& fields)
+    TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::optional<ui32> rowsCountExpectation = {}, const THashMap<std::string, ui64>& fieldDataSizePreallocated = {})
         : Fields(fields) {
         Y_ABORT_UNLESS(Fields.size());
         for (auto&& f : fields) {
             Builders.emplace_back(NArrow::MakeBuilder(f));
+            auto it = fieldDataSizePreallocated.find(f->name());
+            if (it != fieldDataSizePreallocated.end()) {
+                NArrow::ReserveData(*Builders.back(), it->second);
+            }
+            if (rowsCountExpectation) {
+                NArrow::TStatusValidator::Validate(Builders.back()->Reserve(*rowsCountExpectation));
+            }
         }
     }
 

@@ -15,7 +15,15 @@ TScanCounters::TScanCounters(const TString& module)
     , HasResultsAckRequest(TBase::GetDeriviative("HasResultsAckRequest"))
     , NoResultsAckRequest(TBase::GetDeriviative("NoResultsAckRequest"))
     , AckWaitingDuration(TBase::GetDeriviative("AckWaitingDuration"))
+
     , ScanDuration(TBase::GetDeriviative("ScanDuration"))
+
+    , NoScanRecords(TBase::GetDeriviative("NoScanRecords"))
+    , NoScanIntervals(TBase::GetDeriviative("NoScanIntervals"))
+    , LinearScanRecords(TBase::GetDeriviative("LinearScanRecords"))
+    , LinearScanIntervals(TBase::GetDeriviative("LinearScanIntervals"))
+    , LogScanRecords(TBase::GetDeriviative("LogScanRecords"))
+    , LogScanIntervals(TBase::GetDeriviative("LogScanIntervals"))
 
     , PortionBytes(TBase::GetDeriviative("PortionBytes"))
     , FilterBytes(TBase::GetDeriviative("FilterBytes"))

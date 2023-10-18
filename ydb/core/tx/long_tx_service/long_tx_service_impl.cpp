@@ -390,11 +390,6 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFlush::TPtr& ev) 
     Y_ABORT_UNLESS(state.PendingUserRequests || state.PendingBeginTxRequests);
     state.FlushPending = false;
 
-    if (Settings.Counters) {
-        Settings.Counters->AcquireReadSnapshotOutRequests->Inc();
-        Settings.Counters->AcquireReadSnapshotOutInFlight->Inc();
-    }
-
     StartAcquireSnapshotActor(msg->DatabaseName, state);
 }
 

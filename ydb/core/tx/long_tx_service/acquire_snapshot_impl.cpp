@@ -205,6 +205,11 @@ namespace NLongTxService {
         req.BeginTxRequests.swap(state.PendingBeginTxRequests);
         Register(new TAcquireSnapshotActor(SelfId(), reqId, databaseName));
         state.ActiveRequests.insert(reqId);
+
+        if (Settings.Counters) {
+            Settings.Counters->AcquireReadSnapshotOutRequests->Inc();
+            Settings.Counters->AcquireReadSnapshotOutInFlight->Inc();
+        }
     }
 
 } // namespace NLongTxService

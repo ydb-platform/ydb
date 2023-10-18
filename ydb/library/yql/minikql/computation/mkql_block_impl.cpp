@@ -336,13 +336,4 @@ NUdf::TUnboxedValuePod TBlockState::Get(const ui64 sliceSize, const THolderFacto
         return Values[idx];
 }
 
-void TBlockState::FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-    const auto sliceSize = Slice();
-    for (size_t i = 0; i < Values.size(); ++i) {
-        if (const auto out = output[i]) {
-            *out = Get(sliceSize, ctx.HolderFactory, i);
-        }
-    }
-}
-
 }

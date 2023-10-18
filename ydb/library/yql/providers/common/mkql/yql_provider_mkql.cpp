@@ -603,7 +603,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         {"Extend", &TProgramBuilder::Extend},
         {"OrderedExtend", &TProgramBuilder::OrderedExtend},
-        {"BlockExtend", &TProgramBuilder::BlockExtend},
 
         {"Zip", &TProgramBuilder::Zip},
         {"ZipAll", &TProgramBuilder::ZipAll},
@@ -1152,7 +1151,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto value = FromString<i64>(node.Head(), NUdf::EDataSlot::Interval64);
         return ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::Interval64>(
             NUdf::TStringRef((const char*)&value, sizeof(value)));
-    });    
+    });
 
     AddCallable("FoldMap", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto list = MkqlBuildExpr(node.Head(), ctx);

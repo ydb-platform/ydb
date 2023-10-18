@@ -108,8 +108,6 @@ struct TBlockState : public TComputationValue<TBlockState> {
     ui64 Slice();
 
     NUdf::TUnboxedValuePod Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx) const;
-
-    void FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue*const* output);
 };
 #ifndef MKQL_DISABLE_CODEGEN
     class TLLVMFieldsStructureBlockState: public TLLVMFieldsStructure<TComputationValue<TBlockState>> {
@@ -146,75 +144,4 @@ struct TBlockState : public TComputationValue<TBlockState> {
         {}
     };
 #endif
-template <typename TDerived>
-class TStatefulWideFlowBlockComputationNode: public TWideFlowBaseComputationNode<TDerived>
-{
-protected:
-    TStatefulWideFlowBlockComputationNode(TComputationMutables& mutables, const IComputationNode* source, ui32 width)
-        : TWideFlowBaseComputationNode<TDerived>(source)
-        , StateIndex(mutables.CurValueIndex++)
-        , StateKind(EValueRepresentation::Boxed)
-        , Width(width)
-        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(width))
-    {
-        MKQL_ENSURE(width > 0, "Wide flow blocks should have at least one column (block length)");
-    }
-private:
-    struct TState : public TBlockState {
-        NUdf::TUnboxedValue ChildState;
-
-        TState(TMemoryUsageInfo* memInfo, size_t width, ui32 wideFieldsIndex, NUdf::TUnboxedValue*const* values, TComputationContext& ctx)
-            : TBlockState(memInfo, width)
-        {
-            auto**const fields = ctx.WideFields.data() + wideFieldsIndex;
-            for (size_t i = 0; i < width - 1; ++i) {
-                fields[i] = values[i] ? &Values[i] : nullptr;
-            }
-            fields[width - 1] = &Values.back();
-        }
-    };
-
-    TState& GetState(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        auto& state = ctx.MutableValues[GetIndex()];
-        if (!state.HasValue()) {
-            state = ctx.HolderFactory.Create<TState>(Width, WideFieldsIndex, output, ctx);
-        }
-        return *static_cast<TState*>(state.AsBoxed().Get());
-    }
-
-    EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const final {
-        auto& s = GetState(ctx, output);
-        const auto fields = ctx.WideFields.data() + WideFieldsIndex;
-        while (s.Count == 0) {
-            s.Values.assign(s.Values.size(), NUdf::TUnboxedValuePod());
-            if (const auto result = static_cast<const TDerived*>(this)->DoCalculate(s.ChildState, ctx, fields); result != EFetchResult::One) {
-                return result;
-            }
-            s.FillArrays();
-        }
-
-        s.FillOutputs(ctx, output);
-        return EFetchResult::One;
-    }
-
-    ui32 GetIndex() const final {
-        return StateIndex;
-    }
-
-    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
-        if (this == owner)
-            return;
-
-        const auto ins = dependencies.emplace(StateIndex, StateKind);
-        if (ins.second && this->Dependence) {
-            this->Dependence->CollectDependentIndexes(owner, dependencies);
-        }
-    }
-protected:
-    const ui32 StateIndex;
-    const EValueRepresentation StateKind;
-    const ui32 Width;
-    const ui32 WideFieldsIndex;
-};
-
 } //namespace NKikimr::NMiniKQL

@@ -24,7 +24,7 @@ public:
     void Exec(TActorSystem *actorSystem) override {
         CommonLogger->FirstUncommitted = TFirstUncommitted(EndChunkIdx, EndSectorIdx);
 
-        Y_VERIFY_DEBUG(FlushAction);
+        Y_DEBUG_ABORT_UNLESS(FlushAction);
 
         // FlushAction here is a TCompletionLogWrite which will decrease owner's inflight count.
         FlushAction->Exec(actorSystem);

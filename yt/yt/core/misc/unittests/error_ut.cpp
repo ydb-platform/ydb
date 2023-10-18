@@ -70,7 +70,8 @@ TEST(TErrorTest, FormatCtor)
 TEST(TErrorTest, TruncateSimple)
 {
     auto error = TError("Some error")
-        << TErrorAttribute("my_attr", "Attr value");
+        << TErrorAttribute("my_attr", "Attr value")
+        << TError("Inner error");
     auto truncatedError = error.Truncate();
     EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
     EXPECT_EQ(error.GetMessage(), truncatedError.GetMessage());
@@ -79,17 +80,71 @@ TEST(TErrorTest, TruncateSimple)
     EXPECT_EQ(error.GetSpanId(), truncatedError.GetSpanId());
     EXPECT_EQ(error.GetDatetime(), truncatedError.GetDatetime());
     EXPECT_EQ(error.Attributes().Get<TString>("my_attr"), truncatedError.Attributes().Get<TString>("my_attr"));
+    EXPECT_EQ(error.InnerErrors().size(), truncatedError.InnerErrors().size());
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), truncatedError.InnerErrors()[0].GetMessage());
 }
 
 TEST(TErrorTest, TruncateLarge)
 {
-    auto error = TError("Some long long error");
+    auto error = TError("Some long long error")
+        << TError("First inner error")
+        << TError("Second inner error")
+        << TError("Third inner error")
+        << TError("Fourth inner error");
     error.MutableAttributes()->Set("my_attr", "Some long long attr");
 
-    auto truncatedError = error.Truncate(/*maxInnerErrorCount*/ 2, /*stringLimit*/ 10);
+    auto truncatedError = error.Truncate(/*maxInnerErrorCount*/ 3, /*stringLimit*/ 10);
     EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
     EXPECT_EQ("Some long ...<message truncated>", truncatedError.GetMessage());
     EXPECT_EQ("...<attribute truncated>...", truncatedError.Attributes().Get<TString>("my_attr"));
+    EXPECT_EQ(truncatedError.InnerErrors().size(), 3u);
+
+    EXPECT_EQ("First inne...<message truncated>", truncatedError.InnerErrors()[0].GetMessage());
+    EXPECT_EQ("Second inn...<message truncated>", truncatedError.InnerErrors()[1].GetMessage());
+    EXPECT_EQ("Fourth inn...<message truncated>", truncatedError.InnerErrors()[2].GetMessage());
+}
+
+TEST(TErrorTest, TruncateSimpleRValue)
+{
+    auto error = TError("Some error")
+        << TErrorAttribute("my_attr", "Attr value")
+        << TError("Inner error");
+    auto errorCopy = error;
+    auto truncatedError = std::move(errorCopy).Truncate();
+    EXPECT_EQ(NYT::EErrorCode::OK, errorCopy.GetCode());
+
+    EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
+    EXPECT_EQ(error.GetMessage(), truncatedError.GetMessage());
+    EXPECT_EQ(error.GetPid(), truncatedError.GetPid());
+    EXPECT_EQ(error.GetTid(), truncatedError.GetTid());
+    EXPECT_EQ(error.GetSpanId(), truncatedError.GetSpanId());
+    EXPECT_EQ(error.GetDatetime(), truncatedError.GetDatetime());
+    EXPECT_EQ(error.Attributes().Get<TString>("my_attr"), truncatedError.Attributes().Get<TString>("my_attr"));
+    EXPECT_EQ(error.InnerErrors().size(), truncatedError.InnerErrors().size());
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), truncatedError.InnerErrors()[0].GetMessage());
+}
+
+TEST(TErrorTest, TruncateLargeRValue)
+{
+    auto error = TError("Some long long error")
+        << TError("First inner error")
+        << TError("Second inner error")
+        << TError("Third inner error")
+        << TError("Fourth inner error");
+    error.MutableAttributes()->Set("my_attr", "Some long long attr");
+
+    auto errorCopy = error;
+    auto truncatedError = std::move(errorCopy).Truncate(/*maxInnerErrorCount*/ 3, /*stringLimit*/ 10);
+    EXPECT_EQ(NYT::EErrorCode::OK, errorCopy.GetCode());
+
+    EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
+    EXPECT_EQ("Some long ...<message truncated>", truncatedError.GetMessage());
+    EXPECT_EQ("...<attribute truncated>...", truncatedError.Attributes().Get<TString>("my_attr"));
+    EXPECT_EQ(truncatedError.InnerErrors().size(), 3u);
+
+    EXPECT_EQ("First inne...<message truncated>", truncatedError.InnerErrors()[0].GetMessage());
+    EXPECT_EQ("Second inn...<message truncated>", truncatedError.InnerErrors()[1].GetMessage());
+    EXPECT_EQ("Fourth inn...<message truncated>", truncatedError.InnerErrors()[2].GetMessage());
 }
 
 TEST(TErrorTest, YTExceptionToError)

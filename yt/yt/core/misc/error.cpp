@@ -140,6 +140,11 @@ public:
         Message_ = std::move(message);
     }
 
+    TString* MutableMessage()
+    {
+        return &Message_;
+    }
+
     bool HasOriginAttributes() const
     {
         return Host_.operator bool();
@@ -599,10 +604,10 @@ TError TError::Sanitize() const
     return TError(std::move(result));
 }
 
-TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit) const
-{
-    static const TString InnerErrorsTruncatedKey("inner_errors_truncated");
+const TString InnerErrorsTruncatedKey("inner_errors_truncated");
 
+TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit) const &
+{
     if (!Impl_) {
         return TError();
     }
@@ -619,16 +624,20 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit) const
     };
 
     auto truncateAttributes = [stringLimit] (const IAttributeDictionary& attributes) {
-        auto clonedAttributes = attributes.Clone();
-        for (const auto& key : clonedAttributes->ListKeys()) {
-            if (std::ssize(clonedAttributes->FindYson(key).AsStringBuf()) > stringLimit) {
-                clonedAttributes->SetYson(
+        auto truncatedAttributes = CreateEphemeralAttributes();
+        for (const auto& key : attributes.ListKeys()) {
+            if (const auto& value = attributes.FindYson(key); std::ssize(value.AsStringBuf()) > stringLimit) {
+                truncatedAttributes->SetYson(
                     key,
                     BuildYsonStringFluently()
                         .Value("...<attribute truncated>..."));
+            } else {
+                truncatedAttributes->SetYson(
+                    key,
+                    value);
             }
         }
-        return clonedAttributes;
+        return truncatedAttributes;
     };
 
     auto result = std::make_unique<TImpl>();
@@ -652,6 +661,55 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit) const
     }
 
     return TError(std::move(result));
+}
+
+TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit) &&
+{
+    if (!Impl_) {
+        return TError();
+    }
+
+    auto truncateInnerError = [=] (TError& innerError) {
+        innerError = std::move(innerError).Truncate(maxInnerErrorCount, stringLimit);
+    };
+
+    auto truncateString = [stringLimit] (TString* string) {
+        if (std::ssize(*string) > stringLimit) {
+            *string = Format("%v...<message truncated>", string->substr(0, stringLimit));
+        }
+    };
+
+    auto truncateAttributes = [stringLimit] (IAttributeDictionary* attributes) {
+        for (const auto& key : attributes->ListKeys()) {
+            if (std::ssize(attributes->FindYson(key).AsStringBuf()) > stringLimit) {
+                attributes->SetYson(
+                    key,
+                    BuildYsonStringFluently()
+                        .Value("...<attribute truncated>..."));
+            }
+        }
+    };
+
+    truncateString(Impl_->MutableMessage());
+    if (Impl_->HasAttributes()) {
+        truncateAttributes(Impl_->MutableAttributes());
+    }
+    if (std::ssize(InnerErrors()) <= maxInnerErrorCount) {
+        for (auto& innerError : *MutableInnerErrors()) {
+            truncateInnerError(innerError);
+        }
+    } else {
+        auto& innerErrors = *MutableInnerErrors();
+        MutableAttributes()->Set(InnerErrorsTruncatedKey, true);
+        for (int i = 0; i + 1 < maxInnerErrorCount; ++i) {
+            truncateInnerError(innerErrors[i]);
+        }
+        truncateInnerError(innerErrors.back());
+        innerErrors[maxInnerErrorCount - 1] = std::move(innerErrors.back());
+        innerErrors.resize(maxInnerErrorCount);
+    }
+
+    return std::move(*this);
 }
 
 bool TError::IsOK() const

@@ -743,7 +743,7 @@ private:
 
             auto& s = *static_cast<TState*>(state.AsBoxed().Get());
             const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
-            for (size_t i = 0; i < s.Values_.size(); ++i) {
+            for (size_t i = 0; i < Width_; ++i) {
                 fields[i] = &s.Values_[i];
             }
             return s;

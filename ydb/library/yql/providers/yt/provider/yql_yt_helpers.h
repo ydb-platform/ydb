@@ -72,11 +72,17 @@ struct TCopyOrTrivialMapOpts {
         return *this;
     }
 
+    TCopyOrTrivialMapOpts& SetConstraints(const TConstraintSet& constraints) {
+        Constraints = constraints;
+        return *this;
+    }
+
     TExprNode::TListType LimitNodes;
     bool TryKeepSortness = false;
     const TDistinctConstraintNode* SectionUniq = nullptr;
     bool CombineChunks = false;
     bool RangesResetSort = true;
+    TConstraintSet Constraints;
 };
 
 NNodes::TYtPath CopyOrTrivialMap(TPositionHandle pos, NNodes::TExprBase world, NNodes::TYtDSink dataSink,

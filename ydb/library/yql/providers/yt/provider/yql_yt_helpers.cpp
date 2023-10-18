@@ -1353,6 +1353,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
     TVector<std::pair<TYqlRowSpecInfo::TPtr, bool>> rowSpecs;
     const ui64 outNativeYtTypeFlags = outRowSpec ? outRowSpec->GetNativeYtTypeFlags() : (state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
     TYtOutTableInfo outTable(scheme.Cast<TStructExprType>(), outNativeYtTypeFlags);
+    outTable.RowSpec->SetConstraints(opts.Constraints);
     TMaybe<NYT::TNode> outNativeType;
     if (outRowSpec) {
         outNativeType = outRowSpec->GetNativeYtType();

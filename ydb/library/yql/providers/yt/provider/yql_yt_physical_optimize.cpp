@@ -3653,7 +3653,7 @@ private:
                         .Build()
                         .Done(),
                     {}, ctx, State_,
-                    TCopyOrTrivialMapOpts().SetTryKeepSortness(keepSort).SetRangesResetSort(!keepSort).SetSectionUniq(extend.Ref().GetConstraint<TDistinctConstraintNode>()));
+                    TCopyOrTrivialMapOpts().SetTryKeepSortness(keepSort).SetRangesResetSort(!keepSort).SetSectionUniq(extend.Ref().GetConstraint<TDistinctConstraintNode>()).SetConstraints(extend.Ref().GetConstraintSet()));
                 world = TExprBase(ctx.NewWorld(extend.Pos()));
                 paths.assign(1, path);
             }

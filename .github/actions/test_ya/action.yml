@@ -16,6 +16,10 @@ inputs:
     required: false
     default: "28"
     description: "Test threads count"
+  link_threads:
+    required: false
+    default: "8"
+    description: "link threads count"
 
   testman_token:
     required: false
@@ -26,6 +30,9 @@ inputs:
   testman_project_id:
     required: false
     description: "test manager project id"
+  bazel_remote_uri:
+    required: false
+    description: "bazel-remote endpoint"
 runs:
   using: "composite"
   steps:
@@ -119,9 +126,15 @@ runs:
         if [ ! -z "${{ inputs.sanitizer }}" ] && [ "${{ inputs.sanitizer }}" != "none" ]; then
           extra_params+=(--sanitize="${{ inputs.sanitizer }}")
         fi
-
-        ./ya test -A --build relwithdebinfo -D'BUILD_LANGUAGES=CPP PY3' --test-threads "${{ inputs.test_threads }}" \
-          --regular-tests --do-not-output-stderrs -T \
+        
+        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
+          extra_params+=(--bazel-remote-store)
+          extra_params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+        fi
+        
+        ./ya test -A --build relwithdebinfo -D'BUILD_LANGUAGES=CPP PY3' \
+          --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}" \
+          --cache-size 512G --regular-tests --do-not-output-stderrs -T \
           --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" \
           --dump-graph --dump-graph-to-file "$LOG_DIR/ya_graph.json" \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" "${extra_params[@]}" || (
@@ -196,4 +209,8 @@ runs:
       shell: bash
       run: |
         .github/scripts/tests/fail-checker.py "$JUNIT_REPORT_XML"
-        
+
+    - name: show free space
+      if: always()
+      shell: bash
+      run: df -h

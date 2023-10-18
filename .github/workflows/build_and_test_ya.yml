@@ -70,3 +70,4 @@ jobs:
         testman_token: ${{ secrets.TESTMO_TOKEN }}
         testman_url: ${{ vars.TESTMO_URL }}
         testman_project_id: ${{ vars.TESTMO_PROJECT_ID }}
+        bazel_remote_uri: ${{ vars.REMOTE_CACHE_URL_YA || '' }}

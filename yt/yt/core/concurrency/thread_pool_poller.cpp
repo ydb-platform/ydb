@@ -43,9 +43,16 @@ struct TPollableCookie
         : PollerThread(pollerThread)
     { }
 
-    static TPollableCookie* FromPollable(IPollable* pollable)
+    static TPollableCookie* TryFromPollable(IPollable* pollable)
     {
         return static_cast<TPollableCookie*>(pollable->GetCookie());
+    }
+
+    static TPollableCookie* FromPollable(IPollable* pollable)
+    {
+        auto* cookie = TryFromPollable(pollable);
+        YT_VERIFY(cookie);
+        return cookie;
     }
 
     TThreadPoolPoller* const PollerThread = nullptr;
@@ -89,21 +96,6 @@ EPollControl FromImplControl(int implControl)
         control |= EPollControl::ReadHup;
     }
     return control;
-}
-
-bool TryAcquireEventCount(IPollable* pollable)
-{
-    auto* cookie = TPollableCookie::FromPollable(pollable);
-    YT_VERIFY(cookie);
-    YT_VERIFY(cookie->GetRefCount() > 0);
-
-    auto oldEventCount = cookie->ActiveEventCount.fetch_add(2);
-    if (oldEventCount & 1) {
-        return true;
-    }
-
-    cookie->ActiveEventCount.fetch_sub(2);
-    return false;
 }
 
 EThreadPriority PollablePriorityToThreadPriority(EPollablePriority priority)
@@ -181,8 +173,7 @@ public:
     // Shutdown can be done by subscribing returned future or some promise can be set inside OnShutdown.
     TFuture<void> Unregister(const IPollablePtr& pollable) override
     {
-        auto* cookie = TPollableCookie::FromPollable(pollable.Get());
-
+        auto* cookie = TPollableCookie::TryFromPollable(pollable.Get());
         if (!cookie) {
             // Pollable was not registered.
             return VoidFuture;
@@ -210,8 +201,8 @@ public:
 
     void Retry(const IPollablePtr& pollable, bool /*wakeup*/) override
     {
-        if (TryAcquireEventCount(pollable.Get())) {
-            HandlerInvoker_[pollable->GetPriority()]->Invoke(BIND(TRunEventGuard(pollable.Get(), EPollControl::Retry)));
+        if (auto guard = TryAcquireRunEventGuard(pollable.Get(), EPollControl::Retry)) {
+            HandlerInvoker_[pollable->GetPriority()]->Invoke(BIND(std::move(guard)));
         }
     }
 
@@ -229,6 +220,8 @@ private:
     class TRunEventGuard
     {
     public:
+        TRunEventGuard() = default;
+
         TRunEventGuard(IPollable* pollable, EPollControl control)
             : Pollable_(pollable)
             , Control_(control)
@@ -254,6 +247,11 @@ private:
             }
         }
 
+        explicit operator bool() const
+        {
+            return static_cast<bool>(Pollable_);
+        }
+
         void operator()()
         {
             Pollable_->OnEvent(Control_);
@@ -262,13 +260,12 @@ private:
         }
 
     private:
-        IPollable* Pollable_;
-        EPollControl Control_;
+        IPollable* Pollable_ = nullptr;
+        EPollControl Control_ = EPollControl::None;
 
         static void Destroy(IPollable* pollable)
         {
             auto* cookie = TPollableCookie::FromPollable(pollable);
-            YT_VERIFY(cookie);
             auto activeEventCount = cookie->ActiveEventCount.fetch_sub(2) - 2;
             if (activeEventCount == 0) {
                 pollable->OnShutdown();
@@ -303,12 +300,26 @@ private:
 
     TEnumIndexedVector<EPollablePriority, std::vector<TClosure>> Callbacks_;
 
+    static TRunEventGuard TryAcquireRunEventGuard(IPollable* pollable, EPollControl control)
+    {
+        auto* cookie = TPollableCookie::FromPollable(pollable);
+        YT_VERIFY(cookie->GetRefCount() > 0);
+
+        auto oldEventCount = cookie->ActiveEventCount.fetch_add(2);
+        if (oldEventCount & 1) {
+            return TRunEventGuard(pollable, control);
+        }
+
+        cookie->ActiveEventCount.fetch_sub(2);
+        return TRunEventGuard();
+    }
+
     bool DoUnregister(const IPollablePtr& pollable)
     {
         YT_LOG_DEBUG("Requesting pollable unregistration (%v)",
             pollable->GetLoggingTag());
 
-        auto* cookie = TPollableCookie::FromPollable(pollable.Get());
+        auto* cookie = TPollableCookie::TryFromPollable(pollable.Get());
         YT_VERIFY(cookie);
         auto activeEventCount = cookie->ActiveEventCount.load();
 
@@ -357,9 +368,9 @@ private:
             YT_VERIFY(pollable->GetRefCount() > 0);
 
             // Can safely dereference pollable because even unregistered pollables are hold in Pollables_.
-            if (TryAcquireEventCount(pollable)) {
-                auto priority = pollable->GetPriority();
-                Callbacks_[priority].push_back(BIND(TRunEventGuard(pollable, control)));
+            auto priority = pollable->GetPriority();
+            if (auto guard = TryAcquireRunEventGuard(pollable, control)) {
+                Callbacks_[priority].push_back(BIND(std::move(guard)));
             }
         }
 

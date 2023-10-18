@@ -93,6 +93,32 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
 
   {% include [auth-anonymous](../../../../_includes/nodejs/auth-anonymous.md) %}
 
+- Python
+
+  {% include [auth-anonymous](../../../../_includes/python/auth-anonymous.md) %}
+
+- Python (asyncio)
+
+  {% include [auth-anonymous](../../../../_includes/python/async/auth-anonymous.md) %}
+
+- C# (.NET)
+
+  ```C#
+  using Ydb.Sdk;
+  using Ydb.Sdk.Auth;
+
+  const string endpoint = "grpc://localhost:2136";
+  const string database = "/local";
+
+  var config = new DriverConfig(
+      endpoint: endpoint,
+      database: database,
+      credentials: new AnonymousProvider()
+  );
+
+  await using var driver = await Driver.CreateInitialized(config);
+  ```
+
 - PHP
 
   ```php

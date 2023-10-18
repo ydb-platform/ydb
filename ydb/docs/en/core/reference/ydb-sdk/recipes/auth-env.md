@@ -104,6 +104,18 @@ Below are examples of the code for authentication using environment variables in
 
   {% include [auth-env](../../../../_includes/nodejs/auth-env.md) %}
 
+- Python
+
+  {% include [auth-env](../../../../_includes/python/auth-env.md) %}
+
+- Python (asyncio)
+
+  {% include [auth-env](../../../../_includes/python/async/auth-env.md) %}
+
+- C#
+
+  {% include [work in progress message](_includes/addition.md) %}
+
 - PHP
 
   ```php

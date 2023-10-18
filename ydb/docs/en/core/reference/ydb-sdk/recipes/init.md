@@ -98,6 +98,19 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
 
   {% include [work in progress message](_includes/addition.md) %}
 
+- C# (.NET)
+
+  ```C#
+  using Ydb.Sdk;
+
+  var config = new DriverConfig(
+      endpoint: "grpc://localhost:2136",
+      database: "/local"
+  );
+
+  await using var driver = await Driver.CreateInitialized(config);
+  ```
+
 - PHP
 
   ```php

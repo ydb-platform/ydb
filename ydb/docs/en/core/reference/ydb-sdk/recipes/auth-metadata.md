@@ -94,6 +94,34 @@ Below are examples of the code for authentication using environment variables in
 
   {% include [auth-metadata](../../../../_includes/nodejs/auth-metadata.md) %}
 
+- Python
+
+  {% include [auth-metadata](../../../../_includes/python/auth-metadata.md) %}
+
+- Python (asyncio)
+
+  {% include [auth-metadata](../../../../_includes/python/async/auth-metadata.md) %}
+
+- C# (.NET)
+
+  ```C#
+  using Ydb.Sdk;
+  using Ydb.Sdk.Yc;
+
+  var metadataProvider = new MetadataProvider();
+
+  // Await initial IAM token.
+  await metadataProvider.Initialize();
+
+  var config = new DriverConfig(
+      endpoint: endpoint, // Database endpoint, "grpcs://host:port"
+      database: database, // Full database path
+      credentials: metadataProvider
+  );
+
+  await using var driver = await Driver.CreateInitialized(config);
+  ```
+
 - PHP
 
   ```php

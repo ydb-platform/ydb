@@ -114,6 +114,10 @@ description: "В разделе приведены примеры кода ау�
 
   {% include [auth-env](../../../../_includes/python/async/auth-env.md) %}
 
+- C#
+
+  {% include [work in progress message](_includes/addition.md) %}
+
 - PHP
 
   ```php

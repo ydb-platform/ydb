@@ -1238,6 +1238,48 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckLeaseExtension(runtime, sender, 1024, TStatus::OK, epoch);
         CheckLeaseExtension(runtime, sender, 1088, TStatus::OK, epoch);
     }
+
+    Y_UNIT_TEST(DoNotReuseDynnodeIdsBelowMinDynamicNodeId)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // There should be no dynamic nodes initially.
+        auto epoch = GetEpoch(runtime, sender);
+    
+        // Register node 1024.
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, 1024, epoch.GetNextEnd());
+        
+        // Update config and restart NodeBroker
+        auto dnConfig = runtime.GetAppData().DynamicNameserviceConfig;
+        dnConfig->MinDynamicNodeId += 64;
+        dnConfig->MaxDynamicNodeId += 64;
+        RestartNodeBroker(runtime);
+    
+        // Wait until epoch expiration.
+        WaitForEpochUpdate(runtime, sender);
+        epoch = GetEpoch(runtime, sender);
+        CheckLeaseExtension(runtime, sender, 1024, TStatus::OK, epoch);
+        CheckNodeInfo(runtime, sender, 1024, TStatus::OK);
+
+        WaitForEpochUpdate(runtime, sender);
+        CheckNodeInfo(runtime, sender, 1024, TStatus::OK);
+
+        // Wait until node's lease expires
+        WaitForEpochUpdate(runtime, sender);
+        WaitForEpochUpdate(runtime, sender);
+        WaitForEpochUpdate(runtime, sender);
+        WaitForEpochUpdate(runtime, sender);
+        epoch = GetEpoch(runtime, sender);
+
+        CheckNodeInfo(runtime, sender, 1024, TStatus::WRONG_REQUEST);
+
+        // Register node 1088.
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5",
+                          1, 2, 3, 5, TStatus::OK, 1088, epoch.GetNextEnd());
+    }
 }
 
 Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {

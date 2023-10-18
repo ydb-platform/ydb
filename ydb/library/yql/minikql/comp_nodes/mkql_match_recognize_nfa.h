@@ -76,17 +76,26 @@ private:
     }
     TNfaItem BuildFactor(const TRowPatternFactor& factor, const THashMap<TString, size_t>& varNameToIndex) {
         auto input = AddNode();
-        auto interim = AddNode();
         auto output = AddNode();
         auto item = factor.Primary.index() == 0 ?
                     BuildVar(varNameToIndex.at(std::get<0>(factor.Primary))) :
                     BuildTerms(std::get<1>(factor.Primary), varNameToIndex);
-        auto fromInput = TEpsilonTransitions{interim};
-        if (factor.QuantityMin == 0)
-            fromInput.push_back(output);
-        Graph->Transitions[input] = fromInput;
-        Graph->Transitions[interim] = TQuantityEnterTransition{item.Input};
-        Graph->Transitions[item.Output] = std::pair{std::pair{factor.QuantityMin, factor.QuantityMax}, std::pair{item.Input, output}};
+        if (1 == factor.QuantityMin && 1 == factor.QuantityMax) { //simple linear case
+            Graph->Transitions[input] = TEpsilonTransitions{item.Input};
+            Graph->Transitions[item.Output] = TEpsilonTransitions{output};
+        } else {
+            auto interim = AddNode();
+            auto fromInput = TEpsilonTransitions{interim};
+            if (factor.QuantityMin == 0) {
+                fromInput.push_back(output);
+            }
+            Graph->Transitions[input] = fromInput;
+            Graph->Transitions[interim] = TQuantityEnterTransition{item.Input};
+            Graph->Transitions[item.Output] = std::pair{
+                std::pair{factor.QuantityMin, factor.QuantityMax},
+                std::pair{item.Input, output}
+            };
+        }
         return {input, output};
     }
     TNfaItem BuildVar(ui32 varIndex) {

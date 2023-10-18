@@ -78,7 +78,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
 
 TConsumerDescription::TConsumerDescription(Ydb::Topic::DescribeConsumerResult&& result)
     : Proto_(std::move(result))
-    , Consumer_(result.consumer())
+    , Consumer_(Proto_.consumer())
 {
     for (const auto& part : Proto_.partitions()) {
         Partitions_.emplace_back(part);

@@ -51,6 +51,7 @@ class TSslTest
 public:
     NTesting::TPortHolder Port;
     TString Address;
+    TString AddressWithIp;
 
     const char* CA = R"foo(-----BEGIN CERTIFICATE-----
 MIIFWjCCA0KgAwIBAgIBATANBgkqhkiG9w0BAQsFADBGMQswCQYDVQQGEwJSVTEP
@@ -173,6 +174,7 @@ rPl77gAcribJm3TzBVHm2m6jBGtb
     {
         Port = NTesting::GetFreePort();
         Address = Format("localhost:%v", Port);
+        AddressWithIp = Format("127.0.0.1:%v", Port);
     }
 };
 
@@ -500,6 +502,56 @@ TEST_F(TSslTest, FullVerificationMode)
     auto message = CreateMessage(1);
     auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
     EXPECT_TRUE(sendFuture.Get().IsOK());
+
+    server->Stop()
+        .Get()
+        .ThrowOnError();
+}
+
+TEST_F(TSslTest, FullVerificationAlternativeHostName)
+{
+    // Reset ctx in order to unload possibly loaded CA.
+    TSslContext::Get()->Reset();
+
+    auto serverConfig = TBusServerConfig::CreateTcp(Port);
+    serverConfig->EncryptionMode = EEncryptionMode::Required;
+    serverConfig->VerificationMode = EVerificationMode::None;
+    serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
+    serverConfig->CertificateChain->Value = CertChain;
+    serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
+    serverConfig->PrivateKey->Value = PrivateKey;
+    auto server = CreateBusServer(serverConfig);
+    server->Start(New<TEmptyBusHandler>());
+
+    // Connect via IP.
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithIp);
+    clientConfig->EncryptionMode = EEncryptionMode::Required;
+    clientConfig->VerificationMode = EVerificationMode::Full;
+    clientConfig->CA = New<NCrypto::TPemBlobConfig>();
+    clientConfig->CA->Value = CA;
+
+    {
+        auto client = CreateBusClient(clientConfig);
+        auto bus = client->CreateBus(New<TEmptyBusHandler>());
+        // This test should fail since 127.0.0.1 != localhost.
+        EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+            bus->GetReadyFuture().Get().ThrowOnError(),
+            NYT::TErrorException,
+            "Failed to establish TLS/SSL session");
+    }
+
+    // Connect via IP with Alt Hostname.
+    clientConfig->PeerAlternativeHostName = "localhost";
+    auto client = CreateBusClient(clientConfig);
+
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+    // This test should pass since key pair is issued for CN=localhost.
+    EXPECT_NO_THROW(bus->GetReadyFuture().Get().ThrowOnError());
+    EXPECT_TRUE(bus->IsEncrypted());
+
+    auto message = CreateMessage(1);
+    auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+    EXPECT_NO_THROW(sendFuture.Get().ThrowOnError());
 
     server->Stop()
         .Get()

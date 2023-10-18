@@ -130,6 +130,8 @@ void TBusConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("load_certs_from_bus_certs_directory", &TThis::LoadCertsFromBusCertsDirectory)
         .Default(false);
+    registrar.Parameter("peer_alternative_host_name", &TThis::PeerAlternativeHostName)
+        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

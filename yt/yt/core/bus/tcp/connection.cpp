@@ -1994,6 +1994,12 @@ void TTcpConnection::TryEstablishSslSession()
                 Abort(TError(NBus::EErrorCode::SslError, "Failed to set hostname %v for the peer certificate verification", EndpointHostName_));
                 return;
             }
+            if (Config_->PeerAlternativeHostName &&
+                SSL_add1_host(Ssl_.get(), Config_->PeerAlternativeHostName->data()) != 1)
+            {
+                Abort(TError(NBus::EErrorCode::SslError, "Failed to set alternative hostname %v for the peer certificate verification", *Config_->PeerAlternativeHostName));
+                return;
+            }
             [[fallthrough]];
         case EVerificationMode::Ca: {
             if (!Config_->CA) {

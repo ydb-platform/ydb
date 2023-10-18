@@ -1,0 +1,11 @@
+PROTO_LIBRARY()
+
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+
+PROTO_NAMESPACE(yt)
+
+SRCS(
+    profile.proto
+)
+
+END()

@@ -3,7 +3,6 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
-    profile.proto
     signal_safe_profiler.cpp
     cpu_profiler.cpp
     heap_profiler.cpp
@@ -26,6 +25,7 @@ PEERDIR(
     library/cpp/yt/backtrace/cursors/frame_pointer
     library/cpp/yt/backtrace/cursors/libunwind
     yt/yt/library/ytprof/api
+    yt/yt/library/ytprof/proto
     contrib/libs/libunwind
     contrib/libs/tcmalloc/malloc_extension
     library/cpp/svnversion

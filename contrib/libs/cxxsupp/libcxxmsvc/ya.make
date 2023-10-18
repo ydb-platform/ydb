@@ -100,9 +100,7 @@ IF (OS_LINUX)
 ENDIF()
 
 IF (CLANG)
-    CXXFLAGS(
-        GLOBAL -nostdinc++
-    )
+    CXXFLAGS(GLOBAL -nostdinc++)
 ENDIF()
 
 # The CXX_RT variable controls which C++ runtime is used.

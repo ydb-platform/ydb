@@ -211,6 +211,13 @@ protected:
             ExternalAuthInfo.Login = response.User;
             ExternalAuthInfo.Type = response.ExternalAuth;
         }
+
+        TString GetMaskedTicket() const {
+            if (Signature.AccessKeyId) {
+                return MaskTicket(Signature.AccessKeyId);
+            }
+            return MaskTicket(Ticket);
+        }
     };
 
 protected:
@@ -345,8 +352,7 @@ private:
     void RequestAccessServiceAuthorization(const TString& key, TTokenRecord& record) const {
         for (const auto& [perm, permRecord] : record.Permissions) {
             const TString& permission(perm);
-            BLOG_TRACE("Ticket " << MaskTicket(record.Ticket)
-                        << " asking for AccessServiceAuthorization(" << permission << ")");
+            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorization(" << permission << ")");
 
             auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequest>(key, record);
 
@@ -381,8 +387,7 @@ private:
 
     template <typename TTokenRecord>
     void RequestAccessServiceAuthentication(const TString& key, TTokenRecord& record) const {
-        BLOG_TRACE("Ticket " << MaskTicket(record.Ticket)
-                    << " asking for AccessServiceAuthentication");
+        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication");
 
         auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequest>(key, record);
 
@@ -604,7 +609,7 @@ private:
 
         InitTokenRecord(key, record);
         if (record.Error) {
-            BLOG_ERROR("Ticket " << MaskTicket(ticket) << ": " << record.Error);
+            BLOG_ERROR("Ticket " << record.GetMaskedTicket() << ": " << record.Error);
             Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Error), 0, cookie);
             return;
         }
@@ -645,7 +650,7 @@ private:
                     switch (response->Response.subject().type_case()) {
                     case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kUserAccount:
                         if (UserAccountService) {
-                            BLOG_TRACE("Ticket " << MaskTicket(record.Ticket)
+                            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
                                         << " asking for UserAccount(" << record.Subject << ")");
                             THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
                             request->Token = record.Ticket;
@@ -657,7 +662,7 @@ private:
                         break;
                     case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kServiceAccount:
                         if (ServiceAccountService) {
-                            BLOG_TRACE("Ticket " << MaskTicket(record.Ticket)
+                            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
                                         << " asking for ServiceAccount(" << record.Subject << ")");
                             THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
                             request->Token = record.Ticket;
@@ -756,7 +761,7 @@ private:
                     itPermission->second.SubjectType = subjectType;
                     itPermission->second.Error.clear();
                     BLOG_TRACE("Ticket "
-                                << MaskTicket(record.Ticket)
+                                << record.GetMaskedTicket()
                                 << " permission "
                                 << permission
                                 << " now has a valid subject \""
@@ -768,7 +773,7 @@ private:
                     if (itPermission->second.Subject.empty() || !retryable) {
                         itPermission->second.Subject.clear();
                         BLOG_TRACE("Ticket "
-                                    << MaskTicket(record.Ticket)
+                                    << record.GetMaskedTicket()
                                     << " permission "
                                     << permission
                                     << " now has a permanent error \""
@@ -778,7 +783,7 @@ private:
                                     << retryable);
                     } else if (retryable) {
                         BLOG_TRACE("Ticket "
-                                    << MaskTicket(record.Ticket)
+                                    << record.GetMaskedTicket()
                                     << " permission "
                                     << permission
                                     << " now has a retryable error \""
@@ -787,7 +792,7 @@ private:
                     }
                 }
             } else {
-                BLOG_W("Received response for unknown permission " << permission << " for ticket " << MaskTicket(record.Ticket));
+                BLOG_W("Received response for unknown permission " << permission << " for ticket " << record.GetMaskedTicket());
             }
             if (--record.ResponsesLeft == 0) {
                 ui32 permissionsOk = 0;
@@ -829,7 +834,7 @@ private:
                     switch (subjectType) {
                     case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kUserAccount:
                         if (UserAccountService) {
-                            BLOG_TRACE("Ticket " << MaskTicket(record.Ticket)
+                            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
                                         << " asking for UserAccount(" << subject << ")");
                             THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
                             request->Token = record.Ticket;
@@ -841,7 +846,7 @@ private:
                         break;
                     case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kServiceAccount:
                         if (ServiceAccountService) {
-                            BLOG_TRACE("Ticket " << MaskTicket(record.Ticket)
+                            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
                                         << " asking for ServiceAccount(" << subject << ")");
                             THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
                             request->Token = record.Ticket;
@@ -897,12 +902,12 @@ private:
             }
             auto& record = it->second;
             if ((record.ExpireTime > now) && (record.AccessTime + GetLifeTime() > now)) {
-                BLOG_D("Refreshing ticket " << MaskTicket(record.Ticket));
+                BLOG_D("Refreshing ticket " << record.GetMaskedTicket());
                 if (!RefreshTicket(key, record)) {
                     RefreshQueue.push({key, record.RefreshTime});
                 }
             } else {
-                BLOG_D("Expired ticket " << MaskTicket(record.Ticket));
+                BLOG_D("Expired ticket " << record.GetMaskedTicket());
                 if (!record.AuthorizeRequests.empty()) {
                     record.Error = {"Timed out", true};
                     Respond(record);
@@ -927,7 +932,7 @@ private:
                 if (MD5::Calc(key) == token) {
                     html << "<div>";
                     html << "<table class='ticket-parser-proplist'>";
-                    html << "<tr><td>Ticket</td><td>" << MaskTicket(record.Ticket) << "</td></tr>";
+                    html << "<tr><td>Ticket</td><td>" << record.GetMaskedTicket() << "</td></tr>";
                     if (record.TokenType == TDerived::ETokenType::Login) {
                         TVector<TString> tokenData;
                         Split(record.Ticket, ".", tokenData);
@@ -1003,7 +1008,7 @@ private:
             html << "</tr></thead><tbody>";
             for (const auto& [key, record] : GetDerived()->GetUserTokens()) {
                 html << "<tr>";
-                html << "<td>" << MaskTicket(record.Ticket) << "</td>";
+                html << "<td>" << record.GetMaskedTicket() << "</td>";
                 TDerived::WriteTokenRecordValues(html, key, record);
                 html << "</tr>";
             }
@@ -1169,7 +1174,7 @@ protected:
         record.RefreshRetryableErrorImmediately = true;
         CounterTicketsSuccess->Inc();
         CounterTicketsBuildTime->Collect((now - record.InitTime).MilliSeconds());
-        BLOG_D("Ticket " << MaskTicket(record.Ticket) << " ("
+        BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
                     << record.PeerName << ") has now valid token of " << record.Subject);
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
     }
@@ -1182,7 +1187,7 @@ protected:
             record.ExpireTime = GetExpireTime(record, now);
             record.SetErrorRefreshTime(this, now);
             CounterTicketsErrorsRetryable->Inc();
-            BLOG_D("Ticket " << MaskTicket(record.Ticket) << " ("
+            BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
                         << record.PeerName << ") has now retryable error message '" << error.Message << "'");
             if (record.RefreshRetryableErrorImmediately) {
                 record.RefreshRetryableErrorImmediately = false;
@@ -1193,7 +1198,7 @@ protected:
             record.UnsetToken();
             record.SetOkRefreshTime(this, now);
             CounterTicketsErrorsPermanent->Inc();
-            BLOG_D("Ticket " << MaskTicket(record.Ticket) << " ("
+            BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
                         << record.PeerName << ") has now permanent error message '" << error.Message << "'");
         }
         CounterTicketsErrors->Inc();

@@ -293,6 +293,35 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(SelectNoAsciiValue) {
+        auto kikimr = DefaultKikimrRunner();
+        TScriptingClient client(kikimr.GetDriver());
+
+        auto result = client.ExecuteYqlScript(R"(
+            --!syntax_v1
+            CREATE TABLE ascii_test
+            (
+                id String,
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto insertResult = client.ExecuteYqlScript(R"(
+            --!syntax_v1
+            INSERT INTO ascii_test (id) VALUES
+                ('\xBF');
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), EStatus::SUCCESS, insertResult.GetIssues().ToString());
+
+        auto selectResult = client.ExecuteYqlScript(R"(
+            --!syntax_v1
+            SELECT * FROM ascii_test WHERE id='\xBF';
+        )").GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS, selectResult.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(ColumnTypeMismatch) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

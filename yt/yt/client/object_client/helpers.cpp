@@ -241,6 +241,8 @@ bool IsCypressTransactionType(EObjectType type)
     return
         type == EObjectType::Transaction ||
         type == EObjectType::NestedTransaction ||
+        type == EObjectType::ExternalizedTransaction ||
+        type == EObjectType::ExternalizedNestedTransaction ||
         type == EObjectType::UploadTransaction ||
         type == EObjectType::UploadNestedTransaction;
 }

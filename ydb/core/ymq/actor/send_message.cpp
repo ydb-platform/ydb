@@ -257,14 +257,6 @@ private:
                     currentResponse->SetMD5OfMessageAttributes(md5);
                     RLOG_SQS_DEBUG("Calculating MD5 of message attributes. Request: " << *currentRequest << "\nMD5 of message attributes: " << md5);
                 }
-
-                // counters
-                if (status.Status == TSqsEvents::TEvSendMessageBatchResponse::ESendMessageStatus::AlreadySent) {
-                    INC_COUNTER_COUPLE(QueueCounters_, SendMessage_DeduplicationCount, deduplicated_count_per_second);
-                } else {
-                    INC_COUNTER_COUPLE(QueueCounters_, SendMessage_Count, sent_count_per_second);
-                    ADD_COUNTER_COUPLE(QueueCounters_, SendMessage_BytesWritten, sent_bytes_per_second, CalculateMessageSize(*currentRequest));
-                }
             } else {
                 MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
             }

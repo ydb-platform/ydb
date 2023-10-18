@@ -3,6 +3,7 @@ PY3TEST()
 TEST_SRCS(
     test_common.py
     test_yandex_cloud_mode.py
+    test_yandex_cloud_queue_counters.py
 )
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")

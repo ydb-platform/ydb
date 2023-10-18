@@ -95,7 +95,6 @@ private:
     void ProcessAnswer(TDeleteMessageResponse* resp, const TSqsEvents::TEvDeleteMessageBatchResponse::TMessageResult& answer) {
         switch (answer.Status) {
             case TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK: {
-                INC_COUNTER_COUPLE(QueueCounters_, DeleteMessage_Count, deleted_count_per_second);
                 break;
             }
             case TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::NotFound: {

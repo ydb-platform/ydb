@@ -553,6 +553,17 @@ void TQueueLeader::OnMessageSent(const TString& requestId, size_t index, const T
     if (reqInfo.AnswersGot == reqInfo.Statuses.size()) {
         auto answer = MakeHolder<TSqsEvents::TEvSendMessageBatchResponse>();
         answer->Statuses.swap(reqInfo.Statuses);
+        ui64 bytesWritten = 0;
+        for (auto& message : reqInfo.Event->Get()->Messages) {
+            bytesWritten += message.Body.Size();
+        }
+
+        INC_COUNTER_COUPLE(Counters_, SendMessage_Count, sent_count_per_second);
+        ADD_COUNTER_COUPLE(Counters_, SendMessage_BytesWritten, sent_bytes_per_second, bytesWritten);
+        if (messageStatus.Status == TSqsEvents::TEvSendMessageBatchResponse::ESendMessageStatus::AlreadySent) {
+            INC_COUNTER_COUPLE(Counters_, SendMessage_DeduplicationCount, deduplicated_count_per_second);
+        }
+
         Send(reqInfo.Event->Sender, answer.Release());
         SendMessageRequests_.erase(reqInfo.Event->Get()->RequestId);
         DecActiveMessageRequests(shard);
@@ -1117,6 +1128,24 @@ void TQueueLeader::WaitAddMessagesToInflyOrTryAnotherShard(TReceiveMessageBatchR
 
 void TQueueLeader::Reply(TReceiveMessageBatchRequestProcessing& reqInfo) {
     const ui64 shard = reqInfo.GetCurrentShard();
+    if (!reqInfo.Answer->Failed && !reqInfo.Answer->OverLimit) {
+        int receiveCount = 0;
+        int messageCount = 0;
+        ui64 bytesRead = 0;
+
+        for (auto& message : reqInfo.Answer->Messages) {
+            receiveCount += message.ReceiveCount;
+            messageCount++;
+            bytesRead += message.Data.size();
+        }
+
+        if (messageCount > 0) {
+            COLLECT_HISTOGRAM_COUNTER(Counters_, MessageReceiveAttempts, receiveCount);
+            COLLECT_HISTOGRAM_COUNTER(Counters_, receive_attempts_count_rate, receiveCount);
+            ADD_COUNTER_COUPLE(Counters_, ReceiveMessage_Count, received_count_per_second, messageCount);
+            ADD_COUNTER_COUPLE(Counters_, ReceiveMessage_BytesRead, received_bytes_per_second, bytesRead);
+        }
+    }
     Send(reqInfo.Event->Sender, std::move(reqInfo.Answer));
     ReceiveMessageRequests_.erase(reqInfo.Event->Get()->RequestId);
     DecActiveMessageRequests(shard);
@@ -1208,6 +1237,15 @@ void TQueueLeader::OnMessageDeleted(const TString& requestId, ui64 shard, size_t
     }
 
     if (reqInfo.AnswersGot == req->Get()->Messages.size()) {
+        auto& statuses = reqInfo.Answer->Statuses;
+        const ui64 deleted_number = std::count_if(
+            statuses.cbegin(),
+            statuses.cend(),
+            [](auto& messageResult) { 
+                return messageResult.Status == TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK;
+            });
+        ADD_COUNTER_COUPLE(Counters_, DeleteMessage_Count, deleted_count_per_second, deleted_number);
+
         Send(req->Sender, reqInfo.Answer.Release());
         DeleteMessageRequests_.erase(key);
         DecActiveMessageRequests(shard);

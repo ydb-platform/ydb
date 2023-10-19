@@ -566,8 +566,10 @@ def onadd_ytest(unit, *args):
             return
         else:
             test_record["TEST-NAME"] += "_bench"
-
-    if flat_args[1] == 'fuzz.test' and unit.get('FUZZING') == 'yes':
+    elif flat_args[1] in ("g_benchmark", "y_benchmark"):
+        benchmark_opts = get_unit_list_variable(unit, 'BENCHMARK_OPTS_VALUE')
+        test_record['BENCHMARK-OPTS'] = serialize_list(benchmark_opts)
+    elif flat_args[1] == 'fuzz.test' and unit.get('FUZZING') == 'yes':
         test_record['FUZZING'] = '1'
         # use all cores if fuzzing requested
         test_record['REQUIREMENTS'] = serialize_list(

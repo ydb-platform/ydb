@@ -818,7 +818,7 @@ public:
             auto status = google::protobuf::util::JsonStringToMessage(content, &*record);
             success = status.ok();
         } else {
-            Y_FAIL_S("content: " << content.Quote());
+            LOG_D("Unable to parse request, content: " << content.Quote());
         }
         if (!success) {
             record.reset();

@@ -3600,7 +3600,7 @@ private:
                             *scheme,
                             TYtSection(ctx.ChangeChild(section.Ref(), TYtSection::idx_Settings, std::move(settings))),
                             {}, ctx, State_,
-                            TCopyOrTrivialMapOpts().SetTryKeepSortness(keepSort).SetRangesResetSort(!keepSort).SetSectionUniq(section.Ref().GetConstraint<TDistinctConstraintNode>()));
+                            TCopyOrTrivialMapOpts().SetTryKeepSortness(keepSort).SetRangesResetSort(!keepSort).SetSectionUniq(section.Ref().GetConstraint<TDistinctConstraintNode>()).SetConstraints(extend.Ref().GetConstraintSet()));
                         updateChildren = true;
                         newExtendParts.back() = allAreTableContents
                             ? ctx.ChangeChild(child.Ref(), TYtTableContent::idx_Input, path.Table().Ptr())
@@ -3974,7 +3974,7 @@ private:
                 .Settings(NYql::RemoveSettings(section.Settings().Ref(), EYtSettingType::DirectRead | EYtSettingType::Unordered | EYtSettingType::NonUnique, ctx))
                 .Done(),
             {}, ctx, State_,
-            TCopyOrTrivialMapOpts().SetTryKeepSortness(keepSorted).SetSectionUniq(section.Ref().GetConstraint<TDistinctConstraintNode>()));
+            TCopyOrTrivialMapOpts().SetTryKeepSortness(keepSorted).SetSectionUniq(section.Ref().GetConstraint<TDistinctConstraintNode>()).SetConstraints(read.Ref().GetConstraintSet()));
 
         auto newData = path.Columns().Maybe<TCoVoid>() && path.Ranges().Maybe<TCoVoid>()
             ? path.Table()

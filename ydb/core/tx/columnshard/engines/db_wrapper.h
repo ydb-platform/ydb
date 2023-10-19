@@ -13,7 +13,7 @@ class TInsertTableAccessor;
 struct TColumnRecord;
 struct TGranuleRecord;
 class IColumnEngine;
-struct TPortionInfo;
+class TPortionInfo;
 
 class IDbWrapper {
 public:

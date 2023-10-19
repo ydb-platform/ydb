@@ -12,7 +12,7 @@ namespace NKikimr::NOlap {
 
 struct TIndexInfo;
 
-struct TPortionInfo {
+class TPortionInfo {
 private:
     TPortionInfo() = default;
     ui64 Granule = 0;

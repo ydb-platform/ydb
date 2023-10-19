@@ -7,7 +7,7 @@
 
 namespace NKikimr::NOlap {
 
-struct TPortionInfo;
+class TPortionInfo;
 
 class TStorageAction {
 private:

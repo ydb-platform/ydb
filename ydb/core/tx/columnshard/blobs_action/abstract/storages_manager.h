@@ -3,7 +3,7 @@
 
 namespace NKikimr::NOlap {
 
-struct TPortionInfo;
+class TPortionInfo;
 
 class IStoragesManager {
 private:

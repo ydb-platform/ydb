@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.31.59)
+VERSION(1.31.60)
 
 LICENSE(Apache-2.0)
 
@@ -553,6 +553,10 @@ RESOURCE_FILES(
     botocore/data/datasync/2018-11-09/examples-1.json
     botocore/data/datasync/2018-11-09/paginators-1.json
     botocore/data/datasync/2018-11-09/service-2.json
+    botocore/data/datazone/2018-05-10/endpoint-rule-set-1.json.gz
+    botocore/data/datazone/2018-05-10/paginators-1.json
+    botocore/data/datazone/2018-05-10/paginators-1.sdk-extras.json
+    botocore/data/datazone/2018-05-10/service-2.json
     botocore/data/dax/2017-04-19/endpoint-rule-set-1.json.gz
     botocore/data/dax/2017-04-19/examples-1.json
     botocore/data/dax/2017-04-19/paginators-1.json

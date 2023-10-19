@@ -56,6 +56,16 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
     OnYellowChannels(putResult);
     const auto& writeMeta = ev->Get()->GetWriteMeta();
 
+    if (!TablesManager.IsReadyForWrite(writeMeta.GetTableId())) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "absent_pathId")("path_id", writeMeta.GetTableId())("has_index", TablesManager.HasPrimaryIndex());
+        IncCounter(COUNTER_WRITE_FAIL);
+
+        auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, NKikimrTxColumnShard::EResultStatus::ERROR);
+        ctx.Send(writeMeta.GetSource(), result.release());
+        CSCounters.OnFailedWriteResponse();
+        return;
+    }
+
     auto wg = WritesMonitor.FinishWrite(putResult.GetResourceUsage().SourceMemorySize);
 
     if (putResult.GetPutStatus() != NKikimrProto::OK) {

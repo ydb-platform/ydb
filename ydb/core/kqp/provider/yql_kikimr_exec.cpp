@@ -1581,10 +1581,6 @@ public:
                                   auto resultNode = ctx.NewWorld(input->Pos());
                                   return resultNode;
                               }, "Executing CREATE TOPIC");
-
-            input->SetState(TExprNode::EState::ExecutionComplete);
-            input->SetResult(ctx.NewWorld(input->Pos()));
-            return SyncOk();
         }
         if (auto maybeAlter = TMaybeNode<TKiAlterTopic>(input)) {
             auto requireStatus = RequireChild(*input, 0);
@@ -1627,10 +1623,6 @@ public:
                                   auto resultNode = ctx.NewWorld(input->Pos());
                                   return resultNode;
                               }, "Executing ALTER TOPIC");
-
-            input->SetState(TExprNode::EState::ExecutionComplete);
-            input->SetResult(ctx.NewWorld(input->Pos()));
-            return SyncOk();
         }
 
         if (auto maybeDrop = TMaybeNode<TKiDropTopic>(input)) {
@@ -1656,10 +1648,6 @@ public:
                                   auto resultNode = ctx.NewWorld(input->Pos());
                                   return resultNode;
                               }, "Executing DROP TOPIC");
-
-            input->SetState(TExprNode::EState::ExecutionComplete);
-            input->SetResult(ctx.NewWorld(input->Pos()));
-            return SyncOk();
         }
 
         if (auto maybeGrantPermissions = TMaybeNode<TKiModifyPermissions>(input)) {

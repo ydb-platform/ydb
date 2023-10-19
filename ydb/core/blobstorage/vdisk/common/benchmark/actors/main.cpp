@@ -2,10 +2,14 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actorid.h>
 #include <library/cpp/actors/core/actorsystem.h>
+#include <library/cpp/actors/core/event.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/executor_pool_basic.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
+#include <library/cpp/actors/dnsresolver/dnsresolver.h>
+#include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
+#include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
 #include <library/cpp/actors/util/should_continue.h>
 
 #include <util/datetime/base.h>
@@ -14,12 +18,9 @@
 #include <util/system/sigset.h>
 #include <util/system/types.h>
 
-#include "library/cpp/actors/dnsresolver/dnsresolver.h"
-#include "library/cpp/actors/interconnect/interconnect_tcp_proxy.h"
-#include "library/cpp/actors/interconnect/interconnect_tcp_server.h"
-#include "ydb/core/base/blobstorage.h"
-#include "ydb/core/blobstorage/vdisk/common/vdisk_events.h"
-#include "ydb/core/protos/blobstorage.pb.h"
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace {
 
@@ -41,7 +42,7 @@ struct TVdiskBenchEvents {
     static_assert(End < EventSpaceEnd(TEvents::ES_USERSPACE), "expect End < EventSpaceEnd(ES_HELLOWORLD)");
 };
 
-struct TEvAck: public TEventBase<TEvAck, TVdiskBenchEvents::Ack> {
+struct TEvAck : public TEventBase<TEvAck, TVdiskBenchEvents::Ack> {
     DEFINE_SIMPLE_NONLOCAL_EVENT(TEvAck, "Ack");
 };
 
@@ -94,10 +95,10 @@ public:
     }
 
     STFUNC(Main) {
-        switch (ev->GetTypeRewrite()) {
+        STRICT_STFUNC_BODY(
             sFunc(TEvAck, Ack);
             sFunc(TEvents::TEvWakeup, PrintStats);
-        }
+        )
     }
 };
 
@@ -113,9 +114,9 @@ public:
     {}
 
     STFUNC(Main) {
-        switch (ev->GetTypeRewrite()) {
+        STRICT_STFUNC_BODY(
             hFunc(NKikimr::TEvBlobStorage::TEvVPut, Handle);
-        }
+        )
     }
 };
 

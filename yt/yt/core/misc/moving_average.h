@@ -1,6 +1,7 @@
 #pragma once
 
 #include "public.h"
+#include "phoenix.h"
 
 namespace NYT {
 
@@ -23,7 +24,7 @@ public:
 
 private:
     int WindowSize_ = 0;
-    std::queue<TValue> Values_;
+    std::deque<TValue> Values_;
     TValue Total_{};
 
     void RemoveOldValues();

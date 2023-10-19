@@ -927,7 +927,7 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
             TString fileContent;
             if (ReadFromFileIfExists(tokenFile, "default token", fileContent)) {
                 if (!IsAuthSet) {
-                    if (!IsVerbose()) {
+                    if (IsVerbose()) {
                         Cout << "Using auth token from default token file " << defaultTokenFile << Endl;
                     }
                     config.ChosenAuthMethod = "token";

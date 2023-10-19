@@ -184,8 +184,10 @@ namespace NKikimr {
                     return;
                 }
 
-                // cut the log (according to confirmed old synced state)
-                CutLog(ctx, sourceVDisk, oldSyncState.SyncedLsn);
+                if (!SlCtx->IsReadOnlyVDisk) {
+                    // cut the log (according to confirmed old synced state)
+                    CutLog(ctx, sourceVDisk, oldSyncState.SyncedLsn);
+                }
                 // process the request further asyncronously
                 NeighborsPtr->Lock(sourceVDisk, oldSyncState.SyncedLsn);
                 auto aid = ctx.Register(CreateSyncLogReaderActor(SlCtx, VDiskIncarnationGuid, ev, ctx.SelfID, KeeperId,

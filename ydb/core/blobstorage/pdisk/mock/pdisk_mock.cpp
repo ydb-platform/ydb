@@ -44,7 +44,7 @@ struct TPDiskMockState::TImpl {
     std::unordered_map<TString, ui32> Blocks;
     TIntervalSet<ui64> Corrupted;
     NPDisk::TStatusFlags StatusFlags;
-    THashSet<TVDiskID> ReadOnlyVDisks;
+    THashSet<ui32> ReadOnlyVDisks;
     TString StateErrorReason;
 
     TImpl(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize)
@@ -264,14 +264,14 @@ struct TPDiskMockState::TImpl {
 
     void SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly) {
         if (isReadOnly) {
-            ReadOnlyVDisks.insert(vDiskId);
+            ReadOnlyVDisks.insert(vDiskId.GroupID);
         } else {
-            ReadOnlyVDisks.erase(vDiskId);
+            ReadOnlyVDisks.erase(vDiskId.GroupID);
         }
     }
 
     bool IsReadOnly(const TVDiskID& vDiskId) const {
-        return ReadOnlyVDisks.contains(vDiskId);
+        return ReadOnlyVDisks.contains(vDiskId.GroupID);
     }
 };
 

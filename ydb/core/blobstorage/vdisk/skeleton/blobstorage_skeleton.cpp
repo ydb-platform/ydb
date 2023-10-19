@@ -127,6 +127,8 @@ namespace NKikimr {
                 ReplyError(NKikimrProto::ERROR, "disk is in donor mode", ev, ctx, TAppData::TimeProvider->Now());
             } else if (BlockWrites(GInfo->DecommitStatus)) {
                 ReplyError(NKikimrProto::ERROR, "group is being decommitted", ev, ctx, TAppData::TimeProvider->Now());
+            } else if (Config->BaseInfo.ReadOnly) {
+                ReplyError(NKikimrProto::ERROR, "disk is in readonly mode", ev, ctx, TAppData::TimeProvider->Now());
             } else {
                 return true;
             }
@@ -1821,7 +1823,7 @@ namespace NKikimr {
                 TString localRecovInfoStr = Db->LocalRecoveryInfo ? Db->LocalRecoveryInfo->ToString() : TString("{}");
                 auto hugeKeeperCtx = std::make_shared<THugeKeeperCtx>(VCtx, PDiskCtx, Db->LsnMngr,
                         ctx.SelfID, (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID),
-                        localRecovInfoStr);
+                        localRecovInfoStr, Config->BaseInfo.ReadOnly);
                 auto hugeKeeper = CreateHullHugeBlobKeeper(hugeKeeperCtx, ev->Get()->RepairedHuge);
                 Db->HugeKeeperID.Set(ctx.Register(hugeKeeper));
                 ActiveActors.Insert(Db->HugeKeeperID); // keep forever
@@ -1839,7 +1841,8 @@ namespace NKikimr {
                         Config->SyncLogMaxEntryPointSize,
                         Config->SyncLogMaxMemAmount,
                         Config->MaxResponseSize,
-                        Db->SyncLogFirstLsnToKeep);
+                        Db->SyncLogFirstLsnToKeep,
+                        Config->BaseInfo.ReadOnly);
                 Db->SyncLogID.Set(ctx.Register(CreateSyncLogActor(slCtx, GInfo, SelfVDiskId, std::move(repairedSyncLog))));
                 ActiveActors.Insert(Db->SyncLogID); // keep forever
 
@@ -2164,6 +2167,9 @@ namespace NKikimr {
         // CUT LOG FORWARDER SECTOR
         ////////////////////////////////////////////////////////////////////////
         void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
+            if (Config->BaseInfo.ReadOnly) {
+                return;
+            }
             std::unique_ptr<NPDisk::TEvCutLog> msg(ev->Release().Release());
 
             if (LocalDbInitialized) {

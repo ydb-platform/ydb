@@ -222,6 +222,7 @@ namespace NKikimr {
         const TString LocalRecoveryInfoDbg;
         NMonGroup::TLsmHullGroup LsmHullGroup;
         NMonGroup::TDskOutOfSpaceGroup DskOutOfSpaceGroup;
+        const bool IsReadOnlyVDisk;
 
         THugeKeeperCtx(
                 TIntrusivePtr<TVDiskContext> vctx,
@@ -230,7 +231,8 @@ namespace NKikimr {
                 TActorId skeletonId,
                 TActorId loggerId,
                 TActorId logCutterId,
-                const TString &localRecoveryInfoDbg);
+                const TString &localRecoveryInfoDbg,
+                bool isReadOnlyVDisk);
         ~THugeKeeperCtx();
     };
 

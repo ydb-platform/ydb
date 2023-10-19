@@ -605,7 +605,8 @@ namespace NKikimr {
             TActorId skeletonId,
             TActorId loggerId,
             TActorId logCutterId,
-            const TString &localRecoveryInfoDbg)
+            const TString &localRecoveryInfoDbg,
+            bool isReadOnlyVDisk)
         : VCtx(std::move(vctx))
         , PDiskCtx(std::move(pdiskCtx))
         , LsnMngr(std::move(lsnMngr))
@@ -615,6 +616,7 @@ namespace NKikimr {
         , LocalRecoveryInfoDbg(localRecoveryInfoDbg)
         , LsmHullGroup(VCtx->VDiskCounters, "subsystem", "lsmhull")
         , DskOutOfSpaceGroup(VCtx->VDiskCounters, "subsystem", "outofspace")
+        , IsReadOnlyVDisk(isReadOnlyVDisk)
     {}
 
     THugeKeeperCtx::~THugeKeeperCtx() = default;
@@ -683,6 +685,12 @@ namespace NKikimr {
 
         //////////// Cut Log Handler ///////////////////////////////////
         void TryToCutLog(const TActorContext &ctx) {
+            if (HugeKeeperCtx->IsReadOnlyVDisk) {
+                LOG_DEBUG(ctx, BS_LOGCUTTER,
+                    VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
+                        "THullHugeKeeper: TryToCutLog: terminate; readonly vdisk"));
+                return;
+            }
             const ui64 firstLsnToKeep = State.FirstLsnToKeep();
             LOG_DEBUG(ctx, BS_LOGCUTTER,
                 VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,

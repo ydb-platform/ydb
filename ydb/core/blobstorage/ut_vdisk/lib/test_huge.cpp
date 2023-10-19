@@ -229,7 +229,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
         HmCtx->LogCutterID = ctx.ExecutorThread.RegisterActor(CreateRecoveryLogCutter(std::move(logCutterCtx)));
         RepairedHuge->FinishRecovery(ctx);
         auto hugeKeeperCtx = std::make_shared<THugeKeeperCtx>(HmCtx->VCtx, HmCtx->PDiskCtx, HmCtx->LsnMngr,
-                HmCtx->MainID, HmCtx->LoggerID, HmCtx->LogCutterID, "{}");
+                HmCtx->MainID, HmCtx->LoggerID, HmCtx->LogCutterID, "{}", false);
         TAutoPtr<IActor> hugeKeeperActor(CreateHullHugeBlobKeeper(hugeKeeperCtx, RepairedHuge));
         HmCtx->HugeKeeperID = ctx.ExecutorThread.RegisterActor(hugeKeeperActor.Release());
 

@@ -97,8 +97,24 @@ struct TTetsEnv {
         const auto& somePDisk = baseConfig.GetPDisk(position);
         const auto& someVSlot = baseConfig.GetVSlot(position);
         Cerr << "Setting VDisk read-only to " << value << " for position " << position << Endl;
+        if (!value) {
+            Env.PDiskMockStates[{somePDisk.GetNodeId(), somePDisk.GetPDiskId()}]->SetReadOnly(someVDisk, value);
+        }
         Env.SetVDiskReadOnly(somePDisk.GetNodeId(), somePDisk.GetPDiskId(), someVSlot.GetVSlotId().GetVSlotId(), someVDisk, value);
         Env.Sim(TDuration::Seconds(30));
+        if (value) {
+            Env.PDiskMockStates[{somePDisk.GetNodeId(), somePDisk.GetPDiskId()}]->SetReadOnly(someVDisk, value);
+        }
+    }
+
+    void SendCutLog(ui32 position) {
+        auto baseConfig = Env.FetchBaseConfig();
+        const auto& somePDisk = baseConfig.GetPDisk(position);
+        const TActorId sender = Env.Runtime->AllocateEdgeActor(somePDisk.GetNodeId(), __FILE__, __LINE__);
+        Env.Runtime->WrapInActorContext(sender, [&] () {
+            Env.PDiskMockStates[{somePDisk.GetNodeId(), somePDisk.GetPDiskId()}]->TrimQuery();
+        });
+        Env.Sim(TDuration::Minutes(1));
     }
 
     auto SendCollectGarbage(ui32 step) {
@@ -140,12 +156,12 @@ struct TTetsEnv {
         auto ev = std::make_unique<TEvLoad::TEvLoadTestRequest>();
         
         TString conf("StorageLoad: {\n"
-            "DurationSeconds: 1\n"
+            "DurationSeconds: 8\n"
             "Tablets: {\n"
                 "Tablets: { TabletId: 1 Channel: 0 GroupId: " + ToString(GroupInfo->GroupID) + " Generation: 1 }\n"
-                "WriteSizes: { Weight: 1.0 Min: 128 Max: 128 }\n"
+                "WriteSizes: { Weight: 1.0 Min: 1000000 Max: 4000000 }\n"
                 "WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 100000 MaxUs: 100000 } }\n"
-                "MaxInFlightWriteRequests: 4\n"
+                "MaxInFlightWriteRequests: 10\n"
                 "FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 1000000 MaxUs: 1000000 } }\n"
                 "PutHandleClass: TabletLog\n"
             "}\n"
@@ -163,7 +179,7 @@ struct TTetsEnv {
             auto res = Env.WaitForEdgeActorEvent<TEvLoad::TEvNodeFinishResponse>(sender, false);
             UNIT_ASSERT(res->Get()->Record.GetSuccess());
         }
-        Env.Sim(TDuration::Seconds(6));
+        Env.Sim(TDuration::Seconds(60));
     }
 
     TEnvironmentSetup Env;
@@ -192,6 +208,8 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
             Cerr << "=== Putting VDisk #" << i << " to read-only ===" << Endl;
             env.SetVDiskReadOnly(i, true);
             env.ReadAllBlobs(step);
+            env.SendCutLog(i);
+            env.SendCutLog((i + 1) % 7);
         }
 
         for (ui32 i = 0; i < 7; ++i) {
@@ -219,6 +237,7 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
             ++step;
         }
 
+        env.SendCutLog(0);
         env.ReadAllBlobs(step);
 
         Cerr << "=== Put 2 more VDisks to read-only ===" << Endl;
@@ -230,6 +249,10 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
             env.SendPut(step, NKikimrProto::ERROR);
             ++step;
         }
+        env.SendCutLog(0);
+        env.SendCutLog(1);
+        env.SendCutLog(2);
+        env.SendCutLog(3);
         // Even though previous writes were not successfull, some parts were written which is enough to read the blobs back, at least before GC happens.
         env.ReadAllBlobs(step);
 
@@ -269,6 +292,10 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
         env.SetVDiskReadOnly(1, true);
         env.SetVDiskReadOnly(2, true);
 
+        env.SendCutLog(1);
+        env.SendCutLog(2);
+        env.SendCutLog(3);
+
         ui32 stoppedStep = step;
 
         Cerr << "=== Write 10 more blobs, expect errors ===" << Endl;
@@ -304,12 +331,16 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
         env.SetVDiskReadOnly(0, true);
         env.SendPut(step++, NKikimrProto::OK);
         checkGarbageCollectOk();
+        env.SendCutLog(0);
         env.SetVDiskReadOnly(1, true);
         env.SendPut(step++, NKikimrProto::OK);
+        env.SendCutLog(1);
         checkGarbageCollectOk();
         env.SetVDiskReadOnly(2, true);
         env.SendPut(step, NKikimrProto::ERROR);
+        env.SendCutLog(2);
         checkGarbageCollectErr();
+        env.SendCutLog(2);
 
         for (ui32 i = 3; i < 7; ++i) {
             Cerr << "=== Putting VDisk #" << i << " to read-only ===" << Endl;
@@ -324,9 +355,11 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
         }
 
         env.SetVDiskReadOnly(4, false);
+        env.SendCutLog(4);
         checkGarbageCollectOk();
         env.SetVDiskReadOnly(5, false);
         checkGarbageCollectOk();
+        env.SendCutLog(5);
         env.SetVDiskReadOnly(6, false);
         checkGarbageCollectOk();
 
@@ -386,6 +419,8 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
             env.SetVDiskReadOnly(i, true);
             env.SetVDiskReadOnly((i + 1) % 7, true);
             env.SendPut(step++, NKikimrProto::OK);
+            env.SendCutLog(i);
+            env.SendCutLog((i + 1) % 7);
             env.SetVDiskReadOnly(i, false);
             env.SetVDiskReadOnly((i + 1) % 7, false);
         }
@@ -398,14 +433,28 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
 
         env.RunStorageLoad();
 
-        for (ui32 i = 0; i < 8; ++i) {
+        env.SetVDiskReadOnly(0, true);
+        env.RunStorageLoad();
+        env.SendCutLog(0);
+
+        env.SetVDiskReadOnly(1, true);
+        env.RunStorageLoad();
+        env.SendCutLog(1);
+
+        for (ui32 i = 2; i < 8; ++i) {
             env.SetVDiskReadOnly(i, true);
         }
         env.RunStorageLoad();
+        for (ui32 i = 2; i < 8; ++i) {
+            env.SendCutLog(i);
+        }
 
         for (ui32 i = 0; i < 7; ++i) {
             env.SetVDiskReadOnly(i, false);
         }
         env.RunStorageLoad();
+        for (ui32 i = 0; i < 8; ++i) {
+            env.SendCutLog(i);
+        }
     }
 }

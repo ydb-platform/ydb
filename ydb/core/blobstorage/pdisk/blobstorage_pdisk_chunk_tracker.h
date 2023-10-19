@@ -244,10 +244,10 @@ public:
         , OwnerQuota(new TPerOwnerQuotaTracker())
     {}
 
-    bool Reset(const TKeeperParams &params, TString &outErrorReason) {
+    bool Reset(const TKeeperParams &params, const TColorLimits &limits, TString &outErrorReason) {
         Params = params;
 
-        GlobalQuota->Reset(params.TotalChunks, TColorLimits::MakeLogLimits());
+        GlobalQuota->Reset(params.TotalChunks, limits);
         i64 unappropriated = params.TotalChunks;
 
         unappropriated += GlobalQuota->AddSystemOwner(OwnerSystemLog, params.SysLogSize, "SysLog");

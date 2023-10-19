@@ -75,6 +75,19 @@ struct TColorLimits {
         };
     }
 
+    static TColorLimits MakeExtendedLogLimits() {
+        return {
+            {150, 1000}, // Black: Stop early to leave some space for disaster recovery
+            {200, 1000}, // Red
+            {500, 1000}, // Orange
+            {600, 1000}, // PreOrange
+            {700, 1000}, // LightOrange
+            {900, 1000}, // Yellow
+            {930, 1000}, // LightYellow
+            {982, 1000}, // Cyan: Ask to cut log
+        };
+    }
+
     double GetOccupancyForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color, i64 total) {
         switch (color) {
             case NKikimrBlobStorage::TPDiskSpaceColor::GREEN:          return Cyan.CalculateOccupancy(total);

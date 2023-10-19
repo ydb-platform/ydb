@@ -983,5 +983,32 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         );
     }
 
+    Y_UNIT_TEST(PDiskIncreaseLogChunksLimitAfterRestart) {
+        TActorTestContext testCtx({ false });
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+
+        TRcBuf buf(TString(1_MB, 'a'));
+        auto writeLog = [&]() {
+            testCtx.Send(new NPDisk::TEvLog(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0,
+                        buf, vdisk.GetLsnSeg(), nullptr));
+            const auto logRes = testCtx.Recv<NPDisk::TEvLogResult>();
+            return logRes->Status;
+        };
+
+        while (writeLog() == NKikimrProto::OK) {}
+        UNIT_ASSERT_VALUES_EQUAL(writeLog(), NKikimrProto::OUT_OF_SPACE);
+
+        testCtx.Send(new TEvBlobStorage::TEvRestartPDisk(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, nullptr));
+        testCtx.Recv<TEvBlobStorage::TEvRestartPDiskResult>();
+
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(writeLog(), NKikimrProto::OK);
+    }
+
 }
 } // namespace NKikimr

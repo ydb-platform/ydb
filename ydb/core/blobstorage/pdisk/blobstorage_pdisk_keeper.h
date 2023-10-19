@@ -40,8 +40,8 @@ public:
     // Initialization
     //
 
-    bool Reset(const TKeeperParams& params, TString &outErrorReason) {
-        return ChunkTracker.Reset(params, outErrorReason);
+    bool Reset(const TKeeperParams& params, const TColorLimits &limits, TString &outErrorReason) {
+        return ChunkTracker.Reset(params, limits, outErrorReason);
     }
 
     void InitialPushFree(TChunkIdx chunkIdx) {

@@ -184,14 +184,12 @@ private:
         WaitingForStateResponse.clear();
     }
 
-    const TDqAsyncOutputBufferStats* GetSinkStats(ui64 outputIdx, const TAsyncOutputInfoBase& sinkInfo) const override {
-        Y_UNUSED(sinkInfo);
-        return TaskRunnerStats.GetSinkStats(outputIdx);
+    const IDqAsyncOutputBuffer* GetSink(ui64 outputIdx, const TAsyncOutputInfoBase&) const override {
+        return TaskRunnerStats.GetSink(outputIdx);
     }
 
-    const TDqAsyncInputBufferStats* GetInputTransformStats(ui64 inputIdx, const TAsyncInputTransformInfo& inputTransformInfo) const override {
-        Y_UNUSED(inputTransformInfo);
-        return TaskRunnerStats.GetInputTransformStats(inputIdx);
+    const IDqAsyncInputBuffer* GetInputTransform(ui64 inputIdx, const TAsyncInputTransformInfo&) const override {
+        return TaskRunnerStats.GetInputTransform(inputIdx);
     }
 
     void DrainOutputChannel(TOutputChannelInfo& outputChannel) override {
@@ -746,7 +744,7 @@ private:
         return MkqlMemoryLimit;
     }
 
-    const TDqMemoryQuota::TProfileStats* GetProfileStats() const override {
+    const TDqMemoryQuota::TProfileStats* GetMemoryProfileStats() const override {
         return &ProfileStats;
     }
 

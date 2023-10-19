@@ -934,12 +934,11 @@ void FindPlanNodesImpl(const NJson::TJsonValue& node, const TString& key, std::v
         return;
     }
 
-    auto map = node.GetMap();
-    if (map.contains(key)) {
-        results.push_back(map.at(key));
+    if (auto* valueNode = node.GetValueByPath(key)) {
+        results.push_back(*valueNode);
     }
 
-    for (const auto& [_, value]: map) {
+    for (const auto& [_, value]: node.GetMap()) {
         FindPlanNodesImpl(value, key, results);
     }
 }

@@ -23,6 +23,7 @@ constexpr i64 DqPqDefaultFreeSpace = 16_MB;
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     NPq::NProto::TDqPqTopicSink&& settings,
     ui64 outputIndex,
+    TCollectStatsLevel statsLevel,
     TTxId txId,
     const THashMap<TString, TString>& secureParams,
     NYdb::TDriver driver,

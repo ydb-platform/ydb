@@ -75,6 +75,10 @@ class TDummyMemoryQuotaManager: public IMemoryQuotaManager {
     ui64 GetCurrentQuota() const override {
         return std::numeric_limits<ui64>::max();
     }
+
+    ui64 GetMaxMemorySize() const override {
+        return std::numeric_limits<ui64>::max();
+    }
 };
 
 class TDqWorker: public TRichActor<TDqWorker>

@@ -144,7 +144,7 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
                             if (auto* ingressNode = stage.second.GetValueByPath("IngressBytes=S3Source.sum")) {
                                 // raw old
                                 ingress += ingressNode->GetIntegerSafe();
-                            } else if (auto* ingressNode = stage.second.GetValueByPath("IngressBytes=S3Source.Input.Bytes.sum")) {
+                            } else if (auto* ingressNode = stage.second.GetValueByPath("IngressBytes=S3Source.Ingress.Bytes.sum")) {
                                 // raw new
                                 ingress += ingressNode->GetIntegerSafe();
                             }
@@ -279,6 +279,12 @@ TString GetPrettyStatistics(const TString& statistics) {
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue stat;
     if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
+
+        //  EXP 
+        if (stat.GetValueByPath("Columns")) {
+            return statistics;
+        }
+
         for (const auto& p : stat.GetMap()) {
             // YQv1
             if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
@@ -304,8 +310,8 @@ TString GetPrettyStatistics(const TString& statistics) {
                 writer.OnBeginMap();
                     AggregateNode(writer, p.second, "TotalTasks", "TasksCount");
                     AggregateNode(writer, p.second, "TotalCpuTimeUs", "CpuTimeUs");
-                    AggregateNode(writer, p.second, "IngressBytes=S3Source", "IngressObjectStorageBytes");
-                    AggregateNode(writer, p.second, "EgressBytes=S3Sink", "EgressObjectStorageBytes");
+                    AggregateNode(writer, p.second, "Ingress=S3Source.Ingress.Bytes", "IngressObjectStorageBytes");
+                    AggregateNode(writer, p.second, "Egress=S3Sink.Egress.Bytes", "EgressObjectStorageBytes");
                 writer.OnEndMap();
             }
         }

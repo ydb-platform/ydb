@@ -45,7 +45,7 @@ namespace NYql::NDqs {
 
     struct TEvReadyState : NActors::TEventPB<TEvReadyState, NDqProto::TReadyState, TDqExecuterEvents::ES_READY_TO_PULL> {
         TEvReadyState() = default;
-        TEvReadyState(NActors::TActorId sourceId, TString type);
+        TEvReadyState(NActors::TActorId sourceId, TString type, NYql::NDqProto::EDqStatsMode statsMode);
         explicit TEvReadyState(NDqProto::TReadyState&& proto);
     };
 

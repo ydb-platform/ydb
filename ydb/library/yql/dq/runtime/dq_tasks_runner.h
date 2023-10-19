@@ -84,9 +84,9 @@ struct TTaskRunnerStatsBase {
 
     NMonitoring::IHistogramCollectorPtr ComputeCpuTimeByRun; // in millis
 
-    THashMap<ui64, const TDqInputChannelStats*> InputChannels; // Channel id -> Channel stats
-    THashMap<ui64, const TDqAsyncInputBufferStats*> Sources; // Input index -> Source stats
-    THashMap<ui64, const TDqOutputChannelStats*> OutputChannels; // Channel id -> Channel stats
+    THashMap<ui32, THashMap<ui64, IDqInputChannel::TPtr>> InputChannels;   // SrcStageId => {ChannelId => Channel}
+    THashMap<ui64, IDqAsyncInputBuffer::TPtr> Sources;                     // InputIndex => Source
+    THashMap<ui32, THashMap<ui64, IDqOutputChannel::TPtr>> OutputChannels; // DstStageId => {ChannelId => Channel}
 
     TVector<TMkqlStat> MkqlStats;
 
@@ -95,57 +95,9 @@ struct TTaskRunnerStatsBase {
     TTaskRunnerStatsBase& operator=(TTaskRunnerStatsBase&&) = default;
 
     virtual ~TTaskRunnerStatsBase() = default;
-
-    template<typename T>
-    void FromProto(const T& f)
-    {
-        this->BuildCpuTime = TDuration::MicroSeconds(f.GetBuildCpuTimeUs());
-        this->ComputeCpuTime = TDuration::MicroSeconds(f.GetComputeCpuTimeUs());
-        this->RunStatusTimeMetrics.Load(ERunStatus::PendingInput, TDuration::MicroSeconds(f.GetPendingInputTimeUs()));
-        this->RunStatusTimeMetrics.Load(ERunStatus::PendingOutput, TDuration::MicroSeconds(f.GetPendingOutputTimeUs()));
-        this->RunStatusTimeMetrics.Load(ERunStatus::Finished, TDuration::MicroSeconds(f.GetFinishTimeUs()));
-        //s->TotalTime = TDuration::MilliSeconds(f.GetTotalTime());
-        this->WaitTime = TDuration::MicroSeconds(f.GetWaitTimeUs());
-        this->WaitOutputTime = TDuration::MicroSeconds(f.GetWaitOutputTimeUs());
-
-        //s->MkqlTotalNodes = f.GetMkqlTotalNodes();
-        //s->MkqlCodegenFunctions = f.GetMkqlCodegenFunctions();
-        //s->CodeGenTotalInstructions = f.GetCodeGenTotalInstructions();
-        //s->CodeGenTotalFunctions = f.GetCodeGenTotalFunctions();
-        //s->CodeGenFullTime = f.GetCodeGenFullTime();
-        //s->CodeGenFinalizeTime = f.GetCodeGenFinalizeTime();
-        //s->CodeGenModulePassTime = f.GetCodeGenModulePassTime();
-
-        for (const auto& input : f.GetInputChannels()) {
-            this->MutableInputChannel(input.GetChannelId())->FromProto(input);
-        }
-
-        for (const auto& output : f.GetOutputChannels()) {
-            this->MutableOutputChannel(output.GetChannelId())->FromProto(output);
-        }
-
-        // todo: (whcrc) fill sources and ComputeCpuTimeByRun?
-    }
-
-private:
-    virtual TDqInputChannelStats* MutableInputChannel(ui64 channelId) = 0;
-    virtual TDqAsyncInputBufferStats* MutableSource(ui64 sourceId) = 0;  // todo: (whcrc) unused, not modified by these pointers
-    virtual TDqOutputChannelStats* MutableOutputChannel(ui64 channelId) = 0;
 };
 
 struct TDqTaskRunnerStats : public TTaskRunnerStatsBase {
-    // these stats are owned by TDqTaskRunner
-    TDqInputChannelStats* MutableInputChannel(ui64 channelId) override {
-        return const_cast<TDqInputChannelStats*>(InputChannels[channelId]);
-    }
-
-    TDqAsyncInputBufferStats* MutableSource(ui64 sourceId) override {
-        return const_cast<TDqAsyncInputBufferStats*>(Sources[sourceId]);
-    }
-
-    TDqOutputChannelStats* MutableOutputChannel(ui64 channelId) override {
-        return const_cast<TDqOutputChannelStats*>(OutputChannels[channelId]);
-    }
 };
 
 // Provides read access to TTaskRunnerStatsBase
@@ -159,12 +111,12 @@ public:
         , IsDefined(true) {
     }
 
-    TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats, THashMap<ui32, const TDqAsyncOutputBufferStats*>&& sinkStats,
-        THashMap<ui32, const TDqAsyncInputBufferStats*>&& inputTransformStats)
+    TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats, THashMap<ui32, const IDqAsyncOutputBuffer*>&& sinks,
+        THashMap<ui32, const IDqAsyncInputBuffer*>&& inputTransforms)
         : StatsPtr(stats)
         , IsDefined(true)
-        , SinkStats(std::move(sinkStats))
-        , InputTransformStats(std::move(inputTransformStats)) {
+        , Sinks(std::move(sinks))
+        , InputTransforms(std::move(inputTransforms)) {
     }
 
     const TTaskRunnerStatsBase* Get() {
@@ -178,19 +130,19 @@ public:
         return IsDefined;
     }
 
-    const TDqAsyncOutputBufferStats* GetSinkStats(ui32 sinkId) const {
-        return SinkStats.at(sinkId);
+    const IDqAsyncOutputBuffer* GetSink(ui32 sinkId) const {
+        return Sinks.at(sinkId);
     }
 
-    const TDqAsyncInputBufferStats* GetInputTransformStats(ui32 inputTransformId) const {
-        return InputTransformStats.at(inputTransformId);
+    const IDqAsyncInputBuffer* GetInputTransform(ui32 inputTransformId) const {
+        return InputTransforms.at(inputTransformId);
     }
 
 private:
     const TDqTaskRunnerStats* StatsPtr;
     bool IsDefined;
-    THashMap<ui32, const TDqAsyncOutputBufferStats*> SinkStats;
-    THashMap<ui32, const TDqAsyncInputBufferStats*> InputTransformStats;
+    THashMap<ui32, const IDqAsyncOutputBuffer*> Sinks;
+    THashMap<ui32, const IDqAsyncInputBuffer*> InputTransforms;
 };
 
 struct TDqTaskRunnerContext {
@@ -231,8 +183,7 @@ public:
 };
 
 struct TDqTaskRunnerSettings {
-    bool CollectBasicStats = false;
-    bool CollectProfileStats = false;
+    NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
     bool TerminateOnError = false;
     bool UseCacheForLLVM = false;
     TString OptLLVM = "";

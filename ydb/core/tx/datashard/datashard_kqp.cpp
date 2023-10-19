@@ -1040,10 +1040,6 @@ void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunne
     Y_ABORT_UNLESS(dataShard.GetUserTables().size() == 1, "TODO: Fix handling of collocated tables");
     auto tableInfo = dataShard.GetUserTables().begin();
 
-    // Directly use StatsMode instead of bool flag, too much is reported for STATS_COLLECTION_BASIC mode.
-    bool withBasicStats = statsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC;
-    bool withProfileStats = statsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
-
     auto& computeActorStats = *result.Record.MutableComputeActorStats();
 
     ui64 minFirstRowTimeMs = std::numeric_limits<ui64>::max();
@@ -1063,19 +1059,19 @@ void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunne
         protoTable->SetWriteBytes(taskTableStats.UpdateRowBytes);
         protoTable->SetEraseRows(taskTableStats.NEraseRow);
 
-        if (!withBasicStats) {
+        if (statsMode <= NYql::NDqProto::DQ_STATS_MODE_NONE) { // UNSPECIFIED === NONE
             continue;
         }
 
         auto stageId = tasksRunner.GetTask(taskId).GetStageId();
-        NYql::NDq::FillTaskRunnerStats(taskId, stageId, *taskStats, protoTask, withProfileStats);
+        NYql::NDq::FillTaskRunnerStats(taskId, stageId, *taskStats, protoTask, NYql::NDq::StatsModeToCollectStatsLevel(statsMode));
 
-        minFirstRowTimeMs = std::min(minFirstRowTimeMs, protoTask->GetFirstRowTimeMs());
-        maxFinishTimeMs = std::max(maxFinishTimeMs, protoTask->GetFinishTimeMs());
+        // minFirstRowTimeMs = std::min(minFirstRowTimeMs, protoTask->GetFirstRowTimeMs());
+        // maxFinishTimeMs = std::max(maxFinishTimeMs, protoTask->GetFinishTimeMs());
 
         computeActorStats.SetCpuTimeUs(computeActorStats.GetCpuTimeUs() + protoTask->GetCpuTimeUs());
 
-        if (Y_UNLIKELY(withProfileStats)) {
+        if (Y_UNLIKELY(statsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL)) {
             NKqpProto::TKqpShardTableExtraStats tableExtraStats;
             tableExtraStats.SetShardId(dataShard.TabletID());
             protoTable->MutableExtra()->PackFrom(tableExtraStats);

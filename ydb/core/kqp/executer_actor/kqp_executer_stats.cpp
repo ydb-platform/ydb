@@ -31,6 +31,49 @@ void UpdateAggr(NDqProto::TDqStatsAggr* aggr, ui64 value) noexcept {
     aggr->SetCnt(aggr->GetCnt() + 1);
 }
 
+struct TAsyncGroupStat {
+    ui64 Bytes = 0;
+    ui64 Rows = 0;
+    ui64 Chunks = 0;
+    ui64 Splits = 0;
+    ui64 FirstMessageMs = 0;
+    ui64 PauseMessageMs = 0;
+    ui64 ResumeMessageMs = 0;
+    ui64 LastMessageMs = 0;
+    ui64 WaitTimeUs = 0;
+    ui64 WaitPeriods = 0;
+    ui64 Count = 0;
+};
+
+void UpdateAsyncAggr(NDqProto::TDqAsyncStatsAggr& asyncAggr, const NDqProto::TDqAsyncBufferStats& asyncStat) noexcept {
+    UpdateAggr(asyncAggr.MutableBytes(), asyncStat.GetBytes());
+    UpdateAggr(asyncAggr.MutableRows(), asyncStat.GetRows());
+    UpdateAggr(asyncAggr.MutableChunks(), asyncStat.GetChunks());
+    UpdateAggr(asyncAggr.MutableSplits(), asyncStat.GetSplits());
+
+    auto firstMessageMs = asyncStat.GetFirstMessageMs();
+    if (firstMessageMs) {
+        UpdateAggr(asyncAggr.MutableFirstMessageMs(), firstMessageMs);
+    }
+    if (asyncStat.GetPauseMessageMs()) {
+        UpdateAggr(asyncAggr.MutablePauseMessageMs(), asyncStat.GetPauseMessageMs());
+    }
+    if (asyncStat.GetResumeMessageMs()) {
+        UpdateAggr(asyncAggr.MutableResumeMessageMs(), asyncStat.GetResumeMessageMs());
+    }
+    auto lastMessageMs = asyncStat.GetLastMessageMs();
+    if (lastMessageMs) {
+        UpdateAggr(asyncAggr.MutableLastMessageMs(), lastMessageMs);
+    }
+
+    UpdateAggr(asyncAggr.MutableWaitTimeUs(), asyncStat.GetWaitTimeUs());
+    UpdateAggr(asyncAggr.MutableWaitPeriods(), asyncStat.GetWaitPeriods());
+
+    if (firstMessageMs && lastMessageMs >= firstMessageMs) {
+        UpdateAggr(asyncAggr.MutableActiveTimeUs(), (lastMessageMs - firstMessageMs) * 1000);
+    }
+}
+
 void UpdateMinMax(NDqProto::TDqStatsMinMax* minMax, ui64 value) noexcept {
     if (minMax->GetMin() == 0) {
         minMax->SetMin(value);
@@ -79,8 +122,9 @@ NYql::NDqProto::EDqStatsMode GetDqStatsMode(Ydb::Table::QueryStatsCollection::Mo
         // Always collect basic stats for system views / request unit computation.
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
             return NYql::NDqProto::DQ_STATS_MODE_BASIC;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
+            return NYql::NDqProto::DQ_STATS_MODE_FULL;
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
             return NYql::NDqProto::DQ_STATS_MODE_PROFILE;
         default:
@@ -94,8 +138,9 @@ NYql::NDqProto::EDqStatsMode GetDqStatsModeShard(Ydb::Table::QueryStatsCollectio
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
             return NYql::NDqProto::DQ_STATS_MODE_NONE;
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
             return NYql::NDqProto::DQ_STATS_MODE_BASIC;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
+            return NYql::NDqProto::DQ_STATS_MODE_FULL;
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
             return NYql::NDqProto::DQ_STATS_MODE_PROFILE;
         default:
@@ -161,26 +206,39 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
             auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
 
             stageStats->SetTotalTasksCount(stageStats->GetTotalTasksCount() + 1);
+            UpdateAggr(stageStats->MutableMaxMemoryUsage(), stats.GetMaxMemoryUsage()); // only 1 task per CA now
             UpdateAggr(stageStats->MutableCpuTimeUs(), task.GetCpuTimeUs());
+            UpdateAggr(stageStats->MutableSourceCpuTimeUs(), task.GetSourceCpuTimeUs());
             UpdateAggr(stageStats->MutableInputRows(), task.GetInputRows());
             UpdateAggr(stageStats->MutableInputBytes(), task.GetInputBytes());
             UpdateAggr(stageStats->MutableOutputRows(), task.GetOutputRows());
             UpdateAggr(stageStats->MutableOutputBytes(), task.GetOutputBytes());
 
-            UpdateMinMax(stageStats->MutableStartTimeMs(), task.GetStartTimeMs());
-            UpdateMinMax(stageStats->MutableFirstRowTimeMs(), task.GetFirstRowTimeMs());
-            UpdateMinMax(stageStats->MutableFinishTimeMs(), task.GetFinishTimeMs());
+            UpdateMinMax(stageStats->MutableStartTimeMs(), task.GetStartTimeMs());       // to be reviewed
+            UpdateMinMax(stageStats->MutableFirstRowTimeMs(), task.GetFirstRowTimeMs()); // to be reviewed
+            UpdateMinMax(stageStats->MutableFinishTimeMs(), task.GetFinishTimeMs());     // to be reviewed
 
             stageStats->SetDurationUs((stageStats->GetFinishTimeMs().GetMax() - stageStats->GetStartTimeMs().GetMin()) * 1'000);
 
-            for (auto ingressStat : task.GetIngress()) {
-                UpdateAggr(&(*stageStats->MutableIngressBytes())[ingressStat.GetName()], ingressStat.GetBytes());
+            for (auto& sourcesStat : task.GetSources()) {
+                UpdateAsyncAggr(*(*stageStats->MutableIngress())[sourcesStat.GetIngressName()].MutableIngress(), sourcesStat.GetIngress());
+                UpdateAsyncAggr(*(*stageStats->MutableIngress())[sourcesStat.GetIngressName()].MutablePush(),   sourcesStat.GetPush());
+                UpdateAsyncAggr(*(*stageStats->MutableIngress())[sourcesStat.GetIngressName()].MutablePop(),  sourcesStat.GetPop());
             }
-            for (auto egressStat : task.GetEgress()) {
-                UpdateAggr(&(*stageStats->MutableEgressBytes())[egressStat.GetName()], egressStat.GetBytes());
+            for (auto& inputChannelStat : task.GetInputChannels()) {
+                UpdateAsyncAggr(*(*stageStats->MutableInput())[inputChannelStat.GetSrcStageId()].MutablePush(), inputChannelStat.GetPush());
+                UpdateAsyncAggr(*(*stageStats->MutableInput())[inputChannelStat.GetSrcStageId()].MutablePop(), inputChannelStat.GetPop());
+            }
+            for (auto& outputChannelStat : task.GetOutputChannels()) {
+                UpdateAsyncAggr(*(*stageStats->MutableOutput())[outputChannelStat.GetDstStageId()].MutablePush(), outputChannelStat.GetPush());
+                UpdateAsyncAggr(*(*stageStats->MutableOutput())[outputChannelStat.GetDstStageId()].MutablePop(), outputChannelStat.GetPop());
+            }
+            for (auto& sinksStat : task.GetSinks()) {
+                UpdateAsyncAggr(*(*stageStats->MutableEgress())[sinksStat.GetEgressName()].MutablePush(),   sinksStat.GetPush());
+                UpdateAsyncAggr(*(*stageStats->MutableEgress())[sinksStat.GetEgressName()].MutablePop(),    sinksStat.GetPop());
+                UpdateAsyncAggr(*(*stageStats->MutableEgress())[sinksStat.GetEgressName()].MutableEgress(), sinksStat.GetEgress());
             }
         }
-
     }
 
     if (CollectProfileStats(StatsMode)) {
@@ -255,9 +313,9 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
             UpdateAggr(stageStats->MutableOutputRows(), task.GetOutputRows());
             UpdateAggr(stageStats->MutableOutputBytes(), task.GetOutputBytes());
 
-            UpdateMinMax(stageStats->MutableStartTimeMs(), task.GetStartTimeMs());
-            UpdateMinMax(stageStats->MutableFirstRowTimeMs(), task.GetFirstRowTimeMs());
-            UpdateMinMax(stageStats->MutableFinishTimeMs(), task.GetFinishTimeMs());
+            UpdateMinMax(stageStats->MutableStartTimeMs(), task.GetStartTimeMs());       // to be reviewed
+            UpdateMinMax(stageStats->MutableFirstRowTimeMs(), task.GetFirstRowTimeMs()); // to be reviewed
+            UpdateMinMax(stageStats->MutableFinishTimeMs(), task.GetFinishTimeMs());     // to be reviewed
 
             stageStats->SetDurationUs((stageStats->GetFinishTimeMs().GetMax() - stageStats->GetStartTimeMs().GetMin()) * 1'000);
 

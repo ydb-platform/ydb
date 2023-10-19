@@ -11,7 +11,7 @@
 
 namespace NYql::NDq {
 
-#define LOG(s) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(TStringBuilder() << "channelId: " << ChannelId << ". " << s); } } while (0)
+#define LOG(s) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(TStringBuilder() << "channelId: " << PopStats.ChannelId << ". " << s); } } while (0)
 
 #ifndef NDEBUG
 #define DLOG(s) LOG(s)
@@ -20,26 +20,6 @@ namespace NYql::NDq {
 #endif
 
 namespace {
-
-class TProfileGuard {
-public:
-    TProfileGuard(TDuration* duration)
-        : Duration(duration)
-    {
-        if (Y_UNLIKELY(duration)) {
-            Start = TInstant::Now();
-        }
-    }
-
-    ~TProfileGuard() {
-        if (Y_UNLIKELY(Duration)) {
-            *Duration += TInstant::Now() - Start;
-        }
-    }
-private:
-    TInstant Start;
-    TDuration* Duration;
-};
 
 using namespace NKikimr;
 
@@ -50,13 +30,13 @@ using NKikimr::NMiniKQL::TPagedBuffer;
 template<bool FastPack>
 class TDqOutputChannel : public IDqOutputChannel {
 public:
-    TDqOutputChannel(ui64 channelId, NMiniKQL::TType* outputType,
+    TDqOutputStats PushStats;
+    TDqOutputChannelStats PopStats;
+
+    TDqOutputChannel(ui64 channelId, ui32 dstStageId, NMiniKQL::TType* outputType,
         const NMiniKQL::THolderFactory& holderFactory, const TDqOutputChannelSettings& settings, const TLogFunc& logFunc,
         NDqProto::EDataTransportVersion transportVersion)
-        : ChannelId(channelId)
-        , OutputType(outputType)
-        , BasicStats(ChannelId)
-        , ProfileStats(settings.CollectProfileStats ? &BasicStats : nullptr)
+        : OutputType(outputType)
         , Packer(OutputType)
         , Width(OutputType->IsMulti() ? static_cast<NMiniKQL::TMultiType*>(OutputType)->GetElementsCount() : 1u)
         , Storage(settings.ChannelStorage)
@@ -67,14 +47,26 @@ public:
         , ChunkSizeLimit(settings.ChunkSizeLimit)
         , LogFunc(logFunc)
     {
+        PopStats.Level = settings.Level;
+        PushStats.Level = settings.Level;
+        PopStats.ChannelId = channelId;
+        PopStats.DstStageId = dstStageId;
     }
 
     ui64 GetChannelId() const override {
-        return ChannelId;
+        return PopStats.ChannelId;
     }
 
     ui64 GetValuesCount() const override {
         return SpilledRowCount + PackedRowCount + ChunkRowCount;
+    }
+
+    const TDqOutputStats& GetPushStats() const override {
+        return PushStats;
+    }
+
+    const TDqOutputChannelStats& GetPopStats() const override {
+        return PopStats;
     }
 
     [[nodiscard]]
@@ -97,11 +89,6 @@ public:
     }
 
     void DoPush(NUdf::TUnboxedValue* values, ui32 width) {
-        TProfileGuard guard(ProfileStats ? &ProfileStats->SerializationTime : nullptr);
-        if (!BasicStats.FirstRowIn) {
-            BasicStats.FirstRowIn = TInstant::Now();
-        }
-
         ui64 rowsInMemory = PackedRowCount + ChunkRowCount;
 
         LOG("Push request, rows in memory: " << rowsInMemory << ", bytesInMemory: " << (PackedDataSize + Packer.PackedSizeEstimate())
@@ -110,6 +97,12 @@ public:
 
         if (Finished) {
             return;
+        }
+
+        if (PushStats.CollectBasic()) {
+            PushStats.Rows++;
+            PushStats.Chunks++;
+            PushStats.Resume();
         }
 
         if (OutputType->IsMulti()) {
@@ -122,13 +115,14 @@ public:
         }
 
         ChunkRowCount++;
-        BasicStats.RowsIn++;
 
         size_t packerSize = Packer.PackedSizeEstimate();
         if (packerSize >= MaxChunkBytes) {
             Data.emplace_back();
             Data.back().Buffer = FinishPackAndCheckSize();
-            BasicStats.Bytes += Data.back().Buffer.size();
+            if (PushStats.CollectBasic()) {
+                PushStats.Bytes += Data.back().Buffer.size();
+            }
             PackedDataSize += Data.back().Buffer.size();
             PackedRowCount += ChunkRowCount;
             Data.back().RowCount = ChunkRowCount;
@@ -152,18 +146,22 @@ public:
 
             SpilledRowCount += head.RowCount;
 
-            if (Y_UNLIKELY(ProfileStats)) {
-                ProfileStats->SpilledRows += head.RowCount;
-                ProfileStats->SpilledBytes += bufSize + sizeof(head.RowCount);
-                ProfileStats->SpilledBlobs++;
+            if (PopStats.CollectFull()) {
+                PopStats.SpilledRows += head.RowCount;
+                PopStats.SpilledBytes += bufSize + sizeof(head.RowCount);
+                PopStats.SpilledBlobs++;
             }
 
             Data.pop_front();
         }
 
-        if (Y_UNLIKELY(ProfileStats)) {
-            ProfileStats->MaxMemoryUsage = std::max(ProfileStats->MaxMemoryUsage, PackedDataSize + packerSize);
-            ProfileStats->MaxRowsInMemory = std::max(ProfileStats->MaxRowsInMemory, PackedRowCount);
+        if (IsFull() || FirstStoredId < NextStoredId) {
+            PopStats.TryPause();
+        }
+
+        if (PopStats.CollectFull()) {
+            PopStats.MaxMemoryUsage = std::max(PopStats.MaxMemoryUsage, PackedDataSize + packerSize);
+            PopStats.MaxRowsInMemory = std::max(PopStats.MaxRowsInMemory, PackedRowCount);
         }
     }
 
@@ -182,6 +180,7 @@ public:
         LOG("Pop request, rows in memory: " << GetValuesCount() << ", finished: " << Finished);
 
         if (!HasData()) {
+            PushStats.TryPause();
             if (Finished) {
                 data.Clear();
                 data.Proto.SetTransportVersion(TransportVersion);
@@ -217,8 +216,15 @@ public:
 
         DLOG("Took " << data.RowCount() << " rows");
 
-        BasicStats.Chunks++;
-        BasicStats.RowsOut += data.RowCount();
+        if (PopStats.CollectBasic()) {
+            PopStats.Bytes += data.Payload.size();
+            PopStats.Rows += data.RowCount();
+            PopStats.Chunks++;
+            if (!IsFull() || FirstStoredId == NextStoredId) {
+                PopStats.Resume();
+            }
+        }
+
         return true;
     }
 
@@ -265,7 +271,6 @@ public:
         if (ChunkRowCount) {
             Data.emplace_back();
             Data.back().Buffer = FinishPackAndCheckSize();
-            BasicStats.Bytes += Data.back().Buffer.size();
             PackedDataSize += Data.back().Buffer.size();
             PackedRowCount += ChunkRowCount;
             Data.back().RowCount = ChunkRowCount;
@@ -293,6 +298,14 @@ public:
 
         data.Proto.SetRows(rows.RowCount());
         data.SetPayload(FinishPackAndCheckSize());
+        if (PopStats.CollectBasic()) {
+            PopStats.Bytes += data.Payload.size();
+            PopStats.Rows += data.RowCount();
+            PopStats.Chunks++;
+            if (!IsFull() || FirstStoredId == NextStoredId) {
+                PopStats.Resume();
+            }
+        }
         YQL_ENSURE(!HasData());
         return true;
     }
@@ -300,10 +313,6 @@ public:
     void Finish() override {
         LOG("Finish request");
         Finished = true;
-
-        if (!BasicStats.FirstRowIn) {
-            BasicStats.FirstRowIn = TInstant::Now();
-        }
     }
 
     TRope FinishPackAndCheckSize() {
@@ -337,18 +346,11 @@ public:
         return OutputType;
     }
 
-    const TDqOutputChannelStats* GetStats() const override {
-        return &BasicStats;
-    }
-
     void Terminate() override {
     }
 
 private:
-    const ui64 ChannelId;
     NKikimr::NMiniKQL::TType* OutputType;
-    TDqOutputChannelStats BasicStats;
-    TDqOutputChannelStats* ProfileStats = nullptr;
     NKikimr::NMiniKQL::TValuePackerTransport<FastPack> Packer;
     const ui32 Width;
     const IDqChannelStorage::TPtr Storage;
@@ -383,7 +385,7 @@ private:
 } // anonymous namespace
 
 
-IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, NKikimr::NMiniKQL::TType* outputType,
+IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, ui32 dstStageId, NKikimr::NMiniKQL::TType* outputType,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const TDqOutputChannelSettings& settings, const TLogFunc& logFunc)
 {
@@ -394,10 +396,10 @@ IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, NKikimr::NMiniKQL::
             [[fallthrough]];
         case NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0:
         case NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0:
-            return new TDqOutputChannel<false>(channelId, outputType, holderFactory, settings, logFunc, transportVersion);
+            return new TDqOutputChannel<false>(channelId, dstStageId, outputType, holderFactory, settings, logFunc, transportVersion);
         case NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0:
         case NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0:
-            return new TDqOutputChannel<true>(channelId, outputType, holderFactory, settings, logFunc, transportVersion);
+            return new TDqOutputChannel<true>(channelId, dstStageId, outputType, holderFactory, settings, logFunc, transportVersion);
         default:
             YQL_ENSURE(false, "Unsupported transport version " << (ui32)transportVersion);
     }

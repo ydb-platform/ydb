@@ -1,7 +1,7 @@
 #include "tasks_runner_local.h"
 #include "file_cache.h"
 
-#include <ydb/library/yql/providers/dq/counters/counters.h>
+#include <ydb/library/yql/providers/dq/counters/task_counters.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
@@ -26,25 +26,14 @@ namespace NYql::NTaskRunnerProxy {
 using namespace NKikimr;
 using namespace NDq;
 
-#define ADD_COUNTER(name) \
-    if (stats->name) { \
-        QueryStat.AddCounter(QueryStat.GetCounterName("TaskRunner", labels, #name), stats->name); \
-    }
-
-#define ADD_TIME_COUNTER(name) \
-    if (stats->name) { \
-        QueryStat.AddTimeCounter(QueryStat.GetCounterName("TaskRunner", labels, #name), stats->name); \
-    }
-
 class TLocalInputChannel: public IInputChannel {
 public:
-    TLocalInputChannel(const IDqInputChannel::TPtr& channel, ui64 taskId, ui64 channelId, TCounters* queryStat)
+    TLocalInputChannel(const IDqInputChannel::TPtr& channel, ui64 taskId, ui32 stageId, TTaskCounters* queryStat)
         : TaskId(taskId)
-        , ChannelId(channelId)
+        , StageId(stageId)
         , Channel(channel)
         , QueryStat(*queryStat)
-        , Stats(channelId)
-    { }
+    {}
 
     void Push(TDqSerializedBatch&& data) override {
         Channel->Push(std::move(data));
@@ -62,25 +51,23 @@ public:
 private:
     void UpdateInputChannelStats()
     {
-        QueryStat.AddInputChannelStats(*Channel->GetStats(), Stats, TaskId, ChannelId);
+        QueryStat.AddInputChannelStats(Channel->GetPushStats(), Channel->GetPopStats(), TaskId, StageId);
     }
 
     ui64 TaskId;
-    ui64 ChannelId;
+    ui32 StageId;
     IDqInputChannel::TPtr Channel;
-    TCounters& QueryStat;
-    TDqInputChannelStats Stats;
+    TTaskCounters& QueryStat;
 };
 
 class TLocalOutputChannel : public IOutputChannel {
 public:
-    TLocalOutputChannel(const IDqOutputChannel::TPtr channel, ui64 taskId, ui64 channelId, TCounters* queryStat)
+    TLocalOutputChannel(const IDqOutputChannel::TPtr channel, ui64 taskId, ui32 stageId, TTaskCounters* queryStat)
         : TaskId(taskId)
-        , ChannelId(channelId)
+        , StageId(stageId)
         , Channel(channel)
         , QueryStat(*queryStat)
-        , Stats(channelId)
-    { }
+    {}
 
     [[nodiscard]]
     NDqProto::TPopResponse Pop(TDqSerializedBatch& data) override {
@@ -100,14 +87,13 @@ public:
 private:
     void UpdateOutputChannelStats()
     {
-        QueryStat.AddOutputChannelStats(*Channel->GetStats(), Stats, TaskId, ChannelId);
+        QueryStat.AddOutputChannelStats(Channel->GetPushStats(), Channel->GetPopStats(), TaskId, StageId);
     }
 
     ui64 TaskId;
-    ui64 ChannelId;
+    ui32 StageId;
     IDqOutputChannel::TPtr Channel;
-    TCounters& QueryStat;
-    TDqOutputChannelStats Stats;
+    TTaskCounters& QueryStat;
 };
 
 class TLocalTaskRunner: public ITaskRunner {
@@ -147,11 +133,11 @@ public:
     }
 
     IInputChannel::TPtr GetInputChannel(ui64 channelId) override {
-        return new TLocalInputChannel(Runner->GetInputChannel(channelId), Task.GetId(), channelId, &QueryStat);
+        return new TLocalInputChannel(Runner->GetInputChannel(channelId), Task.GetId(), Task.GetStageId(), &QueryStat);
     }
 
     IOutputChannel::TPtr GetOutputChannel(ui64 channelId) override {
-        return new TLocalOutputChannel(Runner->GetOutputChannel(channelId), Task.GetId(), channelId, &QueryStat);
+        return new TLocalOutputChannel(Runner->GetOutputChannel(channelId), Task.GetId(), Task.GetStageId(), &QueryStat);
     }
 
     IDqAsyncInputBuffer::TPtr GetSource(ui64 index) override {
@@ -196,13 +182,12 @@ public:
 
 private:
     void UpdateStats() {
-        QueryStat.AddTaskRunnerStats(*Runner->GetStats(), Stats, Task.GetId());
+        QueryStat.AddTaskRunnerStats(*Runner->GetStats(), Task.GetId(), Task.GetStageId());
     }
 
     NDq::TDqTaskSettings Task;
     TIntrusivePtr<IDqTaskRunner> Runner;
-    TCounters QueryStat;
-    TDqTaskRunnerStats Stats;
+    TTaskCounters QueryStat;
 };
 
 /*______________________________________________________________________________________________*/
@@ -263,8 +248,7 @@ public:
         Y_UNUSED(traceId);
         NDq::TDqTaskRunnerSettings settings;
         settings.TerminateOnError = TerminateOnError;
-        settings.CollectBasicStats = true;
-        settings.CollectProfileStats = false;
+        settings.StatsMode = NDqProto::DQ_STATS_MODE_BASIC;
 
         Yql::DqsProto::TTaskMeta taskMeta;
         task.GetMeta().UnpackTo(&taskMeta);
@@ -275,14 +259,13 @@ public:
             }
             if ("TaskRunnerStats" == s.GetName()) {
                 if ("Disable" == s.GetValue()) {
-                    settings.CollectBasicStats = false;
-                    settings.CollectProfileStats = false;
-                } else if ("Profile" == s.GetValue()) {
-                    settings.CollectBasicStats = true;
-                    settings.CollectProfileStats = true;
+                    settings.StatsMode = NDqProto::DQ_STATS_MODE_NONE;
                 } else if ("Basic" == s.GetValue()) {
-                    settings.CollectBasicStats = true;
-                    settings.CollectProfileStats = false;
+                    settings.StatsMode = NDqProto::DQ_STATS_MODE_BASIC;
+                } else if ("Full" == s.GetValue()) {
+                    settings.StatsMode = NDqProto::DQ_STATS_MODE_FULL;
+                } else if ("Profile" == s.GetValue()) {
+                    settings.StatsMode = NDqProto::DQ_STATS_MODE_PROFILE;
                 }
             }
         }

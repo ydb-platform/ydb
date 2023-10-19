@@ -34,16 +34,18 @@ public:
         StoredBytes += space;
         StoredRows += batch.RowCount();
 
-        auto& stats = MutableBasicStats();
-        stats.Chunks++;
-        stats.Bytes += space;
-        stats.RowsIn += batch.RowCount();
-        if (!stats.FirstRowTs) {
-            stats.FirstRowTs = TInstant::Now();
+        if (static_cast<TDerived*>(this)->PushStats.CollectBasic()) {
+            static_cast<TDerived*>(this)->PushStats.Bytes += space;
+            static_cast<TDerived*>(this)->PushStats.Rows += batch.RowCount();
+            static_cast<TDerived*>(this)->PushStats.Chunks++;
+            static_cast<TDerived*>(this)->PushStats.Resume();
+            if (static_cast<TDerived*>(this)->PushStats.CollectFull()) {
+                static_cast<TDerived*>(this)->PushStats.MaxMemoryUsage = std::max(static_cast<TDerived*>(this)->PushStats.MaxMemoryUsage, StoredBytes);
+            }
         }
 
-        if (auto* profile = MutableProfileStats()) {
-            profile->MaxMemoryUsage = std::max(profile->MaxMemoryUsage, StoredBytes);
+        if (GetFreeSpace() < 0) {
+            static_cast<TDerived*>(this)->PopStats.TryPause();
         }
 
         Batches.emplace_back(std::move(batch));
@@ -53,10 +55,14 @@ public:
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
         Y_ABORT_UNLESS(batch.Width() == GetWidth());
         if (Empty()) {
+            static_cast<TDerived*>(this)->PushStats.TryPause();
             return false;
         }
 
         batch.clear();
+
+        static_cast<TDerived*>(this)->PopStats.Resume(); //save timing before processing
+        ui64 popBytes = 0;
 
         if (IsPaused()) {
             ui64 batchesCount = GetBatchesBeforePause();
@@ -80,6 +86,8 @@ public:
                 }
             }
 
+            popBytes = StoredBytesBeforePause;
+
             BatchesBeforePause = PauseMask;
             Y_ABORT_UNLESS(GetBatchesBeforePause() == 0);
             StoredBytes -= StoredBytesBeforePause;
@@ -101,12 +109,19 @@ public:
                 }
             }
 
+            popBytes = StoredBytes;
+
             StoredBytes = 0;
             StoredRows = 0;
             Batches.clear();
         }
 
-        MutableBasicStats().RowsOut += batch.RowCount();
+        if (static_cast<TDerived*>(this)->PopStats.CollectBasic()) {
+            static_cast<TDerived*>(this)->PopStats.Bytes += popBytes;
+            static_cast<TDerived*>(this)->PopStats.Rows += batch.RowCount(); // may do not match to pushed row count
+            static_cast<TDerived*>(this)->PopStats.Chunks++;
+        }
+
         return true;
     }
 
@@ -120,14 +135,6 @@ public:
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {
         return InputType;
-    }
-
-    auto& MutableBasicStats() {
-        return static_cast<TDerived*>(this)->BasicStats;
-    }
-
-    auto* MutableProfileStats() {
-        return static_cast<TDerived*>(this)->ProfileStats;
     }
 
     void Pause() override {

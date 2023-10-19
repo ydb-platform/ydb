@@ -22,7 +22,8 @@ IActor* CreateComputeActor(
     NYql::NDqProto::TDqTask* task,
     const TString& computeActorType,
     const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
-    ::NMonitoring::TDynamicCounterPtr taskCounters)
+    ::NMonitoring::TDynamicCounterPtr taskCounters,
+    NDqProto::EDqStatsMode statsMode)
 {
     auto memoryLimits = NDq::TComputeMemoryLimits();
     memoryLimits.ChannelBufferSize = 1000000;
@@ -38,7 +39,7 @@ IActor* CreateComputeActor(
     auto computeRuntimeSettings = NDq::TComputeRuntimeSettings();
     computeRuntimeSettings.ExtraMemoryAllocationPool = 3;
     computeRuntimeSettings.FailOnUndelivery = false;
-    computeRuntimeSettings.StatsMode = NDqProto::DQ_STATS_MODE_PROFILE;
+    computeRuntimeSettings.StatsMode = (statsMode != NDqProto::DQ_STATS_MODE_UNSPECIFIED) ? statsMode : NDqProto::DQ_STATS_MODE_FULL;
 
     // clear fake actorids
     for (auto& input : *task->MutableInputs()) {

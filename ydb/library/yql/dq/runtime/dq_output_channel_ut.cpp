@@ -176,10 +176,10 @@ void TestSingleRead(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 1000;
     settings.MaxChunkBytes = 200;
-    settings.CollectProfileStats = true;
+    settings.Level = TCollectStatsLevel::Profile;
     settings.TransportVersion = ctx.TransportVersion;
 
-    auto ch = CreateDqOutputChannel(1, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
 
     for (i32 i = 0; i < 10; ++i) {
         auto row = ctx.CreateRow(i);
@@ -187,17 +187,20 @@ void TestSingleRead(TTestContext& ctx) {
         PushRow(ctx, std::move(row), ch);
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->Chunks);
-    UNIT_ASSERT_VALUES_EQUAL(10, ch->GetStats()->RowsIn);
-    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
+    UNIT_ASSERT_VALUES_EQUAL(10, ch->GetPushStats().Chunks);
+    UNIT_ASSERT_VALUES_EQUAL(10, ch->GetPushStats().Rows);
+    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Chunks);
+    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Rows);
 
     TDqSerializedBatch data;
     UNIT_ASSERT(ch->Pop(data));
 
     UNIT_ASSERT_VALUES_EQUAL(10, data.RowCount());
-    UNIT_ASSERT_VALUES_EQUAL(1, ch->GetStats()->Chunks);
-    UNIT_ASSERT_VALUES_EQUAL(10, ch->GetStats()->RowsIn);
-    UNIT_ASSERT_VALUES_EQUAL(10, ch->GetStats()->RowsOut);
+
+    UNIT_ASSERT_VALUES_EQUAL(10, ch->GetPushStats().Chunks);
+    UNIT_ASSERT_VALUES_EQUAL(10, ch->GetPushStats().Rows);
+    UNIT_ASSERT_VALUES_EQUAL(1, ch->GetPopStats().Chunks);
+    UNIT_ASSERT_VALUES_EQUAL(10, ch->GetPopStats().Rows);
 
     TUnboxedValueBatch buffer(ctx.GetOutputType());
     ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), buffer);
@@ -211,10 +214,10 @@ void TestPartialRead(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 1000;
     settings.MaxChunkBytes = 17;
-    settings.CollectProfileStats = true;
+    settings.Level = TCollectStatsLevel::Profile;
     settings.TransportVersion = ctx.TransportVersion;
 
-    auto ch = CreateDqOutputChannel(1, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
 
     for (i32 i = 0; i < 9; ++i) {
         auto row = ctx.CreateRow(i);
@@ -222,9 +225,10 @@ void TestPartialRead(TTestContext& ctx) {
         PushRow(ctx, std::move(row), ch);
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->Chunks);
-    UNIT_ASSERT_VALUES_EQUAL(9, ch->GetStats()->RowsIn);
-    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
+    UNIT_ASSERT_VALUES_EQUAL(9, ch->GetPushStats().Chunks);
+    UNIT_ASSERT_VALUES_EQUAL(9, ch->GetPushStats().Rows);
+    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Chunks);
+    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Rows);
 
     int req = 0;
     ui32 expected[] = {2, 2, 2, 2, 1};
@@ -240,9 +244,9 @@ void TestPartialRead(TTestContext& ctx) {
         ++req;
 
         UNIT_ASSERT_VALUES_EQUAL(v, rowCount);
-        UNIT_ASSERT_VALUES_EQUAL(++readChunks, ch->GetStats()->Chunks);
-        UNIT_ASSERT_VALUES_EQUAL(9, ch->GetStats()->RowsIn);
-        UNIT_ASSERT_VALUES_EQUAL(readRows + rowCount, ch->GetStats()->RowsOut);
+        UNIT_ASSERT_VALUES_EQUAL(++readChunks, ch->GetPopStats().Chunks);
+        UNIT_ASSERT_VALUES_EQUAL(9, ch->GetPushStats().Rows);
+        UNIT_ASSERT_VALUES_EQUAL(readRows + rowCount, ch->GetPopStats().Rows);
 
         TUnboxedValueBatch buffer(ctx.GetOutputType());
         ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), buffer);
@@ -258,10 +262,10 @@ void TestOverflow(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 30;
     settings.MaxChunkBytes = 10;
-    settings.CollectProfileStats = true;
+    settings.Level = TCollectStatsLevel::Profile;
     settings.TransportVersion = ctx.TransportVersion;
 
-    auto ch = CreateDqOutputChannel(1, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
 
     for (i32 i = 0; i < 8; ++i) {
         auto row = ctx.CreateRow(i);
@@ -269,8 +273,8 @@ void TestOverflow(TTestContext& ctx) {
         PushRow(ctx, std::move(row), ch);
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(8, ch->GetStats()->RowsIn);
-    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
+    UNIT_ASSERT_VALUES_EQUAL(8, ch->GetPushStats().Rows);
+    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Rows);
 
     UNIT_ASSERT(ch->IsFull());
     try {
@@ -286,10 +290,10 @@ void TestPopAll(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 1000;
     settings.MaxChunkBytes = 10;
-    settings.CollectProfileStats = true;
+    settings.Level = TCollectStatsLevel::Profile;
     settings.TransportVersion = ctx.TransportVersion;
 
-    auto ch = CreateDqOutputChannel(1, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
 
     for (i32 i = 0; i < 50; ++i) {
         auto row = ctx.CreateRow(i);
@@ -297,8 +301,8 @@ void TestPopAll(TTestContext& ctx) {
         PushRow(ctx, std::move(row), ch);
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(50, ch->GetStats()->RowsIn);
-    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
+    UNIT_ASSERT_VALUES_EQUAL(50, ch->GetPushStats().Rows);
+    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Rows);
 
     TDqSerializedBatch data;
     TUnboxedValueBatch buffer(ctx.GetOutputType());
@@ -317,10 +321,10 @@ void TestBigRow(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = std::numeric_limits<ui32>::max();
     settings.MaxChunkBytes = 2_MB;
-    settings.CollectProfileStats = true;
+    settings.Level = TCollectStatsLevel::Profile;
     settings.TransportVersion = ctx.TransportVersion;
 
-    auto ch = CreateDqOutputChannel(1, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
 
     {
         auto row = ctx.CreateRow(1);
@@ -335,18 +339,19 @@ void TestBigRow(TTestContext& ctx) {
         }
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->Chunks);
-    UNIT_ASSERT_VALUES_EQUAL(9, ch->GetStats()->RowsIn);
-    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
+    UNIT_ASSERT_VALUES_EQUAL(9, ch->GetPushStats().Chunks);
+    UNIT_ASSERT_VALUES_EQUAL(9, ch->GetPushStats().Rows);
+    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Chunks);
+    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Rows);
 
     {
         TDqSerializedBatch data;
         UNIT_ASSERT(ch->Pop(data));
 
         UNIT_ASSERT_VALUES_EQUAL(2, data.RowCount());
-        UNIT_ASSERT_VALUES_EQUAL(1, ch->GetStats()->Chunks);
-        UNIT_ASSERT_VALUES_EQUAL(9, ch->GetStats()->RowsIn);
-        UNIT_ASSERT_VALUES_EQUAL(2, ch->GetStats()->RowsOut);
+        UNIT_ASSERT_VALUES_EQUAL(1, ch->GetPopStats().Chunks);
+        UNIT_ASSERT_VALUES_EQUAL(9, ch->GetPushStats().Rows);
+        UNIT_ASSERT_VALUES_EQUAL(2, ch->GetPopStats().Rows);
 
         TUnboxedValueBatch buffer(ctx.GetOutputType());
         ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), buffer);
@@ -376,9 +381,9 @@ void TestBigRow(TTestContext& ctx) {
         UNIT_ASSERT(ch->Pop(data));
 
         UNIT_ASSERT_VALUES_EQUAL(1, data.RowCount());
-        UNIT_ASSERT_VALUES_EQUAL(i - 1, ch->GetStats()->Chunks);
-        UNIT_ASSERT_VALUES_EQUAL(9, ch->GetStats()->RowsIn);
-        UNIT_ASSERT_VALUES_EQUAL(i, ch->GetStats()->RowsOut);
+        UNIT_ASSERT_VALUES_EQUAL(i - 1, ch->GetPopStats().Chunks);
+        UNIT_ASSERT_VALUES_EQUAL(9, ch->GetPushStats().Rows);
+        UNIT_ASSERT_VALUES_EQUAL(i, ch->GetPopStats().Rows);
 
         TUnboxedValueBatch buffer(ctx.GetOutputType());
         ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), buffer);
@@ -403,13 +408,13 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 100;
     settings.MaxChunkBytes = 20;
-    settings.CollectProfileStats = true;
+    settings.Level = TCollectStatsLevel::Profile;
     settings.TransportVersion = ctx.TransportVersion;
 
     auto storage = MakeIntrusive<TMockChannelStorage>(100'500ul);
     settings.ChannelStorage = storage;
 
-    auto ch = CreateDqOutputChannel(1, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
 
     for (i32 i = 0; i < 35; ++i) {
         auto row = ctx.CreateRow(i);
@@ -419,11 +424,11 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
 
     UNIT_ASSERT_VALUES_EQUAL(35, ch->GetValuesCount());
 
-    UNIT_ASSERT_VALUES_EQUAL(35, ch->GetStats()->RowsIn);
-    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
-    UNIT_ASSERT_VALUES_EQUAL(18, ch->GetStats()->SpilledRows);
-    UNIT_ASSERT_VALUES_EQUAL(5, ch->GetStats()->SpilledBlobs);
-    UNIT_ASSERT(ch->GetStats()->SpilledBytes > 5 * 8);
+    UNIT_ASSERT_VALUES_EQUAL(35, ch->GetPushStats().Rows);
+    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Rows);
+    UNIT_ASSERT_VALUES_EQUAL(18, ch->GetPopStats().SpilledRows);
+    UNIT_ASSERT_VALUES_EQUAL(5, ch->GetPopStats().SpilledBlobs);
+    UNIT_ASSERT(ch->GetPopStats().SpilledBytes > 5 * 8);
 
     ui32 loadedRows = 0;
 
@@ -467,13 +472,13 @@ void TestOverflowWithMockStorage(TTestContext& ctx) {
     TDqOutputChannelSettings settings;
     settings.MaxStoredBytes = 500;
     settings.MaxChunkBytes = 10;
-    settings.CollectProfileStats = true;
+    settings.Level = TCollectStatsLevel::Profile;
     settings.TransportVersion = ctx.TransportVersion;
 
     auto storage = MakeIntrusive<TMockChannelStorage>(500ul);
     settings.ChannelStorage = storage;
 
-    auto ch = CreateDqOutputChannel(1, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
 
     for (i32 i = 0; i < 42; ++i) {
         auto row = ctx.CreateRow(i);
@@ -481,8 +486,8 @@ void TestOverflowWithMockStorage(TTestContext& ctx) {
         PushRow(ctx, std::move(row), ch);
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(42, ch->GetStats()->RowsIn);
-    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
+    UNIT_ASSERT_VALUES_EQUAL(42, ch->GetPushStats().Rows);
+    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Rows);
 
     // UNIT_ASSERT(ch->IsFull()); it can be false-negative with storage enabled
     try {
@@ -498,11 +503,10 @@ void TestChunkSizeLimit(TTestContext& ctx) {
     settings.MaxStoredBytes = 500;
     settings.MaxChunkBytes = 100;
     settings.ChunkSizeLimit = 100000;
-
-    settings.CollectProfileStats = true;
+    settings.Level = TCollectStatsLevel::Profile;
     settings.TransportVersion = ctx.TransportVersion;
 
-    auto ch = CreateDqOutputChannel(1, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
 
     for (i32 i = 0; i < 10; ++i) {
         auto row = ctx.CreateRow(i);
@@ -510,8 +514,8 @@ void TestChunkSizeLimit(TTestContext& ctx) {
         PushRow(ctx, std::move(row), ch);
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(10, ch->GetStats()->RowsIn);
-    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
+    UNIT_ASSERT_VALUES_EQUAL(10, ch->GetPushStats().Rows);
+    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Rows);
 
     try {
         PushRow(ctx, ctx.CreateBigRow(0, 100'500), ch);

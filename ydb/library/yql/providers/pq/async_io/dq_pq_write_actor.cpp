@@ -100,6 +100,7 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
 public:
     TDqPqWriteActor(
         ui64 outputIndex,
+        TCollectStatsLevel statsLevel,
         const TTxId& txId,
         NPq::NProto::TDqPqTopicSink&& sinkParams,
         NYdb::TDriver driver,
@@ -116,7 +117,9 @@ public:
         , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", PQ sink. ")
         , FreeSpace(freeSpace)
         , PersQueueClient(Driver, GetPersQueueClientSettings())
-    { }
+    { 
+        EgressStats.Level = statsLevel;
+    }
 
     static constexpr char ActorName[] = "DQ_PQ_WRITE_ACTOR";
 
@@ -201,14 +204,10 @@ public:
             SourceId = stateProto.GetSourceId();
             ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
             NextSeqNo = ConfirmedSeqNo + 1;
-            EgressBytes = stateProto.GetEgressBytes();
+            EgressStats.Bytes = stateProto.GetEgressBytes();
             return;
         }
         ythrow yexception() << "Invalid state version " << data.GetVersion();
-    }
-
-    ui64 GetEgressBytes() override {
-        return EgressBytes;
     }
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
@@ -217,11 +216,15 @@ public:
 
     i64 GetFreeSpace() const override {
         return FreeSpace;
-    };
+    }
 
     ui64 GetOutputIndex() const override {
         return OutputIndex;
-    };
+    }
+
+    const TDqAsyncStats& GetEgressStats() const override {
+        return EgressStats;
+    }
 
 private:
     STRICT_STFUNC(StateFunc,
@@ -316,7 +319,7 @@ private:
         NPq::NProto::TDqPqTopicSinkState stateProto;
         stateProto.SetSourceId(GetSourceId());
         stateProto.SetConfirmedSeqNo(ConfirmedSeqNo);
-        stateProto.SetEgressBytes(EgressBytes);
+        stateProto.SetEgressBytes(EgressStats.Bytes);
         TString serializedState;
         YQL_ENSURE(stateProto.SerializeToString(&serializedState));
 
@@ -333,7 +336,7 @@ private:
         WriteSession->Write(std::move(token), Buffer.front(), NextSeqNo++);
         auto itemSize = GetItemSize(Buffer.front());
         WaitingAcks.push(itemSize);
-        EgressBytes += itemSize;
+        EgressStats.Bytes += itemSize;
         Buffer.pop();
     }
 
@@ -404,6 +407,7 @@ private:
 
 private:
     const ui64 OutputIndex;
+    TDqAsyncStats EgressStats;
     const TTxId TxId;
     const NPq::NProto::TDqPqTopicSink SinkParams;
     NYdb::TDriver Driver;
@@ -412,7 +416,6 @@ private:
     const TString LogPrefix;
     i64 FreeSpace = 0;
     bool Finished = false;
-    ui64 EgressBytes = 0;
 
     NYdb::NPersQueue::TPersQueueClient PersQueueClient;
     std::shared_ptr<NYdb::NPersQueue::IWriteSession> WriteSession;
@@ -430,6 +433,7 @@ private:
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     NPq::NProto::TDqPqTopicSink&& settings,
     ui64 outputIndex,
+    TCollectStatsLevel statsLevel,
     TTxId txId,
     const THashMap<TString, TString>& secureParams,
     NYdb::TDriver driver,
@@ -443,6 +447,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
 
     TDqPqWriteActor* actor = new TDqPqWriteActor(
         outputIndex,
+        statsLevel,
         txId,
         std::move(settings),
         std::move(driver),
@@ -462,6 +467,7 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
             return CreateDqPqWriteActor(
                 std::move(settings),
                 args.OutputIndex,
+                args.StatsLevel,
                 args.TxId,
                 args.SecureParams,
                 driver,

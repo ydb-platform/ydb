@@ -10,26 +10,10 @@ namespace NYql::NDq {
 
 struct TDqInputChannelStats : TDqInputStats {
     ui64 ChannelId = 0;
-
-    // profile stats
+    ui32 SrcStageId = 0;
+    ui64 RowsInMemory = 0;
+    ui64 MaxMemoryUsage = 0;
     TDuration DeserializationTime;
-
-    explicit TDqInputChannelStats(ui64 channelId)
-        : ChannelId(channelId) {}
-
-    template<typename T>
-    void FromProto(const T& f)
-    {
-        this->ChannelId = f.GetChannelId();
-        this->Chunks = f.GetChunks();
-        this->Bytes = f.GetBytes();
-        this->RowsIn = f.GetRowsIn();
-        this->RowsOut = f.GetRowsOut();
-        this->MaxMemoryUsage = f.GetMaxMemoryUsage();
-        //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
-        //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
-        this->DeserializationTime = TDuration::MicroSeconds(f.GetDeserializationTimeUs());
-    }
 };
 
 class IDqInputChannel : public IDqInput {
@@ -37,16 +21,15 @@ public:
     using TPtr = TIntrusivePtr<IDqInputChannel>;
 
     virtual ui64 GetChannelId() const = 0;
+    virtual const TDqInputChannelStats& GetPushStats() const = 0;
 
     virtual void Push(TDqSerializedBatch&& data) = 0;
 
     virtual void Finish() = 0;
-
-    virtual const TDqInputChannelStats* GetStats() const = 0;
 };
 
-IDqInputChannel::TPtr CreateDqInputChannel(ui64 channelId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes,
-    bool collectProfileStats, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+IDqInputChannel::TPtr CreateDqInputChannel(ui64 channelId, ui32 srcStageId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes,
+    TCollectStatsLevel level, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, NDqProto::EDataTransportVersion transportVersion);
 
 } // namespace NYql::NDq

@@ -49,6 +49,7 @@ struct TEvPrivate {
 class TClickHouseReadActor : public TActorBootstrapped<TClickHouseReadActor>, public IDqComputeActorAsyncInput {
 public:
     TClickHouseReadActor(ui64 inputIndex,
+        TCollectStatsLevel statsLevel,
         IHTTPGateway::TPtr gateway,
         TString&& url,
         TString&& query,
@@ -59,7 +60,9 @@ public:
         , ActorSystem(TActivationContext::ActorSystem())
         , Url(std::move(url))
         , Query(std::move(query))
-    {}
+    {
+        IngressStats.Level = statsLevel;
+    }
 
     void Bootstrap() {
         Become(&TClickHouseReadActor::StateFunc);
@@ -72,7 +75,14 @@ private:
     void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
     void LoadState(const NDqProto::TSourceState&) final {}
     void CommitState(const NDqProto::TCheckpoint&) final {}
-    ui64 GetInputIndex() const final { return InputIndex; }
+
+    ui64 GetInputIndex() const final {
+        return InputIndex;
+    }
+
+    const TDqAsyncStats& GetIngressStats() const final {
+        return IngressStats;
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvReadResult, Handle);
@@ -118,6 +128,7 @@ private:
     const IHTTPGateway::TPtr Gateway;
 
     const ui64 InputIndex;
+    TDqAsyncStats IngressStats;
     const NActors::TActorId ComputeActorId;
 
     TActorSystem* const ActorSystem;
@@ -130,6 +141,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateClickHouseReadAc
     IHTTPGateway::TPtr gateway,
     NCH::TSource&& params,
     ui64 inputIndex,
+    TCollectStatsLevel statsLevel,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
     const NActors::TActorId& computeActorId,
@@ -153,7 +165,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateClickHouseReadAc
 
     TStringBuilder url;
     url << params.GetScheme() << token.substr(one + 1u, two - one - 1u) << ':' << token.substr(two + 1u) << '@' << params.GetEndpoint() << "/?default_format=Native";
-    const auto actor = new TClickHouseReadActor(inputIndex, std::move(gateway), std::move(url), params.GetQuery() + part, computeActorId);
+    const auto actor = new TClickHouseReadActor(inputIndex, statsLevel, std::move(gateway), std::move(url), params.GetQuery() + part, computeActorId);
     return {actor, actor};
 }
 

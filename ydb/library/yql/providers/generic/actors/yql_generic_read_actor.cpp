@@ -100,6 +100,7 @@ namespace NYql::NDq {
     public:
         TGenericReadActor(
             ui64 inputIndex,
+            TCollectStatsLevel statsLevel,
             NConnector::IClient::TPtr client,
             const NConnector::NApi::TSelect& select,
             const NConnector::NApi::TDataSourceInstance& dataSourceInstance,
@@ -112,6 +113,7 @@ namespace NYql::NDq {
             , Select_(select)
             , DataSourceInstance_(dataSourceInstance)
         {
+            IngressStats_.Level = statsLevel;
         }
 
         void Bootstrap() {
@@ -445,8 +447,13 @@ namespace NYql::NDq {
             return InputIndex_;
         }
 
+        const TDqAsyncStats& GetIngressStats() const override {
+            return IngressStats_;
+        }
+
     private:
         const ui64 InputIndex_;
+        TDqAsyncStats IngressStats_;
         const NActors::TActorId ComputeActorId_;
 
         NConnector::IClient::TPtr Client_;
@@ -466,6 +473,7 @@ namespace NYql::NDq {
     CreateGenericReadActor(NConnector::IClient::TPtr genericClient,
                            Generic::TSource&& params,
                            ui64 inputIndex,
+                           TCollectStatsLevel statsLevel,
                            const THashMap<TString, TString>& /*secureParams*/,
                            const THashMap<TString, TString>& /*taskParams*/,
                            const NActors::TActorId& computeActorId,
@@ -506,6 +514,7 @@ namespace NYql::NDq {
 
         const auto actor = new TGenericReadActor(
             inputIndex,
+            statsLevel,
             genericClient,
             params.select(),
             dsi,

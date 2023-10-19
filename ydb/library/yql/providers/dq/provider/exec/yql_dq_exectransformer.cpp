@@ -137,8 +137,7 @@ public:
         NDq::TDqTaskRunnerSettings settings;
         settings.OptLLVM = "OFF"; // Don't use LLVM for local execution
         settings.SecureParams = secureParams;
-        settings.CollectBasicStats = true;
-        settings.CollectProfileStats = true;
+        settings.StatsMode = NDqProto::DQ_STATS_MODE_BASIC;
         auto runner = NDq::MakeDqTaskRunner(executionContext, settings, {});
         auto runnerSettings = NDq::TDqTaskSettings(&task);
 
@@ -165,11 +164,11 @@ public:
                     break;
                 }
                 if (!fillSettings.Discard) {
-                    if (fillSettings.AllResultsBytesLimit && runner->GetOutputChannel(0)->GetStats()->Bytes >= *fillSettings.AllResultsBytesLimit) {
+                    if (fillSettings.AllResultsBytesLimit && runner->GetOutputChannel(0)->GetPopStats().Bytes >= *fillSettings.AllResultsBytesLimit) {
                         result.Truncated = true;
                         break;
                     }
-                    if (fillSettings.RowsLimitPerWrite && runner->GetOutputChannel(0)->GetStats()->RowsOut >= *fillSettings.RowsLimitPerWrite) {
+                    if (fillSettings.RowsLimitPerWrite && runner->GetOutputChannel(0)->GetPopStats().Rows >= *fillSettings.RowsLimitPerWrite) {
                         result.Truncated = true;
                         break;
                     }

@@ -417,6 +417,7 @@ private:
 class TS3WriteActor : public TActorBootstrapped<TS3WriteActor>, public IDqComputeActorAsyncOutput {
 public:
     TS3WriteActor(ui64 outputIndex,
+        TCollectStatsLevel statsLevel,
         const TTxId& txId,
         const TString& prefix,
         IHTTPGateway::TPtr gateway,
@@ -455,6 +456,7 @@ public:
             DefaultRandomProvider = CreateDefaultRandomProvider();
             RandomProvider = DefaultRandomProvider.Get();
         }
+        EgressStats.Level = statsLevel;
     }
 
     void Bootstrap() {
@@ -466,7 +468,15 @@ public:
 private:
     void CommitState(const NDqProto::TCheckpoint&) final {};
     void LoadState(const NDqProto::TSinkState&) final {};
-    ui64 GetOutputIndex() const final { return OutputIndex; }
+
+    ui64 GetOutputIndex() const final {
+        return OutputIndex;
+    }
+
+    const TDqAsyncStats& GetEgressStats() const final {
+        return EgressStats;
+    }
+
     i64 GetFreeSpace() const final {
         return std::accumulate(FileWriteActors.cbegin(), FileWriteActors.cend(), i64(MemoryLimit),
             [](i64 free, const std::pair<const TString, std::vector<TS3FileWriteActor*>>& item) {
@@ -501,6 +511,7 @@ private:
     void SendData(TUnboxedValueBatch&& data, i64, const TMaybe<NDqProto::TCheckpoint>&, bool finished) final {
         std::unordered_set<TS3FileWriteActor*> processedActors;
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
+        EgressStats.Resume();
         data.ForEachRow([&](const auto& row) {
             const auto& key = MakePartitionKey(row);
             const auto [keyIt, insertedNew] = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
@@ -545,10 +556,6 @@ private:
         data.clear();
     }
 
-    ui64 GetEgressBytes() override {
-        return EgressBytes;
-    }
-
     void Handle(TEvPrivate::TEvUploadError::TPtr& result) {
         LOG_W("TS3WriteActor", "TEvUploadError " << result->Get()->Issues.ToOneLineString());
 
@@ -569,7 +576,10 @@ private:
 
     void Handle(TEvPrivate::TEvUploadFinished::TPtr& result) {
         if (const auto it = FileWriteActors.find(result->Get()->Key); FileWriteActors.cend() != it) {
-            EgressBytes += result->Get()->UploadSize;
+            EgressStats.Bytes += result->Get()->UploadSize;
+            EgressStats.Chunks++;
+            EgressStats.Splits++;
+            EgressStats.Resume();
             if (const auto ft = std::find_if(it->second.cbegin(), it->second.cend(), [&](TS3FileWriteActor* actor){ return result->Get()->Url == actor->GetUrl(); }); it->second.cend() != ft) {
                 (*ft)->PassAway();
                 it->second.erase(ft);
@@ -607,6 +617,7 @@ private:
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
 
     const ui64 OutputIndex;
+    TDqAsyncStats EgressStats;
     const TTxId TxId;
     const TString Prefix;
     IDqComputeActorAsyncOutput::ICallbacks *const Callbacks;
@@ -620,7 +631,6 @@ private:
     const TString Compression;
     const bool Multipart;
     bool Finished = false;
-    ui64 EgressBytes = 0;
 
     std::unordered_map<TString, std::vector<TS3FileWriteActor*>> FileWriteActors;
     bool DirtyWrite;
@@ -636,6 +646,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     IHTTPGateway::TPtr gateway,
     NS3::TSink&& params,
     ui64 outputIndex,
+    TCollectStatsLevel statsLevel,
     const TTxId& txId,
     const TString& prefix,
     const THashMap<TString, TString>& secureParams,
@@ -647,6 +658,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
     const auto actor = new TS3WriteActor(
         outputIndex,
+        statsLevel,
         txId,
         prefix,
         std::move(gateway),

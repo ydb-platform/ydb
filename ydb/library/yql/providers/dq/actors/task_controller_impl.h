@@ -6,7 +6,7 @@
 #include "executer_actor.h"
 #include "grouped_issues.h"
 
-#include <ydb/library/yql/providers/dq/counters/counters.h>
+#include <ydb/library/yql/providers/dq/counters/task_counters.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
@@ -158,20 +158,21 @@ public:
             << " PingCookie: " << ev->Cookie
             << " StatusCode: " << NYql::NDqProto::StatusIds_StatusCode_Name(state.GetStatusCode());
 
-        if (state.HasStats() && TryAddStatsFromExtra(state.GetStats())) {
-            if (Settings->ExportStats.Get().GetOrElse(TDqSettings::TDefault::ExportStats) && ServiceCounters.Counters && !AggrPeriod) {
-                ExportStats(TaskStat, taskId);
-                TrySendNonFinalStat();
-            }
-        } else if (state.HasStats() && state.GetStats().GetTasks().size()) {
-            YQL_CLOG(TRACE, ProviderDq) << " " << SelfId() << " AddStats " << taskId;
-            AddStats(state.GetStats());
-            if (Settings->ExportStats.Get().GetOrElse(TDqSettings::TDefault::ExportStats) && ServiceCounters.Counters && !AggrPeriod) {
-                ExportStats(TaskStat, taskId);
-                TrySendNonFinalStat();
+        if (CollectBasic()) {
+            if (state.HasStats() && TryAddStatsFromExtra(state.GetStats())) {
+                if (Settings->ExportStats.Get().GetOrElse(TDqSettings::TDefault::ExportStats) && ServiceCounters.Counters && !AggrPeriod) {
+                    ExportStats(TaskStat, taskId);
+                    TrySendNonFinalStat();
+                }
+            } else if (state.HasStats() && state.GetStats().GetTasks().size()) {
+                YQL_CLOG(TRACE, ProviderDq) << " " << SelfId() << " AddStats " << taskId;
+                AddStats(state.GetStats());
+                if (Settings->ExportStats.Get().GetOrElse(TDqSettings::TDefault::ExportStats) && ServiceCounters.Counters && !AggrPeriod) {
+                    ExportStats(TaskStat, taskId);
+                    TrySendNonFinalStat();
+                }
             }
         }
-
 
         TIssues localIssues;
         // TODO: don't convert issues to string
@@ -230,7 +231,7 @@ public:
         case AGGR_TIMER_TAG:
             if (AggrPeriod) {
                 if (Settings->ExportStats.Get().GetOrElse(TDqSettings::TDefault::ExportStats) && ServiceCounters.Counters) {
-                    ExportStats(AggregateQueryStatsByStage(TaskStat, Stages), 0);
+                    ExportStats(AggregateQueryStatsByStage(TaskStat, Stages, CollectFull()), 0);
                 }
                 SendNonFinalStat();
                 Schedule(AggrPeriod, new TEvents::TEvWakeup(AGGR_TIMER_TAG));
@@ -278,13 +279,17 @@ private:
                     } else if (name == "CpuTimeUs") {
                         publicCounterName = "query.cpu_usage_us";
                         isDeriv = true;
-                    } else if (name == "Bytes") {
+                    } else if (name == "IngressBytes") {
                         if (labels.count(SourceLabel)) publicCounterName = "query.input_bytes";
-                        else if (labels.count(SinkLabel)) publicCounterName = "query.output_bytes";
                         isDeriv = true;
-                    } else if (name == "RowsIn") {
+                    } else if (name == "EgressBytes") {
+                        if (labels.count(SinkLabel)) publicCounterName = "query.output_bytes";
+                        isDeriv = true;
+                    } else if (name == "OutputRows") {
                         if (labels.count(SourceLabel)) publicCounterName = "query.source_input_records";
-                        else if (labels.count(SinkLabel)) publicCounterName = "query.sink_output_records"; // RowsIn == RowsOut for Sinks
+                        isDeriv = true;
+                    } else if (name == "InputRows") {
+                        if (labels.count(SinkLabel)) publicCounterName = "query.sink_output_records";
                         isDeriv = true;
                     } else if (name == "MultiHop_LateThrownEventsCount") {
                         publicCounterName = "query.late_events";
@@ -356,21 +361,21 @@ private:
         ADD_COUNTER(CpuTimeUs)
         ADD_COUNTER(ComputeCpuTimeUs)
         ADD_COUNTER(SourceCpuTimeUs)
-        ADD_COUNTER(FirstRowTimeMs)
-        ADD_COUNTER(FinishTimeMs)
+        // ADD_COUNTER(FirstRowTimeMs)
+        // ADD_COUNTER(FinishTimeMs)
         ADD_COUNTER(InputRows)
         ADD_COUNTER(InputBytes)
         ADD_COUNTER(OutputRows)
         ADD_COUNTER(OutputBytes)
-        ADD_COUNTER(StartTimeMs)
+        // ADD_COUNTER(StartTimeMs)
 
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
-        ADD_COUNTER(WaitTimeUs)
-        ADD_COUNTER(WaitOutputTimeUs)
-        ADD_COUNTER(PendingInputTimeUs)
-        ADD_COUNTER(PendingOutputTimeUs)
-        ADD_COUNTER(FinishTimeUs)
+        // ADD_COUNTER(WaitTimeUs)
+        // ADD_COUNTER(WaitOutputTimeUs)
+        // ADD_COUNTER(PendingInputTimeUs)
+        // ADD_COUNTER(PendingOutputTimeUs)
+        // ADD_COUNTER(FinishTimeUs)
 
         for (const auto& ingress : s.GetIngress()) {
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Ingress" + ingress.GetName() + "Bytes"), ingress.GetBytes());
@@ -415,92 +420,35 @@ private:
                 auto labels = commonLabels;
                 labels["InputChannel"] = ToString(stats.GetChannelId());
                 labels["SrcStageId"] = ToString(stats.GetSrcStageId());
-
-                ADD_COUNTER(Chunks);
-                ADD_COUNTER(Bytes);
-                ADD_COUNTER(RowsIn);
-                ADD_COUNTER(RowsOut);
-                ADD_COUNTER(MaxMemoryUsage);
-                ADD_COUNTER(DeserializationTimeUs);
-
-                ADD_COUNTER(IdleTimeUs);
-                ADD_COUNTER(WaitTimeUs);
-                ADD_COUNTER(FirstMessageMs);
-                ADD_COUNTER(LastMessageMs);
-
-                if (stats.GetFirstMessageMs() && stats.GetLastMessageMs()) {
-                    TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "ActiveTimeUs"),
-                        (   TInstant::MilliSeconds(stats.GetLastMessageMs()) -
-                            TInstant::MilliSeconds(stats.GetFirstMessageMs()) ).MicroSeconds()
-                    );
-                }
+                TaskStat.AddAsyncStats(stats.GetPush(),  labels, "Push");
+                TaskStat.AddAsyncStats(stats.GetPop(), labels, "Pop");
             }
 
             for (const auto& stats : s.GetOutputChannels()) {
                 auto labels = commonLabels;
                 labels["OutputChannel"] = ToString(stats.GetChannelId());
                 labels["DstStageId"] = ToString(stats.GetDstStageId());
-
-                ADD_COUNTER(Chunks)
-                ADD_COUNTER(Bytes);
-                ADD_COUNTER(RowsIn);
-                ADD_COUNTER(RowsOut);
-                ADD_COUNTER(MaxMemoryUsage);
-
-                ADD_COUNTER(SerializationTimeUs);
-                ADD_COUNTER(BlockedByCapacity);
-
-                ADD_COUNTER(SpilledBytes);
-                ADD_COUNTER(SpilledRows);
-                ADD_COUNTER(SpilledBlobs);
-
-                ADD_COUNTER(BlockedTimeUs);
-                ADD_COUNTER(FirstMessageMs);
-                ADD_COUNTER(LastMessageMs);
-
-                if (stats.GetFirstMessageMs() && stats.GetLastMessageMs()) {
-                    TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "ActiveTimeUs"),
-                        (   TInstant::MilliSeconds(stats.GetLastMessageMs()) -
-                            TInstant::MilliSeconds(stats.GetFirstMessageMs()) ).MicroSeconds()
-                    );
-                }
+                TaskStat.AddAsyncStats(stats.GetPush(),  labels, "Push");
+                TaskStat.AddAsyncStats(stats.GetPop(), labels, "Pop");
             }
         }
 
         for (const auto& stats : s.GetSources()) {
             auto labels = commonLabels;
             labels["Source"] = ToString(stats.GetInputIndex());
-
-            ADD_COUNTER(Chunks);
-            ADD_COUNTER(Bytes);
-            ADD_COUNTER(IngressBytes)
-            ADD_COUNTER(RowsIn);
-            ADD_COUNTER(RowsOut);
-            ADD_COUNTER(MaxMemoryUsage);
-
-            ADD_COUNTER(ErrorsCount);
-
-//            if (stats.GetFinishTs() >= stats.GetStartTs()) {
-//                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs());
-//            }
+            labels["Name"] = stats.GetIngressName();
+            TaskStat.AddAsyncStats(stats.GetIngress(), labels, "Ingress");
+            TaskStat.AddAsyncStats(stats.GetPush(),  labels, "Push");
+            TaskStat.AddAsyncStats(stats.GetPop(), labels, "Pop");
         }
 
         for (const auto& stats : s.GetSinks()) {
             auto labels = commonLabels;
             labels["Sink"] = ToString(stats.GetOutputIndex());
-
-            ADD_COUNTER(Chunks)
-            ADD_COUNTER(Bytes);
-            ADD_COUNTER(EgressBytes)
-            ADD_COUNTER(RowsIn);
-            ADD_COUNTER(RowsOut);
-            ADD_COUNTER(MaxMemoryUsage);
-
-            ADD_COUNTER(ErrorsCount);
-
-//            if (stats.GetFinishTs() >= stats.GetStartTs()) {
-//                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs());
-//            }
+            labels["Name"] = stats.GetEgressName();
+            TaskStat.AddAsyncStats(stats.GetPush(),  labels, "Push");
+            TaskStat.AddAsyncStats(stats.GetPop(), labels, "Pop");
+            TaskStat.AddAsyncStats(stats.GetEgress(),  labels, "Egress");
         }
 
 #undef ADD_COUNTER
@@ -526,6 +474,10 @@ private:
 
 public:
     void OnReadyState(TEvReadyState::TPtr& ev) {
+
+        if (ev->Get()->Record.GetStatsMode() != NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_UNSPECIFIED) {
+            StatsMode = ev->Get()->Record.GetStatsMode();
+        }
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
 
         TaskStat.AddCounters(ev->Get()->Record);
@@ -641,7 +593,7 @@ public:
 private:
     void Finish() {
         if (Settings->ExportStats.Get().GetOrElse(TDqSettings::TDefault::ExportStats) && ServiceCounters.Counters && AggrPeriod) {
-            ExportStats(AggregateQueryStatsByStage(TaskStat, Stages), 0); // force metrics upload on Finish when Aggregated
+            ExportStats(AggregateQueryStatsByStage(TaskStat, Stages, CollectFull()), 0); // force metrics upload on Finish when Aggregated
         }
         Send(ExecuterId, new TEvGraphFinished());
         Finished = true;
@@ -659,9 +611,16 @@ public:
 
 private:
     TCounters FinalStat() {
-        return AggrPeriod ? AggregateQueryStatsByStage(TaskStat, Stages) : TaskStat;
+        return AggrPeriod ? AggregateQueryStatsByStage(TaskStat, Stages, CollectFull()) : TaskStat;
     }
 
+    bool CollectBasic() {
+        return StatsMode >= NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_BASIC;
+    }
+
+    bool CollectFull() {
+        return StatsMode >= NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_FULL;
+    }
 
     bool ChannelsUpdated = false;
     TVector<std::pair<NDq::TDqTaskSettings, TActorId>> Tasks;
@@ -675,13 +634,14 @@ private:
     const TString TraceId;
     TDqConfiguration::TPtr Settings;
     bool Finished = false;
-    TCounters TaskStat;
+    TTaskCounters TaskStat;
     NYql::NCommon::TServiceCounters ServiceCounters;
     TDuration PingPeriod = TDuration::Zero();
     TDuration AggrPeriod = TDuration::Zero();
     NYql::NDq::GroupedIssues Issues;
     ui64 PingCookie = 0;
     TInstant LastStatReport;
+    NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_FULL;
 };
 
 } /* namespace NYql */

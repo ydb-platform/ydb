@@ -14,31 +14,15 @@
 
 namespace NYql::NDq {
 
-struct TDqOutputChannelStats : TDqOutputStats {
+struct TDqOutputChannelStats : public TDqOutputStats {
     ui64 ChannelId = 0;
-
-    // profile stats
+    ui32 DstStageId = 0;
+    ui64 MaxMemoryUsage = 0;
+    ui64 MaxRowsInMemory = 0;
     TDuration SerializationTime;
-
     ui64 SpilledBytes = 0;
     ui64 SpilledRows = 0;
     ui64 SpilledBlobs = 0;
-
-    explicit TDqOutputChannelStats(ui64 channelId)
-        : ChannelId(channelId) {}
-
-    template<typename T>
-    void FromProto(const T& f)
-    {
-        this->ChannelId = f.GetChannelId();
-        this->Chunks = f.GetChunks();
-        this->Bytes = f.GetBytes();
-        this->RowsIn = f.GetRowsIn();
-        this->RowsOut = f.GetRowsOut();
-        this->MaxMemoryUsage = f.GetMaxMemoryUsage();
-        //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
-        //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
-    }
 };
 
 class IDqOutputChannel : public IDqOutput {
@@ -47,6 +31,7 @@ public:
 
     virtual ui64 GetChannelId() const = 0;
     virtual ui64 GetValuesCount() const = 0;
+    virtual const TDqOutputChannelStats& GetPopStats() const = 0;
 
     // <| consumer methods
     // can throw TDqChannelStorageException
@@ -69,7 +54,6 @@ public:
 
     virtual ui64 Drop() = 0;
 
-    virtual const TDqOutputChannelStats* GetStats() const = 0;
     virtual void Terminate() = 0;
 };
 
@@ -79,13 +63,13 @@ struct TDqOutputChannelSettings {
     ui64 ChunkSizeLimit = 48_MB;
     NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
     IDqChannelStorage::TPtr ChannelStorage;
-    bool CollectProfileStats = false;
+    TCollectStatsLevel Level = TCollectStatsLevel::None;
 };
 
 struct TDqOutputChannelChunkSizeLimitExceeded : public yexception {
 };
 
-IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, NKikimr::NMiniKQL::TType* outputType,
+IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, ui32 dstStageId, NKikimr::NMiniKQL::TType* outputType,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const TDqOutputChannelSettings& settings, const TLogFunc& logFunc = {});
 

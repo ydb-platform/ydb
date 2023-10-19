@@ -5,6 +5,7 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/runtime/dq_async_stats.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -214,6 +215,13 @@ struct TReportStatsSettings {
     TDuration MaxInterval;
 };
 
+inline TCollectStatsLevel StatsModeToCollectStatsLevel(NDqProto::EDqStatsMode statsMode) {
+         if (statsMode >= NDqProto::DQ_STATS_MODE_PROFILE) return TCollectStatsLevel::Profile;
+    else if (statsMode >= NDqProto::DQ_STATS_MODE_FULL)    return TCollectStatsLevel::Full;
+    else if (statsMode >= NDqProto::DQ_STATS_MODE_BASIC)   return TCollectStatsLevel::Basic;
+    else                                                   return TCollectStatsLevel::None;
+}
+
 struct TComputeRuntimeSettings {
     TMaybe<TDuration> Timeout;
     NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
@@ -230,6 +238,26 @@ struct TComputeRuntimeSettings {
 
     std::function<void(bool success, const TIssues& issues)> TerminateHandler;
     TMaybe<NDqProto::TRlPath> RlPath;
+
+    inline bool CollectNone() const {
+        return StatsMode <= NDqProto::DQ_STATS_MODE_NONE;
+    }
+
+    inline bool CollectBasic() const {
+        return StatsMode >= NDqProto::DQ_STATS_MODE_BASIC;
+    }
+
+    inline bool CollectFull() const {
+        return StatsMode >= NDqProto::DQ_STATS_MODE_FULL;
+    }
+
+    inline bool CollectProfile() const {
+        return StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE;
+    }
+
+    inline TCollectStatsLevel GetCollectStatsLevel() const {
+        return StatsModeToCollectStatsLevel(StatsMode);
+    }
 };
 
 struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
@@ -239,6 +267,7 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         Y_ABORT_UNLESS(Limit >= Guarantee);
         Y_ABORT_UNLESS(Limit >= Quota);
         Y_ABORT_UNLESS((Step ^ ~Step) + 1 == 0);
+        MaxMemorySize = Limit;
     }
 
     bool AllocateQuota(ui64 memorySize) override {
@@ -252,6 +281,9 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
             }
 
             Limit += delta;
+            if (MaxMemorySize < Limit) {
+                MaxMemorySize = Limit;
+            }
         }
 
         Quota += memorySize;
@@ -274,6 +306,10 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         return Quota;
     }
 
+    ui64 GetMaxMemorySize() const override {
+        return MaxMemorySize;
+    };
+
     virtual bool AllocateExtraQuota(ui64) {
         return false;
     }
@@ -285,6 +321,7 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
     ui64 Guarantee; // do not free memory below this value even if Quota == 0
     ui64 Step;      // allocation chunk size
     ui64 Quota;     // current value
+    ui64 MaxMemorySize; // usage peak for statistics
 };
 
 struct TChainedQuotaManager : public TGuaranteeQuotaManager {
@@ -321,8 +358,10 @@ using TTaskRunnerFactory = std::function<
     TIntrusivePtr<IDqTaskRunner>(const TDqTaskSettings& task, const TLogFunc& logFunc)
 >;
 
+void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats);
+
 void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& taskStats,
-    NDqProto::TDqTaskStats* protoTask, bool withProfileStats, const THashMap<ui64, ui64>& ingressBytesMap = {});
+    NDqProto::TDqTaskStats* protoTask, TCollectStatsLevel level);
 
 NActors::IActor* CreateDqComputeActor(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
     IDqAsyncIoFactory::TPtr asyncIoFactory,

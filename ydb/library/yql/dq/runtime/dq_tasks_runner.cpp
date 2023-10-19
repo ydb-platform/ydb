@@ -215,6 +215,12 @@ IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64
     return {};
 }
 
+inline TCollectStatsLevel StatsModeToCollectStatsLevel(NDqProto::EDqStatsMode statsMode) {
+         if (statsMode >= NDqProto::DQ_STATS_MODE_PROFILE) return TCollectStatsLevel::Profile;
+    else if (statsMode >= NDqProto::DQ_STATS_MODE_FULL)    return TCollectStatsLevel::Full;
+    else if (statsMode >= NDqProto::DQ_STATS_MODE_BASIC)   return TCollectStatsLevel::Basic;
+    else                                                   return TCollectStatsLevel::None;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// TDqTaskRunner
@@ -226,17 +232,13 @@ public:
         , Settings(settings)
         , LogFunc(logFunc)
         , AllocatedHolder(std::make_optional<TAllocatedHolder>())
-        , CollectBasicStats(Settings.CollectBasicStats)
-        , CollectProfileStats(Settings.CollectProfileStats)
     {
-        if (CollectBasicStats) {
+        if (Settings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             Stats = std::make_unique<TDqTaskRunnerStats>();
             Stats->StartTs = TInstant::Now();
-            if (Y_UNLIKELY(CollectProfileStats)) {
+            if (Y_UNLIKELY(CollectFull())) {
                 Stats->ComputeCpuTimeByRun = NMonitoring::ExponentialHistogram(6, 10, 10);
             }
-        } else {
-            YQL_ENSURE(!CollectProfileStats, "CollectProfileStats requires CollectBasicStats to be set as well");
         }
 
         if (!Context.Alloc) {
@@ -259,9 +261,14 @@ public:
     ~TDqTaskRunner() {
         if (SelfAlloc) {
             SelfAlloc->Acquire();
+            Stats.reset();
             AllocatedHolder.reset();
             SelfAlloc->Release();
         }
+    }
+
+    bool CollectFull() const {
+        return Settings.StatsMode >= NDqProto::DQ_STATS_MODE_FULL;
     }
 
     const TDqMeteringStats* GetMeteringStats() const override {
@@ -291,7 +298,7 @@ public:
             return nullptr;
         };
 
-        if (Y_UNLIKELY(CollectProfileStats && !AllocatedHolder->ProgramParsed.StatsRegistry)) {
+        if (Y_UNLIKELY(CollectFull() && !AllocatedHolder->ProgramParsed.StatsRegistry)) {
             AllocatedHolder->ProgramParsed.StatsRegistry = NMiniKQL::CreateDefaultStatsRegistry();
         }
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
@@ -539,23 +546,23 @@ public:
                     << transformDesc.GetType() << " with input type: " << *transform->TransformInputType
                     << " , output type: " << *outputType);
 
-                transform->TransformOutput = CreateDqAsyncInputBuffer(i, outputType,
-                    memoryLimits.ChannelBufferSize, Settings.CollectProfileStats);
+                transform->TransformOutput = CreateDqAsyncInputBuffer(i, transformDesc.GetType(), outputType,
+                    memoryLimits.ChannelBufferSize, StatsModeToCollectStatsLevel(Settings.StatsMode));
 
                 inputType = &transform->TransformInputType;
             }
 
             if (inputDesc.HasSource()) {
-                auto source = CreateDqAsyncInputBuffer(i, *inputType,
-                    memoryLimits.ChannelBufferSize, Settings.CollectProfileStats);
+                auto source = CreateDqAsyncInputBuffer(i, inputDesc.GetSource().GetType(), *inputType,
+                    memoryLimits.ChannelBufferSize, StatsModeToCollectStatsLevel(Settings.StatsMode));
                 auto [_, inserted] = AllocatedHolder->Sources.emplace(i, source);
                 Y_ABORT_UNLESS(inserted);
                 inputs.emplace_back(source);
             } else {
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
                     ui64 channelId = inputChannelDesc.GetId();
-                    auto inputChannel = CreateDqInputChannel(channelId, *inputType,
-                        memoryLimits.ChannelBufferSize, Settings.CollectProfileStats, typeEnv, holderFactory,
+                    auto inputChannel = CreateDqInputChannel(channelId, inputChannelDesc.GetSrcStageId(), *inputType,
+                        memoryLimits.ChannelBufferSize, StatsModeToCollectStatsLevel(Settings.StatsMode), typeEnv, holderFactory,
                         inputChannelDesc.GetTransportVersion());
                     auto ret = AllocatedHolder->InputChannels.emplace(channelId, inputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated input channelId: " << channelId);
@@ -608,14 +615,14 @@ public:
                     << transformDesc.GetType() << " with input type: " << *inputType
                     << " , output type: " << *transform->TransformOutputType);
 
-                transform->TransformInput = CreateDqAsyncOutputBuffer(i, entry->OutputItemTypes[i], memoryLimits.ChannelBufferSize,
-                    Settings.CollectProfileStats);
+                transform->TransformInput = CreateDqAsyncOutputBuffer(i, transformDesc.GetType(), entry->OutputItemTypes[i], memoryLimits.ChannelBufferSize,
+                    StatsModeToCollectStatsLevel(Settings.StatsMode));
 
                 taskOutputType = &transform->TransformOutputType;
             }
             if (outputDesc.HasSink()) {
-                auto sink = CreateDqAsyncOutputBuffer(i, *taskOutputType, memoryLimits.ChannelBufferSize,
-                    Settings.CollectProfileStats);
+                auto sink = CreateDqAsyncOutputBuffer(i, outputDesc.GetSink().GetType(), *taskOutputType, memoryLimits.ChannelBufferSize,
+                    StatsModeToCollectStatsLevel(Settings.StatsMode));
                 auto [_, inserted] = AllocatedHolder->Sinks.emplace(i, sink);
                 Y_ABORT_UNLESS(inserted);
                 outputs.emplace_back(sink);
@@ -628,13 +635,13 @@ public:
                     settings.MaxChunkBytes = memoryLimits.OutputChunkMaxSize;
                     settings.ChunkSizeLimit = memoryLimits.ChunkSizeLimit;
                     settings.TransportVersion = outputChannelDesc.GetTransportVersion();
-                    settings.CollectProfileStats = Settings.CollectProfileStats;
+                    settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
 
                     if (!outputChannelDesc.GetInMemory()) {
                         settings.ChannelStorage = execCtx.CreateChannelStorage(channelId);
                     }
 
-                    auto outputChannel = CreateDqOutputChannel(channelId, *taskOutputType, holderFactory, settings, LogFunc);
+                    auto outputChannel = CreateDqOutputChannel(channelId, outputChannelDesc.GetDstStageId(), *taskOutputType, holderFactory, settings, LogFunc);
 
                     auto ret = AllocatedHolder->OutputChannels.emplace(channelId, outputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated output channelId: " << channelId);
@@ -682,15 +689,12 @@ public:
         LOG(TStringBuilder() << "Prepare task: " << TaskId << ", takes " << prepareTime.MicroSeconds() << " us");
         if (Stats) {
             Stats->BuildCpuTime += prepareTime;
-
-            for (auto&[channelId, inputChannel] : AllocatedHolder->InputChannels) {
-                Stats->InputChannels.emplace(channelId, inputChannel->GetStats());
+            for (auto& [channelId, inputChannel] : AllocatedHolder->InputChannels) {
+                Stats->InputChannels[inputChannel->GetPushStats().SrcStageId].emplace(channelId, inputChannel);
             }
-            for (auto&[inputIndex, source] : AllocatedHolder->Sources) {
-                Stats->Sources.emplace(inputIndex, source->GetStats());
-            }
-            for (auto&[channelId, outputChannel] : AllocatedHolder->OutputChannels) {
-                Stats->OutputChannels.emplace(channelId, outputChannel->GetStats());
+            Stats->Sources = AllocatedHolder->Sources;
+            for (auto& [channelId, outputChannel] : AllocatedHolder->OutputChannels) {
+                Stats->OutputChannels[outputChannel->GetPopStats().DstStageId].emplace(channelId, outputChannel);
             }
         }
     }
@@ -710,7 +714,7 @@ public:
             Stats->RunStatusTimeMetrics.SetCurrentStatus(runStatus, RunComputeTime);
         }
 
-        if (Y_UNLIKELY(CollectProfileStats)) {
+        if (Y_UNLIKELY(CollectFull())) {
             Stats->ComputeCpuTimeByRun->Collect(RunComputeTime.MilliSeconds());
 
             if (AllocatedHolder->ProgramParsed.StatsRegistry) {
@@ -725,14 +729,14 @@ public:
             if (Stats) {
                 Stats->FinishTs = TInstant::Now();
             }
-            if (Y_UNLIKELY(CollectProfileStats)) {
+            if (Y_UNLIKELY(CollectFull())) {
                 StopWaiting(Stats->FinishTs);
             }
 
             return ERunStatus::Finished;
         }
 
-        if (Y_UNLIKELY(CollectProfileStats)) {
+        if (Y_UNLIKELY(CollectFull())) {
             auto now = TInstant::Now();
             StartWaiting(now);
             if (runStatus == ERunStatus::PendingOutput) {
@@ -877,7 +881,7 @@ private:
             if (Stats) {
                 auto duration = TInstant::Now() - startComputeTime;
                 Stats->ComputeCpuTime += duration;
-                if (Y_UNLIKELY(CollectProfileStats)) {
+                if (Y_UNLIKELY(CollectFull())) {
                     RunComputeTime = duration;
                 }
             }
@@ -899,7 +903,7 @@ private:
             wideBuffer.resize(AllocatedHolder->OutputWideType->GetElementsCount());
         }
         while (!AllocatedHolder->Output->IsFull()) {
-            if (Y_UNLIKELY(CollectProfileStats)) {
+            if (Y_UNLIKELY(CollectFull())) {
                 auto now = TInstant::Now();
                 StopWaitingOutput(now);
                 StopWaiting(now);
@@ -992,8 +996,6 @@ private:
 
     bool TaskHasEffects = false;
 
-    bool CollectBasicStats = false;
-    bool CollectProfileStats = false;
     std::unique_ptr<TDqTaskRunnerStats> Stats;
     TDqMeteringStats BillingStats;
     TDuration RunComputeTime;
@@ -1004,26 +1006,26 @@ private:
     std::optional<TInstant> StartWaitTime;
 
     void StartWaitingOutput(TInstant now) {
-        if (Y_UNLIKELY(CollectProfileStats) && !StartWaitOutputTime) {
+        if (Y_UNLIKELY(CollectFull()) && !StartWaitOutputTime) {
             StartWaitOutputTime = now;
         }
     }
 
     void StopWaitingOutput(TInstant now) {
-        if (Y_UNLIKELY(CollectProfileStats) && StartWaitOutputTime) {
+        if (Y_UNLIKELY(CollectFull()) && StartWaitOutputTime) {
             Stats->WaitOutputTime += (now - *StartWaitOutputTime);
             StartWaitOutputTime.reset();
         }
     }
 
     void StartWaiting(TInstant now) {
-        if (Y_UNLIKELY(CollectProfileStats) && !StartWaitTime) {
+        if (Y_UNLIKELY(CollectFull()) && !StartWaitTime) {
             StartWaitTime = now;
         }
     }
 
     void StopWaiting(TInstant now) {
-        if (Y_UNLIKELY(CollectProfileStats) && StartWaitTime) {
+        if (Y_UNLIKELY(CollectFull()) && StartWaitTime) {
             Stats->WaitTime += (now - *StartWaitTime);
             StartWaitTime.reset();
         }

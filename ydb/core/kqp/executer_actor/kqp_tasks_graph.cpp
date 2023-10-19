@@ -748,6 +748,8 @@ void FillEndpointDesc(NDqProto::TEndpoint& endpoint, const TTask& task) {
 void FillChannelDesc(const TKqpTasksGraph& tasksGraph, NDqProto::TChannel& channelDesc, const TChannel& channel,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion) {
     channelDesc.SetId(channel.Id);
+    channelDesc.SetSrcStageId(channel.SrcStageId.StageId);
+    channelDesc.SetDstStageId(channel.DstStageId.StageId);
     channelDesc.SetSrcTaskId(channel.SrcTask);
     channelDesc.SetDstTaskId(channel.DstTask);
 

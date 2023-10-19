@@ -50,7 +50,8 @@ public:
         const TDqConfiguration::TPtr settings,
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TVector<NYql::NDqProto::TDqTask>& tasks,
-        const TString& computeActorType)
+        const TString& computeActorType,
+        NDqProto::EDqStatsMode statsMode)
         : TRichActor<TResourceAllocator>(&TResourceAllocator::Handle)
         , GwmActor(gwmActor)
         , SenderId(senderId)
@@ -64,6 +65,7 @@ public:
         , RetryCounter(counters->GetSubgroup("component", "ServiceProxyActor")->GetCounter("RetryCreateActor", /*derivative=*/ true))
         , Tasks(tasks)
         , ComputeActorType(computeActorType)
+        , StatsMode(statsMode)
     {
         AllocatedWorkers.resize(workerCount);
         if (!Tasks.empty()) {
@@ -188,7 +190,7 @@ private:
             if (requestedNode.ClusterName) {
                 labels.emplace("ClusterName", requestedNode.ClusterName);
             }
-            QueryStat.AddCounter(QueryStat.GetCounterName("Actor", labels, "ActorCreateTime"), delta);
+            QueryStat.AddCounter(QueryStat.GetCounterName("Actor", labels, "ActorCreateTimeUs"), delta);
         }
 
         if (AllocatedCount == RequestedCount) {
@@ -253,6 +255,7 @@ private:
             ActorIdToProto(ControlId, request->Record.MutableResultActorId());
             *request->Record.AddTask() = node.Task;
         }
+        request->Record.SetStatsMode(StatsMode);
         YQL_CLOG(WARN, ProviderDq) << "Send TEvAllocateWorkersRequest to " << NDqs::NExecutionHelpers::PrettyPrintWorkerInfo(node.WorkerInfo, 0);
         if (backoff) {
             TActivationContext::Schedule(backoff, new IEventHandle(
@@ -331,6 +334,7 @@ private:
 
     TVector<NYql::NDqProto::TDqTask> Tasks; // for compute actor
     const TString ComputeActorType;
+    NDqProto::EDqStatsMode StatsMode;
 };
 
 NActors::IActor* CreateResourceAllocator(
@@ -342,9 +346,10 @@ NActors::IActor* CreateResourceAllocator(
     const TDqConfiguration::TPtr& settings,
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
     const TVector<NYql::NDqProto::TDqTask>& tasks,
-    const TString& computeActorType)
+    const TString& computeActorType,
+    NDqProto::EDqStatsMode statsMode)
 {
-    return new TResourceAllocator(gwmActor, senderId, controlId, size, traceId, settings, counters, tasks, computeActorType);
+    return new TResourceAllocator(gwmActor, senderId, controlId, size, traceId, settings, counters, tasks, computeActorType, statsMode);
 }
 
 } // namespace NYql

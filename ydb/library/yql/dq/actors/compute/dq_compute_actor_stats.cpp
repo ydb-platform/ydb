@@ -6,30 +6,52 @@
 namespace NYql {
 namespace NDq {
 
+void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats) {
+    if (stats.CollectBasic()) {
+        proto.SetBytes(stats.Bytes);
+        proto.SetRows(stats.Rows);
+        proto.SetChunks(stats.Chunks);
+        proto.SetSplits(stats.Splits);
+        if (stats.CollectFull()) {
+            proto.SetFirstMessageMs(stats.FirstMessageTs.MilliSeconds());
+            proto.SetPauseMessageMs(stats.PauseMessageTs.MilliSeconds());
+            proto.SetResumeMessageMs(stats.ResumeMessageTs.MilliSeconds());
+            proto.SetLastMessageMs(stats.LastMessageTs.MilliSeconds());
+            proto.SetWaitTimeUs(stats.WaitTime.MicroSeconds());
+            proto.SetWaitPeriods(stats.WaitPeriods);
+        }
+    }
+}
+
 void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& taskStats,
-    NDqProto::TDqTaskStats* protoTask, bool withProfileStats, const THashMap<ui64, ui64>& ingressBytesMap)
+    NDqProto::TDqTaskStats* protoTask, TCollectStatsLevel level)
 {
+    if (StatsLevelCollectNone(level)) {
+        return;
+    }
+
     protoTask->SetTaskId(taskId);
     protoTask->SetStageId(stageId);
     protoTask->SetCpuTimeUs(taskStats.ComputeCpuTime.MicroSeconds() + taskStats.BuildCpuTime.MicroSeconds());
-    protoTask->SetFinishTimeMs(taskStats.FinishTs.MilliSeconds());
-    protoTask->SetStartTimeMs(taskStats.StartTs.MilliSeconds());
-    // Cerr << (TStringBuilder() << "FillTaskRunnerStats: " << taskStats.ComputeCpuTime << ", " << taskStats.BuildCpuTime << Endl);
 
-    if (Y_UNLIKELY(withProfileStats)) {
+    protoTask->SetFinishTimeMs(taskStats.FinishTs.MilliSeconds()); // to be reviewed
+    protoTask->SetStartTimeMs(taskStats.StartTs.MilliSeconds());   // to be reviewed
+
+    if (StatsLevelCollectProfile(level)) {
         if (NActors::TlsActivationContext && NActors::TlsActivationContext->ActorSystem()) {
             protoTask->SetNodeId(NActors::TlsActivationContext->ActorSystem()->NodeId);
         }
         protoTask->SetHostName(HostName());
         protoTask->SetComputeCpuTimeUs(taskStats.ComputeCpuTime.MicroSeconds());
         protoTask->SetBuildCpuTimeUs(taskStats.BuildCpuTime.MicroSeconds());
-        protoTask->SetWaitTimeUs(taskStats.WaitTime.MicroSeconds());
-        protoTask->SetWaitOutputTimeUs(taskStats.WaitOutputTime.MicroSeconds());
+
+        protoTask->SetWaitTimeUs(taskStats.WaitTime.MicroSeconds());             // to be reviewed
+        protoTask->SetWaitOutputTimeUs(taskStats.WaitOutputTime.MicroSeconds()); // to be reviewed
 
         // All run statuses metrics
-        protoTask->SetPendingInputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingInput].MicroSeconds());
-        protoTask->SetPendingOutputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingOutput].MicroSeconds());
-        protoTask->SetFinishTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::Finished].MicroSeconds());
+        protoTask->SetPendingInputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingInput].MicroSeconds());   // to be reviewed
+        protoTask->SetPendingOutputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingOutput].MicroSeconds()); // to be reviewed
+        protoTask->SetFinishTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::Finished].MicroSeconds());             // to be reviewed
         static_assert(TRunStatusTimeMetrics::StatusesCount == 3); // Add all statuses here
 
         if (taskStats.ComputeCpuTimeByRun) {
@@ -49,89 +71,152 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
         }
     }
 
-    ui64 firstRowTs = std::numeric_limits<ui64>::max();
+    TDqAsyncStats taskPushStats;
 
-    for (auto& [channelId, inputChannelStats] : taskStats.InputChannels) {
-        if (!inputChannelStats) {
-            continue;
-        }
-
-        if (inputChannelStats->FirstRowTs) {
-            firstRowTs = std::min(firstRowTs, inputChannelStats->FirstRowTs.MilliSeconds());
-        }
-
-        protoTask->SetInputRows(protoTask->GetInputRows() + inputChannelStats->RowsOut); // Yes, OutputRows of input channel, i.e. rows that were visible by the task runner
-        protoTask->SetInputBytes(protoTask->GetInputBytes() + inputChannelStats->Bytes);  // should be bytes out...
-
-        if (Y_UNLIKELY(withProfileStats)) {
-            auto protoChannel = protoTask->AddInputChannels();
-            protoChannel->SetChannelId(channelId);
-            protoChannel->SetChunks(inputChannelStats->Chunks);
-            protoChannel->SetBytes(inputChannelStats->Bytes);
-            protoChannel->SetRowsIn(inputChannelStats->RowsIn);
-            protoChannel->SetRowsOut(inputChannelStats->RowsOut);
-            protoChannel->SetMaxMemoryUsage(inputChannelStats->MaxMemoryUsage);
-            protoChannel->SetDeserializationTimeUs(inputChannelStats->DeserializationTime.MicroSeconds());
-        }
-    }
-
-    for (auto& [inputIndex, sourceStats] : taskStats.Sources) {
-        if (!sourceStats) {
-            continue;
-        }
-
-        if (sourceStats->FirstRowTs) {
-            firstRowTs = std::min(firstRowTs, sourceStats->FirstRowTs.MilliSeconds());
-        }
-
-        protoTask->SetInputRows(protoTask->GetInputRows() + sourceStats->RowsOut); // the same comment here ... ^^^
-        protoTask->SetInputBytes(protoTask->GetInputBytes() + sourceStats->Bytes);
-
-        if (Y_UNLIKELY(withProfileStats)) {
-            auto* protoSource = protoTask->AddSources();
-            protoSource->SetInputIndex(inputIndex);
-            protoSource->SetChunks(sourceStats->Chunks);
-            protoSource->SetBytes(sourceStats->Bytes);
-            protoSource->SetRowsIn(sourceStats->RowsIn);
-            protoSource->SetRowsOut(sourceStats->RowsOut);
-            protoSource->SetIngressBytes(ingressBytesMap.Value(inputIndex, 0));
-
-            protoSource->SetMaxMemoryUsage(sourceStats->MaxMemoryUsage);
-        }
-    }
-
-    for (auto& [channelId, outputChannelStats] : taskStats.OutputChannels) {
-        if (!outputChannelStats) {
-            continue;
-        }
-
-        if (outputChannelStats->FirstRowIn) {
-            firstRowTs = std::min(firstRowTs, outputChannelStats->FirstRowIn.MilliSeconds());
-        }
-
-        protoTask->SetOutputRows(protoTask->GetOutputRows() + outputChannelStats->RowsIn);
-        protoTask->SetOutputBytes(protoTask->GetOutputBytes() + outputChannelStats->Bytes);
-
-        if (Y_UNLIKELY(withProfileStats)) {
-            auto* protoChannel = protoTask->AddOutputChannels();
-            protoChannel->SetChannelId(channelId);
-
-            protoChannel->SetChunks(outputChannelStats->Chunks);
-            protoChannel->SetBytes(outputChannelStats->Bytes);
-            protoChannel->SetRowsIn(outputChannelStats->RowsIn);
-            protoChannel->SetRowsOut(outputChannelStats->RowsOut);
-
-            protoChannel->SetMaxMemoryUsage(outputChannelStats->MaxMemoryUsage);
-            protoChannel->SetMaxRowsInMemory(outputChannelStats->MaxRowsInMemory);
-            protoChannel->SetSerializationTimeUs(outputChannelStats->SerializationTime.MicroSeconds());
-
-            protoChannel->SetSpilledBytes(outputChannelStats->SpilledBytes);
-            protoChannel->SetSpilledRows(outputChannelStats->SpilledRows);
-            protoChannel->SetSpilledBlobs(outputChannelStats->SpilledBlobs);
+    for (auto& [srcStageId, inputChannels] : taskStats.InputChannels) {
+        switch (level) {
+            case TCollectStatsLevel::None:
+                break;
+            case TCollectStatsLevel::Basic:
+                for (auto& [channelId, inputChannel] : inputChannels) {
+                    taskPushStats.MergeData(inputChannel->GetPushStats());
+                }
+                break;
+            case TCollectStatsLevel::Full:
+                {
+                    TDqInputChannelStats pushStats;
+                    TDqAsyncStats popStats;
+                    bool firstChannelInStage = true;
+                    for (auto& [channelId, inputChannel] : inputChannels) {
+                        taskPushStats.MergeData(inputChannel->GetPushStats());
+                        if (firstChannelInStage) {
+                            pushStats = inputChannel->GetPushStats();
+                            popStats = inputChannel->GetPopStats();
+                            firstChannelInStage = false;
+                        } else {
+                            pushStats.Merge(inputChannel->GetPushStats());
+                            pushStats.DeserializationTime += inputChannel->GetPushStats().DeserializationTime;
+                            pushStats.MaxMemoryUsage += inputChannel->GetPushStats().MaxMemoryUsage;
+                            popStats.Merge(inputChannel->GetPopStats());
+                        }
+                    }
+                    if (inputChannels.size() > 1) {
+                        pushStats.WaitTime /= inputChannels.size();
+                        popStats.WaitTime /= inputChannels.size();
+                    }
+                    {
+                        auto& protoChannel = *protoTask->AddInputChannels();
+                        protoChannel.SetSrcStageId(srcStageId);
+                        FillAsyncStats(*protoChannel.MutablePush(), pushStats);
+                        FillAsyncStats(*protoChannel.MutablePop(), popStats);
+                        protoChannel.SetDeserializationTimeUs(pushStats.DeserializationTime.MicroSeconds());
+                        protoChannel.SetMaxMemoryUsage(pushStats.MaxMemoryUsage);
+                    }
+                }
+                break;
+            case TCollectStatsLevel::Profile:
+                for (auto& [channelId, inputChannel] : inputChannels) {
+                    taskPushStats.MergeData(inputChannel->GetPushStats());
+                    auto& protoChannel = *protoTask->AddInputChannels();
+                    protoChannel.SetChannelId(channelId);
+                    protoChannel.SetSrcStageId(srcStageId);
+                    FillAsyncStats(*protoChannel.MutablePush(), inputChannel->GetPushStats());
+                    FillAsyncStats(*protoChannel.MutablePop(), inputChannel->GetPopStats());
+                    protoChannel.SetDeserializationTimeUs(inputChannel->GetPushStats().DeserializationTime.MicroSeconds());
+                    protoChannel.SetMaxMemoryUsage(inputChannel->GetPushStats().MaxMemoryUsage);
+                }
+                break;
         }
     }
 
-    protoTask->SetFirstRowTimeMs(firstRowTs);
+    protoTask->SetInputRows(taskPushStats.Rows);
+    protoTask->SetInputBytes(taskPushStats.Bytes);
+
+    //
+    // task runner is not aware of ingress/egress stats, fill in in CA
+    //
+    for (auto& [inputIndex, sources] : taskStats.Sources) {
+        if (StatsLevelCollectFull(level)) {
+            auto& protoSource = *protoTask->AddSources();
+            protoSource.SetInputIndex(inputIndex);
+            FillAsyncStats(*protoSource.MutablePush(), sources->GetPushStats());
+            FillAsyncStats(*protoSource.MutablePop(), sources->GetPopStats());
+            protoSource.SetMaxMemoryUsage(sources->GetPushStats().MaxMemoryUsage);
+        }
+    }
+
+    TDqAsyncStats taskPopStats;
+
+    for (auto& [dstStageId, outputChannels] : taskStats.OutputChannels) {
+        switch (level) {
+            case TCollectStatsLevel::None:
+                break;
+            case TCollectStatsLevel::Basic:
+                for (auto& [channelId, outputChannel] : outputChannels) {
+                    taskPopStats.MergeData(outputChannel->GetPopStats());
+                }
+                break;
+            case TCollectStatsLevel::Full:
+                {
+                    TDqAsyncStats pushStats;
+                    TDqOutputChannelStats popStats;
+                    bool firstChannelInStage = true;
+                    for (auto& [channelId, outputChannel] : outputChannels) {
+                        taskPopStats.MergeData(outputChannel->GetPopStats());
+                        if (firstChannelInStage) {
+                            pushStats = outputChannel->GetPushStats();
+                            popStats = outputChannel->GetPopStats();
+                            firstChannelInStage = false;
+                        } else {
+                            pushStats.Merge(outputChannel->GetPushStats());
+                            popStats.Merge(outputChannel->GetPopStats());
+                            popStats.MaxMemoryUsage += outputChannel->GetPopStats().MaxMemoryUsage;
+                            popStats.MaxRowsInMemory += outputChannel->GetPopStats().MaxRowsInMemory;
+                            popStats.SerializationTime += outputChannel->GetPopStats().SerializationTime;
+                            popStats.SpilledBytes += outputChannel->GetPopStats().SpilledBytes;
+                            popStats.SpilledRows += outputChannel->GetPopStats().SpilledRows;
+                            popStats.SpilledBlobs += outputChannel->GetPopStats().SpilledBlobs;
+                        }
+                    }
+                    if (outputChannels.size() > 1) {
+                        pushStats.WaitTime /= outputChannels.size();
+                        popStats.WaitTime /= outputChannels.size();
+                    }
+                    {
+                        auto& protoChannel = *protoTask->AddOutputChannels();
+                        protoChannel.SetDstStageId(dstStageId);
+                        FillAsyncStats(*protoChannel.MutablePush(), pushStats);
+                        FillAsyncStats(*protoChannel.MutablePop(), popStats);
+                        protoChannel.SetMaxMemoryUsage(popStats.MaxMemoryUsage);
+                        protoChannel.SetMaxRowsInMemory(popStats.MaxRowsInMemory);
+                        protoChannel.SetSerializationTimeUs(popStats.SerializationTime.MicroSeconds());
+                        protoChannel.SetSpilledBytes(popStats.SpilledBytes);
+                        protoChannel.SetSpilledRows(popStats.SpilledRows);
+                        protoChannel.SetSpilledBlobs(popStats.SpilledBlobs);
+                    }
+                }
+                break;
+            case TCollectStatsLevel::Profile:
+                for (auto& [channelId, outputChannel] : outputChannels) {
+                    taskPopStats.MergeData(outputChannel->GetPopStats());
+                    auto& protoChannel = *protoTask->AddOutputChannels();
+                    protoChannel.SetChannelId(channelId);
+                    protoChannel.SetDstStageId(dstStageId);
+                    FillAsyncStats(*protoChannel.MutablePush(), outputChannel->GetPushStats());
+                    FillAsyncStats(*protoChannel.MutablePop(), outputChannel->GetPopStats());
+                    protoChannel.SetMaxMemoryUsage(outputChannel->GetPopStats().MaxMemoryUsage);
+                    protoChannel.SetMaxRowsInMemory(outputChannel->GetPopStats().MaxRowsInMemory);
+                    protoChannel.SetSerializationTimeUs(outputChannel->GetPopStats().SerializationTime.MicroSeconds());
+                    protoChannel.SetSpilledBytes(outputChannel->GetPopStats().SpilledBytes);
+                    protoChannel.SetSpilledRows(outputChannel->GetPopStats().SpilledRows);
+                    protoChannel.SetSpilledBlobs(outputChannel->GetPopStats().SpilledBlobs);
+                }
+                break;
+        }
+    }
+
+    protoTask->SetOutputRows(taskPopStats.Rows);
+    protoTask->SetOutputBytes(taskPopStats.Bytes);
 }
 
 } // namespace NDq

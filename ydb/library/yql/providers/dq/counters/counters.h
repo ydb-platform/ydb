@@ -1,9 +1,6 @@
 #pragma once
 
 #include <ydb/library/yql/core/yql_execution.h>
-#include <ydb/library/yql/dq/runtime/dq_input_channel.h>
-#include <ydb/library/yql/dq/runtime/dq_output_channel.h>
-#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 
 #include <util/string/split.h>
 
@@ -73,7 +70,7 @@ struct TCounters {
     }
 
     void AddCounter(const TString& name, TDuration value) const {
-        auto val = value.MilliSeconds();
+        auto val = value.MicroSeconds();
         auto& counter = Counters[name];
         counter.Sum += val;
         counter.Min = counter.Count == 0
@@ -196,97 +193,9 @@ struct TCounters {
         Start.clear();
     }
 
-#define ADD_COUNTER(name) \
-    do {                                                                \
-        auto value = currentStats.name - oldStats.name;                 \
-        if (value) {                                                    \
-            AddCounter(GetCounterName("TaskRunner", labels, #name), value); \
-        }                                                               \
-        oldStats.name = currentStats.name;                              \
-    } while (0);
-
-    void AddInputChannelStats(
-        const NDq::TDqInputChannelStats& currentStats,
-        NDq::TDqInputChannelStats& oldStats,
-        ui64 taskId,
-        ui64 channelId)
-    {
-        std::map<TString, TString> labels = {
-            {"Task", ToString(taskId)},
-            {"InputChannel", ToString(channelId)}
-        };
-
-        ADD_COUNTER(Chunks);
-        ADD_COUNTER(Bytes);
-        ADD_COUNTER(RowsIn);
-        ADD_COUNTER(RowsOut);
-        ADD_COUNTER(RowsInMemory);
-        ADD_COUNTER(MaxMemoryUsage);
-        ADD_COUNTER(DeserializationTime);
+    void ClearCounters() {
+        Counters.clear();
     }
-
-    void AddSourceStats(
-        const NDq::TDqAsyncInputBufferStats& currentStats,
-        NDq::TDqAsyncInputBufferStats& oldStats,
-        ui64 taskId, ui64 inputIndex)
-    {
-        std::map<TString, TString> labels = {
-            {"Task", ToString(taskId)},
-            {"SourceIndex", ToString(inputIndex)}
-        };
-
-        ADD_COUNTER(Chunks);
-        ADD_COUNTER(Bytes);
-        ADD_COUNTER(RowsIn);
-        ADD_COUNTER(RowsOut);
-        ADD_COUNTER(RowsInMemory);
-        ADD_COUNTER(MaxMemoryUsage);
-        ADD_COUNTER(InputIndex);
-    }
-
-    void AddOutputChannelStats(
-        const NDq::TDqOutputChannelStats& currentStats,
-        NDq::TDqOutputChannelStats& oldStats,
-        ui64 taskId, ui64 channelId)
-    {
-        std::map<TString, TString> labels = {
-            {"Task", ToString(taskId)},
-            {"OutputChannel", ToString(channelId)}
-        };
-
-        ADD_COUNTER(Chunks)
-        ADD_COUNTER(Bytes);
-        ADD_COUNTER(RowsIn);
-        ADD_COUNTER(RowsOut);
-        ADD_COUNTER(MaxMemoryUsage);
-        ADD_COUNTER(MaxRowsInMemory);
-
-        ADD_COUNTER(SerializationTime);
-
-        ADD_COUNTER(SpilledBytes);
-        ADD_COUNTER(SpilledRows);
-        ADD_COUNTER(SpilledBlobs);
-    }
-
-    void AddTaskRunnerStats(
-        const NDq::TDqTaskRunnerStats& currentStats,
-        NDq::TDqTaskRunnerStats& oldStats,
-        ui64 taskId)
-    {
-        std::map<TString, TString> labels = {
-            {"Task", ToString(taskId)}
-        };
-
-        // basic stats
-        ADD_COUNTER(ComputeCpuTime)
-        ADD_COUNTER(BuildCpuTime)
-
-        // profile stats
-        ADD_COUNTER(WaitTime)
-        ADD_COUNTER(WaitOutputTime)
-    }
-
-#undef ADD_COUNTER
 
 protected:
 
@@ -294,7 +203,5 @@ protected:
     mutable THashMap<TString, THashMap<i64, ui64>> Histograms;
     mutable THashMap<TString, TInstant> Start;
 };
-
-TCounters AggregateQueryStatsByStage(TCounters& queryStat, const THashMap<ui64, ui64>& task2Stage);
 
 } // namespace NYql

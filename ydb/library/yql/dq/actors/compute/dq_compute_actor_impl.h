@@ -206,9 +206,6 @@ protected:
         , Running(!Task.GetCreateSuspended())
         , PassExceptions(passExceptions)
     {
-        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
-            BasicStats = std::make_unique<TBasicStats>();
-        }
         InitMonCounters(taskCounters);
         InitializeTask();
         if (ownMemoryQuota) {
@@ -226,9 +223,9 @@ protected:
     }
 
     void ReportEventElapsedTime() {
-        if (BasicStats) {
+        if (RuntimeSettings.CollectBasic()) {
             ui64 elapsedMicros = NActors::TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000ull;
-            BasicStats->CpuTime += TDuration::MicroSeconds(elapsedMicros);
+            CpuTime += TDuration::MicroSeconds(elapsedMicros);
         }
     }
 
@@ -294,7 +291,7 @@ protected:
             MemoryLimits,
             TxId,
             Task.GetId(),
-            RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE,
+            RuntimeSettings.CollectFull(),
             CanAllocateExtraMemory,
             NActors::TActivationContext::ActorSystem());
     }
@@ -1370,7 +1367,7 @@ protected:
     }
 
 private:
-    virtual const TDqMemoryQuota::TProfileStats* GetProfileStats() const {
+    virtual const TDqMemoryQuota::TProfileStats* GetMemoryProfileStats() const {
         Y_ABORT_UNLESS(MemoryQuota);
         return MemoryQuota->GetProfileStats();
     }
@@ -1566,6 +1563,7 @@ protected:
                 channel.Channel = TaskRunner->GetInputChannel(channelId);
             }
         }
+        auto collectStatsLevel = StatsModeToCollectStatsLevel(RuntimeSettings.StatsMode);
         for (auto& [inputIndex, source] : SourcesMap) {
             if (TaskRunner) { source.Buffer = TaskRunner->GetSource(inputIndex); Y_ABORT_UNLESS(source.Buffer);}
             Y_ABORT_UNLESS(AsyncIoFactory);
@@ -1581,6 +1579,7 @@ protected:
                     IDqAsyncIoFactory::TSourceArguments {
                         .InputDesc = inputDesc,
                         .InputIndex = inputIndex,
+                        .StatsLevel = collectStatsLevel,
                         .TxId = TxId,
                         .SecureParams = secureParams,
                         .TaskParams = taskParams,
@@ -1612,6 +1611,7 @@ protected:
                         IDqAsyncIoFactory::TInputTransformArguments {
                             .InputDesc = inputDesc,
                             .InputIndex = inputIndex,
+                            .StatsLevel = collectStatsLevel,
                             .TxId = TxId,
                             .TaskId = Task.GetId(),
                             .TransformInput = transform.InputBuffer,
@@ -1647,6 +1647,7 @@ protected:
                         IDqAsyncIoFactory::TOutputTransformArguments {
                             .OutputDesc = outputDesc,
                             .OutputIndex = outputIndex,
+                            .StatsLevel = collectStatsLevel,
                             .TxId = TxId,
                             .TransformOutput = transform.OutputBuffer,
                             .Callback = static_cast<TOutputTransformCallbacks*>(this),
@@ -1675,6 +1676,7 @@ protected:
                     IDqAsyncIoFactory::TSinkArguments {
                         .OutputDesc = outputDesc,
                         .OutputIndex = outputIndex,
+                        .StatsLevel = collectStatsLevel,
                         .TxId = TxId,
                         .Callback = static_cast<TSinkCallbacks*>(this),
                         .SecureParams = secureParams,
@@ -1944,14 +1946,12 @@ private:
         return TaskRunner->GetStats();
     }
 
-    virtual const TDqAsyncOutputBufferStats* GetSinkStats(ui64 outputIdx, const TAsyncOutputInfoBase& sinkInfo) const {
-        Y_UNUSED(outputIdx);
-        return sinkInfo.Buffer ? sinkInfo.Buffer->GetStats() : nullptr;
+    virtual const IDqAsyncOutputBuffer* GetSink(ui64, const TAsyncOutputInfoBase& sinkInfo) const {
+        return sinkInfo.Buffer.Get();
     }
 
-    virtual const TDqAsyncInputBufferStats* GetInputTransformStats(ui64 inputIdx, const TAsyncInputTransformInfo& inputTransformInfo) const {
-        Y_UNUSED(inputIdx);
-        return inputTransformInfo.Buffer ? inputTransformInfo.Buffer->GetStats() : nullptr;
+    virtual const IDqAsyncInputBuffer* GetInputTransform(ui64, const TAsyncInputTransformInfo& inputTransformInfo) const {
+        return inputTransformInfo.Buffer.Get();
     }
 
 public:
@@ -1972,7 +1972,7 @@ public:
     }
 
     void FillStats(NDqProto::TDqComputeActorStats* dst, bool last) {
-        if (!BasicStats) {
+        if (RuntimeSettings.CollectNone()) {
             return;
         }
 
@@ -1980,12 +1980,13 @@ public:
             ReportEventElapsedTime();
         }
 
-        dst->SetCpuTimeUs(BasicStats->CpuTime.MicroSeconds());
+        dst->SetCpuTimeUs(CpuTime.MicroSeconds());
+        dst->SetMaxMemoryUsage(MemoryLimits.MemoryQuotaManager->GetMaxMemorySize());
 
-        if (GetProfileStats()) {
-            dst->SetMkqlMaxMemoryUsage(GetProfileStats()->MkqlMaxUsedMemory);
-            dst->SetMkqlExtraMemoryBytes(GetProfileStats()->MkqlExtraMemoryBytes);
-            dst->SetMkqlExtraMemoryRequests(GetProfileStats()->MkqlExtraMemoryRequests);
+        if (auto memProfileStats = GetMemoryProfileStats(); memProfileStats) {
+            dst->SetMkqlMaxMemoryUsage(memProfileStats->MkqlMaxUsedMemory);
+            dst->SetMkqlExtraMemoryBytes(memProfileStats->MkqlExtraMemoryBytes);
+            dst->SetMkqlExtraMemoryRequests(memProfileStats->MkqlExtraMemoryRequests);
         }
 
         if (Stat) { // for task_runner_actor
@@ -2005,67 +2006,88 @@ public:
         } else if (auto* taskStats = GetTaskRunnerStats()) { // for task_runner_actor_local
             auto* protoTask = dst->AddTasks();
 
-            THashMap<TString, ui64> Ingress;
-            THashMap<TString, ui64> Egress;
-
-            THashMap<ui64, ui64> ingressBytesMap;
             for (auto& [inputIndex, sourceInfo] : SourcesMap) {
                 if (auto* source = sourceInfo.AsyncInput) {
-                    auto ingressBytes = sourceInfo.AsyncInput->GetIngressBytes();
-                    ingressBytesMap.emplace(inputIndex, ingressBytes);
-                    Ingress[sourceInfo.Type] = Ingress.Value(sourceInfo.Type, 0) + ingressBytes;
                     // TODO: support async CA
                     source->FillExtraStats(protoTask, last, TaskRunner ? TaskRunner->GetMeteringStats() : nullptr);
                 }
             }
-            FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) GetProfileStats(), ingressBytesMap);
+            FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, RuntimeSettings.GetCollectStatsLevel());
 
             // More accurate cpu time counter:
             if (TDerived::HasAsyncTaskRunner) {
-                protoTask->SetCpuTimeUs(BasicStats->CpuTime.MicroSeconds() + taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds());
+                protoTask->SetCpuTimeUs(CpuTime.MicroSeconds() + taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds());
             }
             protoTask->SetSourceCpuTimeUs(SourceCpuTime.MicroSeconds());
 
-            for (auto& [outputIndex, sinkInfo] : SinksMap) {
+            THashMap<TString, TDqAsyncStats> ingressStats;
+            THashMap<TString, TDqAsyncStats> egressStats;
+            TDqAsyncStats pushStats;
 
-                ui64 egressBytes = sinkInfo.AsyncOutput ? sinkInfo.AsyncOutput->GetEgressBytes() : 0;
-
-                if (auto* sinkStats = GetSinkStats(outputIndex, sinkInfo)) {
-                    protoTask->SetOutputRows(protoTask->GetOutputRows() + sinkStats->RowsIn);
-                    protoTask->SetOutputBytes(protoTask->GetOutputBytes() + sinkStats->Bytes);
-                    Egress[sinkInfo.Type] = Egress.Value(sinkInfo.Type, 0) + egressBytes;
-
-                    if (GetProfileStats()) {
-                        auto* protoSink = protoTask->AddSinks();
-                        protoSink->SetOutputIndex(outputIndex);
-
-                        protoSink->SetChunks(sinkStats->Chunks);
-                        protoSink->SetBytes(sinkStats->Bytes);
-                        protoSink->SetRowsIn(sinkStats->RowsIn);
-                        protoSink->SetRowsOut(sinkStats->RowsOut);
-                        protoSink->SetEgressBytes(egressBytes);
-
-                        protoSink->SetMaxMemoryUsage(sinkStats->MaxMemoryUsage);
-                        protoSink->SetErrorsCount(sinkInfo.IssuesBuffer.GetAllAddedIssuesCount());
+            if (RuntimeSettings.CollectFull()) {
+                // in full/profile mode enumerate existing protos
+                for (auto& protoSource : *protoTask->MutableSources()) {
+                    if (auto* sourceInfoPtr = SourcesMap.FindPtr(protoSource.GetInputIndex())) {
+                        auto& sourceInfo = *sourceInfoPtr;
+                        protoSource.SetIngressName(sourceInfo.Type);
+                        FillAsyncStats(*protoSource.MutableIngress(), sourceInfo.AsyncInput->GetIngressStats());
+                        ingressStats[sourceInfo.Type].MergeData(sourceInfo.AsyncInput->GetIngressStats());
                     }
+                }
+            } else {
+                // in basic mode enum sources directly
+                for (auto& [inputIndex, sourceInfo] : SourcesMap) {
+                    ingressStats[sourceInfo.Type].MergeData(sourceInfo.AsyncInput->GetIngressStats());
+                }
+            };
+
+            for (auto& [outputIndex, sinkInfo] : SinksMap) {
+                if (auto* sink = GetSink(outputIndex, sinkInfo)) {
+                    if (RuntimeSettings.CollectFull()) {
+                        auto& protoSink = *protoTask->AddSinks();
+                        protoSink.SetOutputIndex(outputIndex);
+                        protoSink.SetEgressName(sinkInfo.Type);
+                        FillAsyncStats(*protoSink.MutablePush(), sink->GetPushStats());
+                        FillAsyncStats(*protoSink.MutablePop(), sink->GetPopStats());
+                        FillAsyncStats(*protoSink.MutableEgress(), sinkInfo.AsyncOutput->GetEgressStats());
+                        protoSink.SetMaxMemoryUsage(sink->GetPopStats().MaxMemoryUsage);
+                        protoSink.SetErrorsCount(sinkInfo.IssuesBuffer.GetAllAddedIssuesCount());
+                    }
+                    egressStats[sinkInfo.Type].MergeData(sinkInfo.AsyncOutput->GetEgressStats());
+                    pushStats.MergeData(sink->GetPushStats());
+                    // p.s. sink == sinkInfo.Buffer
                 }
             }
 
+            for (auto& [name, stats] : ingressStats) {
+                auto& protoIngress = *protoTask->AddIngress();
+                protoIngress.SetName(name);
+                protoIngress.SetBytes(stats.Bytes);
+                protoIngress.SetRows(stats.Rows);
+                protoIngress.SetChunks(stats.Chunks);
+                protoIngress.SetSplits(stats.Splits);
+            }
+            for (auto& [name, stats] : egressStats) {
+                auto& protoEgress = *protoTask->AddEgress();
+                protoEgress.SetName(name);
+                protoEgress.SetBytes(stats.Bytes);
+                protoEgress.SetRows(stats.Rows);
+                protoEgress.SetChunks(stats.Chunks);
+                protoEgress.SetSplits(stats.Splits);
+            }
+            // add egress to output channel stats
+            protoTask->SetOutputRows(protoTask->GetOutputRows() + pushStats.Rows);
+            protoTask->SetOutputBytes(protoTask->GetOutputBytes() + pushStats.Bytes);
+
             for (auto& [inputIndex, transformInfo] : InputTransformsMap) {
-                auto* transformStats = GetInputTransformStats(inputIndex, transformInfo);
-                if (transformStats && GetProfileStats()) {
-                    YQL_ENSURE(transformStats);
-                    ui64 ingressBytes = transformInfo.AsyncInput ? transformInfo.AsyncInput->GetIngressBytes() : 0;
-
-                    auto* protoTransform = protoTask->AddInputTransforms();
-                    protoTransform->SetInputIndex(inputIndex);
-                    protoTransform->SetChunks(transformStats->Chunks);
-                    protoTransform->SetBytes(transformStats->Bytes);
-                    protoTransform->SetRowsIn(transformStats->RowsIn);
-                    protoTransform->SetRowsOut(transformStats->RowsOut);
-                    protoTransform->SetIngressBytes(ingressBytes);
-
-                    protoTransform->SetMaxMemoryUsage(transformStats->MaxMemoryUsage);
+                auto* transform = GetInputTransform(inputIndex, transformInfo);
+                if (transform && RuntimeSettings.CollectFull()) {
+                    // TODO: Ingress clarification
+                    auto& protoTransform = *protoTask->AddInputTransforms();
+                    protoTransform.SetInputIndex(inputIndex);
+                    FillAsyncStats(*protoTransform.MutablePush(), transform->GetPushStats());
+                    FillAsyncStats(*protoTransform.MutablePop(), transform->GetPopStats());
+                    protoTransform.SetMaxMemoryUsage(transform->PushStats.MaxMemoryUsage);
                 }
 
                 if (auto* transform = transformInfo.AsyncInput) {
@@ -2074,51 +2096,57 @@ public:
                 }
             }
 
-            for (auto& [name, bytes] : Egress) {
-                auto* egressStats = protoTask->AddEgress();
-                egressStats->SetName(name);
-                egressStats->SetBytes(bytes);
-            }
-            for (auto& [name, bytes] : Ingress) {
-                auto* ingressStats = protoTask->AddIngress();
-                ingressStats->SetName(name);
-                ingressStats->SetBytes(bytes);
-            }
-
-            if (GetProfileStats()) {
+            if (RuntimeSettings.CollectFull()) {
                 for (auto& protoSource : *protoTask->MutableSources()) {
                     if (auto* sourceInfo = SourcesMap.FindPtr(protoSource.GetInputIndex())) {
                         protoSource.SetErrorsCount(sourceInfo->IssuesBuffer.GetAllAddedIssuesCount());
                     }
                 }
 
-                for (auto& protoInputChannelStats : *protoTask->MutableInputChannels()) {
-                    if (auto* caChannelStats = Channels->GetInputChannelStats(protoInputChannelStats.GetChannelId())) {
-                        protoInputChannelStats.SetPollRequests(caChannelStats->PollRequests);
-                        protoInputChannelStats.SetWaitTimeUs(caChannelStats->WaitTime.MicroSeconds());
-                        protoInputChannelStats.SetResentMessages(caChannelStats->ResentMessages);
-                        protoInputChannelStats.SetFirstMessageMs(caChannelStats->FirstMessageTs.MilliSeconds());
-                        protoInputChannelStats.SetLastMessageMs(caChannelStats->LastMessageTs.MilliSeconds());
-                    }
-
-                    if (auto* inputInfo = InputChannelsMap.FindPtr(protoInputChannelStats.GetChannelId())) {
-                        protoInputChannelStats.SetSrcStageId(inputInfo->SrcStageId);
+                for (auto& protoChannel : *protoTask->MutableInputChannels()) {
+                    if (auto channelId = protoChannel.GetChannelId()) { // Profile or Full Single
+                        if (auto* channelStats = Channels->GetInputChannelStats(channelId)) {
+                            protoChannel.SetPollRequests(channelStats->PollRequests);
+                            protoChannel.SetResentMessages(channelStats->ResentMessages);
+                        }
+                    } else if (auto srcStageId = protoChannel.GetSrcStageId()) { // Full Aggregated
+                        // TODO Optimize
+                        ui64 pollRequests = 0;
+                        ui64 resentMessages = 0;
+                        for (const auto& [channelId, channel] : InputChannelsMap) {
+                            if (channel.SrcStageId == srcStageId) {
+                                if (auto* channelStats = Channels->GetInputChannelStats(channelId)) {
+                                    pollRequests += channelStats->PollRequests;
+                                    resentMessages += channelStats->ResentMessages;
+                                }
+                            }
+                        }
+                        if (pollRequests) {
+                            protoChannel.SetPollRequests(pollRequests);
+                        }
+                        if (resentMessages) {
+                            protoChannel.SetResentMessages(resentMessages);
+                        }
                     }
                 }
 
-                for (auto& protoOutputChannelStats : *protoTask->MutableOutputChannels()) {
-                    if (auto* caChannelStats = Channels->GetOutputChannelStats(protoOutputChannelStats.GetChannelId())) {
-                        protoOutputChannelStats.SetResentMessages(caChannelStats->ResentMessages);
-                        protoOutputChannelStats.SetFirstMessageMs(caChannelStats->FirstMessageTs.MilliSeconds());
-                        protoOutputChannelStats.SetLastMessageMs(caChannelStats->LastMessageTs.MilliSeconds());
-                    }
-
-                    if (auto* outputInfo = OutputChannelsMap.FindPtr(protoOutputChannelStats.GetChannelId())) {
-                        protoOutputChannelStats.SetDstStageId(outputInfo->DstStageId);
-                        if (auto *outputChannelStats = outputInfo->Stats.Get()) {
-                            protoOutputChannelStats.SetBlockedTimeUs(outputChannelStats->BlockedTime.MicroSeconds());
-                            protoOutputChannelStats.SetBlockedByCapacity(outputChannelStats->BlockedByCapacity);
-                            protoOutputChannelStats.SetNoDstActorId(outputChannelStats->NoDstActorId);
+                for (auto& protoChannel : *protoTask->MutableOutputChannels()) {
+                    if (auto channelId = protoChannel.GetChannelId()) { // Profile or Full Single
+                        if (auto* channelStats = Channels->GetOutputChannelStats(channelId)) {
+                            protoChannel.SetResentMessages(channelStats->ResentMessages);
+                        }
+                    } else if (auto dstStageId = protoChannel.GetDstStageId()) { // Full Aggregated
+                        // TODO Optimize
+                        ui64 resentMessages = 0;
+                        for (const auto& [channelId, channel] : OutputChannelsMap) {
+                            if (channel.DstStageId == dstStageId) {
+                                if (auto* channelStats = Channels->GetOutputChannelStats(channelId)) {
+                                    resentMessages += channelStats->ResentMessages;
+                                }
+                            }
+                        }
+                        if (resentMessages) {
+                            protoChannel.SetResentMessages(resentMessages);
                         }
                     }
                 }
@@ -2127,14 +2155,9 @@ public:
 
         static_cast<TDerived*>(this)->FillExtraStats(dst, last);
 
-        if (last) {
-            BasicStats.reset();
-        }
         if (last && MemoryQuota) {
             MemoryQuota->ResetProfileStats();
         }
-
-        // Cerr << "STAAT\n" << dst->DebugString() << Endl;
     }
 
 protected:
@@ -2198,11 +2221,7 @@ protected:
     bool ResumeEventScheduled = false;
     NDqProto::EComputeState State;
     TIntrusivePtr<NYql::NDq::TRequestContext> RequestContext;
-
-    struct TBasicStats {
-        TDuration CpuTime;
-    };
-    std::unique_ptr<TBasicStats> BasicStats;
+    TDuration CpuTime;
 
     struct TProcessOutputsState {
         int Inflight = 0;

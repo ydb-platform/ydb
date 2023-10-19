@@ -295,7 +295,8 @@ private:
                         taskPtr,
                         computeActorType,
                         Options.TaskRunnerActorFactory,
-                        taskCounters));
+                        taskCounters,
+                        ev->Get()->Record.GetStatsMode()));
                 } else {
                     actor.Reset(CreateWorkerActor(
                         Options.RuntimeData,

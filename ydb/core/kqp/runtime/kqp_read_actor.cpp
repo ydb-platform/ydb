@@ -401,6 +401,8 @@ public:
         Y_ABORT_UNLESS(Arena);
         Y_ABORT_UNLESS(settings->GetArena() == Arena->Get());
 
+        IngressStats.Level = args.StatsLevel;
+
         TableId = TTableId(
             Settings->GetTable().GetTableId().GetOwnerId(),
             Settings->GetTable().GetTableId().GetTableId(),
@@ -1045,6 +1047,10 @@ public:
         return InputIndex;
     }
 
+    const NYql::NDq::TDqAsyncStats& GetIngressStats() const override {
+        return IngressStats;
+    }
+
     NMiniKQL::TBytesStatistics GetRowSize(const NUdf::TUnboxedValue* row) {
         NMiniKQL::TBytesStatistics rowStats{0, 0};
         size_t columnIndex = 0;
@@ -1431,6 +1437,7 @@ private:
 
     const TActorId ComputeActorId;
     const ui64 InputIndex;
+    NYql::NDq::TDqAsyncStats IngressStats;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;

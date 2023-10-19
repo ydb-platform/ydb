@@ -12,8 +12,8 @@ namespace NYql::NDq {
         factory.RegisterSource<Generic::TSource>("GenericSource", [credentialsFactory, genericClient](
                                                                       Generic::TSource&& settings,
                                                                       IDqAsyncIoFactory::TSourceArguments&& args) {
-            return CreateGenericReadActor(genericClient, std::move(settings), args.InputIndex, args.SecureParams,
-                                          args.TaskParams, args.ComputeActorId, credentialsFactory, args.HolderFactory);
+            return CreateGenericReadActor(genericClient, std::move(settings), args.InputIndex, args.StatsLevel,
+                                          args.SecureParams, args.TaskParams, args.ComputeActorId, credentialsFactory, args.HolderFactory);
         });
     }
 

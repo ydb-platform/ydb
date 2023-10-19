@@ -8,9 +8,10 @@ namespace NKikimr {
 namespace NKqp {
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateSequencerActor(ui64 inputIndex,
-    const NUdf::TUnboxedValue& input, const NActors::TActorId& computeActorId, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const NMiniKQL::THolderFactory& holderFactory, std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc,
-    NKikimrKqp::TKqpSequencerSettings&& settings, TIntrusivePtr<TKqpCounters>);
+    NYql::NDq::TCollectStatsLevel statsLevel, const NUdf::TUnboxedValue& input, const NActors::TActorId& computeActorId,
+    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc, NKikimrKqp::TKqpSequencerSettings&& settings,
+    TIntrusivePtr<TKqpCounters>);
 
 } // namespace NKqp
 } // namespace NKikimr

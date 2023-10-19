@@ -3,19 +3,12 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 
+#include "dq_async_stats.h" 
+
 namespace NYql::NDq {
 
-struct TDqInputStats {
-    // basic stats
-    ui64 Chunks = 0;
-    ui64 Bytes = 0;
-    ui64 RowsIn = 0;
-    ui64 RowsOut = 0;
-    TInstant FirstRowTs;
+struct TDqInputStats : public TDqAsyncStats {
 
-    // profile stats
-    ui64 RowsInMemory = 0;
-    ui64 MaxMemoryUsage = 0;
 };
 
 class IDqInput : public TSimpleRefCount<IDqInput> {
@@ -24,6 +17,7 @@ public:
 
     virtual ~IDqInput() = default;
 
+    virtual const TDqInputStats& GetPopStats() const = 0;
     virtual i64 GetFreeSpace() const = 0;
     virtual ui64 GetStoredBytes() const = 0;
 
@@ -35,9 +29,8 @@ public:
 
     virtual bool IsFinished() const = 0;
 
-    virtual const TDqInputStats* GetStats() const = 0;
-
     virtual NKikimr::NMiniKQL::TType* GetInputType() const = 0;
+
     inline TMaybe<ui32> GetInputWidth() const {
         auto type = GetInputType();
         if (type->IsMulti()) {

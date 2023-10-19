@@ -10,9 +10,10 @@ NActors::IActor* CreateComputeActor(
     NDq::IMemoryQuotaManager::TPtr memoryQuotaManager,
     const NActors::TActorId& executerId,
     const TString& operationId,
-    NYql::NDqProto::TDqTask* task,
+    NDqProto::TDqTask* task,
     const TString& computeActorType,
     const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
-    ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr);
+    ::NMonitoring::TDynamicCounterPtr taskCounters,
+    NDqProto::EDqStatsMode statsMode);
 
 } // namespace NYql

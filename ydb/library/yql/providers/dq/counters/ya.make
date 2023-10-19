@@ -6,6 +6,7 @@ PEERDIR(
 
 SRCS(
     counters.cpp
+    task_counters.cpp
 )
 
 

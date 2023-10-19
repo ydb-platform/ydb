@@ -1,7 +1,7 @@
 #include "task_command_executor.h"
 
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
-#include <ydb/library/yql/providers/dq/counters/counters.h>
+#include <ydb/library/yql/providers/dq/counters/task_counters.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 #include <ydb/library/yql/providers/dq/api/protos/task_command_executor.pb.h>
@@ -42,47 +42,60 @@ namespace NTaskRunnerProxy {
 static const int CurrentProtocolVersion = 5; // Calls for Sinks
 
 template<typename T>
-void ToProto(T* s1, const NDq::TDqInputChannelStats* ss)
+void ToProto(T& proto, const NDq::TDqAsyncStats& stats)
 {
-    s1->SetChannelId(ss->ChannelId);
-    s1->SetChunks(ss->Chunks);
-    s1->SetBytes(ss->Bytes);
-    s1->SetRowsIn(ss->RowsIn);
-    s1->SetRowsOut(ss->RowsOut);
-    s1->SetMaxMemoryUsage(ss->MaxMemoryUsage);
-    s1->SetDeserializationTimeUs(ss->DeserializationTime.MicroSeconds());
+    proto.SetBytes(stats.Bytes);
+    proto.SetRows(stats.Rows);
+    proto.SetChunks(stats.Chunks);
+    proto.SetSplits(stats.Splits);
+
+    proto.SetFirstMessageMs(stats.FirstMessageTs.MilliSeconds());
+    proto.SetPauseMessageMs(stats.PauseMessageTs.MilliSeconds());
+    proto.SetResumeMessageMs(stats.ResumeMessageTs.MilliSeconds());
+    proto.SetLastMessageMs(stats.LastMessageTs.MilliSeconds());
+    proto.SetWaitTimeUs(stats.WaitTime.MicroSeconds());
+    proto.SetWaitPeriods(stats.WaitPeriods);
 }
 
 template<typename T>
-void ToProto(T* s1, const NDq::TDqAsyncInputBufferStats* ss)
+void ToProto(T& proto, const NDq::IDqInputChannel& channel)
 {
-    s1->SetChunks(ss->Chunks);
-    s1->SetBytes(ss->Bytes);
-    s1->SetRowsIn(ss->RowsIn);
-    s1->SetRowsOut(ss->RowsOut);
-    s1->SetMaxMemoryUsage(ss->MaxMemoryUsage);
-    s1->SetInputIndex(ss->InputIndex);
+    proto.SetChannelId(channel.GetPushStats().ChannelId);
+    proto.SetSrcStageId(channel.GetPushStats().SrcStageId);
+    ToProto(*proto.MutablePush(), channel.GetPushStats());
+    ToProto(*proto.MutablePop(), channel.GetPopStats());
+    proto.SetMaxMemoryUsage(channel.GetPushStats().MaxMemoryUsage);
+    proto.SetDeserializationTimeUs(channel.GetPushStats().DeserializationTime.MicroSeconds());
 }
 
 template<typename T>
-void ToProto(T* s1, const NDq::TDqOutputChannelStats* ss)
+void ToProto(T& proto, const NDq::IDqAsyncInputBuffer& asyncBuffer)
 {
-    s1->SetChannelId(ss->ChannelId);
-    s1->SetChunks(ss->Chunks);
-    s1->SetBytes(ss->Bytes);
-    s1->SetRowsIn(ss->RowsIn);
-    s1->SetRowsOut(ss->RowsOut);
-    s1->SetMaxMemoryUsage(ss->MaxMemoryUsage);
+    proto.SetInputIndex(asyncBuffer.GetPushStats().InputIndex);
+    proto.SetIngressName(asyncBuffer.GetPushStats().Type);
+    ToProto(*proto.MutablePush(), asyncBuffer.GetPushStats());
+    ToProto(*proto.MutablePop(), asyncBuffer.GetPopStats());
+    proto.SetMaxMemoryUsage(asyncBuffer.GetPushStats().MaxMemoryUsage);
 }
 
 template<typename T>
-void ToProto(T* s1, const NDq::TDqAsyncOutputBufferStats* ss)
+void ToProto(T& proto, const NDq::IDqOutputChannel& channel)
 {
-    s1->SetChunks(ss->Chunks);
-    s1->SetBytes(ss->Bytes);
-    s1->SetRowsIn(ss->RowsIn);
-    s1->SetRowsOut(ss->RowsOut);
-    s1->SetMaxMemoryUsage(ss->MaxMemoryUsage);
+    proto.SetChannelId(channel.GetPopStats().ChannelId);
+    proto.SetDstStageId(channel.GetPopStats().DstStageId);
+    ToProto(*proto.MutablePush(), channel.GetPushStats());
+    ToProto(*proto.MutablePop(), channel.GetPopStats());
+    proto.SetMaxMemoryUsage(channel.GetPopStats().MaxMemoryUsage);
+}
+
+template<typename T>
+void ToProto(T& proto, const NDq::IDqAsyncOutputBuffer& asyncBuffer)
+{
+    proto.SetOutputIndex(asyncBuffer.GetPopStats().OutputIndex);
+    proto.SetEgressName(asyncBuffer.GetPopStats().Type);
+    ToProto(*proto.MutablePush(), asyncBuffer.GetPushStats());
+    ToProto(*proto.MutablePop(), asyncBuffer.GetPopStats());
+    proto.SetMaxMemoryUsage(asyncBuffer.GetPopStats().MaxMemoryUsage);
 }
 
 class TTaskCommandExecutor {
@@ -126,83 +139,52 @@ public:
 
         QueryStat.AddTaskRunnerStats(
             *Runner->GetStats(),
-            CurrentStats,
-            Runner->GetTaskId());
-        for (const auto& [inputId, _]: CurrentInputChannelsStats) {
-            UpdateInputChannelStats(inputId);
+            Runner->GetTaskId(), StageId);
+
+        auto stats = Runner->GetStats();
+        for (const auto& [stageId, stageChannels] : stats->OutputChannels) {
+            for (const auto& [id, channel] : stageChannels) {
+                UpdateOutputChannelStats(channel);
+            }
         }
-        for (const auto& [outputId, _]: CurrentOutputChannelsStats) {
-            UpdateOutputChannelStats(outputId);
+        for (const auto& [stageId, stageChannels] : stats->InputChannels) {
+            for (const auto& [id, channel] : stageChannels) {
+                UpdateInputChannelStats(channel);
+            }
         }
     }
 
-    void UpdateOutputChannelStats(ui64 channelId)
-    {
-        if (!Runner) {
-            return;
-        }
-        auto s = Runner->GetStats();
-        auto maybeOutputChannelStats = s->OutputChannels.find(channelId);
-        if (maybeOutputChannelStats == s->OutputChannels.end() || !maybeOutputChannelStats->second) {
-            return;
-        }
-        auto maybeOutputChannelOldStats = CurrentOutputChannelsStats.find(channelId);
-        if (maybeOutputChannelOldStats == CurrentOutputChannelsStats.end()) {
-            maybeOutputChannelOldStats = CurrentOutputChannelsStats.emplace_hint(
-                maybeOutputChannelOldStats, channelId, NDq::TDqOutputChannelStats(channelId));
-        }
+    void UpdateOutputChannelStats(NDq::IDqOutputChannel::TPtr channel) {
         QueryStat.AddOutputChannelStats(
-            *maybeOutputChannelStats->second,
-            maybeOutputChannelOldStats->second,
-            Runner->GetTaskId(), channelId);
+            channel->GetPushStats(),
+            channel->GetPopStats(),
+            Runner->GetTaskId(), StageId);
     }
 
-    void UpdateInputChannelStats(ui64 channelId)
+    void UpdateInputChannelStats(NDq::IDqInputChannel::TPtr channel)
     {
-        if (!Runner) {
-            return;
-        }
-        auto s = Runner->GetStats();
-        auto maybeInputChannelStats = s->InputChannels.find(channelId);
-        if (maybeInputChannelStats == s->InputChannels.end() || !maybeInputChannelStats->second) {
-            return;
-        }
-        auto maybeInputChannelOldStats = CurrentInputChannelsStats.find(channelId);
-        if (maybeInputChannelOldStats == CurrentInputChannelsStats.end()) {
-            maybeInputChannelOldStats = CurrentInputChannelsStats.emplace_hint(
-                maybeInputChannelOldStats, channelId, NDq::TDqInputChannelStats(channelId));
-        }
         QueryStat.AddInputChannelStats(
-            *maybeInputChannelStats->second,
-            maybeInputChannelOldStats->second,
-            Runner->GetTaskId(), channelId);
+            channel->GetPushStats(),
+            channel->GetPopStats(),
+            Runner->GetTaskId(), StageId);
     }
 
-    void UpdateSourceStats(ui64 inputIndex)
+    void UpdateSourceStats(NDq::IDqAsyncInputBuffer::TPtr source)
     {
-        if (!Runner) {
-            return;
-        }
-        auto s = Runner->GetStats();
-        auto maybeSourceStats = s->Sources.find(inputIndex);
-        if (maybeSourceStats == s->Sources.end() || !maybeSourceStats->second) {
-            return;
-        }
-        auto maybeSourceOldStats = CurrentSourcesStats.find(inputIndex);
-        if (maybeSourceOldStats == CurrentSourcesStats.end()) {
-            maybeSourceOldStats = CurrentSourcesStats.emplace_hint(
-                maybeSourceOldStats, inputIndex, NDq::TDqAsyncInputBufferStats(inputIndex));
-        }
         QueryStat.AddSourceStats(
-            *maybeSourceStats->second,
-            maybeSourceOldStats->second,
-            Runner->GetTaskId(), inputIndex);
+            source->GetPushStats(),
+            source->GetPopStats(),
+            Runner->GetTaskId(), StageId);
     }
 
     template<typename T>
     void UpdateStats(T& t) {
         UpdateStats();
-        QueryStat.FlushCounters(t);
+
+        TTaskCounters deltaStat;
+        deltaStat.TakeDeltaCounters(QueryStat, PrevStat);
+        deltaStat.FlushCounters(t);
+        QueryStat.ClearCounters();
 
         auto currentRusage = TRusage::Get();
         TRusage delta;
@@ -268,14 +250,14 @@ public:
         s->SetComputeCpuTimeUs(stats->ComputeCpuTime.MicroSeconds());
 
         // All run statuses metrics
-        s->SetPendingInputTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::PendingInput].MicroSeconds());
-        s->SetPendingOutputTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::PendingOutput].MicroSeconds());
-        s->SetFinishTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::Finished].MicroSeconds());
-        static_assert(NDq::TRunStatusTimeMetrics::StatusesCount == 3); // Add all statuses here
+        // s->SetPendingInputTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::PendingInput].MicroSeconds());
+        // s->SetPendingOutputTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::PendingOutput].MicroSeconds());
+        // s->SetFinishTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::Finished].MicroSeconds());
+        // static_assert(NDq::TRunStatusTimeMetrics::StatusesCount == 3); // Add all statuses here
 
-        //s->SetTotalTime(stats->TotalTime.MilliSeconds());
-        s->SetWaitTimeUs(stats->WaitTime.MicroSeconds());
-        s->SetWaitOutputTimeUs(stats->WaitOutputTime.MicroSeconds());
+        // s->SetTotalTime(stats->TotalTime.MilliSeconds());
+        // s->SetWaitTimeUs(stats->WaitTime.MicroSeconds());
+        // s->SetWaitOutputTimeUs(stats->WaitOutputTime.MicroSeconds());
 
         //s->SetMkqlTotalNodes(stats->MkqlTotalNodes);
         //s->SetMkqlCodegenFunctions(stats->MkqlCodegenFunctions);
@@ -285,17 +267,22 @@ public:
         //s->SetCodeGenFinalizeTime(stats->CodeGenFinalizeTime);
         //s->SetCodeGenModulePassTime(stats->CodeGenModulePassTime);
 
-        for (const auto& [id, ss] : stats->OutputChannels) {
-            ToProto(s->AddOutputChannels(), ss);
+        for (const auto& [stageId, stageChannels] : stats->OutputChannels) {
+            for (const auto& [id, channel] : stageChannels) {
+                ToProto(*s->AddOutputChannels(), *channel);
+            }
         }
 
-        for (const auto& [id, ss] : stats->InputChannels) {
-            ToProto(s->AddInputChannels(), ss);
+        for (const auto& [stageId, stageChannels] : stats->InputChannels) {
+            for (const auto& [id, channel] : stageChannels) {
+                ToProto(*s->AddInputChannels(), *channel);
+            }
         }
 
-        for (const auto& [id, ss] : stats->Sources) {
-            ToProto(s->AddSources(), ss);
+        for (const auto& [id, source] : stats->Sources) {
+            ToProto(*s->AddSources(), *source);
         }
+
         return response;
     }
 
@@ -355,7 +342,7 @@ public:
 
                 auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
                 channel->Push(std::move(data));
-                UpdateInputChannelStats(channelId);
+                UpdateInputChannelStats(channel);
                 break;
             }
             case NDqProto::TCommandHeader::PUSH_SOURCE: {
@@ -400,28 +387,31 @@ public:
                 }
 
                 source->Push(std::move(buffer), request.GetSpace());
-                UpdateSourceStats(channelId);
+                UpdateSourceStats(source);
                 break;
             }
             case NDqProto::TCommandHeader::FINISH: {
                 Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                Runner->GetInputChannel(channelId)->Finish();
-                UpdateInputChannelStats(channelId);
+                auto channel = Runner->GetInputChannel(channelId);
+                channel->Finish();
+                UpdateInputChannelStats(channel);
                 break;
             }
             case NDqProto::TCommandHeader::FINISH_OUTPUT: {
                 Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                Runner->GetOutputChannel(channelId)->Finish();
-                UpdateOutputChannelStats(channelId);
+                auto channel = Runner->GetOutputChannel(channelId);
+                channel->Finish();
+                UpdateOutputChannelStats(channel);
                 break;
             }
             case NDqProto::TCommandHeader::FINISH_SOURCE: {
                 Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                Runner->GetSource(channelId)->Finish();
-                UpdateSourceStats(channelId);
+                auto source = Runner->GetSource(channelId);
+                source->Finish();
+                UpdateSourceStats(source);
                 break;
             }
             case NDqProto::TCommandHeader::DROP_OUTPUT: {
@@ -437,8 +427,9 @@ public:
             case NDqProto::TCommandHeader::TERMINATE_OUTPUT: {
                 Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                Runner->GetOutputChannel(channelId)->Terminate();
-                UpdateOutputChannelStats(channelId);
+                auto channel = Runner->GetOutputChannel(channelId);
+                channel->Terminate();
+                UpdateOutputChannelStats(channel);
                 break;
             }
             case NDqProto::TCommandHeader::GET_STORED_BYTES: {
@@ -475,8 +466,13 @@ public:
                 response.SetResult(channel->Pop(batch));
                 YQL_ENSURE(!batch.IsOOB());
                 *response.MutableData() = std::move(batch.Proto);
-                UpdateOutputChannelStats(channelId);
-                QueryStat.FlushCounters(response);
+                UpdateOutputChannelStats(channel);
+
+                TTaskCounters deltaStat;
+                deltaStat.TakeDeltaCounters(QueryStat, PrevStat);
+                deltaStat.FlushCounters(response);
+                QueryStat.ClearCounters();
+
                 response.MutableStats()->PackFrom(GetStats(taskId));
                 response.Save(&output);
 
@@ -594,27 +590,24 @@ public:
             case NDqProto::TCommandHeader::GET_STATS_INPUT: {
                 Y_ENSURE(header.GetVersion() >= 3);
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                auto ss = Runner->GetInputChannel(channelId)->GetStats();
                 NDqProto::TGetStatsInputResponse response;
-                ToProto(response.MutableStats(), ss);
+                ToProto(*response.MutableStats(), *Runner->GetInputChannel(channelId));
                 response.Save(&output);
                 break;
             }
             case NDqProto::TCommandHeader::GET_STATS_SOURCE: {
                 Y_ENSURE(header.GetVersion() >= 4);
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                auto ss = Runner->GetSource(channelId)->GetStats();
                 NDqProto::TGetStatsSourceResponse response;
-                ToProto(response.MutableStats(), ss);
+                ToProto(*response.MutableStats(), *Runner->GetSource(channelId));
                 response.Save(&output);
                 break;
             }
             case NDqProto::TCommandHeader::GET_STATS_OUTPUT: {
                 Y_ENSURE(header.GetVersion() >= 3);
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                auto ss = Runner->GetOutputChannel(channelId)->GetStats();
                 NDqProto::TGetStatsOutputResponse response;
-                ToProto(response.MutableStats(), ss);
+                ToProto(*response.MutableStats(), *Runner->GetOutputChannel(channelId));
                 response.Save(&output);
                 break;
             }
@@ -677,9 +670,8 @@ public:
                 Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
                 Y_ENSURE(taskId == Runner->GetTaskId());
 
-                auto* stats = Runner->GetSink(channelId)->GetStats();
                 NDqProto::TSinkStatsResponse response;
-                ToProto(response.MutableStats(), stats);
+                ToProto(*response.MutableStats(), *Runner->GetSink(channelId));
                 response.Save(&output);
                 break;
             }
@@ -705,6 +697,7 @@ public:
 
     template<typename T>
     void Prepare(const NDq::TDqTaskSettings& task, const T& taskMeta, TPipedOutput& output) {
+        this->StageId = task.GetStageId();
         NYql::NDqProto::TPrepareResponse result;
         result.SetResult(true); // COMPAT(aozeritsky) YQL-14268
 
@@ -754,8 +747,7 @@ public:
 
         QueryStat.Measure<void>("MakeDqTaskRunner", [&]() {
             NDq::TDqTaskRunnerSettings settings;
-            settings.CollectBasicStats = true;
-            settings.CollectProfileStats = true;
+            settings.StatsMode = NYql::NDqProto::DQ_STATS_MODE_PROFILE;
             settings.TerminateOnError = TerminateOnError;
             for (const auto& x: taskMeta.GetSecureParams()) {
                 settings.SecureParams[x.first] = x.second;
@@ -787,18 +779,15 @@ public:
     NKikimr::NMiniKQL::IStatsRegistry* JobStats;
     bool TerminateOnError;
     TIntrusivePtr<NDq::IDqTaskRunner> Runner;
-    TCounters QueryStat;
+    ui32 StageId = 0;
+    TTaskCounters QueryStat;
+    TTaskCounters PrevStat;
     TDqConfiguration::TPtr DqConfiguration = MakeIntrusive<TDqConfiguration>();
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     NDq::TDqTaskRunnerContext Ctx;
     const NKikimr::NMiniKQL::TUdfModuleRemappings EmptyRemappings;
 
     TRusage Rusage;
-
-    NDq::TDqTaskRunnerStats CurrentStats;
-    std::unordered_map<ui64, NDq::TDqInputChannelStats> CurrentInputChannelsStats;
-    std::unordered_map<ui64, NDq::TDqAsyncInputBufferStats> CurrentSourcesStats;
-    std::unordered_map<ui64, NDq::TDqOutputChannelStats> CurrentOutputChannelsStats;
 
     i64 LastCommand = -1;
     i64 LastVersion = -1;

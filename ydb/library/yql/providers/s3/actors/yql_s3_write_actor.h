@@ -16,6 +16,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     IHTTPGateway::TPtr gateway,
     NS3::TSink&& params,
     ui64 outputIndex,
+    TCollectStatsLevel statsLevel,
     const TTxId& txId,
     const TString& prefix,
     const THashMap<TString, TString>& secureParams,

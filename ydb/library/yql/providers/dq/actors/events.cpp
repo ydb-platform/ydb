@@ -41,9 +41,10 @@ namespace NYql::NDqs {
         NActors::ActorIdToProto(resultId, Record.MutableResultId());
     }
 
-    TEvReadyState::TEvReadyState(NActors::TActorId sourceId, TString type) {
+    TEvReadyState::TEvReadyState(NActors::TActorId sourceId, TString type, NYql::NDqProto::EDqStatsMode statsMode) {
         NActors::ActorIdToProto(sourceId, Record.MutableSourceId());
         *Record.MutableResultType() = std::move(type);
+        Record.SetStatsMode(statsMode);
     }
 
     TEvReadyState::TEvReadyState(NDqProto::TReadyState&& proto) {

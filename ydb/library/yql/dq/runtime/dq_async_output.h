@@ -8,20 +8,10 @@
 namespace NYql::NDq {
 
 struct TDqAsyncOutputBufferStats : TDqOutputStats {
-    const ui64 OutputIndex;
-
-    explicit TDqAsyncOutputBufferStats(ui64 outputIndex)
-        : OutputIndex(outputIndex) {}
-
-    template<typename T>
-    void FromProto(const T& f)
-    {
-        this->Chunks = f.GetChunks();
-        this->Bytes = f.GetBytes();
-        this->RowsIn = f.GetRowsIn();
-        this->RowsOut = f.GetRowsOut();
-        this->MaxMemoryUsage = f.GetMaxMemoryUsage();
-    }
+    ui64 OutputIndex = 0;
+    TString Type;
+    ui64 MaxMemoryUsage = 0;
+    ui64 MaxRowsInMemory = 0;
 };
 
 class IDqAsyncOutputBuffer : public IDqOutput {
@@ -29,6 +19,7 @@ public:
     using TPtr = TIntrusivePtr<IDqAsyncOutputBuffer>;
 
     virtual ui64 GetOutputIndex() const = 0;
+    virtual const TDqAsyncOutputBufferStats& GetPopStats() const = 0;
 
     // Pop data to send. Return estimated size of returned data.
     [[nodiscard]]
@@ -39,11 +30,9 @@ public:
     // Pop chechpoint. Checkpoints may be taken from sink even after it is finished.
     [[nodiscard]]
     virtual bool Pop(NDqProto::TCheckpoint& checkpoint) = 0;
-
-    virtual const TDqAsyncOutputBufferStats* GetStats() const = 0;
 };
 
-IDqAsyncOutputBuffer::TPtr CreateDqAsyncOutputBuffer(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes,
-    bool collectProfileStats);
+IDqAsyncOutputBuffer::TPtr CreateDqAsyncOutputBuffer(ui64 outputIndex, const TString& type, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes,
+    TCollectStatsLevel level);
 
 } // namespace NYql::NDq

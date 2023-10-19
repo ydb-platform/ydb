@@ -25,10 +25,10 @@ static constexpr ui64 MAX_SHARD_RETRIES = 10;
 
 class TKqpStreamLookupActor : public NActors::TActorBootstrapped<TKqpStreamLookupActor>, public NYql::NDq::IDqComputeActorAsyncInput {
 public:
-    TKqpStreamLookupActor(ui64 inputIndex, const NUdf::TUnboxedValue& input, const NActors::TActorId& computeActorId,
-        const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
-        std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc, NKikimrKqp::TKqpStreamLookupSettings&& settings,
-        TIntrusivePtr<TKqpCounters> counters)
+    TKqpStreamLookupActor(ui64 inputIndex, NYql::NDq::TCollectStatsLevel statsLevel, const NUdf::TUnboxedValue& input,
+        const NActors::TActorId& computeActorId, const NMiniKQL::TTypeEnvironment& typeEnv,
+        const NMiniKQL::THolderFactory& holderFactory, std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc,
+        NKikimrKqp::TKqpStreamLookupSettings&& settings, TIntrusivePtr<TKqpCounters> counters)
         : LogPrefix(TStringBuilder() << "StreamLookupActor, inputIndex: " << inputIndex << ", CA Id " << computeActorId)
         , InputIndex(inputIndex)
         , Input(input)
@@ -41,7 +41,8 @@ public:
         , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), typeEnv, holderFactory))
         , Counters(counters)
     {
-    };
+        IngressStats.Level = statsLevel;
+    }
 
     virtual ~TKqpStreamLookupActor() {
         if (Alloc) {
@@ -150,6 +151,10 @@ private:
 
     ui64 GetInputIndex() const final {
         return InputIndex;
+    }
+
+    const NYql::NDq::TDqAsyncStats& GetIngressStats() const final {
+        return IngressStats;
     }
 
     void PassAway() final {
@@ -466,6 +471,7 @@ private:
 private:
     const TString LogPrefix;
     const ui64 InputIndex;
+    NYql::NDq::TDqAsyncStats IngressStats;
     NUdf::TUnboxedValue Input;
     const NActors::TActorId ComputeActorId;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
@@ -492,12 +498,12 @@ private:
 } // namespace
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateStreamLookupActor(ui64 inputIndex,
-    const NUdf::TUnboxedValue& input, const NActors::TActorId& computeActorId, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const NMiniKQL::THolderFactory& holderFactory, std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc,
-    NKikimrKqp::TKqpStreamLookupSettings&& settings,
+    NYql::NDq::TCollectStatsLevel statsLevel, const NUdf::TUnboxedValue& input, const NActors::TActorId& computeActorId,
+    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc, NKikimrKqp::TKqpStreamLookupSettings&& settings,
     TIntrusivePtr<TKqpCounters> counters) {
-    auto actor = new TKqpStreamLookupActor(inputIndex, input, computeActorId, typeEnv, holderFactory, alloc,
-        std::move(settings), counters);
+    auto actor = new TKqpStreamLookupActor(inputIndex, statsLevel, input, computeActorId, typeEnv, holderFactory,
+        alloc, std::move(settings), counters);
     return {actor, actor};
 }
 

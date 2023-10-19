@@ -5,11 +5,6 @@
 
 namespace NYql {
 
-// allow to construct TListEntry in the space for IBoxedValue
-static_assert(sizeof(NKikimr::NUdf::IBoxedValue) >= sizeof(NKikimr::NMiniKQL::TAllocState::TListEntry));
-
-constexpr size_t PallocHdrSize = sizeof(void*) + sizeof(NKikimr::NUdf::IBoxedValue);
-
 inline NKikimr::NUdf::TUnboxedValuePod ScalarDatumToPod(Datum datum) {
     return NKikimr::NUdf::TUnboxedValuePod((ui64)datum);
 }
@@ -22,27 +17,19 @@ inline Datum ScalarDatumFromItem(const NKikimr::NUdf::TBlockItem& value) {
     return (Datum)value.As<ui64>();
 }
 
-class TBoxedValueWithFree : public NKikimr::NUdf::TBoxedValueBase {
-public:
-    void operator delete(void *mem) noexcept {
-        return NKikimr::NMiniKQL::MKQLFreeDeprecated(mem);
-    }
-};
-
 inline NKikimr::NUdf::TUnboxedValuePod PointerDatumToPod(Datum datum) {
-    auto original = (char*)datum - PallocHdrSize;
+    auto header = ((NKikimr::NMiniKQL::TMkqlPAllocHeader*)datum) - 1;
     // remove this block from list
-    ((NKikimr::NMiniKQL::TAllocState::TListEntry*)original)->Unlink();
-
-    auto raw = (NKikimr::NUdf::IBoxedValue*)original;
-    new(raw) TBoxedValueWithFree();
+    header->U.Entry.Unlink();
+    NKikimr::NUdf::IBoxedValue* raw = &header->U.Boxed;
+    new(raw) NKikimr::NMiniKQL::TBoxedValueWithFree();
     NKikimr::NUdf::IBoxedValuePtr ref(raw);
     return NKikimr::NUdf::TUnboxedValuePod(std::move(ref));
 }
 
 inline NKikimr::NUdf::TUnboxedValuePod OwnedPointerDatumToPod(Datum datum) {
-    auto original = (char*)datum - PallocHdrSize;
-    auto raw = (NKikimr::NUdf::IBoxedValue*)original;
+    auto header = ((NKikimr::NMiniKQL::TMkqlPAllocHeader*)datum) - 1;
+    NKikimr::NUdf::IBoxedValue* raw = &header->U.Boxed;
     NKikimr::NUdf::IBoxedValuePtr ref(raw);
     return NKikimr::NUdf::TUnboxedValuePod(std::move(ref));
 }
@@ -50,11 +37,12 @@ inline NKikimr::NUdf::TUnboxedValuePod OwnedPointerDatumToPod(Datum datum) {
 class TVPtrHolder {
 public:
     TVPtrHolder() {
-        new(Dummy) TBoxedValueWithFree();
+        new(Dummy) NKikimr::NMiniKQL::TBoxedValueWithFree();
     }
 
     static bool IsBoxedVPtr(Datum ptr) {
-        return *(const uintptr_t*)((char*)ptr - PallocHdrSize) == *(const uintptr_t*)Instance.Dummy;
+        auto header = ((NKikimr::NMiniKQL::TMkqlPAllocHeader*)ptr) - 1;
+        return *(const uintptr_t*)&header->U.Boxed == *(const uintptr_t*)Instance.Dummy;
     }
 
 private:
@@ -77,7 +65,7 @@ inline NKikimr::NUdf::TUnboxedValuePod AnyDatumToPod(Datum datum, bool passByVal
 }
 
 inline Datum PointerDatumFromPod(const NKikimr::NUdf::TUnboxedValuePod& value) {
-    return (Datum)(((const char*)value.AsBoxed().Get()) + PallocHdrSize);
+    return (Datum)(((const NKikimr::NMiniKQL::TMkqlPAllocHeader*)value.AsBoxed().Get()) + 1);
 }
 
 inline Datum PointerDatumFromItem(const NKikimr::NUdf::TBlockItem& value) {

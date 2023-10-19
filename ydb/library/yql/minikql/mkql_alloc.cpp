@@ -36,7 +36,8 @@ TAllocState::TAllocState(const TSourceLocation& location, const NKikimr::TAligne
 void TAllocState::CleanupPAllocList(TListEntry* root) {
     for (auto curr = root->Right; curr != root; ) {
         auto next = curr->Right;
-        MKQLFreeDeprecated(curr); // may free items from OffloadedBlocksRoot
+        auto size = ((TMkqlPAllocHeader*)curr)->Size;
+        MKQLFreeWithSize(curr, size, EMemorySubPool::Default); // may free items from OffloadedBlocksRoot
         curr = next;
     }
 

@@ -104,20 +104,20 @@ NUdf::TUnboxedValue CreatePgString(i32 typeLen, ui32 targetTypeId, TStringBuf da
 }
 
 void *MkqlAllocSetAlloc(MemoryContext context, Size size) {
-    auto fullSize = size + PallocHdrSize;
-    auto ptr = (char *)MKQLAllocDeprecated(fullSize);
-    auto ret = (void*)(ptr + PallocHdrSize);
-    *(MemoryContext *)(((char *)ret) - sizeof(void *)) = context;
-    ((TAllocState::TListEntry*)ptr)->Link(TlsAllocState->CurrentPAllocList);
-    return ret;
+    auto fullSize = size + sizeof(TMkqlPAllocHeader);
+    auto header = (TMkqlPAllocHeader*)MKQLAllocWithSize(fullSize, EMemorySubPool::Default);
+    header->Size = size;
+    header->U.Entry.Link(TlsAllocState->CurrentPAllocList);
+    header->Self = context;
+    return header + 1;
 }
 
 void MkqlAllocSetFree(MemoryContext context, void* pointer) {
     if (pointer) {
-        auto original = (void*)((char*)pointer - PallocHdrSize);
+        auto header = ((TMkqlPAllocHeader*)pointer) - 1;
         // remove this block from list
-        ((TAllocState::TListEntry*)original)->Unlink();
-        MKQLFreeDeprecated(original);
+        header->U.Entry.Unlink();
+        MKQLFreeWithSize(header, header->Size, EMemorySubPool::Default);
     }
 }
 
@@ -127,12 +127,13 @@ void* MkqlAllocSetRealloc(MemoryContext context, void* pointer, Size size) {
         return nullptr;
     }
 
-    void* ret = MkqlAllocSetAlloc(context, size);
+    auto ret = MkqlAllocSetAlloc(context, size);
     if (pointer) {
-        memmove(ret, pointer, size);
+        auto header = ((TMkqlPAllocHeader*)pointer) - 1;
+        memmove(ret, pointer, header->Size);
+        MkqlAllocSetFree(context, pointer);
     }
 
-    MkqlAllocSetFree(context, pointer);
     return ret;
 }
 
@@ -1107,10 +1108,10 @@ NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod value, TMaybe<N
     case NUdf::EDataSlot::String:
     case NUdf::EDataSlot::Utf8:
         if (IsCString) {
-            auto x = (const char*)value.AsBoxed().Get() + PallocHdrSize;
+            auto x = (const char*)PointerDatumFromPod(value);
             return MakeString(TStringBuf(x));
         } else {
-            auto x = (const text*)((const char*)value.AsBoxed().Get() + PallocHdrSize);
+            auto x = (const text*)PointerDatumFromPod(value);
             return MakeString(GetVarBuf(x));
         }
     default:
@@ -3533,12 +3534,12 @@ public:
     }
 
     NUdf::TStringRef AsCStringBuffer(const NUdf::TUnboxedValue& value) const override {
-        auto x = (const char*)value.AsBoxed().Get() + PallocHdrSize;
+        auto x = (const char*)PointerDatumFromPod(value);
         return { x, strlen(x) + 1};
     }
 
     NUdf::TStringRef AsTextBuffer(const NUdf::TUnboxedValue& value) const override {
-        auto x = (const text*)((const char*)value.AsBoxed().Get() + PallocHdrSize);
+        auto x = (const text*)PointerDatumFromPod(value);
         return { (const char*)x, GetFullVarSize(x) };
     }
 
@@ -3557,7 +3558,7 @@ public:
     }
 
     NUdf::TStringRef AsFixedStringBuffer(const NUdf::TUnboxedValue& value, ui32 length) const override {
-        auto x = (const char*)value.AsBoxed().Get() + PallocHdrSize;
+        auto x = (const char*)PointerDatumFromPod(value);
         return { x, length };
     }
 };

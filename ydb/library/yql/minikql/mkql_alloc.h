@@ -139,6 +139,29 @@ private:
     TAllocState::TListEntry* Prev = nullptr;
 };
 
+// TListEntry and IBoxedValue use the same place
+static_assert(sizeof(NUdf::IBoxedValue) == sizeof(TAllocState::TListEntry));
+
+class TBoxedValueWithFree : public NUdf::TBoxedValueBase {
+public:
+    void operator delete(void *mem) noexcept;
+};
+
+struct TMkqlPAllocHeader {
+    union {
+        TAllocState::TListEntry Entry;
+        TBoxedValueWithFree Boxed;
+    } U;
+
+    size_t Size;
+    void* Self; // should be placed right before pointer to allocated area, see GetMemoryChunkContext
+};
+
+static_assert(sizeof(TMkqlPAllocHeader) == 
+    sizeof(size_t) +
+    sizeof(TAllocState::TListEntry) +
+    sizeof(void*), "Padding is not allowed");
+
 class TScopedAlloc {
 public:
     explicit TScopedAlloc(const TSourceLocation& location,
@@ -289,7 +312,7 @@ inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state, const EMemoryS
 
 void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySubPool mPool) noexcept;
 
-inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool = EMemorySubPool::Default) noexcept {
+inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool) noexcept {
     if (!mem) {
         return;
     }
@@ -346,7 +369,7 @@ inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state,
     MKQLFreeSlow(header, state, mPool);
 }
 
-inline void* MKQLAllocDeprecated(size_t sz, const EMemorySubPool mPool = EMemorySubPool::Default) {
+inline void* MKQLAllocDeprecated(size_t sz, const EMemorySubPool mPool) {
     return MKQLAllocFastDeprecated(sz, TlsAllocState, mPool);
 }
 
@@ -658,6 +681,10 @@ private:
     size_t IndexInLastPage;
 };
 
+inline void TBoxedValueWithFree::operator delete(void *mem) noexcept {
+    auto size = ((TMkqlPAllocHeader*)mem)->Size;
+    return MKQLFreeWithSize(mem, size, EMemorySubPool::Default);
+}
 
 } // NMiniKQL
 

@@ -361,6 +361,7 @@
   - __filesystem/file_time_type.h:                contrib/libs/cxxsupp/libcxx/include/__filesystem/file_time_type.h
   - __format/concepts.h:                          contrib/libs/cxxsupp/libcxx/include/__format/concepts.h
   - __format/enable_insertable.h:                 contrib/libs/cxxsupp/libcxx/include/__format/enable_insertable.h
+  - __format/format_arg_store.h:                  contrib/libs/cxxsupp/libcxx/include/__format/format_arg_store.h
   - __functional/binary_function.h:               contrib/libs/cxxsupp/libcxx/include/__functional/binary_function.h
   - __functional/binary_negate.h:                 contrib/libs/cxxsupp/libcxx/include/__functional/binary_negate.h
   - __functional/bind.h:                          contrib/libs/cxxsupp/libcxx/include/__functional/bind.h

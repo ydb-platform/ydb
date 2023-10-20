@@ -214,9 +214,8 @@ TExprNode::TPtr MergeAggregateTraits(const TExprNode::TPtr& node, TExprContext& 
         bool operator()(const TMergeKey& a, const TMergeKey& b) const {
             size_t len = std::min(a.first.size(), b.first.size());
             for (size_t i = 0; i < len; ++i) {
-                int cmp = CompareNodes(*a.first[i], *b.first[i]);
-                if (cmp) {
-                    return cmp < 0;
+                if (a.first[i] != b.first[i]) {
+                    return a.first[i].Get() < b.first[i].Get();
                 }
             }
             if (a.first.size() != b.first.size()) {
@@ -227,6 +226,7 @@ TExprNode::TPtr MergeAggregateTraits(const TExprNode::TPtr& node, TExprContext& 
     };
     TExprNodeList resultAggTuples;
     TMap<TMergeKey, TVector<TCoAggregateTuple>, TCompareMergeKey> tuplesByKey;
+    TVector<TMergeKey> mergeKeys;
     for (const auto& aggTuple : self.Handlers()) {
         auto maybeAggTraits = aggTuple.Trait().Maybe<TCoAggregationTraits>();
         if (!maybeAggTraits || !maybeAggTraits.Cast().FinishHandler().Ref().IsComplete() || !aggTuple.ColumnName().Ref().IsAtom()) {
@@ -243,13 +243,19 @@ TExprNode::TPtr MergeAggregateTraits(const TExprNode::TPtr& node, TExprContext& 
             distinctKey = aggTuple.DistinctName().Cast().Value();
         }
 
-        auto& tuples = tuplesByKey[TMergeKey{ std::move(aggTraits), distinctKey }];
+        TMergeKey key(std::move(aggTraits), distinctKey);
+        auto& tuples = tuplesByKey[key];
+        if (tuples.empty()) {
+            mergeKeys.push_back(key);
+        }
         tuples.push_back(aggTuple);
     }
 
     bool merged = false;
-    for (auto& it : tuplesByKey) {
-        auto& tuples = it.second;
+    for (auto& key : mergeKeys) {
+        auto it = tuplesByKey.find(key);
+        YQL_ENSURE(it != tuplesByKey.end());
+        auto& tuples = it->second;
         if (tuples.size() == 1) {
             resultAggTuples.push_back(tuples.front().Ptr());
             continue;

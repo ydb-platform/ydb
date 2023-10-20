@@ -54,7 +54,7 @@ private:
 
     bool ActiveCleanup = false;
     THashSet<NOlap::TPortionAddress> TtlPortions;
-
+    YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
 public:
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
     THashSet<NOlap::TPortionAddress> GetConflictCompactionPortions() const;

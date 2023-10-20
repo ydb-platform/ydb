@@ -53,6 +53,7 @@ void TBackgroundController::CheckDeadlinesIndexation() {
 }
 
 void TBackgroundController::StartIndexing(const NOlap::TColumnEngineChanges& changes) {
+    LastIndexationInstant = TMonotonic::Now();
     Y_ABORT_UNLESS(ActiveIndexationTasks.emplace(changes.GetTaskIdentifier(), TMonotonic::Now()).second);
 }
 

@@ -67,6 +67,8 @@ struct TSettings {
     static constexpr ui32 MAX_ACTIVE_COMPACTIONS = 1;
 
     static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
+    static constexpr TDuration GuaranteeIndexationInterval = TDuration::Seconds(0);
+    static constexpr i64 GuaranteeIndexationStartBytesLimit = (i64)5 * 1024 * 1024 * 1024;
 
     TControlWrapper BlobWriteGrouppingEnabled;
     TControlWrapper CacheDataAfterIndexing;
@@ -376,7 +378,6 @@ private:
     ui64 OwnerPathId = 0;
     ui64 TabletTxCounter = 0;
     ui64 StatsReportRound = 0;
-    ui32 SkippedIndexations = TSettings::MAX_INDEXATIONS_TO_SKIP; // Force indexation on tablet init
     TString OwnerPath;
 
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;

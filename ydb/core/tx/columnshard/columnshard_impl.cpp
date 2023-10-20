@@ -711,7 +711,7 @@ protected:
     }
     virtual bool DoOnError(const TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());
-        AFL_VERIFY(false)("blob_id", range);
+        AFL_VERIFY(false)("blob_id", range)("status", status.GetStatus());
         TxEvent->SetPutStatus(NKikimrProto::ERROR);
         TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
         return false;
@@ -729,15 +729,7 @@ public:
 };
 
 void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dataToIndex, const i64 bytesToIndex) {
-    if (bytesToIndex < Limits.MinInsertBytes && dataToIndex.size() < TLimits::MIN_SMALL_BLOBS_TO_INSERT) {
-        if (!bytesToIndex || SkippedIndexations < TSettings::MAX_INDEXATIONS_TO_SKIP) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("bytes", bytesToIndex)("blobs_count", dataToIndex.size());
-            ++SkippedIndexations;
-            return;
-        }
-    }
     CSCounters.IndexationInput(bytesToIndex);
-    SkippedIndexations = 0;
 
     std::vector<NOlap::TInsertedData> data;
     data.reserve(dataToIndex.size());
@@ -771,9 +763,20 @@ void TColumnShard::SetupIndexation() {
             ("count", BackgroundController.GetIndexingActiveCount())("insert_overload_size", InsertTable->GetCountersCommitted().Bytes)
             ("indexing_debug", BackgroundController.DebugStringIndexation());
         return;
-    } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start_indexation_tasks")("insert_overload_size", InsertTable->GetCountersCommitted().Bytes);
     }
+
+    bool force = false;
+    if (InsertTable->GetPathPriorities().size() && InsertTable->GetPathPriorities().rbegin()->first.GetCategory() == NOlap::TPathInfoIndexPriority::EIndexationPriority::PreventOverload) {
+        force = true;
+    }
+    if (!force && InsertTable->GetCountersCommitted().Bytes < TSettings::GuaranteeIndexationStartBytesLimit &&
+        TMonotonic::Now() - BackgroundController.GetLastIndexationInstant() < TSettings::GuaranteeIndexationInterval) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "not_enough_data_and_too_frequency")
+            ("insert_size", InsertTable->GetCountersCommitted().Bytes);
+        return;
+    }
+
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start_indexation_tasks")("insert_overload_size", InsertTable->GetCountersCommitted().Bytes);
     CSCounters.OnSetupIndexation();
     i64 bytesToIndex = 0;
     std::vector<const NOlap::TInsertedData*> dataToIndex;

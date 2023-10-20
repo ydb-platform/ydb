@@ -6,18 +6,17 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(abstract)
-add_subdirectory(intervals)
-add_subdirectory(lbuckets)
-add_subdirectory(levels)
 
-add_library(engines-storage-optimizer INTERFACE)
-target_link_libraries(engines-storage-optimizer INTERFACE
-  contrib-libs-linux-headers
+add_library(storage-optimizer-lbuckets)
+target_link_libraries(storage-optimizer-lbuckets PUBLIC
   contrib-libs-cxxsupp
   yutil
-  storage-optimizer-abstract
-  storage-optimizer-intervals
-  storage-optimizer-levels
-  storage-optimizer-lbuckets
+  libs-apache-arrow
+  ydb-core-protos
+  core-formats-arrow
+  engines-changes-abstract
+)
+target_sources(storage-optimizer-lbuckets PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/optimizer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/counters.cpp
 )

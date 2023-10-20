@@ -19,7 +19,7 @@ protected:
 public:
     using TBase::TBase;
 
-    void AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position, const bool include = true);
+    void AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position, const bool include = true, const bool validationDuplications = true);
 
     virtual TString TypeString() const override {
         return StaticTypeName();

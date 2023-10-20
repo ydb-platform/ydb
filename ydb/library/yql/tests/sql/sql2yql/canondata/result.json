@@ -10527,6 +10527,13 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1817427/5ebfc414781230f90b896d4ed143ea00cf4c7aaa/resource.tar.gz#test_sql2yql.test_pg-aggregate_distinct_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-aggregate_emit_agg_apply]": [
+        {
+            "checksum": "6fe3e9102614378326fdef1ebdc3d9f7",
+            "size": 724,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1599023/83bd1e70db2f3ff932bdff8520b19de955cc6ddf/resource.tar.gz#test_sql2yql.test_pg-aggregate_emit_agg_apply_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-aggregate_factory]": [
         {
             "checksum": "9807c37c4603181699c3903e43504ae1",
@@ -15740,20 +15747,6 @@
             "checksum": "ac772591f007980437e9a88f1d532ce3",
             "size": 1404,
             "uri": "https://storage.yandex-team.ru/get-devtools/1880306/50efd53ad53129cbd4f94db66527b230b24320d3/resource.tar.gz#test_sql2yql.test_view-file_eval_/sql.yql"
-        }
-    ],
-    "test_sql2yql.test[view-file_inner]": [
-        {
-            "checksum": "d423dd9f7dc961eef7b7d4c424058618",
-            "size": 1405,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1880306/50efd53ad53129cbd4f94db66527b230b24320d3/resource.tar.gz#test_sql2yql.test_view-file_inner_/sql.yql"
-        }
-    ],
-    "test_sql2yql.test[view-file_outer]": [
-        {
-            "checksum": "34859678471993ed589f818c72aeacb1",
-            "size": 1405,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1880306/50efd53ad53129cbd4f94db66527b230b24320d3/resource.tar.gz#test_sql2yql.test_view-file_outer_/sql.yql"
         }
     ],
     "test_sql2yql.test[view-init_view_after_eval]": [
@@ -30335,20 +30328,6 @@
             "checksum": "9438613af791a6e76b9123d29b00b57f",
             "size": 115,
             "uri": "https://storage.yandex-team.ru/get-devtools/1880306/50efd53ad53129cbd4f94db66527b230b24320d3/resource.tar.gz#test_sql_format.test_view-file_eval_/formatted.sql"
-        }
-    ],
-    "test_sql_format.test[view-file_inner]": [
-        {
-            "checksum": "8f012ee9373d675c75b1649b96e6ead0",
-            "size": 116,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1880306/50efd53ad53129cbd4f94db66527b230b24320d3/resource.tar.gz#test_sql_format.test_view-file_inner_/formatted.sql"
-        }
-    ],
-    "test_sql_format.test[view-file_outer]": [
-        {
-            "checksum": "9bf795fe9976b5eb6aa0018f00f9dbf9",
-            "size": 116,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1880306/50efd53ad53129cbd4f94db66527b230b24320d3/resource.tar.gz#test_sql_format.test_view-file_outer_/formatted.sql"
         }
     ],
     "test_sql_format.test[view-init_view_after_eval]": [

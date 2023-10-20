@@ -630,28 +630,44 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
         return IGraphTransformer::TStatus::Repeat;
     }
 
+    const NPg::TAggregateDesc* aggDescPtr;
     try {
-        const auto& aggDesc = NPg::LookupAggregation(TString(name), argTypes);
-        if (aggDesc.Kind != NPg::EAggKind::Normal) {
+        aggDescPtr = &NPg::LookupAggregation(TString(name), argTypes);
+        if (aggDescPtr->Kind != NPg::EAggKind::Normal) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 "Only normal aggregation supported"));
             return IGraphTransformer::TStatus::Error;
         }
-
-        ui32 resultType;
-        if (!aggDesc.FinalFuncId) {
-            resultType = aggDesc.TransTypeId;
-        } else {
-            resultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
-        }
-
-        auto result = ctx.Expr.MakeType<TPgExprType>(resultType);
-        input->SetTypeAnn(result);
-        return IGraphTransformer::TStatus::Ok;
     } catch (const yexception& e) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), e.what()));
         return IGraphTransformer::TStatus::Error;
     }
+    const NPg::TAggregateDesc& aggDesc = *aggDescPtr;
+
+    ui32 argIdx = overWindow ? 3 : 2;
+    for (ui32 i = 0; i < argTypes.size(); ++i, ++argIdx) {
+        if (IsCastRequired(argTypes[i], aggDesc.ArgTypes[i])) {
+            auto& argNode = input->ChildRef(argIdx);
+            argNode = WrapWithPgCast(std::move(argNode), aggDesc.ArgTypes[i], ctx);
+            needRetype = true;
+        }
+    }
+
+    if (needRetype) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    ui32 resultType;
+    if (!aggDesc.FinalFuncId) {
+        resultType = aggDesc.TransTypeId;
+    } else {
+        resultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
+    }
+
+    auto result = ctx.Expr.MakeType<TPgExprType>(resultType);
+    input->SetTypeAnn(result);
+
+    return IGraphTransformer::TStatus::Ok;
 }
 
 IGraphTransformer::TStatus PgQualifiedStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -1265,12 +1281,6 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
     }
 
     const NPg::TAggregateDesc& aggDesc = *aggDescPtr;
-    for (size_t i = 0; i < argTypes.size(); ++i) {
-        if (IsCastRequired(argTypes[i], aggDesc.ArgTypes[i])) {
-            auto& argNode = lambda->ChildRef(i+1);
-            argNode = WrapWithPgCast(std::move(argNode), aggDesc.ArgTypes[i], ctx);
-        }
-    }
     output = ExpandPgAggregationTraits(input->Pos(), aggDesc, onWindow, lambda, argTypes, itemType, ctx.Expr);
     return IGraphTransformer::TStatus::Repeat;
 }

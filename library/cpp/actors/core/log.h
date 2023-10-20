@@ -403,6 +403,16 @@ namespace NActors {
             return *this;
         }
 
+        template <class TKey, class TValue>
+        TFormatedStreamWriter& Write(const TKey& pName, const std::optional<TValue>& pValue) {
+            if (pValue) {
+                Builder << pName << "=" << *pValue << ";";
+            } else {
+                Builder << pName << "=NO_VALUE_OPTIONAL;";
+            }
+            return *this;
+        }
+
         TFormatedStreamWriter& WriteDirectly(const TString& data) {
             Builder << data;
             return *this;
@@ -463,7 +473,7 @@ namespace NActors {
 
         template <class TKey, class TValue>
         TLogContextGuard& Write(const TKey& pName, const TValue& pValue) {
-            Write(pName, pValue);
+            TBase::Write(pName, pValue);
             return *this;
         }
 
@@ -522,14 +532,18 @@ namespace NActors {
             return *this;
         }
 
-        ~TVerifyFormattedRecordWriter() {
-            const TString data = TBase::GetResult();
-            Y_ABORT("%s", data.data());
-        }
+        ~TVerifyFormattedRecordWriter();
     };
 }
 
 #define AFL_VERIFY(condition) if (condition); else NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+
+#ifndef NDEBUG
+/// Assert that depend on NDEBUG macro and outputs message like printf
+#define AFL_VERIFY_DEBUG AFL_VERIFY
+#else
+#define AFL_VERIFY_DEBUG(condition) if (true); else NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+#endif
 
 #define ACTORS_FORMATTED_LOG(mPriority, mComponent) \
     if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\

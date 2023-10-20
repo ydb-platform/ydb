@@ -732,4 +732,9 @@ namespace NActors {
 
     }
 
+    TVerifyFormattedRecordWriter::~TVerifyFormattedRecordWriter() {
+        const TString data = TBase::GetResult();
+        Y_ABORT("%s", data.data());
+    }
+
 }

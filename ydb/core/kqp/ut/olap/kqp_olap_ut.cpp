@@ -2233,7 +2233,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
 
         TAggregationTestCase currentTest;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpComputeEvents::EvScanData:
                 {
@@ -2327,7 +2327,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
 
         TAggregationTestCase currentTest;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpComputeEvents::EvScanData:
                 {
@@ -3506,7 +3506,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         std::vector<TAutoPtr<IEventHandle>> evs;
         ui32 num = 0;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
@@ -3592,7 +3592,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
 
         ui64 result = 0;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
@@ -3656,7 +3656,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
 
         bool hasResult = false;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
@@ -3725,7 +3725,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         THashSet<TActorId> columnShardScans;
         bool prevIsFinished = false;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 

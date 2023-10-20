@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         auto shard2actor = ResolveTablet(runtime, shards[1]);
 
         TVector<THolder<IEventHandle>> capturedPropose;
-        auto capturePropose = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto capturePropose = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvProposeTransaction::EventType: {
                     const auto* msg = ev->Get<TEvDataShard::TEvProposeTransaction>();
@@ -418,7 +418,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         }
 
         TVector<size_t> rowLimits;
-        auto inspectResponses = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto inspectResponses = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvStreamQuotaResponse::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvStreamQuotaResponse>();
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         TVector<THolder<IEventHandle>> capturedTxIds;
         size_t captureResolveKeySetResultPartitions = 3;
         TVector<THolder<IEventHandle>> capturedResolveKeySetResults;
-        auto capturePropose = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto capturePropose = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxUserProxy::TEvAllocateTxIdResult::EventType: {
                     if (captureTxIds) {

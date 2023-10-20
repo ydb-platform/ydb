@@ -135,7 +135,7 @@ namespace {
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
         THolder<IEventHandle> delayed;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (delayFunc(ev)) {
                 delayed.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -532,7 +532,7 @@ partitioning_settings {
 
         bool dropNotification = false;
         THolder<IEventHandle> delayed;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvSchemeShard::EvModifySchemeTransaction:
                 break;
@@ -616,7 +616,7 @@ partitioning_settings {
 
         bool dropNotification = false;
         THolder<IEventHandle> delayed;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvSchemeShard::EvModifySchemeTransaction:
                 break;
@@ -719,7 +719,7 @@ partitioning_settings {
         TMaybe<ui64> tabletId;
         bool delayed = false;
 
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::EvProposeTransaction: {
                     auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
@@ -817,7 +817,7 @@ partitioning_settings {
         ui64 txId = 100;
 
         THashSet<ui64> statsCollected;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvPeriodicTableStats) {
                 statsCollected.insert(ev->Get<TEvDataShard::TEvPeriodicTableStats>()->Record.GetDatashardId());
             }
@@ -955,7 +955,7 @@ partitioning_settings {
         UNIT_ASSERT(s3Mock.Start());
 
         THolder<IEventHandle> injectResult;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NSharedCache::EvResult) {
                 const auto* msg = ev->Get<NSharedCache::TEvResult>();
                 UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
@@ -1016,7 +1016,7 @@ partitioning_settings {
         UNIT_ASSERT(s3Mock.Start());
 
         THolder<IEventHandle> copyTables;
-        auto origObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto origObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
                 const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
                 if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
@@ -1048,7 +1048,7 @@ partitioning_settings {
         }
 
         THolder<IEventHandle> proposeTxResult;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
                 proposeTxResult.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -1098,7 +1098,7 @@ partitioning_settings {
         UNIT_ASSERT(s3Mock.Start());
 
         TVector<THolder<IEventHandle>> copyTables;
-        auto origObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto origObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
                 const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
                 if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
@@ -1179,7 +1179,7 @@ partitioning_settings {
         TestGetExport(runtime, txId, "/MyRoot");
 
         TVector<THolder<IEventHandle>> delayed;
-        auto origObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto origObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
                 const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
                 const auto opType = record.GetTransaction(0).GetOperationType();
@@ -1309,7 +1309,7 @@ partitioning_settings {
         UNIT_ASSERT(s3Mock.Start());
 
         THolder<IEventHandle> injectResult;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::EvProposeTransaction: {
                     auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;

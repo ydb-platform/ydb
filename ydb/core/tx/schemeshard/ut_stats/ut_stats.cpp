@@ -150,17 +150,17 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         auto eventAction = TTestActorRuntime::EEventAction::PROCESS;
 
         // capture original observer func by setting dummy one
-        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvPeriodicTableStats: {
                 return eventAction;
             }
             default:
-                return originalObserver(runtime, ev);
+                return originalObserver(ev);
             }
         });
 
@@ -198,18 +198,18 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         ui64 statsCount = 0;
 
         // capture original observer func by setting dummy one
-        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvPeriodicTableStats: {
                 ++statsCount;
                 return eventAction;
             }
             default:
-                return originalObserver(runtime, ev);
+                return originalObserver(ev);
             }
         });
 
@@ -270,17 +270,17 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         auto eventAction = TTestActorRuntime::EEventAction::PROCESS;
 
         // capture original observer func by setting dummy one
-        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvPeriodicTableStats: {
                 return eventAction;
             }
             default:
-                return originalObserver(runtime, ev);
+                return originalObserver(ev);
             }
         });
 

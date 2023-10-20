@@ -177,8 +177,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         // Capture all upload rows requests
         TVector<THolder<IEventHandle>> uploadRequests;
-        auto observer = [&](auto& runtime, TAutoPtr<IEventHandle>& ev) {
-            Y_UNUSED(runtime);
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvUploadRowsRequest::EventType: {
                     Cerr << "... captured TEvUploadRowsRequest" << Endl;
@@ -773,7 +772,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         TVector<ui32> observedUploadStatus;
         TVector<THolder<IEventHandle>> blockedEnqueueRecords;
-        auto prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case NDataShard::TEvChangeExchange::EvEnqueueRecords:
                     blockedEnqueueRecords.emplace_back(ev.Release());

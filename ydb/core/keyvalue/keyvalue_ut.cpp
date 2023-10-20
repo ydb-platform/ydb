@@ -41,12 +41,14 @@ void SetupLogging(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::TABLET_RESOLVER, otherPriority);
 }
 
-class TInitialEventsFilter : TNonCopyable {
+class TInitialEventsFilter: TNonCopyable {
     bool IsDone;
+
 public:
     TInitialEventsFilter()
         : IsDone(false)
-    {}
+    {
+    }
 
     TTestActorRuntime::TEventFilter Prepare() {
         IsDone = false;
@@ -965,7 +967,7 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEvents) {
     TMaybe<TActorId> tabletActor;
     bool firstCollect = true;
     auto setup = [&] (TTestActorRuntime &runtime) {
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (tabletActor && *tabletActor == event->Recipient && event->GetTypeRewrite() == TEvBlobStorage::TEvCollectGarbageResult::EventType) {
                 TestLog("CollectGarbageResult!!! ", event->Sender, "->", event->Recipient, " Cookie# ", event->Cookie);
             }
@@ -1017,7 +1019,7 @@ Y_UNIT_TEST(TestBlockedEvGetRequest) {
     std::optional<ui64> keyValueTabletId;
     std::optional<ui32> keyValueTabletGeneration;
     auto setup = [&] (TTestActorRuntime &runtime) {
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == TEvBlobStorage::TEvGet::EventType) {
                 if (tabletActor && *tabletActor == event->Sender) {
                     // key value tablet reads from dsproxy
@@ -1071,7 +1073,7 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEventsWithSlowI
     TQueue<TAutoPtr<IEventHandle>> savedInitialEvents;
 
     auto setup = [&] (TTestActorRuntime &runtime) {
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             //TestLog("Event ", (event && event->GetBase() ? TypeName(*event->GetBase()) : "unknown"), ' ', event->Sender, "->", event->Recipient);
             if (tabletActor && *tabletActor == event->Recipient && event->GetTypeRewrite() == TEvBlobStorage::TEvCollectGarbageResult::EventType) {
                 if (collectStep == 2) {

@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
         }
 
         size_t observedConnects = 0;
-        auto observerFunc = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             if (ev->Type == TEvTabletPipe::EvConnect) {
                 ++observedConnects;
             }

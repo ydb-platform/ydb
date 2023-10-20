@@ -85,18 +85,18 @@ public:
     }
 
     TTestContext::TEventObserver ObserverFunc() override {
-        return [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        return [this](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TSchemeBoardEvents::EvHandshakeRequest:
                 ReplicaPopulators.emplace(ev->Sender, false);
-                runtime.EnableScheduleForActor(ev->Sender, true);
+                Context->EnableScheduleForActor(ev->Sender, true);
                 break;
 
             case TSchemeBoardEvents::EvUpdateAck:
                 auto it = ReplicaPopulators.find(ev->Recipient);
                 if (DropFirstAcks && it != ReplicaPopulators.end() && !it->second) {
                     it->second = true;
-                    runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, new TEvInterconnect::TEvNodeDisconnected(ev->Sender.NodeId())));
+                    Context->Send(ev->Recipient, ev->Sender, new TEvInterconnect::TEvNodeDisconnected(ev->Sender.NodeId()));
 
                     return TTestContext::EEventAction::DROP;
                 }

@@ -104,7 +104,7 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
             std::vector<ui64> observedSteps;
             std::vector<std::unique_ptr<IEventHandle>> acks;
             std::vector<std::unique_ptr<IEventHandle>> stateRequests;
-            auto observer = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            auto observer = [&](TAutoPtr<IEventHandle>& ev) {
                 switch (ev->GetTypeRewrite()) {
                     case TEvTxProcessing::TEvPlanStep::EventType: {
                         auto* msg = ev->Get<TEvTxProcessing::TEvPlanStep>();

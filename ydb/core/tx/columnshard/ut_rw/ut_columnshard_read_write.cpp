@@ -500,7 +500,7 @@ void TestWriteOverload(const TestTableDescription& table) {
     UNIT_ASSERT_VALUES_EQUAL(toCatch, 22);
     TDeque<TAutoPtr<IEventHandle>> capturedWrites;
 
-    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
         if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(ev)) {
             Cerr << "CATCH TEvWrite, status " << msg->GetPutResult().GetPutStatus() << Endl;
             if (toCatch && msg->GetPutResult().GetPutStatus() != NKikimrProto::UNKNOWN) {
@@ -2834,7 +2834,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         ui64 compactionsHappened = 0;
         ui64 cleanupsHappened = 0;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvReadFinished>(ev)) {
                 Cerr <<  "EvReadFinished " << msg->RequestCookie << Endl;
                 inFlightReads.insert(msg->RequestCookie);

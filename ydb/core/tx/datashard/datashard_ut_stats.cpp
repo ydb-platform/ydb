@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         NKikimrTxDataShard::TEvPeriodicTableStats stats;
         bool captured = false;
 
-        auto observerFunc = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvPeriodicTableStats::EventType: {
                     stats = ev->Get<TEvDataShard::TEvPeriodicTableStats>()->Record;

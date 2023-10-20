@@ -1715,7 +1715,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.Setup();
 
         TString billRecord;
-        ctx.Runtime->SetObserverFunc([&billRecord](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        ctx.Runtime->SetObserverFunc([&billRecord](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
                 billRecord = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson;
             }
@@ -1768,7 +1768,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.Setup();
 
         std::vector<TString> bills;
-        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        ctx.Runtime->SetObserverFunc([&bills](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
                 bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
             }
@@ -1821,7 +1821,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.Setup();
 
         std::vector<TString> bills;
-        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        ctx.Runtime->SetObserverFunc([&bills](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
                 bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
             }
@@ -1878,7 +1878,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.Setup();
 
         std::vector<TString> bills;
-        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        ctx.Runtime->SetObserverFunc([&bills](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
                 bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
             }
@@ -1939,7 +1939,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.Setup();
 
         std::vector<TString> bills;
-        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        ctx.Runtime->SetObserverFunc([&bills](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
                 bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
             }
@@ -2003,7 +2003,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.Setup();
 
         std::vector<TString> bills;
-        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        ctx.Runtime->SetObserverFunc([&bills](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
                 bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
             }
@@ -2062,7 +2062,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.Setup();
 
         std::vector<TString> bills;
-        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        ctx.Runtime->SetObserverFunc([&bills](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
                 bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
             }

@@ -1117,7 +1117,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_NOTICE);
         TVector<TString> meteringRecords;
-        runtime.SetObserverFunc([&meteringRecords](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&meteringRecords](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
@@ -1519,7 +1519,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
 
         bool catchMeteringRecord = false;
         TString meteringRecord;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvCdcStreamScanResponse:
                 if (const auto* msg = ev->Get<TEvDataShard::TEvCdcStreamScanResponse>()) {

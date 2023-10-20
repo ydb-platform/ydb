@@ -873,7 +873,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         bool captureTimecast = false;
         TVector<THolder<IEventHandle>> capturedSplit;
         TVector<THolder<IEventHandle>> capturedTimecast;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvSplit::EventType: {
                     if (captureSplit) {
@@ -1048,7 +1048,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         size_t observedPlanStepTxs = 0;
         // Capture and block all readset messages
         TVector<THolder<IEventHandle>> readSets;
-        auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureRS = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvPlanStep::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvPlanStep>();
@@ -1165,7 +1165,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         TInjectLockSnapshotObserver(TTestActorRuntime& runtime)
             : Runtime(runtime)
         {
-            PrevObserver = runtime.SetObserverFunc([this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            PrevObserver = runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
                 return this->Process(ev);
             });
         }
@@ -1320,7 +1320,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                     break;
                 }
             }
-            return PrevObserver(Runtime, ev);
+            return PrevObserver(ev);
         }
 
         void UnblockReadSets() {
@@ -3691,7 +3691,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         std::vector<std::unique_ptr<IEventHandle>> reads;
         std::vector<std::unique_ptr<IEventHandle>> readAcks;
         std::vector<std::unique_ptr<IEventHandle>> readResults;
-        auto observer = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvRead::EventType: {
                     auto* msg = ev->Get<TEvDataShard::TEvRead>();
@@ -3818,7 +3818,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // Wait until mediator goes idle
         size_t timecastUpdates = 0;
-        auto observer = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvMediatorTimecast::TEvUpdate::EventType: {
                     ++timecastUpdates;

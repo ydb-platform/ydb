@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         }
 
         std::vector<TAutoPtr<IEventHandle>> capturedUpdates;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NKikimr::TEvTablet::TEvFollowerUpdate::EventType ||
                 ev->GetTypeRewrite() == NKikimr::TEvTablet::TEvFollowerAuxUpdate::EventType || 
                 ev->GetTypeRewrite() == NKikimr::TEvTablet::TEvFUpdate::EventType ||

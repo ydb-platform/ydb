@@ -3536,7 +3536,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         bool splitStarted = false;
         THashSet<ui64> deletedShardIdxs; // used to sanity check at the end of the test
 
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvHive::EvDeleteTabletReply:
                 for (const ui64 shardIdx : ev->Get<TEvHive::TEvDeleteTabletReply>()->Record.GetShardLocalIdx()) {
@@ -3879,7 +3879,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         THolder<IEventHandle> delayed;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
                 const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
                 if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild) {
@@ -7541,12 +7541,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         }
 
         void SetUp(TTestActorRuntime& runtime) {
-            runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                 return this->OnEvent(static_cast<TTestActorRuntime&>(runtime), event);
             });
         }
 
-        bool IsPlanStepMessage(TTestActorRuntimeBase& /*runtime*/, TAutoPtr<IEventHandle>& event) {
+        bool IsPlanStepMessage(TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() != TEvTxProcessing::EvPlanStep) {
                 return false;
             }
@@ -7564,7 +7564,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         }
 
         TTestActorRuntime::EEventAction OnEvent(TTestActorRuntime& runtime, TAutoPtr<IEventHandle>& event) {
-            if (!IsPlanStepMessage(runtime, event)) {
+            if (!IsPlanStepMessage(event)) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
 
@@ -7582,7 +7582,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
             return TTestActorRuntime::EEventAction::PROCESS;
         }
-
     };
 
     Y_UNIT_TEST(CreateBlockStoreVolume) { //+

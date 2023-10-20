@@ -48,14 +48,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                    {NLs::PartitionKeys({"A", ""})});
             }
 
-            auto defObserver = [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle> &ev) -> auto {
-                return TTestActorRuntime::DefaultObserverFunc(runtime, ev);
+            auto defObserver = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                return TTestActorRuntime::DefaultObserverFunc(ev);
             };
 
             auto prevObserver = runtime.SetObserverFunc(defObserver);
 
             TVector<THolder<IEventHandle>> suppressed;
-            auto suppressEvent  = [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle> &ev) -> auto {
+            auto suppressEvent  = [&](TAutoPtr<IEventHandle>& ev) -> auto {
                 if (ev->GetTypeRewrite() == TEvDataShard::TEvStateChanged::EventType) {
                     auto *msg = ev->Get<TEvDataShard::TEvStateChanged>();
                     auto state = msg->Record.GetState();
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                     }
                 }
 
-                return prevObserver(runtime, ev);
+                return prevObserver(ev);
             };
 
             runtime.SetObserverFunc(suppressEvent);

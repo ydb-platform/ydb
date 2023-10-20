@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(DataShardReassign) {
         bool captureCheckResult = true;
         TVector<THolder<IEventHandle>> capturedReassign;
         TVector<THolder<IEventHandle>> capturedCheckResult;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::TEvPutResult::EventType: {
                     auto* msg = ev->Get<TEvBlobStorage::TEvPutResult>();

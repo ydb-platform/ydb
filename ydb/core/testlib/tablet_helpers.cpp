@@ -772,7 +772,7 @@ namespace NKikimr {
             TTabletScheduledFilter scheduledFilter(tabletTracer);
             try {
                 testFunc(INITIAL_TEST_DISPATCH_NAME, [&](TTestActorRuntimeBase& runtime) {
-                    runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                         tabletTracer.OnEvent(AsKikimrRuntime(runtime), event);
                         return TTestActorRuntime::EEventAction::PROCESS;
                     });
@@ -829,7 +829,7 @@ namespace NKikimr {
                     TTabletScheduledFilter scheduledFilter(rebootingObserver);
                     testFunc(dispatchName,
                         [&](TTestActorRuntime& runtime) {
-                            runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                                 return rebootingObserver.OnEvent(AsKikimrRuntime(runtime), event);
                             });
 
@@ -872,7 +872,7 @@ namespace NKikimr {
             TTabletScheduledFilter scheduledFilter(tabletTracer);
 
             testFunc(INITIAL_TEST_DISPATCH_NAME, [&](TTestActorRuntime& runtime) {
-                runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                     tabletTracer.OnEvent(AsKikimrRuntime(runtime), event);
                     return TTestActorRuntime::EEventAction::PROCESS;
                 });
@@ -920,7 +920,7 @@ namespace NKikimr {
 
                 testFunc(dispatchName,
                     [&](TTestActorRuntime& runtime) {
-                    runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                         return pipeResetingObserver.OnEvent(AsKikimrRuntime(runtime), event);
                     });
 
@@ -969,7 +969,7 @@ namespace NKikimr {
                     Cout << dispatchName << "\n";
                 testFunc(dispatchName,
                     [&](TTestActorRuntime& runtime) {
-                    runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                         return delayingObserver.OnEvent(AsKikimrRuntime(runtime), event);
                     });
 
@@ -1007,7 +1007,7 @@ namespace NKikimr {
             , TabletTracer(TracingActive, tabletIds)
             , ScheduledFilter(TabletTracer)
         {
-            PrevObserverFunc = Runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            PrevObserverFunc = Runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                 TabletTracer.OnEvent(AsKikimrRuntime(runtime), event);
                 return TTestActorRuntime::EEventAction::PROCESS;
             });

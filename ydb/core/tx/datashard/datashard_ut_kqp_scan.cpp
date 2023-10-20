@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         ui64 result = 0;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
 
             switch (ev->GetTypeRewrite()) {
                 /*
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         ui64 result = 0;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) {
 
             switch (ev->GetTypeRewrite()) {
                 /*
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         ui64 result = 0;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
@@ -402,7 +402,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         ui64 result = 0;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
@@ -532,7 +532,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         ui64 result = 0;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
@@ -641,7 +641,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         ui64 result = 0;
         ui64 incomingRangesSize = 0;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 /*
                  * Trick executor to think that all datashard are located on node 1.
@@ -833,7 +833,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         TVector<THolder<IEventHandle>> blockedGets;
         TVector<THolder<IEventHandle>> blockedSnapshots;
-        auto blockGetObserver = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto blockGetObserver = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TEvKqpSnapshot::TEvCreateSnapshotResponse::EventType: {
                     Cerr << "... blocking snapshot response" << Endl;

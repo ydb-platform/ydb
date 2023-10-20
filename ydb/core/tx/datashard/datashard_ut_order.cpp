@@ -1247,8 +1247,7 @@ Y_UNIT_TEST(TestDelayedTxWaitsForWriteActiveTxOnly) {
     TVector<TAutoPtr<IEventHandle>> rss;
 
     // We want to intercept all RS to table-2.
-    auto captureRS = [shard2,&rss](TTestActorRuntimeBase &,
-                                   TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureRS = [shard2,&rss](TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
             auto &rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;
             if (rec.GetTabletDest() == shard2) {
@@ -1360,8 +1359,7 @@ Y_UNIT_TEST(TestOnlyDataTxLagCausesRejects) {
 
     // Send SQL request which should hang due to lost RS.
     TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                        TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
             readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
@@ -1441,8 +1439,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, StreamLookup) {
 
     // Capture and block all readset messages
     TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
             readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
@@ -1569,8 +1566,7 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
 
     // Capture and block all readset messages
     TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
             readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
@@ -1701,8 +1697,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, StreamLookup) {
 
     // Capture and block all readset messages
     TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
             readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
@@ -1801,8 +1796,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, StreamLookup) {
 
     // Capture and block all readset messages
     TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
             readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
@@ -1910,8 +1904,7 @@ Y_UNIT_TEST(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
 
     // Capture and block all readset messages
     TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
             readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
@@ -2030,8 +2023,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, StreamLookup
 
     // Capture and block all readset messages
     TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
             readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
@@ -2167,8 +2159,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNoBarrierRestartImmediateLongTail, StreamLookup) 
     TVector<THolder<IEventHandle>> progressEvents;
     bool blockProgressEvents = false;
     size_t bypassProgressEvents = 0;
-    auto captureRS = [&](TTestActorRuntimeBase&,
-                         TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle> &event) -> auto {
         auto recipient = event->GetRecipientRewrite();
         switch (event->GetTypeRewrite()) {
             case TEvTablet::EvBoot: {
@@ -2343,7 +2334,7 @@ Y_UNIT_TEST(TestCopyTableNoDeadlock) {
     size_t seenPlanSteps = 0;
     bool captureReadSets = true;
     bool captureTxProposes = false;
-    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
             case TEvTxProcessing::EvPlanStep:
                 Cerr << "---- observed EvPlanStep ----" << Endl;
@@ -2524,7 +2515,7 @@ Y_UNIT_TEST(TestPlannedCancelSplit) {
     TVector<THolder<IEventHandle>> txCancels;
     TVector<THolder<IEventHandle>> txProposes;
     TVector<THolder<IEventHandle>> txProposeResults;
-    auto captureMessages = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureMessages = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
             case TEvDataShard::EvProposeTransaction:
                 Cerr << "---- observed EvProposeTransaction ----" << Endl;
@@ -2700,7 +2691,7 @@ Y_UNIT_TEST(TestPlannedTimeoutSplit) {
 
     // Capture and block some messages
     TVector<THolder<IEventHandle>> txProposes;
-    auto captureMessages = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureMessages = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
             case TEvTxProxy::EvProposeTransaction: {
                 Cerr << "---- observed EvProposeTransaction ----" << Endl;
@@ -2731,7 +2722,7 @@ Y_UNIT_TEST(TestPlannedTimeoutSplit) {
     runtime.SetObserverFunc(prevObserverFunc);
 
     size_t observedSplits = 0;
-    auto observeSplits = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+    auto observeSplits = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
             case TEvDataShard::EvSplit: {
                 Cerr << "---- observed EvSplit ----" << Endl;
@@ -2821,7 +2812,7 @@ Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
     // Capture and block some messages
     TVector<THolder<IEventHandle>> txProposes;
     TVector<THolder<IEventHandle>> txProposeResults;
-    auto captureMessages = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureMessages = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
             case TEvDataShard::EvProposeTransaction: {
                 Cerr << "---- observed EvProposeTransactionResult ----" << Endl;
@@ -2865,7 +2856,7 @@ Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
     UNIT_ASSERT_VALUES_EQUAL(txProposeResults.size(), 1u);
 
     size_t observedSplits = 0;
-    auto observeSplits = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+    auto observeSplits = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
             case TEvDataShard::EvSplit: {
                 Cerr << "---- observed EvSplit ----" << Endl;
@@ -2997,7 +2988,7 @@ Y_UNIT_TEST(TestReadTableWriteConflict) {
     TVector<THolder<IEventHandle>> txProposes;
     size_t seenPlanSteps = 0;
     bool captureReadSets = true;
-    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
             case TEvTxProcessing::EvPlanStep:
                 Cerr << "---- observed EvPlanStep ----" << Endl;
@@ -3125,7 +3116,7 @@ Y_UNIT_TEST(TestReadTableImmediateWriteBlock) {
 
     // Capture and block all readset messages
     size_t seenPlanSteps = 0;
-    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
             case TEvTxProcessing::EvPlanStep:
                 Cerr << "---- observed EvPlanStep ----" << Endl;
@@ -3192,7 +3183,7 @@ Y_UNIT_TEST(TestReadTableSingleShardImmediate) {
 
     // Capture and block all readset messages
     size_t seenPlanSteps = 0;
-    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
             case TEvTxProcessing::EvPlanStep:
                 Cerr << "---- observed EvPlanStep ----" << Endl;
@@ -3247,7 +3238,7 @@ Y_UNIT_TEST(TestImmediateQueueThenSplit) {
     TVector<THolder<IEventHandle>> eventsSplitChanged;
     TVector<THolder<IEventHandle>> eventsPropose;
     TVector<THolder<IEventHandle>> eventsDelayedPropose;
-    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
             case TEvDataShard::EvSplit:
                 if (captureSplit) {
@@ -3422,7 +3413,7 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query) {
 
     bool capturePropose = true;
     TVector<THolder<IEventHandle>> eventsPropose;
-    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+    auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
         // if (ev->GetRecipientRewrite() == streamSender) {
         //     Cerr << "Stream sender got " << ev->GetTypeRewrite() << " " << ev->GetBase()->ToStringHeader() << Endl;
         // }
@@ -3553,7 +3544,7 @@ Y_UNIT_TEST(MvccTestSnapshotRead) {
     TRowVersion snapshot = TRowVersion::Min();
     ui64 lastStep = 0;
 
-    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+    auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
         switch (event->GetTypeRewrite()) {
             case TEvMediatorTimecast::EvUpdate: {
                 if (captureTimecast) {
@@ -3670,7 +3661,7 @@ Y_UNIT_TEST(TestSecondaryClearanceAfterShardRestartRace) {
     TVector<THolder<IEventHandle>> capturedDeliveryProblem;
     size_t seenStreamClearanceRequests = 0;
     size_t seenStreamClearanceResponses = 0;
-    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+    auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
         switch (ev->GetTypeRewrite()) {
             case TEvPipeCache::TEvDeliveryProblem::EventType: {
                 Cerr << "... intercepted TEvDeliveryProblem" << Endl;
@@ -3773,7 +3764,7 @@ Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, StreamLookup) {
     // Capture and block all readset messages
     TVector<THolder<IEventHandle>> readSets;
     size_t delayedProposeCount = 0;
-    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle>& ev) -> auto {
         switch (ev->GetTypeRewrite()) {
             case TEvTxProcessing::TEvReadSet::EventType: {
                 readSets.push_back(std::move(ev));
@@ -3878,7 +3869,7 @@ Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, StreamLookup) {
 
     // Capture and block all readset messages
     TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle>& ev) -> auto {
         switch (ev->GetTypeRewrite()) {
             case TEvTxProcessing::TEvReadSet::EventType: {
                 Cerr << "... captured readset" << Endl;
@@ -3967,7 +3958,7 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
 
     TVector<THolder<IEventHandle>> blockedCommits;
     size_t seenProposeResults = 0;
-    auto blockCommits = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+    auto blockCommits = [&](TAutoPtr<IEventHandle>& ev) -> auto {
         switch (ev->GetTypeRewrite()) {
             case TEvTablet::TEvCommit::EventType: {
                 auto* msg = ev->Get<TEvTablet::TEvCommit>();
@@ -4192,7 +4183,7 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLockOutOfOrder) {
 
     // Capture and block all readset messages
     TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle>& ev) -> auto {
         switch (ev->GetTypeRewrite()) {
             case TEvTxProcessing::TEvReadSet::EventType: {
                 Cerr << "... captured readset" << Endl;
@@ -4300,7 +4291,7 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
 
     // Capture and block all readset messages
     TVector<THolder<IEventHandle>> readSets;
-    auto captureRS = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+    auto captureRS = [&](TAutoPtr<IEventHandle>& ev) -> auto {
         switch (ev->GetTypeRewrite()) {
             case TEvTxProcessing::TEvReadSet::EventType: {
                 Cerr << "... captured readset" << Endl;
@@ -4646,7 +4637,7 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
 
     bool mustWaitForSteps[2] = { false, false };
 
-    auto captureTimecast = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+    auto captureTimecast = [&](TAutoPtr<IEventHandle>& ev) -> auto {
         const ui32 nodeId = ev->GetRecipientRewrite().NodeId();
         const ui32 nodeIndex = nodeId - runtime.GetNodeId(0);
         switch (ev->GetTypeRewrite()) {
@@ -4875,7 +4866,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
     bool captureCommits = false;
     TVector<THolder<IEventHandle>> capturedCommits;
 
-    auto captureCommitAfterReadSet = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+    auto captureCommitAfterReadSet = [&](TAutoPtr<IEventHandle>& ev) -> auto {
         const ui32 nodeId = ev->GetRecipientRewrite().NodeId();
         const ui32 nodeIndex = nodeId - runtime.GetNodeId(0);
         if (nodeIndex == 1) {
@@ -5079,7 +5070,7 @@ Y_UNIT_TEST(UncommittedReads) {
     // Block commits and start counting propose responses
     TVector<THolder<IEventHandle>> blockedCommits;
     size_t seenProposeResults = 0;
-    auto blockCommits = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+    auto blockCommits = [&](TAutoPtr<IEventHandle>& ev) -> auto {
         switch (ev->GetTypeRewrite()) {
             case TEvTablet::TEvCommit::EventType: {
                 auto* msg = ev->Get<TEvTablet::TEvCommit>();

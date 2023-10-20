@@ -2124,7 +2124,7 @@ Y_UNIT_TEST(TestManyConsumers) {
 
 
 void CheckEventSequence(TTestContext& tc, std::function<void()> scenario, std::deque<ui32> expectedEvents) {
-    tc.Runtime->SetObserverFunc([&expectedEvents](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+    tc.Runtime->SetObserverFunc([&expectedEvents](TAutoPtr<IEventHandle>& ev) {
         if (!expectedEvents.empty() && ev->Type == expectedEvents.front()) {
             expectedEvents.pop_front();
         }

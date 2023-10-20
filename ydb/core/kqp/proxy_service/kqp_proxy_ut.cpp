@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             return TTestActorRuntime::DefaultScheduledFilterFunc(run, event, delay, deadline);
         };
 
-        auto captureEvents =  [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
                 Cerr << "Captured Event" << Endl;
                 captured.push_back(ev.Release());
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
         size_t capturedQueries = 0;
         size_t capturedPings = 0;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             // Drop every second event for KQP_PROXY_ACTOR on second node.
             if (ev->Recipient == kqpProxy2 && ev->GetTypeRewrite() == NKqp::TEvKqp::TEvQueryRequest::EventType) {
                 ++capturedQueries;

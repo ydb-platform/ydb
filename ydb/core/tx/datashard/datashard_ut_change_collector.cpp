@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
         InitRoot(server, sender);
 
         // prevent change sending
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::TEvActivateSender::EventType:
                 return TTestActorRuntime::EEventAction::DROP;
@@ -645,7 +645,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         InitRoot(server, sender);
 
         // prevent change sending
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::TEvActivateSender::EventType:
                 return TTestActorRuntime::EEventAction::DROP;

@@ -156,7 +156,7 @@ Y_UNIT_TEST(Simple) {
         runtime.Send(new IEventHandle(spillingActor, tester, new TEvents::TEvPoison));
 
         std::atomic<bool> done = false;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetRecipientRewrite() == spillingService) {
                 if (event->GetTypeRewrite() == 2146435074 /* EvCloseFileResponse */ ) {
                     done = true;

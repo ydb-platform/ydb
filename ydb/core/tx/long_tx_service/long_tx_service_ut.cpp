@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), Ydb::StatusIds::BAD_SESSION);
         }
 
-        auto observer = [&](auto& runtime, auto& ev) {
+        auto observer = [&](auto& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvLongTxService::TEvRollbackTxResult::EventType: {
                     ui32 node1 = ev->Sender.NodeId();
@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
         // Block all cross-node TEvSubscribeLock messages and disconnect instead
         size_t disconnectCount = 0;
-        auto observer = [&](auto& runtime, auto& ev) {
+        auto observer = [&](auto& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvLongTxService::TEvSubscribeLock::EventType: {
                     ui32 node1 = ev->Sender.NodeId();

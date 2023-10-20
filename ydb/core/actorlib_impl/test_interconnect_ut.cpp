@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NActorsServices::INTERCONNECT_SESSION, NActors::NLog::PRI_DEBUG);
         SOCKET s = INVALID_SOCKET;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (auto *p = ev->CastAsLocal<TEvHandshakeDone>()) {
                 s = *p->Socket;
             }
@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         TTestBasicRuntime runtime(2);
         runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);
         SOCKET s = INVALID_SOCKET;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (auto *p = ev->CastAsLocal<TEvHandshakeDone>()) {
                 s = *p->Socket;
             }
@@ -377,7 +377,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         runtime.Send(new IEventHandle(wall, edge, new TEvents::TEvPing), 0, true);
         runtime.GrabEdgeEvent<TEvents::TEvPong>(handle);
 
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev){
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev){
             if (s != INVALID_SOCKET && TEvents::TEvPing::EventType == ev->Type && 666ULL == ev->Cookie) {
                 ShutDown(s, SHUT_RDWR);
                 s = INVALID_SOCKET;

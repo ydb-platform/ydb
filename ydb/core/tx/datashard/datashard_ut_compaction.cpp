@@ -12,7 +12,7 @@ namespace {
         NKikimrTxDataShard::TEvPeriodicTableStats stats;
         bool captured = false;
 
-        auto observerFunc = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvPeriodicTableStats::EventType: {
                     const auto& record = ev->Get<TEvDataShard::TEvPeriodicTableStats>()->Record;

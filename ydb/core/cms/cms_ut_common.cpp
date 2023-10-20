@@ -545,7 +545,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
 
     GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants, options.UseMirror3dcErasure);
 
-    SetObserverFunc([](TTestActorRuntimeBase&,
+    SetObserverFunc([](
                                     TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest
             || event->GetTypeRewrite() == TEvConfigsDispatcher::EvGetConfigRequest) {

@@ -617,7 +617,7 @@ void KqpRm::DisonnectNodes() {
     CheckSnapshot(0, {{1000, 100}, {1000, 100}}, rm_first);
     CheckSnapshot(1, {{1000, 100}, {1000, 100}}, rm_second);
 
-    auto prevObserverFunc = Runtime->SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+    auto prevObserverFunc = Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             case NRm::TEvKqpResourceInfoExchanger::TEvSendResources::EventType: {
                 return TTestActorRuntime::EEventAction::DROP;

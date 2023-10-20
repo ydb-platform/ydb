@@ -761,7 +761,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
     UNIT_ASSERT(DelayedReadSets.size() <= 1);
     UNIT_ASSERT(DelayedData.size() <= 1);
 
-    auto observer = [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+    auto observer = [&](TAutoPtr<IEventHandle>& ev) {
         // send immediate in the right moment
         if (ev->Type == TEvProposeTransactionResult::EventType) {
             auto event = ev->Get<TEvProposeTransactionResult>();
@@ -779,7 +779,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
                 //Cerr << ">>> imm to " << shard << Endl;
                 UNIT_ASSERT(ShardActors.contains(shard));
                 THolder<IEventHandle> handle(new IEventHandle(ShardActors[shard], Tester.Sender, immEvent.Release()));
-                runtime.Send(handle.Release());
+                Tester.Runtime.Send(handle.Release());
                 immEvents.pop_front();
                 ++prevTxId;
             }

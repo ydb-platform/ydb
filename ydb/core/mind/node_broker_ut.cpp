@@ -1100,7 +1100,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
 
             void Install() {
                 if (!Installed) {
-                    PrevObserverFunc = Runtime.SetObserverFunc([this](auto&, auto& event) {
+                    PrevObserverFunc = Runtime.SetObserverFunc([this](auto& event) {
                         return this->OnEvent(event);
                     });
                     INodeBrokerHooks::Set(this);
@@ -1151,7 +1151,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                     }
                 }
 
-                return PrevObserverFunc(Runtime, ev);
+                return PrevObserverFunc(ev);
             }
 
         private:
@@ -1336,7 +1336,7 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         TVector<NKikimrNodeBroker::TListNodes> listRequests;
         TVector<NKikimrNodeBroker::TResolveNode> resolveRequests;
 
-        auto logRequests = [&](TTestActorRuntimeBase &, TAutoPtr<IEventHandle> &event) -> auto {
+        auto logRequests = [&](TAutoPtr<IEventHandle> &event) -> auto {
             if (event->GetTypeRewrite() == TEvNodeBroker::EvListNodes)
                 listRequests.push_back(event->Get<TEvNodeBroker::TEvListNodes>()->Record);
             else if (event->GetTypeRewrite() == TEvNodeBroker::EvResolveNode)

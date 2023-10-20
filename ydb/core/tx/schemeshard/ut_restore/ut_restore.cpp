@@ -288,7 +288,7 @@ namespace {
     using TDelayFunc = std::function<bool(TAutoPtr<IEventHandle>&)>;
 
     auto SetDelayObserver(TTestActorRuntime& runtime, THolder<IEventHandle>& delayed, TDelayFunc delayFunc) {
-        return runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        return runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (delayFunc(ev)) {
                 delayed.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -463,7 +463,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         env.TestWaitNotification(runtime, txId);
 
         bool uploadResponseDropped = false;
-        runtime.SetObserverFunc([&uploadResponseDropped](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&uploadResponseDropped](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse) {
                 uploadResponseDropped = true;
                 return TTestActorRuntime::EEventAction::DROP;
@@ -487,7 +487,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         }
 
         TMaybe<NKikimrTxDataShard::TShardOpResult> result;
-        runtime.SetObserverFunc([&result](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&result](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvSchemaChanged) {
                 const auto& record = ev->Get<TEvDataShard::TEvSchemaChanged>()->Record;
                 if (record.HasOpResult()) {
@@ -522,7 +522,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         runtime.GetAppData().ZstdBlockSizeForTest = 113; // one row
 
         ui32 uploadRowsCount = 0;
-        runtime.SetObserverFunc([&uploadRowsCount](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&uploadRowsCount](TAutoPtr<IEventHandle>& ev) {
             uploadRowsCount += ui32(ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse);
             return TTestActorRuntime::EEventAction::PROCESS;
         });
@@ -736,7 +736,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         const auto data = GenerateTestData(Codec, "a", 2);
 
         TMaybe<NKikimrTxDataShard::TShardOpResult> result;
-        runtime.SetObserverFunc([&result](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&result](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() != TEvDataShard::EvSchemaChanged) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
@@ -801,7 +801,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
 
         ui32 total = 0;
         ui32 overloads = 0;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse) {
                 ++total;
                 const auto& record = ev->Get<TEvDataShard::TEvS3UploadRowsResponse>()->Record;
@@ -1813,7 +1813,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", {{"a", 100}});
 
         TVector<TString> billRecords;
-        runtime.SetObserverFunc([&billRecords](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&billRecords](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
@@ -1864,7 +1864,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", {{"a", 100}});
 
         TVector<TString> billRecords;
-        runtime.SetObserverFunc([&billRecords](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&billRecords](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }

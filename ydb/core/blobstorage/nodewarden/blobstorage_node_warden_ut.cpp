@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TBlockUpdates(TTestBasicRuntime& runtime)
         : Runtime(&runtime)
         {
-            TTestActorRuntime::TEventObserver observer = [=] (TTestActorRuntimeBase& /*runtime*/, TAutoPtr<IEventHandle>& event) -> TTestActorRuntime::EEventAction {
+            TTestActorRuntime::TEventObserver observer = [=] (TAutoPtr<IEventHandle>& event) -> TTestActorRuntime::EEventAction {
                 if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
                     return TTestActorRuntime::EEventAction::DROP;
                 }

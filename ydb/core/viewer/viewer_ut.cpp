@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         int nodeIdCount = 1;
         const int nodesTotal = 100;
         const int tabletsTotal = 100;
-        auto observerFunc = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             Y_UNUSED(ev);
             switch (ev->GetTypeRewrite()) {
                 case TEvInterconnect::EvNodesInfo: {
@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         int tabletIdCount = 1;
         int nodeIdCount = 1;
-        auto observerFunc = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             Y_UNUSED(ev);
             switch (ev->GetTypeRewrite()) {
                 case NConsole::TEvConsole::EvListTenantsResponse: {

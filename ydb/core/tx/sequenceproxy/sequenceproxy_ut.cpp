@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
         DoNextVal(runtime, "/dc-1/noseq", Ydb::StatusIds::SCHEME_ERROR);
 
         ui64 allocateEvents = 0;
-        auto observerFunc = [&](auto&, auto& ev) {
+        auto observerFunc = [&](auto& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvSequenceShard::TEvAllocateSequence::EventType:
                     ++allocateEvents;

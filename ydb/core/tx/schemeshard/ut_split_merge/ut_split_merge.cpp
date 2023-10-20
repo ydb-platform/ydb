@@ -639,7 +639,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
 
         TLoadAndSplitSimulator simulator(tableLocalPathId, initialDatashardId, targetCpuLoadPercent);
 
-        runtime.SetObserverFunc([&simulator](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+        runtime.SetObserverFunc([&simulator](TAutoPtr<IEventHandle>& event) {
             simulator.ChangeEvent(event);
             return TTestActorRuntime::EEventAction::PROCESS;
         });
@@ -669,7 +669,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
 
         TLoadAndSplitSimulator simulator(tableLocalPathId, initialDatashardId, targetCpuLoadPercent);
 
-        runtime.SetObserverFunc([&simulator](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+        runtime.SetObserverFunc([&simulator](TAutoPtr<IEventHandle>& event) {
             simulator.ChangeEvent(event);
             return TTestActorRuntime::EEventAction::PROCESS;
         });

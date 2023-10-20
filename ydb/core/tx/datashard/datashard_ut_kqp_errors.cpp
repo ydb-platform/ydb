@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(KqpErrors) {
 
 Y_UNIT_TEST(ResolveTableError) {
     TLocalFixture fixture;
-    auto mitm = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+    auto mitm = [&](TAutoPtr<IEventHandle> &ev) {
         if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
             auto event = ev.Get()->Get<TEvTxProxySchemeCache::TEvNavigateKeySetResult>();
             event->Request->ErrorCount = 1;
@@ -122,7 +122,7 @@ Y_UNIT_TEST(ProposeError) {
         auto client = fixture.Runtime->AllocateEdgeActor();
 
         bool done = false;
-        auto mitm = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        auto mitm = [&](TAutoPtr<IEventHandle> &ev) {
             if (!done && ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransactionResult::EventType &&
                 !knownExecuters.contains(ev->Recipient))
             {
@@ -230,12 +230,11 @@ Y_UNIT_TEST(ProposeError) {
 
 Y_UNIT_TEST(ProposeRequestUndelivered) {
     TLocalFixture fixture(true);
-    auto mitm = [&](TTestActorRuntimeBase& rt, TAutoPtr<IEventHandle> &ev) {
+    auto mitm = [&](TAutoPtr<IEventHandle> &ev) {
         if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
             auto forwardEvent = ev.Get()->Get<TEvPipeCache::TEvForward>();
             if (forwardEvent->Ev->Type() == TEvDataShard::TEvProposeTransaction::EventType) {
-                rt.Send(new IEventHandle(ev->Sender, ev->Recipient,
-                    new TEvPipeCache::TEvDeliveryProblem(forwardEvent->TabletId, /* NotDelivered */ true)));
+                fixture.Runtime->Send(new IEventHandle(ev->Sender, ev->Recipient, new TEvPipeCache::TEvDeliveryProblem(forwardEvent->TabletId, /* NotDelivered */ true)));
                 return TTestActorRuntime::EEventAction::DROP;
             }
         }
@@ -267,7 +266,7 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
     TActorId executer;
     ui32 droppedEvents = 0;
 
-    runtime.SetObserverFunc([&](TTestActorRuntimeBase& rt, TAutoPtr<IEventHandle>& ev) {
+    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
             auto* fe = ev.Get()->Get<TEvPipeCache::TEvForward>();
             if (fe->Ev->Type() == TEvDataShard::TEvProposeTransaction::EventType) {
@@ -283,7 +282,7 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
                 if (ev->Sender.NodeId() == executer.NodeId()) {
                     ++droppedEvents;
                     // Cerr << "-- send undelivery to " << ev->Recipient << ", executer: " << executer << Endl;
-                    rt.Send(new IEventHandle(executer, ev->Sender,
+                    runtime.Send(new IEventHandle(executer, ev->Sender,
                         new TEvPipeCache::TEvDeliveryProblem(msg->GetOrigin(), /* NotDelivered */ false)));
                     return TTestActorRuntime::EEventAction::DROP;
                 }

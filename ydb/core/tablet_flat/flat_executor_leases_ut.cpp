@@ -254,7 +254,7 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
 
         bool blockDropLease = true;
         TVector<THolder<IEventHandle>> dropLeaseMsgs;
-        auto observerFunc = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTablet::TEvDropLease::EventType:
                     if (blockDropLease) {

@@ -760,7 +760,7 @@ struct TTestHelper {
         bool capturePlanStep = true;
         bool dropRS = true;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
             switch (event->GetTypeRewrite()) {
                 case TEvTxProcessing::EvPlanStep: {
                     if (capturePlanStep) {
@@ -1156,7 +1156,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRowsInResult(1);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1215,7 +1215,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetReverse(true);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1275,7 +1275,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRows(1);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1332,7 +1332,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRowsInResult(1);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1487,7 +1487,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRows(8);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1531,7 +1531,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRows(8);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1572,7 +1572,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRows(5);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1629,7 +1629,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRows(5);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1679,7 +1679,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRows(1);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -2189,11 +2189,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // capture original observer func by setting dummy one
         auto& runtime = *helper.Server->GetRuntime();
 
-        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvReadContinue: {
                 if (shouldDrop) {
@@ -2203,7 +2203,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
             default:
-                return originalObserver(runtime, ev);
+                return originalObserver(ev);
             }
         });
 
@@ -2278,11 +2278,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // capture original observer func by setting dummy one
         auto& runtime = *helper.Server->GetRuntime();
 
-        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvReadContinue: {
                 if (shouldDrop) {
@@ -2292,7 +2292,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
             default:
-                return originalObserver(runtime, ev);
+                return originalObserver(ev);
             }
         });
 
@@ -2429,7 +2429,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         ui32 continueCounter = 0;
         bool connectedFromDifferentNode = false;
         ui32 serverConnectedCount = 0;
-        runtime.SetObserverFunc([&continueCounter, &connectedFromDifferentNode, &serverConnectedCount](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&continueCounter, &connectedFromDifferentNode, &serverConnectedCount](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvReadContinue:
                 ++continueCounter;
@@ -2851,7 +2851,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         ui64 waitPlanStep = 0;
         ui64 notifyPlanStep = 0;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
             switch (event->GetTypeRewrite()) {
                 case TEvMediatorTimecast::EvUpdate: {
                     auto* update = event->Get<TEvMediatorTimecast::TEvUpdate>();
@@ -2983,7 +2983,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         ui64 notifyPlanStep = 0;
         size_t readResults = 0;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
             switch (event->GetTypeRewrite()) {
                 case TEvMediatorTimecast::EvUpdate: {
                     auto* update = event->Get<TEvMediatorTimecast::TEvUpdate>();
@@ -3694,7 +3694,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
         size_t observedReadResults = 0;
         bool captureCacheRequests = true;
         std::vector<std::unique_ptr<IEventHandle>> capturedCacheRequests;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvReadResult::EventType: {
                     auto* msg = ev->Get<TEvDataShard::TEvReadResult>();

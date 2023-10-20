@@ -578,8 +578,7 @@ namespace NActors {
         return UseRealThreads;
     }
 
-    TTestActorRuntimeBase::EEventAction TTestActorRuntimeBase::DefaultObserverFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-        Y_UNUSED(runtime);
+    TTestActorRuntimeBase::EEventAction TTestActorRuntimeBase::DefaultObserverFunc(TAutoPtr<IEventHandle>& event) {
         Y_UNUSED(event);
         return EEventAction::PROCESS;
     }
@@ -1204,7 +1203,7 @@ namespace NActors {
                                     mbox.second->Capture(events);
                                     for (auto& ev : events) {
                                         TInverseGuard<TMutex> inverseGuard(Mutex);
-                                        ObserverFunc(*this, ev);
+                                        ObserverFunc(ev);
                                     }
                                     mbox.second->PushFront(events);
                                 }
@@ -1232,7 +1231,7 @@ namespace NActors {
                                     EEventAction action;
                                     {
                                         TInverseGuard<TMutex> inverseGuard(Mutex);
-                                        action = ObserverFunc(*this, ev);
+                                        action = ObserverFunc(ev);
                                     }
 
                                     switch (action) {

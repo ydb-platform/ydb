@@ -461,7 +461,7 @@ void TPQTabletFixture::WaitForCalcPredicateResult()
 {
     bool found = false;
 
-    auto observer = [&found](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+    auto observer = [&found](TAutoPtr<IEventHandle>& event) {
         if (auto* msg = event->CastAsLocal<TEvPQ::TEvTxCalcPredicateResult>()) {
             found = true;
         }
@@ -482,7 +482,7 @@ void TPQTabletFixture::WaitForCalcPredicateResult()
 void TPQTabletFixture::StartPQWriteObserver(bool& flag, unsigned cookie)
 {
     flag = false;
-    auto observer = [&flag, cookie](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+    auto observer = [&flag, cookie](TAutoPtr<IEventHandle>& event) {
         if (auto* kvResponse = event->CastAsLocal<TEvKeyValue::TEvResponse>()) {
             if ((event->Sender == event->Recipient) &&
                 kvResponse->Record.HasCookie() &&

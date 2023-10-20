@@ -180,7 +180,7 @@ void TCacheTest::Recreate() {
 
 void TCacheTest::RacyCreateAndSync() {
     THolder<IEventHandle> delayedSyncRequest;
-    auto prevObserver = Context->SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+    auto prevObserver = Context->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
         case TSchemeBoardEvents::EvSyncRequest:
             delayedSyncRequest.Reset(ev.Release());
@@ -234,7 +234,7 @@ void TCacheTest::RacyRecreateAndSync() {
     TestNavigate("/Root/DirA", TNavigate::EStatus::PathErrorUnknown, "", TNavigate::EOp::OpPath, false, true, true);
 
     THolder<IEventHandle> delayedSyncRequest;
-    auto prevObserver = Context->SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+    auto prevObserver = Context->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
         case TSchemeBoardEvents::EvSyncRequest:
             delayedSyncRequest.Reset(ev.Release());
@@ -662,7 +662,7 @@ void TCacheTest::MigrationLostMessage() {
     auto tenantSSNotifier = CreateNotificationSubscriber(*Context, tentantSchemeShard);
 
     bool deleteMsgHasBeenDropped = false;
-    auto skipDeleteNotification = [&deleteMsgHasBeenDropped](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+    auto skipDeleteNotification = [&deleteMsgHasBeenDropped](TAutoPtr<IEventHandle>& ev) -> auto {
         if (ev->Type == TSchemeBoardEvents::EvNotifyDelete) {
             auto *msg = ev->Get<TSchemeBoardEvents::TEvNotifyDelete>();
             Cerr << Endl << Endl << Endl << "skipDeleteNotification"
@@ -995,7 +995,7 @@ void TCacheTest::PathBelongsToDomain() {
 class TCacheTestWithDrops: public TCacheTest {
 public:
     TTestContext::TEventObserver ObserverFunc() override {
-        return [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        return [](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TSchemeBoardEvents::EvNotifyUpdate:
             case TSchemeBoardEvents::EvNotifyDelete:

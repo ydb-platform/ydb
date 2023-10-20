@@ -2367,7 +2367,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         std::vector<TAutoPtr<IEventHandle>> captured;
         bool firstAttemptToGetData = false;
 
-        auto captureEvents =  [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
                 IActor* actor = runtime->FindActor(ev->GetRecipientRewrite());
                 if (actor && actor->GetActivityType() == NKikimrServices::TActivity::KQP_STREAM_LOOKUP_ACTOR) {

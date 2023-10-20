@@ -1470,7 +1470,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
 
         THolder<IEventHandle> delayedClusterInfo;
-        env.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->Recipient == cmsActorId && ev->GetTypeRewrite() == TCms::TEvPrivate::EvClusterInfo) {
                 delayedClusterInfo.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -1492,7 +1492,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
 
         ui32 processQueueCount = 0;
-        env.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->Recipient == cmsActorId && ev->GetTypeRewrite() == TCms::TEvPrivate::EvProcessQueue) {
                 ++processQueueCount;
             }
@@ -1568,7 +1568,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
 
         THolder<IEventHandle> delayedClusterInfo;
-        env.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TCms::TEvPrivate::EvClusterInfo) {
                 if (ev->Recipient == cmsActorId) {
                     delayedClusterInfo.Reset(ev.Release());
@@ -1588,7 +1588,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
 
         bool requestCaptured = false;
-        env.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvCms::EvPermissionRequest) {
                 requestCaptured = true;
             }
@@ -1607,7 +1607,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.Send(delayedClusterInfo.Release(), 0, true);
         bool processQueueCaptured = false;
         bool clusterInfoCaptured = false;
-        env.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TCms::TEvPrivate::EvProcessQueue) {
                 if (ev->Sender == cmsActorId || ev->Recipient == cmsActorId) {
                     processQueueCaptured = true;
@@ -1634,7 +1634,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         requestCaptured = false;
         THolder<IEventHandle> delayedStartCollecting;
-        env.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvCms::EvPermissionRequest) {
                 requestCaptured = true;
             } else if (ev->GetTypeRewrite() == TCms::TEvPrivate::EvStartCollecting) {
@@ -1656,7 +1656,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
 
         bool startCollecting = false;
-        env.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TCms::TEvPrivate::EvStartCollecting) {
                 if (ev->Sender == cmsActorId || ev->Recipient == cmsActorId) {
                     startCollecting = true;

@@ -85,7 +85,7 @@ TMsgCounter::TMsgCounter(TTestActorRuntime &runtime, ui32 msgType)
     : Runtime(runtime)
     , Counter(0)
 {
-    PrevObserver = Runtime.SetObserverFunc([this, msgType](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+    PrevObserver = Runtime.SetObserverFunc([this, msgType](TAutoPtr<IEventHandle>& ev) {
         if (ev->GetTypeRewrite() == msgType) {
             this->Counter += 1;
         }

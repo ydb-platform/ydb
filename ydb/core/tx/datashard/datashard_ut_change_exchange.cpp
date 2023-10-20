@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         InitRoot(server, sender);
 
         bool activated = false;
-        runtime.SetObserverFunc([&activated](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&activated](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvChangeExchange::EvActivateSender) {
                 activated = true;
             }
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         InitRoot(server, sender);
 
         ui32 counter = 0;
-        runtime.SetObserverFunc([&counter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&counter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvChangeExchange::EvHandshake) {
                 ++counter;
             }
@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         THashSet<ui64> requested;
         THashSet<ui64> removed;
 
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::EvEnqueueRecords:
                 for (const auto& record : ev->Get<TEvChangeExchange::TEvEnqueueRecords>()->Records) {
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         THashSet<ui64> enqueued;
         THashSet<ui64> removed;
 
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::EvActivateSender:
                 if (preventActivation) {
@@ -369,7 +369,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         TVector<THolder<IEventHandle>> delayed;
         bool inited = false;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::EvEnqueueRecords:
                 delayed.emplace_back(ev.Release());
@@ -414,7 +414,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         THashSet<ui64> enqueued;
         THashSet<ui64> removed;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::EvEnqueueRecords:
                 for (const auto& record : ev->Get<TEvChangeExchange::TEvEnqueueRecords>()->Records) {
@@ -479,7 +479,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         THashMap<ui64, ui32> splitAcks;
         ui32 allowedRejects = Max<ui32>();
 
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing) {
@@ -634,7 +634,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         bool preventEnqueueing = true;
         TVector<THolder<IEventHandle>> enqueued;
 
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing) {
@@ -1885,7 +1885,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         bool preventEnqueueing = true;
         TVector<THolder<IEventHandle>> enqueued;
 
-        env.GetServer()->GetRuntime()->SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        env.GetServer()->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing) {
@@ -2047,7 +2047,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
 
         ui32 readSets = 0;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvTxProcessing::EvReadSet:
                 ++readSets;
@@ -2077,7 +2077,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         bool splitStarted = false;
         bool splitAcked = false;
 
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvPersQueue::EvRequest:
                 if (auto* msg = ev->Get<TEvPersQueue::TEvRequest>()) {
@@ -2142,7 +2142,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         TVector<THolder<IEventHandle>> enqueued;
         THashMap<ui64, ui32> splitAcks;
 
-        env.GetServer()->GetRuntime()->SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        env.GetServer()->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing) {
@@ -2239,7 +2239,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         TVector<THolder<IEventHandle>> activations;
         THashMap<ui64, ui32> splitAcks;
 
-        env.GetServer()->GetRuntime()->SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        env.GetServer()->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing || (preventEnqueueingOnSpecificSender && *preventEnqueueingOnSpecificSender == ev->Recipient)) {
@@ -2365,7 +2365,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         bool added = false;
         TVector<THolder<IEventHandle>> delayed;
 
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::EvAddSender:
                 added = true;
@@ -2432,7 +2432,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         auto& runtime = *env.GetServer()->GetRuntime();
 
         TVector<THolder<IEventHandle>> enqueued;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvChangeExchange::EvEnqueueRecords) {
                 enqueued.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -2474,7 +2474,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         InitRoot(server, edgeActor);
 
         THashSet<ui64> enqueued;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvChangeExchange::EvEnqueueRecords) {
                 for (const auto& record : ev->Get<TEvChangeExchange::TEvEnqueueRecords>()->Records) {
                     enqueued.insert(record.Order);
@@ -2506,7 +2506,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         THashSet<ui64> removed;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvChangeExchange::EvRemoveRecords) {
                 for (const auto& record : ev->Get<TEvChangeExchange::TEvRemoveRecords>()->Records) {
                     removed.insert(record);
@@ -2653,7 +2653,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )");
 
         TVector<THolder<IEventHandle>> delayed;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvCdcStreamScanRequest) {
                 delayed.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -2732,7 +2732,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         TVector<THolder<IEventHandle>> delayed;
         ui32 progressCount = 0;
 
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             static constexpr ui32 EvCdcStreamScanProgress = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 24;
 
             switch (ev->GetTypeRewrite()) {
@@ -2801,7 +2801,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )");
 
         THolder<IEventHandle> delayed;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvModifySchemeTransaction) {
                 auto* msg = ev->Get<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
                 const auto& tx = msg->Record.GetTransaction(0);
@@ -2869,7 +2869,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         ui32 progressCount = 0;
         TVector<THolder<IEventHandle>> delayed;
 
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             static constexpr ui32 EvCdcStreamScanProgress = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 24;
             if (ev->GetTypeRewrite() == EvCdcStreamScanProgress) {
                 ++progressCount;
@@ -2926,7 +2926,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         );
 
         bool ready = false;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvChangeExchangePrivate::EvReady) {
                 ready = true;
             }
@@ -2948,7 +2948,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         runtime.SetObserverFunc(prevObserver);
 
         THolder<IEventHandle> delayed;
-        prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvChangeExchangePrivate::EvReady) {
                 delayed.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -3123,7 +3123,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )");
 
         THolder<IEventHandle> delayed;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvCdcStreamScanRequest) {
                 delayed.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;

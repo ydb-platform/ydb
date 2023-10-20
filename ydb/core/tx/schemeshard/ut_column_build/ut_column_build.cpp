@@ -345,7 +345,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
         bool enabledCapture = true;
         TVector<TAutoPtr<IEventHandle>> delayedUpsertRows;
-        auto grab = [&delayedUpsertRows, &enabledCapture](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto grab = [&delayedUpsertRows, &enabledCapture](TAutoPtr<IEventHandle>& ev) -> auto {
             if (enabledCapture && ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvUploadRowsRequest::EventType) {
                 delayedUpsertRows.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -497,7 +497,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
                             NLs::PathVersionEqual(3)});
 
         TStringBuilder meteringMessages;
-        auto grabMeteringMessage = [&meteringMessages](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto grabMeteringMessage = [&meteringMessages](TAutoPtr<IEventHandle>& ev) -> auto {
             if (ev->Type == NMetering::TEvMetering::TEvWriteMeteringJson::EventType) {
                 auto *msg = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>();
                 Cerr << "grabMeteringMessage has happened" << Endl;

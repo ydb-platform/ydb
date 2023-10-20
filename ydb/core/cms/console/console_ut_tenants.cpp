@@ -391,7 +391,7 @@ struct CatchPoolEvent {
     {
     }
 
-    TTenantTestRuntime::EEventAction operator()(TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev)
+    TTenantTestRuntime::EEventAction operator()(TAutoPtr<IEventHandle>& ev)
     {
         if (ev->HasEvent()
             && (ev->Type == TTenantsManager::TEvPrivate::TEvPoolAllocated::EventType)

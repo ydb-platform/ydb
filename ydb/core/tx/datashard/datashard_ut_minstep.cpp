@@ -22,7 +22,7 @@ TAutoPtr<IEventHandle> EjectDataPropose(TServer::TPtr server, ui64 dataShard)
     bool hasFound = false;
     TAutoPtr<IEventHandle> proposeEvent = nullptr;
 
-    auto captureProposes = [dataShard, schemeShard, &hasFound, &proposeEvent] (TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto
+    auto captureProposes = [dataShard, schemeShard, &hasFound, &proposeEvent] (TAutoPtr<IEventHandle> &event) -> auto
     {
         if (event->GetTypeRewrite() == TEvTxProxy::EvProposeTransaction) {
             auto &rec = event->Get<TEvTxProxy::TEvProposeTransaction>()->Record;
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         TDeque<THolder<IEventHandle>> proposeResults;
         size_t schemaChangedCount = 0;
         TTestActorRuntimeBase::TEventObserver prevObserver;
-        auto captureObserver = [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        auto captureObserver = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxy::TEvProposeTransaction::EventType:
                     if (capturePlan) {
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
                     ++schemaChangedCount;
                     break;
             }
-            return prevObserver(runtime, ev);
+            return prevObserver(ev);
         };
         prevObserver = runtime.SetObserverFunc(captureObserver);
 
@@ -425,7 +425,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
 
         // capture scheme proposals
         size_t seenProposeScheme = 0;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvProposeTransaction::EventType: {
                     const auto* msg = ev->Get<TEvDataShard::TEvProposeTransaction>();

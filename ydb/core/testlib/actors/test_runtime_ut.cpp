@@ -446,8 +446,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             auto producerActor = new TProducerActor(count, consumerIds);
             TActorId producerId = runtime.Register(producerActor);
             runtime.Send(new IEventHandle(producerId, sender, new TEvents::TEvPing));
-            runtime.SetObserverFunc([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-                Y_UNUSED(runtime);
+            runtime.SetObserverFunc([](TAutoPtr<IEventHandle>& event) {
                 Y_UNUSED(event);
                 return TTestActorRuntime::EEventAction::PROCESS;
             });

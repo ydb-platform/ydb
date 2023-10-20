@@ -268,7 +268,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                             NLs::PathVersionEqual(3)});
 
         TStringBuilder meteringMessages;
-        auto grabMeteringMessage = [&meteringMessages](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto grabMeteringMessage = [&meteringMessages](TAutoPtr<IEventHandle>& ev) -> auto {
             if (ev->Type == NMetering::TEvMetering::TEvWriteMeteringJson::EventType) {
                 auto *msg = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>();
                 Cerr << "grabMeteringMessage has happened" << Endl;
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         }
 
         TVector<TString> billRecords;
-        runtime.SetObserverFunc([&billRecords](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        runtime.SetObserverFunc([&billRecords](TAutoPtr<IEventHandle>& ev) {
             if (ev->Type == NMetering::TEvMetering::TEvWriteMeteringJson::EventType) {
                 auto* msg = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>();
                 billRecords.push_back(msg->MeteringJson);
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         NDataShard::gDbStatsDataSizeResolution = 80000;
 
-        auto upgradeEvent = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto upgradeEvent = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             if (ev->Type == TEvSchemeShard::EvModifySchemeTransaction) {
                 auto *msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
                 if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild) {

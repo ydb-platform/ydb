@@ -372,17 +372,17 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
                 }
 
                 switch (ev->GetTypeRewrite()) {
-                case TEvSentinel::TEvUpdateConfig::EventType:
-                case TEvSentinel::TEvUpdateState::EventType:
-                case TEvents::TEvWakeup::EventType:
-                    return false;
+                    case TEvSentinel::TEvUpdateConfig::EventType:
+                    case TEvSentinel::TEvUpdateState::EventType:
+                    case TEvents::TEvWakeup::EventType:
+                        return false;
 
-                default:
-                    return true;
+                    default:
+                        return true;
                 }
             });
             auto prevObserver = SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
-            SetObserverFunc([this, prevObserver](TTestActorRuntimeBase& runtime,
+            SetObserverFunc([this, prevObserver](
                                     TAutoPtr<IEventHandle> &event){
                 switch (event->GetTypeRewrite()) {
                 case TEvCms::TEvClusterStateRequest::EventType:
@@ -398,7 +398,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
                     return TTestActorRuntime::EEventAction::PROCESS;
                 }
                 default:
-                    return prevObserver(runtime, event);
+                    return prevObserver(event);
                 }
             });
 

@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                             NLs::PathVersionEqual(3)});
 
         TStringBuilder meteringMessages;
-        auto grabMeteringMessage = [&meteringMessages](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto grabMeteringMessage = [&meteringMessages](TAutoPtr<IEventHandle>& ev) -> auto {
             if (ev->Type == NMetering::TEvMetering::TEvWriteMeteringJson::EventType) {
                 auto *msg = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>();
                 Cerr << "grabMeteringMessage has happened" << Endl;

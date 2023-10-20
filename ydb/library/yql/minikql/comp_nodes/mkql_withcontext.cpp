@@ -162,8 +162,8 @@ private:
     const std::string_view ContextType;
 };
 
-class TWithContextWideFlowWrapper : public TStatefulWideFlowComputationNode<TWithContextWideFlowWrapper> {
-using TBaseComputation = TStatefulWideFlowComputationNode<TWithContextWideFlowWrapper>;
+class TWithContextWideFlowWrapper : public TStatefulWideFlowCodegeneratorNode<TWithContextWideFlowWrapper> {
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWithContextWideFlowWrapper>;
 public:
     TWithContextWideFlowWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow,
         const std::string_view& contextType)
@@ -184,11 +184,8 @@ public:
         state.Detach(status == EFetchResult::Finish);
         return status;
     }
-/*
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        Cerr << Flow->DebugString() << Endl;
-        Y_ABORT("bad");
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -198,6 +195,8 @@ public:
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
+        const auto good = BasicBlock::Create(context, "good", ctx.Func);
+        const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
 
         BranchInst::Create(main, make, HasValue(statePtr, block), block);
         block = make;
@@ -207,7 +206,7 @@ public:
         const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWithContextWideFlowWrapper::MakeState));
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -219,35 +218,46 @@ public:
         const auto attachFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Attach));
         const auto attachFuncType = FunctionType::get(Type::getVoidTy(context), { statePtrType }, false);
         const auto attachFuncPtr = CastInst::Create(Instruction::IntToPtr, attachFunc, PointerType::getUnqual(attachFuncType), "attach", block);
-        CallInst::Create(attachFuncPtr, { stateArg }, "", block);
+        CallInst::Create(attachFuncType, attachFuncPtr, { stateArg }, "", block);
 
         auto getres = GetNodeValues(Flow, ctx, block);
-        const auto array = new AllocaInst(ArrayType::get(valueType, getres.second.size()), 0U, "array", &ctx.Func->getEntryBlock().back());
-        auto i = 0;
-        for (auto& getter : getres.second) {
-            const auto itemPtr = GetElementPtrInst::CreateInBounds(array, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, "item_ptr", &ctx.Func->getEntryBlock().back());
-            const auto item = getter(ctx, block);
-            ValueAddRef(EValueRepresentation::Any, item, ctx, block);
-            new StoreInst(item, itemPtr, block);
-            getter = [itemPtr] (const TCodegenContext& ctx, BasicBlock*& block) {
-                const auto item = new LoadInst(itemPtr, "item", block);
-                ValueRelease(EValueRepresentation::Any, item, ctx, block);
-                return item;
-            };
-            ++i;
+
+        const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, getres.first, ConstantInt::get(getres.first->getType(), static_cast<i32>(EFetchResult::Yield)), "special", block);
+
+        BranchInst::Create(exit, good, special, block);
+
+        block = good;
+
+        const auto arrayType = ArrayType::get(valueType, getres.second.size());
+        const auto arrayPtr = new AllocaInst(arrayType, 0U, "array_ptr", &ctx.Func->getEntryBlock().back());
+        Value* array = UndefValue::get(arrayType);
+        for (auto idx = 0U; idx < getres.second.size(); ++idx) {
+            const auto item = getres.second[idx](ctx, block);
+            array = InsertValueInst::Create(array, item, {idx}, (TString("value_") += ToString(idx)).c_str(), block);
         }
+        new StoreInst(array, arrayPtr, block);
+
+        BranchInst::Create(exit, block);
+
+        block = exit;
 
         const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, getres.first, ConstantInt::get(getres.first->getType(), static_cast<i32>(EFetchResult::Finish)), "finish", block);
 
         const auto detachFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Detach));
         const auto detachFuncType = FunctionType::get(Type::getVoidTy(context), { statePtrType, finish->getType() }, false);
         const auto detachFuncPtr = CastInst::Create(Instruction::IntToPtr, detachFunc, PointerType::getUnqual(detachFuncType), "detach", block);
-        CallInst::Create(detachFuncPtr, { stateArg, finish }, "", block);
+        CallInst::Create(detachFuncType, detachFuncPtr, { stateArg, finish }, "", block);
+
+        for (auto idx = 0U; idx < getres.second.size(); ++idx) {
+            getres.second[idx] = [idx, arrayPtr, arrayType, indexType, valueType] (const TCodegenContext& ctx, BasicBlock*& block) {
+                const auto itemPtr = GetElementPtrInst::CreateInBounds(arrayType, arrayPtr, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx)}, (TString("ptr_") += ToString(idx)).c_str(), block);
+                return new LoadInst(valueType, itemPtr, (TString("item_") += ToString(idx)).c_str(), block);
+            };
+        }
 
         return getres;
     }
 #endif
-*/
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TState>(ContextType);
@@ -267,11 +277,10 @@ IComputationNode* WrapWithContext(TCallable& callable, const TComputationNodeFac
     const auto contextTypeData = AS_VALUE(TDataLiteral, callable.GetInput(0));
     const auto contextType = contextTypeData->AsValue().AsStringRef();
     const auto arg = LocateNode(ctx.NodeLocator, callable, 1);
-    if (callable.GetInput(1).GetStaticType()->IsFlow()) {
+    if (const auto type = callable.GetType()->GetReturnType(); type->IsFlow()) {
         if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(arg)) {
             return new TWithContextWideFlowWrapper(ctx.Mutables, wide, contextType);
         } else {
-            const auto type = callable.GetType()->GetReturnType();
             return new TWithContextFlowWrapper(ctx.Mutables, contextType, GetValueRepresentation(type), arg);
         }
     } else {

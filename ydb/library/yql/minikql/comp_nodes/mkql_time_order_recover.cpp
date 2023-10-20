@@ -7,73 +7,73 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
-class TState: public TComputationValue<TState> {
-public:
-    using TTimestamp = i64; //use signed integers to simplify arithmetics
-    using TTimeinterval = i64;
-
-    TState(TMemoryUsageInfo* memInfo, TTimeinterval delay, TTimeinterval ahead, ui32 rowLimit)
-        : TComputationValue<TState>(memInfo)
-        , Heap(Greater)
-        , Delay(delay)
-        , Ahead(ahead)
-        , RowLimit(rowLimit + 1)
-        , Latest(0)
-        , Terminating(false)
-    {}
-    NUdf::TUnboxedValue GetOutputIfReady() {
-        if (Terminating && Heap.empty()) {
-            return NUdf::TUnboxedValue::MakeFinish();
-        }
-        if (Heap.empty()) {
-            return NUdf::TUnboxedValue{};
-        }
-        TTimestamp oldest = Heap.top().first;
-        if (oldest < Latest + Delay || Heap.size() == RowLimit || Terminating) {
-            auto result = std::move(Heap.top().second);
-            Heap.pop();
-            return result;
-        }
-        return NUdf::TUnboxedValue{};
-    }
-    ///return input row in case it cannot process it correctly
-    NUdf::TUnboxedValue ProcessRow(TTimestamp t, NUdf::TUnboxedValue&& row) {
-        MKQL_ENSURE(!row.IsSpecial(), "Internal logic error");
-        MKQL_ENSURE(Heap.size() < RowLimit, "Internal logic error");
-        if (Heap.empty()) {
-            Latest = t;
-        }
-        if (Latest + Delay < t && t < Latest + Ahead) {
-            Heap.emplace(t, std::move(row));
-        } else {
-            return row;
-        }
-        Latest = std::max(Latest, t);
-        return NUdf::TUnboxedValue{};
-    }
-    void Finish() {
-        Terminating = true;
-    }
-private:
-    using TEntry = std::pair<TTimestamp, NUdf::TUnboxedValue>;
-    static constexpr auto Greater = [](const TEntry& lhs, const TEntry& rhs) {
-        return lhs.first > rhs.first;
-    };
-    using THeap = std::priority_queue<
-        TEntry,
-        std::vector<TEntry, TMKQLAllocator<TEntry>>,
-        decltype(Greater)>;
-    THeap Heap;
-    const TTimeinterval Delay;
-    const TTimeinterval Ahead;
-    const ui32 RowLimit;
-    TTimestamp Latest;
-    bool Terminating; //not applicable for streams, but useful for debug and testing
-};
-
 class TTimeOrderRecover : public TStatefulFlowComputationNode<TTimeOrderRecover> {
     using TBaseComputation = TStatefulFlowComputationNode<TTimeOrderRecover>;
 public:
+    class TState: public TComputationValue<TState> {
+    public:
+        using TTimestamp = i64; //use signed integers to simplify arithmetics
+        using TTimeinterval = i64;
+
+        TState(TMemoryUsageInfo* memInfo, TTimeinterval delay, TTimeinterval ahead, ui32 rowLimit)
+            : TComputationValue<TState>(memInfo)
+            , Heap(Greater)
+            , Delay(delay)
+            , Ahead(ahead)
+            , RowLimit(rowLimit + 1)
+            , Latest(0)
+            , Terminating(false)
+        {}
+        NUdf::TUnboxedValue GetOutputIfReady() {
+            if (Terminating && Heap.empty()) {
+                return NUdf::TUnboxedValue::MakeFinish();
+            }
+            if (Heap.empty()) {
+                return NUdf::TUnboxedValue{};
+            }
+            TTimestamp oldest = Heap.top().first;
+            if (oldest < Latest + Delay || Heap.size() == RowLimit || Terminating) {
+                auto result = std::move(Heap.top().second);
+                Heap.pop();
+                return result;
+            }
+            return NUdf::TUnboxedValue{};
+        }
+        ///return input row in case it cannot process it correctly
+        NUdf::TUnboxedValue ProcessRow(TTimestamp t, NUdf::TUnboxedValue&& row) {
+            MKQL_ENSURE(!row.IsSpecial(), "Internal logic error");
+            MKQL_ENSURE(Heap.size() < RowLimit, "Internal logic error");
+            if (Heap.empty()) {
+                Latest = t;
+            }
+            if (Latest + Delay < t && t < Latest + Ahead) {
+                Heap.emplace(t, std::move(row));
+            } else {
+                return row;
+            }
+            Latest = std::max(Latest, t);
+            return NUdf::TUnboxedValue{};
+        }
+        void Finish() {
+            Terminating = true;
+        }
+    private:
+        using TEntry = std::pair<TTimestamp, NUdf::TUnboxedValue>;
+        static constexpr auto Greater = [](const TEntry& lhs, const TEntry& rhs) {
+            return lhs.first > rhs.first;
+        };
+        using THeap = std::priority_queue<
+            TEntry,
+            std::vector<TEntry, TMKQLAllocator<TEntry>>,
+            decltype(Greater)>;
+        THeap Heap;
+        const TTimeinterval Delay;
+        const TTimeinterval Ahead;
+        const ui32 RowLimit;
+        TTimestamp Latest;
+        bool Terminating; //not applicable for streams, but useful for debug and testing
+    };
+
     TTimeOrderRecover(
         TComputationMutables& mutables,
         EValueRepresentation kind,

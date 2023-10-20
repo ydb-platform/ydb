@@ -22,8 +22,6 @@ def get_block_gateways_config():
 
 def yqlrun_yt_results(provider, prepare, suite, case, config):
     if (suite, case) not in yqlrun_yt_results.cache:
-        if 'Proto' in case:
-            pytest.skip('Protobuf')
         if 'ViewWithUdfProcess' in case:
             pytest.skip('ScriptUdf')
 

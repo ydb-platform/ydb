@@ -40,6 +40,10 @@ PEERDIR(
 
 TAG(ya:dump_test_env)
 
+IF (SANITIZER_TYPE == "memory")
+    TAG(ya:not_autocheck) # YQL-15385
+ENDIF()
+
 NO_CHECK_IMPORTS()
 
 REQUIREMENTS(cpu:4 ram:13)

@@ -10,6 +10,7 @@ RECURSE(
     json2
     math
     pire
+    protobuf
     re2
     set
     stat

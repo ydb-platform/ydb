@@ -4,6 +4,7 @@ SET(
     ydb/library/yql/udfs/common/digest
     ydb/library/yql/udfs/common/hyperloglog
     ydb/library/yql/udfs/common/pire
+    ydb/library/yql/udfs/common/protobuf
     ydb/library/yql/udfs/common/re2
     ydb/library/yql/udfs/common/set
     ydb/library/yql/udfs/common/stat

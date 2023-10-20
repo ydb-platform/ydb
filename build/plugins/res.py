@@ -139,5 +139,5 @@ def on_ya_conf_json(unit, conf_file):
                         formula, bottle_name, conf_file, '" or "'.join(valid_dirs)
                     )
                 )
-    for formula in formulas:
+    for formula in sorted(formulas):
         unit.onresource_files(formula)

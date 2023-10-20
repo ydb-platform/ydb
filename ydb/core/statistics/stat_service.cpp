@@ -4,6 +4,8 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -21,6 +23,12 @@ public:
     }
 
     void Bootstrap() {
+        EnableStatistics = AppData()->FeatureFlags.GetEnableStatistics();
+
+        ui32 configKind = (ui32) NKikimrConsole::TConfigItem::FeatureFlagsItem;
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({configKind}));
+
         Become(&TStatService::StateWork);
     }
 
@@ -31,6 +39,8 @@ public:
             hFunc(TEvStatistics::TEvBroadcastStatistics, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig)
+            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig)
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -46,6 +56,11 @@ private:
         request.ReplyToActorId = ev->Sender;
         request.EvCookie = ev->Cookie;
         request.StatRequests.swap(ev->Get()->StatRequests);
+
+        if (!EnableStatistics) {
+            ReplyFailed(requestId);
+            return;
+        }
 
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
         auto navigate = std::make_unique<TNavigate>();
@@ -71,6 +86,11 @@ private:
         ui64 requestId = navigate->Cookie;
         auto itRequest = InFlight.find(requestId);
         if (itRequest == InFlight.end()) {
+            return;
+        }
+
+        if (!EnableStatistics) {
+            ReplyFailed(requestId);
             return;
         }
 
@@ -191,6 +211,20 @@ private:
         RegisterNode();
     }
 
+    void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+            "Subscribed for config changes");
+    }
+
+    void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const auto& featureFlags = record.GetConfig().GetFeatureFlags();
+        EnableStatistics = featureFlags.GetEnableStatistics();
+
+        auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
+    }
+
     void EstablishPipe() {
         if (!SchemeShardPipeClient && SchemeShardId) {
             auto policy = NTabletPipe::TClientRetryPolicy::WithRetries();
@@ -270,6 +304,12 @@ private:
             TResponse rsp;
             rsp.Success = false;
             rsp.Req = req;
+
+            TStatSimple stat;
+            stat.RowCount = 0;
+            stat.BytesSize = 0;
+            rsp.Statistics = stat;
+
             result->StatResponses.push_back(rsp);
         }
 
@@ -286,11 +326,12 @@ private:
     }
 
 private:
+    bool EnableStatistics = false;
+
     struct TRequestState {
         NActors::TActorId ReplyToActorId;
         ui64 EvCookie = 0;
         std::vector<TRequest> StatRequests;
-        bool WaitingForStatistics = false;
     };
     std::map<ui64, TRequestState> InFlight; // request id -> state
     ui64 NextRequestId = 1;

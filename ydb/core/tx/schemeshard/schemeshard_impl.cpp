@@ -4177,6 +4177,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableMoveIndex = appData->FeatureFlags.GetEnableMoveIndex();
     EnableAlterDatabaseCreateHiveFirst = appData->FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnablePQConfigTransactionsAtSchemeShard = appData->FeatureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
+    EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -6606,6 +6607,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableMoveIndex = featureFlags.GetEnableMoveIndex();
     EnableAlterDatabaseCreateHiveFirst = featureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnablePQConfigTransactionsAtSchemeShard = featureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
+    EnableStatistics = featureFlags.GetEnableStatistics();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
@@ -6827,17 +6829,19 @@ void TSchemeShard::GenerateStatisticsMap() {
     auto broadcast = std::make_unique<NStat::TEvStatistics::TEvBroadcastStatistics>();
     auto* record = broadcast->MutableRecord();
 
-    for (const auto& [pathId, tableInfo] : Tables) {
-        const auto& aggregated = tableInfo->GetStats().Aggregated;
-        auto* entry = record->AddEntries();
-        auto* entryPathId = entry->MutablePathId();
-        entryPathId->SetOwnerId(pathId.OwnerId);
-        entryPathId->SetLocalId(pathId.LocalPathId);
-        entry->SetRowCount(aggregated.RowCount);
-        entry->SetBytesSize(aggregated.DataSize);
-        ++count;
+    if (EnableStatistics) {
+        for (const auto& [pathId, tableInfo] : Tables) {
+            const auto& aggregated = tableInfo->GetStats().Aggregated;
+            auto* entry = record->AddEntries();
+            auto* entryPathId = entry->MutablePathId();
+            entryPathId->SetOwnerId(pathId.OwnerId);
+            entryPathId->SetLocalId(pathId.LocalPathId);
+            entry->SetRowCount(aggregated.RowCount);
+            entry->SetBytesSize(aggregated.DataSize);
+            ++count;
+        }
+        // TODO: column tables
     }
-    // TODO: column tables
 
     PreSerializedStatisticsMapData.clear();
     Y_PROTOBUF_SUPPRESS_NODISCARD record->SerializeToString(&PreSerializedStatisticsMapData);
@@ -6862,6 +6866,7 @@ void TSchemeShard::BroadcastStatistics() {
 
     auto broadcast = std::make_unique<NStat::TEvStatistics::TEvBroadcastStatistics>();
     auto* record = broadcast->MutableRecord();
+    record->MutableNodeIds()->Reserve(StatNodes.size());
     for (const auto& [nodeId, _] : StatNodes) {
         if (nodeId == leadingNodeId) {
             continue;
@@ -6888,6 +6893,7 @@ void TSchemeShard::BroadcastStatisticsFast() {
 
     auto broadcast = std::make_unique<NStat::TEvStatistics::TEvBroadcastStatistics>();
     auto* record = broadcast->MutableRecord();
+    record->MutableNodeIds()->Reserve(StatFastBroadcastNodes.size());
     for (const auto& nodeId : StatFastBroadcastNodes) {
         if (nodeId == leadingNodeId) {
             continue;

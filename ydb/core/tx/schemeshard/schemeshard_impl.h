@@ -265,6 +265,7 @@ public:
     bool EnableMoveIndex = true;
     bool EnableAlterDatabaseCreateHiveFirst = false;
     bool EnablePQConfigTransactionsAtSchemeShard = false;
+    bool EnableStatistics = false;
 
     TShardDeleter ShardDeleter;
 

@@ -1,5 +1,5 @@
-#include <yql/library/protobuf_udf/type_builder.h>
-#include <yql/library/protobuf_udf/value_builder.h>
+#include <ydb/library/yql/minikql/protobuf_udf/type_builder.h>
+#include <ydb/library/yql/minikql/protobuf_udf/value_builder.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/udf/udf_registrator.h>
 

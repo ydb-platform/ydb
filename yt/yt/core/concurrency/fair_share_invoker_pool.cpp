@@ -149,7 +149,7 @@ public:
         {
             auto now = GetInstant();
 
-            auto guard = WriterGuard(InvokerQueueStatesLock_);
+            auto guard = Guard(InvokerQueueStatesLock_);
 
             auto& queueState = InvokerQueueStates_[index];
             queueState.OnActionEnqueued(now);
@@ -174,7 +174,7 @@ protected:
 
         auto now = GetInstant();
 
-        auto guard = ReaderGuard(InvokerQueueStatesLock_);
+        auto guard = Guard(InvokerQueueStatesLock_);
 
         const auto& queueState = InvokerQueueStates_[index];
         return queueState.GetInvokerStatistics(now);
@@ -242,7 +242,7 @@ private:
         }
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, InvokerQueueStatesLock_);
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, InvokerQueueStatesLock_);
     std::vector<TInvokerQueueState> InvokerQueueStates_;
 
     IFairShareCallbackQueuePtr Queue_;
@@ -316,7 +316,7 @@ private:
         YT_VERIFY(IsValidInvokerIndex(bucketIndex));
 
         {
-            auto guard = WriterGuard(InvokerQueueStatesLock_);
+            auto guard = Guard(InvokerQueueStatesLock_);
 
             auto& queueState = InvokerQueueStates_[bucketIndex];
             queueState.OnActionDequeued();

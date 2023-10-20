@@ -128,7 +128,7 @@ namespace NKikimr::NDataStreams::V1 {
             PartitionWriteSpeedInBytesPerSec(GetProtoRequest()->write_quota_kb_per_sec()));
 
         if (AppData(ctx)->PQConfig.GetBillingMeteringConfig().GetEnabled()) {
-            topicRequest.set_metering_mode(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY);
+            topicRequest.set_metering_mode(Ydb::Topic::METERING_MODE_REQUEST_UNITS);
 
             if (GetProtoRequest()->has_stream_mode_details()) {
                 switch(GetProtoRequest()->stream_mode_details().stream_mode()) {

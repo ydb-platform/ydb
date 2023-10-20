@@ -70,33 +70,50 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
     }
     // Save new portions (their column records)
 
+    THashMap<ui64, std::shared_ptr<TGranuleMeta>> granules;
     for (auto& portionInfoWithBlobs : AppendedPortions) {
         auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
         Y_ABORT_UNLESS(!portionInfo.Empty());
         auto it = remapGranules.find(portionInfo.GetGranule());
         if (it != remapGranules.end()) {
-            portionInfo.SetGranule(it->second);
-        }
-        self.UpsertPortion(portionInfo);
-        for (auto& record : portionInfo.Records) {
-            self.ColumnsTable->Write(context.DB, portionInfo, record);
+            granules.emplace(it->second, self.GetGranulePtrVerified(it->second));
+        } else {
+            granules.emplace(portionInfo.GetGranule(), self.GetGranulePtrVerified(portionInfo.GetGranule()));
         }
     }
-
-    auto g = self.GranulesStorage->StartPackModification();
     for (auto& [_, portionInfo] : PortionsToRemove) {
-        Y_ABORT_UNLESS(!portionInfo.Empty());
-        Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
+        granules.emplace(portionInfo.GetGranule(), self.GetGranulePtrVerified(portionInfo.GetGranule()));
+    }
+    NJson::TJsonValue sbJson = NJson::JSON_MAP;
+    {
+        auto g = self.GranulesStorage->StartPackModification();
 
-        const ui64 granule = portionInfo.GetGranule();
-        const ui64 portion = portionInfo.GetPortion();
+        for (auto& [_, portionInfo] : PortionsToRemove) {
+            Y_ABORT_UNLESS(!portionInfo.Empty());
+            Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
 
-        const TPortionInfo& oldInfo = self.GetGranuleVerified(granule).GetPortionVerified(portion);
+            const ui64 granule = portionInfo.GetGranule();
+            const ui64 portion = portionInfo.GetPortion();
 
-        self.UpsertPortion(portionInfo, &oldInfo);
+            const TPortionInfo& oldInfo = self.GetGranuleVerified(granule).GetPortionVerified(portion);
 
-        for (auto& record : portionInfo.Records) {
-            self.ColumnsTable->Write(context.DB, portionInfo, record);
+            self.UpsertPortion(portionInfo, &oldInfo);
+
+            for (auto& record : portionInfo.Records) {
+                self.ColumnsTable->Write(context.DB, portionInfo, record);
+            }
+        }
+        for (auto& portionInfoWithBlobs : AppendedPortions) {
+            auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
+            Y_ABORT_UNLESS(!portionInfo.Empty());
+            auto it = remapGranules.find(portionInfo.GetGranule());
+            if (it != remapGranules.end()) {
+                portionInfo.SetGranule(it->second);
+            }
+            self.UpsertPortion(portionInfo);
+            for (auto& record : portionInfo.Records) {
+                self.ColumnsTable->Write(context.DB, portionInfo, record);
+            }
         }
     }
 

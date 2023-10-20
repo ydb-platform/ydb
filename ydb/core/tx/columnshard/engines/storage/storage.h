@@ -10,8 +10,6 @@ class TGranulesStorage {
 private:
     const TCompactionLimits Limits;
     const NColumnShard::TEngineLogsCounters Counters;
-    THashMap<ui64, TCompactionPriority> GranulesCompactionPriority;
-    std::map<TCompactionPriority, std::set<ui64>> GranuleCompactionPrioritySorting;
     std::shared_ptr<IStoragesManager> StoragesManager;
     bool PackModificationFlag = false;
     THashMap<ui64, const TGranuleMeta*> PackModifiedGranules;

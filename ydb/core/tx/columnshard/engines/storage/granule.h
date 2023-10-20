@@ -148,30 +148,6 @@ public:
     }
 };
 
-class TCompactionPriority {
-private:
-    NStorageOptimizer::TOptimizationPriority Weight;
-    TMonotonic ConstructionInstant = TMonotonic::Now();
-public:
-    const NStorageOptimizer::TOptimizationPriority& GetWeight() const {
-        return Weight;
-    }
-
-    TCompactionPriority(std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> planner)
-        : Weight(planner->GetUsefulMetric())
-    {
-
-    }
-    bool operator<(const TCompactionPriority& item) const {
-        return Weight < item.Weight;
-    }
-
-    TString DebugString() const {
-        return TStringBuilder() << "summary:(" << Weight.DebugString() << ");";
-    }
-
-};
-
 class TGranuleMeta: TNonCopyable {
 public:
     enum class EActivity {
@@ -240,8 +216,15 @@ public:
 
     TGranuleAdditiveSummary::ECompactionClass GetCompactionType(const TCompactionLimits& limits) const;
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;
-    TCompactionPriority GetCompactionPriority() const {
-        return TCompactionPriority(OptimizerPlanner);
+
+    NStorageOptimizer::TOptimizationPriority GetCompactionPriority() const {
+        return OptimizerPlanner->GetUsefulMetric();
+    }
+
+    void ActualizeOptimizer(const TInstant currentInstant) const {
+        if (currentInstant - OptimizerPlanner->GetActualizationInstant() > TDuration::Seconds(1)) {
+            OptimizerPlanner->Actualize(currentInstant);
+        }
     }
 
     bool NeedCompaction(const TCompactionLimits& limits) const {

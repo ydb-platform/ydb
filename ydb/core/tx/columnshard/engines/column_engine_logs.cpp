@@ -288,11 +288,15 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept {
     auto granule = GranulesStorage->GetGranuleForCompaction(Granules);
     if (!granule) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no granules for start compaction");
         return nullptr;
     }
     granule->OnStartCompaction();
     auto changes = granule->GetOptimizationTask(limits, granule, busyPortions);
     NYDBTest::TControllers::GetColumnShardController()->OnStartCompaction(changes);
+    if (!changes) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")("weight", granule->GetCompactionPriority().DebugString());
+    }
     return changes;
 }
 

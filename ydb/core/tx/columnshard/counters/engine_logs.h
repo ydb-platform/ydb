@@ -5,6 +5,10 @@
 #include <util/string/builder.h>
 #include <set>
 
+namespace NKikimr::NOlap {
+class TPortionInfo;
+}
+
 namespace NKikimr::NColumnShard {
 
 class TBaseGranuleDataClassSummary {
@@ -244,6 +248,8 @@ private:
 
     TAgentGranuleDataCounters GranuleDataAgent;
     std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
+    std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;
+    std::vector<std::shared_ptr<TIncrementalHistogram>> PortionRecordsDistribution;
 public:
     NMonitoring::TDynamicCounters::TCounterPtr OverloadGranules;
     NMonitoring::TDynamicCounters::TCounterPtr CompactOverloadGranulesSelection;
@@ -253,29 +259,33 @@ public:
 
     class TPortionsInfoGuard {
     private:
-        std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> Guards;
+        std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> BlobGuards;
+        std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> PortionRecordCountGuards;
+        std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> PortionSizeGuards;
     public:
-        TPortionsInfoGuard(const std::vector<std::shared_ptr<TIncrementalHistogram>>& distr)
+        TPortionsInfoGuard(const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrBlobs,
+            const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrPortionSize,
+            const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrRecordsCount)
         {
-            for (auto&& i : distr) {
-                Guards.emplace_back(i->BuildGuard());
+            for (auto&& i : distrBlobs) {
+                BlobGuards.emplace_back(i->BuildGuard());
+            }
+            for (auto&& i : distrPortionSize) {
+                PortionSizeGuards.emplace_back(i->BuildGuard());
+            }
+            for (auto&& i : distrRecordsCount) {
+                PortionRecordCountGuards.emplace_back(i->BuildGuard());
             }
         }
 
-        void OnNewBlob(const NOlap::NPortion::EProduced produced, const ui64 size) const {
-            Y_ABORT_UNLESS((ui32)produced < Guards.size());
-            Guards[(ui32)produced]->Add(size, size);
-        }
 
-        void OnDropBlob(const NOlap::NPortion::EProduced produced, const ui64 size) const {
-            Y_ABORT_UNLESS((ui32)produced < Guards.size());
-            Guards[(ui32)produced]->Sub(size, size);
-        }
+        void OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const;
+        void OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const;
 
     };
 
     TPortionsInfoGuard BuildPortionBlobsGuard() const {
-        return TPortionsInfoGuard(BlobSizeDistribution);
+        return TPortionsInfoGuard(BlobSizeDistribution, PortionSizeDistribution, PortionRecordsDistribution);
     }
 
     TGranuleDataCounters RegisterGranuleDataCounters() const {

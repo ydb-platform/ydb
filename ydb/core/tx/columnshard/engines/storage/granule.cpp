@@ -3,6 +3,7 @@
 #include <library/cpp/actors/core/log.h>
 #include "optimizer/intervals/optimizer.h"
 #include "optimizer/levels/optimizer.h"
+#include "optimizer/lbuckets/optimizer.h"
 
 namespace NKikimr::NOlap {
 
@@ -72,13 +73,7 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
     if (portionAfter) {
         AFL_VERIFY(PortionsByPK[portionAfter->IndexKeyStart()].emplace(portionAfter->GetPortion(), portionAfter).second);
 
-        THashMap<TUnifiedBlobId, ui64> blobIdSize;
-        for (auto&& i : portionAfter->Records) {
-            blobIdSize[i.BlobRange.BlobId] += i.BlobRange.Size;
-        }
-        for (auto&& i : blobIdSize) {
-            PortionInfoGuard.OnNewBlob(portionAfter->HasRemoveSnapshot() ? NPortion::EProduced::INACTIVE : portionAfter->GetMeta().Produced, i.second);
-        }
+        PortionInfoGuard.OnNewPortion(portionAfter);
         if (!portionAfter->HasRemoveSnapshot()) {
             if (modificationGuard) {
                 modificationGuard->AddPortion(portionAfter);
@@ -111,13 +106,7 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
             }
         }
 
-        THashMap<TUnifiedBlobId, ui64> blobIdSize;
-        for (auto&& i : portionBefore->Records) {
-            blobIdSize[i.BlobRange.BlobId] += i.BlobRange.Size;
-        }
-        for (auto&& i : blobIdSize) {
-            PortionInfoGuard.OnDropBlob(portionBefore->HasRemoveSnapshot() ? NPortion::EProduced::INACTIVE : portionBefore->GetMeta().Produced, i.second);
-        }
+        PortionInfoGuard.OnDropPortion(portionBefore);
         if (!portionBefore->HasRemoveSnapshot()) {
             OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
         }

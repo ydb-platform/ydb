@@ -785,7 +785,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     // Create an apply for the future that will fetch table statistics and save it in the metadata
     // This method will only run if cost based optimization is enabled
 
-    if (!Config || !Config->HasOptEnableCostBasedOptimization()){
+    if (!Config || !Config->FeatureFlags.GetEnableStatistics()){
         return future;
     }
 
@@ -825,9 +825,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     return;
                 }
                 auto resp = response.StatResponses[0];
-                auto s = std::get<NKikimr::NStat::TStatSimple>(resp.Statistics);
-                result.Metadata->RecordsCount = s.RowCount;
-                result.Metadata->DataSize = s.BytesSize;
+                if (std::holds_alternative<NKikimr::NStat::TStatSimple>(resp.Statistics)) {
+                    auto s = std::get<NKikimr::NStat::TStatSimple>(resp.Statistics);
+                    result.Metadata->RecordsCount = s.RowCount;
+                    result.Metadata->DataSize = s.BytesSize;
+                }
                 promise.SetValue(result);
         });
 

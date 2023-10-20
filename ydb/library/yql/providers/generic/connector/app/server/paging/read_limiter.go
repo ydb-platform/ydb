@@ -1,10 +1,11 @@
-package utils
+package paging
 
 import (
 	"fmt"
 
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 )
 
 // ReadLimiter helps to limitate amount of data returned by Connector server in every read request.
@@ -24,8 +25,10 @@ type readLimiterRows struct {
 }
 
 func (rl *readLimiterRows) AddRow() error {
-	if rl.rowsRead == rl.rowsLimit {
-		return fmt.Errorf("can read only %d line(s) from data source per request: %w", rl.rowsLimit, ErrReadLimitExceeded)
+	if rl.rowsRead >= rl.rowsLimit {
+		return fmt.Errorf("can read only %d line(s) from data source per request: %w",
+			rl.rowsLimit,
+			utils.ErrReadLimitExceeded)
 	}
 
 	rl.rowsRead++

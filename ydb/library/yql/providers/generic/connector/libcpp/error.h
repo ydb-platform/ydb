@@ -10,7 +10,24 @@
 namespace NYql::NConnector {
     NApi::TError NewSuccess();
 
-    bool IsSuccess(const NApi::TError& error);
+    template <typename TResponse>
+    bool IsSuccess(const TResponse& response) {
+        if (!response.has_error()) {
+            return true;
+        }
+
+        const NApi::TError& error = response.error();
+
+        YQL_ENSURE(error.status() != Ydb::StatusIds_StatusCode::StatusIds_StatusCode_STATUS_CODE_UNSPECIFIED,
+                   "error status code is not initialized");
+
+        auto ok = error.status() == Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS;
+        if (ok) {
+            YQL_ENSURE(error.issues_size() == 0, "request succeeded, but issues are not empty");
+        }
+
+        return ok;
+    }
 
     TIssues ErrorToIssues(const NApi::TError& error);
 

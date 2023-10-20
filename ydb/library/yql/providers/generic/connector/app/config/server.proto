@@ -7,17 +7,29 @@ option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/gener
 
 // Connector server configuration
 message TServerConfig {
-    // Network address server will be listening on
-    NYql.NConnector.NApi.TEndpoint endpoint = 1;
-    // TLS settings.
-    // Leave it empty for insecure connections.
-    TServerTLSConfig tls = 2;
+    // TODO: remove it after YQ-2057
+    NYql.NConnector.NApi.TEndpoint endpoint = 1 [deprecated=true];
+    TServerTLSConfig tls = 2 [deprecated=true];
+
+    TConnectorServerConfig connector_server = 5; 
     // This is a rough restriction for YQ memory consumption until
     // https://st.yandex-team.ru/YQ-2057 is implemented.
     // Leave it empty if you want to avoid any memory limits.
     TServerReadLimit read_limit = 3;
     // Logger config
     TLoggerConfig logger = 4;
+    // Go runtime profiler.
+    // Disabled if this part of config is empty.
+    TPprofServerConfig pprof_server = 6;
+}
+
+// TConnectorServerConfig - configuration of the main GRPC server
+message TConnectorServerConfig {
+    // Network address server will be listening on
+    NYql.NConnector.NApi.TEndpoint endpoint = 1;
+    // TLS settings.
+    // Leave it empty for insecure connections.
+    TServerTLSConfig tls = 2;
 }
 
 message TServerTLSConfig {
@@ -51,4 +63,13 @@ enum ELogLevel {
 	WARN = 3;
 	ERROR = 4;
 	FATAL = 5;
+}
+
+// TPprofServerConfig configures HTTP server delivering Go runtime profiler data 
+message TPprofServerConfig {
+    // Network address server will be listening on
+    NYql.NConnector.NApi.TEndpoint endpoint = 1;
+    // TLS settings.
+    // Leave it empty for insecure connections.
+    TServerTLSConfig tls = 2;
 }

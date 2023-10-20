@@ -220,8 +220,7 @@ namespace NYql {
                 const auto it = Results_.find(TGenericState::TTableAddress(clusterName, tableName));
                 if (Results_.cend() != it) {
                     const auto& response = it->second->Response;
-                    const auto& error = response.error();
-                    if (NConnector::IsSuccess(error)) {
+                    if (NConnector::IsSuccess(response)) {
                         TGenericState::TTableMeta tableMeta;
                         tableMeta.Schema = response.schema();
                         tableMeta.DataSourceInstance = it->second->DataSourceInstance;
@@ -246,6 +245,7 @@ namespace NYql {
                             break;
                         }
                     } else {
+                        const auto& error = response.error();
                         NConnector::ErrorToExprCtx(error, ctx, ctx.GetPosition(read.Pos()),
                                                    TStringBuilder()
                                                        << "Loading metadata for table: " << clusterName << '.' << tableName);

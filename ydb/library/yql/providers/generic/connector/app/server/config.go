@@ -12,16 +12,32 @@ import (
 )
 
 func validateServerConfig(c *config.TServerConfig) error {
-	if err := validateEndpoint(c.Endpoint); err != nil {
-		return fmt.Errorf("validate `Server`: %w", err)
-	}
-
-	if err := validateServerTLSConfig(c.Tls); err != nil {
-		return fmt.Errorf("validate `TLS`: %w", err)
+	if err := validateConnectorServerConfig(c.ConnectorServer); err != nil {
+		return fmt.Errorf("validate `connector_server`: %w", err)
 	}
 
 	if err := validateServerReadLimit(c.ReadLimit); err != nil {
-		return fmt.Errorf("validate `ReadLimit`: %w", err)
+		return fmt.Errorf("validate `read_limit`: %w", err)
+	}
+
+	if err := validatePprofServerConfig(c.PprofServer); err != nil {
+		return fmt.Errorf("validate `pprof_server`: %w", err)
+	}
+
+	return nil
+}
+
+func validateConnectorServerConfig(c *config.TConnectorServerConfig) error {
+	// TODO: make it required after YQ-2057
+	// if c == nil {
+	// 	return fmt.Errorf("required field is missing")
+	// }
+	if err := validateEndpoint(c.Endpoint); err != nil {
+		return fmt.Errorf("validate `endpoint`: %w", err)
+	}
+
+	if err := validateServerTLSConfig(c.Tls); err != nil {
+		return fmt.Errorf("validate `tls`: %w", err)
 	}
 
 	return nil
@@ -29,15 +45,15 @@ func validateServerConfig(c *config.TServerConfig) error {
 
 func validateEndpoint(c *api_common.TEndpoint) error {
 	if c == nil {
-		return fmt.Errorf("missing required field `Server`")
+		return fmt.Errorf("required field is missing")
 	}
 
 	if c.Host == "" {
-		return fmt.Errorf("invalid value of field `Server.Host`: %v", c.Host)
+		return fmt.Errorf("invalid value of field `host`: %v", c.Host)
 	}
 
 	if c.Port == 0 || c.Port > math.MaxUint16 {
-		return fmt.Errorf("invalid value of field `Server.Port`: %v", c.Port)
+		return fmt.Errorf("invalid value of field `port`: %v", c.Port)
 	}
 
 	return nil
@@ -50,11 +66,11 @@ func validateServerTLSConfig(c *config.TServerTLSConfig) error {
 	}
 
 	if err := fileMustExist(c.Key); err != nil {
-		return fmt.Errorf("invalid value of field `TLS.Key`: %w", err)
+		return fmt.Errorf("invalid value of field `key`: %w", err)
 	}
 
 	if err := fileMustExist(c.Cert); err != nil {
-		return fmt.Errorf("invalid value of field `TLS.Cert`: %w", err)
+		return fmt.Errorf("invalid value of field `cert`: %w", err)
 	}
 
 	return nil
@@ -68,7 +84,24 @@ func validateServerReadLimit(c *config.TServerReadLimit) error {
 
 	// but if it's not nil, one must set limits explicitly
 	if c.GetRows() == 0 {
-		return fmt.Errorf("invalid value of field `ServerReadLimit.Rows`")
+		return fmt.Errorf("invalid value of field `rows`")
+	}
+
+	return nil
+}
+
+func validatePprofServerConfig(c *config.TPprofServerConfig) error {
+	if c == nil {
+		// It's OK to disable profiler
+		return nil
+	}
+
+	if err := validateEndpoint(c.Endpoint); err != nil {
+		return fmt.Errorf("validate `endpoint`: %w", err)
+	}
+
+	if err := validateServerTLSConfig(c.Tls); err != nil {
+		return fmt.Errorf("validate `tls`: %w", err)
 	}
 
 	return nil

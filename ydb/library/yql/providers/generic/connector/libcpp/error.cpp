@@ -12,18 +12,6 @@ namespace NYql::NConnector {
         return error;
     }
 
-    bool IsSuccess(const NApi::TError& error) {
-        YQL_ENSURE(error.status() != Ydb::StatusIds_StatusCode::StatusIds_StatusCode_STATUS_CODE_UNSPECIFIED,
-                   "error status code is not initialized");
-
-        auto ok = error.status() == Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS;
-        if (ok) {
-            YQL_ENSURE(error.issues_size() == 0, "request succeeded, but issues are not empty");
-        }
-
-        return ok;
-    }
-
     TIssues ErrorToIssues(const NApi::TError& error) {
         TIssues issues;
         issues.Reserve(error.get_arr_issues().size() + 1);
@@ -55,8 +43,6 @@ namespace NYql::NConnector {
     }
 
     void ErrorToExprCtx(const NApi::TError& error, TExprContext& ctx, const TPosition& position, const TString& summary) {
-        YQL_ENSURE(!IsSuccess(error));
-
         // add high-level error
         TStringBuilder ss;
         ss << summary << ": status=" << Ydb::StatusIds_StatusCode_Name(error.status()) << ", message=" << error.message();

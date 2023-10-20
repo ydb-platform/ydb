@@ -172,7 +172,7 @@ namespace NYql::NDq {
             YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvListSplitsPart :: event handling started"
                                              << ": splits_size=" << response.splits().size();
 
-            if (!NConnector::IsSuccess(response.error())) {
+            if (!NConnector::IsSuccess(response)) {
                 return NotifyComputeActorWithError(
                     TActivationContext::ActorSystem(),
                     ComputeActorId_,
@@ -266,7 +266,7 @@ namespace NYql::NDq {
             YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling started"
                                              << ": part_size=" << response.arrow_ipc_streaming().size();
 
-            if (!NConnector::IsSuccess(response.error())) {
+            if (!NConnector::IsSuccess(response)) {
                 return NotifyComputeActorWithError(
                     TActivationContext::ActorSystem(),
                     ComputeActorId_,
@@ -369,9 +369,16 @@ namespace NYql::NDq {
                               i64 /*freeSpace*/) final {
             YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
 
+            YQL_CLOG(TRACE, ProviderGeneric) << "GetAsyncInputData :: start";
+
             // Stream is finished
             if (!LastReadSplitsResponse_) {
                 finished = ReadSplitsFinished_;
+
+                if (finished) {
+                    YQL_CLOG(INFO, ProviderGeneric) << "GetAsyncInputData :: data reading finished";
+                }
+
                 return 0;
             }
 
@@ -414,7 +421,6 @@ namespace NYql::NDq {
             buffer.emplace_back(std::move(value));
 
             // freeSpace -= size;
-            finished = true;
             LastReadSplitsResponse_ = std::nullopt;
 
             // TODO: check it, because in S3 the generic cache clearing happens only when LastFileWasProcessed:
@@ -425,6 +431,9 @@ namespace NYql::NDq {
             AwaitNextStreamItem<NConnector::IReadSplitsStreamIterator,
                                 TEvPrivate::TEvReadSplitsPart,
                                 TEvPrivate::TEvReadSplitsFinished>(ReadSplitsIterator_);
+            finished = false;
+
+            YQL_CLOG(TRACE, ProviderGeneric) << "GetAsyncInputData :: bytes obtained = " << total;
 
             return total;
         }

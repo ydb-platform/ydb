@@ -1,4 +1,4 @@
-package utils
+package paging
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow/go/v13/arrow/ipc"
 	"github.com/apache/arrow/go/v13/arrow/memory"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
@@ -17,7 +18,7 @@ type columnarBufferArrowIPCStreaming struct {
 	builders       []array.Builder
 	readLimiter    ReadLimiter
 	schema         *arrow.Schema
-	typeMapper     TypeMapper
+	typeMapper     utils.TypeMapper
 	ydbTypes       []*Ydb.Type
 }
 
@@ -88,7 +89,7 @@ type columnarBufferArrowIPCStreamingEmptyColumns struct {
 	arrowAllocator memory.Allocator
 	readLimiter    ReadLimiter
 	schema         *arrow.Schema
-	typeMapper     TypeMapper
+	typeMapper     utils.TypeMapper
 	rowsAdded      int64
 }
 

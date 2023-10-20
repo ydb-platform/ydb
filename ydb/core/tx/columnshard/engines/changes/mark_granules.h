@@ -24,9 +24,8 @@ public:
 
     bool MakePrecedingMark(const TIndexInfo& indexInfo);
 
-    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch, const TIndexInfo& indexInfo);
-    static THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::vector<std::pair<TMark, ui64>>& granules,
+    static THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
+        const std::map<NArrow::TReplaceKey, ui64>& granules,
         const TIndexInfo& indexInfo);
 
     static std::shared_ptr<arrow::RecordBatch> GetEffectiveKey(const std::shared_ptr<arrow::RecordBatch>& batch,

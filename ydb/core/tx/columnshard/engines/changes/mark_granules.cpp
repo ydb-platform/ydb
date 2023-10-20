@@ -49,23 +49,15 @@ bool TMarksGranules::MakePrecedingMark(const TIndexInfo& indexInfo) {
     return false;
 }
 
-THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> TMarksGranules::SliceIntoGranules(
-    const std::shared_ptr<arrow::RecordBatch>& batch,
-    const TIndexInfo& indexInfo)
-{
-    return SliceIntoGranules(batch, Marks, indexInfo);
-}
-
-THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> TMarksGranules::SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::pair<TMark, ui64>>& granules, const TIndexInfo& indexInfo) {
+THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> TMarksGranules::SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch, const std::map<NArrow::TReplaceKey, ui64>& granules, const TIndexInfo& indexInfo) {
     Y_ABORT_UNLESS(batch);
     if (batch->num_rows() == 0) {
         return {};
     }
-
-    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> out;
+    THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> out;
 
     if (granules.size() == 1) {
-        out.emplace(granules[0].second, batch);
+        out[granules.begin()->second].emplace_back(batch);
     } else {
         const auto effKey = GetEffectiveKey(batch, indexInfo);
         Y_ABORT_UNLESS(effKey->num_columns() && effKey->num_rows());
@@ -80,18 +72,23 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> TMarksGranules::SliceIntoGra
         }
 
         i64 offset = 0;
-        for (size_t i = 0; i < granules.size() && offset < effKey->num_rows(); ++i) {
-            const i64 end = (i + 1 == granules.size())
+        auto itNext = granules.begin();
+        ++itNext;
+        for (auto it = granules.begin(); it != granules.end() && offset < effKey->num_rows(); ++it) {
+            const i64 end = (itNext == granules.end())
                 // Just take the number of elements in the key column for the last granule.
                 ? effKey->num_rows()
                 // Locate position of the next granule in the key.
-                : NArrow::TReplaceKeyHelper::LowerBound(keys, granules[i + 1].first.GetBorder(), offset);
+                : NArrow::TReplaceKeyHelper::LowerBound(keys, itNext->first, offset);
 
             if (const i64 size = end - offset) {
-                Y_ABORT_UNLESS(out.emplace(granules[i].second, batch->Slice(offset, size)).second);
+                out[it->second].emplace_back(batch->Slice(offset, size));
             }
 
             offset = end;
+            if (itNext != granules.end()) {
+                ++itNext;
+            }
         }
     }
     return out;

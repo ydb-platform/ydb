@@ -199,6 +199,14 @@ private:
     void OnAdditiveSummaryChange() const;
     YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 public:
+    NJson::TJsonValue OptimizerSerializeToJson() const {
+        return OptimizerPlanner->SerializeToJsonVisual();
+    }
+
+    std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const {
+        return OptimizerPlanner->GetBucketPositions();
+    }
+
     void OnStartCompaction() {
         LastCompactionInstant = TMonotonic::Now();
     }

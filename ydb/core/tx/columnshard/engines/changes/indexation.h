@@ -2,6 +2,7 @@
 #include "abstract/abstract.h"
 #include "with_appended.h"
 #include <ydb/core/tx/columnshard/engines/insert_table/data.h>
+#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr::NOlap {
@@ -22,7 +23,7 @@ protected:
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
 public:
     const TMark DefaultMark;
-    THashMap<ui64, std::vector<std::pair<TMark, ui64>>> PathToGranule; // pathId -> {mark, granule}
+    THashMap<ui64, std::map<NIndexedReader::TSortableBatchPosition, ui64>> PathToGranule; // pathId -> {pos, granule}
 public:
     TInsertColumnEngineChanges(const TMark& defaultMark, std::vector<NOlap::TInsertedData>&& dataToIndex, const TSplitSettings& splitSettings, const TSaverContext& saverContext)
         : TBase(splitSettings, saverContext, StaticTypeName())
@@ -46,7 +47,7 @@ public:
     virtual TString TypeString() const override {
         return StaticTypeName();
     }
-    bool AddPathIfNotExists(ui64 pathId);
+    std::optional<ui64> AddPathIfNotExists(ui64 pathId);
 
 };
 

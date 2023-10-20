@@ -253,6 +253,8 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
 
     auto changes = std::make_shared<TInsertColumnEngineChanges>(DefaultMark(), std::move(dataToIndex), TSplitSettings(), saverContext);
     ui32 reserveGranules = 0;
+    auto pkSchema = VersionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey();
+
     for (const auto& data : changes->GetDataToIndex()) {
         const ui64 pathId = data.PathId;
 
@@ -262,7 +264,13 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
 
         if (PathGranules.contains(pathId)) {
             const auto& src = PathGranules[pathId];
-            changes->PathToGranule[pathId].assign(src.begin(), src.end());
+            for (auto&& i : src) {
+                NIndexedReader::TSortableBatchPosition pos(i.first.GetBorder().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false);
+                changes->PathToGranule[pathId].emplace(pos, i.second);
+                for (auto&& pos : GetGranulePtrVerified(i.second)->GetBucketPositions()) {
+                    changes->PathToGranule[pathId].emplace(pos, i.second);
+                }
+            }
         } else {
             // It could reserve more than needed in case of the same pathId in DataToIndex
             ++reserveGranules;
@@ -362,7 +370,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
     auto& indexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
     Y_ABORT_UNLESS(context.Changes->Tiering.emplace(pathId, ttl).second);
 
-    TDuration dWaiting = NYDBTest::TControllers::GetColumnShardController()->GetTTLDefaultWaitingDuration(TDuration::Minutes(5));
+    TDuration dWaiting = NYDBTest::TControllers::GetColumnShardController()->GetTTLDefaultWaitingDuration(TDuration::Minutes(1));
     auto itGranules = PathGranules.find(pathId);
     if (itGranules == PathGranules.end()) {
         return dWaiting;
@@ -410,6 +418,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
 
                 AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_result")("keep", keep)("tryEvictPortion", tryEvictPortion)("allowDrop", context.AllowDrop);
                 if (keep && tryEvictPortion) {
+                    const TString currentTierName = info->GetMeta().GetTierName() ? info->GetMeta().GetTierName() : IStoragesManager::DefaultStorageId;
                     TString tierName = "";
                     for (auto& tierRef : ttl.GetOrderedTiers()) {
                         auto& tierInfo = tierRef.Get();
@@ -437,7 +446,6 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                     if (!tierName) {
                         tierName = IStoragesManager::DefaultStorageId;
                     }
-                    const TString currentTierName = info->GetMeta().GetTierName() ? info->GetMeta().GetTierName() : IStoragesManager::DefaultStorageId;
                     if (currentTierName != tierName) {
                         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering switch detected")("from", currentTierName)("to", tierName);
                         evictionSize += info->BlobsSizes().first;
@@ -456,6 +464,9 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                 SignalCounters.OnPortionNoBorder(info->BlobsBytes());
             }
         }
+    }
+    if (dWaiting > TDuration::MilliSeconds(500) && (!context.AllowEviction || !context.AllowDrop)) {
+        dWaiting = TDuration::MilliSeconds(500);
     }
     Y_ABORT_UNLESS(!!dWaiting);
     return dWaiting;

@@ -88,4 +88,7 @@ namespace NFq {
 #define STATE_COLUMN_NAME "state"
 #define STATE_TIME_COLUMN_NAME "state_time"
 
+#define CREATED_AT_COLUMN_NAME "created_at"
+#define LAST_ACCESS_AT_COLUMN_NAME "last_access_at"
+
 } // namespace NFq

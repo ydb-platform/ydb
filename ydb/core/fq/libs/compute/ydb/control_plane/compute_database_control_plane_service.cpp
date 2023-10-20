@@ -66,6 +66,7 @@ public:
         hFunc(TEvYdbCompute::TEvCreateDatabaseResponse, Handle);
         hFunc(TEvControlPlaneStorage::TEvCreateDatabaseResponse, Handle);
         hFunc(TEvYdbCompute::TEvSynchronizeResponse, Handle);
+        IgnoreFunc(TEvControlPlaneStorage::TEvModifyDatabaseResponse);
     )
 
     void Handle(TEvControlPlaneStorage::TEvDescribeDatabaseResponse::TPtr& ev) {
@@ -83,6 +84,9 @@ public:
         }
 
         Result = result;
+        auto lastAccessAtEvent = std::make_unique<TEvControlPlaneStorage::TEvModifyDatabaseRequest>(Request->Get()->CloudId, Request->Get()->Scope);
+        lastAccessAtEvent->LastAccessAt = TInstant::Now();
+        Send(ControlPlaneStorageServiceActorId(), lastAccessAtEvent.release());
         Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, result.connection()});
     }
 

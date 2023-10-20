@@ -311,6 +311,8 @@ void TYdbControlPlaneStorageActor::CreateComputeDatabasesTable()
     auto description = TTableBuilder()
         .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(INTERNAL_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(CREATED_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
+        .AddNullableColumn(LAST_ACCESS_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
         .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME})
         .Build();
 

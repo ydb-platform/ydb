@@ -771,6 +771,7 @@ struct TEvControlPlaneStorage {
         TString CloudId;
         TString Scope;
         TMaybe<bool> Synchronized;
+        TMaybe<TInstant> LastAccessAt;
     };
 
     struct TEvModifyDatabaseResponse : NActors::TEventLocal<TEvModifyDatabaseResponse, EvModifyDatabaseResponse> {

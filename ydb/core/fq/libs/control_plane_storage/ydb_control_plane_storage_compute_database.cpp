@@ -31,8 +31,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatab
     queryBuilder.AddString("internal", request.SerializeAsString());
 
     queryBuilder.AddText(
-        "INSERT INTO `" COMPUTE_DATABASES_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`) VALUES\n"
-        "    ($scope, $internal);"
+        "INSERT INTO `" COMPUTE_DATABASES_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`, `" CREATED_AT_COLUMN_NAME "`, `" LAST_ACCESS_AT_COLUMN_NAME"`) VALUES\n"
+        "    ($scope, $internal, CurrentUtcTimestamp(), CurrentUtcTimestamp());"
     );
 
     const auto query = queryBuilder.Build();
@@ -128,7 +128,41 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatab
 
     CPS_LOG_T(MakeLogPrefix(scope, "internal", scope)
         << "ModifyDatabaseRequest");
+    
+    // only write part
+    if (event.LastAccessAt) {
+        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyDatabase(write)");
+        writeQueryBuilder.AddTimestamp("last_access_at", *event.LastAccessAt);
+        writeQueryBuilder.AddString("scope", scope);
+        writeQueryBuilder.AddText(
+            "UPSERT INTO `" COMPUTE_DATABASES_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" LAST_ACCESS_AT_COLUMN_NAME "`)\n"
+            "VALUES ($scope, $last_access_at);"
+        );
+        const auto writeQuery = writeQueryBuilder.Build();
+        auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+        auto result = Write(writeQuery.Sql, writeQuery.Params, requestCounters, debugInfo);
 
+        auto prepare = [] { return std::make_tuple<NYql::TIssues>(NYql::TIssues{}); };
+        auto success = SendResponseTuple<TEvControlPlaneStorage::TEvModifyDatabaseResponse, std::tuple<NYql::TIssues>>(
+            MakeLogPrefix(scope, "internal", scope) + "ModifyDatabaseRequest",
+            NActors::TActivationContext::ActorSystem(),
+            result,
+            SelfId(),
+            ev,
+            startTime,
+            requestCounters,
+            prepare,
+            debugInfo);
+
+        success.Apply([=](const auto& future) {
+                TDuration delta = TInstant::Now() - startTime;
+                LWPROBE(ModifyDatabaseRequest, scope, "internal", delta, byteSize, future.GetValue());
+            });
+
+        return;
+    }
+
+    // read write part
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ModifyDatabase");
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddText(

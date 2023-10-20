@@ -47,6 +47,8 @@ logger = logging.getLogger(__name__)
 #: the ``env var`` is the OS environment variable (``os.environ``) to
 #: use, and ``default_value`` is the value to use if no value is otherwise
 #: found.
+#: NOTE: Fixing the spelling of this variable would be a breaking change.
+#: Please leave as is.
 BOTOCORE_DEFAUT_SESSION_VARIABLES = {
     # logical:  config_file, env_var,        default_value, conversion_func
     'profile': (None, ['AWS_DEFAULT_PROFILE', 'AWS_PROFILE'], None, None),

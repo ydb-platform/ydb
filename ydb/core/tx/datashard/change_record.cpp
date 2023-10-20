@@ -350,11 +350,12 @@ void TChangeRecord::SerializeToDynamoDBStreamsJson(NJson::TJsonValue& json, cons
     }
 }
 
-void TChangeRecord::SerializeToDebeziumJson(NJson::TJsonValue& keyJson, NJson::TJsonValue& valueJson, bool virtualTimestamps, TUserTable::TCdcStream::EMode streamMode) const {
+void TChangeRecord::SerializeToDebeziumJson(NJson::TJsonValue& keyJson, NJson::TJsonValue& valueJson, TUserTable::TCdcStream::EMode streamMode) const {
     Y_ABORT_UNLESS(Kind == EKind::CdcDataChange);
     Y_ABORT_UNLESS(Schema);
 
     const auto body = ParseBody(Body);
+
     keyJson["payload"].SetType(NJson::JSON_MAP);
     SerializeJsonValue(Schema, keyJson["payload"], body.GetKey()); // Debezium expects key in the same format as values
 
@@ -379,7 +380,7 @@ void TChangeRecord::SerializeToDebeziumJson(NJson::TJsonValue& keyJson, NJson::T
             case NKikimrChangeExchange::TDataChange::kUpsert:
             case NKikimrChangeExchange::TDataChange::kReset:
                 if (streamMode == TUserTable::TCdcStream::EMode::ECdcStreamModeNewAndOldImages) {
-                    valueJson["payload"]["op"] = body.HasOldImage() ? "u" : "c"; // u = update, c = create
+                    valueJson["payload"]["op"] = body.HasOldImage() ? "u" : "c"; // c = create
                 } else {
                     valueJson["payload"]["op"] = "u"; // u = update
                 }
@@ -392,18 +393,15 @@ void TChangeRecord::SerializeToDebeziumJson(NJson::TJsonValue& keyJson, NJson::T
         }
     }
 
-    // payload.ts. Optional. "ts_ms" int64 in Debezium, "ts" array here
-    if (virtualTimestamps) {
-        SerializeVirtualTimestamp(valueJson["payload"]["ts"], {Step, TxId});
-    }
-
     // payload.source. Mandatory.
     valueJson["payload"]["source"] = NJson::TJsonMap({
-        {"version", "0.0.1"},
-        {"connector", "ydb_debezium_json"},
-        {"ts_ms", GetApproximateCreationDateTime().MilliSeconds()},
+        {"version", "1.0.0"},
+        {"connector", "ydb"},
+        {"ts_ms", GetApproximateCreationDateTime().MilliSeconds()}, // payload.ts_ms has no sense
         {"snapshot", Source == ESource::InitialScan},
+        {"step", Step},
         {"txId", TxId},
+        // TODO: db & table
     });
 }
 

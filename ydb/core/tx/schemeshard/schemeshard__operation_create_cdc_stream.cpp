@@ -198,11 +198,6 @@ public:
         switch (streamDesc.GetFormat()) {
         case NKikimrSchemeOp::ECdcStreamFormatProto:
         case NKikimrSchemeOp::ECdcStreamFormatJson:
-            if (!streamDesc.GetAwsRegion().empty()) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "AWS_REGION option incompatible with specified stream format");
-                return result;
-            }
             break;
         case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
             if (!AppData()->FeatureFlags.GetEnableChangefeedDynamoDBStreamsFormat()) {
@@ -227,6 +222,41 @@ public:
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
                 << "Invalid stream format: " << static_cast<ui32>(streamDesc.GetFormat()));
             return result;
+        }
+
+        if (!streamDesc.GetAwsRegion().empty()) {
+            switch (streamDesc.GetFormat()) {
+            case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
+                break;
+            default:
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "AWS_REGION option incompatible with specified stream format");
+                return result;
+            }
+        }
+
+        if (streamDesc.GetVirtualTimestamps()) {
+            switch (streamDesc.GetFormat()) {
+            case NKikimrSchemeOp::ECdcStreamFormatProto:
+            case NKikimrSchemeOp::ECdcStreamFormatJson:
+                break;
+            default:
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "VIRTUAL_TIMESTAMPS incompatible with specified stream format");
+                return result;
+            }
+        }
+
+        if (streamDesc.GetResolvedTimestampsIntervalMs()) {
+            switch (streamDesc.GetFormat()) {
+            case NKikimrSchemeOp::ECdcStreamFormatProto:
+            case NKikimrSchemeOp::ECdcStreamFormatJson:
+                break;
+            default:
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "RESOLVED_TIMESTAMPS incompatible with specified stream format");
+                return result;
+            }
         }
 
         TString errStr;

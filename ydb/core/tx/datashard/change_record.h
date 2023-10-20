@@ -57,7 +57,7 @@ public:
     void SerializeToProto(NKikimrChangeExchange::TChangeRecord& record) const;
     void SerializeToYdbJson(NJson::TJsonValue& json, bool virtualTimestamps) const;
     void SerializeToDynamoDBStreamsJson(NJson::TJsonValue& json, const TAwsJsonOptions& opts) const;
-    void SerializeToDebeziumJson(NJson::TJsonValue& keyJson, NJson::TJsonValue& valueJson, bool virtualTimestamps, TUserTable::TCdcStream::EMode streamMode) const;
+    void SerializeToDebeziumJson(NJson::TJsonValue& keyJson, NJson::TJsonValue& valueJson, TUserTable::TCdcStream::EMode streamMode) const;
 
     TConstArrayRef<TCell> GetKey() const;
     i64 GetSeqNo() const;

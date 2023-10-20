@@ -1292,7 +1292,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     };
 
-    static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false, bool timestamps = false) {
+    static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false) {
         NJsonWriter::TBuf body;
         auto root = body.BeginObject();
         auto payload = root.WriteKey("payload").BeginObject();
@@ -1301,8 +1301,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
             .WriteKey("op").WriteString(op)
             .WriteKey("source")
                 .BeginObject()
-                    .WriteKey("connector").WriteString("ydb_debezium_json")
-                    .WriteKey("version").WriteString("***")
+                    .WriteKey("connector").WriteString("ydb")
+                    .WriteKey("version").WriteString("1.0.0")
+                    .WriteKey("step").WriteString("***")
                     .WriteKey("txId").WriteString("***")
                     .WriteKey("ts_ms").WriteString("***")
                     .WriteKey("snapshot").WriteBool(snapshot)
@@ -1314,10 +1315,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         if (after) {
             payload.WriteKey("after").UnsafeWriteValue(after);
-        }
-
-        if (timestamps) {
-            payload.WriteKey("ts").WriteString("***");
         }
 
         payload.EndObject();
@@ -1492,30 +1489,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{},"key":[1],"ts":"***"})",
             R"({"update":{},"key":[2],"ts":"***"})",
             R"({"update":{},"key":[3],"ts":"***"})",
-        });
-    }
-
-    Y_UNIT_TEST(VirtualTimestampsDebezium) {
-        TopicRunner::Read(SimpleTable(), WithVirtualTimestamps(NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson)), {R"(
-            UPSERT INTO `/Root/Table` (key, value) VALUES
-            (1, 10),
-            (2, 20),
-            (3, 30);
-        )", R"(
-            UPSERT INTO `/Root/Table` (key, value) VALUES
-            (1, 100),
-            (2, 200),
-            (3, 300);
-        )", R"(
-            DELETE FROM `/Root/Table` WHERE key = 1;
-        )"}, { 
-            {DebeziumBody("c", nullptr, R"({"key":1,"value":10})", false, true), {{"__key", R"({"payload":{"key":1}})"}}},
-            {DebeziumBody("c", nullptr, R"({"key":2,"value":20})", false, true), {{"__key", R"({"payload":{"key":2}})"}}},
-            {DebeziumBody("c", nullptr, R"({"key":3,"value":30})", false, true), {{"__key", R"({"payload":{"key":3}})"}}},
-            {DebeziumBody("u", R"({"key":1,"value":10})", R"({"key":1,"value":100})", false, true), {{"__key", R"({"payload":{"key":1}})"}}},
-            {DebeziumBody("u", R"({"key":2,"value":20})", R"({"key":2,"value":200})", false, true), {{"__key", R"({"payload":{"key":2}})"}}},
-            {DebeziumBody("u", R"({"key":3,"value":30})", R"({"key":3,"value":300})", false, true), {{"__key", R"({"payload":{"key":3}})"}}},
-            {DebeziumBody("d", R"({"key":1,"value":100})", nullptr, false, true), {{"__key", R"({"payload":{"key":1}})"}}},
         });
     }
 

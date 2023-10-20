@@ -157,7 +157,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                 case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson: {
                     NJson::TJsonValue keyJson;
                     NJson::TJsonValue valueJson;
-                    record.SerializeToDebeziumJson(keyJson, valueJson, Stream.VirtualTimestamps, Stream.Mode);
+                    record.SerializeToDebeziumJson(keyJson, valueJson, Stream.Mode);
 
                     TStringStream keyStr;
                     WriteJson(&keyStr, &keyJson, DefaultJsonConfig());

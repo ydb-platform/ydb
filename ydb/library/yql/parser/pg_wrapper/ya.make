@@ -84,44 +84,43 @@ INCLUDE(cflags.inc)
 
 IF (OS_LINUX OR OS_DARWIN)
     SRCS(
-        ../../../../../contrib/libs/postgresql/src/backend/port/posix_sema.c
-        ../../../../../contrib/libs/postgresql/src/backend/port/sysv_shmem.c
+        postgresql/src/backend/port/posix_sema.c
+        postgresql/src/backend/port/sysv_shmem.c
     )
 ELSEIF (OS_WINDOWS)
     ADDINCL(
-        contrib/libs/postgresql/src/include
-        contrib/libs/postgresql/src/include/port/win32
-        contrib/libs/postgresql/src/include/port/win32
-        contrib/libs/postgresql/src/include/port/win32_msvc
+        ydb/library/yql/parser/pg_wrapper/postgresql/src/include
+        ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32
+        ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32_msvc
     )
     SRCS(
-        ../../../../../contrib/libs/postgresql/src/backend/port/win32/crashdump.c
-        ../../../../../contrib/libs/postgresql/src/backend/port/win32/signal.c
-        ../../../../../contrib/libs/postgresql/src/backend/port/win32/socket.c
-        ../../../../../contrib/libs/postgresql/src/backend/port/win32/timer.c
-        ../../../../../contrib/libs/postgresql/src/backend/port/win32_sema.c
-        ../../../../../contrib/libs/postgresql/src/backend/port/win32_shmem.c
-        ../../../../../contrib/libs/postgresql/src/port/dirmod.c
-        ../../../../../contrib/libs/postgresql/src/port/dlopen.c
-        ../../../../../contrib/libs/postgresql/src/port/getaddrinfo.c
-        ../../../../../contrib/libs/postgresql/src/port/getopt.c
-        ../../../../../contrib/libs/postgresql/src/port/getrusage.c
-        ../../../../../contrib/libs/postgresql/src/port/gettimeofday.c
-        ../../../../../contrib/libs/postgresql/src/port/inet_aton.c
-        ../../../../../contrib/libs/postgresql/src/port/kill.c
-        ../../../../../contrib/libs/postgresql/src/port/open.c
-        ../../../../../contrib/libs/postgresql/src/port/pread.c
-        ../../../../../contrib/libs/postgresql/src/port/pwrite.c
-        ../../../../../contrib/libs/postgresql/src/port/pwritev.c
-        ../../../../../contrib/libs/postgresql/src/port/system.c
-        ../../../../../contrib/libs/postgresql/src/port/win32common.c
-        ../../../../../contrib/libs/postgresql/src/port/win32env.c
-        ../../../../../contrib/libs/postgresql/src/port/win32error.c
-        ../../../../../contrib/libs/postgresql/src/port/win32fseek.c
-        ../../../../../contrib/libs/postgresql/src/port/win32ntdll.c
-        ../../../../../contrib/libs/postgresql/src/port/win32security.c
-        ../../../../../contrib/libs/postgresql/src/port/win32setlocale.c
-        ../../../../../contrib/libs/postgresql/src/port/win32stat.c
+        postgresql/src/backend/port/win32/crashdump.c
+        postgresql/src/backend/port/win32/signal.c
+        postgresql/src/backend/port/win32/socket.c
+        postgresql/src/backend/port/win32/timer.c
+        postgresql/src/backend/port/win32_sema.c
+        postgresql/src/backend/port/win32_shmem.c
+        postgresql/src/port/dirmod.c
+        postgresql/src/port/dlopen.c
+        postgresql/src/port/getaddrinfo.c
+        postgresql/src/port/getopt.c
+        postgresql/src/port/getrusage.c
+        postgresql/src/port/gettimeofday.c
+        postgresql/src/port/inet_aton.c
+        postgresql/src/port/kill.c
+        postgresql/src/port/open.c
+        postgresql/src/port/pread.c
+        postgresql/src/port/pwrite.c
+        postgresql/src/port/pwritev.c
+        postgresql/src/port/system.c
+        postgresql/src/port/win32common.c
+        postgresql/src/port/win32env.c
+        postgresql/src/port/win32error.c
+        postgresql/src/port/win32fseek.c
+        postgresql/src/port/win32ntdll.c
+        postgresql/src/port/win32security.c
+        postgresql/src/port/win32setlocale.c
+        postgresql/src/port/win32stat.c
     )
 ENDIF()
 

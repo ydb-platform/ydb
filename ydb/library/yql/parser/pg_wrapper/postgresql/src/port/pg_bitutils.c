@@ -3,7 +3,7 @@
  * pg_bitutils.c
  *	  Miscellaneous functions for bit-wise operations.
  *
- * Copyright (c) 2019-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2019-2022, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/port/pg_bitutils.c
@@ -103,37 +103,21 @@ const uint8 pg_number_of_ones[256] = {
 	4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8
 };
 
-/*
- * On x86_64, we can use the hardware popcount instruction, but only if
- * we can verify that the CPU supports it via the cpuid instruction.
- *
- * Otherwise, we fall back to __builtin_popcount if the compiler has that,
- * or a hand-rolled implementation if not.
- */
-#ifdef HAVE_X86_64_POPCNTQ
-#if defined(HAVE__GET_CPUID) || defined(HAVE__CPUID)
-#define USE_POPCNT_ASM 1
-#endif
-#endif
-
 static int	pg_popcount32_slow(uint32 word);
 static int	pg_popcount64_slow(uint64 word);
 
-#ifdef USE_POPCNT_ASM
+#ifdef TRY_POPCNT_FAST
 static bool pg_popcount_available(void);
 static int	pg_popcount32_choose(uint32 word);
 static int	pg_popcount64_choose(uint64 word);
-static int	pg_popcount32_asm(uint32 word);
-static int	pg_popcount64_asm(uint64 word);
+static int	pg_popcount32_fast(uint32 word);
+static int	pg_popcount64_fast(uint64 word);
 
 int			(*pg_popcount32) (uint32 word) = pg_popcount32_choose;
 int			(*pg_popcount64) (uint64 word) = pg_popcount64_choose;
-#else
-int			(*pg_popcount32) (uint32 word) = pg_popcount32_slow;
-int			(*pg_popcount64) (uint64 word) = pg_popcount64_slow;
-#endif							/* USE_POPCNT_ASM */
+#endif							/* TRY_POPCNT_FAST */
 
-#ifdef USE_POPCNT_ASM
+#ifdef TRY_POPCNT_FAST
 
 /*
  * Return true if CPUID indicates that the POPCNT instruction is available.
@@ -165,8 +149,8 @@ pg_popcount32_choose(uint32 word)
 {
 	if (pg_popcount_available())
 	{
-		pg_popcount32 = pg_popcount32_asm;
-		pg_popcount64 = pg_popcount64_asm;
+		pg_popcount32 = pg_popcount32_fast;
+		pg_popcount64 = pg_popcount64_fast;
 	}
 	else
 	{
@@ -182,8 +166,8 @@ pg_popcount64_choose(uint64 word)
 {
 	if (pg_popcount_available())
 	{
-		pg_popcount32 = pg_popcount32_asm;
-		pg_popcount64 = pg_popcount64_asm;
+		pg_popcount32 = pg_popcount32_fast;
+		pg_popcount64 = pg_popcount64_fast;
 	}
 	else
 	{
@@ -195,32 +179,40 @@ pg_popcount64_choose(uint64 word)
 }
 
 /*
- * pg_popcount32_asm
+ * pg_popcount32_fast
  *		Return the number of 1 bits set in word
  */
 static int
-pg_popcount32_asm(uint32 word)
+pg_popcount32_fast(uint32 word)
 {
+#ifdef _MSC_VER
+	return __popcnt(word);
+#else
 	uint32		res;
 
 __asm__ __volatile__(" popcntl %1,%0\n":"=q"(res):"rm"(word):"cc");
 	return (int) res;
+#endif
 }
 
 /*
- * pg_popcount64_asm
+ * pg_popcount64_fast
  *		Return the number of 1 bits set in word
  */
 static int
-pg_popcount64_asm(uint64 word)
+pg_popcount64_fast(uint64 word)
 {
+#ifdef _MSC_VER
+	return __popcnt64(word);
+#else
 	uint64		res;
 
 __asm__ __volatile__(" popcntq %1,%0\n":"=q"(res):"rm"(word):"cc");
 	return (int) res;
+#endif
 }
 
-#endif							/* USE_POPCNT_ASM */
+#endif							/* TRY_POPCNT_FAST */
 
 
 /*
@@ -273,6 +265,28 @@ pg_popcount64_slow(uint64 word)
 #endif							/* HAVE__BUILTIN_POPCOUNT */
 }
 
+#ifndef TRY_POPCNT_FAST
+
+/*
+ * When the POPCNT instruction is not available, there's no point in using
+ * function pointers to vary the implementation between the fast and slow
+ * method.  We instead just make these actual external functions when
+ * TRY_POPCNT_FAST is not defined.  The compiler should be able to inline
+ * the slow versions here.
+ */
+int
+pg_popcount32(uint32 word)
+{
+	return pg_popcount32_slow(word);
+}
+
+int
+pg_popcount64(uint64 word)
+{
+	return pg_popcount64_slow(word);
+}
+
+#endif							/* !TRY_POPCNT_FAST */
 
 /*
  * pg_popcount

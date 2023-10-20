@@ -932,6 +932,6 @@ target_sources(yql-parser-pg_wrapper PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.17.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.18.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.19.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/backend/port/posix_sema.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/backend/port/sysv_shmem.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/port/posix_sema.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/port/sysv_shmem.c
 )

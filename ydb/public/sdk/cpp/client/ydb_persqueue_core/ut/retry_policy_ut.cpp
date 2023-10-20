@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
 
         auto settings = setup1->GetWriteSessionSettings();
         auto& client = setup1->GetPersQueueClient();
-        
+
         //! Fill data in dc1 1 with SeqNo = 1..10 for 2 different SrcId
         Cerr << "===Write 10 messages into every writer\n";
         for (auto i = 0; i != 10; i++) {
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
 
         //! Put some data inflight. It cannot be written now, but SeqNo will be assigned.
         Cerr << "===Write four async message into every writer\n";
-        for (auto i = 0; i != 4; i++) {
+        for (auto i = 0; i != 3; i++) {
             writer1->Write(false);
             writer2->Write(false);
         }
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
 
         //! Put some data inflight again;
         Cerr << "===Write four async messages into writer2\n";
-        for (auto i = 0; i != 4; i++) {
+        for (auto i = 0; i != 3; i++) {
             writer2->Write(false);
         }
         f2 = writer2->Write(false);
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         CheckSeqNo("dc1", 14);
         //! DC2 has no shift in SeqNo since 5 messages were written to dc 1.
         Cerr << "===Check SeqNo writer2 dc2\n";
-        CheckSeqNo("dc2", 15);
+        CheckSeqNo("dc2", 9);
 
 
         auto readSession = client.CreateReadSession(setup1->GetReadSessionSettings());
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         };
         THashMap<TString, ui64> MsgCountByClusterSrc2 = {
                 {"dc1", 14},
-                {"dc2", 6}
+                {"dc2", 5}
         };
         ui32 clustersPendingSrc1 = 2;
         ui32 clustersPendingSrc2 = 2;
@@ -337,7 +337,7 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
                                     if (prevSeqNo == 0) {
                                         UNIT_ASSERT_VALUES_EQUAL(seqNo, 1);
                                     } else if (prevSeqNo == 1) {
-                                        UNIT_ASSERT_VALUES_EQUAL(seqNo, 11);
+                                        UNIT_ASSERT_VALUES_EQUAL(seqNo, 6);
                                     } else {
                                         UNIT_ASSERT_VALUES_EQUAL(seqNo, prevSeqNo + 1);
                                     }

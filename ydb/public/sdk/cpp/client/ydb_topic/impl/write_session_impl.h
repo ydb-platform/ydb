@@ -163,7 +163,7 @@ private:
     using IProcessor = IWriteSessionConnectionProcessorFactory::IProcessor;
 
     struct TMessage {
-        ui64 SeqNo;
+        ui64 Id;
         TInstant CreatedAt;
         TStringBuf DataRef;
         TMaybe<ECodec> Codec;
@@ -171,10 +171,10 @@ private:
         TVector<std::pair<TString, TString>> MessageMeta;
         const NTable::TTransaction* Tx;
 
-        TMessage(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec = {},
+        TMessage(ui64 id, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec = {},
                  ui32 originalSize = 0, const TVector<std::pair<TString, TString>>& messageMeta = {},
                  const NTable::TTransaction* tx = nullptr)
-            : SeqNo(seqNo)
+            : Id(id)
             , CreatedAt(createdAt)
             , DataRef(data)
             , Codec(codec)
@@ -192,13 +192,13 @@ private:
         bool Acquired = false;
         bool FlushRequested = false;
 
-        void Add(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize,
+        void Add(ui64 id, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize,
                  const TVector<std::pair<TString, TString>>& messageMeta,
                  const NTable::TTransaction* tx) {
             if (StartedAt == TInstant::Zero())
                 StartedAt = TInstant::Now();
             CurrentSize += codec ? originalSize : data.size();
-            Messages.emplace_back(seqNo, createdAt, data, codec, originalSize, messageMeta, tx);
+            Messages.emplace_back(id, createdAt, data, codec, originalSize, messageMeta, tx);
             Acquired = false;
         }
 
@@ -264,24 +264,24 @@ private:
     };
 
     struct TOriginalMessage {
-        ui64 SeqNo;
+        ui64 Id;
         TInstant CreatedAt;
         size_t Size;
         TVector<std::pair<TString, TString>> MessageMeta;
         const NTable::TTransaction* Tx;
 
-        TOriginalMessage(const ui64 sequenceNumber, const TInstant createdAt, const size_t size,
+        TOriginalMessage(const ui64 id, const TInstant createdAt, const size_t size,
                          const NTable::TTransaction* tx)
-            : SeqNo(sequenceNumber)
+            : Id(id)
             , CreatedAt(createdAt)
             , Size(size)
             , Tx(tx)
         {}
 
-        TOriginalMessage(const ui64 sequenceNumber, const TInstant createdAt, const size_t size,
+        TOriginalMessage(const ui64 id, const TInstant createdAt, const size_t size,
                          TVector<std::pair<TString, TString>>&& messageMeta,
                          const NTable::TTransaction* tx)
-            : SeqNo(sequenceNumber)
+            : Id(id)
             , CreatedAt(createdAt)
             , Size(size)
             , MessageMeta(std::move(messageMeta))
@@ -389,9 +389,11 @@ private:
 
     //TString GetDebugIdentity() const;
     TClientMessage GetInitClientMessage();
-    bool CleanupOnAcknowledged(ui64 sequenceNumber);
+    bool CleanupOnAcknowledged(ui64 id);
     bool IsReadyToSendNextImpl() const;
-    ui64 GetNextSeqNoImpl(const TMaybe<ui64>& seqNo);
+    ui64 GetNextIdImpl(const TMaybe<ui64>& seqNo);
+    ui64 GetSeqNoImpl(ui64 id);
+    ui64 GetIdImpl(ui64 seqNo);
     void SendImpl();
     void AbortImpl();
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
@@ -418,7 +420,6 @@ private:
     TString TargetCluster;
     TString InitialCluster;
     TString CurrentCluster;
-    bool OnSeqNoShift = false;
     TString PreferredClusterByCDS;
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory;
     TDbDriverStatePtr DbDriverState;
@@ -461,9 +462,9 @@ private:
     bool SessionEstablished = false;
     ui32 PartitionId = 0;
     TPartitionLocation PreferredPartitionLocation = {};
-    ui64 LastSeqNo = 0;
-    ui64 MinUnsentSeqNo = 0;
-    ui64 SeqNoShift = 0;
+    ui64 NextId = 0;
+    ui64 MinUnsentId = 1;
+    TMaybe<ui64> InitSeqNo;
     TMaybe<bool> AutoSeqNoMode;
     bool ValidateSeqNoMode = false;
 

@@ -92,6 +92,11 @@ func (c *connectionManager) Make(
 		return nil, fmt.Errorf("open connection: %w", err)
 	}
 
+	// set schema (public by default)
+	if _, err = conn.Exec(ctx, fmt.Sprintf("set search_path='%s'", dsi.GetPgOptions().GetSchema())); err != nil {
+		return nil, fmt.Errorf("exec: %w", err)
+	}
+
 	queryLogger := c.QueryLoggerFactory.Make(logger)
 
 	return &Connection{conn, queryLogger}, nil

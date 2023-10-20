@@ -12,10 +12,12 @@ type queryExecutor struct {
 }
 
 func (qm queryExecutor) DescribeTable(ctx context.Context, conn *Connection, request *api_service_protos.TDescribeTableRequest) (utils.Rows, error) {
+	schema := request.GetDataSourceInstance().GetPgOptions().GetSchema()
 	out, err := conn.Query(
 		ctx,
-		"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1 AND table_schema ='public'",
+		"SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1 AND table_schema = $2",
 		request.Table,
+		schema,
 	)
 
 	if err != nil {

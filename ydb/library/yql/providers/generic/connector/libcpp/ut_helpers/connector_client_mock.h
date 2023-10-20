@@ -152,7 +152,9 @@ namespace NYql::NConnector::NTest {
         int port = DEFAULT_PG_PORT,
         const TString& login = DEFAULT_LOGIN,
         const TString& password = DEFAULT_PASSWORD,
-        bool useTls = DEFAULT_USE_TLS);
+        bool useTls = DEFAULT_USE_TLS,
+        const TString& databaseName = DEFAULT_DATABASE,
+        const TString& schema = DEFAULT_PG_SCHEMA);
 
     void CreateClickHouseExternalDataSource(
         const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
@@ -163,7 +165,8 @@ namespace NYql::NConnector::NTest {
         const TString& password = DEFAULT_PASSWORD,
         bool useTls = DEFAULT_USE_TLS,
         const TString& serviceAccountId = DEFAULT_CH_SERVICE_ACCOUNT_ID,
-        const TString& serviceAccountIdSignature = DEFAULT_CH_SERVICE_ACCOUNT_ID_SIGNATURE);
+        const TString& serviceAccountIdSignature = DEFAULT_CH_SERVICE_ACCOUNT_ID_SIGNATURE,
+        const TString& databaseName = DEFAULT_DATABASE);
 
     class TConnectorClientMock: public NYql::NConnector::IClient {
     public:
@@ -189,6 +192,7 @@ namespace NYql::NConnector::NTest {
             EXPR_SETTER(Password, mutable_credentials()->mutable_basic()->set_password);
             EXPR_SETTER(Host, mutable_endpoint()->set_host);
             EXPR_SETTER(Port, mutable_endpoint()->set_port);
+            EXPR_SETTER(Schema, mutable_pg_options()->set_schema);
             SETTER(UseTls, use_tls);
             SETTER(Kind, kind);
             SETTER(Protocol, protocol);
@@ -218,6 +222,7 @@ namespace NYql::NConnector::NTest {
                 this->Port(DEFAULT_PG_PORT);
                 this->Kind(NApi::EDataSourceKind::POSTGRESQL);
                 this->Protocol(DEFAULT_PG_PROTOCOL);
+                this->Schema(DEFAULT_PG_SCHEMA);
             }
         };
 

@@ -16,6 +16,7 @@ namespace NYql::NConnector::NTest {
     constexpr bool DEFAULT_USE_TLS = true;
     extern const TString PG_SOURCE_TYPE;
     constexpr NApi::EProtocol DEFAULT_PG_PROTOCOL = NApi::EProtocol::NATIVE;
+    extern const TString DEFAULT_PG_SCHEMA;
 
     extern const TString DEFAULT_CH_HOST;
     constexpr int DEFAULT_CH_PORT = 8443;

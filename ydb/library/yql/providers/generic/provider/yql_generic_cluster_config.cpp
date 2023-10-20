@@ -122,8 +122,24 @@ namespace NYql {
         }
 
         clusterConfig.SetDatabaseName(it->second);
+    }
 
-        return;
+    void ParseSchema(const THashMap<TString, TString>& properties,
+                     NYql::TGenericClusterConfig& clusterConfig) {
+        auto it = properties.find("schema");
+        if (it == properties.cend()) {
+            // TODO: make this property required during https://st.yandex-team.ru/YQ-2494
+            // ythrow yexception() <<  "missing 'SCHEMA' value";
+            return;
+        }
+
+        if (!it->second) {
+            // TODO: make this property required during https://st.yandex-team.ru/YQ-2494
+            // ythrow yexception() << "invalid 'SCHEMA' value: '" << it->second << "'";
+            return;
+        }
+
+        clusterConfig.mutable_datasourceoptions()->insert({TString("schema"), TString(it->second)});
     }
 
     void ParseMdbClusterId(const THashMap<TString, TString>& properties,
@@ -244,6 +260,7 @@ namespace NYql {
         ParseLocation(properties, clusterConfig);
         ParseUseTLS(properties, clusterConfig);
         ParseDatabaseName(properties, clusterConfig);
+        ParseSchema(properties, clusterConfig);
         ParseMdbClusterId(properties, clusterConfig);
         ParseSourceType(properties, clusterConfig);
         ParseProtocol(properties, clusterConfig);

@@ -116,6 +116,29 @@ namespace NYql {
                 TStringBuf dbNameTarget, tableName;
                 auto isFullPath = TStringBuf(tablePath).TrySplit('.', dbNameTarget, tableName);
 
+                switch (dataSourceKind) {
+                    case NYql::NConnector::NApi::CLICKHOUSE:
+                        break;
+                    case NYql::NConnector::NApi::POSTGRESQL: {
+                        // for backward compability set schema "public" by default
+                        // TODO: simplify during https://st.yandex-team.ru/YQ-2494
+                        TString schema;
+                        const auto options_it = clusterConfig.GetDataSourceOptions().find(TString("schema"));
+                        if (options_it != clusterConfig.GetDataSourceOptions().end()) {
+                            schema = options_it->second;
+                        }
+                        if (!schema) {
+                            schema = TString("public");
+                        }
+
+                        dsi->mutable_pg_options()->Setschema(schema);
+                    } break;
+
+                    default:
+                        ythrow yexception() << "Unexpected data source kind: '"
+                                            << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
+                }
+
                 if (!dbNameFromConfig.empty()) {
                     dbNameTarget = dbNameFromConfig;
                     if (!isFullPath) {

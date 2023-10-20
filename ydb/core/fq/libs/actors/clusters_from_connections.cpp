@@ -90,14 +90,14 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
 }
 
 template <typename TConnection>
-void FillGenericClusterConfig(
+void FillGenericClusterConfigBase(
     TGenericClusterConfig& clusterCfg,
     const TConnection& connection,
     const TString& connectionName,
     NConnector::NApi::EDataSourceKind dataSourceKind,
     const TString& authToken,
     const THashMap<TString, TString>& accountIdSignatures
-){
+) {
     clusterCfg.SetKind(dataSourceKind);
     clusterCfg.SetName(connectionName);
     clusterCfg.SetDatabaseId(connection.database_id());
@@ -126,6 +126,31 @@ void FillGenericClusterConfig(
     }
 
     ValidateGenericClusterConfig(clusterCfg, "NFq::FillGenericClusterFromConfig");
+}
+
+template <typename TConnection>
+void FillGenericClusterConfig(
+    TGenericClusterConfig& clusterCfg,
+    const TConnection& connection,
+    const TString& connectionName,
+    NConnector::NApi::EDataSourceKind dataSourceKind,
+    const TString& authToken,
+    const THashMap<TString, TString>& accountIdSignatures
+) {
+    FillGenericClusterConfigBase(clusterCfg, connection, connectionName, dataSourceKind, authToken, accountIdSignatures);
+}
+
+template<>
+void FillGenericClusterConfig<FederatedQuery::PostgreSQLCluster>(
+    TGenericClusterConfig& clusterCfg,
+    const FederatedQuery::PostgreSQLCluster& connection,
+    const TString& connectionName,
+    NConnector::NApi::EDataSourceKind dataSourceKind,
+    const TString& authToken,
+    const THashMap<TString, TString>& accountIdSignatures
+){
+    FillGenericClusterConfigBase(clusterCfg, connection, connectionName, dataSourceKind, authToken, accountIdSignatures);
+    clusterCfg.mutable_datasourceoptions()->insert({TString("schema"), TString(connection.schema())});
 }
 
 } //namespace

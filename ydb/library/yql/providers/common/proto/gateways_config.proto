@@ -581,6 +581,9 @@ message TGenericClusterConfig {
     // Transport protocol used to establish a network connection with database
     optional NYql.NConnector.NApi.EProtocol Protocol = 14;
 
+    // Data source options specific to various data sources
+    map<string, string> DataSourceOptions = 15;
+
     reserved 2, 3, 5;
 }
 

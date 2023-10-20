@@ -2,7 +2,7 @@
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
-#include <ydb/library/yql/protobuf_udf/type_builder.h>
+#include <ydb/library/yql/minikql/protobuf_udf/type_builder.h>
 #include <ydb/library/yql/public/udf/udf_type_builder.h>
 
 #include <util/generic/vector.h>

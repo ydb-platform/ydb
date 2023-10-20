@@ -12,7 +12,8 @@ SRCS(
 
 PEERDIR(
     library/cpp/protobuf/yql
-    yql/library/protobuf_udf
+    ydb/library/yql/minikql/protobuf_udf
+    ydb/library/yql/public/udf
 )
 
 END()

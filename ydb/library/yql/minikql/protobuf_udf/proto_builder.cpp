@@ -1,7 +1,6 @@
 #include "proto_builder.h"
 
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
 
 #include <util/generic/singleton.h>
 

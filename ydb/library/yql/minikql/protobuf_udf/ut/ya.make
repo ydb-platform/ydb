@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/protobuf_udf)
+UNITTEST_FOR(ydb/library/yql/minikql/protobuf_udf)
 
 SRCS(
     type_builder_ut.cpp

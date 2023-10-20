@@ -24,7 +24,7 @@ target_link_libraries(protobuf_udf.dyn PUBLIC
   yql-public-udf
   public-udf-support
   cpp-protobuf-yql
-  yql-library-protobuf_udf
+  yql-minikql-protobuf_udf
 )
 target_link_options(protobuf_udf.dyn PRIVATE
   -ldl
@@ -54,7 +54,7 @@ target_link_libraries(protobuf_udf INTERFACE
   yql-public-udf
   public-udf-support
   cpp-protobuf-yql
-  yql-library-protobuf_udf
+  yql-minikql-protobuf_udf
 )
 
 add_global_library_for(protobuf_udf.global protobuf_udf)
@@ -70,7 +70,7 @@ target_link_libraries(protobuf_udf.global PUBLIC
   yql-public-udf
   public-udf-support
   cpp-protobuf-yql
-  yql-library-protobuf_udf
+  yql-minikql-protobuf_udf
 )
 target_sources(protobuf_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/protobuf/protobuf_udf.cpp

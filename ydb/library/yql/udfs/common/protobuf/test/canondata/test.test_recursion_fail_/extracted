@@ -6,6 +6,6 @@
         <tmp_path>/program.sql:<main>:64:8: Error: At function: NamedApply, At function: Udf, At Protobuf.Parse
         	SELECT $udf(TestField) FROM plato.Input;
 	       ^
-            <tmp_path>/program.sql:<main>:64:8: Error: Failed to find UDF function: Protobuf.Parse, reason: Error: Module: Protobuf, function: Parse, error: (yexception) yql/library/protobuf_udf/type_builder.cpp:xxx: can't handle recursive types: Test
+            <tmp_path>/program.sql:<main>:64:8: Error: Failed to find UDF function: Protobuf.Parse, reason: Error: Module: Protobuf, function: Parse, error: (yexception) ydb/library/yql/minikql/protobuf_udf/type_builder.cpp:xxx: can't handle recursive types: Test
             	SELECT $udf(TestField) FROM plato.Input;
 	       ^

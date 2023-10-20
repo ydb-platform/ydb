@@ -1,7 +1,7 @@
 #include "type_builder.h"
 
 //#include <alice/wonderlogs/protos/wonderlogs.pb.h>
-#include <ydb/library/yql/protobuf_udf/ut/protobuf_ut.pb.h>
+#include <ydb/library/yql/minikql/protobuf_udf/ut/protobuf_ut.pb.h>
 #include <ydb/library/yql/providers/yt/lib/schema/schema.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 

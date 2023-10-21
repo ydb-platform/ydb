@@ -351,7 +351,7 @@ def serialize_list(lst):
 
 
 def deserialize_list(val):
-    return filter(None, val.replace('"', "").split(";"))
+    return list(filter(None, val.replace('"', "").split(";")))
 
 
 def get_correct_expression_for_group_var(varname):
@@ -777,7 +777,7 @@ def onadd_pytest_script(unit, *args):
         return
     unit.set(["PYTEST_BIN", "no"])
     custom_deps = get_values_list(unit, 'TEST_DEPENDS_VALUE')
-    timeout = filter(None, [unit.get(["TEST_TIMEOUT"])])
+    timeout = list(filter(None, [unit.get(["TEST_TIMEOUT"])]))
     if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
 

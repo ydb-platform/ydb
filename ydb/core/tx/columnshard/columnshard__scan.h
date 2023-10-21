@@ -47,40 +47,7 @@ public:
         }
     }
 
-    static std::vector<TPartialReadResult> SplitResults(const std::vector<TPartialReadResult>& resultsExt, const ui32 maxRecordsInResult) {
-        std::vector<TPartialReadResult> result;
-        std::shared_ptr<arrow::RecordBatch> currentBatch;
-        for (auto&& i : resultsExt) {
-            std::shared_ptr<arrow::RecordBatch> currentBatchSplitting = i.ResultBatch;
-            while (currentBatchSplitting && currentBatchSplitting->num_rows()) {
-                const ui32 currentRecordsCount = currentBatch ? currentBatch->num_rows() : 0;
-                if (currentRecordsCount + currentBatchSplitting->num_rows() < maxRecordsInResult) {
-                    if (!currentBatch) {
-                        currentBatch = currentBatchSplitting;
-                    } else {
-                        currentBatch = NArrow::CombineBatches({currentBatch, currentBatchSplitting});
-                    }
-                    currentBatchSplitting = nullptr;
-                } else {
-                    auto currentSlice = currentBatchSplitting->Slice(0, maxRecordsInResult - currentRecordsCount);
-                    AFL_VERIFY(currentSlice);
-                    if (!currentBatch) {
-                        currentBatch = currentSlice;
-                    } else {
-                        currentBatch = NArrow::CombineBatches({currentBatch, currentSlice});
-                        AFL_VERIFY(currentBatch);
-                    }
-                    result.emplace_back(TPartialReadResult(nullptr, currentBatch));
-                    currentBatch = nullptr;
-                    currentBatchSplitting = currentBatchSplitting->Slice(maxRecordsInResult - currentRecordsCount);
-                }
-            }
-        }
-        if (currentBatch && currentBatch->num_rows()) {
-            result.emplace_back(TPartialReadResult(nullptr, currentBatch));
-        }
-        return result;
-    }
+    static std::vector<TPartialReadResult> SplitResults(const std::vector<TPartialReadResult>& resultsExt, const ui32 maxRecordsInResult, const bool mergePartsToMax);
 
     void Slice(const ui32 offset, const ui32 length) {
         ResultBatch = ResultBatch->Slice(offset, length);
@@ -151,6 +118,9 @@ public:
     }
     virtual bool Finished() const = 0;
     virtual std::optional<NOlap::TPartialReadResult> GetBatch() = 0;
+    virtual void PrepareResults() {
+
+    }
     virtual std::shared_ptr<NOlap::NBlobOperations::NRead::ITask> GetNextTaskToRead() { return nullptr; }
     virtual TString DebugString() const {
         return "NO_DATA";

@@ -66,7 +66,7 @@ std::vector<NKikimr::NOlap::TPartialReadResult> TPlainReadData::DoExtractReadyRe
     }
     ReadyResultsCount = 0;
 
-    auto result = TPartialReadResult::SplitResults(PartialResults, maxRowsInBatch);
+    auto result = TPartialReadResult::SplitResults(PartialResults, maxRowsInBatch, GetContext().GetIsInternalRead());
     PartialResults.clear();
     ui32 count = 0;
     for (auto&& r: result) {
@@ -113,25 +113,21 @@ void TPlainReadData::OnIntervalResult(std::shared_ptr<arrow::RecordBatch> batch)
 }
 
 NKikimr::NOlap::NPlainReader::TFetchingPlan TPlainReadData::GetColumnsFetchingPlan(const bool exclusiveSource) const {
+    if (GetContext().GetIsInternalRead()) {
+        return TFetchingPlan(PKFFColumns, EmptyColumns, exclusiveSource);
+    }
+
     if (exclusiveSource) {
-        if (Context.GetIsInternalRead()) {
+        if (TrivialEFFlag) {
             return TFetchingPlan(FFColumns, EmptyColumns, true);
         } else {
-            if (TrivialEFFlag) {
-                return TFetchingPlan(FFColumns, EmptyColumns, true);
-            } else {
-                return TFetchingPlan(EFColumns, FFMinusEFColumns, true);
-            }
+            return TFetchingPlan(EFColumns, FFMinusEFColumns, true);
         }
     } else {
-        if (GetContext().GetIsInternalRead()) {
+        if (TrivialEFFlag) {
             return TFetchingPlan(PKFFColumns, EmptyColumns, false);
         } else {
-            if (TrivialEFFlag) {
-                return TFetchingPlan(PKFFColumns, EmptyColumns, false);
-            } else {
-                return TFetchingPlan(EFPKColumns, FFMinusEFPKColumns, false);
-            }
+            return TFetchingPlan(EFPKColumns, FFMinusEFPKColumns, false);
         }
     }
 }

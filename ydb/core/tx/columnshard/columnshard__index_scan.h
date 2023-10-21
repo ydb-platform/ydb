@@ -101,6 +101,7 @@ public:
     }
 
     std::optional<NOlap::TPartialReadResult> GetBatch() override;
+    virtual void PrepareResults() override;
 
     virtual std::shared_ptr<NOlap::NBlobOperations::NRead::ITask> GetNextTaskToRead() override;
 

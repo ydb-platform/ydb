@@ -22,6 +22,10 @@ std::optional<NOlap::TPartialReadResult> TColumnShardScanIterator::GetBatch() {
     return ReadyResults.pop_front();
 }
 
+void TColumnShardScanIterator::PrepareResults() {
+    FillReadyResults();
+}
+
 std::shared_ptr<NOlap::NBlobOperations::NRead::ITask> TColumnShardScanIterator::GetNextTaskToRead() {
     return IndexedData->ExtractNextReadTask(ReadyResults.size());
 }

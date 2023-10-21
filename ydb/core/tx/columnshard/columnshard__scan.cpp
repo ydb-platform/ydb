@@ -186,13 +186,14 @@ private:
         Y_ABORT_UNLESS(!Finished);
         Y_ABORT_UNLESS(ScanIterator);
 
-        if (!ChunksLimiter.HasMore()) {
-            ACFL_DEBUG("stage", "bytes limit exhausted")("limit", ChunksLimiter.DebugString());
+        if (ScanIterator->Finished()) {
+            ACFL_DEBUG("stage", "scan iterator is finished")("iterator", ScanIterator->DebugString());
             return false;
         }
 
-        if (ScanIterator->Finished()) {
-            ACFL_DEBUG("stage", "scan iterator is finished")("iterator", ScanIterator->DebugString());
+        if (!ChunksLimiter.HasMore()) {
+            ScanIterator->PrepareResults();
+            ACFL_DEBUG("stage", "bytes limit exhausted")("limit", ChunksLimiter.DebugString());
             return false;
         }
 
@@ -1004,6 +1005,70 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
     ScanTxInFlight.insert({txId, LastAccessTime});
     SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     Execute(new TTxScan(this, ev), ctx);
+}
+
+}
+
+namespace NKikimr::NOlap {
+
+class TCurrentBatch {
+private:
+    std::vector<std::shared_ptr<arrow::RecordBatch>> Batches;
+    ui32 RecordsCount = 0;
+public:
+    void AddChunk(const std::shared_ptr<arrow::RecordBatch>& chunk) {
+        AFL_VERIFY(chunk);
+        AFL_VERIFY(chunk->num_rows());
+        Batches.emplace_back(chunk);
+        RecordsCount += chunk->num_rows();
+    }
+
+    ui32 GetRecordsCount() const {
+        return RecordsCount;
+    }
+
+    void FillResult(std::vector<TPartialReadResult>& result, const bool mergePartsToMax) const {
+        AFL_VERIFY(Batches.size());
+        if (mergePartsToMax) {
+            auto res = NArrow::CombineBatches(Batches);
+            AFL_VERIFY(res);
+            result.emplace_back(TPartialReadResult(nullptr, res));
+        } else {
+            for (auto&& i : Batches) {
+                result.emplace_back(TPartialReadResult(nullptr, i));
+            }
+        }
+    }
+};
+
+std::vector<NKikimr::NOlap::TPartialReadResult> TPartialReadResult::SplitResults(const std::vector<TPartialReadResult>& resultsExt, const ui32 maxRecordsInResult, const bool mergePartsToMax) {
+    TCurrentBatch currentBatch;
+    std::vector<TCurrentBatch> resultBatches;
+    for (auto&& i : resultsExt) {
+        std::shared_ptr<arrow::RecordBatch> currentBatchSplitting = i.ResultBatch;
+        while (currentBatchSplitting && currentBatchSplitting->num_rows()) {
+            const ui32 currentRecordsCount = currentBatch.GetRecordsCount();
+            if (currentRecordsCount + currentBatchSplitting->num_rows() < maxRecordsInResult) {
+                currentBatch.AddChunk(currentBatchSplitting);
+                currentBatchSplitting = nullptr;
+            } else {
+                auto currentSlice = currentBatchSplitting->Slice(0, maxRecordsInResult - currentRecordsCount);
+                currentBatch.AddChunk(currentSlice);
+                resultBatches.emplace_back(std::move(currentBatch));
+                currentBatch = TCurrentBatch();
+                currentBatchSplitting = currentBatchSplitting->Slice(maxRecordsInResult - currentRecordsCount);
+            }
+        }
+    }
+    if (currentBatch.GetRecordsCount()) {
+        resultBatches.emplace_back(std::move(currentBatch));
+    }
+
+    std::vector<TPartialReadResult> result;
+    for (auto&& i : resultBatches) {
+        i.FillResult(result, mergePartsToMax);
+    }
+    return result;
 }
 
 }

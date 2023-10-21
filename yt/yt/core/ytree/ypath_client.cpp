@@ -331,12 +331,17 @@ void ResolveYPath(
 
 TFuture<TSharedRefArray> ExecuteVerb(
     const IYPathServicePtr& service,
-    const TSharedRefArray& requestMessage)
+    const TSharedRefArray& requestMessage,
+    NLogging::TLogger logger,
+    NLogging::ELogLevel logLevel)
 {
     IYPathServicePtr suffixService;
     TYPath suffixPath;
     try {
-        auto resolveContext = CreateYPathContext(requestMessage);
+        auto resolveContext = CreateYPathContext(
+            requestMessage,
+            logger,
+            logLevel);
         ResolveYPath(
             service,
             resolveContext,
@@ -352,7 +357,10 @@ TFuture<TSharedRefArray> ExecuteVerb(
 
     auto updatedRequestMessage = SetRequestHeader(requestMessage, requestHeader);
 
-    auto invokeContext = CreateYPathContext(std::move(updatedRequestMessage));
+    auto invokeContext = CreateYPathContext(
+        std::move(updatedRequestMessage),
+        std::move(logger),
+        logLevel);
 
     // NB: Calling GetAsyncResponseMessage after Invoke is not allowed.
     auto asyncResponseMessage = invokeContext->GetAsyncResponseMessage();

@@ -8,6 +8,7 @@
 
 add_subdirectory(abstract)
 add_subdirectory(compaction)
+add_subdirectory(counters)
 
 add_library(columnshard-engines-changes)
 target_link_libraries(columnshard-engines-changes PUBLIC
@@ -19,6 +20,7 @@ target_link_libraries(columnshard-engines-changes PUBLIC
   columnshard-engines-insert_table
   engines-changes-abstract
   engines-changes-compaction
+  engines-changes-counters
   tx-columnshard-splitter
   ydb-core-tablet_flat
   core-tx-tiering

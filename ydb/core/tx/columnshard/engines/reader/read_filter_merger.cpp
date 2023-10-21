@@ -1,5 +1,7 @@
 #include "read_filter_merger.h"
+#include <ydb/core/formats/arrow/permutations.h>
 #include <library/cpp/actors/core/log.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 
 namespace NKikimr::NOlap::NIndexedReader {
 
@@ -132,8 +134,8 @@ bool TMergePartialStream::DrainAll(TRecordBatchBuilder& builder) {
 }
 
 std::optional<TSortableBatchPosition> TMergePartialStream::DrainCurrentPosition() {
-    Y_DEBUG_ABORT_UNLESS(SortHeap.Size());
-    Y_DEBUG_ABORT_UNLESS(!SortHeap.Current().IsControlPoint());
+    Y_ABORT_UNLESS(SortHeap.Size());
+    Y_ABORT_UNLESS(!SortHeap.Current().IsControlPoint());
     TSortableBatchPosition result = SortHeap.Current().GetKeyColumns();
     TSortableBatchPosition resultVersion = SortHeap.Current().GetVersionColumns();
     bool isFirst = true;

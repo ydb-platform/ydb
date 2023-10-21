@@ -3,8 +3,8 @@
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
-#include <ydb/core/formats/arrow/replace_key.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <library/cpp/actors/core/log.h>
 #include <util/generic/hash.h>
 #include <util/string/join.h>
 #include <set>
@@ -19,7 +19,7 @@ private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
 public:
     TSortableScanData() = default;
-    TSortableScanData(std::shared_ptr<arrow::RecordBatch> batch, const std::vector<std::string>& columns);
+    TSortableScanData(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
 
     bool IsSameSchema(const std::shared_ptr<arrow::Schema>& schema) const {
         if (Fields.size() != (size_t)schema->num_fields()) {
@@ -103,12 +103,84 @@ public:
         }
     };
 
-    static std::optional<TFoundPosition> FindPosition(std::shared_ptr<arrow::RecordBatch> batch, const TSortableBatchPosition& forFound, const bool needGreater);
-    TSortableBatchPosition::TFoundPosition SkipToLower(const TSortableBatchPosition& forFound);
+    template <class TContainer>
+    class TAssociatedContainerIterator {
+    private:
+        typename TContainer::const_iterator Current;
+        typename TContainer::const_iterator End;
+    public:
+        TAssociatedContainerIterator(const TContainer& container)
+            : Current(container.begin())
+            , End(container.end())
+        {
+        }
 
-    NArrow::TReplaceKey BuildReplaceKey() const {
-        return NArrow::TReplaceKey::FromBatch(Batch, Position);
+        bool IsValid() const {
+            return Current != End;
+        }
+
+        void Next() {
+            ++Current;
+        }
+
+        const auto& CurrentPosition() const {
+            return Current->first;
+        }
+    };
+
+    //  (-inf, it1), [it1, it2), [it2, it3), ..., [itLast, +inf)
+    template <class TBordersIterator>
+    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBorders(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, TBordersIterator& it) {
+        std::vector<std::shared_ptr<arrow::RecordBatch>> result;
+        if (!batch || batch->num_rows() == 0) {
+            while (it.IsValid()) {
+                result.emplace_back(nullptr);
+            }
+            result.emplace_back(nullptr);
+            return result;
+        }
+        TSortableBatchPosition pos(batch, 0, columnNames, {}, false);
+        bool batchFinished = false;
+        i64 recordsCountSplitted = 0;
+        for (; it.IsValid() && !batchFinished; it.Next()) {
+            const ui32 startPos = pos.GetPosition();
+            auto posFound = pos.SkipToLower(it.CurrentPosition());
+            if (posFound.IsGreater() || posFound.IsEqual()) {
+                if (posFound.GetPosition() == startPos) {
+                    result.emplace_back(nullptr);
+                } else {
+                    result.emplace_back(batch->Slice(startPos, posFound.GetPosition() - startPos));
+                    recordsCountSplitted += result.back()->num_rows();
+                }
+            } else {
+                result.emplace_back(batch->Slice(startPos, posFound.GetPosition() - startPos + 1));
+                recordsCountSplitted += result.back()->num_rows();
+                batchFinished = true;
+            }
+        }
+        if (batchFinished) {
+            for (; it.IsValid(); it.Next()) {
+                result.emplace_back(nullptr);
+            }
+            result.emplace_back(nullptr);
+        } else {
+            AFL_VERIFY(!it.IsValid());
+            result.emplace_back(batch->Slice(pos.GetPosition()));
+            AFL_VERIFY(result.back()->num_rows());
+            recordsCountSplitted += result.back()->num_rows();
+        }
+        AFL_VERIFY(batch->num_rows() == recordsCountSplitted);
+        return result;
     }
+
+    template <class TContainer>
+    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInAssociativeContainer(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TContainer& container) {
+        TAssociatedContainerIterator<TContainer> it(container);
+        return SplitByBorders(batch, columnNames, it);
+    }
+
+    static std::optional<TFoundPosition> FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound, const bool needGreater, const std::optional<ui32> includedStartPosition);
+    TSortableBatchPosition::TFoundPosition SkipToLower(const TSortableBatchPosition& forFound);
 
     const TSortableScanData& GetData() const {
         return *Data;

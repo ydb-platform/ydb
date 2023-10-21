@@ -171,7 +171,7 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr
 
     auto srcSchema = srcBatch->schema();
     for (auto& name : columnNames) {
-        int pos = srcSchema->GetFieldIndex(name);
+        const int pos = srcSchema->GetFieldIndex(name);
         AFL_VERIFY(pos >= 0)("field_name", name);
         fields.push_back(srcSchema->field(pos));
         columns.push_back(srcBatch->column(pos));
@@ -206,7 +206,7 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
             auto srcField = srcBatch->schema()->GetFieldByName(field->name());
             Y_ABORT_UNLESS(srcField);
             if (!field->Equals(srcField)) {
-                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse_incoming_batch")("reason", "invalid_column_type")("column", field->name())
+                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")("column", field->name())
                                 ("column_type", field->ToString(true))("incoming_type", srcField->ToString(true));
                 return nullptr;
             }
@@ -214,7 +214,7 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
 
         Y_ABORT_UNLESS(columns.back());
         if (!columns.back()->type()->Equals(field->type())) {
-            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse_incoming_batch")("reason", "invalid_column_type")("column", field->name())
+            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")("column", field->name())
                                 ("column_type", field->type()->ToString())("incoming_type", columns.back()->type()->ToString());
             return nullptr;
         }
@@ -696,7 +696,11 @@ int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                                               const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
     auto sortPermutation = MakeSortPermutation(batch, sortingKey, andUnique);
-    return Reorder(batch, sortPermutation, andUnique);
+    if (sortPermutation) {
+        return Reorder(batch, sortPermutation, andUnique);
+    } else {
+        return batch;
+    }
 }
 
 std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec) {
@@ -862,7 +866,7 @@ NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 head
         resultFull.InsertValue("tail", tail);
         auto& result = resultFull.InsertValue("data", NJson::JSON_ARRAY);
         for (int i = 0; i < column.length(); ++i) {
-            if (i >= (int)head && i + (int)tail <= column.length()) {
+            if (i >= (int)head && i + (int)tail < column.length()) {
                 continue;
             }
             if constexpr (arrow::has_string_view<typename TWrap::T>()) {

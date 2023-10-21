@@ -109,6 +109,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
     }
 
     Y_ABORT_UNLESS(Blobs.empty());
+    const std::vector<std::string> comparableColumns = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
     for (auto& [pathId, batches] : pathBatches) {
         auto newGranuleId = AddPathIfNotExists(pathId);
         NIndexedReader::TMergePartialStream stream(resultSchema->GetIndexInfo().GetReplaceKey(), resultSchema->GetIndexInfo().ArrowSchemaWithSpecials(), false);
@@ -126,16 +127,24 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         stream.SetPossibleSameVersion(true);
         stream.DrainAll(builder);
 
-        std::map<NArrow::TReplaceKey, ui64> markers;
-        for (auto&& i : PathToGranule[pathId]) {
-            markers[i.first.BuildReplaceKey()] = i.second;
-        }
         THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> batchChunks;
-        if (markers.empty()) {
+        if (PathToGranule[pathId].empty()) {
             AFL_VERIFY(newGranuleId);
             batchChunks[*newGranuleId].emplace_back(builder.Finalize());
         } else {
-            batchChunks = TMarksGranules::SliceIntoGranules(builder.Finalize(), markers, resultSchema->GetIndexInfo());
+            auto& markers = PathToGranule[pathId];
+            std::vector<std::shared_ptr<arrow::RecordBatch>> result = NIndexedReader::TSortableBatchPosition::SplitByBordersInAssociativeContainer(builder.Finalize(), comparableColumns, markers);
+            AFL_VERIFY(result.size() == markers.size() + 1)("result", result.size())("markers", markers.size());
+            ui32 idx = 0;
+            for (auto&& i : markers) {
+                auto chunk = result[++idx];
+                if (chunk) {
+                    batchChunks[i.second].emplace_back(chunk);
+                }
+            }
+            if (result.front()) {
+                batchChunks[markers.begin()->second].emplace_back(result.front());
+            }
         }
         for (auto&& g : batchChunks) {
             for (auto&& b : g.second) {

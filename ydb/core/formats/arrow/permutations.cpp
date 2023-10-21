@@ -71,6 +71,8 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<ar
     TStatusValidator::Validate(builder.Reserve(points.size()));
 
     TRawReplaceKey* predKey = nullptr;
+    int predPosition = -1;
+    bool isTrivial = true;
     for (auto& point : points) {
         if (andUnique) {
             if (predKey) {
@@ -83,8 +85,16 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<ar
                 }
             }
         }
+        if (point.GetPosition() != predPosition + 1) {
+            isTrivial = false;
+        }
+        predPosition = point.GetPosition();
         TStatusValidator::Validate(builder.Append(point.GetPosition()));
         predKey = &point;
+    }
+
+    if (isTrivial && builder.length() == (i64)points.size()) {
+        return nullptr;
     }
 
     std::shared_ptr<arrow::UInt64Array> out;

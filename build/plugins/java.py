@@ -3,6 +3,7 @@ import ymake
 import json
 import os
 import base64
+import six
 
 
 DELIM = '================================'
@@ -10,16 +11,16 @@ CONTRIB_JAVA_PREFIX = 'contrib/java/'
 
 
 def split_args(s):  # TODO quotes, escapes
-    return filter(None, s.split())
+    return list(filter(None, s.split()))
 
 
 def extract_macro_calls(unit, macro_value_name, macro_calls_delim):
     if not unit.get(macro_value_name):
         return []
 
-    return filter(
+    return list(filter(
         None, map(split_args, unit.get(macro_value_name).replace('$' + macro_value_name, '').split(macro_calls_delim))
-    )
+    ))
 
 
 def extract_macro_calls2(unit, macro_value_name):
@@ -68,7 +69,7 @@ def on_run_jbuild_program(unit, *args):
         args += ['FAKE_OUT', fake_out]
 
     prev = unit.get(['RUN_JAVA_PROGRAM_VALUE']) or ''
-    new_val = (prev + ' ' + base64.b64encode(json.dumps(list(args), encoding='utf-8'))).strip()
+    new_val = (prev + ' ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(list(args)), encoding='utf-8')))).strip()
     unit.set(['RUN_JAVA_PROGRAM_VALUE', new_val])
 
 
@@ -82,7 +83,7 @@ def ongenerate_script(unit, *args):
     if len(kv.get('TEMPLATE', [])) > len(kv.get('OUT', [])):
         ymake.report_configure_error('To many arguments for TEMPLATE parameter')
     prev = unit.get(['GENERATE_SCRIPT_VALUE']) or ''
-    new_val = (prev + ' ' + base64.b64encode(json.dumps(list(args), encoding='utf-8'))).strip()
+    new_val = (prev + ' ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(list(args)), encoding='utf-8')))).strip()
     unit.set(['GENERATE_SCRIPT_VALUE', new_val])
 
 
@@ -221,7 +222,7 @@ def onjava_module(unit, *args):
     for java_srcs_args in data['JAVA_SRCS']:
         external = None
 
-        for i in xrange(len(java_srcs_args)):
+        for i in six.moves.range(len(java_srcs_args)):
             arg = java_srcs_args[i]
 
             if arg == 'EXTERNAL':
@@ -241,11 +242,9 @@ def onjava_module(unit, *args):
         if external:
             unit.onpeerdir(external)
 
-    for k, v in data.items():
-        if not v:
-            data.pop(k)
+    data = {k:v for k, v in six.iteritems(data) if v}
 
-    dart = 'JAVA_DART: ' + base64.b64encode(json.dumps(data)) + '\n' + DELIM + '\n'
+    dart = 'JAVA_DART: ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(data)))) + '\n' + DELIM + '\n'
     unit.set_property(['JAVA_DART_DATA', dart])
 
 
@@ -389,7 +388,7 @@ def parse_words(words):
             continue
         props.append('-B')
         if len(p) > 1:
-            props.append(base64.b64encode("{}={}".format(p[0], ' '.join(p[1:]))))
+            props.append(six.ensure_str(base64.b64encode(six.ensure_binary("{}={}".format(p[0], ' '.join(p[1:]))))))
         else:
             ymake.report_configure_error('CUSTOM_PROPERTY "{}" value is not specified'.format(p[0]))
     for i, o in enumerate(outputs):

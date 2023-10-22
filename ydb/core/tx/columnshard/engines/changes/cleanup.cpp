@@ -28,14 +28,7 @@ void TCleanupColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self,
         self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.RawBytesSum());
     }
     for (auto&& p: pathIds) {
-        auto itDrop = self.TablesManager.GetPathsToDrop().find(p);
-        if (itDrop != self.TablesManager.GetPathsToDrop().end()) {
-            if (!self.TablesManager.GetPrimaryIndexSafe().HasDataInPathId(p)) {
-                self.TablesManager.MutablePathsToDrop().erase(itDrop);
-                NIceDb::TNiceDb db(context.Txc.DB);
-                NColumnShard::Schema::EraseTableInfo(db, p);
-            }
-        }
+        self.TablesManager.TryFinalizeDropPath(context.Txc, p);
     }
 }
 

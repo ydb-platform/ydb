@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/tiering/manager.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
 
 namespace NKikimr::NColumnShard {
@@ -303,6 +304,20 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
     : StoragesManager(storagesManager)
     , TabletId(tabletId)
 {
+}
+
+bool TTablesManager::TryFinalizeDropPath(NTabletFlatExecutor::TTransactionContext& txc, const ui64 pathId) {
+    auto itDrop = PathsToDrop.find(pathId);
+    if (itDrop == PathsToDrop.end()) {
+        return false;
+    }
+    if (GetPrimaryIndexSafe().HasDataInPathId(pathId)) {
+        return false;
+    }
+    PathsToDrop.erase(itDrop);
+    NIceDb::TNiceDb db(txc.DB);
+    NColumnShard::Schema::EraseTableInfo(db, pathId);
+    return true;
 }
 
 }

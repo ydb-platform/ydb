@@ -21,6 +21,15 @@ public:
     TSortableScanData() = default;
     TSortableScanData(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
 
+    std::shared_ptr<arrow::RecordBatch> Slice(const ui64 offset, const ui64 count) const {
+        std::vector<std::shared_ptr<arrow::Array>> slicedArrays;
+        for (auto&& i : Columns) {
+            AFL_VERIFY(offset + count <= (ui64)i->length())("offset", offset)("count", count)("length", i->length());
+            slicedArrays.emplace_back(i->Slice(offset, count));
+        }
+        return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(Fields), count, slicedArrays);
+    }
+
     bool IsSameSchema(const std::shared_ptr<arrow::Schema>& schema) const {
         if (Fields.size() != (size_t)schema->num_fields()) {
             return false;
@@ -62,16 +71,19 @@ public:
 };
 
 class TSortableBatchPosition {
-protected:
-
+private:
     YDB_READONLY(i64, Position, 0);
     i64 RecordsCount = 0;
     bool ReverseSort = false;
     std::shared_ptr<TSortableScanData> Sorting;
     std::shared_ptr<TSortableScanData> Data;
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
 public:
     TSortableBatchPosition() = default;
+
+    std::shared_ptr<arrow::RecordBatch> Slice(const ui64 offset, const ui64 count) const {
+        AFL_VERIFY(Data);
+        return Data->Slice(offset, count);
+    }
 
     class TFoundPosition {
     private:
@@ -209,7 +221,8 @@ public:
     }
 
     static std::optional<TFoundPosition> FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound, const bool needGreater, const std::optional<ui32> includedStartPosition);
-    TSortableBatchPosition::TFoundPosition SkipToLower(const TSortableBatchPosition& forFound);
+    static std::optional<TSortableBatchPosition::TFoundPosition> FindPosition(TSortableBatchPosition& position, const ui64 posStart, const ui64 posFinish, const TSortableBatchPosition& forFound, const bool greater);
+    TSortableBatchPosition::TFoundPosition SkipToLower(const TSortableBatchPosition & forFound);
 
     const TSortableScanData& GetData() const {
         return *Data;
@@ -234,15 +247,16 @@ public:
 
     TSortableBatchPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position, const std::vector<std::string>& sortingColumns, const std::vector<std::string>& dataColumns, const bool reverseSort)
         : Position(position)
-        , RecordsCount(batch->num_rows())
         , ReverseSort(reverseSort)
-        , Sorting(std::make_shared<TSortableScanData>(batch, sortingColumns))
-        , Batch(batch)
     {
+        Y_ABORT_UNLESS(batch);
+        Y_ABORT_UNLESS(batch->num_rows());
+        RecordsCount = batch->num_rows();
+
         if (dataColumns.size()) {
             Data = std::make_shared<TSortableScanData>(batch, dataColumns);
         }
-        Y_ABORT_UNLESS(batch->num_rows());
+        Sorting = std::make_shared<TSortableScanData>(batch, sortingColumns);
         Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }

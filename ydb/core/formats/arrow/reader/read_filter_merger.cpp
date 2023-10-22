@@ -15,20 +15,9 @@ NJson::TJsonValue TSortableBatchPosition::DebugJson() const {
     return result;
 }
 
-std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound, const bool greater, const std::optional<ui32> includedStartPosition) {
-    if (!batch || !batch->num_rows()) {
-        return {};
-    }
-
-    i64 posStart = 0;
-    i64 posFinish = batch->num_rows() - 1;
-    if (forFound.IsReverseSort()) {
-        std::swap(posStart, posFinish);
-    }
-    if (includedStartPosition) {
-        posStart = *includedStartPosition;
-    }
-    TSortableBatchPosition position = forFound.BuildSame(batch, posStart);
+std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindPosition(TSortableBatchPosition& position, const ui64 posStartExt, const ui64 posFinishExt, const TSortableBatchPosition& forFound, const bool greater) {
+    ui64 posStart = posStartExt;
+    ui64 posFinish = posFinishExt;
     {
         position.InitPosition(posStart);
         auto cmp = position.Compare(forFound);
@@ -60,21 +49,40 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
     }
     Y_ABORT_UNLESS(posFinish != posStart);
     if (greater) {
+        Y_ABORT_UNLESS(position.InitPosition(posFinish));
         return TFoundPosition::Greater(posFinish);
     } else {
+        Y_ABORT_UNLESS(position.InitPosition(posStart));
         return TFoundPosition::Less(posStart);
     }
 }
 
-TSortableBatchPosition::TFoundPosition TSortableBatchPosition::SkipToLower(const TSortableBatchPosition& forFound) {
-    auto pos = FindPosition(Batch, forFound, true, Position);
-    AFL_VERIFY(pos)("batch", NArrow::DebugJson(Batch, 1, 1))("found", forFound.DebugJson());
-    if (ReverseSort) {
-        AFL_VERIFY(pos->GetPosition() <= Position)("pos", Position)("pos_skip", pos->GetPosition())("reverse", true);
-    } else {
-        AFL_VERIFY(Position <= pos->GetPosition())("pos", Position)("pos_skip", pos->GetPosition())("reverse", false);
+std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound, const bool greater, const std::optional<ui32> includedStartPosition) {
+    if (!batch || !batch->num_rows()) {
+        return {};
     }
-    AFL_VERIFY(InitPosition(pos->GetPosition()));
+    i64 posStart = 0;
+    i64 posFinish = batch->num_rows() - 1;
+    if (forFound.IsReverseSort()) {
+        std::swap(posStart, posFinish);
+    }
+    if (includedStartPosition) {
+        posStart = *includedStartPosition;
+    }
+
+    TSortableBatchPosition position = forFound.BuildSame(batch, posStart);
+    return FindPosition(position, posStart, posFinish, forFound, greater);
+}
+
+TSortableBatchPosition::TFoundPosition TSortableBatchPosition::SkipToLower(const TSortableBatchPosition& forFound) {
+    const ui32 posStart = Position;
+    auto pos = FindPosition(*this, posStart, ReverseSort ? 0 : (RecordsCount - 1), forFound, true);
+    AFL_VERIFY(pos)("cursor", DebugJson())("found", forFound.DebugJson());
+    if (ReverseSort) {
+        AFL_VERIFY(Position <= posStart)("pos", Position)("pos_skip", pos->GetPosition())("reverse", true);
+    } else {
+        AFL_VERIFY(posStart <= Position)("pos", Position)("pos_skip", pos->GetPosition())("reverse", false);
+    }
     return *pos;
 }
 

@@ -105,10 +105,13 @@ std::shared_ptr<arrow::RecordBatch> TMergePartialStream::SingleSourceDrain(const
         include = true;
     }
     if (Reverse) {
-        result = SortHeap.Current().GetKeyColumns().GetBatch()->Slice(pos.GetPosition() + (include ? 0 : 1), delta + (include ? 1 : 0));
+        result = SortHeap.Current().GetKeyColumns().Slice(pos.GetPosition() + (include ? 0 : 1), delta + (include ? 1 : 0));
     } else {
-        result = SortHeap.Current().GetKeyColumns().GetBatch()->Slice(startPos, delta + (include ? 1 : 0));
+        result = SortHeap.Current().GetKeyColumns().Slice(startPos, delta + (include ? 1 : 0));
     }
+#ifndef NDEBUG
+    NArrow::TStatusValidator::Validate(result->ValidateFull());
+#endif
     if (Reverse) {
         auto permutation = NArrow::MakePermutation(result->num_rows(), true);
         result = NArrow::TStatusValidator::GetValid(arrow::compute::Take(result, permutation)).record_batch();

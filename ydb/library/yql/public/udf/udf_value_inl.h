@@ -669,6 +669,15 @@ Y_FORCE_INLINE void TUnboxedValuePod::UnlockRef(i32 prev) const noexcept
     }
 }
 
+Y_FORCE_INLINE i32 TUnboxedValuePod::RefCount() const noexcept
+{
+    switch (Raw.GetMarkers()) {
+    case EMarkers::String: return Raw.String.Value->RefCount();
+    case EMarkers::Boxed: return Raw.Boxed.Value->RefCount();
+    default: return -1;
+    }
+}
+
 #define VALUE_GET(xType) \
     template <> \
     inline xType TUnboxedValuePod::Get<xType>() const \

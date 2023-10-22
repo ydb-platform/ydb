@@ -885,6 +885,7 @@ public:
     inline void DeleteUnreferenced() const noexcept;
     inline i32 LockRef() const noexcept;
     inline void UnlockRef(i32 prev) const noexcept;
+    inline i32 RefCount() const noexcept;
 
     static constexpr ui32 InternalBufferSize = sizeof(TRaw::Embedded.Buffer);
     static constexpr ui32 OffsetLimit = 1U << 24U;

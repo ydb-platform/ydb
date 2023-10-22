@@ -9,7 +9,7 @@ bool Schema::IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* ds
 
     while (!rowset.EndOfSet()) {
         NOlap::TPortionInfo portion = NOlap::TPortionInfo::BuildEmpty();
-        portion.SetGranule(rowset.GetValue<IndexColumns::Granule>());
+        portion.SetPathId(rowset.GetValue<IndexColumns::PathId>());
         portion.SetMinSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>());
         portion.SetPortion(rowset.GetValue<IndexColumns::Portion>());
 

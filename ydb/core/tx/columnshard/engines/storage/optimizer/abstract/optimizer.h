@@ -56,8 +56,7 @@ protected:
     virtual void DoModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
-    virtual void DoActualize(const TInstant /*currentInstant*/) {
-    }
+    virtual void DoActualize(const TInstant currentInstant) = 0;
     virtual TString DoDebugString() const {
         return "";
     }
@@ -107,9 +106,7 @@ public:
         return DoDebugString();
     }
 
-    virtual std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const {
-        return {};
-    }
+    virtual std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const = 0;
 
     NJson::TJsonValue SerializeToJsonVisual() const {
         return DoSerializeToJsonVisual();

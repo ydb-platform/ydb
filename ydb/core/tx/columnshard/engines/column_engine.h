@@ -1,5 +1,5 @@
 #pragma once
-#include "granules_table.h"
+#include "db_wrapper.h"
 #include "portions/portion_info.h"
 #include "scheme/snapshot_scheme.h"
 #include "predicate/filter.h"
@@ -21,7 +21,6 @@ class TCleanupColumnEngineChanges;
 
 struct TSelectInfo {
     struct TStats {
-        size_t Granules{};
         size_t Portions{};
         size_t Records{};
         size_t Blobs{};
@@ -29,7 +28,6 @@ struct TSelectInfo {
         size_t Bytes{};
 
         const TStats& operator += (const TStats& stats) {
-            Granules += stats.Granules;
             Portions += stats.Portions;
             Records += stats.Records;
             Blobs += stats.Blobs;
@@ -39,15 +37,10 @@ struct TSelectInfo {
         }
     };
 
-    std::vector<TGranuleRecord> Granules; // ordered by key (ascending)
     std::vector<std::shared_ptr<TPortionInfo>> PortionsOrderedPK;
 
     NColumnShard::TContainerAccessorWithDirection<std::vector<std::shared_ptr<TPortionInfo>>> GetPortionsOrdered(const bool reverse) const {
         return NColumnShard::TContainerAccessorWithDirection<std::vector<std::shared_ptr<TPortionInfo>>>(PortionsOrderedPK, reverse);
-    }
-
-    NColumnShard::TContainerAccessorWithDirection<std::vector<TGranuleRecord>> GetGranulesOrdered(const bool reverse) const {
-        return NColumnShard::TContainerAccessorWithDirection<std::vector<TGranuleRecord>>(Granules, reverse);
     }
 
     size_t NumChunks() const {
@@ -60,7 +53,6 @@ struct TSelectInfo {
 
     TStats Stats() const {
         TStats out;
-        out.Granules = Granules.size();
         out.Portions = PortionsOrderedPK.size();
 
         THashSet<TUnifiedBlobId> uniqBlob;
@@ -79,13 +71,6 @@ struct TSelectInfo {
     }
 
     friend IOutputStream& operator << (IOutputStream& out, const TSelectInfo& info) {
-        if (info.Granules.size()) {
-            out << "granules:";
-            for (auto& rec : info.Granules) {
-                out << " " << rec;
-            }
-            out << "; ";
-        }
         if (info.PortionsOrderedPK.size()) {
             out << "portions:";
             for (auto& portionInfo : info.PortionsOrderedPK) {
@@ -170,8 +155,6 @@ public:
     };
 
     i64 Tables{};
-    i64 Granules{};
-    i64 EmptyGranules{};
     i64 ColumnRecords{};
     i64 ColumnMetadataBytes{};
     THashMap<TPortionMeta::EProduced, TPortionsStats> StatsByType;
@@ -362,6 +345,8 @@ public:
 
 
 class IColumnEngine {
+protected:
+    virtual void DoRegisterTable(const ui64 pathId) = 0;
 public:
     virtual ~IColumnEngine() = default;
 
@@ -373,10 +358,13 @@ public:
     virtual TString SerializeMark(const NArrow::TReplaceKey& key) const = 0;
     virtual NArrow::TReplaceKey DeserializeMark(const TString& key, std::optional<ui32> markNumKeys) const = 0;
 
-    virtual bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) = 0;
-
+    virtual bool HasDataInPathId(const ui64 pathId) const = 0;
+    virtual bool Load(IDbWrapper& db) = 0;
+    void RegisterTable(const ui64 pathId) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RegisterTable")("path_id", pathId);
+        return DoRegisterTable(pathId);
+    }
     virtual std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
-                                                const THashSet<ui32>& columnIds,
                                                 const TPKRangesFilter& pkRangesFilter) const = 0;
     virtual std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept = 0;

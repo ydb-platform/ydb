@@ -133,7 +133,6 @@ void TTxRead::Complete(const TActorContext& ctx) {
             std::static_pointer_cast<const NOlap::TReadMetadataBase>(ReadMetadata));
         auto statsDelta = Self->InFlightReadsTracker.GetSelectStatsDelta();
 
-        Self->IncCounter(COUNTER_READ_INDEX_GRANULES, statsDelta.Granules);
         Self->IncCounter(COUNTER_READ_INDEX_PORTIONS, statsDelta.Portions);
         Self->IncCounter(COUNTER_READ_INDEX_BLOBS, statsDelta.Blobs);
         Self->IncCounter(COUNTER_READ_INDEX_ROWS, statsDelta.Rows);

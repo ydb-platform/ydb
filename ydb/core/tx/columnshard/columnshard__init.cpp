@@ -41,7 +41,6 @@ void TTxInit::SetDefaults() {
     Self->OwnerPath.clear();
     Self->AltersInFlight.clear();
     Self->CommitsInFlight.clear();
-    Self->TablesManager.Clear();
     Self->LongTxWrites.clear();
     Self->LongTxWritesByUniqueId.clear();
 }
@@ -131,13 +130,12 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     }
     {
         ACFL_INFO("step", "TTablesManager::Load_Start");
-        TTablesManager tManagerLocal(Self->StoragesManager);
-        THashSet<TUnifiedBlobId> lostEvictions;
-        if (!tManagerLocal.InitFromDB(db, Self->TabletID())) {
+        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
+        if (!tManagerLocal.InitFromDB(db)) {
             ACFL_ERROR("step", "TTablesManager::InitFromDB_Fails");
             return false;
         }
-        if (!tManagerLocal.LoadIndex(dbTable, lostEvictions)) {
+        if (!tManagerLocal.LoadIndex(dbTable)) {
             ACFL_ERROR("step", "TTablesManager::Load_Fails");
             return false;
         }

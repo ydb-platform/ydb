@@ -55,36 +55,7 @@ void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIn
 }
 
 bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
-    // Save new granules
-    std::map<ui64, ui64> remapGranules;
-    for (auto& [granule, p] : NewGranules) {
-        ui64 pathId = p.first;
-        TMark mark = p.second;
-        TGranuleRecord rec(pathId, granule, context.Snapshot, mark.GetBorder());
-        auto oldGranuleId = self.NewGranule(rec);
-        if (!oldGranuleId) {
-            self.GranulesTable->Write(context.DB, rec);
-        } else {
-            remapGranules.emplace(rec.Granule, *oldGranuleId);
-        }
-    }
     // Save new portions (their column records)
-
-    THashMap<ui64, std::shared_ptr<TGranuleMeta>> granules;
-    for (auto& portionInfoWithBlobs : AppendedPortions) {
-        auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
-        Y_ABORT_UNLESS(!portionInfo.Empty());
-        auto it = remapGranules.find(portionInfo.GetGranule());
-        if (it != remapGranules.end()) {
-            granules.emplace(it->second, self.GetGranulePtrVerified(it->second));
-        } else {
-            granules.emplace(portionInfo.GetGranule(), self.GetGranulePtrVerified(portionInfo.GetGranule()));
-        }
-    }
-    for (auto& [_, portionInfo] : PortionsToRemove) {
-        granules.emplace(portionInfo.GetGranule(), self.GetGranulePtrVerified(portionInfo.GetGranule()));
-    }
-    NJson::TJsonValue sbJson = NJson::JSON_MAP;
     {
         auto g = self.GranulesStorage->StartPackModification();
 
@@ -92,10 +63,7 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
             Y_ABORT_UNLESS(!portionInfo.Empty());
             Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
 
-            const ui64 granule = portionInfo.GetGranule();
-            const ui64 portion = portionInfo.GetPortion();
-
-            const TPortionInfo& oldInfo = self.GetGranuleVerified(granule).GetPortionVerified(portion);
+            const TPortionInfo& oldInfo = self.GetGranuleVerified(portionInfo.GetPathId()).GetPortionVerified(portionInfo.GetPortion());
 
             self.UpsertPortion(portionInfo, &oldInfo);
 
@@ -106,10 +74,6 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
         for (auto& portionInfoWithBlobs : AppendedPortions) {
             auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
             Y_ABORT_UNLESS(!portionInfo.Empty());
-            auto it = remapGranules.find(portionInfo.GetGranule());
-            if (it != remapGranules.end()) {
-                portionInfo.SetGranule(it->second);
-            }
             self.UpsertPortion(portionInfo);
             for (auto& record : portionInfo.Records) {
                 self.ColumnsTable->Write(context.DB, portionInfo, record);

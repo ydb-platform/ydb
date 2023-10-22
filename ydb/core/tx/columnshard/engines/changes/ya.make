@@ -5,7 +5,6 @@ SRCS(
     ttl.cpp
     indexation.cpp
     cleanup.cpp
-    mark_granules.cpp
     with_appended.cpp
     general_compaction.cpp
 )

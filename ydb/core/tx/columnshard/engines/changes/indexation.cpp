@@ -1,5 +1,4 @@
 #include "indexation.h"
-#include "mark_granules.h"
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -23,19 +22,6 @@ void TInsertColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, 
     if (!DataToIndex.empty()) {
         self.UpdateInsertTableCounters();
     }
-}
-
-std::optional<ui64> TInsertColumnEngineChanges::AddPathIfNotExists(ui64 pathId) {
-    if (PathToGranule.contains(pathId)) {
-        return {};
-    }
-
-    Y_ABORT_UNLESS(FirstGranuleId);
-    ui64 granule = FirstGranuleId;
-    ++FirstGranuleId;
-
-    NewGranules.emplace(granule, std::make_pair(pathId, DefaultMark));
-    return granule;
 }
 
 void TInsertColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
@@ -111,7 +97,6 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
     Y_ABORT_UNLESS(Blobs.empty());
     const std::vector<std::string> comparableColumns = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
     for (auto& [pathId, batches] : pathBatches) {
-        auto newGranuleId = AddPathIfNotExists(pathId);
         NIndexedReader::TMergePartialStream stream(resultSchema->GetIndexInfo().GetReplaceKey(), resultSchema->GetIndexInfo().ArrowSchemaWithSpecials(), false);
         THashMap<std::string, ui64> fieldSizes;
         ui64 rowsCount = 0;
@@ -127,37 +112,22 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         stream.SetPossibleSameVersion(true);
         stream.DrainAll(builder);
 
-        THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> batchChunks;
-        if (PathToGranule[pathId].empty()) {
-            AFL_VERIFY(newGranuleId);
-            batchChunks[*newGranuleId].emplace_back(builder.Finalize());
-        } else {
-            auto& markers = PathToGranule[pathId];
-            std::vector<std::shared_ptr<arrow::RecordBatch>> result = NIndexedReader::TSortableBatchPosition::SplitByBordersInAssociativeContainer(builder.Finalize(), comparableColumns, markers);
-            AFL_VERIFY(result.size() == markers.size() + 1)("result", result.size())("markers", markers.size());
-            ui32 idx = 0;
-            for (auto&& i : markers) {
-                auto chunk = result[++idx];
-                if (chunk) {
-                    batchChunks[i.second].emplace_back(chunk);
-                }
+        auto itGranule = PathToGranule.find(pathId);
+        AFL_VERIFY(itGranule != PathToGranule.end());
+        std::vector<std::shared_ptr<arrow::RecordBatch>> result = NIndexedReader::TSortableBatchPosition::SplitByBordersInSequentialContainer(builder.Finalize(), comparableColumns, itGranule->second);
+        for (auto&& b : result) {
+            if (!b) {
+                continue;
             }
-            if (result.front()) {
-                batchChunks[markers.begin()->second].emplace_back(result.front());
+            if (b->num_rows() < 100) {
+                SaverContext.SetExternalCompression(NArrow::TCompression(arrow::Compression::type::UNCOMPRESSED));
+            } else {
+                SaverContext.SetExternalCompression(NArrow::TCompression(arrow::Compression::type::LZ4_FRAME));
             }
-        }
-        for (auto&& g : batchChunks) {
-            for (auto&& b : g.second) {
-                if (b->num_rows() < 100) {
-                    SaverContext.SetExternalCompression(NArrow::TCompression(arrow::Compression::type::UNCOMPRESSED));
-                } else {
-                    SaverContext.SetExternalCompression(NArrow::TCompression(arrow::Compression::type::LZ4_FRAME));
-                }
-                auto portions = MakeAppendedPortions(b, g.first, maxSnapshot, nullptr, context);
-                Y_ABORT_UNLESS(portions.size());
-                for (auto& portion : portions) {
-                    AppendedPortions.emplace_back(std::move(portion));
-                }
+            auto portions = MakeAppendedPortions(b, pathId, maxSnapshot, nullptr, context);
+            Y_ABORT_UNLESS(portions.size());
+            for (auto& portion : portions) {
+                AppendedPortions.emplace_back(std::move(portion));
             }
         }
     }

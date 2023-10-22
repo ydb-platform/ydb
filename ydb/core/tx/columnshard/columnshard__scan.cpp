@@ -959,7 +959,6 @@ void TTxScan::Complete(const TActorContext& ctx) {
     ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(ReadMetadataRanges);
     auto statsDelta = Self->InFlightReadsTracker.GetSelectStatsDelta();
 
-    Self->IncCounter(COUNTER_READ_INDEX_GRANULES, statsDelta.Granules);
     Self->IncCounter(COUNTER_READ_INDEX_PORTIONS, statsDelta.Portions);
     Self->IncCounter(COUNTER_READ_INDEX_BLOBS, statsDelta.Blobs);
     Self->IncCounter(COUNTER_READ_INDEX_ROWS, statsDelta.Rows);

@@ -71,7 +71,7 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
 }
 
 TPortionInfo TPortionInfo::CopyWithFilteredColumns(const THashSet<ui32>& columnIds) const {
-    TPortionInfo result(Granule, Portion, GetMinSnapshot(), BlobsOperator);
+    TPortionInfo result(PathId, Portion, GetMinSnapshot(), BlobsOperator);
     result.Meta = Meta;
     result.Records.reserve(columnIds.size());
 
@@ -112,7 +112,7 @@ int TPortionInfo::CompareMinByPk(const TPortionInfo& item, const TIndexInfo& inf
 TString TPortionInfo::DebugString(const bool withDetails) const {
     TStringBuilder sb;
     sb << "(portion_id:" << Portion << ";" <<
-        "granule_id:" << Granule << ";records_count:" << NumRows() << ";"
+        "path_id:" << PathId << ";records_count:" << NumRows() << ";"
         "min_schema_snapshot:(" << MinSnapshot.DebugString() << ");";
     if (withDetails) {
         sb <<
@@ -184,7 +184,7 @@ size_t TPortionInfo::NumBlobs() const {
 }
 
 bool TPortionInfo::IsEqualWithSnapshots(const TPortionInfo& item) const {
-    return Granule == item.Granule && MinSnapshot == item.MinSnapshot
+    return PathId == item.PathId && MinSnapshot == item.MinSnapshot
         && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
 }
 

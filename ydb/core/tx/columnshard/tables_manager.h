@@ -139,13 +139,9 @@ private:
     TTtl Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
-    ui64 TabletId;
+    ui64 TabletId = 0;
 public:
-    TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager)
-        : StoragesManager(storagesManager)
-    {
-
-    }
+    TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
 
     const TTtl& GetTtl() const {
         return Ttl;
@@ -194,10 +190,8 @@ public:
         return *PrimaryIndex;
     }
 
-    bool InitFromDB(NIceDb::TNiceDb& db, const ui64 tabletId);
-    bool LoadIndex(NOlap::TDbWrapper& db, THashSet<NOlap::TUnifiedBlobId>& lostEvictions);
-
-    void Clear();
+    bool InitFromDB(NIceDb::TNiceDb& db);
+    bool LoadIndex(NOlap::TDbWrapper& db);
 
     const TTableInfo& GetTable(const ui64 pathId) const;
     ui64 GetMemoryUsage() const;

@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    common.cpp
     conveyor_task.cpp
     description.cpp
     queue.cpp

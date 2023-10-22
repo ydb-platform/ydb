@@ -15,8 +15,8 @@ struct TIndexInfo;
 class TPortionInfo {
 private:
     TPortionInfo() = default;
-    ui64 Granule = 0;
-    ui64 Portion = 0;   // Id of independent (overlayed by PK) portion of data in granule
+    ui64 PathId = 0;
+    ui64 Portion = 0;   // Id of independent (overlayed by PK) portion of data in pathId
     TSnapshot MinSnapshot = TSnapshot::Zero();  // {PlanStep, TxId} is min snapshot for {Granule, Portion}
     TSnapshot RemoveSnapshot = TSnapshot::Zero(); // {XPlanStep, XTxId} is snapshot where the blob has been removed (i.e. compacted into another one)
 
@@ -24,6 +24,10 @@ private:
     TPortionMeta Meta;
     std::shared_ptr<NOlap::IBlobsStorageOperator> BlobsOperator;
 public:
+    ui64 GetPathId() const {
+        return PathId;
+    }
+
     bool OlderThen(const TPortionInfo& info) const {
         return RecordSnapshotMin() < info.RecordSnapshotMin();
     }
@@ -123,8 +127,8 @@ public:
 
     bool Empty() const { return Records.empty(); }
     bool Produced() const { return Meta.GetProduced() != TPortionMeta::EProduced::UNSPECIFIED; }
-    bool Valid() const { return MinSnapshot.Valid() && Granule && Portion && !Empty() && Produced() && HasPkMinMax() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
-    bool ValidSnapshotInfo() const { return MinSnapshot.Valid() && Granule && Portion; }
+    bool Valid() const { return MinSnapshot.Valid() && PathId && Portion && !Empty() && Produced() && HasPkMinMax() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
+    bool ValidSnapshotInfo() const { return MinSnapshot.Valid() && PathId && Portion; }
     bool IsInserted() const { return Meta.GetProduced() == TPortionMeta::EProduced::INSERTED; }
     bool IsEvicted() const { return Meta.GetProduced() == TPortionMeta::EProduced::EVICTED; }
     bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
@@ -140,8 +144,8 @@ public:
         return TPortionInfo();
     }
 
-    TPortionInfo(const ui64 granuleId, const ui64 portionId, const TSnapshot& minSnapshot, const std::shared_ptr<NOlap::IBlobsStorageOperator>& blobsOperator)
-        : Granule(granuleId)
+    TPortionInfo(const ui64 pathId, const ui64 portionId, const TSnapshot& minSnapshot, const std::shared_ptr<NOlap::IBlobsStorageOperator>& blobsOperator)
+        : PathId(pathId)
         , Portion(portionId)
         , MinSnapshot(minSnapshot)
         , BlobsOperator(blobsOperator)
@@ -176,15 +180,15 @@ public:
     }
 
     ui64 GetGranule() const {
-        return Granule;
+        return PathId;
     }
 
     TPortionAddress GetAddress() const {
-        return TPortionAddress(Granule, Portion);
+        return TPortionAddress(PathId, Portion);
     }
 
-    void SetGranule(const ui64 granule) {
-        Granule = granule;
+    void SetPathId(const ui64 pathId) {
+        PathId = pathId;
     }
 
     void SetPortion(const ui64 portion) {

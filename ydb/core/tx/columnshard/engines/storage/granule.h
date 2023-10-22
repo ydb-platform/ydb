@@ -164,6 +164,7 @@ private:
 
     std::set<EActivity> Activity;
     mutable bool AllowInsertionFlag = false;
+    const ui64 PathId;
     std::shared_ptr<TGranulesStorage> Owner;
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
@@ -229,7 +230,7 @@ public:
 
     bool NeedCompaction(const TCompactionLimits& limits) const {
         if (InCompaction() || Empty()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "granule_skipped_by_state")("granule_id", GetGranuleId())("granule_size", Size());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "granule_skipped_by_state")("path_id", GetPathId())("granule_size", Size());
             return false;
         }
         return GetCompactionType(limits) != TGranuleAdditiveSummary::ECompactionClass::NoCompaction;
@@ -238,7 +239,7 @@ public:
     bool InCompaction() const;
 
     bool IsErasable() const {
-        return Activity.empty();
+        return Activity.empty() && Portions.empty();
     }
 
     void OnCompactionStarted();
@@ -249,15 +250,13 @@ public:
     void UpsertPortion(const TPortionInfo& info);
 
     TString DebugString() const {
-        return TStringBuilder() << "(granule:" << GetGranuleId() << ";"
-            << "path_id:" << Record.PathId << ";"
+        return TStringBuilder() << "(granule:" << GetPathId() << ";"
+            << "path_id:" << GetPathId() << ";"
             << "size:" << GetAdditiveSummary().GetGranuleSize() << ";"
             << "portions_count:" << Portions.size() << ";"
             << ")"
             ;
     }
-
-    const TGranuleRecord Record;
 
     void AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta);
 
@@ -266,7 +265,11 @@ public:
     }
 
     ui64 GetPathId() const {
-        return Record.PathId;
+        return PathId;
+    }
+
+    ui64 GetGranuleId() const {
+        return PathId;
     }
 
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {
@@ -285,12 +288,8 @@ public:
 
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
+    explicit TGranuleMeta(const ui64 pathId, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
 
-    ui64 GetGranuleId() const {
-        return Record.Granule;
-    }
-    ui64 PathId() const noexcept { return Record.PathId; }
     bool Empty() const noexcept { return Portions.empty(); }
 
     ui64 Size() const;

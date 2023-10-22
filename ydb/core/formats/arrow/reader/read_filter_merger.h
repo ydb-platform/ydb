@@ -103,31 +103,6 @@ public:
         }
     };
 
-    template <class TContainer>
-    class TAssociatedContainerIterator {
-    private:
-        typename TContainer::const_iterator Current;
-        typename TContainer::const_iterator End;
-    public:
-        TAssociatedContainerIterator(const TContainer& container)
-            : Current(container.begin())
-            , End(container.end())
-        {
-        }
-
-        bool IsValid() const {
-            return Current != End;
-        }
-
-        void Next() {
-            ++Current;
-        }
-
-        const auto& CurrentPosition() const {
-            return Current->first;
-        }
-    };
-
     //  (-inf, it1), [it1, it2), [it2, it3), ..., [itLast, +inf)
     template <class TBordersIterator>
     static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBorders(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, TBordersIterator& it) {
@@ -174,8 +149,62 @@ public:
     }
 
     template <class TContainer>
+    class TAssociatedContainerIterator {
+    private:
+        typename TContainer::const_iterator Current;
+        typename TContainer::const_iterator End;
+    public:
+        TAssociatedContainerIterator(const TContainer& container)
+            : Current(container.begin())
+            , End(container.end()) {
+        }
+
+        bool IsValid() const {
+            return Current != End;
+        }
+
+        void Next() {
+            ++Current;
+        }
+
+        const auto& CurrentPosition() const {
+            return Current->first;
+        }
+    };
+
+    template <class TContainer>
     static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInAssociativeContainer(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TContainer& container) {
         TAssociatedContainerIterator<TContainer> it(container);
+        return SplitByBorders(batch, columnNames, it);
+    }
+
+    template <class TContainer>
+    class TSequentialContainerIterator {
+    private:
+        typename TContainer::const_iterator Current;
+        typename TContainer::const_iterator End;
+    public:
+        TSequentialContainerIterator(const TContainer& container)
+            : Current(container.begin())
+            , End(container.end()) {
+        }
+
+        bool IsValid() const {
+            return Current != End;
+        }
+
+        void Next() {
+            ++Current;
+        }
+
+        const auto& CurrentPosition() const {
+            return *Current;
+        }
+    };
+
+    template <class TContainer>
+    static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInSequentialContainer(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TContainer& container) {
+        TSequentialContainerIterator<TContainer> it(container);
         return SplitByBorders(batch, columnNames, it);
     }
 

@@ -23,7 +23,7 @@ protected:
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
 public:
     const TMark DefaultMark;
-    THashMap<ui64, std::map<NIndexedReader::TSortableBatchPosition, ui64>> PathToGranule; // pathId -> {pos, granule}
+    THashMap<ui64, std::vector<NIndexedReader::TSortableBatchPosition>> PathToGranule; // pathId -> positions (sorted by pk)
 public:
     TInsertColumnEngineChanges(const TMark& defaultMark, std::vector<NOlap::TInsertedData>&& dataToIndex, const TSplitSettings& splitSettings, const TSaverContext& saverContext)
         : TBase(splitSettings, saverContext, StaticTypeName())

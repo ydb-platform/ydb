@@ -13,13 +13,12 @@ TDataStorageAccessor::TDataStorageAccessor(const std::unique_ptr<NOlap::TInsertT
     , Index(index)
 {}
 
-std::shared_ptr<NOlap::TSelectInfo> TDataStorageAccessor::Select(const NOlap::TReadDescription& readDescription, const THashSet<ui32>& columnIds) const {
+std::shared_ptr<NOlap::TSelectInfo> TDataStorageAccessor::Select(const NOlap::TReadDescription& readDescription, const THashSet<ui32>& /*columnIds*/) const {
     if (readDescription.ReadNothing) {
         return std::make_shared<NOlap::TSelectInfo>();
     }
     return Index->Select(readDescription.PathId,
                             readDescription.GetSnapshot(),
-                            columnIds,
                             readDescription.PKRangesFilter);
 }
 

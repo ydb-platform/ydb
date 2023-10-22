@@ -55,6 +55,7 @@ public:
         TString requestId = CreateGuidAsString();
 
         auto hostName = GetProxyForHeavyRequest(context);
+        UpdateHeaderForProxyIfNeed(hostName, context, header);
         Request_ = context.HttpClient->StartRequest(GetFullUrl(hostName, context, header), requestId, header);
         BufferedOutput_.Reset(new TBufferedOutput(Request_->GetStream(), BufferSize_));
     }

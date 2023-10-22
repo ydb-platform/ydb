@@ -57,6 +57,8 @@ public:
     bool HasMutationId() const;
 
     void SetToken(const TString& token);
+    void SetProxyAddress(const TString& proxyAddress);
+    void SetHostPort(const TString& hostPort);
     void SetImpersonationUser(const TString& impersonationUser);
 
     void SetServiceTicket(const TString& ticket);
@@ -70,7 +72,7 @@ public:
     void SetResponseCompression(const TString& compression);
 
     TString GetCommand() const;
-    TString GetUrl() const;
+    TString GetUrl(bool needProxy = false) const;
     TString GetHeaderAsString(const TString& hostName, const TString& requestId, bool includeParameters = true) const;
     NHttp::THeadersPtrWrapper GetHeader(const TString& hostName, const TString& requestId, bool includeParameters) const;
 
@@ -89,6 +91,8 @@ private:
     TString Token;
     TString ServiceTicket;
     TNode Attributes;
+    TString ProxyAddress;
+    TString HostPort;
 
 private:
     TMaybe<TFormat> InputFormat = TFormat::YsonText();

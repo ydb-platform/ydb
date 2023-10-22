@@ -1296,6 +1296,7 @@ TClientPtr CreateClientImpl(
     context.Config = options.Config_ ? options.Config_ : TConfig::Get();
     context.TvmOnly = options.TvmOnly_;
     context.UseTLS = options.UseTLS_;
+    context.ProxyAddress = options.ProxyAddress_;
 
     context.ServerName = serverName;
     if (serverName.find('.') == TString::npos &&

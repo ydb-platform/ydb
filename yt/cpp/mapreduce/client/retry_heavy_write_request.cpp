@@ -51,6 +51,8 @@ void RetryHeavyWriteRequest(
             auto hostName = GetProxyForHeavyRequest(context);
             requestId = CreateGuidAsString();
 
+            UpdateHeaderForProxyIfNeed(hostName, context, header);
+
             header.AddTransactionId(attemptTx.GetId(), /* overwrite = */ true);
             header.SetRequestCompression(ToString(context.Config->ContentEncoding));
 

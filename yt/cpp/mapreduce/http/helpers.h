@@ -14,6 +14,10 @@ TString CreateHostNameWithPort(const TString& name, const TClientContext& contex
 
 TString GetFullUrl(const TString& hostName, const TClientContext& context, THttpHeader& header);
 
+void UpdateHeaderForProxyIfNeed(const TString& hostName, const TClientContext& context, THttpHeader& header);
+
+TString GetFullUrlForProxy(const TString& hostName, const TClientContext& context, THttpHeader& header);
+
 TString TruncateForLogs(const TString& text, size_t maxSize);
 
 TString GetLoggedAttributes(const THttpHeader& header, const TString& url, bool includeParameters, size_t sizeLimit);

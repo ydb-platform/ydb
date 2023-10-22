@@ -676,6 +676,8 @@ public:
         auto hostName = GetProxyForHeavyRequest(context);
         auto requestId = CreateGuidAsString();
 
+        UpdateHeaderForProxyIfNeed(hostName, context, header);
+
         Response_ = context.HttpClient->Request(GetFullUrl(hostName, context, header), requestId, header);
         ResponseStream_ = Response_->GetResponseStream();
     }

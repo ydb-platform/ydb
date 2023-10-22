@@ -41,7 +41,7 @@ TGUID ParseGuidFromResponse(const TString& response)
 TString GetProxyForHeavyRequest(const TClientContext& context)
 {
     if (!context.Config->UseHosts) {
-        return context.ServerName;
+        return context.ProxyAddress ? *context.ProxyAddress : context.ServerName;
     }
 
     return NPrivate::THostManager::Get().GetProxyForHeavyRequest(context);

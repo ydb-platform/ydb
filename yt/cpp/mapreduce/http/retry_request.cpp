@@ -34,7 +34,9 @@ static TResponseInfo Request(
         hostName = context.ServerName;
     }
 
-    auto url = GetFullUrl(hostName, context, header);
+    UpdateHeaderForProxyIfNeed(hostName, context, header);
+
+    auto url = GetFullUrlForProxy(hostName, context, header);
 
     auto response = context.HttpClient->Request(url, requestId, config.HttpConfig, header, body);
 
@@ -82,6 +84,8 @@ TResponseInfo RetryRequestWithPolicy(
     } else {
         header.SetToken(context.Token);
     }
+
+    UpdateHeaderForProxyIfNeed(context.ServerName, context, header);
 
     if (context.ImpersonationUser) {
         header.SetImpersonationUser(*context.ImpersonationUser);

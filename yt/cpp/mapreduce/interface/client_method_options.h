@@ -1071,6 +1071,9 @@ struct TCreateClientOptions
     /// access token, api version and more.
     /// @see NYT::TConfig
     FLUENT_FIELD_DEFAULT(TConfigPtr, Config, nullptr);
+
+    /// @brief Proxy Address to be used for connection
+    FLUENT_FIELD_OPTION(TString, ProxyAddress);
 };
 
 ///

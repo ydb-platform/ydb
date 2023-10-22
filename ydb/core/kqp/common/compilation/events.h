@@ -16,7 +16,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         TMaybe<TKqpQueryId>&& query, bool keepInCache, TInstant deadline,
         TKqpDbCountersPtr dbCounters, std::shared_ptr<std::atomic<bool>> intrestedInResult, 
         const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {},
-        TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
+        TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false)
         : UserToken(userToken)
         , Uid(uid)
         , Query(std::move(query))
@@ -27,6 +27,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         , Orbit(std::move(orbit))
         , TempTablesState(std::move(tempTablesState))
         , IntrestedInResult(std::move(intrestedInResult))
+        , CollectDiagnostics(collectDiagnostics)
     {
         Y_ENSURE(Uid.Defined() != Query.Defined());
     }
@@ -45,6 +46,8 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
 
     TKqpTempTablesState::TConstPtr TempTablesState;
     std::shared_ptr<std::atomic<bool>> IntrestedInResult;
+
+    bool CollectDiagnostics = false;
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
@@ -80,8 +83,9 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
 };
 
 struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {
-    TEvCompileResponse(const TKqpCompileResult::TConstPtr& compileResult, NLWTrace::TOrbit orbit = {})
+    TEvCompileResponse(const TKqpCompileResult::TConstPtr& compileResult, NLWTrace::TOrbit orbit = {}, const std::optional<TString>& replayMessage = std::nullopt)
         : CompileResult(compileResult)
+        , ReplayMessage(replayMessage)
         , Orbit(std::move(orbit)) {
     }
 

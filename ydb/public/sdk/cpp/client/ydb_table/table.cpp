@@ -2017,10 +2017,11 @@ bool TPrepareQueryResult::IsQueryFromCache() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TExplainQueryResult::TExplainQueryResult(TStatus&& status, TString&& plan, TString&& ast)
+TExplainQueryResult::TExplainQueryResult(TStatus&& status, TString&& plan, TString&& ast, TString&& diagnostics)
     : TStatus(std::move(status))
     , Plan_(std::move(plan))
     , Ast_(std::move(ast))
+    , Diagnostics_(std::move(diagnostics))
 {}
 
 const TString& TExplainQueryResult::GetPlan() const {
@@ -2031,6 +2032,11 @@ const TString& TExplainQueryResult::GetPlan() const {
 const TString& TExplainQueryResult::GetAst() const {
     CheckStatusOk("TExplainQueryResult::GetAst");
     return Ast_;
+}
+
+const TString& TExplainQueryResult::GetDiagnostics() const {
+    CheckStatusOk("TExplainQueryResult::GetDiagnostics");
+    return Diagnostics_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

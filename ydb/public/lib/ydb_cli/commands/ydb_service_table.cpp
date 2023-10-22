@@ -14,6 +14,7 @@
 #include <util/string/split.h>
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
+#include <util/generic/guid.h>
 
 #include <math.h>
 
@@ -687,6 +688,8 @@ void TCommandExplain::Config(TConfig& config) {
         .NoArgument().SetFlag(&Analyze);
     config.Opts->AddLongOption("flame-graph", "Builds resource usage flame graph, based on analyze info")
             .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
+    config.Opts->AddLongOption("collect-diagnostics", "Collects diagnostics and saves it to file")
+        .StoreTrue(&CollectFullDiagnostics);
 
     AddFormats(config, {
             EOutputFormat::Pretty,
@@ -757,13 +760,23 @@ int TCommandExplain::Run(TConfig& config) {
             ast = proto.query_ast();
         }
     } else if (QueryType == "data" && !Analyze) {
+        NTable::TExplainDataQuerySettings settings(FillSettings(NTable::TExplainDataQuerySettings()));
+        if (CollectFullDiagnostics) {
+            settings.WithCollectFullDiagnostics(true);
+        }
+
         NTable::TExplainQueryResult result = GetSession(config).ExplainDataQuery(
             Query,
-            FillSettings(NTable::TExplainDataQuerySettings())
+            settings
         ).GetValueSync();
         ThrowOnError(result);
         planJson = result.GetPlan();
         ast = result.GetAst();
+
+        if (CollectFullDiagnostics) {
+            TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
+            file << result.GetDiagnostics();
+        }
 
     } else {
         throw TMisuseException() << "Unknown query type for explain.";

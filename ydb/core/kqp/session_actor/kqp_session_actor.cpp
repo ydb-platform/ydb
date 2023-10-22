@@ -122,26 +122,26 @@ struct TKqpCleanupCtx {
 
 class TKqpSessionActor : public TActorBootstrapped<TKqpSessionActor> {
 
-class TTimerGuard {
-public:
-    TTimerGuard(TKqpSessionActor* this_)
-      : This(this_)
-    {
-        if (This->QueryState) {
-            YQL_ENSURE(!This->QueryState->CurrentTimer);
-            This->QueryState->CurrentTimer.emplace();
+    class TTimerGuard {
+    public:
+        TTimerGuard(TKqpSessionActor* this_)
+        : This(this_)
+        {
+            if (This->QueryState) {
+                YQL_ENSURE(!This->QueryState->CurrentTimer);
+                This->QueryState->CurrentTimer.emplace();
+            }
         }
-    }
 
-    ~TTimerGuard() {
-        if (This->QueryState) {
-            This->QueryState->ResetTimer();
+        ~TTimerGuard() {
+            if (This->QueryState) {
+                This->QueryState->ResetTimer();
+            }
         }
-    }
 
-private:
-    TKqpSessionActor* This;
-};
+    private:
+        TKqpSessionActor* This;
+    };
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -388,6 +388,7 @@ public:
         );
 
         switch (action) {
+            case NKikimrKqp::QUERY_ACTION_EXPLAIN:
             case NKikimrKqp::QUERY_ACTION_EXECUTE:
             case NKikimrKqp::QUERY_ACTION_PREPARE:
             case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED: {
@@ -420,18 +421,6 @@ public:
             }
             case NKikimrKqp::QUERY_ACTION_COMMIT_TX:
                 return CommitTx();
-
-            case NKikimrKqp::QUERY_ACTION_EXPLAIN: {
-                auto type = QueryState->GetType();
-                if (type != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY &&
-                    type != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY &&
-                    type != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT)
-                {
-                    return ForwardRequest(ev);
-                }
-
-                break;
-            }
 
             // not supported yet
             case NKikimrKqp::QUERY_ACTION_VALIDATE:
@@ -1639,6 +1628,7 @@ public:
 
             response.SetQueryPlan(preparedQuery->GetPhysicalQuery().GetQueryPlan());
             response.SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
+            response.SetQueryDiagnostics(QueryState->ReplayMessage);
 
             const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
             FillColumnsMeta(phyQuery, response);

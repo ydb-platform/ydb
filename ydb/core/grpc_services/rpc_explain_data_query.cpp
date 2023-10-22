@@ -68,6 +68,7 @@ public:
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         ev->Record.MutableRequest()->SetQuery(req->yql_text());
+        ev->Record.MutableRequest()->SetCollectDiagnostics(req->Getcollect_full_diagnostics());
 
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
@@ -83,6 +84,7 @@ public:
             Ydb::Table::ExplainQueryResult queryResult;
             queryResult.set_query_ast(kqpResponse.GetQueryAst());
             queryResult.set_query_plan(kqpResponse.GetQueryPlan());
+            queryResult.set_query_full_diagnostics(kqpResponse.GetQueryDiagnostics());
 
             ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, queryResult, ctx);
         } else {

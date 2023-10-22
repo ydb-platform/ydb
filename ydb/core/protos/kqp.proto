@@ -107,6 +107,7 @@ message TQueryRequest {
     map<string, Ydb.TypedValue> YdbParameters = 24;
     optional bool IsInternalCall = 25;
     optional Ydb.Query.Syntax Syntax = 26;
+    optional bool CollectDiagnostics = 27;
 }
 
 message TKqpPathIdProto {
@@ -263,6 +264,7 @@ message TQueryResponse {
     optional NKqpProto.TKqpStatsQuery QueryStats = 12;
     repeated Ydb.ResultSet YdbResults = 13;
     optional TTopicOperationsResponse TopicOperations = 14;
+    optional string QueryDiagnostics = 15;
 }
 
 message TEvQueryResponse {

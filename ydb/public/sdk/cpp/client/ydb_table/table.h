@@ -1524,7 +1524,9 @@ struct TDescribeTableSettings : public TOperationRequestSettings<TDescribeTableS
     FLUENT_SETTING_DEFAULT(bool, WithPartitionStatistics, false);
 };
 
-struct TExplainDataQuerySettings : public TOperationRequestSettings<TExplainDataQuerySettings> {};
+struct TExplainDataQuerySettings : public TOperationRequestSettings<TExplainDataQuerySettings> {
+    FLUENT_SETTING_DEFAULT(bool, WithCollectFullDiagnostics, false);
+};
 
 struct TPrepareDataQuerySettings : public TOperationRequestSettings<TPrepareDataQuerySettings> {};
 
@@ -1778,14 +1780,16 @@ private:
 //! Represents result of ExplainDataQuery call
 class TExplainQueryResult : public TStatus {
 public:
-    TExplainQueryResult(TStatus&& status, TString&& plan, TString&& ast);
+    TExplainQueryResult(TStatus&& status, TString&& plan, TString&& ast, TString&& diagnostics);
 
     const TString& GetPlan() const;
     const TString& GetAst() const;
+    const TString& GetDiagnostics() const;
 
 private:
     TString Plan_;
     TString Ast_;
+    TString Diagnostics_;
 };
 
 //! Represents result of DescribeTable call

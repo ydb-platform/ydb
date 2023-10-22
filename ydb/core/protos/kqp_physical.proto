@@ -454,4 +454,5 @@ message TKqpPhyQuery {
     repeated TKqpTableInfo TableInfos = 8;
     bool HasUncommittedChangesRead = 9;
 
+    string QueryDiagnostics = 10;
 }

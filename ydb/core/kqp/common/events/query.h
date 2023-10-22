@@ -233,6 +233,10 @@ public:
         return ParametersSize;
     }
 
+    bool GetCollectDiagnostics() const {
+        return Record.GetRequest().GetCollectDiagnostics();
+    }
+
     ui32 CalculateSerializedSize() const override {
         PrepareRemote();
         return Record.ByteSize();

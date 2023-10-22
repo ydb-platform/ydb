@@ -113,6 +113,8 @@ public:
 
     TKqpTempTablesState::TConstPtr TempTablesState;
 
+    TString ReplayMessage;
+
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestEv->GetAction();
     }
@@ -422,6 +424,10 @@ public:
     // Returns nullptr in case of no local event
     google::protobuf::Arena* GetArena() {
         return RequestEv->GetArena();
+    }
+
+    bool GetCollectDiagnostics() {
+        return RequestEv->GetCollectDiagnostics();
     }
 
     //// Topic ops ////

@@ -133,6 +133,7 @@ private:
     TString QueryType;
     bool Analyze = false;
     TMaybe<TString> FlameGraphPath;
+    bool CollectFullDiagnostics = false;
 };
 
 class TCommandReadTable : public TYdbCommand, public TCommandWithPath,

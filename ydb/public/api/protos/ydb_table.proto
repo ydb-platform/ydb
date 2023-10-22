@@ -853,6 +853,7 @@ message ExplainDataQueryRequest {
     // SQL text to explain
     string yql_text = 2;
     Ydb.Operations.OperationParams operation_params = 3;
+    bool collect_full_diagnostics = 4;
 }
 
 message ExplainDataQueryResponse {
@@ -863,6 +864,7 @@ message ExplainDataQueryResponse {
 message ExplainQueryResult {
     string query_ast = 1;
     string query_plan = 2;
+    string query_full_diagnostics = 3;
 }
 
 // Prepare given program to execute

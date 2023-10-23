@@ -19,6 +19,11 @@ LICENSE(
     Public-Domain
 )
 
+LICENSE_RESTRICTION_EXCEPTIONS(
+    # Consider Artistic-1.0 as acceptable license risk
+    contrib/tools/yasm
+)
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 IF (MUSL)

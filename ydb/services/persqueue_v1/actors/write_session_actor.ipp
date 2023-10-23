@@ -217,8 +217,8 @@ void TWriteSessionActor<UseMigrationProtocol>::Bootstrap(const TActorContext& ct
     const auto& pqConfig = AppData(ctx)->PQConfig;
     SrcIdTableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
                                                                     : ESourceIdTableGeneration::SrcIdMeta2;
-    SelectSourceIdQuery = GetSourceIdSelectQueryFromPath(pqConfig.GetSourceIdTablePath(),SrcIdTableGeneration);
-    UpdateSourceIdQuery = GetUpdateIdSelectQueryFromPath(pqConfig.GetSourceIdTablePath(), SrcIdTableGeneration);
+    SelectSourceIdQuery = GetSelectSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(),SrcIdTableGeneration);
+    UpdateSourceIdQuery = GetUpdateSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(), SrcIdTableGeneration);
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "Select srcid query: " << SelectSourceIdQuery);
 
     Request->GetStreamCtx()->Attach(ctx.SelfID);

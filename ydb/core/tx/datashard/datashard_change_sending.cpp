@@ -319,6 +319,7 @@ public:
         }
 
         if (ChangeExchangeSplit) {
+            Self->KillChangeSender(ctx);
             Self->ChangeExchangeSplitter.DoSplit(ctx);
         }
 

@@ -662,7 +662,7 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
 
         switch (opts.AvailabilityMode) {
         case MODE_MAX_AVAILABILITY:
-            if (!counters->CheckForMaxAvailability(error, defaultDeadline, opts.PartialPermissionAllowed)) {
+            if (!counters->CheckForMaxAvailability(ClusterInfo, error, defaultDeadline, opts.PartialPermissionAllowed)) {
                 return false;
             }
             break;
@@ -1981,13 +1981,6 @@ void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
 
     LOG_DEBUG_S(ctx, NKikimrServices::CMS,
                 "Got config subscription id=" << ConfigSubscriptionId);
-}
-
-void TCms::Handle(TEvents::TEvPoisonPill::TPtr &ev,
-                  const TActorContext &ctx)
-{
-    Y_UNUSED(ev);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
 }
 
 void TCms::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev,

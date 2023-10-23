@@ -75,12 +75,7 @@
                                                                                                 "PlanNodeType": "Connection",
                                                                                                 "Plans": [
                                                                                                     {
-                                                                                                        "Node Type": "Aggregate",
-                                                                                                        "Operators": [
-                                                                                                            {
-                                                                                                                "Name": "Aggregate"
-                                                                                                            }
-                                                                                                        ],
+                                                                                                        "Node Type": "Stage",
                                                                                                         "PlanNodeId": 3,
                                                                                                         "Plans": [
                                                                                                             {

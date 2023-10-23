@@ -179,7 +179,7 @@ public:
         Y_FAIL("Unimplemented for local rpc");
     }
 
-    void FinishStream() override {
+    void FinishStream(ui32) override {
         Y_FAIL("Unimplemented for local rpc");
     }
 
@@ -221,6 +221,17 @@ public:
 
     bool IsInternalCall() const override {
         return InternalCall;
+    }
+
+    // IRequestCtx
+    //
+    void FinishRequest() override {}
+
+    // IRequestCtxBase
+    //
+    void AddAuditLogPart(const TStringBuf&, const TString&) override {}
+    const NGRpcService::TAuditLogParts& GetAuditLogParts() const override {
+        Y_FAIL("unimplemented for local rpc");
     }
 
 private:

@@ -39,7 +39,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_split_merge PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-schemeshard-ut_split_merge PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_split_merge.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_split_merge/ut_split_merge.cpp
 )
 set_property(
   TARGET

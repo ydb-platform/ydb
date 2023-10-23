@@ -504,6 +504,18 @@ public:
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
+        if (parentPath.Base()->IsCdcStream()) {
+            auto tablePath = parentPath.Parent();
+            Y_VERIFY(tablePath.IsResolved());
+
+            Y_VERIFY(context.SS->Tables.contains(tablePath.Base()->PathId));
+            auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+
+            for (const auto& splitOpId : table->GetSplitOpsInFlight()) {
+                context.OnComplete.Dependence(splitOpId.GetTxId(), OperationId.GetTxId());
+            }
+        }
+
         context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
         context.OnComplete.ActivateTx(OperationId);
 

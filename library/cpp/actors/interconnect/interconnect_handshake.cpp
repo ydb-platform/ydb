@@ -491,8 +491,11 @@ namespace NActors {
                     s << ", errorReason# " << errorReason;
                     errorCallback(s.Str());
                 }
-            } else {
+            } else if (proto.HasVersionTag()) {
                 ValidateVersionTag(proto, std::forward<TCallback>(errorCallback));
+            } else {
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH09", NLog::PRI_WARN,
+                    "Neither CompatibilityInfo nor VersionTag of the peer can be validated, accepting by default");
             }
         }
 

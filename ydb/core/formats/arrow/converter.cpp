@@ -167,11 +167,12 @@ std::shared_ptr<arrow::RecordBatch> InplaceConvertColumns(const std::shared_ptr<
 
     for (i32 i = 0; i < batch->num_columns(); ++i) {
         auto& colName = batch->column_name(i);
+        auto origType = batch->schema()->GetFieldByName(colName);
         auto it = columnsToConvert.find(TString(colName.data(), colName.size()));
         if (it != columnsToConvert.end()) {
             columns[i] = InplaceConvertColumn(columns[i], it->second);
         }
-        fields.push_back(std::make_shared<arrow::Field>(colName, columns[i]->type()));
+        fields.push_back(std::make_shared<arrow::Field>(colName, columns[i]->type(), origType->nullable()));
     }
     auto resultSchemaFixed = std::make_shared<arrow::Schema>(std::move(fields));
     auto convertedBatch = arrow::RecordBatch::Make(resultSchemaFixed, batch->num_rows(), std::move(columns));
@@ -273,7 +274,6 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
             }
 
             if (NeedDataConversion(colType)) {
-                memPool.Clear();
                 for (i32 i = 0; i < unroll; ++i) {
                     if (!ConvertData(cells[i][col], colType, memPool, errorMessage)) {
                         return false;
@@ -287,6 +287,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
         for (i32 i = 0; i < unroll; ++i) {
             RowWriter_.AddRow(cells[i]);
         }
+        memPool.Clear();
     }
     cells.resize(1);
 #else

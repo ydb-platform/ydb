@@ -3,7 +3,6 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/engine/mkql_proto.h>
-#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -712,6 +711,37 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
             << "Initial scan is not supported yet")};
     }
 
+    Y_VERIFY(context.SS->Tables.contains(tablePath.Base()->PathId));
+    auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+
+    TVector<TString> boundaries;
+    if (op.HasTopicPartitions()) {
+        if (op.GetTopicPartitions() <= 0) {
+            return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Topic partitions count must be greater than 0")};
+        }
+
+        const auto& keyColumns = table->KeyColumnIds;
+        const auto& columns = table->Columns;
+
+        Y_VERIFY(!keyColumns.empty());
+        Y_VERIFY(columns.contains(keyColumns.at(0)));
+        const auto firstKeyColumnType = columns.at(keyColumns.at(0)).PType;
+
+        if (!TSchemeShard::FillUniformPartitioning(boundaries, keyColumns.size(), firstKeyColumnType, op.GetTopicPartitions(), AppData()->TypeRegistry, errStr)) {
+            return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, errStr)};
+        }
+    } else {
+        const auto& partitions = table->GetPartitions();
+        boundaries.reserve(partitions.size() - 1);
+
+        for (ui32 i = 0; i < partitions.size(); ++i) {
+            const auto& partition = partitions.at(i);
+            if (i != partitions.size() - 1) {
+                boundaries.push_back(partition.EndOfRange);
+            }
+        }
+    }
+
     TVector<ISubOperation::TPtr> result;
 
     if (initialScan) {
@@ -748,16 +778,12 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     }
 
     {
-        Y_VERIFY(context.SS->Tables.contains(tablePath.Base()->PathId));
-        auto table = context.SS->Tables.at(tablePath.Base()->PathId);
-        const auto& partitions = table->GetPartitions();
-
         auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
         outTx.SetFailOnExist(!acceptExisted);
 
         auto& desc = *outTx.MutableCreatePersQueueGroup();
         desc.SetName("streamImpl");
-        desc.SetTotalGroupCount(partitions.size());
+        desc.SetTotalGroupCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : table->GetPartitions().size());
         desc.SetPartitionPerTablet(2);
 
         auto& pqConfig = *desc.MutablePQTabletConfig();
@@ -784,37 +810,19 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
             }
         }
 
-        auto& bootstrapConfig = *desc.MutableBootstrapConfig();
-        for (ui32 i = 0; i < partitions.size(); ++i) {
-            const auto& cur = partitions.at(i);
+        for (const auto& serialized : boundaries) {
+            TSerializedCellVec endKey(serialized);
+            Y_VERIFY(endKey.GetCells().size() <= table->KeyColumnIds.size());
 
-            Y_VERIFY(context.SS->ShardInfos.contains(cur.ShardIdx));
-            const auto& shard = context.SS->ShardInfos.at(cur.ShardIdx);
-
-            auto& mg = *bootstrapConfig.AddExplicitMessageGroups();
-            mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shard.TabletID)));
-
-            if (i != partitions.size() - 1) {
-                TSerializedCellVec endKey(cur.EndOfRange);
-                Y_VERIFY(endKey.GetCells().size() <= table->KeyColumnIds.size());
-
-                TString errStr;
-                auto& boundary = *desc.AddPartitionBoundaries();
-                for (ui32 ki = 0; ki < endKey.GetCells().size(); ++ki) {
-                    const auto& cell = endKey.GetCells()[ki];
-                    const auto tag = table->KeyColumnIds.at(ki);
-                    Y_VERIFY(table->Columns.contains(tag));
-                    const auto typeId = table->Columns.at(tag).PType;
-                    const bool ok = NMiniKQL::CellToValue(typeId, cell, *boundary.AddTuple(), errStr);
-                    Y_VERIFY(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
-                }
-
-                mg.MutableKeyRange()->SetToBound(cur.EndOfRange);
-            }
-
-            if (i) {
-                const auto& prev = partitions.at(i - 1);
-                mg.MutableKeyRange()->SetFromBound(prev.EndOfRange);
+            TString errStr;
+            auto& boundary = *desc.AddPartitionBoundaries();
+            for (ui32 ki = 0; ki < endKey.GetCells().size(); ++ki) {
+                const auto& cell = endKey.GetCells()[ki];
+                const auto tag = table->KeyColumnIds.at(ki);
+                Y_VERIFY(table->Columns.contains(tag));
+                const auto typeId = table->Columns.at(tag).PType;
+                const bool ok = NMiniKQL::CellToValue(typeId, cell, *boundary.AddTuple(), errStr);
+                Y_VERIFY(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
             }
         }
 

@@ -7,6 +7,7 @@
 
 
 add_subdirectory(ut_async_index)
+add_subdirectory(ut_auditsettings)
 add_subdirectory(ut_backup)
 add_subdirectory(ut_base)
 add_subdirectory(ut_base_reboots)
@@ -32,7 +33,6 @@ add_subdirectory(ut_move)
 add_subdirectory(ut_move_reboots)
 add_subdirectory(ut_olap)
 add_subdirectory(ut_olap_reboots)
-add_subdirectory(ut_pq)
 add_subdirectory(ut_pq_reboots)
 add_subdirectory(ut_reboots)
 add_subdirectory(ut_replication)

@@ -453,6 +453,9 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             if (subDomain->GetDatabaseQuotas()) {
                 message->Record.MutableDatabaseQuotas()->CopyFrom(*subDomain->GetDatabaseQuotas());
             }
+            if (const auto& auditSettings = subDomain->GetAuditSettings()) {
+                message->Record.MutableAuditSettings()->CopyFrom(*auditSettings);
+            }
             hasChanges = true;
         }
 

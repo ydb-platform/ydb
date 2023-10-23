@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     audit_log.cpp
+    audit_dml_operations.cpp
     grpc_endpoint_publish_actor.cpp
     grpc_helper.cpp
     grpc_mon.cpp
@@ -86,6 +87,7 @@ PEERDIR(
     library/cpp/cgiparam
     library/cpp/digest/old_crc
     ydb/core/actorlib_impl
+    ydb/core/audit
     ydb/core/base
     ydb/core/control
     ydb/core/discovery

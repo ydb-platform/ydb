@@ -104,6 +104,8 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
     using TItemVariant = std::variant<TBlock, TBarrier, TBlob>;
    
     struct TPerVDiskInfo {
+        std::optional<TString> ErrorReason;
+
         std::optional<ui64> LastProcessedBlock;
         std::optional<std::tuple<ui64, ui8>> LastProcessedBarrier;
         std::optional<TLogoBlobID> LastProcessedBlob;
@@ -279,11 +281,20 @@ public:
     }
 
     void Bootstrap() {
-        Become(&TThis::StateWork);
+        A_LOG_INFO_S("BPA01", "bootstrap"
+            << " ActorId# " << SelfId()
+            << " Group# " << Info->GroupID
+            << " RestartCounter# " << RestartCounter);
+
+        Become(&TThis::StateWork, TDuration::Seconds(10), new TEvents::TEvWakeup);
 
         for (ui32 i = 0; i < PerVDiskInfo.size(); ++i) {
             Request(i);
         }
+    }
+
+    void HandleWakeup() {
+        A_LOG_NOTICE_S("BPA25", "assimilation is way too long");
     }
 
     STATEFN(StateWork) {
@@ -292,6 +303,9 @@ public:
         }
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvVAssimilateResult, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            default:
+                Y_VERIFY_DEBUG(false);
         }
     }
 
@@ -306,25 +320,45 @@ public:
             maxOpt(SkipBarriersUpTo, info.LastProcessedBarrier),
             maxOpt(SkipBlobsUpTo, info.LastProcessedBlob)), 0);
 
+        A_LOG_DEBUG_S("BPA03", "Request orderNumber# " << orderNumber << " VDiskId# " << Info->GetVDiskId(orderNumber));
+
         ++RequestsInFlight;
     }
 
     void Handle(TEvBlobStorage::TEvVAssimilateResult::TPtr ev) {
-        --RequestsInFlight;
+        ProcessReplyFromQueue(ev);
 
         const auto& record = ev->Get()->Record;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const ui32 orderNumber = Info->GetTopology().GetOrderNumber(vdiskId);
         Y_VERIFY(orderNumber < PerVDiskInfo.size());
 
+        A_LOG_DEBUG_S("BPA02", "Handle TEvVAssimilateResult"
+                << " Status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus())
+                << " ErrorReason# '" << record.GetErrorReason() << "'"
+                << " VDiskId# " << vdiskId
+                << " Blocks# " << record.BlocksSize()
+                << " Barriers# " << record.BarriersSize()
+                << " Blobs# " << record.BlobsSize()
+                << " RequestsInFlight# " << RequestsInFlight);
+
+        Y_VERIFY(RequestsInFlight);
+        --RequestsInFlight;
+
+        auto& info = PerVDiskInfo[orderNumber];
+        Y_VERIFY(!info.HasItemsToMerge());
         if (record.GetStatus() == NKikimrProto::OK) {
-            auto& info = PerVDiskInfo[orderNumber];
             info.PushDataFromMessage(record, *this, Info->Type);
             if (info.HasItemsToMerge()) {
                 Heap.push_back(&info);
                 std::push_heap(Heap.begin(), Heap.end(), TPerVDiskInfo::TCompare());
             } else if (!info.Finished()) {
                 Request(orderNumber);
+            }
+        } else {
+            info.ErrorReason = TStringBuilder() << vdiskId << ": " << NKikimrProto::EReplyStatus_Name(record.GetStatus());
+            if (record.GetErrorReason()) {
+                *info.ErrorReason += " (" + record.GetErrorReason() + ')';
             }
         }
 
@@ -334,7 +368,7 @@ public:
     }
 
     void Merge() {
-        std::vector<ui32> requests;
+        TStackVec<ui8, 32> requests;
 
         const TBlobStorageGroupInfo::TTopology *top = &Info->GetTopology();
         TBlobStorageGroupInfo::TGroupVDisks disksWithData(top);
@@ -350,12 +384,14 @@ public:
                 ReplyAndDie(NKikimrProto::ERROR);
             } else {
                 // answer with what we have already collected
+                A_LOG_DEBUG_S("BPA06", "SendResponseAndDie (no items to merge)");
                 SendResponseAndDie(std::move(Result));
             }
             return;
         }
         while (requests.empty()) {
             if (Heap.empty()) {
+                A_LOG_DEBUG_S("BPA07", "SendResponseAndDie (heap empty)");
                 SendResponseAndDie(std::move(Result));
                 return;
             }
@@ -398,6 +434,7 @@ public:
         }
 
         if (Result->Blocks.size() + Result->Barriers.size() + Result->Blobs.size() >= 10'000) {
+            A_LOG_DEBUG_S("BPA05", "SendResponseAndDie (10k)");
             SendResponseAndDie(std::move(Result));
         } else {
             for (const ui32 orderNumber : requests) {
@@ -414,6 +451,15 @@ public:
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
+        A_LOG_DEBUG_S("BPA04", "ReplyAndDie status# " << NKikimrProto::EReplyStatus_Name(status));
+        for (const auto& item : PerVDiskInfo) {
+            if (item.ErrorReason) {
+                if (ErrorReason) {
+                    ErrorReason += ", ";
+                }
+                ErrorReason += *item.ErrorReason;
+            }
+        }
         SendResponseAndDie(std::make_unique<TEvBlobStorage::TEvAssimilateResult>(status, ErrorReason));
     }
 };

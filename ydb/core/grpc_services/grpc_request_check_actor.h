@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "audit_log.h"
+#include "audit_dml_operations.h"
 #include "service_ratelimiter_events.h"
 #include "grpc_request_proxy_handle_methods.h"
 #include "local_rate_limiter.h"
@@ -98,6 +99,7 @@ public:
             TBase::SetPeerName(peerName);
             InitializeAttributes(schemeData);
             TBase::SetDatabase(CheckedDatabaseName_);
+            InitializeAuditSettings(schemeData);
         }
     }
 
@@ -124,7 +126,8 @@ public:
         }
 
         if (AppData(ctx)->FeatureFlags.GetEnableGrpcAudit()) {
-            AuditLog(GrpcRequestBaseCtx_, CheckedDatabaseName_, GetSubject(), ctx);
+            // log info about input connection (remote address, basically)
+            AuditLogConn(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
         }
 
         // Simple rps limitation
@@ -235,11 +238,6 @@ public:
     }
 
 private:
-    TString GetSubject() const {
-        const auto sid = TBase::GetUserSID();
-        return sid ? sid : "no subject";
-    }
-
     static NYql::TIssues GetRlIssues(const Ydb::RateLimiter::AcquireResourceResponse& resp) {
         NYql::TIssues opIssues;
         NYql::IssuesFromMessage(resp.operation().issues(), opIssues);
@@ -349,6 +347,29 @@ private:
     }
 
 private:
+    void InitializeAuditSettings(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+        const auto& auditSettings = schemeData.GetPathDescription().GetDomainDescription().GetAuditSettings();
+        DmlAuditEnabled_ = auditSettings.GetEnableDmlAudit();
+        DmlAuditExpectedSubjects_.insert(auditSettings.GetExpectedSubjects().begin(), auditSettings.GetExpectedSubjects().end());
+    }
+
+    bool IsAuditEnabledFor(const TString& userSID) const {
+        return DmlAuditEnabled_ && !DmlAuditExpectedSubjects_.contains(userSID);
+    };
+
+    void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName, const TString& userSID) const {
+        const bool dmlAuditEnabled = requestBaseCtx->IsAuditable() && IsAuditEnabledFor(userSID);
+
+        if (dmlAuditEnabled) {
+            AuditContextStart(requestBaseCtx, databaseName, userSID);
+            requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
+                AuditContextEnd(requestBaseCtx);
+                AuditLog(status, parts);
+            });
+        }
+    }
+
+private:
     void ReplyUnauthorizedAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
@@ -387,6 +408,9 @@ private:
     }
 
     void HandleAndDie(TAutoPtr<TEventHandle<TEvProxyRuntimeEvent>>& event) {
+        // Request audit happen after successfull authorization
+        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
+
         event->Release().Release()->Pass(*this);
         TBase::PassAway();
     }
@@ -482,6 +506,8 @@ private:
     bool SkipCheckConnectRigths_ = false;
     std::vector<std::pair<TString, TString>> Attributes_;
     const IFacilityProvider* FacilityProvider_;
+    bool DmlAuditEnabled_;
+    std::unordered_set<TString> DmlAuditExpectedSubjects_;
 };
 
 // default behavior - attributes in schema

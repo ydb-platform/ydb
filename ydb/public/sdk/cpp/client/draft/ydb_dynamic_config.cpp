@@ -12,10 +12,11 @@ public:
     {
     }
 
-    TAsyncStatus SetConfig(const TString& config, bool dryRun, const TClusterConfigSettings& settings = {}) {
+    TAsyncStatus SetConfig(const TString& config, bool dryRun, bool allowUnknownFields, const TClusterConfigSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::DynamicConfig::SetConfigRequest>(settings);
         request.set_config(config);
         request.set_dry_run(dryRun);
+        request.set_allow_unknown_fields(allowUnknownFields);
 
         return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::SetConfigRequest, Ydb::DynamicConfig::SetConfigResponse>(
             std::move(request),
@@ -23,10 +24,11 @@ public:
             TRpcRequestSettings::Make(settings));
     }
 
-    TAsyncStatus ReplaceConfig(const TString& config, bool dryRun, const TClusterConfigSettings& settings = {}) {
+    TAsyncStatus ReplaceConfig(const TString& config, bool dryRun, bool allowUnknownFields, const TClusterConfigSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::DynamicConfig::ReplaceConfigRequest>(settings);
         request.set_config(config);
         request.set_dry_run(dryRun);
+        request.set_allow_unknown_fields(allowUnknownFields);
 
         return RunSimple<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::ReplaceConfigRequest, Ydb::DynamicConfig::ReplaceConfigResponse>(
             std::move(request),
@@ -342,15 +344,17 @@ TDynamicConfigClient::TDynamicConfigClient(const TDriver& driver)
 TAsyncStatus TDynamicConfigClient::SetConfig(
     const TString& config,
     bool dryRun,
+    bool allowUnknownFields,
     const TClusterConfigSettings& settings) {
-    return Impl_->SetConfig(config, dryRun, settings);
+    return Impl_->SetConfig(config, dryRun, allowUnknownFields, settings);
 }
 
 TAsyncStatus TDynamicConfigClient::ReplaceConfig(
     const TString& config,
     bool dryRun,
+    bool allowUnknownFields,
     const TClusterConfigSettings& settings) {
-    return Impl_->ReplaceConfig(config, dryRun, settings);
+    return Impl_->ReplaceConfig(config, dryRun, allowUnknownFields, settings);
 }
 
 TAsyncStatus TDynamicConfigClient::DropConfig(

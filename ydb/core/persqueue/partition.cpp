@@ -24,6 +24,7 @@ namespace NKikimr::NPQ {
 
 static const TDuration WAKE_TIMEOUT = TDuration::Seconds(5);
 static const TDuration UPDATE_AVAIL_SIZE_INTERVAL = TDuration::MilliSeconds(100);
+static const TDuration MIN_UPDATE_COUNTERS_DELAY = TDuration::MilliSeconds(300);
 static const ui32 MAX_USERS = 1000;
 static const ui32 MAX_TXS = 1000;
 
@@ -489,7 +490,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         CreateMirrorerActor();
     }
 
-    ReportCounters(ctx);
+    ReportCounters(ctx, true);
 }
 
 
@@ -529,6 +530,7 @@ void TPartition::Handle(TEvPQ::TEvPipeDisconnected::TPtr& ev, const TActorContex
 void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx) {
     NKikimrPQ::TStatusResponse::TPartResult result;
     result.SetPartition(Partition);
+
     if (DiskIsFull || WaitingForSubDomainQuota(ctx)) {
         result.SetStatus(NKikimrPQ::TStatusResponse::STATUS_DISK_IS_FULL);
     } else if (EndOffset - StartOffset >= static_cast<ui64>(Config.GetPartitionConfig().GetMaxCountInPartition()) ||
@@ -965,12 +967,18 @@ ui64 TPartition::GetSizeLag(i64 offset) {
 }
 
 
-bool TPartition::UpdateCounters(const TActorContext& ctx) {
+bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     if (!PartitionCountersLabeled) {
         return false;
     }
-    // per client counters
+
     const auto now = ctx.Now();
+    if ((now - LastCountersUpdate < MIN_UPDATE_COUNTERS_DELAY) && !force)
+        return false;
+
+    LastCountersUpdate = now;
+
+    // per client counters
     for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
         auto& userInfo = userInfoPair.second;
         if (!userInfo.LabeledCounters)
@@ -1191,8 +1199,8 @@ bool TPartition::UpdateCounters(const TActorContext& ctx) {
     return haveChanges;
 }
 
-void TPartition::ReportCounters(const TActorContext& ctx) {
-    if (UpdateCounters(ctx)) {
+void TPartition::ReportCounters(const TActorContext& ctx, bool force) {
+    if (UpdateCounters(ctx, force)) {
         ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
     }
 }

@@ -81,7 +81,6 @@ namespace NKikimr {
                 HFunc(TEvTabletPipe::TEvClientConnected, Handle);
                 HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
                 HFunc(TEvents::TEvPong, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle);
             default:
                 HandleDefaultEvents(ev, SelfId());
             }
@@ -145,11 +144,6 @@ namespace NKikimr {
             Y_UNUSED(ev);
             Y_UNUSED(ctx);
             Cout << "Got pong\n";
-        }
-
-        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
         }
 
         void Send(const TActorContext& ctx) {
@@ -246,7 +240,6 @@ namespace NKikimr {
                 HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
                 HFunc(TEvTabletPipe::TEvServerDestroyed, Handle);
                 HFunc(TEvents::TEvPing, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle);
                 HFunc(TEvConsumerTablet::TEvReject, Handle);
                 HFunc(TEvPrivate::TEvGetServerPipeInfo, Handle);
             default:
@@ -277,11 +270,6 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), ctx.SelfID);
             UNIT_ASSERT_VALUES_EQUAL(ev->Recipient, LastServerId);
             ctx.Send(ev->Sender, new TEvents::TEvPong());
-        }
-
-        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
         }
 
         void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
@@ -371,7 +359,6 @@ namespace NKikimr {
                 HFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
                 HFunc(TEvents::TEvPing, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle);
             default:
                 HandleDefaultEvents(ev, SelfId());
             }
@@ -381,11 +368,6 @@ namespace NKikimr {
             Cout << "Got ping\n";
             UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), ctx.SelfID);
             ctx.Send(ev->Sender, new TEvents::TEvPong());
-        }
-
-        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
         }
 
         void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
@@ -1099,7 +1081,6 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
                 IgnoreFunc(TEvTabletPipe::TEvServerConnected);
                 IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
                 HFunc(TEvents::TEvPing, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle);
             default:
                 HandleDefaultEvents(ev, SelfId());
             }
@@ -1125,11 +1106,6 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
             }
 
             SendViaSession(ev->InterconnectSession, ctx, ev->Sender, new TEvents::TEvPong());
-        }
-
-        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
         }
 
         void OnDetach(const TActorContext &ctx) override {

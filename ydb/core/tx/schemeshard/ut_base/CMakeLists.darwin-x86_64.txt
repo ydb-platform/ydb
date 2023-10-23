@@ -37,9 +37,9 @@ target_link_options(ydb-core-tx-schemeshard-ut_base PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-schemeshard-ut_base PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_base.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_info_types.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_allocate_pq.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_base/ut_base.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_base/ut_info_types.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_base/ut_allocate_pq.cpp
 )
 set_property(
   TARGET

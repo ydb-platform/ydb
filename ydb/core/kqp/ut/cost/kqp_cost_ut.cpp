@@ -140,13 +140,15 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(it.GetStatus(), EStatus::SUCCESS);
         auto res = CollectStreamResult(it);
 
+        UNIT_ASSERT(res.ConsumedRuFromHeader > 0);
+
         CompareYson(R"(
             [
                 [[3500u];["None"];[1u];["Anna"]]
             ]
         )", res.ResultSetYson);
-
-/*        const auto& stats = *res.QueryStats;
+/*
+        const auto& stats = *res.QueryStats;
 
         Cerr << stats.DebugString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
@@ -154,7 +156,29 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 */
     }
 
+    Y_UNIT_TEST_TWIN(ScanScriptingRangeFullScan, SourceRead) {
+        TKikimrRunner kikimr(GetAppConfig(SourceRead));
 
+        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+        auto query = Q_(R"(
+            SELECT * FROM `/Root/Test` WHERE Amount < 5000ul ORDER BY Group LIMIT 1;
+        )");
+
+        NYdb::NScripting::TExecuteYqlRequestSettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto it = client.StreamExecuteYqlScript(query, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(it.GetStatus(), EStatus::SUCCESS);
+        auto res = CollectStreamResult(it);
+
+        UNIT_ASSERT(res.ConsumedRuFromHeader > 0);
+
+        CompareYson(R"(
+            [
+                [[3500u];["None"];[1u];["Anna"]]
+            ]
+        )", res.ResultSetYson);
+    }
 }
 
 }

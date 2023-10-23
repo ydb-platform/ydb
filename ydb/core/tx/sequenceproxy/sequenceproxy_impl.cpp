@@ -7,7 +7,7 @@
 #include <util/string/builder.h>
 
 #define TXLOG_LOG(priority, stream) \
-    LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::LONG_TX_SERVICE, LogPrefix << stream)
+    LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::SEQUENCEPROXY, LogPrefix << stream)
 #define TXLOG_DEBUG(stream) TXLOG_LOG(NActors::NLog::PRI_DEBUG, stream)
 #define TXLOG_NOTICE(stream) TXLOG_LOG(NActors::NLog::PRI_NOTICE, stream)
 #define TXLOG_ERROR(stream) TXLOG_LOG(NActors::NLog::PRI_ERROR, stream)
@@ -37,18 +37,18 @@ namespace NSequenceProxy {
             msg->Path);
     }
 
-    void TSequenceProxy::DoNextVal(TNextValRequestInfo&& request, const TString& database, const TString& path) {
-        auto& info = Databases[database].SequenceByName[path];
-        if (!info.ResolveInProgress) {
+    void TSequenceProxy::MaybeStartResolve(const TString& database, const TString& path, TSequenceByName& info) {
+        if (!info.ResolveInProgress && !info.NewNextValResolve.empty()) {
+            info.PendingNextValResolve = std::move(info.NewNextValResolve);
             StartResolve(database, path, !info.PathId);
             info.ResolveInProgress = true;
         }
-        if (!info.PathId) {
-            info.PendingNextValResolve.emplace_back(std::move(request));
-            return;
-        }
+    }
 
-        DoNextVal(std::move(request), database, info.PathId, /* needRefresh */ false);
+    void TSequenceProxy::DoNextVal(TNextValRequestInfo&& request, const TString& database, const TString& path) {
+        auto& info = Databases[database].SequenceByName[path];
+        info.NewNextValResolve.emplace_back(std::move(request));
+        MaybeStartResolve(database, path, info);
     }
 
     void TSequenceProxy::DoNextVal(TNextValRequestInfo&& request, const TString& database, const TPathId& pathId, bool needRefresh) {
@@ -77,80 +77,74 @@ namespace NSequenceProxy {
         OnChanged(database, pathId, info);
     }
 
-    void TSequenceProxy::Handle(TEvPrivate::TEvResolveResult::TPtr& ev) {
-        auto* msg = ev->Get();
-        auto it = ResolveInFlight.find(ev->Cookie);
-        Y_VERIFY(it != ResolveInFlight.end());
-        auto database = it->second.Database;
-        auto path = it->second.Path;
-        ResolveInFlight.erase(it);
-
-        std::visit(
-            [&](const auto& path) {
-                OnResolveResult(database, path, msg);
-            },
-            path);
-    }
-
-    void TSequenceProxy::OnResolveResult(const TString& database, const TString& path, TEvPrivate::TEvResolveResult* msg) {
+    void TSequenceProxy::OnResolveError(const TString& database, const TString& path, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
         auto& info = Databases[database].SequenceByName[path];
         Y_VERIFY(info.ResolveInProgress);
         info.ResolveInProgress = false;
 
-        if (msg->Status != Ydb::StatusIds::SUCCESS) {
-            while (!info.PendingNextValResolve.empty()) {
-                const auto& request = info.PendingNextValResolve.front();
-                Send(request.Sender, new TEvSequenceProxy::TEvNextValResult(msg->Status, msg->Issues), 0, request.Cookie);
-                info.PendingNextValResolve.pop_front();
-            }
-            return;
+        while (!info.PendingNextValResolve.empty()) {
+            const auto& request = info.PendingNextValResolve.front();
+            Send(request.Sender, new TEvSequenceProxy::TEvNextValResult(status, issues), 0, request.Cookie);
+            info.PendingNextValResolve.pop_front();
         }
 
-        auto pathId = msg->PathId;
+        MaybeStartResolve(database, path, info);
+    }
+
+    void TSequenceProxy::OnResolveResult(const TString& database, const TString& path, TResolveResult&& result) {
+        auto& info = Databases[database].SequenceByName[path];
+        Y_VERIFY(info.ResolveInProgress);
+        info.ResolveInProgress = false;
+
+        auto pathId = result.PathId;
         Y_VERIFY(pathId);
 
         info.PathId = pathId;
 
-        Y_VERIFY(msg->SequenceInfo);
+        Y_VERIFY(result.SequenceInfo);
 
         auto& infoById = Databases[database].SequenceByPathId[pathId];
-        infoById.SequenceInfo = msg->SequenceInfo;
-        infoById.SecurityObject = msg->SecurityObject;
-        infoById.PendingNextValResolve.splice(infoById.PendingNextValResolve.end(), info.PendingNextValResolve);
-        OnResolved(database, pathId, infoById);
+        infoById.SequenceInfo = result.SequenceInfo;
+        infoById.SecurityObject = result.SecurityObject;
+        OnResolved(database, pathId, infoById, info.PendingNextValResolve);
+
+        MaybeStartResolve(database, path, info);
     }
 
-    void TSequenceProxy::OnResolveResult(const TString& database, const TPathId& pathId, TEvPrivate::TEvResolveResult* msg) {
+    void TSequenceProxy::OnResolveError(const TString& database, const TPathId& pathId, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
         auto& info = Databases[database].SequenceByPathId[pathId];
         Y_VERIFY(info.ResolveInProgress);
         info.ResolveInProgress = false;
 
-        if (msg->Status != Ydb::StatusIds::SUCCESS) {
-            while (!info.PendingNextValResolve.empty()) {
-                const auto& request = info.PendingNextValResolve.front();
-                Send(request.Sender, new TEvSequenceProxy::TEvNextValResult(msg->Status, msg->Issues), 0, request.Cookie);
-                info.PendingNextValResolve.pop_front();
-            }
-            return;
+        while (!info.PendingNextValResolve.empty()) {
+            const auto& request = info.PendingNextValResolve.front();
+            Send(request.Sender, new TEvSequenceProxy::TEvNextValResult(status, issues), 0, request.Cookie);
+            info.PendingNextValResolve.pop_front();
         }
-
-        Y_VERIFY(msg->SequenceInfo);
-        info.SequenceInfo = msg->SequenceInfo;
-        info.SecurityObject = msg->SecurityObject;
-        OnResolved(database, pathId, info);
     }
 
-    void TSequenceProxy::OnResolved(const TString& database, const TPathId& pathId, TSequenceByPathId& info) {
+    void TSequenceProxy::OnResolveResult(const TString& database, const TPathId& pathId, TResolveResult&& result) {
+        auto& info = Databases[database].SequenceByPathId[pathId];
+        Y_VERIFY(info.ResolveInProgress);
+        info.ResolveInProgress = false;
+
+        Y_VERIFY(result.SequenceInfo);
+        info.SequenceInfo = result.SequenceInfo;
+        info.SecurityObject = result.SecurityObject;
+        OnResolved(database, pathId, info, info.PendingNextValResolve);
+    }
+
+    void TSequenceProxy::OnResolved(const TString& database, const TPathId& pathId, TSequenceByPathId& info, TList<TNextValRequestInfo>& resolved) {
         info.LastKnownTabletId = info.SequenceInfo->Description.GetSequenceShard();
         info.DefaultCacheSize = Max(info.SequenceInfo->Description.GetCache(), ui64(1));
 
-        while (!info.PendingNextValResolve.empty()) {
-            auto& request = info.PendingNextValResolve.front();
+        while (!resolved.empty()) {
+            auto& request = resolved.front();
             if (!DoMaybeReplyUnauthorized(request, pathId, info)) {
                 info.PendingNextVal.emplace_back(std::move(request));
                 ++info.TotalRequested;
             }
-            info.PendingNextValResolve.pop_back();
+            resolved.pop_back();
         }
 
         OnChanged(database, pathId, info);

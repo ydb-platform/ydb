@@ -185,6 +185,7 @@ struct TCollectedStreamResult {
     TMaybe<TString> PlanJson;
     TMaybe<Ydb::TableStats::QueryStats> QueryStats;
     ui64 RowsCount = 0;
+    ui64 ConsumedRuFromHeader = 0;
 };
 
 template<typename TIterator>

@@ -46,34 +46,58 @@ namespace NKikimr::NBlobDepot {
 
     STFUNC(TBlobDepot::StateWork) {
         try {
+            auto handleDelivery = [this](auto& ev) {
+                const auto it = PipeServers.find(ev->Recipient);
+                if (it == PipeServers.end()) {
+                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT29, "HandleDelivery dropped", (Id, GetLogId()),
+                        (RequestId, ev->Cookie), (Sender, ev->Sender), (PipeServerId, ev->Recipient), (Type, ev->Type));
+                    return;
+                }
+                auto& info = it->second;
+
+                Y_VERIFY(info.InFlightDeliveries);
+                --info.InFlightDeliveries;
+
+                // return original event type
+                ev->Rewrite(ev->Type, ev->GetRecipientRewrite());
+
+                // ensure correct ordering of incoming messages
+                Y_VERIFY_S(ev->Cookie == info.NextExpectedMsgId, "message reordering detected Cookie# " << ev->Cookie
+                    << " NextExpectedMsgId# " << info.NextExpectedMsgId << " Type# " << Sprintf("%08" PRIx32,
+                    ev->GetTypeRewrite()) << " Id# " << GetLogId());
+                ++info.NextExpectedMsgId;
+                HandleFromAgent(ev);
+            };
+
             auto handleFromAgentPipe = [this](auto& ev) {
                 const auto it = PipeServers.find(ev->Recipient);
                 if (it == PipeServers.end()) {
+                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT23, "HandleFromAgentPipe dropped", (Id, GetLogId()),
+                        (RequestId, ev->Cookie), (Sender, ev->Sender), (PipeServerId, ev->Recipient), (Type, ev->Type));
                     return; // this may be a race with TEvServerDisconnected and postpone queue; it's okay to have this
                 }
                 auto& info = it->second;
 
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT69, "HandleFromAgentPipe", (Id, GetLogId()), (RequestId, ev->Cookie),
-                    (Sender, ev->Sender), (PipeServerId, ev->Recipient), (ProcessThroughQueue, info.ProcessThroughQueue),
-                    (NextExpectedMsgId, info.NextExpectedMsgId), (PostponeQ.size, info.PostponeQ.size()));
+                    (Sender, ev->Sender), (PipeServerId, ev->Recipient), (NextExpectedMsgId, info.NextExpectedMsgId),
+                    (PostponeQ.size, info.PostponeQ.size()), (InFlightDeliveries, info.InFlightDeliveries),
+                    (ReadyForAgentQueries, ReadyForAgentQueries()), (Type, ev->Type));
 
-                if (info.ProcessThroughQueue || !ReadyForAgentQueries()) {
+                Y_VERIFY(ev->Type == ev->GetTypeRewrite());
+                ev->Rewrite(TEvPrivate::EvDeliver, ev->GetRecipientRewrite());
+
+                if (!ReadyForAgentQueries()) { // we can't handle agent queries now -- enqueue this message
                     info.PostponeQ.emplace_back(ev.Release());
-                    info.ProcessThroughQueue = true;
-                } else {
-                    // ensure correct ordering of incoming messages
-                    Y_VERIFY_S(ev->Cookie == info.NextExpectedMsgId, "message reordering detected Cookie# " << ev->Cookie
-                        << " NextExpectedMsgId# " << info.NextExpectedMsgId << " Type# " << Sprintf("%08" PRIx32,
-                        ev->GetTypeRewrite()) << " Id# " << GetLogId());
-                    ++info.NextExpectedMsgId;
-
-                    HandleFromAgent(ev);
+                } else if (!info.PostponeQ.empty()) {
+                    Y_FAIL("PostponeQ can't be nonempty while agent is running");
+                } else if (info.InFlightDeliveries++) {
+                    TActivationContext::Send(ev.Release());
+                } else { // handle event as delivery one
+                    StateWork(ev);
                 }
             };
 
             switch (const ui32 type = ev->GetTypeRewrite()) {
-                cFunc(TEvents::TSystem::Poison, HandlePoison);
-
                 hFunc(TEvBlobDepot::TEvApplyConfig, Handle);
 
                 fFunc(TEvBlobDepot::EvRegisterAgent, handleFromAgentPipe);
@@ -86,9 +110,9 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvBlobDepot::EvPushNotifyResult, handleFromAgentPipe);
                 fFunc(TEvBlobDepot::EvCollectGarbage, handleFromAgentPipe);
 
-                hFunc(TEvBlobDepot::TEvPushMetrics, Handle);
+                fFunc(TEvPrivate::EvDeliver, handleDelivery);
 
-                cFunc(TEvPrivate::EvProcessRegisterAgentQ, ProcessRegisterAgentQ);
+                hFunc(TEvBlobDepot::TEvPushMetrics, Handle);
 
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
                 hFunc(TEvBlobStorage::TEvGetResult, Data->UncertaintyResolver->Handle);

@@ -178,10 +178,10 @@ struct TTestOlap {
     {
         return std::make_shared<arrow::Schema>(
             std::vector<std::shared_ptr<arrow::Field>>{
-                arrow::field("timestamp", tsType),
+                arrow::field("timestamp", tsType, false),
                 arrow::field("resource_type", arrow::utf8()),
                 arrow::field("resource_id", arrow::utf8()),
-                arrow::field("uid", arrow::utf8()),
+                arrow::field("uid", arrow::utf8(), false),
                 arrow::field("level", arrow::int32()),
                 arrow::field("message", arrow::utf8()),
                 arrow::field("json_payload", arrow::binary()),
@@ -223,10 +223,10 @@ struct TTestOlap {
             SchemaPresets {
                 Name: "default"
                 Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull : true }
                     Columns { Name: "resource_type" Type: "Utf8" }
                     Columns { Name: "resource_id" Type: "Utf8" }
-                    Columns { Name: "uid" Type: "Utf8" }
+                    Columns { Name: "uid" Type: "Utf8" NotNull : true }
                     Columns { Name: "level" Type: "Int32" }
                     Columns { Name: "message" Type: "Utf8" }
                     Columns { Name: "json_payload" Type: "JsonDocument" }

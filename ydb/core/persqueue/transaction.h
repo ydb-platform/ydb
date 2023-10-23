@@ -66,9 +66,6 @@ struct TDistributedTransaction {
 
     bool WriteInProgress = false;
 
-    void SetDecision(EDecision decision);
-    void SetDecision(ui64 tablet, EDecision decision);
-
     EDecision GetDecision() const;
 
     bool HaveParticipantsDecision() const;

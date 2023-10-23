@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
+#include <ydb/core/formats/arrow/serializer/full.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -3666,6 +3667,115 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(ChangefeedTopicPartitions) {
+        using namespace NTopic;
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // Uint64 key
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table_1` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // default
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table_1` ADD CHANGEFEED `feed_1` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table_1/feed_1").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        { // custom
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table_1` ADD CHANGEFEED `feed_2` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 10
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table_1/feed_2").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitions().size(), 10);
+        }
+
+        { // non-positive (invalid)
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table_1` ADD CHANGEFEED `feed_3` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 0
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        { // Utf8 key
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table_2` (
+                    Key Utf8,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // default
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table_2` ADD CHANGEFEED `feed_1` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table_2/feed_1").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        { // custom
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table_2` ADD CHANGEFEED `feed_2` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 10
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(ChangefeedAttributes) {
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto db = kikimr.GetTableClient();
@@ -4352,10 +4462,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto schema = std::make_shared<arrow::Schema>(
             std::vector<std::shared_ptr<arrow::Field>>{
-                arrow::field("CUint8", arrow::uint8()),
-                arrow::field("CInt8", arrow::int8()),
-                arrow::field("CUint16", arrow::uint16()),
-                arrow::field("CInt16", arrow::int16())
+                arrow::field("CUint8", arrow::uint8(), false),
+                arrow::field("CInt8", arrow::int8(), false),
+                arrow::field("CUint16", arrow::uint16(), false),
+                arrow::field("CInt16", arrow::int16(), false)
             });
 
         size_t rowsCount = 10;
@@ -4908,7 +5018,7 @@ namespace {
             std::shared_ptr<arrow::Schema> GetArrowSchema(const TVector<TColumnSchema>& columns) {
                 std::vector<std::shared_ptr<arrow::Field>> result;
                 for (auto&& col : columns) {
-                    result.push_back(BuildField(col.GetName(), col.GetType()));
+                    result.push_back(BuildField(col.GetName(), col.GetType(), col.IsNullable()));
                 }
                 return std::make_shared<arrow::Schema>(result);
             }
@@ -4923,48 +5033,48 @@ namespace {
                 return JoinStrings(columnStr, ", ");
             }
 
-            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeId& typeId) const {
+            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeId& typeId, bool nullable) const {
                 switch(typeId) {
                 case NScheme::NTypeIds::Bool:
-                    return arrow::field(name, arrow::boolean());
+                    return arrow::field(name, arrow::boolean(), nullable);
                 case NScheme::NTypeIds::Int8:
-                    return arrow::field(name, arrow::int8());
+                    return arrow::field(name, arrow::int8(), nullable);
                 case NScheme::NTypeIds::Int16:
-                    return arrow::field(name, arrow::int16());
+                    return arrow::field(name, arrow::int16(), nullable);
                 case NScheme::NTypeIds::Int32:
-                    return arrow::field(name, arrow::int32());
+                    return arrow::field(name, arrow::int32(), nullable);
                 case NScheme::NTypeIds::Int64:
-                    return arrow::field(name, arrow::int64());
+                    return arrow::field(name, arrow::int64(), nullable);
                 case NScheme::NTypeIds::Uint8:
-                    return arrow::field(name, arrow::uint8());
+                    return arrow::field(name, arrow::uint8(), nullable);
                 case NScheme::NTypeIds::Uint16:
-                    return arrow::field(name, arrow::uint16());
+                    return arrow::field(name, arrow::uint16(), nullable);
                 case NScheme::NTypeIds::Uint32:
-                    return arrow::field(name, arrow::uint32());
+                    return arrow::field(name, arrow::uint32(), nullable);
                 case NScheme::NTypeIds::Uint64:
-                    return arrow::field(name, arrow::uint64());
+                    return arrow::field(name, arrow::uint64(), nullable);
                 case NScheme::NTypeIds::Float:
-                    return arrow::field(name, arrow::float32());
+                    return arrow::field(name, arrow::float32(), nullable);
                 case NScheme::NTypeIds::Double:
-                    return arrow::field(name, arrow::float64());
+                    return arrow::field(name, arrow::float64(), nullable);
                 case NScheme::NTypeIds::String:
-                    return arrow::field(name, arrow::binary());
+                    return arrow::field(name, arrow::binary(), nullable);
                 case NScheme::NTypeIds::Utf8:
-                    return arrow::field(name, arrow::utf8());
+                    return arrow::field(name, arrow::utf8(), nullable);
                 case NScheme::NTypeIds::Json:
-                    return arrow::field(name, arrow::utf8());
+                    return arrow::field(name, arrow::utf8(), nullable);
                 case NScheme::NTypeIds::Yson:
-                    return arrow::field(name, arrow::binary());
+                    return arrow::field(name, arrow::binary(), nullable);
                 case NScheme::NTypeIds::Date:
-                    return arrow::field(name, arrow::uint16());
+                    return arrow::field(name, arrow::uint16(), nullable);
                 case NScheme::NTypeIds::Datetime:
-                    return arrow::field(name, arrow::uint32());
+                    return arrow::field(name, arrow::uint32(), nullable);
                 case NScheme::NTypeIds::Timestamp:
-                    return arrow::field(name, arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO));
+                    return arrow::field(name, arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), nullable);
                 case NScheme::NTypeIds::Interval:
-                    return arrow::field(name, arrow::duration(arrow::TimeUnit::TimeUnit::MICRO));
+                    return arrow::field(name, arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), nullable);
                 case NScheme::NTypeIds::JsonDocument:
-                    return arrow::field(name, arrow::binary());
+                    return arrow::field(name, arrow::binary(), nullable);
                 }
                 return nullptr;
             }
@@ -5018,7 +5128,7 @@ namespace {
 
             auto txId = resBeginTx.GetResult().tx_id();
             auto batch = updates.BuildArrow();
-            TString data = NArrow::SerializeBatchNoCompression(batch);
+            TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
 
             NLongTx::TLongTxWriteResult resWrite =
                     LongTxClient.Write(txId, table.GetName(), txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
@@ -5297,33 +5407,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT new_column FROM `/Root/ColumnTableTest`", "[[#];[#];[[200u]]]");
     }
 
-    Y_UNIT_TEST(AddColumnOldScheme) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
-        };
-
-        TTestHelper::TColumnTable testTable;
-
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-        {
-            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` ADD COLUMN new_column Uint64;";
-            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
-            testHelper.InsertData(testTable, tableInserter, {}, EStatus::SCHEME_ERROR);
-        }
-    }
-
     Y_UNIT_TEST(AddColumnOldSchemeBulkUpsert) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -5462,6 +5545,41 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SCHEME_ERROR, alterResult.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST(NullColumnError) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32).SetNullable(false)
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        TVector<TTestHelper::TColumnSchema> schemaWithNull = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schemaWithNull));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            tableInserter.AddRow().Add(2).Add("test_res_2").Add(123);
+            testHelper.InsertData(testTable, tableInserter, {}, EStatus::GENERIC_ERROR);
+        }
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schemaWithNull));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            tableInserter.AddRow().Add(2).Add("test_res_2").Add(123);
+            testHelper.BulkUpsert(testTable, tableInserter, Ydb::StatusIds::GENERIC_ERROR);
+        }
+
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[]");
     }
 
     Y_UNIT_TEST(DropColumn) {

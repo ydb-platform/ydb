@@ -8,7 +8,12 @@
 
 namespace NYamlConfig {
 
-NKikimrConfig::TAppConfig YamlToProto(const NFyaml::TNodeRef& node, bool allowUnknown, bool preTransform) {
+NKikimrConfig::TAppConfig YamlToProto(
+    const NFyaml::TNodeRef& node,
+    bool allowUnknown,
+    bool preTransform,
+    TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector) {
+
     TStringStream sstr;
 
     sstr << NFyaml::TJsonEmitter(node);
@@ -31,6 +36,7 @@ NKikimrConfig::TAppConfig YamlToProto(const NFyaml::TNodeRef& node, bool allowUn
     c.CastRobust = true;
     c.MapAsObject = true;
     c.AllowUnknownFields = allowUnknown;
+    c.UnknownFieldsCollector = std::move(unknownFieldsCollector);
 
     NProtobufJson::MergeJson2Proto(json, yamlProtoConfig, c);
 

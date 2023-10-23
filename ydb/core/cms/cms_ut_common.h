@@ -368,7 +368,6 @@ public:
     void EnableNoisyBSCPipe();
 
     const ui64 CmsId;
-    i32 ProcessQueueCount;
 
 private:
     void SetupLogging();

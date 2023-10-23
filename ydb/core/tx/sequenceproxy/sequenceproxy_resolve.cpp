@@ -9,7 +9,7 @@
 #include <util/string/builder.h>
 
 #define TXLOG_LOG(priority, stream) \
-    LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::LONG_TX_SERVICE, LogPrefix << stream)
+    LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::SEQUENCEPROXY, LogPrefix << stream)
 #define TXLOG_DEBUG(stream) TXLOG_LOG(NActors::NLog::PRI_DEBUG, stream)
 #define TXLOG_NOTICE(stream) TXLOG_LOG(NActors::NLog::PRI_NOTICE, stream)
 #define TXLOG_ERROR(stream) TXLOG_LOG(NActors::NLog::PRI_ERROR, stream)
@@ -17,121 +17,96 @@
 namespace NKikimr {
 namespace NSequenceProxy {
 
-    class TSequenceProxy::TResolveActor : public TActorBootstrapped<TResolveActor> {
+    namespace {
+
         using TSchemeCacheNavigate = NSchemeCache::TSchemeCacheNavigate;
         using TEntry = TSchemeCacheNavigate::TEntry;
         using ERequestType = TEntry::ERequestType;
 
-    private:
-        struct TOutputHelper {
-            const std::variant<TString, TPathId>& value;
-
-            friend inline IOutputStream& operator<<(IOutputStream& out, const TOutputHelper& helper) {
-                std::visit(
-                    [&out](const auto& value) {
-                        out << value;
-                    },
-                    helper.value);
-                return out;
-            }
-        };
-
-    public:
-        TResolveActor(
-                TActorId owner, ui64 cookie,
-                const TString& database,
-                const std::variant<TString, TPathId>& path,
-                bool syncVersion)
-            : Owner(owner)
-            , Cookie(cookie)
-            , Database(database)
-            , Path(path)
-            , SyncVersion(syncVersion)
-        { }
-
-        void Bootstrap() {
-            auto schemeCache = MakeSchemeCacheID();
-            auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-            req->DatabaseName = Database;
-            auto& entry = req->ResultSet.emplace_back();
-            std::visit(
-                [&entry](const auto& path) {
-                    InitPath(entry, path);
-                },
-                Path);
-            entry.ShowPrivatePath = true;
-            entry.SyncVersion = SyncVersion;
-            Send(schemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(req.Release()));
-            Become(&TThis::StateWork);
-        }
-
-        static void InitPath(TEntry& entry, const TString& path) {
+        void InitPath(TEntry& entry, const TString& path) {
             entry.Path = SplitPath(path);
             entry.RequestType = ERequestType::ByPath;
         }
 
-        static void InitPath(TEntry& entry, const TPathId& pathId) {
+        void InitPath(TEntry& entry, const TPathId& pathId) {
             entry.TableId.PathId = pathId;
             entry.RequestType = ERequestType::ByTableId;
         }
 
-    private:
-        void ReplyAndDie(Ydb::StatusIds::StatusCode status, const TString& error) {
-            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, error));
-            auto res = MakeHolder<TEvPrivate::TEvResolveResult>();
-            res->Status = status;
-            res->Issues = IssueManager.GetIssues();
-            Send(Owner, res.Release(), 0, Cookie);
-            PassAway();
+        void InitPath(TEntry& entry, const std::variant<TString, TPathId>& path) {
+            std::visit(
+                [&entry](const auto& path) {
+                    InitPath(entry, path);
+                },
+                path);
         }
 
-    private:
-        STFUNC(StateWork) {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            }
+        NYql::TIssues MakeResolveIssues(const TString& message) {
+            NYql::TIssueManager issueManager;
+            issueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, message));
+            return issueManager.GetIssues();
         }
 
-        void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            auto req = std::move(ev->Get()->Request);
-            if (req->ErrorCount > 0) {
-                ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder()
-                    << "Failed to resolve sequence " << TOutputHelper{ Path });
-                return;
-            }
-
-            auto& res = req->ResultSet.at(0);
-            if (!res.SequenceInfo || res.SequenceInfo->Description.GetSequenceShard() == 0) {
-                ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder()
-                    << "Failed to resolve sequence " << TOutputHelper{ Path });
-                return;
-            }
-
-            auto reply = MakeHolder<TEvPrivate::TEvResolveResult>();
-            reply->Status = Ydb::StatusIds::SUCCESS;
-            reply->PathId = res.TableId.PathId;
-            reply->SequenceInfo = res.SequenceInfo;
-            reply->SecurityObject = res.SecurityObject;
-            Send(Owner, reply.Release(), 0, Cookie);
-            PassAway();
-        }
-
-    private:
-        const TActorId Owner;
-        const ui64 Cookie;
-        const TString Database;
-        const std::variant<TString, TPathId> Path;
-        const bool SyncVersion;
-        NYql::TIssueManager IssueManager;
-    };
+    } // namespace
 
     ui64 TSequenceProxy::StartResolve(const TString& database, const std::variant<TString, TPathId>& path, bool syncVersion) {
         ui64 cookie = ++LastCookie;
         auto& info = ResolveInFlight[cookie];
         info.Database = database;
         info.Path = path;
-        Register(new TResolveActor(SelfId(), cookie, database, path, syncVersion));
+
+        auto schemeCache = MakeSchemeCacheID();
+        auto req = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+        req->DatabaseName = database;
+        auto& entry = req->ResultSet.emplace_back();
+        InitPath(entry, path);
+        entry.ShowPrivatePath = true;
+        entry.SyncVersion = syncVersion;
+        Send(schemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(req.release()), 0, cookie);
+
         return cookie;
+    }
+
+    void TSequenceProxy::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        ui64 cookie = ev->Cookie;
+        auto it = ResolveInFlight.find(cookie);
+        Y_VERIFY(it != ResolveInFlight.end(), "TEvNavigateKeySetResult with cookie %" PRIu64 " does not match a previous request", cookie);
+        auto database = std::move(it->second.Database);
+        auto path = std::move(it->second.Path);
+        ResolveInFlight.erase(it);
+
+        auto req = std::move(ev->Get()->Request);
+        if (req->ErrorCount > 0) {
+            std::visit(
+                [this, &database](auto& path) {
+                    OnResolveError(database, path, Ydb::StatusIds::SCHEME_ERROR, MakeResolveIssues(TStringBuilder()
+                        << "Failed to resolve sequence " << path));
+                },
+                path);
+            return;
+        }
+
+        auto& entry = req->ResultSet.at(0);
+        if (!entry.SequenceInfo || entry.SequenceInfo->Description.GetSequenceShard() == 0) {
+            std::visit(
+                [this, &database](auto& path) {
+                    OnResolveError(database, path, Ydb::StatusIds::SCHEME_ERROR, MakeResolveIssues(TStringBuilder()
+                        << "Failed to resolve sequence " << path));
+                },
+                path);
+            return;
+        }
+
+        TResolveResult result{
+            entry.TableId.PathId,
+            std::move(entry.SequenceInfo),
+            std::move(entry.SecurityObject),
+        };
+        std::visit(
+            [this, &database, &result](auto& path) {
+                OnResolveResult(database, path, std::move(result));
+            },
+            path);
     }
 
 } // namespace NSequenceProxy

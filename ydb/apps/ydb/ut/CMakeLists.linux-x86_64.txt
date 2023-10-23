@@ -70,3 +70,5 @@ target_allocator(ydb-apps-ydb-ut
   libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-apps-ydb-ut)
+add_dependencies(ydb-apps-ydb-ut ydb_py_protos)
+

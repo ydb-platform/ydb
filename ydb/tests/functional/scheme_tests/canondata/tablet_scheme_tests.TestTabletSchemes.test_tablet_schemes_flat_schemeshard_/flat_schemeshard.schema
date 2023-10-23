@@ -1265,11 +1265,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 29,
-                "ColumnName": "ImportsLimit",
-                "ColumnType": "Uint64"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -1408,13 +1403,22 @@
                 "ColumnId": 28,
                 "ColumnName": "ExportsLimit",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 29,
+                "ColumnName": "ImportsLimit",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 30,
+                "ColumnName": "AuditSettings",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    29,
                     1,
                     2,
                     3,
@@ -1442,7 +1446,9 @@
                     25,
                     26,
                     27,
-                    28
+                    28,
+                    29,
+                    30
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2153,6 +2159,11 @@
                 "ColumnId": 9,
                 "ColumnName": "DatabaseQuotas",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "AuditSettings",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -2167,7 +2178,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,

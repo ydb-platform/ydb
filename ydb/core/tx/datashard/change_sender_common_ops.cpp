@@ -9,10 +9,9 @@
 
 namespace NKikimr::NDataShard {
 
-void TBaseChangeSender::RegisterSender(THashMap<ui64, TSender>& senders, ui64 partitionId) {
-    Y_VERIFY(!senders.contains(partitionId));
-    auto& sender = senders[partitionId];
-    sender.ActorId = ActorOps->Register(CreateSender(partitionId));
+void TBaseChangeSender::LazyCreateSender(THashMap<ui64, TSender>& senders, ui64 partitionId) {
+    auto res = senders.emplace(partitionId, TSender{});
+    Y_VERIFY(res.second);
 
     for (const auto& [order, broadcast] : Broadcasting) {
         if (AddBroadcastPartition(order, partitionId)) {
@@ -20,6 +19,14 @@ void TBaseChangeSender::RegisterSender(THashMap<ui64, TSender>& senders, ui64 pa
             Enqueued.insert(broadcast.Record);
         }
     }
+}
+
+void TBaseChangeSender::RegisterSender(ui64 partitionId) {
+    Y_VERIFY(Senders.contains(partitionId));
+    auto& sender = Senders.at(partitionId);
+
+    Y_VERIFY(!sender.ActorId);
+    sender.ActorId = ActorOps->RegisterWithSameMailbox(CreateSender(partitionId));
 }
 
 void TBaseChangeSender::CreateMissingSenders(const TVector<ui64>& partitionIds) {
@@ -31,7 +38,7 @@ void TBaseChangeSender::CreateMissingSenders(const TVector<ui64>& partitionIds) 
             senders.emplace(partitionId, std::move(it->second));
             Senders.erase(it);
         } else {
-            RegisterSender(senders, partitionId);
+            LazyCreateSender(senders, partitionId);
         }
     }
 
@@ -39,7 +46,9 @@ void TBaseChangeSender::CreateMissingSenders(const TVector<ui64>& partitionIds) 
         ReEnqueueRecords(sender);
         ProcessBroadcasting(&TBaseChangeSender::RemoveBroadcastPartition,
             partitionId, sender.Broadcasting);
-        ActorOps->Send(sender.ActorId, new TEvents::TEvPoisonPill());
+        if (sender.ActorId) {
+            ActorOps->Send(sender.ActorId, new TEvents::TEvPoisonPill());
+        }
     }
 
     Senders = std::move(senders);
@@ -47,7 +56,7 @@ void TBaseChangeSender::CreateMissingSenders(const TVector<ui64>& partitionIds) 
 
 void TBaseChangeSender::RecreateSenders(const TVector<ui64>& partitionIds) {
     for (const auto& partitionId : partitionIds) {
-        RegisterSender(Senders, partitionId);
+        LazyCreateSender(Senders, partitionId);
     }
 }
 
@@ -67,7 +76,9 @@ void TBaseChangeSender::CreateSenders(const TVector<ui64>& partitionIds, bool pa
 
 void TBaseChangeSender::KillSenders() {
     for (const auto& [_, sender] : std::exchange(Senders, {})) {
-        ActorOps->Send(sender.ActorId, new TEvents::TEvPoisonPill());
+        if (sender.ActorId) {
+            ActorOps->Send(sender.ActorId, new TEvents::TEvPoisonPill());
+        }
     }
 }
 
@@ -145,6 +156,7 @@ void TBaseChangeSender::SendRecords() {
 
     auto it = PendingSent.begin();
     THashSet<ui64> sendTo;
+    THashSet<ui64> registrations;
     bool needToResolve = false;
 
     while (it != PendingSent.end()) {
@@ -158,6 +170,10 @@ void TBaseChangeSender::SendRecords() {
 
             auto& sender = Senders.at(partitionId);
             sender.Prepared.push_back(std::move(it->second));
+            if (!sender.ActorId) {
+                Y_VERIFY(!sender.Ready);
+                registrations.insert(partitionId);
+            }
             if (sender.Ready) {
                 sendTo.insert(partitionId);
             }
@@ -167,6 +183,10 @@ void TBaseChangeSender::SendRecords() {
                 if (Senders.contains(partitionId)) {
                     auto& sender = Senders.at(partitionId);
                     sender.Prepared.push_back(std::move(it->second));
+                    if (!sender.ActorId) {
+                        Y_VERIFY(!sender.Ready);
+                        registrations.insert(partitionId);
+                    }
                     if (sender.Ready) {
                         sendTo.insert(partitionId);
                     }
@@ -179,6 +199,10 @@ void TBaseChangeSender::SendRecords() {
         }
 
         it = PendingSent.erase(it);
+    }
+
+    for (const auto partitionId : registrations) {
+        RegisterSender(partitionId);
     }
 
     for (const auto partitionId : sendTo) {
@@ -265,6 +289,7 @@ void TBaseChangeSender::SendPreparedRecords(ui64 partitionId) {
         }
     }
 
+    Y_VERIFY(sender.ActorId);
     ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::exchange(sender.Prepared, {})));
 }
 

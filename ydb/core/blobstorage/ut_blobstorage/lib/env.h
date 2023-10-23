@@ -33,6 +33,7 @@ struct TEnvironmentSetup {
         const ui32 NumDataCenters = 0;
         const std::function<TNodeLocation(ui32)> LocationGenerator;
         const bool SetupHive = false;
+        const bool SuppressCompatibilityCheck = false;
     };
 
     const TSettings Settings;
@@ -124,6 +125,8 @@ struct TEnvironmentSetup {
         SetupLogging();
         Runtime->Start();
         auto *appData = Runtime->GetAppData();
+
+        appData->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
 
         auto domain = TDomainsInfo::TDomain::ConstructEmptyDomain(DomainName, DomainId);
         appData->DomainsInfo->AddDomain(domain.Get());

@@ -375,7 +375,8 @@ namespace NKikimr {
                 const TRcBuf &entryPoint = it->second.Data;
                 TString errorReason;
                 if (!TSyncerData::CheckEntryPoint(LocRecCtx->VCtx->VDiskLogPrefix, SkeletonId,
-                                                  LocRecCtx->VCtx->ShortSelfVDisk, LocRecCtx->VCtx->Top, entryPoint, errorReason)) {
+                                                  LocRecCtx->VCtx->ShortSelfVDisk, LocRecCtx->VCtx->Top, entryPoint, errorReason,
+                                                  AppData()->FeatureFlags.GetSuppressCompatibilityCheck())) {
                     errorReason = "Entry point for Syncer check failed, ErrorReason# " + errorReason;
                     LocRecCtx->VCtx->LocalRecoveryErrorStr = errorReason;
                     SignalErrorAndDie(ctx, NKikimrProto::ERROR, errorReason);

@@ -788,7 +788,10 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TK
     txExplore.GetTableOperations(hasScheme, hasData);
 
     if (hasData && hasScheme) {
-        ctx.AddError(YqlIssue(ctx.GetPosition(commit.Pos()), TIssuesIds::KIKIMR_MIXED_SCHEME_DATA_TX));
+        TString message = TStringBuilder() << "Queries with mixed data and scheme operations "
+            << "are not supported. Use separate queries for different types of operations.";
+
+        ctx.AddError(YqlIssue(ctx.GetPosition(commit.Pos()), TIssuesIds::KIKIMR_MIXED_SCHEME_DATA_TX, message));
         return nullptr;
     }
 

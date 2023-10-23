@@ -794,6 +794,13 @@ public:
             alter->SetDatabaseQuotas(inputSettings.GetDatabaseQuotas());
         }
 
+        if (const auto& auditSettings = subdomainInfo->GetAuditSettings()) {
+            alter->SetAuditSettings(*auditSettings);
+        }
+        if (inputSettings.HasAuditSettings()) {
+            alter->ApplyAuditSettings(inputSettings.GetAuditSettings());
+        }
+
         LOG_D("TAlterExtSubDomain Propose"
             << ", opId: " << OperationId
             << ", subdomain ver " << subdomainInfo->GetVersion()

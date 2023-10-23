@@ -13,7 +13,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_LOAD_EVERYTHING; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxLoadEverything::Execute");
+        BLOG_NOTICE("THive::TTxLoadEverything::Execute");
 
         TAppData* appData = AppData();
         TDomainsInfo* domainsInfo = appData->DomainsInfo.Get();
@@ -55,6 +55,9 @@ public:
             auto domainsRowset = db.Table<Schema::SubDomain>().Select();
             auto blockedOwnersRowset = db.Table<Schema::BlockedOwner>().Select();
             auto tabletOwnersRowset = db.Table<Schema::TabletOwners>().Select();
+            auto nodeRowset = db.Table<Schema::Node>().Select();
+            auto configRowset = db.Table<Schema::State>().Select();
+            auto categoryRowset = db.Table<Schema::TabletCategory>().Select();
             if (!tabletRowset.IsReady()
                     || !tabletChannelRowset.IsReady()
                     || !tabletChannelGenRowset.IsReady()
@@ -66,7 +69,10 @@ public:
                     || !sequencesRowset.IsReady()
                     || !domainsRowset.IsReady()
                     || !blockedOwnersRowset.IsReady()
-                    || !tabletOwnersRowset.IsReady())
+                    || !tabletOwnersRowset.IsReady()
+                    || !nodeRowset.IsReady()
+                    || !configRowset.IsReady()
+                    || !categoryRowset.IsReady())
                 return false;
         }
 
@@ -230,7 +236,7 @@ public:
             }
         }
 
-        BLOG_D("THive::TTxLoadEverything loaded " << numSequences << " sequences");
+        BLOG_NOTICE("THive::TTxLoadEverything loaded " << numSequences << " sequences");
 
         auto tabletTypeAllowedMetrics = db.Table<Schema::TabletTypeMetrics>().Select();
         if (!tabletTypeAllowedMetrics.IsReady())
@@ -266,7 +272,7 @@ public:
                 if (!domainRowset.Next())
                     return false;
             }
-            BLOG_D("THive::TTxLoadEverything loaded " << numSubDomains << " subdomains");
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numSubDomains << " subdomains");
         }
 
         {
@@ -280,7 +286,7 @@ public:
                 if (!blockedOwnerRowset.Next())
                     return false;
             }
-            BLOG_D("THive::TTxLoadEverything loaded " << numBlockedOwners << " blocked owners");
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numBlockedOwners << " blocked owners");
         }
 
         {
@@ -323,7 +329,7 @@ public:
                 if (!nodeRowset.Next())
                     return false;
             }
-            BLOG_D("THive::TTxLoadEverything loaded " << numNodes << " nodes");
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numNodes << " nodes");
         }
 
         {
@@ -340,7 +346,7 @@ public:
                 if (!categoryRowset.Next())
                     return false;
             }
-            BLOG_D("THive::TTxLoadEverything loaded " << numTabletCategories << " tablet categories");
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletCategories << " tablet categories");
         }
 
         if (Self->CurrentConfig.GetSystemTabletCategoryId() != 0 && Self->TabletCategories.empty()) {
@@ -445,7 +451,7 @@ public:
                 if (!tabletRowset.Next())
                     return false;
             }
-            BLOG_D("THive::TTxLoadEverything loaded " << numTablets << " tablets");
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTablets << " tablets");
         }
 
         {
@@ -481,7 +487,7 @@ public:
                 if (!tabletChannelRowset.Next())
                     return false;
             }
-            BLOG_D("THive::TTxLoadEverything loaded " << numTabletChannels << " tablet/channel pairs ("
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletChannels << " tablet/channel pairs ("
                     << numMissingTablets << " for missing tablets)");
         }
 
@@ -513,14 +519,14 @@ public:
                 if (!tabletChannelGenRowset.Next())
                     return false;
             }
-            BLOG_D("THive::TTxLoadEverything loaded " << numTabletChannelHistories << " tablet/channel history items ("
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletChannelHistories << " tablet/channel history items ("
                     << numMissingTablets << " for missing tablets)");
         }
 
         for (auto& [tabletId, tabletInfo] : Self->Tablets) {
             tabletInfo.AcquireAllocationUnits();
         }
-        BLOG_D("THive::TTxLoadEverything initialized allocation units for " << Self->Tablets.size() << " tablets");
+        BLOG_NOTICE("THive::TTxLoadEverything initialized allocation units for " << Self->Tablets.size() << " tablets");
 
         {
             size_t numTabletFollowerGroups = 0;
@@ -560,7 +566,7 @@ public:
                 if (!tabletFollowerGroupRowset.Next())
                     return false;
             }
-            BLOG_D("THive::TTxLoadEverything loaded " << numTabletFollowerGroups << " tablet follower groups ("
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletFollowerGroups << " tablet follower groups ("
                     << numMissingTablets << " for missing tablets)");
         }
 
@@ -598,7 +604,7 @@ public:
                 if (!tabletFollowerRowset.Next())
                     return false;
             }
-            BLOG_D("THive::TTxLoadEverything loaded " << numTabletFollowers << " tablet followers ("
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletFollowers << " tablet followers ("
                     << numMissingTablets << " for missing tablets)");
         }
 
@@ -628,7 +634,7 @@ public:
                 if (!metricsRowset.Next())
                     return false;
             }
-            BLOG_D("THive::TTxLoadEverything loaded " << numMetrics << " metrics ("
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numMetrics << " metrics ("
                     << numMissingTablets << " for missing tablets)");
         }
 
@@ -641,7 +647,7 @@ public:
                 ++itNode;
             }
         }
-        BLOG_D("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes");
+        BLOG_NOTICE("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes");
 
         TTabletId nextTabletId = Max(maxTabletId + 1, Self->NextTabletId);
 
@@ -694,7 +700,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxLoadEverything::Complete " << Self->DatabaseConfig.ShortDebugString());
+        BLOG_NOTICE("THive::TTxLoadEverything::Complete " << Self->DatabaseConfig.ShortDebugString());
         i64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;

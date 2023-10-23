@@ -47,8 +47,12 @@ public:
                     ythrow yexception() << "Version mismatch";
                 }
 
+                if (req.GetRequest().allow_unknown_fields()) {
+                    UnknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
+                }
+
                 for (auto& [_, config] : resolved.Configs) {
-                    auto cfg = NYamlConfig::YamlToProto(config.second);
+                    auto cfg = NYamlConfig::YamlToProto(config.second, req.GetRequest().allow_unknown_fields(), true, UnknownFieldsCollector);
                 }
 
                 if (!req.GetRequest().dry_run()) {
@@ -65,7 +69,17 @@ public:
                 }
             }
 
-            Response = MakeHolder<NActors::IEventHandle>(Request->Sender, ctx.SelfID, new TEvConsole::TEvReplaceYamlConfigResponse());
+            auto ev = MakeHolder<TEvConsole::TEvReplaceYamlConfigResponse>();
+
+            if (UnknownFieldsCollector) {
+                for (auto& [path, info] : UnknownFieldsCollector->GetUnknownKeys()) {
+                    auto *issue = ev->Record.AddIssues();
+                        issue->set_severity(NYql::TSeverityIds::S_WARNING);
+                        issue->set_message(TStringBuilder{} << "Unknown key# " << info.first << " in proto# " << info.second << " found in path# " << path);
+                }
+            }
+
+            Response = MakeHolder<NActors::IEventHandle>(Request->Sender, ctx.SelfID, ev.Release());
         } catch (const yexception& ex) {
             Error = true;
 
@@ -107,6 +121,7 @@ private:
     THolder<NActors::IEventHandle> Response;
     bool Error = false;
     bool Modify = false;
+    TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> UnknownFieldsCollector = nullptr;
     ui32 Version;
     TString Cluster;
     TString UpdatedConfig;

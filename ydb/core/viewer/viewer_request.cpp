@@ -65,7 +65,7 @@ public:
     }
 };
 
-IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr request) {
+IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request) {
     switch (request->Get()->Record.GetRequestCase()) {
         case NKikimrViewer::TEvViewerRequest::kTabletRequest:
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>(request);

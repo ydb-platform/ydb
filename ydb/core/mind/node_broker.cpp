@@ -347,7 +347,7 @@ void TNodeBroker::ApplyStateDiff(const TStateDiff &diff)
                     "Remove node " << it->second.IdString());
 
         ExpiredNodes.erase(it);
-        if (!IsBannedId(id) && NodeIdDomain(id) == DomainId)
+        if (!IsBannedId(id) && NodeIdDomain(id) == DomainId && id >= MinDynamicId && id <= MaxDynamicId)
             FreeIds.Set(id);
     }
 

@@ -74,7 +74,7 @@ public:
         return ColumnId;
     }
 
-    std::shared_ptr<arrow::Schema> GetExpectedSchema() const {
+    const std::shared_ptr<arrow::Schema>& GetExpectedSchema() const {
         return ExpectedSchema;
     }
 
@@ -99,7 +99,6 @@ private:
     const ui32 ColumnId;
     std::optional<NArrow::TCompression> Compression;
     std::optional<NArrow::NDictionary::TEncodingSettings> DictionaryEncoding;
-    mutable std::shared_ptr<TColumnLoader> LoaderCache;
 public:
     TColumnFeatures(const ui32 columnId)
         : ColumnId(columnId)

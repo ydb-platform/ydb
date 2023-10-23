@@ -215,7 +215,7 @@ void TBlobStorageController::ValidateInternalState() {
             Y_VERIFY(donor);
             Y_VERIFY(donor->Mood == TMood::Donor);
             Y_VERIFY(donor->GroupId == vslot->GroupId);
-            Y_VERIFY(donor->GroupGeneration < vslot->GroupGeneration + group->ContentChanged);
+            Y_VERIFY(donor->GroupGeneration < vslot->GroupGeneration);
             Y_VERIFY(donor->GetShortVDiskId() == vslot->GetShortVDiskId());
         }
         if (vslot->Group) {

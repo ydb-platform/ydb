@@ -821,7 +821,7 @@ void TConfigsManager::Handle(TEvConsole::TEvAddVolatileConfigRequest::TPtr &ev, 
             auto resolved = NYamlConfig::ResolveAll(tree);
 
             for (auto &[_, config] : resolved.Configs) {
-                auto cfg = NYamlConfig::YamlToProto(config.second);
+                auto cfg = NYamlConfig::YamlToProto(config.second, true);
             }
 
             if (ClusterName != clusterName) {

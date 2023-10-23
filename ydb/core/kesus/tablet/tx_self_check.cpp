@@ -73,8 +73,7 @@ void TKesusTablet::Handle(TEvPrivate::TEvSelfCheckTimeout::TPtr& ev) {
         const auto& ctx = TActivationContext::AsActorContext();
         LOG_ERROR_S(ctx, NKikimrServices::KESUS_TABLET,
             "[" << TabletID() << "] Self-check timeout, attempting suicide");
-        Send(Tablet(), new TEvents::TEvPoisonPill());
-        Become(&TThis::StateZombie);
+        HandlePoison(TActivationContext::ActorContextFor(SelfId()));
     }
 }
 

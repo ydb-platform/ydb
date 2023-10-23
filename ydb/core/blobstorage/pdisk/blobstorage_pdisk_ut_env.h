@@ -25,6 +25,7 @@ public:
         EDiskMode DiskMode = EDiskMode::DM_NONE;
         ui32 ChunkSize = 128 * (1 << 20);
         bool SmallDisk = false;
+        bool SuppressCompatibilityCheck = false;
     };
 
 private:
@@ -57,6 +58,7 @@ public:
         pDiskConfig->SectorMap = TestCtx.SectorMap;
         pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
         pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(Settings.SmallDisk);
+        pDiskConfig->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
         return pDiskConfig;
     }
 

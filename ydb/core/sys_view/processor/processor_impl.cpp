@@ -386,11 +386,6 @@ void TSysViewProcessor::IgnoreFailure(TNodeId nodeId) {
     NodesInFlight.erase(nodeId);
 }
 
-void TSysViewProcessor::Handle(TEvents::TEvPoisonPill::TPtr&) {
-    Become(&TThis::StateBroken);
-    Send(Tablet(), new TEvents::TEvPoisonPill);
-}
-
 void TSysViewProcessor::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     auto nodeId = (TNodeId)ev.Get()->Cookie;
     SVLOG_W("[" << TabletID() << "] TEvUndelivered: node id# " << nodeId);

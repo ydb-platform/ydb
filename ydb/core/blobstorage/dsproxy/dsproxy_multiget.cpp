@@ -25,6 +25,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
     const TInstant Deadline;
     const bool IsInternal;
     const bool PhantomCheck;
+    const bool Decommission;
     TArrayHolder<TEvBlobStorage::TEvGetResult::TResponse> Responses;
 
     const TInstant StartTime;
@@ -107,6 +108,7 @@ public:
         , Deadline(ev->Deadline)
         , IsInternal(ev->IsInternal)
         , PhantomCheck(ev->PhantomCheck)
+        , Decommission(ev->Decommission)
         , Responses(new TEvBlobStorage::TEvGetResult::TResponse[QuerySize])
         , StartTime(now)
         , MustRestoreFirst(ev->MustRestoreFirst)
@@ -127,6 +129,7 @@ public:
         ev->IsInternal = IsInternal;
         ev->ReaderTabletData = ReaderTabletData;
         ev->PhantomCheck = PhantomCheck;
+        ev->Decommission = Decommission;
         PendingGets.emplace_back(std::move(ev), cookie);
     }
 

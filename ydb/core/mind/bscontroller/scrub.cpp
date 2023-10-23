@@ -144,6 +144,8 @@ class TBlobStorageController::TScrubState::TImpl {
         Y_FAIL();
     }
 
+    friend class TBlobStorageController;
+
 public:
     TImpl(TBlobStorageController *self)
         : Self(self)
@@ -778,6 +780,10 @@ TBlobStorageController::TScrubState::~TScrubState()
 void TBlobStorageController::TScrubState::HandleTimer() {
     Impl->OnTimer(TActivationContext::Now());
     TActivationContext::Schedule(TDuration::Minutes(1), new IEventHandle(Impl->SelfId(), {}, new TEvPrivate::TEvScrub));
+}
+
+void TBlobStorageController::TScrubState::Clear() {
+    Impl.reset(new TImpl(Impl->Self));
 }
 
 void TBlobStorageController::TScrubState::AddItem(TVSlotId vslotId, std::optional<TString> state,

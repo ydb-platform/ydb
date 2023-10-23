@@ -59,7 +59,6 @@ struct TReadSetParams {
     ui64 Source = 0;
     ui64 Target = 0;
     bool Predicate = false;
-    ui64 SeqNo = 0;
 };
 
 struct TDropTabletParams {
@@ -148,7 +147,7 @@ protected:
     void WaitPlanStepAccepted(const TPlanStepAcceptedMatcher& matcher = {});
 
     void WaitReadSet(NHelpers::TPQTabletMock& tablet, const TReadSetMatcher& matcher);
-    void SendReadSet(NHelpers::TPQTabletMock& tablet, const TReadSetParams& params);
+    void SendReadSet(const TReadSetParams& params);
 
     void WaitReadSetAck(NHelpers::TPQTabletMock& tablet, const TReadSetAckMatcher& matcher);
     void SendReadSetAck(NHelpers::TPQTabletMock& tablet);
@@ -357,6 +356,26 @@ void TPQTabletFixture::WaitReadSet(NHelpers::TPQTabletMock& tablet, const TReadS
         UNIT_ASSERT(tablet.ReadSet->HasTabletProducer());
         UNIT_ASSERT_VALUES_EQUAL(*matcher.Producer, tablet.ReadSet->GetTabletProducer());
     }
+}
+
+void TPQTabletFixture::SendReadSet(const TReadSetParams& params)
+{
+    NKikimrTx::TReadSetData payload;
+    payload.SetDecision(params.Predicate ? NKikimrTx::TReadSetData::DECISION_COMMIT : NKikimrTx::TReadSetData::DECISION_ABORT);
+
+    TString body;
+    Y_VERIFY(payload.SerializeToString(&body));
+
+    auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(params.Step,
+                                                               params.TxId,
+                                                               params.Source,
+                                                               params.Target,
+                                                               params.Source,
+                                                               body,
+                                                               0);
+
+    SendToPipe(Ctx->Edge,
+               event.release());
 }
 
 void TPQTabletFixture::WaitReadSetAck(NHelpers::TPQTabletMock& tablet, const TReadSetAckMatcher& matcher)
@@ -915,6 +934,31 @@ Y_UNIT_TEST_F(Test_Waiting_For_TEvReadSet_Without_Recipients, TPQTabletFixture)
 Y_UNIT_TEST_F(Test_Waiting_For_TEvReadSet_Without_Senders, TPQTabletFixture)
 {
     TestWaitingForTEvReadSet(0, 2);
+}
+
+Y_UNIT_TEST_F(TEvReadSet_comes_before_TEvPlanStep, TPQTabletFixture)
+{
+    const ui64 mockTabletId = 22222;
+
+    CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=1, .Path="/topic"}
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendReadSet({.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Predicate=true});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=100});
 }
 
 }

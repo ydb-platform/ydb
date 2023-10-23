@@ -27,8 +27,8 @@ namespace NKikimr::NBlobDepot {
                 EvCommitCertainKeys,
                 EvDoGroupMetricsExchange,
                 EvKickSpaceMonitor,
-                EvProcessRegisterAgentQ,
                 EvUpdateThroughputs,
+                EvDeliver,
             };
         };
 
@@ -39,12 +39,6 @@ namespace NKikimr::NBlobDepot {
 
         TBlobDepot(TActorId tablet, TTabletStorageInfo *info);
         ~TBlobDepot();
-
-        void HandlePoison() {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT23, "HandlePoison", (Id, GetLogId()));
-            Become(&TThis::StateZombie);
-            Send(Tablet(), new TEvents::TEvPoison);
-        }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -84,7 +78,7 @@ namespace NKikimr::NBlobDepot {
             std::optional<ui32> NodeId; // as reported by RegisterAgent
             ui64 NextExpectedMsgId = 1;
             std::deque<std::unique_ptr<IEventHandle>> PostponeQ;
-            bool ProcessThroughQueue = false;
+            size_t InFlightDeliveries = 0;
         };
 
         THashMap<TActorId, TPipeServerContext> PipeServers;
@@ -220,14 +214,6 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         STFUNC(StateInit) {
-            if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
-                HandlePoison();
-            } else {
-                StateInitImpl(ev, SelfId());
-            }
-        }
-
-        STFUNC(StateZombie) {
             StateInitImpl(ev, SelfId());
         }
 

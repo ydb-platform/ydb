@@ -39,7 +39,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_serverless PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-schemeshard-ut_serverless PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_serverless.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_serverless/ut_serverless.cpp
 )
 set_property(
   TARGET

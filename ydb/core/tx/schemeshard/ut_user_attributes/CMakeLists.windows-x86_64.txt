@@ -39,7 +39,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_user_attributes PUBLIC
   yql-public-issue
 )
 target_sources(ydb-core-tx-schemeshard-ut_user_attributes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_user_attributes.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_user_attributes/ut_user_attributes.cpp
 )
 set_property(
   TARGET

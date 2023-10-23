@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
     }
 
     void SenderShouldShakeHands(const TString& path, ui32 times, const TShardedTableOptions& opts,
-            TMaybe<TShardedTableOptions::TIndex> addIndex = Nothing())
+            TMaybe<TShardedTableOptions::TIndex> addIndex, const TString& query)
     {
         const auto pathParts = SplitPath(path);
         UNIT_ASSERT(pathParts.size() > 1);
@@ -146,8 +146,11 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         CreateShardedTable(server, sender, workingDir, tableName, opts);
         if (addIndex) {
-            AsyncAlterAddIndex(server, domainName, path, *addIndex);
+            WaitTxNotification(server, sender, AsyncAlterAddIndex(server, domainName, path, *addIndex));
         }
+
+        // trigger initialization
+        ExecSQL(server, sender, query);
 
         if (counter != times) {
             TDispatchOptions opts;
@@ -159,7 +162,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
     }
 
     Y_UNIT_TEST(SenderShouldShakeHandsOnce) {
-        SenderShouldShakeHands("/Root/Table", 1, TableWithIndex(SimpleAsyncIndex()));
+        SenderShouldShakeHands("/Root/Table", 1, TableWithIndex(SimpleAsyncIndex()), {},
+            "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (1, 10);");
     }
 
     Y_UNIT_TEST(SenderShouldShakeHandsTwice) {
@@ -172,12 +176,14 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
             .Indexes({
                 {"by_i1key", {"i1key"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
                 {"by_i2key", {"i2key"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
-            })
+            }), {},
+            "UPSERT INTO `/Root/Table` (pkey, i1key, i2key) VALUES (1, 10, 100);"
         );
     }
 
     Y_UNIT_TEST(SenderShouldShakeHandsAfterAddingIndex) {
-        SenderShouldShakeHands("/Root/Table", 1, TableWoIndexes(), SimpleAsyncIndex());
+        SenderShouldShakeHands("/Root/Table", 1, TableWoIndexes(), SimpleAsyncIndex(),
+            "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (1, 10);");
     }
 
     void ShouldDeliverChanges(const TString& path, const TShardedTableOptions& opts,
@@ -2693,6 +2699,38 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         checkAwsRegion("/Root/Table/Stream1", "defaultRegion");
         checkAwsRegion("/Root/Table/Stream2", "customRegion");
+    }
+
+    Y_UNIT_TEST(SequentialSplitMerge) {
+        TTestPqEnv env(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), false);
+        SetSplitMergePartCountLimit(env.GetServer()->GetRuntime(), -1);
+
+        // split
+        auto tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
+
+        WaitTxNotification(env.GetServer(), env.GetEdgeActor(), 
+            AsyncSplitTable(env.GetServer(), env.GetEdgeActor(), "/Root/Table", tabletIds.at(0), 4));
+
+        // merge
+        tabletIds = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 2);
+
+        WaitTxNotification(env.GetServer(), env.GetEdgeActor(),
+            AsyncMergeTable(env.GetServer(), env.GetEdgeActor(), "/Root/Table", tabletIds));
+
+        ExecSQL(env.GetServer(), env.GetEdgeActor(), R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        WaitForContent(env.GetServer(), env.GetEdgeActor(), "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+        });
     }
 
 } // Cdc

@@ -156,7 +156,6 @@ public:
             return result;
         }
 
-
         bool requestedStoragePools = !settings.GetStoragePools().empty();
         if (requestedStoragePools) {
             return paramErrorResult("only declaration at creation is allowed, do not set up storage");
@@ -226,6 +225,10 @@ public:
 
         if (settings.HasDatabaseQuotas()) {
             alter->SetDatabaseQuotas(settings.GetDatabaseQuotas());
+        }
+
+        if (settings.HasAuditSettings()) {
+            alter->SetAuditSettings(settings.GetAuditSettings());
         }
 
         Y_VERIFY(!context.SS->SubDomains.contains(newNode->PathId));

@@ -297,6 +297,8 @@ class TDataShard
     friend class TTxStartMvccStateChange;
     friend class TTxExecuteMvccStateChange;
 
+    friend class TAsyncIndexChangeSenderShard;
+
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
 
@@ -343,6 +345,8 @@ class TDataShard
             EvCdcStreamScanContinue,
             EvRestartOperation, // used to restart after an aborted scan (e.g. backup)
             EvChangeExchangeExecuteHandshakes,
+            EvConfirmReadonlyLease,
+            EvReadonlyLeaseConfirmation,
             EvEnd
         };
 
@@ -525,6 +529,17 @@ class TDataShard
         };
 
         struct TEvChangeExchangeExecuteHandshakes : public TEventLocal<TEvChangeExchangeExecuteHandshakes, EvChangeExchangeExecuteHandshakes> {};
+
+        struct TEvConfirmReadonlyLease : public TEventLocal<TEvConfirmReadonlyLease, EvConfirmReadonlyLease> {
+            explicit TEvConfirmReadonlyLease(TMonotonic ts = TMonotonic::Zero())
+                : Timestamp(ts)
+            {
+            }
+
+            const TMonotonic Timestamp;
+        };
+
+        struct TEvReadonlyLeaseConfirmation: public TEventLocal<TEvReadonlyLeaseConfirmation, EvReadonlyLeaseConfirmation> {};
     };
 
     struct Schema : NIceDb::Schema {
@@ -1277,6 +1292,8 @@ class TDataShard
 
     void Handle(TEvPrivate::TEvRemoveLockChangeRecords::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPrivate::TEvConfirmReadonlyLease::TPtr& ev, const TActorContext& ctx);
+
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
     void DoPeriodicTasks(const TActorContext &ctx);
@@ -1428,6 +1445,12 @@ public:
                 State == TShardState::Readonly ||
                 State == TShardState::WaitScheme ||
                 State == TShardState::SplitSrcWaitForNoTxInFlight ||
+                State == TShardState::Frozen;
+    }
+
+    bool IsStateNewReadAllowed() const {
+        return State == TShardState::Ready ||
+                State == TShardState::Readonly ||
                 State == TShardState::Frozen;
     }
 
@@ -1763,6 +1786,7 @@ public:
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOffset, const TPathId& pathId);
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
     void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records);
+    void UpdateChangeDeliveryLag(TInstant now);
     void CreateChangeSender(const TActorContext& ctx);
     void KillChangeSender(const TActorContext& ctx);
     void MaybeActivateChangeSender(const TActorContext& ctx);
@@ -2569,28 +2593,31 @@ private:
         }
     };
 
-    struct TEnqueuedRecord {
+    struct TEnqueuedRecordTag {};
+    struct TEnqueuedRecord: public TIntrusiveListItem<TEnqueuedRecord, TEnqueuedRecordTag> {
         ui64 BodySize;
         TPathId TableId;
         ui64 SchemaVersion;
         bool SchemaSnapshotAcquired;
+        TInstant EnqueuedAt;
         ui64 LockId;
         ui64 LockOffset;
 
         explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId,
-                ui64 schemaVersion, ui64 lockId = 0, ui64 lockOffset = 0)
+                ui64 schemaVersion, TInstant now, ui64 lockId = 0, ui64 lockOffset = 0)
             : BodySize(bodySize)
             , TableId(tableId)
             , SchemaVersion(schemaVersion)
             , SchemaSnapshotAcquired(false)
+            , EnqueuedAt(now)
             , LockId(lockId)
             , LockOffset(lockOffset)
         {
         }
 
-        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record)
-            : TEnqueuedRecord(record.BodySize, record.TableId,
-                    record.SchemaVersion, record.LockId, record.LockOffset)
+        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record, TInstant now)
+            : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion, now,
+                record.LockId, record.LockOffset)
         {
         }
     };
@@ -2608,6 +2635,7 @@ private:
     bool RequestChangeRecordsInFly = false;
     bool RemoveChangeRecordsInFly = false;
     THashMap<ui64, TEnqueuedRecord> ChangesQueue; // ui64 is order
+    TIntrusiveList<TEnqueuedRecord, TEnqueuedRecordTag> ChangesList;
     ui64 ChangesQueueBytes = 0;
     TActorId OutChangeSender;
     bool OutChangeSenderSuspended = false;
@@ -2851,6 +2879,7 @@ protected:
             HFunc(TEvLongTxService::TEvLockStatus, Handle);
             HFunc(TEvDataShard::TEvGetOpenTxs, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
+            HFunc(TEvPrivate::TEvConfirmReadonlyLease, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD,

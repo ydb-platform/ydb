@@ -3,6 +3,7 @@
 #include "rpc_kqp_base.h"
 #include "rpc_common/rpc_common.h"
 #include "service_table.h"
+#include "audit_dml_operations.h"
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
@@ -55,6 +56,8 @@ public:
         const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
         const auto requestType = Request_->GetRequestType();
+
+        AuditContextAppend(Request_.get(), *req);
 
         if (!CheckSession(req->session_id(), Request_.get())) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
@@ -205,6 +208,8 @@ public:
                 issues.AddIssue(NYql::ExceptionToIssue(ex));
                 return Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
             }
+
+            AuditContextAppend(Request_.get(), *GetProtoRequest(), *queryResult);
 
             ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, *queryResult, ctx);
         } else {

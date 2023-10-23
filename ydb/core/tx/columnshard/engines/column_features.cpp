@@ -23,20 +23,17 @@ NArrow::NTransformation::ITransformer::TPtr TColumnFeatures::GetLoadTransformer(
 }
 
 std::shared_ptr<NKikimr::NOlap::TColumnLoader> TColumnFeatures::GetLoader(const TIndexInfo& info) const {
-    if (!LoaderCache) {
-        NArrow::NTransformation::ITransformer::TPtr transformer = GetLoadTransformer();
-        auto schema = info.GetColumnSchema(ColumnId);
-        if (!transformer) {
-            LoaderCache = std::make_shared<TColumnLoader>(transformer,
-                std::make_shared<NArrow::NSerialization::TBatchPayloadDeserializer>(schema),
-                schema, ColumnId);
-        } else {
-            LoaderCache = std::make_shared<TColumnLoader>(transformer,
-                std::make_shared<NArrow::NSerialization::TFullDataDeserializer>(),
-                schema, ColumnId);
-        }
+    NArrow::NTransformation::ITransformer::TPtr transformer = GetLoadTransformer();
+    auto schema = info.GetColumnSchema(ColumnId);
+    if (!transformer) {
+        return std::make_shared<TColumnLoader>(transformer,
+            std::make_shared<NArrow::NSerialization::TBatchPayloadDeserializer>(schema),
+            schema, ColumnId);
+    } else {
+        return std::make_shared<TColumnLoader>(transformer,
+            std::make_shared<NArrow::NSerialization::TFullDataDeserializer>(),
+            schema, ColumnId);
     }
-    return LoaderCache;
 }
 
 std::optional<NKikimr::NOlap::TColumnFeatures> TColumnFeatures::BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const ui32 columnId) {

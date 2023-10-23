@@ -24,6 +24,7 @@ enum ESimpleCounters {
     COUNTER_READ_ITERATORS_WAITING = 14                            [(CounterOpts) = {Name: "ReadIteratorsWaiting"}];
     COUNTER_READ_ITERATORS_COUNT = 15                              [(CounterOpts) = {Name: "ReadIteratorsCount"}];
     COUNTER_READ_ITERATORS_EXHAUSTED_COUNT = 16                    [(CounterOpts) = {Name: "ReadIteratorsExhaustedCount"}];
+    COUNTER_CHANGE_DELIVERY_LAG = 17                               [(CounterOpts) = {Name: "ChangeDeliveryLag"}];
 }
 
 enum ECumulativeCounters {

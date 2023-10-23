@@ -130,8 +130,8 @@ def ydb_endpoint(ydb_cluster):
 
 @pytest.fixture(scope='function')
 def ydb_client(ydb_endpoint, request):
-    def _make_driver(database_path):
-        driver_config = DriverConfig(ydb_endpoint, database_path)
+    def _make_driver(database_path, **kwargs):
+        driver_config = DriverConfig(ydb_endpoint, database_path, **kwargs)
         driver = Driver(driver_config)
 
         def stop_driver():
@@ -144,8 +144,8 @@ def ydb_client(ydb_endpoint, request):
 
 @pytest.fixture(scope='function')
 def ydb_client_session(ydb_client, request):
-    def _make_pool(database_path):
-        driver = ydb_client(database_path)
+    def _make_pool(database_path, **kwargs):
+        driver = ydb_client(database_path, **kwargs)
         pool = SessionPool(driver)
 
         def stop_pool():

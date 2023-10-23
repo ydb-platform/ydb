@@ -12,6 +12,7 @@ PEERDIR(
     ydb/library/yql/sql/pg_dummy
     ydb/public/sdk/cpp/client/ydb_types
     ydb/services/kesus
+    ydb/services/datastreams
     ydb/services/persqueue_cluster_discovery
 )
 

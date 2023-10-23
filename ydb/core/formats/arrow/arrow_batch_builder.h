@@ -148,7 +148,7 @@ public:
 
     /// @note compression is disabled by default KIKIMR-11690
     // Allowed codecs: UNCOMPRESSED, LZ4_FRAME, ZSTD
-    TArrowBatchBuilder(arrow::Compression::type codec = arrow::Compression::UNCOMPRESSED);
+    TArrowBatchBuilder(arrow::Compression::type codec = arrow::Compression::UNCOMPRESSED, const std::set<std::string>& notNullColumns = {});
     ~TArrowBatchBuilder() = default;
 
     bool Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,
@@ -191,6 +191,7 @@ private:
     std::unique_ptr<arrow::RecordBatchBuilder> BatchBuilder;
     std::shared_ptr<arrow::RecordBatch> Batch;
     size_t RowsToReserve{DEFAULT_ROWS_TO_RESERVE};
+    const std::set<std::string> NotNullColumns;
 
 protected:
     size_t NumRows{0};
@@ -198,7 +199,7 @@ protected:
 
 private:
     std::unique_ptr<IBlockBuilder> Clone() const override {
-        return std::make_unique<TArrowBatchBuilder>();
+        return std::make_unique<TArrowBatchBuilder>(WriteOptions.codec->compression_type(), NotNullColumns);
     }
 };
 

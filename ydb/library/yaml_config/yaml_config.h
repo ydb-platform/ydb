@@ -2,6 +2,7 @@
 
 #include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
 #include <library/cpp/actors/core/actor.h>
+#include <library/cpp/protobuf/json/json2proto.h>
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -21,10 +22,51 @@
 
 namespace NYamlConfig {
 
+struct TBasicUnknownFieldsCollector : public NProtobufJson::IUnknownFieldsCollector {
+    void OnEnterMapItem(const TString& key) override {
+        CurrentPath.push_back(key);
+    }
+
+    void OnEnterArrayItem(ui64 id) override {
+        CurrentPath.push_back(ToString(id));
+    }
+
+    void OnLeaveMapItem() override {
+        CurrentPath.pop_back();
+    }
+
+    void OnLeaveArrayItem() override {
+        CurrentPath.pop_back();
+    }
+
+    void OnUnknownField(const TString& key, const google::protobuf::Descriptor& value) override {
+        TString path;
+        for (auto& piece : CurrentPath) {
+            path.append("/");
+            path.append(piece);
+        }
+        path.append("/");
+        path.append(key);
+        UnknownKeys[std::move(path)] = {key, value.full_name()};
+    }
+
+    const TMap<TString, std::pair<TString, TString>>& GetUnknownKeys() const {
+        return UnknownKeys;
+    }
+
+private:
+    TVector<TString> CurrentPath;
+    TMap<TString, std::pair<TString, TString>> UnknownKeys;
+};
+
 /**
  * Converts YAML representation to ProtoBuf
  */
-NKikimrConfig::TAppConfig YamlToProto(const NFyaml::TNodeRef& node, bool allowUnknown = false, bool preTransform = true);
+NKikimrConfig::TAppConfig YamlToProto(
+    const NFyaml::TNodeRef& node,
+    bool allowUnknown = false,
+    bool preTransform = true,
+    TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector = nullptr);
 
 /**
  * Resolves config for given labels and stores result to appConfig

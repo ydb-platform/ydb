@@ -98,7 +98,8 @@ class TBaseChangeSender: public IChangeSender {
         THashSet<ui64> CompletedPartitions;
     };
 
-    void RegisterSender(THashMap<ui64, TSender>& senders, ui64 partitionId);
+    void LazyCreateSender(THashMap<ui64, TSender>& senders, ui64 partitionId);
+    void RegisterSender(ui64 partitionId);
     void CreateMissingSenders(const TVector<ui64>& partitionIds);
     void RecreateSenders(const TVector<ui64>& partitionIds);
 

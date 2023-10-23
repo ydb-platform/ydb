@@ -124,7 +124,7 @@ namespace NKikimr::NBlobDepot {
             doNotKeep_.release();
 
             record.CollectGarbageRequestInFlight = true;
-            record.PerGenerationCounter += ev->Collect ? ev->PerGenerationCounterStepSize() : 0;
+            record.PerGenerationCounter += ev->Collect;
             record.TrashInFlight.swap(trashInFlight);
             record.IssuedGenStep = nextGenStep;
 

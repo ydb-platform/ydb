@@ -209,6 +209,7 @@ message TEvInitTenantSchemeShard {
 
     optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 16;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 17;
+    optional NKikimrSubDomains.TAuditSettings AuditSettings = 18;
 }
 
 message TEvInitTenantSchemeShardResult {
@@ -376,6 +377,8 @@ message TEvUpdateTenantSchemeShard {
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 14;
 
     optional string UpdateTenantRootACL = 13;
+
+    optional NKikimrSubDomains.TAuditSettings AuditSettings = 15;
 }
 
 message TEvFindTabletSubDomainPathId {

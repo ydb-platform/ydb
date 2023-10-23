@@ -90,6 +90,10 @@ namespace NKikimr::NBlobDepot {
             TGenStep& barrierGenCtr = hard ? barrier.HardGenCtr : barrier.SoftGenCtr;
             TGenStep& barrierGenStep = hard ? barrier.Hard : barrier.Soft;
 
+            if (genCtr < barrierGenCtr) { // obsolete barrier command, just ignore the barrier
+                return true;
+            }
+
             Y_VERIFY(barrierGenCtr <= genCtr);
             Y_VERIFY(barrierGenStep <= collectGenStep);
 
@@ -122,7 +126,6 @@ namespace NKikimr::NBlobDepot {
             const auto& record = Request->Get()->Record;
 
             const ui64 tabletId = record.GetTabletId();
-            const ui8 channel = record.GetChannel();
             const ui32 generation = record.GetGeneration();
             if (!Self->BlocksManager->CheckBlock(tabletId, generation)) {
                 Finish("block race detected", NKikimrProto::BLOCKED);
@@ -136,6 +139,7 @@ namespace NKikimr::NBlobDepot {
                 return false;
             }
 
+            const ui8 channel = record.GetChannel();
             const auto key = std::make_tuple(tabletId, channel);
             auto& barriers = Self->BarrierServer->Barriers;
             if (const auto it = barriers.find(key); it != barriers.end()) {
@@ -149,8 +153,10 @@ namespace NKikimr::NBlobDepot {
 
                 // validate them
                 if (genCtr < barrierGenCtr) {
-                    Finish("record generation:counter is obsolete");
-                    return false;
+                    if (barrierGenStep < collectGenStep) {
+                        Finish("incorrect barrier sequence");
+                        return false;
+                    }
                 } else if (genCtr == barrierGenCtr) {
                     if (barrierGenStep != collectGenStep) {
                         Finish("repeated command with different collect parameters received");

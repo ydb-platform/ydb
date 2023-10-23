@@ -184,7 +184,11 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             const auto& cfg = Props.GetHierarchicalDRRResourceConfig();
             const double speed = cfg.GetMaxUnitsPerSecond();
             const double prefetch = cfg.GetPrefetchCoefficient() ? cfg.GetPrefetchCoefficient() : NKesus::NQuoter::PREFETCH_COEFFICIENT_DEFAULT;
-            const double watermark = std::clamp(cfg.GetPrefetchWatermark() ? cfg.GetPrefetchWatermark() : NKesus::NQuoter::PREFETCH_WATERMARK_DEFAULT, 0.0, 1.0);
+            double watermark = std::clamp(cfg.GetPrefetchWatermark() ? cfg.GetPrefetchWatermark() : NKesus::NQuoter::PREFETCH_WATERMARK_DEFAULT, 0.0, 1.0);
+
+            if (Props.GetHierarchicalDRRResourceConfig().HasReplicatedBucket()) {
+                watermark = 0.999;
+            }
 
             const double prevBucketMaxSize = ResourceBucketMaxSize;
             ResourceBucketMaxSize = Max(0.0, speed * prefetch);
@@ -206,7 +210,8 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
 
             if (Props.GetAccountingConfig().GetEnabled()) {
                 AccountingReportPeriod = TDuration::MilliSeconds(Props.GetAccountingConfig().GetReportPeriodMs());
-                THolder<TTimeSeriesVec<double>> history(new TTimeSeriesVec<double>(Props.GetAccountingConfig().GetCollectPeriodSec()));
+                const ui64 intervalsInSec = 100; // as far as default resolution in TTimeSerisVec is 10'000
+                THolder<TTimeSeriesVec<double>> history(new TTimeSeriesVec<double>(Props.GetAccountingConfig().GetCollectPeriodSec() * intervalsInSec));
                 if (History) {
                     history->Add(*History.Get());
                 }

@@ -50,7 +50,11 @@ std::vector<TString> ScanQuerySelectSimple(
                 for (auto& [colName, colType] : ydbSchema) {
                     switch (colType) {
                         case NYdb::EPrimitiveType::Timestamp:
-                            ss << parser.ColumnParser(colName).GetOptionalTimestamp() << ",";
+                            if (colName == "timestamp") {
+                                ss << parser.ColumnParser(colName).GetTimestamp() << ",";
+                            } else {
+                                ss << parser.ColumnParser(colName).GetOptionalTimestamp() << ",";
+                            }
                             break;
                         case NYdb::EPrimitiveType::Datetime:
                             ss << parser.ColumnParser(colName).GetOptionalDatetime() << ",";
@@ -65,7 +69,11 @@ std::vector<TString> ScanQuerySelectSimple(
                             break;
                         }
                         case NYdb::EPrimitiveType::Utf8:
-                            ss << parser.ColumnParser(colName).GetOptionalUtf8() << ",";
+                            if (colName == "uid") {
+                                ss << parser.ColumnParser(colName).GetUtf8() << ",";
+                            } else {
+                                ss << parser.ColumnParser(colName).GetOptionalUtf8() << ",";
+                            }
                             break;
                         case NYdb::EPrimitiveType::Int32:
                             ss << parser.ColumnParser(colName).GetOptionalInt32() << ",";
@@ -220,13 +228,13 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
 
         auto tableBuilder = client.GetTableBuilder();
         for (auto& [name, type] : schema) {
-            if (name == "id") {
+            if (name == "id" || name == "timestamp") {
                 tableBuilder.AddNonNullableColumn(name, type);
             } else {
                 tableBuilder.AddNullableColumn(name, type);
             }
         }
-        tableBuilder.SetPrimaryKeyColumns({"id"});
+        tableBuilder.SetPrimaryKeyColumns({"id", "timestamp"});
         auto result = session.CreateTable(tablePath, tableBuilder.Build(), {}).ExtractValueSync();
 
         UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
@@ -234,8 +242,8 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
 
         auto batchSchema = std::make_shared<arrow::Schema>(
             std::vector<std::shared_ptr<arrow::Field>>{
-                arrow::field("id", arrow::uint32()),
-                arrow::field("timestamp", arrow::int64()),
+                arrow::field("id", arrow::uint32(), false),
+                arrow::field("timestamp", arrow::int64(), false),
                 arrow::field("dateTimeS", arrow::int32()),
                 arrow::field("dateTimeU", arrow::uint32()),
                 arrow::field("date", arrow::uint16()),
@@ -567,9 +575,13 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         { // CREATE TABLE /Root/Logs (timestamp Timestamp, ... PK timestamp)
             auto tableBuilder = client.GetTableBuilder();
             for (auto& [name, type] : TTestOlap::PublicSchema()) {
-                tableBuilder.AddNullableColumn(name, type);
+                if (name == "uid" || name == "timestamp") {
+                    tableBuilder.AddNonNullableColumn(name, type);
+                } else {
+                    tableBuilder.AddNullableColumn(name, type);
+                }
             }
-            tableBuilder.SetPrimaryKeyColumns({"timestamp"});
+            tableBuilder.SetPrimaryKeyColumns({"uid", "timestamp"});
             NYdb::NTable::TCreateTableSettings tableSettings;
             //tableSettings.PartitioningPolicy(NYdb::NTable::TPartitioningPolicy().UniformPartitions(2));
             auto result = session.CreateTable(tablePath, tableBuilder.Build(), tableSettings).ExtractValueSync();
@@ -676,9 +688,13 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         { // CREATE TABLE /Root/Logs (timestamp Timestamp, ... PK timestamp)
             auto tableBuilder = client.GetTableBuilder();
             for (auto& [name, type] : TTestOlap::PublicSchema()) {
-                tableBuilder.AddNullableColumn(name, type);
+                if (name == "uid" || name == "timestamp") {
+                    tableBuilder.AddNonNullableColumn(name, type);
+                } else {
+                    tableBuilder.AddNullableColumn(name, type);
+                }
             }
-            tableBuilder.SetPrimaryKeyColumns({"timestamp"});
+            tableBuilder.SetPrimaryKeyColumns({"uid", "timestamp"});
             NYdb::NTable::TCreateTableSettings tableSettings;
             //tableSettings.PartitioningPolicy(NYdb::NTable::TPartitioningPolicy().UniformPartitions(2));
             auto result = session.CreateTable(tablePath, tableBuilder.Build(), tableSettings).ExtractValueSync();

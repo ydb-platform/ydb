@@ -533,7 +533,6 @@ static void SetupServices(TTestActorRuntime &runtime,
 TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
         : TTestBasicRuntime(options.NodeCount, options.DataCenterCount, false)
         , CmsId(MakeCmsID(0))
-        , ProcessQueueCount(0)
         , CmsTabletActor(TActorId())
 {
     TFakeNodeWhiteboardService::Config.MutableResponse()->SetSuccess(true);
@@ -546,27 +545,13 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
 
     GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants, options.UseMirror3dcErasure);
 
-    SetObserverFunc([&ProcessQueueCount = ProcessQueueCount, &CmsTabletActor = CmsTabletActor](TTestActorRuntimeBase&,
+    SetObserverFunc([](TTestActorRuntimeBase&,
                                     TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest
             || event->GetTypeRewrite() == TEvConfigsDispatcher::EvGetConfigRequest) {
             auto fakeId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(event->Recipient.NodeId());
             if (event->Recipient != fakeId)
                 event = IEventHandle::Forward(event, fakeId);
-        }
-
-        if (event->GetTypeRewrite() == TCms::TEvPrivate::EvProcessQueue
-            && event->Recipient == CmsTabletActor) {
-            ++ProcessQueueCount;
-        }
-
-        if (event->GetTypeRewrite() == TCms::TEvPrivate::EvUpdateClusterInfo
-            || event->GetTypeRewrite() == TEvCms::EvClusterStateRequest
-            || event->GetTypeRewrite() == TEvCms::EvNotification
-            || event->GetTypeRewrite() == TEvCms::EvResetMarkerRequest
-            || event->GetTypeRewrite() == TEvCms::EvSetMarkerRequest
-            || event->GetTypeRewrite() == TEvCms::EvGetClusterInfoRequest) {
-            --ProcessQueueCount;
         }
 
         return TTestActorRuntime::EEventAction::PROCESS;

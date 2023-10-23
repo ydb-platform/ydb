@@ -539,7 +539,7 @@ private:
             NullSerializeReadTableResponse(message, status, &out);
             Request_->SendSerializedResult(std::move(out), status);
         }
-        Request_->FinishStream();
+        Request_->FinishStream(status);
         LOG_NOTICE_S(ctx, NKikimrServices::READ_TABLE_API,
             SelfId() << " Finish grpc stream, status: " << (int)status);
 

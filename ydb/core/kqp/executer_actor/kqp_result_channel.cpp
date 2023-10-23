@@ -45,14 +45,18 @@ protected:
 
 private:
     STATEFN(WorkState) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NYql::NDq::TEvDqCompute::TEvChannelData, HandleWork);
-            hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleWork);
-            hFunc(TEvents::TEvPoison, HandlePoison);
-            default: {
-                InternalError(TStringBuilder() << "TxId: " << TxId << ", channelId: " << ChannelId
-                    << "Handle unexpected event " << ev->GetTypeRewrite());
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(NYql::NDq::TEvDqCompute::TEvChannelData, HandleWork);
+                hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleWork);
+                hFunc(TEvents::TEvPoison, HandlePoison);
+                default: {
+                    InternalError(TStringBuilder() << "TxId: " << TxId << ", channelId: " << ChannelId
+                        << "Handle unexpected event " << ev->GetTypeRewrite());
+                }
             }
+        } catch (const yexception& ex) {
+            InternalError(ex.what());
         }
     }
 
@@ -115,8 +119,13 @@ private:
 
 private:
     STATEFN(DeadState) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvPoison, HandlePoison);
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvPoison, HandlePoison);
+            }
+            
+        } catch(const yexception& ex) {
+            InternalError(ex.what());
         }
     }
 
@@ -170,6 +179,7 @@ private:
 
         Send(Target, streamEv.Release());
     }
+
 private:
     const TVector<ui32>* ColumnOrder;
     NKikimr::NMiniKQL::TType* ItemType;

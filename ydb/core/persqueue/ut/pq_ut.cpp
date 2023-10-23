@@ -2021,6 +2021,43 @@ Y_UNIT_TEST(TestWriteTimeLag) {
     CmdGetOffset(0, "aaa", 0, tc, -1, 0);
 }
 
+Y_UNIT_TEST(TestManyConsumers) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+
+    tc.Runtime->SetScheduledLimit(150);
+    tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
+    tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+
+    TVector<std::pair<TString, bool>> consumers;
+    for (ui32 i = 0; i < 2000; ++i) {
+        consumers.push_back(std::make_pair<TString, bool>(TStringBuilder() << "consumer_" << i, false));
+    }
+
+    PQTabletPrepare({}, consumers, tc);
+
+    TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
+    ui64 ssId = 325;
+    BootFakeSchemeShard(*tc.Runtime, ssId, state);
+
+    for (ui32 i = 0; i < 100; ++i) {
+        PQBalancerPrepare(TOPIC_NAME, {{0,{tc.TabletId, 1}}}, ssId, tc, false, false);
+    }
+
+    for (ui32 i = 0; i < 100; ++i) {
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, new TEvPersQueue::TEvStatus(), 0, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        TEvPersQueue::TEvStatusResponse *result;
+        result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvStatusResponse>(handle);
+        Y_UNUSED(result);
+    }
+    PQBalancerPrepare(TOPIC_NAME, {{0,{tc.TabletId, 1}}}, ssId, tc, false, true);
+
+}
+
+
 
 void CheckEventSequence(TTestContext& tc, std::function<void()> scenario, std::deque<ui32> expectedEvents) {
     tc.Runtime->SetObserverFunc([&expectedEvents](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
@@ -2066,6 +2103,8 @@ Y_UNIT_TEST(TestTabletRestoreEventsOrder) {
         TEvTablet::TEvTabletActive::EventType,
     });
 }
+
+
 
 } // Y_UNIT_TEST_SUITE(TPQTest)
 } // namespace NKikimr::NPQ

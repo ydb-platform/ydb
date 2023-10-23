@@ -266,16 +266,15 @@ namespace NKikimr::NBsController {
                 TTransactionContext& txc, TString *errorDescription) {
             NIceDb::TNiceDb db(txc.DB);
 
-            for (auto&& [base, overlay] : state.Groups.Diff()) {
-                if (base && overlay->second && std::exchange(overlay->second->ContentChanged, false)) {
-                    const auto& groupInfo = overlay->second;
-                    ++groupInfo->Generation;
-                    for (const TVSlotInfo *slot : groupInfo->VDisksInGroup) {
-                        if (slot->GroupGeneration != groupInfo->Generation) {
-                            TVSlotInfo *mutableSlot = state.VSlots.FindForUpdate(slot->VSlotId);
-                            Y_VERIFY(mutableSlot);
-                            mutableSlot->GroupGeneration = groupInfo->Generation;
-                        }
+            for (TGroupId groupId : state.GroupContentChanged) {
+                TGroupInfo *group = state.Groups.FindForUpdate(groupId);
+                Y_VERIFY(group);
+                ++group->Generation;
+                for (const TVSlotInfo *slot : group->VDisksInGroup) {
+                    if (slot->GroupGeneration != group->Generation) {
+                        TVSlotInfo *mutableSlot = state.VSlots.FindForUpdate(slot->VSlotId);
+                        Y_VERIFY(mutableSlot);
+                        mutableSlot->GroupGeneration = group->Generation;
                     }
                 }
             }
@@ -297,12 +296,8 @@ namespace NKikimr::NBsController {
 
             // check that group modification would not degrade failure model
             if (!suppressFailModelChecking) {
-                for (auto&& [base, overlay] : state.Groups.Diff()) {
-                    if (!overlay->second || !base) {
-                        continue;
-                    }
-                    auto& group = overlay->second;
-                    if ((base->second->Generation != group->Generation || group->MoodChanged) && group->VDisksInGroup) {
+                for (TGroupId groupId : state.GroupFailureModelChanged) {
+                    if (const TGroupInfo *group = state.Groups.Find(groupId); group && group->VDisksInGroup) {
                         // process only groups with changed content; create topology for group
                         auto& topology = *group->Topology;
                         // fill in vector of failed disks (that are not fully operational)
@@ -315,14 +310,16 @@ namespace NKikimr::NBsController {
                         // check the failure model
                         auto& checker = *topology.QuorumChecker;
                         if (!checker.CheckFailModelForGroup(failed)) {
-                            *errorDescription = TStringBuilder() << "GroupId# " << base->first
+                            *errorDescription = TStringBuilder() << "GroupId# " << groupId
                                 << " may lose data while modifying group";
                             return false;
                         } else if (!suppressDegradedGroupsChecking && checker.IsDegraded(failed)) {
-                            *errorDescription = TStringBuilder() << "GroupId# " << base->first
+                            *errorDescription = TStringBuilder() << "GroupId# " << groupId
                                 << " may become DEGRADED while modifying group";
                             return false;
                         }
+                    } else {
+                        Y_VERIFY(group); // group must exist
                     }
                 }
             }
@@ -342,10 +339,21 @@ namespace NKikimr::NBsController {
                 state.PDisks.DeleteExistingEntry(pdiskId);
             }
 
-            MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
-            MakeTableMerger<Schema::Box>(&Boxes, &state.Boxes.Get(), this)(txc);
-            MakeTableMerger<Schema::BoxStoragePool>(&StoragePools, &state.StoragePools.Get(), this)(txc);
-            MakeTableMerger<Schema::Node>(&Nodes, &state.Nodes.Get(), this)(txc);
+            if (state.HostConfigs.Changed()) {
+                MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
+            }
+            if (state.Boxes.Changed()) {
+                MakeTableMerger<Schema::Box>(&Boxes, &state.Boxes.Get(), this)(txc);
+            }
+            if (state.StoragePools.Changed()) {
+                MakeTableMerger<Schema::BoxStoragePool>(&StoragePools, &state.StoragePools.Get(), this)(txc);
+            }
+            if (state.Nodes.Changed()) {
+                MakeTableMerger<Schema::Node>(&Nodes, &state.Nodes.Get(), this)(txc);
+            }
+            if (state.BlobDepotDeleteQueue.Changed()) {
+                MakeTableMerger<Schema::BlobDepotDeleteQueue>(&BlobDepotDeleteQueue, &state.BlobDepotDeleteQueue.Get(), this)(txc);
+            }
 
             // apply overlay maps to their respective tables
             state.PDisks.ApplyToTable(this, txc);
@@ -699,7 +707,7 @@ namespace NKikimr::NBsController {
                     Y_VERIFY(donor);
                     Y_VERIFY(donor->Mood == TMood::Donor);
                     Y_VERIFY(donor->GroupId == vslot.GroupId);
-                    Y_VERIFY(donor->GroupGeneration < vslot.GroupGeneration + group->ContentChanged);
+                    Y_VERIFY(donor->GroupGeneration < vslot.GroupGeneration + GroupContentChanged.count(vslot.GroupId));
                     Y_VERIFY(donor->GetShortVDiskId() == vslot.GetShortVDiskId());
                 }
             });
@@ -737,7 +745,6 @@ namespace NKikimr::NBsController {
             for (const auto& slot : VDisksInGroup) {
                 slot.Mutable().Group = this;
             }
-            MoodChanged = false;
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id,

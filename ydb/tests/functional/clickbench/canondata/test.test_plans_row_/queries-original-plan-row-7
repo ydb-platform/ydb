@@ -30,15 +30,12 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort-Aggregate",
+                                                "Node Type": "TopSort",
                                                 "Operators": [
                                                     {
                                                         "Limit": "1001",
                                                         "Name": "TopSort",
                                                         "TopSortBy": "argument.Count0"
-                                                    },
-                                                    {
-                                                        "Name": "Aggregate"
                                                     }
                                                 ],
                                                 "PlanNodeId": 3,

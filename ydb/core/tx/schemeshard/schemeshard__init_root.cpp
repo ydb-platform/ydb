@@ -392,6 +392,10 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             subdomain->SetDatabaseQuotas(record.GetDatabaseQuotas(), Self);
         }
 
+        if (record.HasAuditSettings()) {
+            subdomain->SetAuditSettings(record.GetAuditSettings());
+        }
+
         RegisterShard(db, subdomain, processingParams.GetCoordinators(), TTabletTypes::Coordinator);
         RegisterShard(db, subdomain, processingParams.GetMediators(), TTabletTypes::Mediator);
         RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetSchemeShard()}, TTabletTypes::SchemeShard);

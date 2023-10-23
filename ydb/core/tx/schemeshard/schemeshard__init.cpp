@@ -1524,6 +1524,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (domainInfo->GetDiskQuotaExceeded()) {
                         Self->ChangeDiskSpaceQuotaExceeded(+1);
                     }
+
+                    if (rowset.HaveValue<Schema::SubDomains::AuditSettings>()) {
+                        NKikimrSubDomains::TAuditSettings value;
+                        Y_VERIFY(ParseFromStringNoSizeLimit(value, rowset.GetValue<Schema::SubDomains::AuditSettings>()));
+                        domainInfo->SetAuditSettings(value);
+                    }
                 }
 
                 if (!rowset.Next())

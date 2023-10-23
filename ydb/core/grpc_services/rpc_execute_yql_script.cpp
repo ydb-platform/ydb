@@ -1,6 +1,7 @@
 #include "service_yql_scripting.h"
 #include "rpc_kqp_base.h"
 #include "rpc_common/rpc_common.h"
+#include "audit_dml_operations.h"
 
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
 
@@ -45,6 +46,8 @@ public:
     void Proceed(const TActorContext &ctx) {
         const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
+
+        AuditContextAppend(Request_.get(), *req);
 
         auto script = req->script();
 
@@ -102,6 +105,8 @@ public:
         } else if (kqpResponse.HasQueryPlan()) {
             queryResult->mutable_query_stats()->set_query_plan(kqpResponse.GetQueryPlan());
         }
+
+        AuditContextAppend(Request_.get(), *GetProtoRequest(), *queryResult);
 
         ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, *queryResult, ctx);
     }

@@ -708,6 +708,10 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     if (subDomainInfo->GetDiskQuotaExceeded()) {
         entry->MutableDomainState()->SetDiskQuotaExceeded(true);
     }
+
+    if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
+        entry->MutableAuditSettings()->CopyFrom(*auditSettings);
+    }
 }
 
 void TPathDescriber::DescribeDomainExtra(TPathElement::TPtr pathEl) {

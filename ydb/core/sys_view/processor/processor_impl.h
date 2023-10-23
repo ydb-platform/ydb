@@ -130,7 +130,6 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev);
 
-    void Handle(TEvents::TEvPoisonPill::TPtr& ev);
     void Handle(TEvents::TEvUndelivered::TPtr& ev);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
 
@@ -189,7 +188,6 @@ private:
     STFUNC(StateInit) {
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvSysView::TEvConfigureProcessor, Handle);
-            hFunc(TEvents::TEvPoisonPill, Handle);
             IgnoreFunc(TEvSysView::TEvIntervalQuerySummary);
             IgnoreFunc(TEvSysView::TEvGetIntervalMetricsResponse);
             IgnoreFunc(TEvSysView::TEvGetQueryMetricsRequest);
@@ -206,7 +204,6 @@ private:
 
     STFUNC(StateOffline) {
         switch(ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvPoisonPill, Handle);
             hFunc(TEvSysView::TEvConfigureProcessor, Handle);
             IgnoreFunc(TEvSysView::TEvIntervalQuerySummary);
             IgnoreFunc(TEvSysView::TEvGetIntervalMetricsResponse);
@@ -244,7 +241,6 @@ private:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
-            hFunc(TEvents::TEvPoisonPill, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
@@ -256,10 +252,6 @@ private:
                         "TSysViewProcessor StateWork unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
                 }
         }
-    }
-
-    STFUNC(StateBroken) {
-        HandleDefaultEvents(ev, SelfId());
     }
 
 private:

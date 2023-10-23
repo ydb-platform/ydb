@@ -24,4 +24,5 @@ message TBlobDepotConfig {
     optional uint64 TabletId = 4;
     optional bool HiveContacted = 5;
     optional NKikimrHive.TEvCreateTablet HiveParams = 6; // extra hive parameters
+    optional uint64 TenantHiveId = 7;
 }

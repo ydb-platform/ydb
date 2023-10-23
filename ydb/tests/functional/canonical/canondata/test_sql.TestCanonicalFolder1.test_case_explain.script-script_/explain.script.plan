@@ -95,12 +95,9 @@
                                     {
                                         "Name": "Limit",
                                         "Limit": "1"
-                                    },
-                                    {
-                                        "Name": "Aggregate"
                                     }
                                 ],
-                                "Node Type": "Aggregate-Limit-Aggregate"
+                                "Node Type": "Aggregate-Limit"
                             }
                         ],
                         "Node Type": "ResultSet",
@@ -187,12 +184,9 @@
                                     {
                                         "Name": "Limit",
                                         "Limit": "1"
-                                    },
-                                    {
-                                        "Name": "Aggregate"
                                     }
                                 ],
-                                "Node Type": "Aggregate-Limit-Aggregate"
+                                "Node Type": "Aggregate-Limit"
                             }
                         ],
                         "Node Type": "Precompute_0",
@@ -261,12 +255,9 @@
                                     {
                                         "Name": "Limit",
                                         "Limit": "1"
-                                    },
-                                    {
-                                        "Name": "Aggregate"
                                     }
                                 ],
-                                "Node Type": "Aggregate-Limit-Aggregate"
+                                "Node Type": "Aggregate-Limit"
                             }
                         ],
                         "Node Type": "ResultSet",
@@ -353,12 +344,9 @@
                                     {
                                         "Name": "Limit",
                                         "Limit": "1"
-                                    },
-                                    {
-                                        "Name": "Aggregate"
                                     }
                                 ],
-                                "Node Type": "Aggregate-Limit-Aggregate"
+                                "Node Type": "Aggregate-Limit"
                             }
                         ],
                         "Node Type": "Precompute_0",

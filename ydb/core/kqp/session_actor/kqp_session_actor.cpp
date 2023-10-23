@@ -879,13 +879,34 @@ public:
     }
 
     bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
-        if (tx && tx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
-            YQL_ENSURE(QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
-            YQL_ENSURE(tx->StagesSize() == 0);
+        if (tx) {
+            switch (tx->GetType()) {
+                case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
+                    YQL_ENSURE(tx->StagesSize() == 0);
 
-            SendToSchemeExecuter(tx);
-            ++QueryState->CurrentTx;
-            return false;
+                    if (QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
+                        ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "Scheme operations cannot be executed inside transaction");
+                        return true;
+                    }
+
+                    SendToSchemeExecuter(tx);
+                    ++QueryState->CurrentTx;
+                    return false;
+
+                case NKqpProto::TKqpPhyTx::TYPE_DATA:
+                case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
+                    if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
+                        ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "Data operations cannot be executed outside of transaction");
+                        return true;
+                    }
+
+                    break;
+
+                default:
+                    break;
+            }
         }
 
         auto& txCtx = *QueryState->TxCtx;
@@ -1479,6 +1500,12 @@ public:
             }
             LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
         }
+
+        Counters->ReportResponseStatus(Settings.DbCounters, record.ByteSize(), record.GetYdbStatus());
+        for (auto& issue : record.GetResponse().GetQueryIssues()) {
+            Counters->ReportIssues(Settings.DbCounters, CachedIssueCounters, issue);
+        }
+
         Send(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         LOG_D("Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId
             << ", proxyId: " << QueryState->Sender.ToString());
@@ -1995,6 +2022,8 @@ private:
     TActorId Owner;
     TString SessionId;
 
+    // cached lookups to issue counters
+    THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr> CachedIssueCounters;
     TInstant CreationTime;
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<TKqpRequestCounters> RequestCounters;

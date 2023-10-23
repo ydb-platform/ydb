@@ -270,4 +270,5 @@ enum ETxTypes {
     TXTYPE_GROUP_METRICS_EXCHANGE = 25 [(TxTypeOpts) = {Name: "TTxGroupMetricsExchange"}];
     TXTYPE_DECOMMIT_GROUP = 26 [(TxTypeOpts) = {Name: "TTxDecommitGroup"}];
     TXTYPE_UPDATE_GROUP = 27 [(TxTypeOpts) = {Name: "TTxUpdateGroup"}];
+    TXTYPE_DELETE_BLOB_DEPOT = 28 [(TxTypeOpts) = {Name: "TTxDeleteBlobDepot"}];
 }

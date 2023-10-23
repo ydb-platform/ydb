@@ -5,6 +5,7 @@
 #include "rpc_kqp_base.h"
 #include "rpc_common/rpc_common.h"
 #include "service_table.h"
+#include "audit_dml_operations.h"
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -46,6 +47,8 @@ private:
     void BeginTransactionImpl(const TActorContext &ctx) {
         const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
+
+        AuditContextAppend(Request_.get(), *req);
 
         TString sessionId;
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
@@ -100,6 +103,8 @@ private:
             if (kqpResponse.HasTxMeta()) {
                 beginTxResult->mutable_tx_meta()->CopyFrom(kqpResponse.GetTxMeta());
             }
+
+            AuditContextAppend(Request_.get(), *GetProtoRequest(), *beginTxResult);
 
             ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, *beginTxResult, ctx);
         } else {

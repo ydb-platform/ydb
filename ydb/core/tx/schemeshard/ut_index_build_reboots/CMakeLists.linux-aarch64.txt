@@ -40,7 +40,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_index_build_reboots PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-schemeshard-ut_index_build_reboots PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_index_build_reboots.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_index_build_reboots/ut_index_build_reboots.cpp
 )
 set_property(
   TARGET

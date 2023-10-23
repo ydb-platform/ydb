@@ -98,7 +98,7 @@ TString TIndexInfo::GetColumnName(ui32 id, bool required) const {
             return {};
         }
 
-        Y_VERIFY(ci != Columns.end());
+        Y_VERIFY_S(ci != Columns.end(), "Unknown columnId" << id);
         return ci->second.Name;
     }
 }
@@ -349,9 +349,10 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     for (const auto& col : schema.GetColumns()) {
         const ui32 id = col.GetId();
         const TString& name = col.GetName();
+        const bool notNull = col.HasNotNull() ? col.GetNotNull() : false;
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
             col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
-        Columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
+        Columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, typeInfoMod.TypeMod, notNull);
         ColumnNames[name] = id;
         std::optional<TColumnFeatures> cFeatures = TColumnFeatures::BuildFromProto(col, id);
         if (!cFeatures) {
@@ -402,7 +403,7 @@ std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSche
 
         const auto& column = it->second;
         std::string colName(column.Name.data(), column.Name.size());
-        fields.emplace_back(std::make_shared<arrow::Field>(colName, NArrow::GetArrowType(column.PType)));
+        fields.emplace_back(std::make_shared<arrow::Field>(colName, NArrow::GetArrowType(column.PType), !column.NotNull));
     }
 
     return std::make_shared<arrow::Schema>(std::move(fields));

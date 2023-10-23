@@ -30,7 +30,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_olap_reboots PUBLIC
   udf-service-exception_policy
 )
 target_sources(ydb-core-tx-schemeshard-ut_olap_reboots PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_olap_reboots.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_olap_reboots/ut_olap_reboots.cpp
 )
 set_property(
   TARGET

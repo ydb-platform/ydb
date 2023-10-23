@@ -5,6 +5,7 @@
 #include "rpc_kqp_base.h"
 #include "rpc_common/rpc_common.h"
 #include "service_table.h"
+#include "audit_dml_operations.h"
 
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -53,6 +54,8 @@ public:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request_);
         SetDatabase(ev, *Request_);
+
+        AuditContextAppend(Request_.get(), *req);
 
         if (traceId) {
             ev->Record.SetTraceId(traceId.GetRef());
@@ -103,6 +106,9 @@ public:
                 }
                 queryResult.mutable_parameters_types()->insert({queryParameter.GetName(), parameterType});
             }
+
+            AuditContextAppend(Request_.get(), *GetProtoRequest(), queryResult);
+
             ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, queryResult, ctx);
         } else {
             return OnGenericQueryResponseError(record, ctx);

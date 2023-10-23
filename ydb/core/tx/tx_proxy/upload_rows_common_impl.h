@@ -150,6 +150,7 @@ protected:
     // Additional schema info (for OLAP dst or source format)
     TVector<std::pair<TString, NScheme::TTypeInfo>> SrcColumns; // source columns in CSV could have any order
     TVector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
+    std::set<std::string> NotNullColumns;
     THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema
     THashMap<TString, NScheme::TTypeInfo> ColumnsToConvert;
     THashMap<TString, NScheme::TTypeInfo> ColumnsToConvertInplace;
@@ -209,7 +210,7 @@ protected:
     std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows,
                                                     TString& errorMessage)
     {
-        NArrow::TArrowBatchBuilder batchBuilder;
+        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
         batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
         if (!batchBuilder.Start(YdbSchema)) {
             errorMessage = "Cannot make Arrow batch from rows";
@@ -253,6 +254,7 @@ private:
     virtual bool ExtractBatch(TString& errorMessage) = 0;
     virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
     virtual void SendResult(const NActors::TActorContext& ctx, const ::Ydb::StatusIds::StatusCode& status) = 0;
+    virtual void AuditContextStart() {}
 
     virtual EUploadSource GetSourceType() const {
         return EUploadSource::ProtoValues;
@@ -433,6 +435,7 @@ private:
             bool notNull = entry.NotNullColumns.contains(ci.Name);
             if (notNull) {
                 notNullColumnsLeft.erase(ci.Name);
+                NotNullColumns.emplace(ci.Name);
             }
 
             if (ci.KeyOrder != -1) {
@@ -485,6 +488,8 @@ private:
     void ResolveTable(const TString& table, const NActors::TActorContext& ctx) {
         // TODO: check all params;
         // Cerr << *Request->GetProtoRequest() << Endl;
+
+        AuditContextStart();
 
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;

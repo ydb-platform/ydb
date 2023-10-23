@@ -26,23 +26,14 @@ namespace NSequenceProxy {
         void Bootstrap();
 
     private:
-        class TResolveActor;
         class TAllocateActor;
 
         using TSequenceInfo = NSchemeCache::TSchemeCacheNavigate::TSequenceInfo;
 
         struct TEvPrivate {
             enum EEv {
-                EvResolveResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+                EvBegin = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
                 EvAllocateResult,
-            };
-
-            struct TEvResolveResult : public TEventLocal<TEvResolveResult, EvResolveResult> {
-                Ydb::StatusIds::StatusCode Status;
-                NYql::TIssues Issues;
-                TPathId PathId;
-                TIntrusiveConstPtr<TSequenceInfo> SequenceInfo;
-                TIntrusivePtr<TSecurityObject> SecurityObject;
             };
 
             struct TEvAllocateResult : public TEventLocal<TEvAllocateResult, EvAllocateResult> {
@@ -53,6 +44,13 @@ namespace NSequenceProxy {
                 i64 Start, Increment;
                 ui64 Count;
             };
+        };
+
+    private:
+        struct TResolveResult {
+            TPathId PathId;
+            TIntrusiveConstPtr<TSequenceInfo> SequenceInfo;
+            TIntrusivePtr<TSecurityObject> SecurityObject;
         };
 
     private:
@@ -93,6 +91,7 @@ namespace NSequenceProxy {
         // When requests come using sequence name they end up here first
         struct TSequenceByName {
             TPathId PathId;
+            TList<TNextValRequestInfo> NewNextValResolve;
             TList<TNextValRequestInfo> PendingNextValResolve;
             bool ResolveInProgress = false;
         };
@@ -118,23 +117,26 @@ namespace NSequenceProxy {
             switch (ev->GetTypeRewrite()) {
                 sFunc(TEvents::TEvPoison, HandlePoison);
                 hFunc(TEvSequenceProxy::TEvNextVal, Handle);
-                hFunc(TEvPrivate::TEvResolveResult, Handle);
                 hFunc(TEvPrivate::TEvAllocateResult, Handle);
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             }
         }
 
         void HandlePoison();
         void Handle(TEvSequenceProxy::TEvNextVal::TPtr& ev);
-        void Handle(TEvPrivate::TEvResolveResult::TPtr& ev);
         void Handle(TEvPrivate::TEvAllocateResult::TPtr& ev);
+        void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
         ui64 StartResolve(const TString& database, const std::variant<TString, TPathId>& path, bool syncVersion);
         ui64 StartAllocate(ui64 tabletId, const TString& database, const TPathId& pathId, ui64 cache);
+        void MaybeStartResolve(const TString& database, const TString& path, TSequenceByName& info);
         void DoNextVal(TNextValRequestInfo&& request, const TString& database, const TString& path);
         void DoNextVal(TNextValRequestInfo&& request, const TString& database, const TPathId& pathId, bool needRefresh = true);
-        void OnResolveResult(const TString& database, const TString& path, TEvPrivate::TEvResolveResult* msg);
-        void OnResolveResult(const TString& database, const TPathId& pathId, TEvPrivate::TEvResolveResult* msg);
-        void OnResolved(const TString& database, const TPathId& pathId, TSequenceByPathId& info);
+        void OnResolveError(const TString& database, const TString& path, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues);
+        void OnResolveError(const TString& database, const TPathId& pathId, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues);
+        void OnResolveResult(const TString& database, const TString& path, TResolveResult&& result);
+        void OnResolveResult(const TString& database, const TPathId& pathId, TResolveResult&& result);
+        void OnResolved(const TString& database, const TPathId& pathId, TSequenceByPathId& info, TList<TNextValRequestInfo>& resolved);
         void OnChanged(const TString& database, const TPathId& pathId, TSequenceByPathId& info);
         bool DoMaybeReplyUnauthorized(const TNextValRequestInfo& request, const TPathId& pathId, TSequenceByPathId& info);
         bool DoReplyFromCache(const TNextValRequestInfo& request, const TPathId& pathId, TSequenceByPathId& info);

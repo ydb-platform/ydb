@@ -7,14 +7,18 @@
 
 
 
-add_executable(ydb-core-tx-schemeshard-ut_pq)
-target_include_directories(ydb-core-tx-schemeshard-ut_pq PRIVATE
+add_executable(ydb-core-tx-schemeshard-ut_auditsettings)
+target_compile_options(ydb-core-tx-schemeshard-ut_auditsettings PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(ydb-core-tx-schemeshard-ut_auditsettings PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard
 )
-target_link_libraries(ydb-core-tx-schemeshard-ut_pq PUBLIC
+target_link_libraries(ydb-core-tx-schemeshard-ut_auditsettings PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-schemeshard
   library-cpp-getopt
@@ -23,9 +27,8 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_pq PUBLIC
   core-testlib-default
   ydb-core-tx
   tx-schemeshard-ut_helpers
-  udf-service-exception_policy
 )
-target_link_options(ydb-core-tx-schemeshard-ut_pq PRIVATE
+target_link_options(ydb-core-tx-schemeshard-ut_auditsettings PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -35,21 +38,21 @@ target_link_options(ydb-core-tx-schemeshard-ut_pq PRIVATE
   -lrt
   -ldl
 )
-target_sources(ydb-core-tx-schemeshard-ut_pq PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_pq.cpp
+target_sources(ydb-core-tx-schemeshard-ut_auditsettings PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_auditsettings/ut_auditsettings.cpp
 )
 set_property(
   TARGET
-  ydb-core-tx-schemeshard-ut_pq
+  ydb-core-tx-schemeshard-ut_auditsettings
   PROPERTY
   SPLIT_FACTOR
   10
 )
 add_yunittest(
   NAME
-  ydb-core-tx-schemeshard-ut_pq
+  ydb-core-tx-schemeshard-ut_auditsettings
   TEST_TARGET
-  ydb-core-tx-schemeshard-ut_pq
+  ydb-core-tx-schemeshard-ut_auditsettings
   TEST_ARG
   --print-before-suite
   --print-before-test
@@ -59,26 +62,27 @@ add_yunittest(
 )
 set_yunittest_property(
   TEST
-  ydb-core-tx-schemeshard-ut_pq
+  ydb-core-tx-schemeshard-ut_auditsettings
   PROPERTY
   LABELS
   MEDIUM
 )
 set_yunittest_property(
   TEST
-  ydb-core-tx-schemeshard-ut_pq
+  ydb-core-tx-schemeshard-ut_auditsettings
   PROPERTY
   PROCESSORS
   1
 )
 set_yunittest_property(
   TEST
-  ydb-core-tx-schemeshard-ut_pq
+  ydb-core-tx-schemeshard-ut_auditsettings
   PROPERTY
   TIMEOUT
-  600
+  60
 )
-target_allocator(ydb-core-tx-schemeshard-ut_pq
-  cpp-malloc-jemalloc
+target_allocator(ydb-core-tx-schemeshard-ut_auditsettings
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
-vcs_info(ydb-core-tx-schemeshard-ut_pq)
+vcs_info(ydb-core-tx-schemeshard-ut_auditsettings)

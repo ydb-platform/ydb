@@ -169,6 +169,12 @@ bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TSqlEx
             return false;
         }
         settings.RetentionPeriod = exprNode;
+    } else if (to_lower(id.Name) == "topic_min_active_partitions") {
+        if (!exprNode->IsIntegerLiteral()) {
+            ctx.Context().Error() << "Literal of integer type is expected for " << id.Name;
+            return false;
+        }
+        settings.TopicPartitions = exprNode;
     } else if (to_lower(id.Name) == "aws_region") {
         if (!exprNode->IsLiteral() || exprNode->GetLiteralType() != "String") {
             ctx.Context().Error() << "Literal of String type is expected for " << id.Name;

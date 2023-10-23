@@ -784,23 +784,24 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 icCommon->AcceptUUID.emplace_back(item);
             }
 
-            if (!nsConfig.GetSuppressVersionCheck()) {
+            if (!nsConfig.GetSuppressVersionCheck() && !Config.GetFeatureFlags().GetSuppressCompatibilityCheck()) {
                 icCommon->VersionInfo = VERSION;
                 CheckVersionTag();
 
                 icCommon->CompatibilityInfo = TString();
-                Y_VERIFY(TCompatibilityInfo::MakeStored(NKikimrConfig::TCompatibilityRule::Interconnect).SerializeToString(&*icCommon->CompatibilityInfo));
+                bool success = CompatibilityInfo.MakeStored(NKikimrConfig::TCompatibilityRule::Interconnect).SerializeToString(&*icCommon->CompatibilityInfo);
+                Y_VERIFY(success);
                 icCommon->ValidateCompatibilityInfo = [&](const TString& peer, TString& errorReason) {
                     NKikimrConfig::TStoredCompatibilityInfo peerPB;
                     if (!peerPB.ParseFromString(peer)) {
                         errorReason = "Cannot parse given CompatibilityInfo";
                         return false;
                     }
-                    return TCompatibilityInfo::CheckCompatibility(&peerPB, (ui32)NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
+                    return CompatibilityInfo.CheckCompatibility(&peerPB, NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
                 };
 
                 icCommon->ValidateCompatibilityOldFormat = [&](const NActors::TInterconnectProxyCommon::TVersionInfo& peer, TString& errorReason) {
-                    return TCompatibilityInfo::CheckCompatibility(peer, (ui32)NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
+                    return CompatibilityInfo.CheckCompatibility(peer, NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
                 };
             }
 
@@ -2274,7 +2275,16 @@ TLongTxServiceInitializer::TLongTxServiceInitializer(const TKikimrRunConfig &run
 void TLongTxServiceInitializer::InitializeServices(TActorSystemSetup *setup,
                                                    const TAppData *appData)
 {
-    auto* actor = NLongTxService::CreateLongTxService();
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> longTxGroup = tabletGroup->GetSubgroup("type", "LONG_TX");
+
+    auto counters = MakeIntrusive<NLongTxService::TLongTxServiceCounters>(longTxGroup);
+
+    NLongTxService::TLongTxServiceSettings settings{
+        .Counters = counters,
+    };
+
+    auto* actor = NLongTxService::CreateLongTxService(settings);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NLongTxService::MakeLongTxServiceID(NodeId),
             TActorSetupCmd(actor, TMailboxType::ReadAsFilled, appData->UserPoolId)));

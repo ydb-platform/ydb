@@ -1,5 +1,6 @@
 RECURSE_FOR_TESTS(
     ut_async_index
+    ut_auditsettings
     ut_backup
     ut_base
     ut_base_reboots
@@ -24,7 +25,6 @@ RECURSE_FOR_TESTS(
     ut_move_reboots
     ut_olap
     ut_olap_reboots
-    ut_pq
     ut_pq_reboots
     ut_reboots
     ut_replication

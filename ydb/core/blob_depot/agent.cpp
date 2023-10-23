@@ -220,17 +220,10 @@ namespace NKikimr::NBlobDepot {
         if (!ReadyForAgentQueries()) {
             return;
         }
-
         for (auto& [pipeServerId, info] : PipeServers) {
-            if (info.ProcessThroughQueue) {
-                if (info.PostponeQ.empty()) {
-                    info.ProcessThroughQueue = false;
-                } else {
-                    for (auto& ev : std::exchange(info.PostponeQ, {})) {
-                        TActivationContext::Send(ev.release());
-                    }
-                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvProcessRegisterAgentQ, 0, SelfId(), {}, nullptr, 0));
-                }
+            for (auto& ev : std::exchange(info.PostponeQ, {})) {
+                TActivationContext::Send(ev.release());
+                ++info.InFlightDeliveries;
             }
         }
     }

@@ -274,6 +274,9 @@ public:
     virtual const TString& GetRequestName() const = 0;
     virtual void SetDiskQuotaExceeded(bool disk) = 0;
     virtual bool GetDiskQuotaExceeded() const = 0;
+
+    virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
+    virtual const TAuditLogParts& GetAuditLogParts() const = 0;
 };
 
 class TRespHookCtx : public TThrRefBase {
@@ -323,6 +326,11 @@ enum class TRateLimiterMode : ui8 {
 #define RLSWITCH(mode) \
     IsRlAllowed() ? mode : TRateLimiterMode::Off
 
+enum class TAuditMode : bool {
+    Off = false,
+    Auditable = true,
+};
+
 class ICheckerIface;
 
 // The way to pass some common data to request processing
@@ -336,6 +344,7 @@ public:
 struct TRequestAuxSettings {
     TRateLimiterMode RlMode = TRateLimiterMode::Off;
     void (*CustomAttributeProcessor)(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
+    TAuditMode AuditMode = TAuditMode::Off;
 };
 
 // grpc_request_proxy part
@@ -374,6 +383,12 @@ public:
 
     // Pass request for next processing
     virtual void Pass(const IFacilityProvider& facility) = 0;
+
+    // audit
+    virtual bool IsAuditable() const {
+        return false;
+    }
+    virtual void SetAuditLogHook(TAuditLogHook&& hook) = 0;
 };
 
 // Request context
@@ -392,11 +407,14 @@ public:
     virtual void SetCostInfo(float consumed_units) = 0;
 
     virtual void SetStreamingNotify(NGrpc::IRequestContextBase::TOnNextReply&& cb) = 0;
-    virtual void FinishStream() = 0;
+    virtual void FinishStream(ui32 status) = 0;
 
     virtual void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) = 0;
 
     virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0) = 0;
+
+protected:
+    virtual void FinishRequest() = 0;
 };
 
 class IRequestOpCtx : public IRequestCtx {
@@ -603,6 +621,19 @@ public:
 
     void Pass(const IFacilityProvider&) override {
         Y_FAIL("unimplemented");
+    }
+
+    void SetAuditLogHook(TAuditLogHook&&) override {
+        Y_FAIL("unimplemented for TRefreshTokenImpl");
+    }
+
+    // IRequestCtxBase
+    //
+    void AddAuditLogPart(const TStringBuf&, const TString&) override {
+        Y_FAIL("unimplemented for TRefreshTokenImpl");
+    }
+    const TAuditLogParts& GetAuditLogParts() const override {
+        Y_FAIL("unimplemented for TRefreshTokenImpl");
     }
 
 private:
@@ -830,6 +861,19 @@ public:
         Y_FAIL("unimplemented");
     }
 
+    void SetAuditLogHook(TAuditLogHook&&) override {
+        Y_FAIL("unimplemented for TGRpcRequestBiStreamWrapper");
+    }
+
+    // IRequestCtxBase
+    //
+    void AddAuditLogPart(const TStringBuf&, const TString&) override {
+        Y_FAIL("unimplemented for TGRpcRequestBiStreamWrapper");
+    }
+    const TAuditLogParts& GetAuditLogParts() const override {
+        Y_FAIL("unimplemented for TGRpcRequestBiStreamWrapper");
+    }
+
 private:
     TIntrusivePtr<IStreamCtx> Ctx_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
@@ -843,17 +887,23 @@ private:
 template <typename TDerived>
 class TGrpcResponseSenderImpl : public IRequestOpCtx {
 public:
+    // IRequestOpCtx
+    //
     void SendOperation(const Ydb::Operations::Operation& operation) override {
         auto self = Derived();
+        if (operation.ready()) {
+            self->FinishRequest();
+        }
         auto resp = self->CreateResponseMessage();
         resp->mutable_operation()->CopyFrom(operation);
-        self->Ctx_->Reply(resp, operation.status());
+        self->Reply(resp, operation.status());
     }
 
     void SendResult(Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) override
     {
         auto self = Derived();
+        self->FinishRequest();
         auto resp = self->CreateResponseMessage();
         auto deferred = resp->mutable_operation();
         deferred->set_ready(true);
@@ -870,6 +920,7 @@ public:
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) override
     {
         auto self = Derived();
+        self->FinishRequest();
         auto resp = self->CreateResponseMessage();
         auto deferred = resp->mutable_operation();
         deferred->set_ready(true);
@@ -885,6 +936,7 @@ public:
 
     void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override {
         auto self = Derived();
+        self->FinishRequest();
         auto resp = self->CreateResponseMessage();
         auto deferred = resp->mutable_operation();
         deferred->set_ready(true);
@@ -1047,12 +1099,14 @@ public:
     void ReplyUnavaliable() override {
         TResponse* resp = CreateResponseMessage();
         TCommonResponseFiller<TResp, TDerived::IsOp>::Fill(*resp, IssueManager.GetIssues(), CostInfo, Ydb::StatusIds::UNAVAILABLE);
+        FinishRequest();
         Reply(resp, Ydb::StatusIds::UNAVAILABLE);
     }
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         TResponse* resp = CreateResponseMessage();
         TCommonResponseFiller<TResponse, TDerived::IsOp>::Fill(*resp, IssueManager.GetIssues(), CostInfo, status);
+        FinishRequest();
         Reply(resp, status);
     }
 
@@ -1155,7 +1209,9 @@ public:
         return Ctx_->IsClientLost();
     }
 
-    void FinishStream() override {
+    void FinishStream(ui32 status) override {
+        // End Of Request for streaming requests
+        AuditLogRequestEnd(status);
         Ctx_->FinishStreamingOk();
     }
 
@@ -1191,17 +1247,49 @@ public:
         Y_FAIL("unimplemented");
     }
 
+    void SetAuditLogHook(TAuditLogHook&& hook) override {
+        AuditLogHook = std::move(hook);
+    }
+
+    // IRequestCtx
+    //
+    void FinishRequest() override {
+        RequestFinished = true;
+    }
+
+    // IRequestCtxBase
+    //
+    void AddAuditLogPart(const TStringBuf& name, const TString& value) override {
+        AuditLogParts.emplace_back(name, value);
+    }
+    const TAuditLogParts& GetAuditLogParts() const override {
+        return AuditLogParts;
+    }
+
     void ReplyGrpcError(grpc::StatusCode code, const TString& msg, const TString& details = "") {
         Ctx_->ReplyError(code, msg, details);
     }
 
 private:
     void Reply(NProtoBuf::Message *resp, ui32 status) override {
+        // End Of Request for non streaming requests
+        if (RequestFinished) {
+            AuditLogRequestEnd(status);
+        }
         if (RespHook) {
             TRespHook hook = std::move(RespHook);
             return hook(MakeIntrusive<TRespHookCtx>(Ctx_, resp, GetRequestName(), Ru, status));
         }
         return Ctx_->Reply(resp, status);
+    }
+
+    void AuditLogRequestEnd(ui32 status) {
+        if (AuditLogHook) {
+            AuditLogHook(status, GetAuditLogParts());
+            // Drop hook to avoid double logging in case when operation implemention
+            // invokes both FinishRequest() (indirectly) and FinishStream()
+            AuditLogHook = nullptr;
+        }
     }
 
     TResponse* CreateResponseMessage() {
@@ -1229,6 +1317,10 @@ private:
     TMaybe<NRpcService::TRlPath> RlPath;
     IGRpcProxyCounters::TPtr Counters;
     std::function<TFinishWrapper(std::function<void()>&&)> FinishWrapper = &GetStdFinishWrapper;
+
+    TAuditLogParts AuditLogParts;
+    TAuditLogHook AuditLogHook;
+    bool RequestFinished = false;
 };
 
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>
@@ -1306,6 +1398,12 @@ public:
             AuxSettings.CustomAttributeProcessor(schemeData, iface);
             return true;
         }
+    }
+
+    // IRequestCtxBaseMtSafe
+    //
+    bool IsAuditable() const override {
+        return (AuxSettings.AuditMode == TAuditMode::Auditable) && !this->IsInternalCall();
     }
 
 private:

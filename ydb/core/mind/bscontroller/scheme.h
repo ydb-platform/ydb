@@ -102,12 +102,13 @@ struct Schema : NIceDb::Schema {
         struct GroupLayoutSanitizer : Column<18, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct NextVirtualGroupId : Column<19, Group::ID::ColumnType> { static constexpr Type Default = 0; };
         struct AllowMultipleRealmsOccupation : Column<20, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
+        struct CompatibilityInfo : Column<21, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
               InstanceId, SelfHealEnable, DonorModeEnable, ScrubPeriodicity, SerialManagementStage, NextStoragePoolId,
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
-              GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation>;
+              GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo>;
     };
 
     struct VSlot : Table<5> {
@@ -408,35 +409,45 @@ struct Schema : NIceDb::Schema {
 
     // struct VirtualGroupPool : Table<130> {};
 
+    struct BlobDepotDeleteQueue : Table<131> {
+        struct GroupId : Column<1, NScheme::NTypeIds::Uint32> {}; // PK
+        struct HiveId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct BlobDepotId : Column<3, NScheme::NTypeIds::Uint64> {}; // may be null if creation wasn't confirmed
+
+        using TKey = TableKey<GroupId>;
+        using TColumns = TableColumns<GroupId, HiveId, BlobDepotId>;
+    };
+
     using TTables = SchemaTables<
-                                Node,
-                                PDisk,
-                                Group,
-                                State,
-                                VSlot,
-                                VDiskMetrics,
-                                PDiskMetrics,
-                                GroupLatencies,
-                                Box,
-                                BoxUser,
-                                HostConfig,
-                                HostConfigDrive,
-                                BoxHostV2,
-                                BoxStoragePool,
-                                BoxStoragePoolUser,
-                                BoxStoragePoolPDiskFilter,
-                                GroupStoragePool,
-                                OperationLog,
-                                MigrationPlan,
-                                MigrationEntry,
-                                ScrubState,
-                                DriveSerial
-                                >;
+        Node,
+        PDisk,
+        Group,
+        State,
+        VSlot,
+        VDiskMetrics,
+        PDiskMetrics,
+        GroupLatencies,
+        Box,
+        BoxUser,
+        HostConfig,
+        HostConfigDrive,
+        BoxHostV2,
+        BoxStoragePool,
+        BoxStoragePoolUser,
+        BoxStoragePoolPDiskFilter,
+        GroupStoragePool,
+        OperationLog,
+        MigrationPlan,
+        MigrationEntry,
+        ScrubState,
+        DriveSerial,
+        BlobDepotDeleteQueue
+    >;
 
     using TSettings = SchemaSettings<
-                                    ExecutorLogBatching<true>,
-                                    ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>
-                                    >;
+        ExecutorLogBatching<true>,
+        ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>
+    >;
 };
 
 } // NBsController

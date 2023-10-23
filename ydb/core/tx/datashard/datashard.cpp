@@ -861,6 +861,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
         }
     }
 
+    UpdateChangeDeliveryLag(AppData()->TimeProvider->Now());
     ChangesQueue.erase(it);
 
     IncCounter(COUNTER_CHANGE_RECORDS_REMOVED);
@@ -884,11 +885,19 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
         << ": at tablet: " << TabletID()
         << ", records: " << JoinSeq(", ", records));
 
+    const auto now = AppData()->TimeProvider->Now();
     TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> forward(Reserve(records.size()));
     for (const auto& record : records) {
         forward.emplace_back(record.Order, record.PathId, record.BodySize);
 
-        if (auto res = ChangesQueue.emplace(record.Order, record); res.second) {
+        auto res = ChangesQueue.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(record.Order),
+            std::forward_as_tuple(record, now)
+        );
+        if (res.second) {
+            ChangesList.PushBack(&res.first->second);
+
             Y_VERIFY(ChangesQueueBytes <= (Max<ui64>() - record.BodySize));
             ChangesQueueBytes += record.BodySize;
 
@@ -899,11 +908,20 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
         }
     }
 
+    UpdateChangeDeliveryLag(now);
     IncCounter(COUNTER_CHANGE_RECORDS_ENQUEUED, forward.size());
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
 
     Y_VERIFY(OutChangeSender);
     Send(OutChangeSender, new TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
+}
+
+void TDataShard::UpdateChangeDeliveryLag(TInstant now) {
+    if (!ChangesList.Empty()) {
+        SetCounter(COUNTER_CHANGE_DELIVERY_LAG, (now - ChangesList.Front()->EnqueuedAt).MilliSeconds());
+    } else {
+        SetCounter(COUNTER_CHANGE_DELIVERY_LAG, 0);
+    }
 }
 
 void TDataShard::CreateChangeSender(const TActorContext& ctx) {
@@ -2171,6 +2189,10 @@ void TDataShard::SendWithConfirmedReadOnlyLease(
     SendWithConfirmedReadOnlyLease(TMonotonic::Zero(), target, event, cookie, sessionId);
 }
 
+void TDataShard::Handle(TEvPrivate::TEvConfirmReadonlyLease::TPtr& ev, const TActorContext&) {
+    SendWithConfirmedReadOnlyLease(ev->Get()->Timestamp, ev->Sender, new TEvPrivate::TEvReadonlyLeaseConfirmation, ev->Cookie);
+}
+
 void TDataShard::SendImmediateReadResult(
     TMonotonic readTime,
     const TActorId& target,
@@ -3127,6 +3149,7 @@ void TDataShard::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr &ev, co
 
 void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     UpdateLagCounters(ctx);
+    UpdateChangeDeliveryLag(ctx.Now());
     UpdateTableStats(ctx);
     SendPeriodicTableStats(ctx);
     CollectCpuUsage(ctx);

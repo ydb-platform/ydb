@@ -221,13 +221,15 @@ namespace NKikimr {
                                     const TVDiskIdShort &selfVDisk,
                                     std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                                     const TString &entryPoint,
-                                    TString& errorReason);
+                                    TString& errorReason,
+                                    bool suppressCompatibilityCheck);
         static bool CheckEntryPoint(const TString &logPrefix,
                                     const TActorId &notifyId,
                                     const TVDiskIdShort &selfVDisk,
                                     std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                                     const TContiguousSpan &entryPoint,
-                                    TString& errorReason);
+                                    TString& errorReason,
+                                    bool suppressCompatibilityCheck);
 
         // Convert from old entry point format to protobuf format
         // TODO: we can remove this function after migrating to the protobuf format

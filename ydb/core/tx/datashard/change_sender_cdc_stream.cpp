@@ -36,6 +36,14 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
 
     /// Init
 
+    void Init() {
+        auto opts = TPartitionWriterOpts()
+            .WithCheckState(true)
+            .WithAutoRegister(true);
+        Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), {}, ShardId, PartitionId, {}, SourceId, opts));
+        Become(&TThis::StateInit);
+    }
+
     STATEFN(StateInit) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPartitionWriter::TEvInitResult, Handle);
@@ -236,7 +244,13 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
 
     void Disconnected() {
         LOG_D("Disconnected");
-        Leave();
+
+        if (CurrentStateFunc() != static_cast<TReceiveFunc>(&TThis::StateInit)) {
+            return Leave();
+        }
+
+        CloseWriter();
+        Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup());
     }
 
     void Lost() {
@@ -249,11 +263,14 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         PassAway();
     }
 
-    void PassAway() override {
-        if (Writer) {
-            Send(Writer, new TEvents::TEvPoisonPill());
+    void CloseWriter() {
+        if (const auto& writer = std::exchange(Writer, {})) {
+            Send(writer, new TEvents::TEvPoisonPill());
         }
+    }
 
+    void PassAway() override {
+        CloseWriter();
         TActorBootstrapped::PassAway();
     }
 
@@ -278,17 +295,14 @@ public:
     }
 
     void Bootstrap() {
-        auto opts = TPartitionWriterOpts()
-            .WithCheckState(true)
-            .WithAutoRegister(true);
-        Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), {}, ShardId, PartitionId, {}, SourceId, opts));
-        Become(&TThis::StateInit);
+        Init();
     }
 
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvPartitionWriter::TEvDisconnected, Disconnected);
             hFunc(NMon::TEvRemoteHttpInfo, Handle);
+            sFunc(TEvents::TEvWakeup, Init);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -654,7 +668,11 @@ class TCdcChangeSenderMain
             Y_VERIFY(!prev->KeyRange.ToBound.Defined());
         }
 
-        CreateSenders(MakePartitionIds(KeyDesc->Partitions));
+        const auto topicVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
+        const bool versionChanged = !TopicVersion || TopicVersion != topicVersion;
+        TopicVersion = topicVersion;
+
+        CreateSenders(MakePartitionIds(KeyDesc->Partitions), versionChanged);
         Become(&TThis::StateMain);
     }
 
@@ -773,6 +791,7 @@ public:
     explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId)
         : TActorBootstrapped()
         , TBaseChangeSender(this, this, dataShard, streamPathId)
+        , TopicVersion(0)
     {
     }
 
@@ -807,6 +826,7 @@ private:
 
     TUserTable::TCdcStream Stream;
     TPathId TopicPathId;
+    ui64 TopicVersion;
     THolder<TKeyDesc> KeyDesc;
     THashMap<ui32, ui64> PartitionToShard;
 

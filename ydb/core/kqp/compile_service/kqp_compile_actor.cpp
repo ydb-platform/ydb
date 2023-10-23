@@ -332,6 +332,7 @@ private:
                     kqpResult.PreparingQuery.release(), AppData()->FunctionRegistry);
                 preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
                 KqpCompileResult->PreparedQuery = preparedQueryHolder;
+                KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery());
             }
 
             auto now = TInstant::Now();

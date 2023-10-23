@@ -30,15 +30,12 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort-Aggregate",
+                                                "Node Type": "TopSort",
                                                 "Operators": [
                                                     {
                                                         "Limit": "10",
                                                         "Name": "TopSort",
                                                         "TopSortBy": "argument.Count0"
-                                                    },
-                                                    {
-                                                        "Name": "Aggregate"
                                                     }
                                                 ],
                                                 "PlanNodeId": 9,
@@ -264,14 +261,11 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Aggregate-Aggregate",
+                                                                                "Node Type": "Aggregate",
                                                                                 "Operators": [
                                                                                     {
                                                                                         "Aggregation": "{_yql_agg_3: Inc(state._yql_agg_3)}",
                                                                                         "GroupBy": "item.SearchPhrase",
-                                                                                        "Name": "Aggregate"
-                                                                                    },
-                                                                                    {
                                                                                         "Name": "Aggregate"
                                                                                     }
                                                                                 ],

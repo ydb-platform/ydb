@@ -37,6 +37,7 @@ public:
             auto groupLatencies = db.Table<Schema::GroupLatencies>().Select();
             auto scrubState = db.Table<Schema::ScrubState>().Select();
             auto pdiskSerial = db.Table<Schema::DriveSerial>().Select();
+            auto blobDepotDeleteQueue = db.Table<Schema::BlobDepotDeleteQueue>().Select();
             if (!state.IsReady()
                     || !nodes.IsReady()
                     || !disk.IsReady()
@@ -55,7 +56,8 @@ public:
                     || !groupStoragePool.IsReady()
                     || !groupLatencies.IsReady()
                     || !scrubState.IsReady()
-                    || !pdiskSerial.IsReady()) {
+                    || !pdiskSerial.IsReady()
+                    || !blobDepotDeleteQueue.IsReady()) {
                 return false;
             }
         }
@@ -237,7 +239,8 @@ public:
         if (!NTableAdapter::FetchTable<Schema::HostConfig>(db, Self, Self->HostConfigs)
                 || !NTableAdapter::FetchTable<Schema::Box>(db, Self, Self->Boxes)
                 || !NTableAdapter::FetchTable<Schema::BoxStoragePool>(db, Self, Self->StoragePools)
-                || !NTableAdapter::FetchTable<Schema::DriveSerial>(db, Self, Self->DrivesSerials)) {
+                || !NTableAdapter::FetchTable<Schema::DriveSerial>(db, Self, Self->DrivesSerials)
+                || !NTableAdapter::FetchTable<Schema::BlobDepotDeleteQueue>(db, Self, Self->BlobDepotDeleteQueue)) {
             return false;
         }
         for (const auto& [storagePoolId, storagePool] : Self->StoragePools) {
@@ -472,6 +475,7 @@ public:
         }
 
         // scrub state
+        Self->ScrubState.Clear();
         {
             using Table = Schema::ScrubState;
             auto scrubState = db.Table<Table>().Select();

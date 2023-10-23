@@ -24,6 +24,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   library-cpp-cgiparam
   cpp-digest-old_crc
   ydb-core-actorlib_impl
+  ydb-core-audit
   ydb-core-base
   ydb-core-control
   ydb-core-discovery
@@ -67,6 +68,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
 )
 target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/audit_log.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/audit_dml_operations.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/grpc_endpoint_publish_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/grpc_helper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/grpc_mon.cpp

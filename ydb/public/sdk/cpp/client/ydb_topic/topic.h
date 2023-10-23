@@ -168,6 +168,8 @@ public:
 
     const TString& GetOwner() const;
 
+    const NScheme::TVirtualTimestamp& GetCreationTimestamp() const;
+
     const TVector<NScheme::TPermissions>& GetPermissions() const;
 
     const TVector<NScheme::TPermissions>& GetEffectivePermissions() const;
@@ -201,7 +203,6 @@ private:
 
     const Ydb::Topic::DescribeTopicResult& GetProto() const;
 
-
     const Ydb::Topic::DescribeTopicResult Proto_;
     TVector<TPartitionInfo> Partitions_;
     TVector<ECodec> SupportedCodecs_;
@@ -216,6 +217,7 @@ private:
     TTopicStats TopicStats_;
 
     TString Owner_;
+    NScheme::TVirtualTimestamp CreationTimestamp_;
     TVector<NScheme::TPermissions> Permissions_;
     TVector<NScheme::TPermissions> EffectivePermissions_;
 };

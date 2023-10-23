@@ -352,7 +352,8 @@ namespace NKikimr {
 
                     // create slots for the new group
                     auto newSlots = CreateVSlotsForGroup(groupInfo, group, preservedSlots);
-                    groupInfo->ContentChanged = true;
+                    State.GroupContentChanged.insert(groupId);
+                    State.GroupFailureModelChanged.insert(groupId);
 
                     if (replacedSlots) {
                         if (!IgnoreGroupFailModelChecks) {

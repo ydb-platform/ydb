@@ -131,6 +131,7 @@ struct TGrpcStatus {
     TString Details;
     int GRpcStatusCode;
     bool InternalError;
+    std::multimap<TString, TString> ServerTrailingMetadata;
 
     TGrpcStatus()
         : GRpcStatusCode(grpc::StatusCode::OK)
@@ -800,6 +801,11 @@ private:
         } else if (readCallback) {
             if (status.Ok()) {
                 status = TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
+                for (const auto& [name, value] : Context.GetServerTrailingMetadata()) {
+                    status.ServerTrailingMetadata.emplace(
+                        TString(name.begin(), name.end()),
+                        TString(value.begin(), value.end()));
+                }
             }
             readCallback(std::move(status));
         } else if (finishCallback) {
@@ -1196,6 +1202,11 @@ private:
         } else if (readCallback) {
             if (status.Ok()) {
                 status = TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
+                for (const auto& [name, value] : Context.GetServerTrailingMetadata()) {
+                    status.ServerTrailingMetadata.emplace(
+                        TString(name.begin(), name.end()),
+                        TString(value.begin(), value.end()));
+                }
             }
             readCallback(std::move(status));
         } else if (finishCallback) {

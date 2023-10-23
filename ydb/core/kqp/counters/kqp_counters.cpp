@@ -383,13 +383,16 @@ TString TKqpCountersBase::GetIssueName(ui32 issueCode) {
     return TStringBuilder() << "CODE:" << ToString(issueCode);
 }
 
-void TKqpCountersBase::ReportIssues(const Ydb::Issue::IssueMessage& issue) {
-    auto issueCounter = IssueCounters.FindPtr(issue.issue_code());
+void TKqpCountersBase::ReportIssues(
+    THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr>& issueCounters,
+    const Ydb::Issue::IssueMessage& issue)
+{
+    auto issueCounter = issueCounters.FindPtr(issue.issue_code());
     if (!issueCounter) {
         auto counterName = TStringBuilder() << "Issues/" << GetIssueName(issue.issue_code());
         auto counter = KqpGroup->GetCounter(counterName , true);
 
-        auto result = IssueCounters.emplace(issue.issue_code(), counter);
+        auto result = issueCounters.emplace(issue.issue_code(), counter);
         issueCounter = &result.first->second;
     }
 
@@ -400,7 +403,7 @@ void TKqpCountersBase::ReportIssues(const Ydb::Issue::IssueMessage& issue) {
     }
 
     for (auto& childIssue : issue.issues()) {
-        ReportIssues(childIssue);
+        ReportIssues(issueCounters, childIssue);
     }
 }
 
@@ -970,10 +973,13 @@ void TKqpCounters::ReportResultsBytes(TKqpDbCountersPtr dbCounters, ui64 results
     }
 }
 
-void TKqpCounters::ReportIssues(TKqpDbCountersPtr dbCounters, const Ydb::Issue::IssueMessage& issue) {
-    TKqpCountersBase::ReportIssues(issue);
+void TKqpCounters::ReportIssues(TKqpDbCountersPtr dbCounters,
+    THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr>& issueCounters,
+    const Ydb::Issue::IssueMessage& issue)
+{
+    TKqpCountersBase::ReportIssues(issueCounters, issue);
     if (dbCounters) {
-        dbCounters->ReportIssues(issue);
+        dbCounters->ReportIssues(issueCounters, issue);
     }
 }
 

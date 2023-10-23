@@ -734,6 +734,7 @@ struct Schema : NIceDb::Schema {
         struct TableCdcStreamsLimit : Column<27, NScheme::NTypeIds::Uint64> {};
         struct ExportsLimit : Column<28, NScheme::NTypeIds::Uint64> {};
         struct ImportsLimit : Column<29, NScheme::NTypeIds::Uint64> {};
+        struct AuditSettings : Column<30, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -765,7 +766,8 @@ struct Schema : NIceDb::Schema {
             SecurityStateVersion,
             TableCdcStreamsLimit,
             ExportsLimit,
-            ImportsLimit
+            ImportsLimit,
+            AuditSettings
         >;
     };
 
@@ -787,6 +789,7 @@ struct Schema : NIceDb::Schema {
         struct SharedHiveId : Column<7, NScheme::NTypeIds::Uint64> { using Type = TTabletId; static constexpr Type Default = InvalidTabletId; };
         struct DeclaredSchemeQuotas : Column<8, NScheme::NTypeIds::String> {};
         struct DatabaseQuotas : Column<9, NScheme::NTypeIds::String> {};
+        struct AuditSettings : Column<10, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -798,7 +801,8 @@ struct Schema : NIceDb::Schema {
             ResourcesDomainLocalPathId,
             SharedHiveId,
             DeclaredSchemeQuotas,
-            DatabaseQuotas
+            DatabaseQuotas,
+            AuditSettings
         >;
     };
 

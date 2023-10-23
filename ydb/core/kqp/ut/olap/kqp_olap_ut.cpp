@@ -29,6 +29,7 @@
 
 #include <fmt/format.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
+#include <ydb/core/formats/arrow/serializer/full.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -265,7 +266,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
 
         TDistribution GetDistribution(const bool verbose = false) {
-            const TString selectQuery = "PRAGMA Kikimr.OptUseFinalizeByKey='true';SELECT COUNT(*) as c, field FROM `" + TablePath + "` GROUP BY field ORDER BY field";
+            const TString selectQuery = "SELECT COUNT(*) as c, field FROM `" + TablePath + "` GROUP BY field ORDER BY field";
 
             auto tableClient = KikimrRunner.GetTableClient();
             auto rows = ExecuteScanQuery(tableClient, selectQuery, verbose);
@@ -513,7 +514,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto txId = resBeginTx.GetResult().tx_id();
         auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
-        TString data = NArrow::SerializeBatchNoCompression(batch);
+
+        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
 
         NLongTx::TLongTxWriteResult resWrite =
                 client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
@@ -534,7 +536,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto txId = resBeginTx.GetResult().tx_id();
         auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
-        TString data = NArrow::SerializeBatchNoCompression(batch);
+        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
 
         NLongTx::TLongTxWriteResult resWrite =
                 client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
@@ -554,7 +556,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto txId = resBeginTx.GetResult().tx_id();
         auto batch = lHelper.TestArrowBatch();
-        TString data = NArrow::SerializeBatchNoCompression(batch);
+        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
 
         NLongTx::TLongTxWriteResult resWrite =
                 client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
@@ -1881,7 +1883,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             TString query = R"(
                 --!syntax_v1
-                PRAGMA Kikimr.OptUseFinalizeByKey;
                 SELECT
                     level, COUNT(level)
                 FROM `/Root/olapStore/olapTable`
@@ -2119,7 +2120,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             if (!Pushdown) {
                 queryFixed << "PRAGMA Kikimr.OptEnableOlapPushdown = \"false\";" << Endl;
             }
-            queryFixed << "PRAGMA Kikimr.OptUseFinalizeByKey;" << Endl;
 
             queryFixed << Query << Endl;
             Cerr << "REQUEST:\n" << queryFixed << Endl;

@@ -44,13 +44,18 @@ struct TContext {
     bool Authenticated() { return AuthenticationStep == SUCCESS; }
 };
 
-template<class T>
+template<std::derived_from<TApiMessage> T>
 class TMessagePtr {
 public:
     TMessagePtr(const std::shared_ptr<TBuffer>& buffer, const std::shared_ptr<TApiMessage>& message)
         : Buffer(buffer)
         , Message(message)
         , Ptr(dynamic_cast<T*>(message.get())) {
+    }
+
+    template<std::derived_from<TApiMessage> O>
+    TMessagePtr<O> Cast() {
+        return TMessagePtr<O>(Buffer, Message);
     }
 
     T* operator->() const {

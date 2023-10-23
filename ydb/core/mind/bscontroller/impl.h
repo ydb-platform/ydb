@@ -560,8 +560,6 @@ public:
         TGroupLatencyStats LatencyStats;
         TBoxStoragePoolId StoragePoolId;
         mutable TStorageStatusFlags StatusFlags;
-        bool ContentChanged = false;
-        bool MoodChanged = false;
 
         TActorId VirtualGroupSetupMachineId;
 
@@ -1371,6 +1369,33 @@ public:
         void OnClone(const THolder<TDriveSerialInfo>&) {}
     };
 
+    struct TBlobDepotDeleteQueueInfo {
+        using Table = Schema::BlobDepotDeleteQueue;
+
+        TMaybe<Table::HiveId::Type> HiveId;
+        TMaybe<Table::BlobDepotId::Type> BlobDepotId;
+        TActorId VirtualGroupSetupMachineId;
+
+        TBlobDepotDeleteQueueInfo() = default;
+
+        TBlobDepotDeleteQueueInfo(TMaybe<Table::HiveId::Type> hiveId, TMaybe<Table::BlobDepotId::Type> blobDepotId)
+            : HiveId(std::move(hiveId))
+            , BlobDepotId(std::move(blobDepotId))
+        {}
+
+        template<typename T>
+        static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
+            static TTableAdapter<Table, TBlobDepotDeleteQueueInfo,
+                    Table::HiveId,
+                    Table::BlobDepotId
+                > adapter(
+                    &TBlobDepotDeleteQueueInfo::HiveId,
+                    &TBlobDepotDeleteQueueInfo::BlobDepotId
+                );
+            callback(&adapter);
+        }
+    };
+
     struct THostRecord {
         TNodeId NodeId;
         TNodeLocation Location;
@@ -1461,6 +1486,7 @@ private:
     TMap<TBoxId, TBoxInfo> Boxes;
     TMap<TBoxStoragePoolId, TStoragePoolInfo> StoragePools;
     TMultiMap<TBoxStoragePoolId, TGroupId> StoragePoolGroups;
+    TMap<TGroupId, TBlobDepotDeleteQueueInfo> BlobDepotDeleteQueue;
     ui64 NextOperationLogIndex = 1;
     TActorId StatProcessorActorId;
     TInstant LastMetricsCommit;
@@ -1683,6 +1709,11 @@ private:
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }
         }
+        for (const auto& [groupId, info] : BlobDepotDeleteQueue) {
+            if (const auto& actorId = info.VirtualGroupSetupMachineId) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+            }
+        }
         return TActor::PassAway();
     }
 
@@ -1786,6 +1817,7 @@ private:
         TScrubState(TBlobStorageController *self);
         ~TScrubState();
         void HandleTimer();
+        void Clear();
         void AddItem(TVSlotId vslotId, std::optional<TString> state, TInstant scrubCycleStartTime,
             TInstant scrubCycleFinishTime, std::optional<bool> success);
         void OnDeletePDisk(TPDiskId pdiskId);
@@ -2039,6 +2071,9 @@ public:
                 StartVirtualGroupSetupMachine(info.Get());
             }
         }
+        for (auto& [groupId, info] : BlobDepotDeleteQueue) {
+            StartVirtualGroupDeleteMachine(groupId, info);
+        }
 
         for (; !InitQueue.empty(); InitQueue.pop_front()) {
             TAutoPtr<IEventHandle> &ev = InitQueue.front();
@@ -2091,6 +2126,7 @@ public:
     void CommitVirtualGroupUpdates(TConfigState& state);
 
     void StartVirtualGroupSetupMachine(TGroupInfo *group);
+    void StartVirtualGroupDeleteMachine(ui32 groupId, TBlobDepotDeleteQueueInfo& info);
 
     void Handle(TEvBlobStorage::TEvControllerGroupDecommittedNotify::TPtr ev);
 

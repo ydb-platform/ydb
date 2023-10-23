@@ -22,6 +22,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/driver_lib/version/version.h>
 #include <ydb/library/schlab/schine/scheduler.h>
 #include <ydb/library/schlab/schine/job_kind.h>
 
@@ -185,6 +186,9 @@ public:
     // Chunk locking
     TMap<TOwner, ui32> OwnerLocks;
 
+    // Serialized compatibility info record
+    std::optional<TString> SerializedCompatibilityInfo;
+
     // Debug
     std::function<TString()> DebugInfoGenerator;
 
@@ -197,7 +201,7 @@ public:
     bool CheckGuid(TString *outReason); // Called by actor
     bool CheckFormatComplete(); // Called by actor
     void ReadSysLog(const TActorId &pDiskActor); // Called by actor
-    void ProcessChunk0(const TEvReadLogResult &readLogResult);
+    bool ProcessChunk0(const TEvReadLogResult &readLogResult, TString& errorReason);
     void PrintChunksDebugInfo();
     TRcBuf ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn, const TEvReadLogResult &readLogResult);
     void ReadAndParseMainLog(const TActorId &pDiskActor);

@@ -153,6 +153,8 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 return;
             }
 
+            self->Issues_.insert(self->Issues_.end(), part.GetIssues().begin(), part.GetIssues().end());
+
             if (part.HasResultSet()) {
                 auto inRs = part.ExtractResultSet();
                 auto& inRsProto = TProtoAccessor::GetProto(inRs);

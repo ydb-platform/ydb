@@ -110,12 +110,6 @@ void TKesusTablet::VerifyKesusPath(const TString& kesusPath) {
         KesusPath.Quote().data());
 }
 
-void TKesusTablet::Handle(TEvents::TEvPoisonPill::TPtr& ev) {
-    Y_UNUSED(ev);
-    Send(Tablet(), new TEvents::TEvPoisonPill());
-    Become(&TThis::StateZombie);
-}
-
 void TKesusTablet::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     const auto* msg = ev->Get();
     switch (msg->SourceType) {
@@ -241,22 +235,11 @@ void TKesusTablet::HandleIgnored() {
 }
 
 STFUNC(TKesusTablet::StateInit) {
-    switch (ev->GetTypeRewrite()) {
-        hFunc(TEvents::TEvPoisonPill, Handle);
-
-        default:
-            StateInitImpl(ev, SelfId());
-            break;
-    }
-}
-
-STFUNC(TKesusTablet::StateZombie) {
     StateInitImpl(ev, SelfId());
 }
 
 STFUNC(TKesusTablet::StateWork) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvents::TEvPoisonPill, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, Handle);
         hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);

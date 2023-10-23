@@ -379,7 +379,7 @@ bool TColumnEngineForLogs::LoadGranules(IDbWrapper& db) {
 
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs) {
     return ColumnsTable->Load(db, [&](const TColumnRecord& rec) {
-        auto& indexInfo = GetIndexInfo();
+        auto& indexInfo = VersionedIndex.GetSchema(NOlap::TSnapshot(rec.PlanStep, rec.TxId))->GetIndexInfo();
         Y_VERIFY(rec.Valid());
         // Do not count the blob as lost since it exists in the index.
         lostBlobs.erase(rec.BlobRange.BlobId);

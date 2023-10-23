@@ -465,6 +465,36 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             29]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(Discard) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            DISCARD SELECT 1;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
+    }
+
+    Y_UNIT_TEST(AnsiIn) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            $list = AsList(
+                Just(1),
+                Just(2),
+                NULL
+            );
+
+            SELECT 1 in $list;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetIssues().Size() == 0, result.GetIssues().ToString());
+
+        CompareYson(R"([[[%true]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 } // namespace NKqp

@@ -54,6 +54,12 @@ TPlainStatus::TPlainStatus(
     if (msg) {
         Issues.AddIssue(NYql::TIssue(msg));
     }
+    for (const auto& [name, value] : grpcStatus.ServerTrailingMetadata) {
+        Metadata.emplace(
+            TStringType(name.begin(), name.end()),
+            TStringType(value.begin(), value.end())
+        );
+    }
 }
 
 TPlainStatus TPlainStatus::Internal(const TStringType& message) {

@@ -509,8 +509,8 @@ protected:
 
     }
 public:
-    TLevelsOptimizerPlanner(const ui64 granuleId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
-        : TBase(granuleId)
+    TLevelsOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
+        : TBase(pathId)
         , StoragesManager(storagesManager)
         , Counters(std::make_shared<TCounters>())
     {

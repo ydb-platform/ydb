@@ -170,8 +170,8 @@ void TIntervalsOptimizerPlanner::AddRanged(const TBorderPositions& data) {
     }
 }
 
-TIntervalsOptimizerPlanner::TIntervalsOptimizerPlanner(const ui64 granuleId, const std::shared_ptr<IStoragesManager>& storagesManager)
-    : TBase(granuleId)
+TIntervalsOptimizerPlanner::TIntervalsOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager)
+    : TBase(pathId)
     , StoragesManager(storagesManager)
     , Counters(std::make_shared<TCounters>())
     , SizeProblemBlobs(Counters, storagesManager)

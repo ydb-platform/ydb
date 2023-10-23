@@ -28,29 +28,4 @@ public:
     }
 };
 
-struct TCompactionInfo {
-private:
-    std::shared_ptr<TGranuleMeta> GranuleMeta;
-public:
-    TCompactionInfo(std::shared_ptr<TGranuleMeta> granule)
-        : GranuleMeta(granule)
-    {
-        Y_ABORT_UNLESS(granule);
-    }
-
-    std::shared_ptr<TGranuleMeta> GetGranule() const {
-        return GranuleMeta;
-    }
-
-};
-
-struct TCompactionSrcGranule {
-    TMark Mark;
-
-    TCompactionSrcGranule(const TMark& mark)
-        : Mark(mark)
-    {
-    }
-};
-
 }

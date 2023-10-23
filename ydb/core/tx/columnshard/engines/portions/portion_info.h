@@ -179,10 +179,6 @@ public:
         return Portion;
     }
 
-    ui64 GetGranule() const {
-        return PathId;
-    }
-
     TPortionAddress GetAddress() const {
         return TPortionAddress(PathId, Portion);
     }

@@ -4,7 +4,7 @@ namespace NKikimr::NOlap {
 
 void TGranulesStorage::UpdateGranuleInfo(const TGranuleMeta& granule) {
     if (PackModificationFlag) {
-        PackModifiedGranules[granule.GetGranuleId()] = &granule;
+        PackModifiedGranules[granule.GetPathId()] = &granule;
         return;
     }
 }

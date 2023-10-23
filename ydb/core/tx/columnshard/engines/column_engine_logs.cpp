@@ -49,7 +49,7 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
                                             const TPortionInfo* exPortionInfo) {
     UpdatePortionStats(Counters, portionInfo, updateType, exPortionInfo);
 
-    const ui64 pathId = portionInfo.GetGranule();
+    const ui64 pathId = portionInfo.GetPathId();
     Y_ABORT_UNLESS(pathId);
     if (!PathStats.contains(pathId)) {
         auto& stats = PathStats[pathId];

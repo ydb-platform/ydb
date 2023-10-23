@@ -114,7 +114,7 @@ TString TPortionMeta::DebugString() const {
 }
 
 TString TPortionAddress::DebugString() const {
-    return TStringBuilder() << "(granule_id=" << GranuleId << ";portion_id=" << PortionId << ")";
+    return TStringBuilder() << "(path_id=" << PathId << ";portion_id=" << PortionId << ")";
 }
 
 }

@@ -74,7 +74,7 @@ public:
             *rowProto.MutablePortionMeta() = std::move(*proto);
         }
 
-        auto& data = Indices[index].Columns[portion.GetGranule()];
+        auto& data = Indices[index].Columns[portion.GetPathId()];
         NOlap::TColumnChunkLoadContext loadContext(row.GetAddress(), row.BlobRange, rowProto);
         auto itInsertInfo = LoadContexts[portion.GetAddress()].emplace(row.GetAddress(), loadContext);
         if (!itInsertInfo.second) {
@@ -84,7 +84,7 @@ public:
         if (it == data.end()) {
             it = data.emplace(portion.GetPortion(), portion.CopyWithFilteredColumns({})).first;
         } else {
-            Y_ABORT_UNLESS(portion.GetGranule() == it->second.GetGranule() && portion.GetPortion() == it->second.GetPortion());
+            Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortion() == it->second.GetPortion());
         }
         it->second.SetMinSnapshot(portion.GetMinSnapshot());
         it->second.SetRemoveSnapshot(portion.GetRemoveSnapshot());
@@ -103,7 +103,7 @@ public:
     }
 
     void EraseColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) override {
-        auto& data = Indices[index].Columns[portion.GetGranule()];
+        auto& data = Indices[index].Columns[portion.GetPathId()];
         auto it = data.find(portion.GetPortion());
         Y_ABORT_UNLESS(it != data.end());
         auto& portionLocal = it->second;
@@ -119,7 +119,7 @@ public:
 
     bool LoadColumns(ui32 index, const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>& callback) override {
         auto& columns = Indices[index].Columns;
-        for (auto& [granule, portions] : columns) {
+        for (auto& [pathId, portions] : columns) {
             for (auto& [portionId, portionLocal] : portions) {
                 auto copy = portionLocal;
                 copy.ResetMeta();

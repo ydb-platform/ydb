@@ -4,7 +4,7 @@
 namespace NKikimr::NOlap::NStorageOptimizer {
 
 std::shared_ptr<TColumnEngineChanges> IOptimizerPlanner::GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const {
-    NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("granule_id", GranuleId));
+    NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
     auto result = DoGetOptimizationTask(limits, granule, busyPortions);
     if (!!result) {
         auto portions = result->GetTouchedPortions();

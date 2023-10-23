@@ -2858,11 +2858,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Y_ABORT_UNLESS(compact->SwitchedPortions.size());
                     ++compactionsHappened;
                     Cerr << "Compaction old portions:";
-                    ui64 srcGranule{0};
+                    ui64 srcPathId{0};
                     for (const auto& portionInfo : compact->SwitchedPortions) {
-                        ui64 granule = portionInfo.GetGranule();
-                        UNIT_ASSERT(!srcGranule || srcGranule == granule);
-                        srcGranule = granule;
+                        const ui64 pathId = portionInfo.GetPathId();
+                        UNIT_ASSERT(!srcPathId || srcPathId == pathId);
+                        srcPathId = pathId;
                         oldPortions.insert(portionInfo.GetPortion());
                     }
                     Cerr << Endl;

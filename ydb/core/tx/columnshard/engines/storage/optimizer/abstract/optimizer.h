@@ -50,7 +50,7 @@ public:
 
 class IOptimizerPlanner {
 private:
-    const ui64 GranuleId;
+    const ui64 PathId;
     YDB_READONLY(TInstant, ActualizationInstant, TInstant::Zero());
 protected:
     virtual void DoModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) = 0;
@@ -66,8 +66,8 @@ protected:
     
 public:
     using TFactory = NObjectFactory::TObjectFactory<IOptimizerPlanner, TString>;
-    IOptimizerPlanner(const ui64 granuleId)
-        : GranuleId(granuleId)
+    IOptimizerPlanner(const ui64 pathId)
+        : PathId(pathId)
     {
 
     }
@@ -113,7 +113,7 @@ public:
     }
 
     void ModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
-        NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("granule_id", GranuleId));
+        NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
         DoModifyPortions(add, remove);
     }
 

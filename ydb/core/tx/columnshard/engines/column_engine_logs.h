@@ -186,9 +186,9 @@ public:
         return !!GetGranuleOptional(pathId);
     }
 
-    const TGranuleMeta& GetGranuleVerified(const ui64 granuleId) const {
-        auto it = Tables.find(granuleId);
-        AFL_VERIFY(it != Tables.end())("granule_id", granuleId)("count", Tables.size());
+    const TGranuleMeta& GetGranuleVerified(const ui64 pathId) const {
+        auto it = Tables.find(pathId);
+        AFL_VERIFY(it != Tables.end())("path_id", pathId)("count", Tables.size());
         return *it->second;
     }
 

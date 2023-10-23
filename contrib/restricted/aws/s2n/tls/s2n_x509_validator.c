@@ -19,13 +19,13 @@
 #include <openssl/x509.h>
 #include <sys/socket.h>
 
+#include "crypto/s2n_libcrypto.h"
 #include "crypto/s2n_openssl.h"
 #include "crypto/s2n_openssl_x509.h"
 #include "tls/extensions/s2n_extension_list.h"
 #include "tls/s2n_config.h"
 #include "tls/s2n_connection.h"
 #include "tls/s2n_crl.h"
-#include "utils/s2n_asn1_time.h"
 #include "utils/s2n_result.h"
 #include "utils/s2n_rfc5952.h"
 #include "utils/s2n_safety.h"
@@ -34,6 +34,7 @@
     #include <openssl/ocsp.h>
 DEFINE_POINTER_CLEANUP_FUNC(OCSP_RESPONSE *, OCSP_RESPONSE_free);
 DEFINE_POINTER_CLEANUP_FUNC(OCSP_BASICRESP *, OCSP_BASICRESP_free);
+
 #endif
 
 #ifndef X509_V_FLAG_PARTIAL_CHAIN
@@ -42,7 +43,21 @@ DEFINE_POINTER_CLEANUP_FUNC(OCSP_BASICRESP *, OCSP_BASICRESP_free);
 
 #define DEFAULT_MAX_CHAIN_DEPTH 7
 /* Time used by default for nextUpdate if none provided in OCSP: 1 hour since thisUpdate. */
-#define DEFAULT_OCSP_NEXT_UPDATE_PERIOD 3600000000000
+#define DEFAULT_OCSP_NEXT_UPDATE_PERIOD 3600
+
+/* s2n's internal clock measures epoch-nanoseconds stored with a uint64_t. The
+ * maximum representable timestamp is Sunday, July 21, 2554. time_t measures
+ * epoch-seconds in a int64_t or int32_t (platform dependent). If time_t is an
+ * int32_t, the maximum representable timestamp is January 19, 2038.
+ *
+ * This means that converting from the internal clock to a time_t is not safe,
+ * because the internal clock might hold a value that is too large to represent
+ * in a time_t. This constant represents the largest internal clock value that
+ * can be safely represented as a time_t.
+ */
+#define MAX_32_TIMESTAMP_NANOS 2147483647 * ONE_SEC_IN_NANOS
+
+#define OSSL_VERIFY_CALLBACK_IGNORE_ERROR 1
 
 DEFINE_POINTER_CLEANUP_FUNC(STACK_OF(X509_CRL) *, sk_X509_CRL_free);
 DEFINE_POINTER_CLEANUP_FUNC(STACK_OF(GENERAL_NAME) *, GENERAL_NAMES_free);
@@ -413,7 +428,7 @@ static S2N_RESULT s2n_x509_validator_read_cert_chain(struct s2n_x509_validator *
 
         /* the cert is der encoded, just convert it. */
         server_cert = d2i_X509(NULL, &data, asn1_cert.size);
-        RESULT_ENSURE_REF(server_cert);
+        RESULT_ENSURE(server_cert, S2N_ERR_CERT_INVALID);
 
         /* add the cert to the chain. */
         if (!sk_X509_push(validator->cert_chain_from_wire, server_cert)) {
@@ -474,6 +489,74 @@ static S2N_RESULT s2n_x509_validator_process_cert_chain(struct s2n_x509_validato
     return S2N_RESULT_OK;
 }
 
+static S2N_RESULT s2n_x509_validator_set_no_check_time_flag(struct s2n_x509_validator *validator)
+{
+    RESULT_ENSURE_REF(validator);
+    RESULT_ENSURE_REF(validator->store_ctx);
+
+    X509_VERIFY_PARAM *param = X509_STORE_CTX_get0_param(validator->store_ctx);
+    RESULT_ENSURE_REF(param);
+
+#ifdef S2N_LIBCRYPTO_SUPPORTS_FLAG_NO_CHECK_TIME
+    RESULT_GUARD_OSSL(X509_VERIFY_PARAM_set_flags(param, X509_V_FLAG_NO_CHECK_TIME),
+            S2N_ERR_INTERNAL_LIBCRYPTO_ERROR);
+#else
+    RESULT_BAIL(S2N_ERR_UNIMPLEMENTED);
+#endif
+
+    return S2N_RESULT_OK;
+}
+
+int s2n_disable_time_validation_ossl_verify_callback(int default_ossl_ret, X509_STORE_CTX *ctx)
+{
+    int err = X509_STORE_CTX_get_error(ctx);
+    switch (err) {
+        case X509_V_ERR_CERT_NOT_YET_VALID:
+        case X509_V_ERR_CERT_HAS_EXPIRED:
+            return OSSL_VERIFY_CALLBACK_IGNORE_ERROR;
+        default:
+            break;
+    }
+
+    /* If CRL validation is enabled, setting the time validation verify callback will override the
+     * CRL verify callback. The CRL verify callback is manually triggered to work around this
+     * issue.
+     *
+     * The CRL verify callback ignores validation errors exclusively for CRL timestamp fields. So,
+     * if CRL validation isn't enabled, the CRL verify callback is a no-op.
+     */
+    return s2n_crl_ossl_verify_callback(default_ossl_ret, ctx);
+}
+
+static S2N_RESULT s2n_x509_validator_disable_time_validation(struct s2n_connection *conn,
+        struct s2n_x509_validator *validator)
+{
+    RESULT_ENSURE_REF(conn);
+    RESULT_ENSURE_REF(conn->config);
+    RESULT_ENSURE_REF(validator);
+    RESULT_ENSURE_REF(validator->store_ctx);
+
+    /* Setting an X509_STORE verify callback is not recommended with AWS-LC:
+     * https://github.com/aws/aws-lc/blob/aa90e509f2e940916fbe9fdd469a4c90c51824f6/include/openssl/x509.h#L2980-L2990
+     *
+     * If the libcrypto supports the ability to disable time validation with an X509_VERIFY_PARAM
+     * NO_CHECK_TIME flag, this method is preferred.
+     *
+     * However, older versions of AWS-LC and OpenSSL 1.0.2 do not support this flag. In this case,
+     * an X509_STORE verify callback is used. This is acceptable in older versions of AWS-LC
+     * because the versions are fixed, and updates to AWS-LC will not break the callback
+     * implementation.
+     */
+    if (s2n_libcrypto_supports_flag_no_check_time()) {
+        RESULT_GUARD(s2n_x509_validator_set_no_check_time_flag(validator));
+    } else {
+        X509_STORE_CTX_set_verify_cb(validator->store_ctx,
+                s2n_disable_time_validation_ossl_verify_callback);
+    }
+
+    return S2N_RESULT_OK;
+}
+
 static S2N_RESULT s2n_x509_validator_verify_cert_chain(struct s2n_x509_validator *validator, struct s2n_connection *conn)
 {
     RESULT_ENSURE(validator->state == READY_TO_VERIFY, S2N_ERR_INVALID_CERT_STATE);
@@ -501,17 +584,31 @@ static S2N_RESULT s2n_x509_validator_verify_cert_chain(struct s2n_x509_validator
                 S2N_ERR_INTERNAL_LIBCRYPTO_ERROR);
     }
 
-    uint64_t current_sys_time = 0;
-    RESULT_GUARD(s2n_config_wall_clock(conn->config, &current_sys_time));
+    /* Disabling time validation may set a NO_CHECK_TIME flag on the X509_STORE_CTX. Calling
+     * X509_STORE_CTX_set_time will override this flag. To prevent this, X509_STORE_CTX_set_time is
+     * only called if time validation is enabled.
+     */
+    if (conn->config->disable_x509_time_validation) {
+        RESULT_GUARD(s2n_x509_validator_disable_time_validation(conn, validator));
+    } else {
+        uint64_t current_sys_time = 0;
+        RESULT_GUARD(s2n_config_wall_clock(conn->config, &current_sys_time));
+        if (sizeof(time_t) == 4) {
+            /* cast value to uint64_t to prevent overflow errors */
+            RESULT_ENSURE_LTE(current_sys_time, (uint64_t) MAX_32_TIMESTAMP_NANOS);
+        }
 
-    /* this wants seconds not nanoseconds */
-    time_t current_time = (time_t) (current_sys_time / 1000000000);
-    X509_STORE_CTX_set_time(validator->store_ctx, 0, current_time);
+        /* this wants seconds not nanoseconds */
+        time_t current_time = (time_t) (current_sys_time / ONE_SEC_IN_NANOS);
+        X509_STORE_CTX_set_time(validator->store_ctx, 0, current_time);
+    }
 
     int verify_ret = X509_verify_cert(validator->store_ctx);
     if (verify_ret <= 0) {
         int ossl_error = X509_STORE_CTX_get_error(validator->store_ctx);
         switch (ossl_error) {
+            case X509_V_ERR_CERT_NOT_YET_VALID:
+                RESULT_BAIL(S2N_ERR_CERT_NOT_YET_VALID);
             case X509_V_ERR_CERT_HAS_EXPIRED:
                 RESULT_BAIL(S2N_ERR_CERT_EXPIRED);
             case X509_V_ERR_CERT_REVOKED:
@@ -565,6 +662,9 @@ static S2N_RESULT s2n_x509_validator_read_leaf_info(struct s2n_connection *conn,
 S2N_RESULT s2n_x509_validator_validate_cert_chain(struct s2n_x509_validator *validator, struct s2n_connection *conn,
         uint8_t *cert_chain_in, uint32_t cert_chain_len, s2n_pkey_type *pkey_type, struct s2n_pkey *public_key_out)
 {
+    RESULT_ENSURE_REF(conn);
+    RESULT_ENSURE_REF(conn->config);
+
     switch (validator->state) {
         case INIT:
             break;
@@ -598,6 +698,14 @@ S2N_RESULT s2n_x509_validator_validate_cert_chain(struct s2n_x509_validator *val
          *# the first CertificateEntry.
          */
         RESULT_GUARD_POSIX(s2n_extension_list_process(S2N_EXTENSION_LIST_CERTIFICATE, conn, &first_certificate_extensions));
+    }
+
+    if (conn->config->cert_validation_cb) {
+        struct s2n_cert_validation_info info = { 0 };
+        RESULT_ENSURE(conn->config->cert_validation_cb(conn, &info, conn->config->cert_validation_ctx) >= S2N_SUCCESS,
+                S2N_ERR_CANCELLED);
+        RESULT_ENSURE(info.finished, S2N_ERR_INVALID_STATE);
+        RESULT_ENSURE(info.accepted, S2N_ERR_CERT_REJECTED);
     }
 
     *public_key_out = public_key;
@@ -674,28 +782,68 @@ S2N_RESULT s2n_x509_validator_validate_cert_stapled_ocsp_response(struct s2n_x50
     OCSP_CERTID *cert_id = OCSP_cert_to_id(EVP_sha1(), subject, issuer);
     RESULT_ENSURE_REF(cert_id);
 
+    /**
+     *= https://www.rfc-editor.org/rfc/rfc6960.html#section-2.4
+     *#
+     *# thisUpdate      The most recent time at which the status being
+     *#                 indicated is known by the responder to have been
+     *#                 correct.
+     *#
+     *# nextUpdate      The time at or before which newer information will be
+     *#                 available about the status of the certificate.
+     **/
     ASN1_GENERALIZEDTIME *revtime, *thisupd, *nextupd;
     /* Actual verification of the response */
     const int ocsp_resp_find_status_res = OCSP_resp_find_status(basic_response, cert_id, &status, &reason, &revtime, &thisupd, &nextupd);
     OCSP_CERTID_free(cert_id);
     RESULT_GUARD_OSSL(ocsp_resp_find_status_res, S2N_ERR_CERT_UNTRUSTED);
 
-    uint64_t this_update = 0;
-    RESULT_GUARD(s2n_asn1_time_to_nano_since_epoch_ticks((const char *) thisupd->data,
-            (uint32_t) thisupd->length, &this_update));
-
-    uint64_t next_update = 0;
-    if (nextupd) {
-        RESULT_GUARD(s2n_asn1_time_to_nano_since_epoch_ticks((const char *) nextupd->data,
-                (uint32_t) nextupd->length, &next_update));
-    } else {
-        next_update = this_update + DEFAULT_OCSP_NEXT_UPDATE_PERIOD;
+    uint64_t current_sys_time_nanoseconds = 0;
+    RESULT_GUARD(s2n_config_wall_clock(conn->config, &current_sys_time_nanoseconds));
+    if (sizeof(time_t) == 4) {
+        /* cast value to uint64_t to prevent overflow errors */
+        RESULT_ENSURE_LTE(current_sys_time_nanoseconds, (uint64_t) MAX_32_TIMESTAMP_NANOS);
     }
+    /* convert the current_sys_time (which is in nanoseconds) to seconds */
+    time_t current_sys_time_seconds = (time_t) (current_sys_time_nanoseconds / ONE_SEC_IN_NANOS);
 
-    uint64_t current_time = 0;
-    RESULT_GUARD(s2n_config_wall_clock(conn->config, &current_time));
-    RESULT_ENSURE(current_time >= this_update, S2N_ERR_CERT_INVALID);
-    RESULT_ENSURE(current_time <= next_update, S2N_ERR_CERT_EXPIRED);
+    DEFER_CLEANUP(ASN1_GENERALIZEDTIME *current_sys_time = ASN1_GENERALIZEDTIME_set(NULL, current_sys_time_seconds), s2n_openssl_asn1_time_free_pointer);
+    RESULT_ENSURE_REF(current_sys_time);
+
+    /**
+     * It is fine to use ASN1_TIME functions with ASN1_GENERALIZEDTIME structures
+     * From openssl documentation:
+     * It is recommended that functions starting with ASN1_TIME be used instead
+     * of those starting with ASN1_UTCTIME or ASN1_GENERALIZEDTIME. The
+     * functions starting with ASN1_UTCTIME and ASN1_GENERALIZEDTIME act only on
+     * that specific time format. The functions starting with ASN1_TIME will
+     * operate on either format.
+     * https://www.openssl.org/docs/man1.1.1/man3/ASN1_TIME_to_generalizedtime.html
+     *
+     * ASN1_TIME_compare has a much nicer API, but is not available in Openssl
+     * 1.0.1, so we use ASN1_TIME_diff.
+     */
+    int pday = 0;
+    int psec = 0;
+    RESULT_GUARD_OSSL(ASN1_TIME_diff(&pday, &psec, thisupd, current_sys_time), S2N_ERR_CERT_UNTRUSTED);
+    /* ensure that current_time is after or the same as "this update" */
+    RESULT_ENSURE(pday >= 0 && psec >= 0, S2N_ERR_CERT_INVALID);
+
+    /* ensure that current_time is before or the same as "next update" */
+    if (nextupd) {
+        RESULT_GUARD_OSSL(ASN1_TIME_diff(&pday, &psec, current_sys_time, nextupd), S2N_ERR_CERT_UNTRUSTED);
+        RESULT_ENSURE(pday >= 0 && psec >= 0, S2N_ERR_CERT_EXPIRED);
+    } else {
+        /**
+         * if nextupd isn't present, assume that nextupd is
+         * DEFAULT_OCSP_NEXT_UPDATE_PERIOD after thisupd. This means that if the
+         * current time is more than DEFAULT_OCSP_NEXT_UPDATE_PERIOD
+         * seconds ahead of thisupd, we consider it invalid. We already compared
+         * current_sys_time to thisupd, so reuse those values
+         */
+        uint64_t seconds_after_thisupd = pday * (3600 * 24) + psec;
+        RESULT_ENSURE(seconds_after_thisupd < DEFAULT_OCSP_NEXT_UPDATE_PERIOD, S2N_ERR_CERT_EXPIRED);
+    }
 
     switch (status) {
         case V_OCSP_CERTSTATUS_GOOD:
@@ -794,4 +942,26 @@ S2N_RESULT s2n_validate_sig_scheme_supported(struct s2n_connection *conn, X509 *
 bool s2n_x509_validator_is_cert_chain_validated(const struct s2n_x509_validator *validator)
 {
     return validator && (validator->state == VALIDATED || validator->state == OCSP_VALIDATED);
+}
+
+int s2n_cert_validation_accept(struct s2n_cert_validation_info *info)
+{
+    POSIX_ENSURE_REF(info);
+    POSIX_ENSURE(!info->finished, S2N_ERR_INVALID_STATE);
+
+    info->finished = true;
+    info->accepted = true;
+
+    return S2N_SUCCESS;
+}
+
+int s2n_cert_validation_reject(struct s2n_cert_validation_info *info)
+{
+    POSIX_ENSURE_REF(info);
+    POSIX_ENSURE(!info->finished, S2N_ERR_INVALID_STATE);
+
+    info->finished = true;
+    info->accepted = false;
+
+    return S2N_SUCCESS;
 }

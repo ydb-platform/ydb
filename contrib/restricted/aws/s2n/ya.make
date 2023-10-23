@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.3.44)
+VERSION(1.3.54)
 
-ORIGINAL_SOURCE(https://github.com/aws/s2n-tls/archive/v1.3.44.tar.gz)
+ORIGINAL_SOURCE(https://github.com/aws/s2n-tls/archive/v1.3.54.tar.gz)
 
 PEERDIR(
     contrib/libs/openssl
@@ -30,19 +30,29 @@ NO_COMPILER_WARNINGS()
 NO_RUNTIME()
 
 CFLAGS(
+    -DS2N_ATOMIC_SUPPORTED
+    -DS2N_CLOEXEC_SUPPORTED
+    -DS2N_CLOEXEC_XOPEN_SUPPORTED
     -DS2N_CLONE_SUPPORTED
+    -DS2N_DIAGNOSTICS_POP_SUPPORTED
+    -DS2N_DIAGNOSTICS_PUSH_SUPPORTED
+    -DS2N_EXECINFO_AVAILABLE
     -DS2N_FALL_THROUGH_SUPPORTED
+    -DS2N_KYBER512R3_AVX2_BMI2_SUPPORTED
+    -DS2N_KYBER512R3_M256_INTRINSICS_SUPPORTED
     -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD5_SHA1_HASH
     -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD_CTX_SET_PKEY_CTX
     -DS2N_LIBCRYPTO_SUPPORTS_EVP_RC4
+    -DS2N_LIBCRYPTO_SUPPORTS_FLAG_NO_CHECK_TIME
     -DS2N_MADVISE_SUPPORTED
-    -DS2N_PLATFORM_SUPPORTS_KTLS
     -DS2N___RESTRICT__SUPPORTED
 )
 
 IF (OS_LINUX)
     CFLAGS(
         -DS2N_FEATURES_AVAILABLE
+        -DS2N_LINUX_SENDFILE
+        -DS2N_KTLS_SUPPORTED
     )
 ENDIF()
 
@@ -114,7 +124,7 @@ SRCS(
     pq-crypto/kyber_r3/kyber512r3_polyvec.c
     pq-crypto/kyber_r3/kyber512r3_reduce.c
     pq-crypto/kyber_r3/kyber512r3_symmetric-shake.c
-    pq-crypto/s2n_kyber_512_evp.c
+    pq-crypto/s2n_kyber_evp.c
     pq-crypto/s2n_pq.c
     pq-crypto/s2n_pq_random.c
     stuffer/s2n_stuffer.c
@@ -200,6 +210,7 @@ SRCS(
     tls/s2n_key_log.c
     tls/s2n_key_update.c
     tls/s2n_ktls.c
+    tls/s2n_ktls_io.c
     tls/s2n_next_protocol.c
     tls/s2n_ocsp_stapling.c
     tls/s2n_post_handshake.c
@@ -238,11 +249,12 @@ SRCS(
     tls/s2n_tls13_secrets.c
     tls/s2n_x509_validator.c
     utils/s2n_array.c
-    utils/s2n_asn1_time.c
+    utils/s2n_atomic.c
     utils/s2n_blob.c
     utils/s2n_ensure.c
     utils/s2n_fork_detection.c
     utils/s2n_init.c
+    utils/s2n_io.c
     utils/s2n_map.c
     utils/s2n_mem.c
     utils/s2n_random.c

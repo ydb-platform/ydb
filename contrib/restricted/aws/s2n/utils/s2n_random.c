@@ -13,8 +13,39 @@
  * permissions and limitations under the License.
  */
 
+/*
+ * _XOPEN_SOURCE is needed for resolving the constant O_CLOEXEC in some
+ * environments. We use _XOPEN_SOURCE instead of _GNU_SOURCE because
+ * _GNU_SOURCE is not portable and breaks when attempting to build rust
+ * bindings on MacOS.
+ *
+ * https://man7.org/linux/man-pages/man2/open.2.html
+ * The O_CLOEXEC, O_DIRECTORY, and O_NOFOLLOW flags are not
+ * specified in POSIX.1-2001, but are specified in POSIX.1-2008.
+ * Since glibc 2.12, one can obtain their definitions by defining
+ * either _POSIX_C_SOURCE with a value greater than or equal to
+ * 200809L or _XOPEN_SOURCE with a value greater than or equal to
+ * 700.  In glibc 2.11 and earlier, one obtains the definitions by
+ * defining _GNU_SOURCE.
+ *
+ * We use two feature probes to detect the need to perform this workaround.
+ * It is only applied if we can't get CLOEXEC without it and the build doesn't
+ * fail with _XOPEN_SOURCE being defined.
+ *
+ * # Relevent Links
+ *
+ * - POSIX.1-2017: https://pubs.opengroup.org/onlinepubs/9699919799
+ * - https://stackoverflow.com/a/5724485
+ * - https://stackoverflow.com/a/5583764
+ */
+#if !defined(S2N_CLOEXEC_SUPPORTED) && defined(S2N_CLOEXEC_XOPEN_SUPPORTED) && !defined(_XOPEN_SOURCE)
+    #define _XOPEN_SOURCE 700
+    #include <fcntl.h>
+    #undef _XOPEN_SOURCE
+#else
+    #include <fcntl.h>
+#endif
 #include <errno.h>
-#include <fcntl.h>
 #include <limits.h>
 #include <openssl/engine.h>
 #include <openssl/rand.h>
@@ -34,15 +65,23 @@
 
 #include "api/s2n.h"
 #include "crypto/s2n_drbg.h"
+#include "crypto/s2n_fips.h"
 #include "error/s2n_errno.h"
 #include "stuffer/s2n_stuffer.h"
 #include "utils/s2n_fork_detection.h"
+#include "utils/s2n_init.h"
 #include "utils/s2n_mem.h"
 #include "utils/s2n_random.h"
 #include "utils/s2n_result.h"
 #include "utils/s2n_safety.h"
 
 #define ENTROPY_SOURCE "/dev/urandom"
+
+#if defined(O_CLOEXEC)
+    #define ENTROPY_FLAGS O_RDONLY | O_CLOEXEC
+#else
+    #define ENTROPY_FLAGS O_RDONLY
+#endif
 
 /* See https://en.wikipedia.org/wiki/CPUID */
 #define RDRAND_ECX_FLAG 0x40000000
@@ -66,6 +105,8 @@ struct s2n_rand_state {
 static pthread_key_t s2n_per_thread_rand_state_key;
 /* Needed to ensure key is initialized only once */
 static pthread_once_t s2n_per_thread_rand_state_key_once = PTHREAD_ONCE_INIT;
+/* Tracks if call to pthread_key_create failed */
+static int pthread_key_create_result;
 
 static __thread struct s2n_rand_state s2n_per_thread_rand_state = {
     .cached_fork_generation_number = 0,
@@ -135,6 +176,14 @@ S2N_RESULT s2n_get_mix_entropy(struct s2n_blob *blob)
     return S2N_RESULT_OK;
 }
 
+/* Deletes pthread key at process-exit */
+static void __attribute__((destructor)) s2n_drbg_rand_state_key_cleanup(void)
+{
+    if (s2n_is_initialized()) {
+        pthread_key_delete(s2n_per_thread_rand_state_key);
+    }
+}
+
 static void s2n_drbg_destructor(void *_unused_argument)
 {
     (void) _unused_argument;
@@ -144,7 +193,9 @@ static void s2n_drbg_destructor(void *_unused_argument)
 
 static void s2n_drbg_make_rand_state_key(void)
 {
-    (void) pthread_key_create(&s2n_per_thread_rand_state_key, s2n_drbg_destructor);
+    /* We can't return the output of pthread_key_create due to the parameter constraints of pthread_once.
+     * Here we store the result in a global variable that will be error checked later. */
+    pthread_key_create_result = pthread_key_create(&s2n_per_thread_rand_state_key, s2n_drbg_destructor);
 }
 
 static S2N_RESULT s2n_init_drbgs(void)
@@ -157,6 +208,7 @@ static S2N_RESULT s2n_init_drbgs(void)
     RESULT_GUARD_POSIX(s2n_blob_init(&private, s2n_private_drbg, sizeof(s2n_private_drbg)));
 
     RESULT_ENSURE(pthread_once(&s2n_per_thread_rand_state_key_once, s2n_drbg_make_rand_state_key) == 0, S2N_ERR_DRBG);
+    RESULT_ENSURE_EQ(pthread_key_create_result, 0);
 
     RESULT_GUARD(s2n_drbg_instantiate(&s2n_per_thread_rand_state.public_drbg, &public, S2N_AES_128_CTR_NO_DF_PR));
     RESULT_GUARD(s2n_drbg_instantiate(&s2n_per_thread_rand_state.private_drbg, &private, S2N_AES_256_CTR_NO_DF_PR));
@@ -206,9 +258,19 @@ static S2N_RESULT s2n_ensure_uniqueness(void)
     return S2N_RESULT_OK;
 }
 
-static S2N_RESULT s2n_get_random_data(struct s2n_blob *out_blob,
-        struct s2n_drbg *drbg_state)
+static S2N_RESULT s2n_get_libcrypto_random_data(struct s2n_blob *out_blob)
 {
+    RESULT_GUARD_PTR(out_blob);
+    RESULT_GUARD_OSSL(RAND_bytes(out_blob->data, out_blob->size), S2N_ERR_DRBG);
+    return S2N_RESULT_OK;
+}
+
+static S2N_RESULT s2n_get_custom_random_data(struct s2n_blob *out_blob, struct s2n_drbg *drbg_state)
+{
+    RESULT_GUARD_PTR(out_blob);
+    RESULT_GUARD_PTR(drbg_state);
+
+    RESULT_ENSURE(!s2n_is_in_fips_mode(), S2N_ERR_DRBG);
     RESULT_GUARD(s2n_ensure_initialized_drbgs());
     RESULT_GUARD(s2n_ensure_uniqueness());
 
@@ -224,6 +286,22 @@ static S2N_RESULT s2n_get_random_data(struct s2n_blob *out_blob,
         remaining -= slice.size;
         offset += slice.size;
     }
+
+    return S2N_RESULT_OK;
+}
+
+static S2N_RESULT s2n_get_random_data(struct s2n_blob *blob, struct s2n_drbg *drbg_state)
+{
+    /* By default, s2n-tls uses a custom random implementation to generate random data for the TLS
+     * handshake. When operating in FIPS mode, the FIPS-validated libcrypto implementation is used
+     * instead.
+     */
+    if (s2n_is_in_fips_mode()) {
+        RESULT_GUARD(s2n_get_libcrypto_random_data(blob));
+        return S2N_RESULT_OK;
+    }
+
+    RESULT_GUARD(s2n_get_custom_random_data(blob, drbg_state));
 
     return S2N_RESULT_OK;
 }
@@ -375,7 +453,7 @@ RAND_METHOD s2n_openssl_rand_method = {
 static int s2n_rand_init_impl(void)
 {
 OPEN:
-    entropy_fd = open(ENTROPY_SOURCE, O_RDONLY);
+    entropy_fd = open(ENTROPY_SOURCE, ENTROPY_FLAGS);
     if (entropy_fd == -1) {
         if (errno == EINTR) {
             goto OPEN;
@@ -397,6 +475,10 @@ S2N_RESULT s2n_rand_init(void)
     RESULT_GUARD(s2n_ensure_initialized_drbgs());
 
 #if S2N_LIBCRYPTO_SUPPORTS_CUSTOM_RAND
+    if (s2n_is_in_fips_mode()) {
+        return S2N_RESULT_OK;
+    }
+
     /* Create an engine */
     ENGINE *e = ENGINE_new();
 
@@ -465,6 +547,11 @@ S2N_RESULT s2n_rand_cleanup_thread(void)
     RESULT_GUARD(s2n_drbg_wipe(&s2n_per_thread_rand_state.public_drbg));
 
     s2n_per_thread_rand_state.drbgs_initialized = false;
+
+    /* Unset the thread-local destructor */
+    if (s2n_is_initialized()) {
+        pthread_setspecific(s2n_per_thread_rand_state_key, NULL);
+    }
 
     return S2N_RESULT_OK;
 }

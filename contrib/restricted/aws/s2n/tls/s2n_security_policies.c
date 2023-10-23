@@ -369,6 +369,46 @@ const struct s2n_security_policy security_policy_aws_crt_sdk_tls_13 = {
     .ecc_preferences = &s2n_ecc_preferences_20200310,
 };
 
+const struct s2n_security_policy security_policy_aws_crt_sdk_ssl_v3_06_23 = {
+    .minimum_protocol_version = S2N_SSLv3,
+    .cipher_preferences = &cipher_preferences_aws_crt_sdk_ssl_v3,
+    .kem_preferences = &kem_preferences_null,
+    .signature_preferences = &s2n_signature_preferences_20200207,
+    .ecc_preferences = &s2n_ecc_preferences_20230623,
+};
+
+const struct s2n_security_policy security_policy_aws_crt_sdk_tls_10_06_23 = {
+    .minimum_protocol_version = S2N_TLS10,
+    .cipher_preferences = &cipher_preferences_aws_crt_sdk_default,
+    .kem_preferences = &kem_preferences_null,
+    .signature_preferences = &s2n_signature_preferences_20200207,
+    .ecc_preferences = &s2n_ecc_preferences_20230623,
+};
+
+const struct s2n_security_policy security_policy_aws_crt_sdk_tls_11_06_23 = {
+    .minimum_protocol_version = S2N_TLS11,
+    .cipher_preferences = &cipher_preferences_aws_crt_sdk_default,
+    .kem_preferences = &kem_preferences_null,
+    .signature_preferences = &s2n_signature_preferences_20200207,
+    .ecc_preferences = &s2n_ecc_preferences_20230623,
+};
+
+const struct s2n_security_policy security_policy_aws_crt_sdk_tls_12_06_23 = {
+    .minimum_protocol_version = S2N_TLS12,
+    .cipher_preferences = &cipher_preferences_aws_crt_sdk_default,
+    .kem_preferences = &kem_preferences_null,
+    .signature_preferences = &s2n_signature_preferences_20200207,
+    .ecc_preferences = &s2n_ecc_preferences_20230623,
+};
+
+const struct s2n_security_policy security_policy_aws_crt_sdk_tls_13_06_23 = {
+    .minimum_protocol_version = S2N_TLS13,
+    .cipher_preferences = &cipher_preferences_aws_crt_sdk_tls_13,
+    .kem_preferences = &kem_preferences_null,
+    .signature_preferences = &s2n_signature_preferences_20200207,
+    .ecc_preferences = &s2n_ecc_preferences_20230623,
+};
+
 const struct s2n_security_policy security_policy_kms_tls_1_0_2018_10 = {
     .minimum_protocol_version = S2N_TLS10,
     .cipher_preferences = &cipher_preferences_kms_tls_1_0_2018_10,
@@ -379,6 +419,14 @@ const struct s2n_security_policy security_policy_kms_tls_1_0_2018_10 = {
 
 const struct s2n_security_policy security_policy_kms_tls_1_0_2021_08 = {
     .minimum_protocol_version = S2N_TLS10,
+    .cipher_preferences = &cipher_preferences_kms_tls_1_0_2021_08,
+    .kem_preferences = &kem_preferences_null,
+    .signature_preferences = &s2n_signature_preferences_20200207,
+    .ecc_preferences = &s2n_ecc_preferences_20200310,
+};
+
+const struct s2n_security_policy security_policy_kms_tls_1_2_2023_06 = {
+    .minimum_protocol_version = S2N_TLS12,
     .cipher_preferences = &cipher_preferences_kms_tls_1_0_2021_08,
     .kem_preferences = &kem_preferences_null,
     .signature_preferences = &s2n_signature_preferences_20200207,
@@ -557,6 +605,14 @@ const struct s2n_security_policy security_policy_pq_tls_1_2_2023_04_10 = {
     .kem_preferences = &kem_preferences_pq_tls_1_0_2021_05,
     .signature_preferences = &s2n_signature_preferences_20200207,
     .ecc_preferences = &s2n_ecc_preferences_20200310,
+};
+
+const struct s2n_security_policy security_policy_pq_tls_1_3_2023_06_01 = {
+    .minimum_protocol_version = S2N_TLS12,
+    .cipher_preferences = &cipher_preferences_pq_tls_1_3_2023_06_01,
+    .kem_preferences = &kem_preferences_pq_tls_1_3_2023_06,
+    .signature_preferences = &s2n_signature_preferences_20200207,
+    .ecc_preferences = &s2n_ecc_preferences_20201021,
 };
 
 const struct s2n_security_policy security_policy_kms_fips_tls_1_2_2018_10 = {
@@ -767,7 +823,7 @@ const struct s2n_security_policy security_policy_rfc9151 = {
 const struct s2n_security_policy security_policy_test_all = {
     .minimum_protocol_version = S2N_SSLv3,
     .cipher_preferences = &cipher_preferences_test_all,
-    .kem_preferences = &kem_preferences_pq_tls_1_0_2021_05,
+    .kem_preferences = &kem_preferences_all,
     .signature_preferences = &s2n_signature_preferences_20201021,
     .ecc_preferences = &s2n_ecc_preferences_test_all,
 };
@@ -865,14 +921,21 @@ struct s2n_security_policy_selection security_policy_selection[] = {
     { .version = "CloudFront-TLS-1-1-2016-Legacy", .security_policy = &security_policy_cloudfront_tls_1_1_2016_legacy, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "CloudFront-TLS-1-2-2018-Legacy", .security_policy = &security_policy_cloudfront_tls_1_2_2018_legacy, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "CloudFront-TLS-1-2-2019-Legacy", .security_policy = &security_policy_cloudfront_tls_1_2_2019_legacy, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
+    /* CRT allows users to choose the minimal TLS protocol they want to negotiate with. This translates to 5 different security policies in s2n */
     { .version = "AWS-CRT-SDK-SSLv3.0", .security_policy = &security_policy_aws_crt_sdk_ssl_v3, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "AWS-CRT-SDK-TLSv1.0", .security_policy = &security_policy_aws_crt_sdk_tls_10, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "AWS-CRT-SDK-TLSv1.1", .security_policy = &security_policy_aws_crt_sdk_tls_11, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "AWS-CRT-SDK-TLSv1.2", .security_policy = &security_policy_aws_crt_sdk_tls_12, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "AWS-CRT-SDK-TLSv1.3", .security_policy = &security_policy_aws_crt_sdk_tls_13, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
+    { .version = "AWS-CRT-SDK-SSLv3.0-2023", .security_policy = &security_policy_aws_crt_sdk_ssl_v3_06_23, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
+    { .version = "AWS-CRT-SDK-TLSv1.0-2023", .security_policy = &security_policy_aws_crt_sdk_tls_10_06_23, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
+    { .version = "AWS-CRT-SDK-TLSv1.1-2023", .security_policy = &security_policy_aws_crt_sdk_tls_11_06_23, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
+    { .version = "AWS-CRT-SDK-TLSv1.2-2023", .security_policy = &security_policy_aws_crt_sdk_tls_12_06_23, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
+    { .version = "AWS-CRT-SDK-TLSv1.3-2023", .security_policy = &security_policy_aws_crt_sdk_tls_13_06_23, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     /* KMS TLS Policies*/
     { .version = "KMS-TLS-1-0-2018-10", .security_policy = &security_policy_kms_tls_1_0_2018_10, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "KMS-TLS-1-0-2021-08", .security_policy = &security_policy_kms_tls_1_0_2021_08, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
+    { .version = "KMS-TLS-1-2-2023-06", .security_policy = &security_policy_kms_tls_1_2_2023_06, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "KMS-FIPS-TLS-1-2-2018-10", .security_policy = &security_policy_kms_fips_tls_1_2_2018_10, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "KMS-FIPS-TLS-1-2-2021-08", .security_policy = &security_policy_kms_fips_tls_1_2_2021_08, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "KMS-PQ-TLS-1-0-2019-06", .security_policy = &security_policy_kms_pq_tls_1_0_2019_06, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
@@ -896,6 +959,7 @@ struct s2n_security_policy_selection security_policy_selection[] = {
     { .version = "PQ-TLS-1-2-2023-04-08", .security_policy = &security_policy_pq_tls_1_2_2023_04_08, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "PQ-TLS-1-2-2023-04-09", .security_policy = &security_policy_pq_tls_1_2_2023_04_09, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "PQ-TLS-1-2-2023-04-10", .security_policy = &security_policy_pq_tls_1_2_2023_04_10, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
+    { .version = "PQ-TLS-1-3-2023-06-01", .security_policy = &security_policy_pq_tls_1_3_2023_06_01, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "20140601", .security_policy = &security_policy_20140601, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "20141001", .security_policy = &security_policy_20141001, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
     { .version = "20150202", .security_policy = &security_policy_20150202, .ecc_extension_required = 0, .pq_kem_extension_required = 0 },
@@ -1026,7 +1090,7 @@ int s2n_security_policies_init()
                 security_policy_selection[i].ecc_extension_required = 1;
             }
 
-            if (s2n_cipher_suite_requires_pq_extension(cipher)) {
+            if (s2n_cipher_suite_requires_pq_extension(cipher) && kem_preference->kem_count > 0) {
                 security_policy_selection[i].pq_kem_extension_required = 1;
             }
         }
@@ -1072,6 +1136,11 @@ bool s2n_pq_kem_is_extension_required(const struct s2n_security_policy *security
         if (security_policy_selection[i].security_policy == security_policy) {
             return 1 == security_policy_selection[i].pq_kem_extension_required;
         }
+    }
+
+    /* Preferences with no KEMs for the TLS 1.2 PQ KEM extension do not require that extension. */
+    if (security_policy->kem_preferences && security_policy->kem_preferences->kem_count == 0) {
+        return false;
     }
 
     /* If cipher preference is not in the official list, compute the result */

@@ -12,25 +12,18 @@
  * express or implied. See the License for the specific language governing
  * permissions and limitations under the License.
  */
-
 #pragma once
-
-#include <stdint.h>
-#include <time.h>
 
 #include "utils/s2n_result.h"
 
-struct parser_args {
-    uint8_t offset_negative;
-    uint8_t local_time_assumed;
-    uint8_t current_digit;
-    long offset_hours;
-    long offset_minutes;
-    struct tm time;
-};
-
-/**
- * Converts an asn1 formatted time string to ticks since epoch in nanoseconds.
- * ticks is an output parameter. Returns 0 on success and -1 on failure.
+/* While we shouldn't need to reset errno before executing `action`,
+ * we do so just in case action doesn't set errno properly on failure.
  */
-S2N_RESULT s2n_asn1_time_to_nano_since_epoch_ticks(const char *asn1_time, uint32_t len, uint64_t *ticks);
+#define S2N_IO_RETRY_EINTR(result, action) \
+    do {                                   \
+        errno = 0;                         \
+        result = action;                   \
+    } while (result < 0 && errno == EINTR)
+
+S2N_RESULT s2n_io_check_write_result(ssize_t result);
+S2N_RESULT s2n_io_check_read_result(ssize_t result);

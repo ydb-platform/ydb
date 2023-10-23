@@ -7,8 +7,12 @@ from yql_utils import get_param as yql_get_param
 from google.protobuf import text_format
 import ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
 
-SQLRUN_PATH = yatest.common.binary_path('ydb/library/yql/tools/sql2yql/sql2yql')
 DATA_PATH = yatest.common.source_path('ydb/library/yql/tests/sql/suites')
+try:
+    SQLRUN_PATH = yatest.common.binary_path('ydb/library/yql/tools/sql2yql/sql2yql')
+except BaseException:
+    SQLRUN_PATH = None
+
 try:
     YQLRUN_PATH = yatest.common.binary_path('ydb/library/yql/tools/yqlrun/yqlrun')
 except BaseException:

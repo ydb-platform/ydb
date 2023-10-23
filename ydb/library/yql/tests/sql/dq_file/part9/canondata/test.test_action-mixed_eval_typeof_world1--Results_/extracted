@@ -1,0 +1,46 @@
+<tmp_path>/program.sql:<main>: Error: Expression evaluation
+
+    <tmp_path>/program.sql:<main>:6:16: Error: At function: EvaluateCode
+    	    $remover = EvaluateCode(LambdaCode(($st) -> {
+	               ^
+        <tmp_path>/program.sql:<main>: Error: Type annotation
+        
+            <tmp_path>/program.sql:<main>:6:29: Error: At function: SerializeCode
+            	    $remover = EvaluateCode(LambdaCode(($st) -> {
+	                            ^
+                <tmp_path>/program.sql:<main>:6:46: Error: At function: LambdaCode
+                	    $remover = EvaluateCode(LambdaCode(($st) -> {
+	                                             ^
+                    <tmp_path>/program.sql:<main>:8:16: Error: At function: FuncCode
+                    	        return FuncCode(
+	               ^
+                        <tmp_path>/program.sql:<main>:10:13: Error: At function: ListMap
+                        	            ListMap(
+	            ^
+                            <tmp_path>/program.sql:<main>:7:20: Error: At function: ListFlatMap
+                            	        $to_keep = ListFlatMap(StructTypeComponents(TypeHandle(TypeOf($struct))), ($x) -> {return IF($x.Name not in $to_remove, $x.Name)});
+	                   ^
+                                <tmp_path>/program.sql:<main>:7:32: Error: At function: StructTypeComponents
+                                	        $to_keep = ListFlatMap(StructTypeComponents(TypeHandle(TypeOf($struct))), ($x) -> {return IF($x.Name not in $to_remove, $x.Name)});
+	                               ^
+                                    <tmp_path>/program.sql:<main>:7:53: Error: At function: TypeHandle
+                                    	        $to_keep = ListFlatMap(StructTypeComponents(TypeHandle(TypeOf($struct))), ($x) -> {return IF($x.Name not in $to_remove, $x.Name)});
+	                                                    ^
+                                        <tmp_path>/program.sql:<main>:7:64: Error: At function: TypeOf
+                                        	        $to_keep = ListFlatMap(StructTypeComponents(TypeHandle(TypeOf($struct))), ($x) -> {return IF($x.Name not in $to_remove, $x.Name)});
+	                                                               ^
+                                            <tmp_path>/program.sql:<main>:32:17: Error: At function: RemoveSystemMembers
+                                            	                TableRow(),
+	                ^
+                                                <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Error: At function: InstanceOf
+                                                	
+	                                                                 ^
+                                                    <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Error: At function: ListItemType
+                                                    	
+	                                                                             ^
+                                                        <tmp_path>/program.sql:<main>:19:29: Error: At function: TypeOf, At function: Merge, At function: YtSection, At function: YtPath
+                                                        	define action $func($input, $output) as
+	                            ^
+                                                            <tmp_path>/program.sql:<main>:19:29: Error: Anonymous table "@Output1" must be materialized. Use COMMIT before reading from it.
+                                                            	define action $func($input, $output) as
+	                            ^

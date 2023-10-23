@@ -1,0 +1,23 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:4:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	select
+	^
+        <tmp_path>/program.sql:<main>:11:6: Warning: At function: CalcOverWindow, At function: CalcOverWindow, At function: SortTraits, At function: PersistableRepr
+        	from $input
+	     ^
+            <tmp_path>/program.sql:<main>:13:43: Warning: At function: %
+            	  w1 as (partition by subkey order by key % 3, key),
+	                                          ^
+                <tmp_path>/program.sql:<main>:13:43: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                	  w1 as (partition by subkey order by key % 3, key),
+	                                          ^
+        <tmp_path>/program.sql:<main>:4:1: Warning: At function: SqlProjectItem
+        	select
+	^
+            <tmp_path>/program.sql:<main>:7:5: Warning: At function: *
+            	  2 * sum(key) over w1 as dbl_sum,
+	    ^
+                <tmp_path>/program.sql:<main>:7:5: Warning: Integral type implicit bitcast: Int32 and Optional<Uint64>
+                	  2 * sum(key) over w1 as dbl_sum,
+	    ^

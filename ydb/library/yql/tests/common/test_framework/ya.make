@@ -5,6 +5,12 @@ PY_SRCS(
     yql_utils.py
     yql_ports.py
     yqlrun.py
+    yql_http_file_server.py
+)
+
+PY_SRCS(
+    NAMESPACE ydb_library_yql_test_framework
+    conftest.py
 )
 
 PEERDIR(

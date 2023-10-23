@@ -1,0 +1,32 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:15:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:20:6: Warning: At function: OrderedMap
+        	FROM Input JOIN $data_dict AS d on cast(Input.key as uint32) / 100 == d.mod
+	     ^
+            <tmp_path>/program.sql:<main>:20:6: Warning: At function: EquiJoin, At function: RemoveSystemMembers, At function: OrderedMap, At function: AddMember
+            	FROM Input JOIN $data_dict AS d on cast(Input.key as uint32) / 100 == d.mod
+	     ^
+                <tmp_path>/program.sql:<main>:20:62: Warning: At function: /
+                	FROM Input JOIN $data_dict AS d on cast(Input.key as uint32) / 100 == d.mod
+	                                                             ^
+                    <tmp_path>/program.sql:<main>:20:62: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                    	FROM Input JOIN $data_dict AS d on cast(Input.key as uint32) / 100 == d.mod
+	                                                             ^
+            <tmp_path>/program.sql:<main>:20:6: Warning: At function: RemoveSystemMembers
+            	FROM Input JOIN $data_dict AS d on cast(Input.key as uint32) / 100 == d.mod
+	     ^
+                <tmp_path>/program.sql:<main>:6:15: Warning: At function: PersistableRepr, At function: SqlProject
+                	$data_dict = (select
+	              ^
+                    <tmp_path>/program.sql:<main>:11:6: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: FlatMap, At function: AsList, At function: AddMember
+                    	from Input
+	     ^
+                        <tmp_path>/program.sql:<main>:12:30: Warning: At function: %
+                        	group by cast(key as uint32) % 10 as mod);
+	                             ^
+                            <tmp_path>/program.sql:<main>:12:30: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                            	group by cast(key as uint32) % 10 as mod);
+	                             ^

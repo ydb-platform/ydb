@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:4:1: Fatal: Execution of node: Result
+    	SELECT Yson::ConvertToString(Yson("122"));
+	^
+        <tmp_path>/program.sql:<main>:4:14: Fatal: Cannot parse string value from integer (122) value
+        	SELECT Yson::ConvertToString(Yson("122"));
+	             ^

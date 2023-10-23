@@ -10,7 +10,7 @@ import re
 import tempfile
 import shutil
 
-from collections import namedtuple, defaultdict
+from collections import namedtuple, defaultdict, OrderedDict
 from functools import partial
 import codecs
 import decimal
@@ -801,14 +801,18 @@ def normalize_table_yson(y):
     if isinstance(y, list):
         return [normalize_table_yson(i) for i in y]
     if isinstance(y, dict):
-        normDict = dict()
-        for k, v in six.iteritems(y):
+        normDict = OrderedDict()
+        for k, v in sorted(six.iteritems(y), key=lambda x: x[0], reverse=True):
             if k == "_other":
                 normDict[normalize_table_yson(k)] = sorted(normalize_table_yson(v))
             elif v != "Void" and v is not None and not isinstance(v, YsonEntity):
                 normDict[normalize_table_yson(k)] = normalize_table_yson(v)
         return normDict
     return y
+
+
+def dump_table_yson(res_yson):
+    return cyson.dumps(sorted(normalize_table_yson(cyson.loads('[' + res_yson + ']'))), format="pretty")
 
 
 def normalize_source_code_path(s):

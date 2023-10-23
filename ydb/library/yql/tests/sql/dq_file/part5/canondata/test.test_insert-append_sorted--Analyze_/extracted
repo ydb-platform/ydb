@@ -1,0 +1,56 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:19: Warning: At function: YtPublish!
+    	insert into plato.Output1
+	                  ^
+        <tmp_path>/program.sql:<main>:3:19: Warning: Sort order of written data differs from the order of "Output1" table content. Result table content will be unordered
+        	insert into plato.Output1
+	                  ^
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:19: Warning: At function: YtPublish!
+    	insert into plato.Output2
+	                  ^
+        <tmp_path>/program.sql:<main>:6:19: Warning: Sort order of written data differs from the order of "Output2" table content. Result table content will be unordered
+        	insert into plato.Output2
+	                  ^
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:9:19: Warning: At function: YtPublish!
+    	insert into plato.Output3
+	                  ^
+        <tmp_path>/program.sql:<main>:9:19: Warning: Sort order of written data differs from the order of "Output3" table content. Result table content will be unordered
+        	insert into plato.Output3
+	                  ^
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:15:19: Warning: At function: YtPublish!
+    	insert into plato.Output5
+	                  ^
+        <tmp_path>/program.sql:<main>:15:19: Warning: Sort order of written data differs from the order of "Output5" table content. Result table content will be unordered
+        	insert into plato.Output5
+	                  ^
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:18:19: Warning: At function: YtPublish!
+    	insert into plato.Output6
+	                  ^
+        <tmp_path>/program.sql:<main>:18:19: Warning: Sort order of written data differs from the order of "Output6" table content. Result table content will be unordered
+        	insert into plato.Output6
+	                  ^
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:21:19: Warning: At function: YtPublish!
+    	insert into plato.Output7
+	                  ^
+        <tmp_path>/program.sql:<main>:21:19: Warning: Sort order of written data differs from the order of "Output7" table content. Result table content will be unordered
+        	insert into plato.Output7
+	                  ^
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:24:19: Warning: At function: YtPublish!
+    	insert into plato.Output8
+	                  ^
+        <tmp_path>/program.sql:<main>:24:19: Warning: Sort order of written data differs from the order of "Output8" table content. Result table content will be unordered
+        	insert into plato.Output8
+	                  ^

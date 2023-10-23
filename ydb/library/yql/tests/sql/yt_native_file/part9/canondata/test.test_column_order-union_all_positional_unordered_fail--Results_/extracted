@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:5:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: UnionAllPositional
+    	select 1 as c, 2 as b, 3 as a
+	^
+        <tmp_path>/program.sql:<main>:7:1: Error: Input #1 does not have ordered columns. Consider making column order explicit by using SELECT with column names
+        	select * from as_table([<|c:1, b:2, a:3|>]);
+	^

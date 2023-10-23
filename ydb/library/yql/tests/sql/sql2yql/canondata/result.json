@@ -9829,9 +9829,9 @@
     ],
     "test_sql2yql.test[optimizers-yql-14581_fuseflatmaps_with_external_lambda]": [
         {
-            "checksum": "9e0e7c877e5b4a90c3651e3ea2929539",
-            "size": 2005,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1936997/00f46808be87e2ae2d4ac3ac45675b659c5ace45/resource.tar.gz#test_sql2yql.test_optimizers-yql-14581_fuseflatmaps_with_external_lambda_/sql.yql"
+            "checksum": "9f769766c3b7a79cf01dd0e54cd90d06",
+            "size": 1913,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1777230/5f01ddf11a783059ff6f734be3d1e3311bf692af/resource.tar.gz#test_sql2yql.test_optimizers-yql-14581_fuseflatmaps_with_external_lambda_/sql.yql"
         }
     ],
     "test_sql2yql.test[optimizers-yql-15210_sqlin]": [
@@ -26727,9 +26727,9 @@
     ],
     "test_sql_format.test[optimizers-yql-14581_fuseflatmaps_with_external_lambda]": [
         {
-            "checksum": "7b0b61a765598cb84fa7f1de0d3d335f",
-            "size": 812,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1925821/aeddf2bb85ad22d5cb1dd10f889edcbbe03627bd/resource.tar.gz#test_sql_format.test_optimizers-yql-14581_fuseflatmaps_with_external_lambda_/formatted.sql"
+            "checksum": "078b62449ee0819f9a7ff12d788ff57d",
+            "size": 797,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1777230/5f01ddf11a783059ff6f734be3d1e3311bf692af/resource.tar.gz#test_sql_format.test_optimizers-yql-14581_fuseflatmaps_with_external_lambda_/formatted.sql"
         }
     ],
     "test_sql_format.test[optimizers-yql-15210_sqlin]": [

@@ -1,0 +1,35 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:5:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	select d.mod, d.lv, j.key
+	^
+        <tmp_path>/program.sql:<main>:7:12: Warning: At function: OrderedMap
+        	flatten by lv
+	           ^
+            <tmp_path>/program.sql:<main>:7:12: Warning: At function: EquiJoin, At function: RemoveSystemMembers, At function: OrderedFlatMap
+            	flatten by lv
+	           ^
+                <tmp_path>/program.sql:<main>:3:10: Warning: At function: PersistableRepr, At function: SqlProject
+                	$data = (select mod, aggregate_list(value) as lv from plato.Input group by cast(key as uint32) % 10 as mod);
+	         ^
+                    <tmp_path>/program.sql:<main>:3:61: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: FlatMap, At function: AsList, At function: AddMember
+                    	$data = (select mod, aggregate_list(value) as lv from plato.Input group by cast(key as uint32) % 10 as mod);
+	                                                            ^
+                        <tmp_path>/program.sql:<main>:3:96: Warning: At function: %
+                        	$data = (select mod, aggregate_list(value) as lv from plato.Input group by cast(key as uint32) % 10 as mod);
+	                                                                                               ^
+                            <tmp_path>/program.sql:<main>:3:96: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                            	$data = (select mod, aggregate_list(value) as lv from plato.Input group by cast(key as uint32) % 10 as mod);
+	                                                                                               ^
+            <tmp_path>/program.sql:<main>:7:12: Warning: At function: RemoveSystemMembers, At function: OrderedMap, At function: AddMember
+            	flatten by lv
+	           ^
+                <tmp_path>/program.sql:<main>:8:62: Warning: At function: %
+                	join plato.Input as j on d.mod == cast(j.key as uint32) / 10 % 10
+	                                                             ^
+                    <tmp_path>/program.sql:<main>:8:57: Warning: At function: /
+                    	join plato.Input as j on d.mod == cast(j.key as uint32) / 10 % 10
+	                                                        ^
+                        <tmp_path>/program.sql:<main>:8:57: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                        	join plato.Input as j on d.mod == cast(j.key as uint32) / 10 % 10
+	                                                        ^

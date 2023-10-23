@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:5:1: Fatal: Execution of node: Result
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:6:23: Fatal: Condition violated:
+
+Error executing jsonpath:
+jsonpath:1:8: Error: Member not found, code: 4702
+
+
+
+        	    JSON_VALUE($json, "strict $.key" ERROR ON ERROR);
+	                      ^

@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:42: Error: At function: YtWriteTable!
+    	INSERT INTO Output WITH (MONOTONIC_KEYS, TRUNCATE)
+	                                         ^
+        <tmp_path>/program.sql:<main>:3:42: Error: "monotonic_keys" setting can not be used with TRUNCATE mode
+        	INSERT INTO Output WITH (MONOTONIC_KEYS, TRUNCATE)
+	                                         ^

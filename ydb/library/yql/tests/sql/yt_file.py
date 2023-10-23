@@ -3,7 +3,6 @@ import os
 import pytest
 import re
 import yql_utils
-import yt.yson
 
 import yatest.common
 from yql_utils import execute, get_tables, get_files, get_http_files, \
@@ -19,9 +18,6 @@ ASTDIFF_PATH = yql_binary_path('ydb/library/yql/tools/astdiff/astdiff')
 
 
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
-    if get_param('MULTIRUN'):
-        if suite in set(['schema', 'insert']):
-            pytest.skip('multirun can not execute this')
     if get_param('SQL_FLAGS'):
         if what == 'Debug' or what == 'Plan' or what == 'Peephole' or what == 'Lineage':
             pytest.skip('SKIP')
@@ -95,6 +91,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             prov='yt',
             keep_temp=False,
             gateway_config=get_gateways_config(http_files, yql_http_file_server),
+            udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')
         )
 
         opt_res, opt_tables_res = execute(

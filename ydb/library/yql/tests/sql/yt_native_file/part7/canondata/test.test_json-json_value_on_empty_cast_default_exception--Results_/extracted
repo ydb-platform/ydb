@@ -1,0 +1,12 @@
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:5:1: Fatal: Execution of node: Result
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:6:71: Fatal: Condition violated:
+
+Failed to cast default value from ON EMPTY clause to target type Optional<Uint32>
+
+
+        	    JSON_VALUE($json, "lax $.key" RETURNING Uint32 DEFAULT -2 ON EMPTY ERROR ON ERROR);
+	                                                                      ^

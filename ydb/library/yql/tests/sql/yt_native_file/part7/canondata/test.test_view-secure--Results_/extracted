@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Table metadata loading
+
+    <tmp_path>/program.sql:<main>: Error: Table Input
+    
+        <tmp_path>/program.sql:<main>:1:8: Error: SecureParam function can't be used in views
+        	/* postgres can not */
+	       ^
+        <tmp_path>/program.sql:<main>: Error: Can't load sql view "SELECT SecureParam('api:oauth') as k, subkey as s, value as v FROM self", table: plato.Input, view: secure

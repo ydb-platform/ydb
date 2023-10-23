@@ -1,0 +1,32 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:47:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: SqlProject
+    	SELECT Avg(Length(FinalResult)) AS AvgResultLength FROM $p4;
+	^
+        <tmp_path>/program.sql:<main>:47:57: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate
+        	SELECT Avg(Length(FinalResult)) AS AvgResultLength FROM $p4;
+	                                                        ^
+            <tmp_path>/program.sql:<main>:44:5: Warning: At function: PersistableRepr, At function: OrderedSqlProject
+            	    SELECT Data AS FinalResult FROM $p3
+	    ^
+                <tmp_path>/program.sql:<main>:40:5: Warning: At function: AutoDemux, At function: PersistableRepr, At function: SqlProcess
+                	    PROCESS $p2 USING Streaming::Process(TableRows(), "grep", AsList("180"))
+	    ^
+                    <tmp_path>/program.sql:<main>:40:34: Warning: At function: Udf, At function: TupleType, At function: TupleType, At function: TypeOf
+                    	    PROCESS $p2 USING Streaming::Process(TableRows(), "grep", AsList("180"))
+	                                 ^
+                        <tmp_path>/program.sql:<main>:40:42: Warning: At function: RemoveSystemMembers
+                        	    PROCESS $p2 USING Streaming::Process(TableRows(), "grep", AsList("180"))
+	                                         ^
+                            <tmp_path>/program.sql:<main>:36:5: Warning: At function: PersistableRepr, At function: OrderedSqlProject
+                            	    SELECT Result AS Data FROM $p1
+	    ^
+                                <tmp_path>/program.sql:<main>:32:5: Warning: At function: AutoDemux, At function: PersistableRepr, At function: SqlProcess
+                                	    PROCESS $data USING $udf($prefix, TableRows(), "=") WHERE Name != "foo"
+	    ^
+                                    <tmp_path>/program.sql:<main>:20:16: Warning: The Udf used in PROCESS accepts List argument type, which prevents some optimizations. Consider to rewrite it using Stream argument type
+                                    	$udf = Python::processRows(
+	               ^
+<tmp_path>/program.sql:<main>: Info: Optimization
+
+    <tmp_path>/program.sql:<main>: Info: DQ cannot execute the query. Cause: unsupported callable 'ForwardList'

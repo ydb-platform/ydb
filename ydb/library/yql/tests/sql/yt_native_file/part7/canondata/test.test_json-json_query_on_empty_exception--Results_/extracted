@@ -1,0 +1,19 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:7:4: Warning: At function: JsonQuery
+        	    JSON_QUERY($json, "lax $.key" ERROR ON EMPTY);
+	   ^
+            <tmp_path>/program.sql:<main>:7:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+            	    JSON_QUERY($json, "lax $.key" ERROR ON EMPTY);
+	   ^
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:6:1: Fatal: Execution of node: Result
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:7:4: Fatal: ydb/library/yql/udfs/common/json2/sql_query.h:xxx: Empty result
+        	    JSON_QUERY($json, "lax $.key" ERROR ON EMPTY);
+	   ^

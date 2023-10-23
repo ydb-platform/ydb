@@ -1,0 +1,26 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:34:25: Warning: At function: RemovePrefixMembers, At function: Unordered
+    	INSERT INTO Output WITH TRUNCATE
+	                        ^
+        <tmp_path>/program.sql:<main>:35:1: Warning: At function: UnionAll
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:41:1: Warning: At function: PersistableRepr, At function: OrderedSqlProject
+            	SELECT
+	^
+                <tmp_path>/program.sql:<main>:31:1: Warning: At function: Take, At function: Coalesce
+                	LIMIT IF($clean ?? 0 < 2, 2 - $clean ?? 0, 0)
+	^
+                    <tmp_path>/program.sql:<main>:31:7: Warning: At function: If
+                    	LIMIT IF($clean ?? 0 < 2, 2 - $clean ?? 0, 0)
+	      ^
+                        <tmp_path>/program.sql:<main>:31:38: Warning: At function: Coalesce
+                        	LIMIT IF($clean ?? 0 < 2, 2 - $clean ?? 0, 0)
+	                                     ^
+                            <tmp_path>/program.sql:<main>:31:29: Warning: At function: -
+                            	LIMIT IF($clean ?? 0 < 2, 2 - $clean ?? 0, 0)
+	                            ^
+                                <tmp_path>/program.sql:<main>:31:29: Warning: Integral type implicit bitcast: Int32 and Optional<Uint64>
+                                	LIMIT IF($clean ?? 0 < 2, 2 - $clean ?? 0, 0)
+	                            ^

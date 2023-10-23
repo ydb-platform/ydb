@@ -1,0 +1,20 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select 1ul/1; -- warn
+	^
+        <tmp_path>/program.sql:<main>:2:11: Warning: At function: /
+        	select 1ul/1; -- warn
+	          ^
+            <tmp_path>/program.sql:<main>:2:11: Warning: Integral type implicit bitcast: Uint64 and Int32
+            	select 1ul/1; -- warn
+	          ^
+    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select 1u/1;  -- warn
+	^
+        <tmp_path>/program.sql:<main>:3:10: Warning: At function: /
+        	select 1u/1;  -- warn
+	         ^
+            <tmp_path>/program.sql:<main>:3:10: Warning: Integral type implicit bitcast: Uint32 and Int32
+            	select 1u/1;  -- warn
+	         ^

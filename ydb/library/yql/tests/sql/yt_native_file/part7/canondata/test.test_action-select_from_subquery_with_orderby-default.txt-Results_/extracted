@@ -1,0 +1,16 @@
+<tmp_path>/program.sql:<main>: Warning: Optimization
+
+    <tmp_path>/program.sql:<main>:4:3: Warning: ORDER BY in subquery will be ignored
+    	  select * from plato.Input order by subkey;
+	  ^
+        <tmp_path>/program.sql:<main>:11:15: Warning: When used here
+        	select * from $src() order by key;
+	              ^
+<tmp_path>/program.sql:<main>: Warning: Optimization
+
+    <tmp_path>/program.sql:<main>:8:3: Warning: ORDER BY in subquery will be ignored
+    	  select * from as_table([<|key:1, subkey:1|>, <|key:2, subkey:2|>]) order by subkey;
+	  ^
+        <tmp_path>/program.sql:<main>:12:15: Warning: When used here
+        	select * from $src_non_yt() order by key;
+	              ^

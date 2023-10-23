@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: SqlProject, At function: SqlProjectItem
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:5:5: Warning: At function: SqlAccess
+        	    AGGREGATE_LIST(DISTINCT cast(subkey as Int32))[COUNT(DISTINCT cast(subkey as Uint64)) - 1] as foo
+	    ^
+            <tmp_path>/program.sql:<main>:5:91: Warning: At function: -
+            	    AGGREGATE_LIST(DISTINCT cast(subkey as Int32))[COUNT(DISTINCT cast(subkey as Uint64)) - 1] as foo
+	                                                                                          ^
+                <tmp_path>/program.sql:<main>:5:91: Warning: Integral type implicit bitcast: Uint64 and Int32
+                	    AGGREGATE_LIST(DISTINCT cast(subkey as Int32))[COUNT(DISTINCT cast(subkey as Uint64)) - 1] as foo
+	                                                                                          ^

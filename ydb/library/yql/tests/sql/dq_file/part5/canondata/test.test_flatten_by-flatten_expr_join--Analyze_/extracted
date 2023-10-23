@@ -1,0 +1,7 @@
+<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
+
+    <tmp_path>/program.sql:<main>: Info: Optimization
+    
+        <tmp_path>/program.sql:<main>:7:8: Info: ydb/library/yql/dq/opt/dq_opt_join.cpp:xxx  DqBuildPhyJoin(): requirement join.LeftInput().Maybe<TDqCnUnionAll>() failed
+        	SELECT * FROM ANY $data as x FLATTEN BY (String::SplitToList(a, ",") as aa) JOIN Input as y ON x.aa = y.key ORDER BY aa;
+	       ^

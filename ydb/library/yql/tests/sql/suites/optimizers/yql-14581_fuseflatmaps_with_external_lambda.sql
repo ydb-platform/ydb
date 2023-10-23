@@ -2,7 +2,7 @@
 USE plato;
 
 $improve_low = ($val) -> {
-    RETURN Unicode::Fold(CAST($val AS Utf8));
+    RETURN CAST($val AS Utf8);
 };
 
 $names_intersection = ($org_names, $db_names) -> {

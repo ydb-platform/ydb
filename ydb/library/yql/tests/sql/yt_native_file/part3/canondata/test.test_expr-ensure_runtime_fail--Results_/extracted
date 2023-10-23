@@ -1,0 +1,12 @@
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:2:1: Fatal: Execution of node: Result
+    	select Ensure(42, 2 != 2, "message");
+	^
+        <tmp_path>/program.sql:<main>:2:8: Fatal: Condition violated:
+
+message
+
+
+        	select Ensure(42, 2 != 2, "message");
+	       ^

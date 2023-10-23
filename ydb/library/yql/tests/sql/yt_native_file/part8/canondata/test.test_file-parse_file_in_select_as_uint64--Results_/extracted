@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select key, value, cast(key as int32) in ParseFile('uint64', "keyid.lst") as privilege from plato.Input;
+	^
+        <tmp_path>/program.sql:<main>:2:32: Warning: At function: SqlIn
+        	select key, value, cast(key as int32) in ParseFile('uint64', "keyid.lst") as privilege from plato.Input;
+	                               ^
+            <tmp_path>/program.sql:<main>:2:32: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+            	select key, value, cast(key as int32) in ParseFile('uint64', "keyid.lst") as privilege from plato.Input;
+	                               ^

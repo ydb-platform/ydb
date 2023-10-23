@@ -1,0 +1,38 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:4:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select String::ReplaceAll(); -- too few
+	^
+        <tmp_path>/program.sql:<main>:4:16: Error: At function: Apply, Callable is produced by Udf: String.ReplaceAll
+        	select String::ReplaceAll(); -- too few
+	               ^
+            <tmp_path>/program.sql:<main>:4:16: Error: Callable expected at least 3 argument(s), but got 0
+            	select String::ReplaceAll(); -- too few
+	               ^
+    <tmp_path>/program.sql:<main>:5:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select String::ReplaceAll("abc"); -- too few
+	^
+        <tmp_path>/program.sql:<main>:5:16: Error: At function: Apply, Callable is produced by Udf: String.ReplaceAll
+        	select String::ReplaceAll("abc"); -- too few
+	               ^
+            <tmp_path>/program.sql:<main>:5:16: Error: Callable expected at least 3 argument(s), but got 1
+            	select String::ReplaceAll("abc"); -- too few
+	               ^
+    <tmp_path>/program.sql:<main>:7:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select String::ReplaceAll("abc", "b", 2, 4); -- too many
+	^
+        <tmp_path>/program.sql:<main>:7:16: Error: At function: Apply, Callable is produced by Udf: String.ReplaceAll
+        	select String::ReplaceAll("abc", "b", 2, 4); -- too many
+	               ^
+            <tmp_path>/program.sql:<main>:7:16: Error: Callable expected at most 3 argument(s), but got 4
+            	select String::ReplaceAll("abc", "b", 2, 4); -- too many
+	               ^
+    <tmp_path>/program.sql:<main>:8:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select String::ReplaceAll("abc" , "b", 2, 4, 44); -- too many
+	^
+        <tmp_path>/program.sql:<main>:8:16: Error: At function: Apply, Callable is produced by Udf: String.ReplaceAll
+        	select String::ReplaceAll("abc" , "b", 2, 4, 44); -- too many
+	               ^
+            <tmp_path>/program.sql:<main>:8:16: Error: Callable expected at most 3 argument(s), but got 5
+            	select String::ReplaceAll("abc" , "b", 2, 4, 44); -- too many
+	               ^

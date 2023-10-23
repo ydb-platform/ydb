@@ -1,3 +1,5 @@
+import codecs
+import cyson
 import os
 import re
 import pytest
@@ -22,9 +24,6 @@ def get_block_gateways_config():
 
 def yqlrun_yt_results(provider, prepare, suite, case, config):
     if (suite, case) not in yqlrun_yt_results.cache:
-        if 'ViewWithUdfProcess' in case:
-            pytest.skip('ScriptUdf')
-
         if provider not in get_supported_providers(config):
             pytest.skip('%s provider is not supported here' % provider)
 
@@ -37,6 +36,14 @@ def yqlrun_yt_results(provider, prepare, suite, case, config):
 
         in_tables, out_tables = get_tables(suite, config, DATA_PATH, def_attr=KSV_ATTR)
         files = get_files(suite, config, DATA_PATH)
+
+        for table in in_tables:
+            if cyson.loads(table.attr).get("type") == "document":
+                content = table.content
+            else:
+                content = table.attr
+            if 'Python' in content or 'Javascript' in content:
+                pytest.skip('ScriptUdf')
 
         yqlrun = YQLRun(prov=provider, keep_temp=True, udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps'))
         res, tables_res = execute(

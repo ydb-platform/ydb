@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:9:1: Error: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT 
+	^
+        <tmp_path>/program.sql:<main>:9:1: Error: Duplicated member: magic
+        	SELECT 
+	^

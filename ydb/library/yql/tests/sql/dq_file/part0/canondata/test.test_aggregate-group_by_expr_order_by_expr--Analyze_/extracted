@@ -1,0 +1,23 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: SqlProject
+    	select sum(cast(key as uint32)) as keysum from plato.Input group by cast(key as uint32) / 100 + cast(subkey as uint32) % 10 order by keysum desc;
+	^
+        <tmp_path>/program.sql:<main>:3:54: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: FlatMap, At function: AsList, At function: AddMember
+        	select sum(cast(key as uint32)) as keysum from plato.Input group by cast(key as uint32) / 100 + cast(subkey as uint32) % 10 order by keysum desc;
+	                                                     ^
+            <tmp_path>/program.sql:<main>:3:95: Warning: At function: +
+            	select sum(cast(key as uint32)) as keysum from plato.Input group by cast(key as uint32) / 100 + cast(subkey as uint32) % 10 order by keysum desc;
+	                                                                                              ^
+                <tmp_path>/program.sql:<main>:3:89: Warning: At function: /
+                	select sum(cast(key as uint32)) as keysum from plato.Input group by cast(key as uint32) / 100 + cast(subkey as uint32) % 10 order by keysum desc;
+	                                                                                        ^
+                    <tmp_path>/program.sql:<main>:3:89: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                    	select sum(cast(key as uint32)) as keysum from plato.Input group by cast(key as uint32) / 100 + cast(subkey as uint32) % 10 order by keysum desc;
+	                                                                                        ^
+                <tmp_path>/program.sql:<main>:3:120: Warning: At function: %
+                	select sum(cast(key as uint32)) as keysum from plato.Input group by cast(key as uint32) / 100 + cast(subkey as uint32) % 10 order by keysum desc;
+	                                                                                                                       ^
+                    <tmp_path>/program.sql:<main>:3:120: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                    	select sum(cast(key as uint32)) as keysum from plato.Input group by cast(key as uint32) / 100 + cast(subkey as uint32) % 10 order by keysum desc;
+	                                                                                                                       ^

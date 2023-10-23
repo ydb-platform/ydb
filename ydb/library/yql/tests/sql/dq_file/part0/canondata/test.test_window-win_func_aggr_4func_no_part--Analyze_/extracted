@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select
+	^
+        <tmp_path>/program.sql:<main>:3:5: Warning: At function: *
+        	  2 * sum(cast(key as uint32)) over w1 as dbl_sum,
+	    ^
+            <tmp_path>/program.sql:<main>:3:5: Warning: Integral type implicit bitcast: Int32 and Optional<Uint64>
+            	  2 * sum(cast(key as uint32)) over w1 as dbl_sum,
+	    ^

@@ -1,0 +1,29 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:24:17: Warning: At function: RemovePrefixMembers
+    	    INSERT INTO $dst (
+	                ^
+        <tmp_path>/program.sql:<main>:25:5: Warning: At function: RemoveSystemMembers
+        	    SELECT * FROM Input
+	    ^
+            <tmp_path>/program.sql:<main>:27:5: Warning: At function: Take, At function: Skip, At function: Coalesce
+            	    LIMIT $bucket_size OFFSET $offset);
+	    ^
+                <tmp_path>/program.sql:<main>:21:53: Warning: At function: *
+                	    $offset = unwrap(CAST($bucket_number AS UInt8)) * $bucket_size;
+	                                                    ^
+                    <tmp_path>/program.sql:<main>:18:16: Warning: At function: Unwrap
+                    	$bucket_size = unwrap(CAST($row_count / ListLength($buckets) AS Uint64));
+	               ^
+                        <tmp_path>/program.sql:<main>:18:23: Warning: At function: SafeCast
+                        	$bucket_size = unwrap(CAST($row_count / ListLength($buckets) AS Uint64));
+	                      ^
+                            <tmp_path>/program.sql:<main>:18:39: Warning: At function: /
+                            	$bucket_size = unwrap(CAST($row_count / ListLength($buckets) AS Uint64));
+	                                      ^
+                                <tmp_path>/program.sql:<main>:18:39: Warning: Integral type implicit bitcast: Optional<Int64> and Uint64
+                                	$bucket_size = unwrap(CAST($row_count / ListLength($buckets) AS Uint64));
+	                                      ^
+<tmp_path>/program.sql:<main>: Info: Optimization
+
+    <tmp_path>/program.sql:<main>: Info: DQ cannot execute the query. Cause: unsupported write of sorted data

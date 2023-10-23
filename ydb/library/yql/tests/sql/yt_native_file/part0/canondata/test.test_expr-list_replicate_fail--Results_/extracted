@@ -1,0 +1,22 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select
+	^
+        <tmp_path>/program.sql:<main>:3:1: Warning: At function: Replicate
+        	ListReplicate(1, -1);
+	^
+            <tmp_path>/program.sql:<main>:3:18: Warning: Failed to convert type: Int32 to Uint64
+            	ListReplicate(1, -1);
+	                 ^
+                <tmp_path>/program.sql:<main>:3:18: Warning: Consider using explicit CAST or BITCAST to convert from Int32 to Uint64
+                	ListReplicate(1, -1);
+	                 ^
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:2:1: Fatal: Execution of node: Result
+    	select
+	^
+        <tmp_path>/program.sql:<main>:3:1: Fatal: Second argument in ListReplicate = 18446744073709551615 exceeds maximum value = 4294967296
+        	ListReplicate(1, -1);
+	^

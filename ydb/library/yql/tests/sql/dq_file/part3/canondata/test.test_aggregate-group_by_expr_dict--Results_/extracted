@@ -1,0 +1,20 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:5:1: Warning: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: Sort, At function: PersistableRepr, At function: SqlProject
+    	select * from $data_dict as t group by t.dk[0] as gk order by gk;
+	^
+        <tmp_path>/program.sql:<main>:5:15: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: FlatMap
+        	select * from $data_dict as t group by t.dk[0] as gk order by gk;
+	              ^
+            <tmp_path>/program.sql:<main>:3:15: Warning: At function: PersistableRepr, At function: SqlProject
+            	$data_dict = (select mod, Just(YQL::ToIndexDict(ListSort(aggregate_list(key)))) as dk, ListSort(aggregate_list(subkey)) as ls, ListSort(aggregate_list(value)) as lv from plato.Input group by cast(subkey as uint32) % 10 as mod);
+	              ^
+                <tmp_path>/program.sql:<main>:3:177: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: FlatMap, At function: AsList, At function: AddMember
+                	$data_dict = (select mod, Just(YQL::ToIndexDict(ListSort(aggregate_list(key)))) as dk, ListSort(aggregate_list(subkey)) as ls, ListSort(aggregate_list(value)) as lv from plato.Input group by cast(subkey as uint32) % 10 as mod);
+	                                                                                                                                                                                ^
+                    <tmp_path>/program.sql:<main>:3:215: Warning: At function: %
+                    	$data_dict = (select mod, Just(YQL::ToIndexDict(ListSort(aggregate_list(key)))) as dk, ListSort(aggregate_list(subkey)) as ls, ListSort(aggregate_list(value)) as lv from plato.Input group by cast(subkey as uint32) % 10 as mod);
+	                                                                                                                                                                                                                      ^
+                        <tmp_path>/program.sql:<main>:3:215: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                        	$data_dict = (select mod, Just(YQL::ToIndexDict(ListSort(aggregate_list(key)))) as dk, ListSort(aggregate_list(subkey)) as ls, ListSort(aggregate_list(value)) as lv from plato.Input group by cast(subkey as uint32) % 10 as mod);
+	                                                                                                                                                                                                                      ^

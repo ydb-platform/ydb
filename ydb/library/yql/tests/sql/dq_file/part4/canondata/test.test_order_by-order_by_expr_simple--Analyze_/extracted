@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Warning: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: Sort, At function: PersistableRepr
+    	select * from plato.Input as i order by (cast(i.key as uint32) / 10) % 10 desc, subkey;
+	^
+        <tmp_path>/program.sql:<main>:2:70: Warning: At function: %
+        	select * from plato.Input as i order by (cast(i.key as uint32) / 10) % 10 desc, subkey;
+	                                                                     ^
+            <tmp_path>/program.sql:<main>:2:64: Warning: At function: /
+            	select * from plato.Input as i order by (cast(i.key as uint32) / 10) % 10 desc, subkey;
+	                                                               ^
+                <tmp_path>/program.sql:<main>:2:64: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                	select * from plato.Input as i order by (cast(i.key as uint32) / 10) % 10 desc, subkey;
+	                                                               ^

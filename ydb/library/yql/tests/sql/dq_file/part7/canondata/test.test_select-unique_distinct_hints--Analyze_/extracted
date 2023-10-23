@@ -1,0 +1,46 @@
+<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
+
+    <tmp_path>/program.sql:<main>: Info: Post type annotation
+    
+        <tmp_path>/program.sql:<main>:13:26: Info: At function: Unordered
+        	INSERT INTO Output7 WITH TRUNCATE SELECT /*+ unique(subkey value) */ key, value FROM Input;
+	                         ^
+            <tmp_path>/program.sql:<main>:13:35: Info: At function: AssumeUniqueHint
+            	INSERT INTO Output7 WITH TRUNCATE SELECT /*+ unique(subkey value) */ key, value FROM Input;
+	                                  ^
+                <tmp_path>/program.sql:<main>:13:35: Info: Unique sql hint contains invalid column: 
+Unique((subkey,value)) is not applicable to List<Struct<'key':String,'value':String>>
+                	INSERT INTO Output7 WITH TRUNCATE SELECT /*+ unique(subkey value) */ key, value FROM Input;
+	                                  ^
+    <tmp_path>/program.sql:<main>: Info: Optimization
+    
+        <tmp_path>/program.sql:<main>:4:26: Info: Failed to execute callable with name: YtWriteTable!, you possibly used cross provider/cluster operations or pulled not materialized result in refselect mode
+        	INSERT INTO Output1 WITH TRUNCATE SELECT /*+ unique() */ * FROM Input;
+	                         ^
+        <tmp_path>/program.sql:<main>:5:26: Info: Failed to execute callable with name: YtWriteTable!, you possibly used cross provider/cluster operations or pulled not materialized result in refselect mode
+        	INSERT INTO Output2 WITH TRUNCATE SELECT /*+ distinct() */ * FROM Input;
+	                         ^
+        <tmp_path>/program.sql:<main>:7:26: Info: Failed to execute callable with name: YtWriteTable!, you possibly used cross provider/cluster operations or pulled not materialized result in refselect mode
+        	INSERT INTO Output3 WITH TRUNCATE SELECT /*+ distinct(key subkey) unique(value) */ * FROM Input;
+	                         ^
+        <tmp_path>/program.sql:<main>:8:26: Info: Failed to execute callable with name: YtWriteTable!, you possibly used cross provider/cluster operations or pulled not materialized result in refselect mode
+        	INSERT INTO Output4 WITH TRUNCATE SELECT /*+ unique(key) distinct(subkey value) */ * FROM Input;
+	                         ^
+        <tmp_path>/program.sql:<main>:9:26: Info: Failed to execute callable with name: YtWriteTable!, you possibly used cross provider/cluster operations or pulled not materialized result in refselect mode
+        	INSERT INTO Output5 WITH TRUNCATE SELECT /*+ unique(key value) unique(subkey) */ * FROM Input;
+	                         ^
+        <tmp_path>/program.sql:<main>:10:26: Info: Failed to execute callable with name: YtWriteTable!, you possibly used cross provider/cluster operations or pulled not materialized result in refselect mode
+        	INSERT INTO Output6 WITH TRUNCATE SELECT /*+ distinct(key) distinct(subkey) */ * FROM Input;
+	                         ^
+<tmp_path>/program.sql:<main>: Warning: Post type annotation
+
+    <tmp_path>/program.sql:<main>:13:26: Warning: At function: Unordered
+    	INSERT INTO Output7 WITH TRUNCATE SELECT /*+ unique(subkey value) */ key, value FROM Input;
+	                         ^
+        <tmp_path>/program.sql:<main>:13:35: Warning: At function: AssumeUniqueHint
+        	INSERT INTO Output7 WITH TRUNCATE SELECT /*+ unique(subkey value) */ key, value FROM Input;
+	                                  ^
+            <tmp_path>/program.sql:<main>:13:35: Warning: Unique sql hint contains invalid column: 
+Unique((subkey,value)) is not applicable to List<Struct<'key':String,'value':String>>
+            	INSERT INTO Output7 WITH TRUNCATE SELECT /*+ unique(subkey value) */ key, value FROM Input;
+	                                  ^

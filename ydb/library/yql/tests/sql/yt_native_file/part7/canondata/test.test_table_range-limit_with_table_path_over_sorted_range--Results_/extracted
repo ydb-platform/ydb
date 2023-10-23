@@ -1,0 +1,23 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:4:1: Warning: At function: RemovePrefixMembers, At function: Unordered
+    	SELECT key, value, SUBSTRING(TablePath(), NULL, CAST(LENGTH(TablePath()) - 1 as Uint32)) as path
+	^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: Take
+        	LIMIT 2
+	^
+            <tmp_path>/program.sql:<main>:4:1: Warning: At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+            	SELECT key, value, SUBSTRING(TablePath(), NULL, CAST(LENGTH(TablePath()) - 1 as Uint32)) as path
+	^
+                <tmp_path>/program.sql:<main>:4:20: Warning: At function: Substring
+                	SELECT key, value, SUBSTRING(TablePath(), NULL, CAST(LENGTH(TablePath()) - 1 as Uint32)) as path
+	                   ^
+                    <tmp_path>/program.sql:<main>:4:49: Warning: At function: SafeCast
+                    	SELECT key, value, SUBSTRING(TablePath(), NULL, CAST(LENGTH(TablePath()) - 1 as Uint32)) as path
+	                                                ^
+                        <tmp_path>/program.sql:<main>:4:74: Warning: At function: -
+                        	SELECT key, value, SUBSTRING(TablePath(), NULL, CAST(LENGTH(TablePath()) - 1 as Uint32)) as path
+	                                                                         ^
+                            <tmp_path>/program.sql:<main>:4:74: Warning: Integral type implicit bitcast: Uint32 and Int32
+                            	SELECT key, value, SUBSTRING(TablePath(), NULL, CAST(LENGTH(TablePath()) - 1 as Uint32)) as path
+	                                                                         ^

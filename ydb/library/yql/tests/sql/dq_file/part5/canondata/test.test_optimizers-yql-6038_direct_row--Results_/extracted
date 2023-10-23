@@ -1,0 +1,31 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:23:1: Warning: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	select *
+	^
+        <tmp_path>/program.sql:<main>:24:18: Warning: At function: EquiJoin, At function: RemoveSystemMembers
+        	from $queries as queries join $users as users using(j)
+	                 ^
+            <tmp_path>/program.sql:<main>:16:5: Warning: At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+            	    select
+	    ^
+                <tmp_path>/program.sql:<main>:17:41: Warning: At function: %
+                	        cast(Random(idx + x) as Uint64) % $count as j,
+	                                        ^
+                    <tmp_path>/program.sql:<main>:17:9: Warning: At function: SafeCast
+                    	        cast(Random(idx + x) as Uint64) % $count as j,
+	        ^
+                        <tmp_path>/program.sql:<main>:17:14: Warning: At function: Random, At function: DependsOn
+                        	        cast(Random(idx + x) as Uint64) % $count as j,
+	             ^
+                            <tmp_path>/program.sql:<main>:17:25: Warning: At function: +
+                            	        cast(Random(idx + x) as Uint64) % $count as j,
+	                        ^
+                                <tmp_path>/program.sql:<main>:17:25: Warning: Integral type implicit bitcast: Uint64 and Int32
+                                	        cast(Random(idx + x) as Uint64) % $count as j,
+	                        ^
+<tmp_path>/program.sql:<main>: Warning: Optimization
+
+    <tmp_path>/program.sql:<main>:7:20: Warning: TableRecord will be empty
+    	$queries = (select TableRecordIndex() as j, key from $queries_0);
+	                   ^

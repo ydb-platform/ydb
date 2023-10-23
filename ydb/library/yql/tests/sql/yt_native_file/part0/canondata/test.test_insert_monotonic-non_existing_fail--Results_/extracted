@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:25: Error: At function: YtWriteTable!
+    	INSERT INTO Output WITH MONOTONIC_KEYS
+	                        ^
+        <tmp_path>/program.sql:<main>:3:25: Error: Insert with "monotonic_keys" setting cannot be used with a non-existent table
+        	INSERT INTO Output WITH MONOTONIC_KEYS
+	                        ^

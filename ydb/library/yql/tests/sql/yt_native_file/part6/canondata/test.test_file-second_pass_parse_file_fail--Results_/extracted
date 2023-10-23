@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:3:1: Fatal: Execution of node: Result
+    	select ListExtend(
+	^
+        <tmp_path>/program.sql:<main>:2:9: Fatal: The file iterator was already created. To scan file data multiple times please use ListCollect either over ParseFile or over some lazy function over it, e.g. ListMap
+        	$list = ParseFile("int32","keyid.lst");
+	        ^

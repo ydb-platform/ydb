@@ -3,6 +3,7 @@ RECURSE(
     datetime
     datetime2
     digest
+    file
     histogram
     hyperloglog
     ip_base
@@ -14,6 +15,7 @@ RECURSE(
     re2
     set
     stat
+    streaming
     string
     top
     topfreq

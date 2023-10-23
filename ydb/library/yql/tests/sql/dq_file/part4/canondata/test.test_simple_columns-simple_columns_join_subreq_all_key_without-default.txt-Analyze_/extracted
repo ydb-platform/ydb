@@ -1,0 +1,38 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:8:1: Warning: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:12:6: Warning: At function: OrderedMap, At function: EquiJoin, At function: RemoveSystemMembers
+        	FROM Input JOIN $data as d ON Input.subkey = cast(cast(d.kk as uint32)/100 as string)
+	     ^
+            <tmp_path>/program.sql:<main>:12:6: Warning: At function: OrderedMap
+            	FROM Input JOIN $data as d ON Input.subkey = cast(cast(d.kk as uint32)/100 as string)
+	     ^
+                <tmp_path>/program.sql:<main>:5:10: Warning: At function: PersistableRepr, At function: OrderedSqlProject
+                	$data = (SELECT key as kk, subkey as sk, value FROM Input WHERE cast(key as uint32)/100 < 5);
+	         ^
+                    <tmp_path>/program.sql:<main>:5:53: Warning: At function: OrderedFilter, At function: Coalesce
+                    	$data = (SELECT key as kk, subkey as sk, value FROM Input WHERE cast(key as uint32)/100 < 5);
+	                                                    ^
+                        <tmp_path>/program.sql:<main>:5:89: Warning: At function: <
+                        	$data = (SELECT key as kk, subkey as sk, value FROM Input WHERE cast(key as uint32)/100 < 5);
+	                                                                                        ^
+                            <tmp_path>/program.sql:<main>:5:84: Warning: At function: /
+                            	$data = (SELECT key as kk, subkey as sk, value FROM Input WHERE cast(key as uint32)/100 < 5);
+	                                                                                   ^
+                                <tmp_path>/program.sql:<main>:5:84: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                                	$data = (SELECT key as kk, subkey as sk, value FROM Input WHERE cast(key as uint32)/100 < 5);
+	                                                                                   ^
+            <tmp_path>/program.sql:<main>:12:6: Warning: At function: OrderedMap, At function: AddMember
+            	FROM Input JOIN $data as d ON Input.subkey = cast(cast(d.kk as uint32)/100 as string)
+	     ^
+                <tmp_path>/program.sql:<main>:12:46: Warning: At function: SafeCast
+                	FROM Input JOIN $data as d ON Input.subkey = cast(cast(d.kk as uint32)/100 as string)
+	                                             ^
+                    <tmp_path>/program.sql:<main>:12:71: Warning: At function: /
+                    	FROM Input JOIN $data as d ON Input.subkey = cast(cast(d.kk as uint32)/100 as string)
+	                                                                      ^
+                        <tmp_path>/program.sql:<main>:12:71: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                        	FROM Input JOIN $data as d ON Input.subkey = cast(cast(d.kk as uint32)/100 as string)
+	                                                                      ^

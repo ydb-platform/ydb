@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Warning: Optimization
+
+    <tmp_path>/program.sql:<main>:9:17: Warning: TableRecord will be empty
+    	    select key, TableRecordIndex() as record, TablePath() as path from Input
+	                ^
+    <tmp_path>/program.sql:<main>:9:47: Warning: TablePath will be empty
+    	    select key, TableRecordIndex() as record, TablePath() as path from Input
+	                                              ^

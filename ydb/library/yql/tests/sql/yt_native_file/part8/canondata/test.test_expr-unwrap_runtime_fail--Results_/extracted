@@ -1,0 +1,12 @@
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:2:1: Fatal: Execution of node: Result
+    	select Unwrap(null, "message");
+	^
+        <tmp_path>/program.sql:<main>:2:8: Fatal: Failed to unwrap empty optional:
+
+message
+
+
+        	select Unwrap(null, "message");
+	       ^

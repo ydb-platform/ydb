@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Expression evaluation
+
+    <tmp_path>/program.sql:<main>:5:38: Error: At function: EvaluateFor!
+    	evaluate for $_i in ListFromRange(0, 10) do empty_action();
+	                                     ^
+        <tmp_path>/program.sql:<main>:5:38: Error: Too large list for EVALUATE FOR, allowed: 3, got: 10
+        	evaluate for $_i in ListFromRange(0, 10) do empty_action();
+	                                     ^

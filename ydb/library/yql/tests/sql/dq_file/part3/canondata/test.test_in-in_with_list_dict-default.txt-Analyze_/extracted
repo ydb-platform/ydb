@@ -1,0 +1,23 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT key, CAST(key AS int32) IN $l, CAST(key AS int32) IN $d FROM plato.Input;
+	^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT key, CAST(key AS int32) IN $l, CAST(key AS int32) IN $d FROM plato.Input;
+	^
+            <tmp_path>/program.sql:<main>:6:25: Warning: At function: SqlIn
+            	SELECT key, CAST(key AS int32) IN $l, CAST(key AS int32) IN $d FROM plato.Input;
+	                        ^
+                <tmp_path>/program.sql:<main>:6:25: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	SELECT key, CAST(key AS int32) IN $l, CAST(key AS int32) IN $d FROM plato.Input;
+	                        ^
+        <tmp_path>/program.sql:<main>:6:1: Warning: At function: SqlProjectItem
+        	SELECT key, CAST(key AS int32) IN $l, CAST(key AS int32) IN $d FROM plato.Input;
+	^
+            <tmp_path>/program.sql:<main>:6:51: Warning: At function: SqlIn
+            	SELECT key, CAST(key AS int32) IN $l, CAST(key AS int32) IN $d FROM plato.Input;
+	                                                  ^
+                <tmp_path>/program.sql:<main>:6:51: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	SELECT key, CAST(key AS int32) IN $l, CAST(key AS int32) IN $d FROM plato.Input;
+	                                                  ^

@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:42: Error: At function: YtWriteTable!
+    	insert into plato.Output with (truncate, keepmeta)
+	                                         ^
+        <tmp_path>/program.sql:<main>:3:42: Error: Table "Output" has udf remappers, truncate with keep meta is not allowed
+        	insert into plato.Output with (truncate, keepmeta)
+	                                         ^

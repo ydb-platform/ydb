@@ -1,0 +1,17 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:5:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject, At function: OrderedFlatMap
+    	select mod, iv from $data flatten by lv as iv order by mod, iv;
+	^
+        <tmp_path>/program.sql:<main>:3:10: Warning: At function: PersistableRepr, At function: SqlProject
+        	$data = (select mod, aggregate_list(value) as lv from plato.Input group by cast(key as uint32) % 10 as mod);
+	         ^
+            <tmp_path>/program.sql:<main>:3:61: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: FlatMap, At function: AsList, At function: AddMember
+            	$data = (select mod, aggregate_list(value) as lv from plato.Input group by cast(key as uint32) % 10 as mod);
+	                                                            ^
+                <tmp_path>/program.sql:<main>:3:96: Warning: At function: %
+                	$data = (select mod, aggregate_list(value) as lv from plato.Input group by cast(key as uint32) % 10 as mod);
+	                                                                                               ^
+                    <tmp_path>/program.sql:<main>:3:96: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                    	$data = (select mod, aggregate_list(value) as lv from plato.Input group by cast(key as uint32) % 10 as mod);
+	                                                                                               ^

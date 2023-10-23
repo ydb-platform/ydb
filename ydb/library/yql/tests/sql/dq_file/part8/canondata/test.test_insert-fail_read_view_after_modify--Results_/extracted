@@ -1,0 +1,5 @@
+<tmp_path>/program.sql:<main>: Error: Table intent determination
+
+    <tmp_path>/program.sql:<main>:8:15: Error: Table "Output" cannot have any view after replacing its content
+    	select * from plato.Output view raw;
+	              ^

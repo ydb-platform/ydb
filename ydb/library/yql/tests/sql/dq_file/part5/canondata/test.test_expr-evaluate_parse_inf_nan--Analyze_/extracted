@@ -1,0 +1,10 @@
+<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
+
+    <tmp_path>/program.sql:<main>: Info: Expression evaluation
+    
+        <tmp_path>/program.sql:<main>:5:17: Info: At function: EvaluateExpr
+        	select ListSort(EvaluateExpr($foo), ($item) -> (AsTuple($item.key, $item.subkey)));
+	                ^
+            <tmp_path>/program.sql:<main>:5:17: Info: (NYql::TYqlPanic) ydb/library/yql/providers/common/mkql/yql_provider_mkql.cpp:xxx  GetCallable(): requirement Callables.cend() != compiler failed, message: Missed callable: DqCnUnionAll
+            	select ListSort(EvaluateExpr($foo), ($item) -> (AsTuple($item.key, $item.subkey)));
+	                ^

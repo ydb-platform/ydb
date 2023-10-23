@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:4:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject, At function: Merge, At function: YtSection, At function: YtPath
+    	select * from @a;
+	^
+        <tmp_path>/program.sql:<main>:4:1: Error: Anonymous table "@a" must be materialized. Use COMMIT before reading from it.
+        	select * from @a;
+	^

@@ -2,6 +2,7 @@ SET(
     UDFS
     ydb/library/yql/udfs/common/datetime2
     ydb/library/yql/udfs/common/digest
+    ydb/library/yql/udfs/common/file
     ydb/library/yql/udfs/common/hyperloglog
     ydb/library/yql/udfs/common/pire
     ydb/library/yql/udfs/common/protobuf
@@ -17,6 +18,7 @@ SET(
     ydb/library/yql/udfs/common/math
     ydb/library/yql/udfs/common/url_base
     ydb/library/yql/udfs/common/unicode_base
+    ydb/library/yql/udfs/common/streaming
     ydb/library/yql/udfs/examples/callables
     ydb/library/yql/udfs/examples/dicts
     ydb/library/yql/udfs/examples/dummylog

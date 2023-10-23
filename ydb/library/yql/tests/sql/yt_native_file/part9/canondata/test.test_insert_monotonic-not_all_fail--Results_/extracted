@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:7:13: Error: At function: YtPublish!
+    	INSERT INTO Output
+	            ^
+        <tmp_path>/program.sql:<main>:7:13: Error: All appends within the same commit should have the same "monotonic_keys" flag
+        	INSERT INTO Output
+	            ^

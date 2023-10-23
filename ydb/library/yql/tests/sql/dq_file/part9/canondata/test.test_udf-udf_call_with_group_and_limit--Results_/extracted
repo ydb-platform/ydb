@@ -1,0 +1,24 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:4:14: Warning: GROUP BY will aggregate by column `key` instead of aggregating by SELECT expression with same alias
+    	    group by key
+	             ^
+    <tmp_path>/program.sql:<main>:2:19: Warning: You should probably use alias in GROUP BY instead of using it here. Please consult documentation for more details
+    	select SimpleUdf::Echo(key) as key, count(*) as count 
+	                  ^
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:4:14: Warning: GROUP BY will aggregate by column `key` instead of aggregating by SELECT expression with same alias
+    	    group by key
+	             ^
+    <tmp_path>/program.sql:<main>:2:19: Warning: You should probably use alias in GROUP BY instead of using it here. Please consult documentation for more details
+    	select SimpleUdf::Echo(key) as key, count(*) as count 
+	                  ^
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:4:14: Warning: GROUP BY will aggregate by column `key` instead of aggregating by SELECT expression with same alias
+    	    group by key
+	             ^
+    <tmp_path>/program.sql:<main>:2:19: Warning: You should probably use alias in GROUP BY instead of using it here. Please consult documentation for more details
+    	select SimpleUdf::Echo(key) as key, count(*) as count 
+	                  ^

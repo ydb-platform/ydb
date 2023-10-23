@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:8:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: SqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:11:5: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: FlatMap, At function: AsList, At function: AddMember
+        	    SELECT data.key as dkey, data.*
+	    ^
+            <tmp_path>/program.sql:<main>:15:32: Warning: At function: /
+            	    cast(middle.dkey as uint32)/100 as hundred_keys
+	                               ^
+                <tmp_path>/program.sql:<main>:15:32: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                	    cast(middle.dkey as uint32)/100 as hundred_keys
+	                               ^

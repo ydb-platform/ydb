@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: SqlProject, At function: SqlProjectItem
+    	select
+	^
+        <tmp_path>/program.sql:<main>:7:76: Warning: At function: +
+        	       sum(distinct cast(Unicode::ToLower(CAST(subkey AS Utf8)) as Int32)) + sum(distinct cast(Unicode::ToUpper(CAST(subkey AS Utf8)) as Uint64)) as sks,
+	                                                                           ^
+            <tmp_path>/program.sql:<main>:7:76: Warning: Integral type implicit bitcast: Optional<Int64> and Optional<Uint64>
+            	       sum(distinct cast(Unicode::ToLower(CAST(subkey AS Utf8)) as Int32)) + sum(distinct cast(Unicode::ToUpper(CAST(subkey AS Utf8)) as Uint64)) as sks,
+	                                                                           ^

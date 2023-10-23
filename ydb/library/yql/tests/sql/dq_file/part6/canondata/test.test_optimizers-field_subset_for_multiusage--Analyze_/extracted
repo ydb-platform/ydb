@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: SqlProject
+    	select 
+	^
+        <tmp_path>/program.sql:<main>:7:21: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: OrderedFilter, At function: Coalesce
+        	from concat(Input1, Input2)
+	                    ^
+            <tmp_path>/program.sql:<main>:8:7: Warning: At function: SqlIn
+            	where subkey in ("1", "2", "3", "4")
+	      ^
+                <tmp_path>/program.sql:<main>:8:7: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	where subkey in ("1", "2", "3", "4")
+	      ^

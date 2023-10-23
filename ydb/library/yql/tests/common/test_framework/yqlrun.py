@@ -1,5 +1,4 @@
 import os
-import pytest
 import shutil
 import yatest.common
 import yql_utils
@@ -243,11 +242,6 @@ class YQLRun(object):
 
         if run_sql and not self.use_sql2yql:
             cmd += '--sql '
-
-        if yql_utils.get_param('MULTIRUN'):
-            if '/* multirun can not */' in yql_program:
-                pytest.skip('multirun can not execute this')
-            cmd += '-M %s ' % yql_utils.get_param('MULTIRUN')
 
         if parameters:
             parameters_file = res_file_path('params.yson')

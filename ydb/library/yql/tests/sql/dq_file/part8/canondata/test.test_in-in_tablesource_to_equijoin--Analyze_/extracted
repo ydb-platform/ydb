@@ -1,0 +1,68 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:13:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT key FROM Input WHERE
+	^
+        <tmp_path>/program.sql:<main>:13:17: Warning: At function: OrderedFilter, At function: Coalesce
+        	SELECT key FROM Input WHERE
+	                ^
+            <tmp_path>/program.sql:<main>:26:24: Warning: At function: And
+            	   (key - 3)    NOT IN $r8_20                     -- key = [10]
+	                       ^
+                <tmp_path>/program.sql:<main>:26:24: Warning: At function: And
+                	   (key - 3)    NOT IN $r8_20                     -- key = [10]
+	                       ^
+                    <tmp_path>/program.sql:<main>:26:24: Warning: At function: And
+                    	   (key - 3)    NOT IN $r8_20                     -- key = [10]
+	                       ^
+                        <tmp_path>/program.sql:<main>:14:11: Warning: At function: SqlIn
+                        	   (key + 1)      IN         $r4_20  AND      -- key = [3, 19]       -- 2 joinable
+	          ^
+                            <tmp_path>/program.sql:<main>:14:11: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                            	   (key + 1)      IN         $r4_20  AND      -- key = [3, 19]       -- 2 joinable
+	          ^
+                        <tmp_path>/program.sql:<main>:15:4: Warning: At function: SqlIn
+                        	   optkey         IN         $r6_20  AND      -- key = [6, 19]
+	   ^
+                            <tmp_path>/program.sql:<main>:15:4: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                            	   optkey         IN         $r6_20  AND      -- key = [6, 19]
+	   ^
+                    <tmp_path>/program.sql:<main>:26:24: Warning: At function: And
+                    	   (key - 3)    NOT IN $r8_20                     -- key = [10]
+	                       ^
+                        <tmp_path>/program.sql:<main>:19:14: Warning: At function: SqlIn
+                        	   (optkey + 3)   IN         $r10_20 AND      -- key = [8, 17]       -- 3 joinable
+	             ^
+                            <tmp_path>/program.sql:<main>:19:14: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                            	   (optkey + 3)   IN         $r10_20 AND      -- key = [8, 17]       -- 3 joinable
+	             ^
+                <tmp_path>/program.sql:<main>:26:24: Warning: At function: And
+                	   (key - 3)    NOT IN $r8_20                     -- key = [10]
+	                       ^
+                    <tmp_path>/program.sql:<main>:26:24: Warning: At function: And
+                    	   (key - 3)    NOT IN $r8_20                     -- key = [10]
+	                       ^
+                        <tmp_path>/program.sql:<main>:21:4: Warning: At function: SqlIn
+                        	   key            IN         $r10_20 AND      -- key = [10, 17]
+	   ^
+                            <tmp_path>/program.sql:<main>:21:4: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                            	   key            IN         $r10_20 AND      -- key = [10, 17]
+	   ^
+                    <tmp_path>/program.sql:<main>:26:24: Warning: At function: And, At function: And
+                    	   (key - 3)    NOT IN $r8_20                     -- key = [10]
+	                       ^
+                        <tmp_path>/program.sql:<main>:23:37: Warning: At function: Or
+                        	   (optkey      IN $r1_16 OR key IN $r1_16) AND   -- key = [10, 16]  -- 1 nonjoinable (not SqlIn)
+	                                    ^
+                            <tmp_path>/program.sql:<main>:23:5: Warning: At function: SqlIn
+                            	   (optkey      IN $r1_16 OR key IN $r1_16) AND   -- key = [10, 16]  -- 1 nonjoinable (not SqlIn)
+	    ^
+                                <tmp_path>/program.sql:<main>:23:5: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                                	   (optkey      IN $r1_16 OR key IN $r1_16) AND   -- key = [10, 16]  -- 1 nonjoinable (not SqlIn)
+	    ^
+                            <tmp_path>/program.sql:<main>:23:30: Warning: At function: SqlIn
+                            	   (optkey      IN $r1_16 OR key IN $r1_16) AND   -- key = [10, 16]  -- 1 nonjoinable (not SqlIn)
+	                             ^
+                                <tmp_path>/program.sql:<main>:23:30: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                                	   (optkey      IN $r1_16 OR key IN $r1_16) AND   -- key = [10, 16]  -- 1 nonjoinable (not SqlIn)
+	                             ^

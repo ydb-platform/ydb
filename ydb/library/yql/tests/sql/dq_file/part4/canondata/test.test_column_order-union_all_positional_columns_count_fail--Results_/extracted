@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:5:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: UnionAllPositional
+    	select 1 as c, 2 as b, 3 as a
+	^
+        <tmp_path>/program.sql:<main>:7:1: Error: Different column counts in UNION ALL inputs: input #0 has 3 column, input #1 has 2 columns
+        	select 1 as c, 2 as b;
+	^

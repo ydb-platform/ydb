@@ -1,0 +1,47 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:26:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: SqlProject
+    	select count(distinct strongest_id) as native_users from $native_show_and_clicks($input);
+	^
+        <tmp_path>/program.sql:<main>:26:82: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: OrderedMap, At function: UnorderedSubquery
+        	select count(distinct strongest_id) as native_users from $native_show_and_clicks($input);
+	                                                                                 ^
+            <tmp_path>/program.sql:<main>:19:5: Warning: At function: PersistableRepr, At function: OrderedSqlProject
+            	    select 
+	    ^
+                <tmp_path>/program.sql:<main>:21:14: Warning: At function: OrderedFilter, At function: OrderedMap, At function: UnorderedSubquery
+                	        from $input()
+	             ^
+                    <tmp_path>/program.sql:<main>:6:5: Warning: At function: PersistableRepr, At function: OrderedSqlProject
+                    	    select
+	    ^
+                        <tmp_path>/program.sql:<main>:12:28: Warning: At function: OrderedFilter, At function: Coalesce
+                        	        from concat(Input, Input)
+	                           ^
+                            <tmp_path>/program.sql:<main>:14:38: Warning: At function: And
+                            	            and subkey in ("native", "gif");
+	                                     ^
+                                <tmp_path>/program.sql:<main>:13:15: Warning: At function: SqlIn
+                                	        where key in ("heartbeat", "show", "click")
+	              ^
+                                    <tmp_path>/program.sql:<main>:13:15: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                                    	        where key in ("heartbeat", "show", "click")
+	              ^
+                                <tmp_path>/program.sql:<main>:14:17: Warning: At function: SqlIn
+                                	            and subkey in ("native", "gif");
+	                ^
+                                    <tmp_path>/program.sql:<main>:14:17: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                                    	            and subkey in ("native", "gif");
+	                ^
+                <tmp_path>/program.sql:<main>:21:14: Warning: At function: OrderedFilter, At function: Coalesce
+                	        from $input()
+	             ^
+                    <tmp_path>/program.sql:<main>:23:34: Warning: At function: And
+                    	            and key in ("click", "show");
+	                                 ^
+                        <tmp_path>/program.sql:<main>:23:17: Warning: At function: SqlIn
+                        	            and key in ("click", "show");
+	                ^
+                            <tmp_path>/program.sql:<main>:23:17: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                            	            and key in ("click", "show");
+	                ^

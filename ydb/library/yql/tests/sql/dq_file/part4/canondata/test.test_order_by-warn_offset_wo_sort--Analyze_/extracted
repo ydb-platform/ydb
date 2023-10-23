@@ -1,0 +1,15 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:6:1: Warning: LIMIT with OFFSET without ORDER BY may provide different results from run to run
+    	select * from Input
+	^
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:6:1: Warning: LIMIT with OFFSET without ORDER BY may provide different results from run to run
+    	select * from Input
+	^
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:6:1: Warning: LIMIT with OFFSET without ORDER BY may provide different results from run to run
+    	select * from Input
+	^

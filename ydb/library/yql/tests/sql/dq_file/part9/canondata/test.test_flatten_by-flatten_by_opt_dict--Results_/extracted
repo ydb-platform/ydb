@@ -1,0 +1,17 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:5:1: Warning: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject, At function: OrderedFlatMap
+    	select * from $data_dict flatten dict by dk order by mod;
+	^
+        <tmp_path>/program.sql:<main>:3:15: Warning: At function: PersistableRepr, At function: SqlProject
+        	$data_dict = (select mod, Just(ToDict(ListEnumerate(ListTake(ListSort(aggregate_list(key)), 1)))) as dk, ListTake(ListSort(aggregate_list(value)), 1) as lv from plato.Input group by cast(subkey as uint32) % 10 as mod);
+	              ^
+            <tmp_path>/program.sql:<main>:3:168: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: FlatMap, At function: AsList, At function: AddMember
+            	$data_dict = (select mod, Just(ToDict(ListEnumerate(ListTake(ListSort(aggregate_list(key)), 1)))) as dk, ListTake(ListSort(aggregate_list(value)), 1) as lv from plato.Input group by cast(subkey as uint32) % 10 as mod);
+	                                                                                                                                                                       ^
+                <tmp_path>/program.sql:<main>:3:206: Warning: At function: %
+                	$data_dict = (select mod, Just(ToDict(ListEnumerate(ListTake(ListSort(aggregate_list(key)), 1)))) as dk, ListTake(ListSort(aggregate_list(value)), 1) as lv from plato.Input group by cast(subkey as uint32) % 10 as mod);
+	                                                                                                                                                                                                             ^
+                    <tmp_path>/program.sql:<main>:3:206: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                    	$data_dict = (select mod, Just(ToDict(ListEnumerate(ListTake(ListSort(aggregate_list(key)), 1)))) as dk, ListTake(ListSort(aggregate_list(value)), 1) as lv from plato.Input group by cast(subkey as uint32) % 10 as mod);
+	                                                                                                                                                                                                             ^

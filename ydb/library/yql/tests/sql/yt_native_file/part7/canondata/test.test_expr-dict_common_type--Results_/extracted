@@ -1,0 +1,32 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:14:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select AsList({100u:100}, $d1, $d2, $d3, $d4);
+	^
+        <tmp_path>/program.sql:<main>:14:8: Warning: At function: AsList
+        	select AsList({100u:100}, $d1, $d2, $d3, $d4);
+	       ^
+            <tmp_path>/program.sql:<main>:6:7: Warning: Failed to convert type: Dict<Int32,Uint32> to Dict<Int32,Int32>
+            	$d1 = ToDict([(1, 1u)]);
+	      ^
+                <tmp_path>/program.sql:<main>:6:7: Warning: Consider using explicit CAST or BITCAST to convert from Uint32 to Int32
+                	$d1 = ToDict([(1, 1u)]);
+	      ^
+    <tmp_path>/program.sql:<main>:15:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select AsList({100}, $s1, $s2);
+	^
+        <tmp_path>/program.sql:<main>:15:8: Warning: At function: AsList
+        	select AsList({100}, $s1, $s2);
+	       ^
+            <tmp_path>/program.sql:/lib/yql/core.yql:xxx:yyy: Warning: Failed to convert type: Set<Uint32> to Set<Int32>
+            	
+	                            ^
+                <tmp_path>/program.sql:/lib/yql/core.yql:xxx:yyy: Warning: Consider using explicit CAST or BITCAST to convert from Uint32 to Int32
+                	
+	                            ^
+            <tmp_path>/program.sql:<main>:12:7: Warning: Failed to convert type: Set<Uint32> to Set<Int32>
+            	$s2 = AsSet(2u);
+	      ^
+                <tmp_path>/program.sql:<main>:12:7: Warning: Consider using explicit CAST or BITCAST to convert from Uint32 to Int32
+                	$s2 = AsSet(2u);
+	      ^

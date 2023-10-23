@@ -1,0 +1,17 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:9:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	select
+	^
+        <tmp_path>/program.sql:<main>:11:6: Warning: At function: CalcOverWindow, At function: CalcOverWindow
+        	from $data
+	     ^
+            <tmp_path>/program.sql:<main>:2:10: Warning: At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+            	$data = (select
+	         ^
+                <tmp_path>/program.sql:<main>:4:24: Warning: At function: /
+                	    cast(key as uint32)/10 as age_decade,
+	                       ^
+                    <tmp_path>/program.sql:<main>:4:24: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                    	    cast(key as uint32)/10 as age_decade,
+	                       ^

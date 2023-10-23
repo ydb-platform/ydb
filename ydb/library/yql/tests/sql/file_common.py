@@ -3,14 +3,14 @@ import os
 import pytest
 import re
 import yql_utils
-import yt.yson
+import cyson
 
 import yatest.common
 import ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
 
 from google.protobuf import text_format
 from yql_utils import execute_sql, get_supported_providers, get_tables, get_files, get_http_files, \
-    get_pragmas, log, KSV_ATTR, is_xfail, get_param, YQLExecResult
+    get_pragmas, log, KSV_ATTR, is_xfail, get_param, YQLExecResult, yql_binary_path
 from yqlrun import YQLRun
 
 from utils import get_config, get_parameters_json, DATA_PATH
@@ -62,10 +62,18 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, 
                 pytest.skip('yson udf is not supported on non-default target platform')
         if provider + 'file can not' in sql_query:
             pytest.skip(provider + ' can not execute this')
-            assert False
 
     pragmas.append(sql_query)
     sql_query = ';\n'.join(pragmas)
+    if 'Python' in sql_query or 'Javascript' in sql_query:
+        pytest.skip('ScriptUdf')
+    for table in in_tables:
+        if cyson.loads(table.attr).get("type") == "document":
+            content = table.content
+        else:
+            content = table.attr
+        if 'Python' in content or 'Javascript' in content:
+            pytest.skip('ScriptUdf')
 
     parameters = get_parameters_json(suite, config)
 
@@ -75,6 +83,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, 
         binary=yqlrun_binary,
         gateway_config=get_gateways_config(http_files, yql_http_file_server, force_blocks=force_blocks),
         extra_args=extra_args,
+        udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')
     )
 
     res, tables_res = execute_sql(

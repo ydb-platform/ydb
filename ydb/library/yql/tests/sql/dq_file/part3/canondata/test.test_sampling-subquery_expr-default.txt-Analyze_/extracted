@@ -1,0 +1,17 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:7:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT * FROM (SELECT * FROM plato.Input) TABLESAMPLE BERNOULLI(5 * $count);
+	^
+        <tmp_path>/program.sql:<main>:7:16: Warning: At function: RemoveSystemMembers
+        	SELECT * FROM (SELECT * FROM plato.Input) TABLESAMPLE BERNOULLI(5 * $count);
+	               ^
+            <tmp_path>/program.sql:<main>:7:23: Warning: At function: OrderedFlatMap, At function: OptionalIf, At function: <, At function: /, At function: Coalesce, At function: SafeCast, At function: Ensure, At function: Ensure
+            	SELECT * FROM (SELECT * FROM plato.Input) TABLESAMPLE BERNOULLI(5 * $count);
+	                      ^
+                <tmp_path>/program.sql:<main>:7:67: Warning: At function: *
+                	SELECT * FROM (SELECT * FROM plato.Input) TABLESAMPLE BERNOULLI(5 * $count);
+	                                                                  ^
+                    <tmp_path>/program.sql:<main>:7:67: Warning: Integral type implicit bitcast: Int32 and Optional<Uint64>
+                    	SELECT * FROM (SELECT * FROM plato.Input) TABLESAMPLE BERNOULLI(5 * $count);
+	                                                                  ^

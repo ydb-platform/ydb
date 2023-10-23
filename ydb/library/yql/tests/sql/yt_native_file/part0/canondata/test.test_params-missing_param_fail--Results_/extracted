@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>: Error: Parameters evaluation
+
+    <tmp_path>/program.sql:<main>: Error: Missing value for parameter: $y

@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>: Warning: Table metadata loading
+
+    <tmp_path>/program.sql:<main>: Warning: Table "Output" is locked exclusively after taking snapshot lock. This may lead query failure if YQL detected concurrent table modification before taking exclusive lock. Add WITH XLOCK hint to all reads from this table to resolve this warning

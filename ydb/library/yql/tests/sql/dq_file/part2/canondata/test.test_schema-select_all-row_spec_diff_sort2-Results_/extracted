@@ -1,0 +1,5 @@
+<tmp_path>/program.sql:<main>: Warning: Table metadata loading
+
+    <tmp_path>/program.sql:<main>: Warning: Table Input
+    
+        <tmp_path>/program.sql:<main>: Warning: Table attribute '_yql_row_spec' defines sorting, which differs from the actual one. The table will be assumed unordered

@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: SqlProject
+    	SELECT ki, count(1) FROM plato.Input WHERE ki IN (75, 20) GROUP BY Cast(key as Uint32) as ki ORDER BY ki;
+	^
+        <tmp_path>/program.sql:<main>:3:32: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: OrderedFilter, At function: Coalesce
+        	SELECT ki, count(1) FROM plato.Input WHERE ki IN (75, 20) GROUP BY Cast(key as Uint32) as ki ORDER BY ki;
+	                               ^
+            <tmp_path>/program.sql:<main>:3:44: Warning: At function: SqlIn
+            	SELECT ki, count(1) FROM plato.Input WHERE ki IN (75, 20) GROUP BY Cast(key as Uint32) as ki ORDER BY ki;
+	                                           ^
+                <tmp_path>/program.sql:<main>:3:44: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	SELECT ki, count(1) FROM plato.Input WHERE ki IN (75, 20) GROUP BY Cast(key as Uint32) as ki ORDER BY ki;
+	                                           ^

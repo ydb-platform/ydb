@@ -4,13 +4,11 @@ import pytest
 import re
 import json
 import yql_utils
-from yt import yson
-from yt.yson.convert import yson_to_json
 import cyson
 
 import yatest.common
 from yql_utils import execute_sql, get_tables, get_files, get_http_files, replace_vals, get_supported_providers, \
-    KSV_ATTR, yql_binary_path, is_xfail, is_skip_forceblocks, get_param, normalize_source_code_path, normalize_table_yson, \
+    KSV_ATTR, yql_binary_path, is_xfail, is_skip_forceblocks, get_param, normalize_source_code_path, dump_table_yson, \
     get_gateway_cfg_suffix, do_custom_query_check
 from yqlrun import YQLRun
 
@@ -22,8 +20,6 @@ DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
 
 
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
-    if get_param('MULTIRUN'):
-        pytest.skip('multirun can not execute this')
     if get_param('SQL_FLAGS'):
         if what == 'Debug' or what == 'Plan':
             pytest.skip('SKIP')
@@ -99,18 +95,11 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
                     '%(dq_result_name)s result:\n %(dq_res_yson)s\n\n' \
                     '%(yqlrun_result_name)s result:\n %(yqlrun_res_yson)s\n' % locals()
 
-                # Compare output tables
-                def dumpJson(res_yson):
-                    return json.dumps(
-                        yson_to_json(sorted(normalize_table_yson(cyson.loads('[' + res_yson + ']')))),
-                        sort_keys=True,
-                        ensure_ascii=False)
-
                 for table in yqlrun_tables_res:
                     assert table in tables_res
 
-                    yqlrun_table_yson = dumpJson(yqlrun_tables_res[table].content)
-                    dq_table_yson = dumpJson(tables_res[table].content)
+                    yqlrun_table_yson = dump_table_yson(yqlrun_tables_res[table].content)
+                    dq_table_yson = dump_table_yson(tables_res[table].content)
 
                     assert yqlrun_table_yson == dq_table_yson, \
                         'OUT_TABLE_DIFFER: %(table)s\n' \

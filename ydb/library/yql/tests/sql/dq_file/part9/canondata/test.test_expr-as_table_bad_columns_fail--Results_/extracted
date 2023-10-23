@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:8:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT Key, Value3 FROM AS_TABLE($data);
+	^
+        <tmp_path>/program.sql:<main>:8:13: Error: At function: Member
+        	SELECT Key, Value3 FROM AS_TABLE($data);
+	            ^
+            <tmp_path>/program.sql:<main>:8:13: Error: Member not found: Value3
+            	SELECT Key, Value3 FROM AS_TABLE($data);
+	            ^

@@ -1,0 +1,17 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:5:1: Warning: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject, At function: OrderedFlatMap
+    	select * from $data_deep flatten by (lk as ik, lv) order by ik, lv, mod;
+	^
+        <tmp_path>/program.sql:<main>:3:15: Warning: At function: PersistableRepr, At function: SqlProject
+        	$data_deep = (select mod, aggregate_list(key) as lk, aggregate_list(subkey) as ls, aggregate_list(value) as lv from plato.Input group by cast(key as uint32) % 10 as mod);
+	              ^
+            <tmp_path>/program.sql:<main>:3:123: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: FlatMap, At function: AsList, At function: AddMember
+            	$data_deep = (select mod, aggregate_list(key) as lk, aggregate_list(subkey) as ls, aggregate_list(value) as lv from plato.Input group by cast(key as uint32) % 10 as mod);
+	                                                                                                                          ^
+                <tmp_path>/program.sql:<main>:3:158: Warning: At function: %
+                	$data_deep = (select mod, aggregate_list(key) as lk, aggregate_list(subkey) as ls, aggregate_list(value) as lv from plato.Input group by cast(key as uint32) % 10 as mod);
+	                                                                                                                                                             ^
+                    <tmp_path>/program.sql:<main>:3:158: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                    	$data_deep = (select mod, aggregate_list(key) as lk, aggregate_list(subkey) as ls, aggregate_list(value) as lv from plato.Input group by cast(key as uint32) % 10 as mod);
+	                                                                                                                                                             ^

@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:7:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	select key_mod, aggr_list(value) over w, aggr_list(subkey) over w
+	^
+        <tmp_path>/program.sql:<main>:8:6: Warning: At function: CalcOverWindow, At function: OrderedFlatMap, At function: AsList, At function: AddMember
+        	from Input window w as (partition by cast(key as uint32) % 10 as key_mod order by subkey)
+	     ^
+            <tmp_path>/program.sql:<main>:8:58: Warning: At function: %
+            	from Input window w as (partition by cast(key as uint32) % 10 as key_mod order by subkey)
+	                                                         ^
+                <tmp_path>/program.sql:<main>:8:58: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                	from Input window w as (partition by cast(key as uint32) % 10 as key_mod order by subkey)
+	                                                         ^

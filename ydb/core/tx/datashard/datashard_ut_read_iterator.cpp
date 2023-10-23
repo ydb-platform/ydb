@@ -2470,8 +2470,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         waitFor([&]{ return serverConnectedCount != 0; }, "intercepted EvServerConnected");
         if (!connectedFromDifferentNode) {
             ++node;
+            sender = runtime.AllocateEdgeActor(node);
+            serverConnectedCount = 0;
             table.ClientId = runtime.ConnectToPipe(table.TabletId, sender, node, GetPipeConfigWithRetries());
             UNIT_ASSERT(table.ClientId);
+            waitFor([&]{ return serverConnectedCount != 0; }, "intercepted EvServerConnected");
         }
         UNIT_ASSERT(connectedFromDifferentNode);
 
@@ -2491,10 +2494,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         runtime.DisconnectNodes(0, 1);
         table.ClientId = runtime.ConnectToPipe(table.TabletId, sender, node, GetPipeConfigWithRetries());
 
-        exhaustedCount = helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsExhaustedCount", 0);
+        exhaustedCount = helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsExhaustedCount", node);
         while (exhaustedCount != 0) {
             SimulateSleep(helper.Server, TDuration::Seconds(1));
-            exhaustedCount = helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsExhaustedCount", 0);
+            exhaustedCount = helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsExhaustedCount", node);
         }
 
         iteratorsCount = helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsCount", node);

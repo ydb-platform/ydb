@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <library/cpp/actors/protos/unittests.pb.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/formats/arrow/simple_builder/array.h>
@@ -29,7 +30,8 @@ namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 
-class TDisableCompactionController: public NKikimr::NYDBTest::ICSController {
+using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
+class TDisableCompactionController: public NKikimr::NYDBTest::NColumnShard::TController {
 protected:
     virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
         changes = nullptr;
@@ -542,6 +544,7 @@ void TestWriteOverload(const TestTableDescription& table) {
 void TestWriteReadDup(const TestTableDescription& table = {}) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -592,6 +595,7 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
 void TestWriteReadLongTxDup() {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -1105,6 +1109,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -2486,6 +2491,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     void TestCompactionSplitGranuleImpl(const TestTableDescription& table, const TTestBlobOptions& testBlobOptions = {}) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -2806,6 +2812,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     void TestCompactionGC() {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
         runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
 

@@ -769,8 +769,10 @@ void TColumnShard::SetupIndexation() {
     if (InsertTable->GetPathPriorities().size() && InsertTable->GetPathPriorities().rbegin()->first.GetCategory() == NOlap::TPathInfoIndexPriority::EIndexationPriority::PreventOverload) {
         force = true;
     }
-    if (!force && InsertTable->GetCountersCommitted().Bytes < TSettings::GuaranteeIndexationStartBytesLimit &&
-        TMonotonic::Now() - BackgroundController.GetLastIndexationInstant() < TSettings::GuaranteeIndexationInterval) {
+    const ui64 bytesLimit = NYDBTest::TControllers::GetColumnShardController()->GetGuaranteeIndexationStartBytesLimit(TSettings::GuaranteeIndexationStartBytesLimit);
+    const TDuration durationLimit = NYDBTest::TControllers::GetColumnShardController()->GetGuaranteeIndexationInterval(TSettings::GuaranteeIndexationInterval);
+    if (!force && InsertTable->GetCountersCommitted().Bytes < bytesLimit &&
+        TMonotonic::Now() < BackgroundController.GetLastIndexationInstant() + durationLimit) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "not_enough_data_and_too_frequency")
             ("insert_size", InsertTable->GetCountersCommitted().Bytes);
         return;

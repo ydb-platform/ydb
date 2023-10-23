@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/engines/changes/general_compaction.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/library/accessor/accessor.h>
 
 #include <util/generic/hash.h>
@@ -15,7 +16,12 @@
 namespace NKikimr::NOlap::NStorageOptimizer::NBuckets {
 
 static const ui64 SmallPortionDetectSizeLimit = 1 << 20;
-static const TDuration CommonFreshnessCheckDuration = TDuration::Seconds(300);
+
+TDuration GetCommonFreshnessCheckDuration() {
+    static const TDuration CommonFreshnessCheckDuration = TDuration::Seconds(300);
+    return NYDBTest::TControllers::GetColumnShardController()->GetOptimizerFreshnessCheckDuration(CommonFreshnessCheckDuration);
+}
+
 class TSimplePortionsGroupInfo {
 private:
     YDB_READONLY(i64, Bytes, 0);
@@ -77,7 +83,7 @@ private:
     std::map<TInstant, THashMap<ui64, std::shared_ptr<TPortionInfo>>> Futures;
     TSimplePortionsGroupInfo BucketInfo;
     std::shared_ptr<TCounters> Counters;
-    const TDuration FutureDetector = CommonFreshnessCheckDuration;
+    const TDuration FutureDetector;
     bool AddActual(const std::shared_ptr<TPortionInfo>& portion) {
         if (Actuals.emplace(portion->GetPortionId(), portion).second) {
             BucketInfo.AddPortion(portion);
@@ -604,7 +610,7 @@ public:
     TPortionsBucket(const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TCounters>& counters)
         : MainPortion(portion)
         , Counters(counters)
-        , Others(Counters, CommonFreshnessCheckDuration)
+        , Others(Counters, GetCommonFreshnessCheckDuration())
     {
         if (MainPortion) {
             Counters->PortionsAlone->AddPortion(MainPortion);
@@ -951,7 +957,7 @@ public:
         } else {
             if (itFrom == Buckets.end()) {
                 const TDuration freshness = now - TInstant::MilliSeconds(portion->RecordSnapshotMax().GetPlanStep());
-                if (freshness < CommonFreshnessCheckDuration) {
+                if (freshness < GetCommonFreshnessCheckDuration()) {
                     AddOther(portion, now);
                     return;
                 }

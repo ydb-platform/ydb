@@ -1,6 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 
 #include <ydb/core/sys_view/service/query_history.h>
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
@@ -267,7 +266,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
 
         TDistribution GetDistribution(const bool verbose = false) {
-            const TString selectQuery = "SELECT COUNT(*) as c, field FROM `" + TablePath + "` GROUP BY field ORDER BY field";
+            const TString selectQuery = "PRAGMA Kikimr.OptUseFinalizeByKey='true';SELECT COUNT(*) as c, field FROM `" + TablePath + "` GROUP BY field ORDER BY field";
 
             auto tableClient = KikimrRunner.GetTableClient();
             auto rows = ExecuteScanQuery(tableClient, selectQuery, verbose);
@@ -1342,8 +1341,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(CheckEarlyFilterOnEmptySelect) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -1882,6 +1880,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             TString query = R"(
                 --!syntax_v1
+                PRAGMA Kikimr.OptUseFinalizeByKey;
                 SELECT
                     level, COUNT(level)
                 FROM `/Root/olapStore/olapTable`
@@ -2119,6 +2118,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             if (!Pushdown) {
                 queryFixed << "PRAGMA Kikimr.OptEnableOlapPushdown = \"false\";" << Endl;
             }
+            queryFixed << "PRAGMA Kikimr.OptUseFinalizeByKey;" << Endl;
 
             queryFixed << Query << Endl;
             Cerr << "REQUEST:\n" << queryFixed << Endl;
@@ -3295,6 +3295,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         static ui32 numKinds = 5;
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -3336,6 +3337,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         static ui32 numKinds = 5;
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable_1");
@@ -3396,6 +3398,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(StatsSysViewEnumStringBytes) {
         ui64 rawBytesPK1;
         ui64 bytesPK1;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         {
             auto settings = TKikimrSettings()
                 .SetWithSampleTables(false);
@@ -3704,6 +3707,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetNodeCount(2);
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
         auto runtime = server->GetRuntime();
         auto sender = runtime->AllocateEdgeActor();
@@ -3790,8 +3794,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(StatsSysViewColumns) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TKikimrRunner kikimr(settings);
         static ui32 numKinds = 5;
 
@@ -3850,9 +3854,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(StatsSysViewRanges) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         static ui32 numKinds = 5;
@@ -3932,9 +3936,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(StatsSysViewFilter) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
         for (ui64 i = 0; i < 10; ++i) {
@@ -3999,9 +4003,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(StatsSysViewAggregation) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         static ui32 numKinds = 5;
 
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_1");

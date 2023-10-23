@@ -67,7 +67,7 @@ struct TSettings {
     static constexpr ui32 MAX_ACTIVE_COMPACTIONS = 1;
 
     static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
-    static constexpr TDuration GuaranteeIndexationInterval = TDuration::Seconds(0);
+    static constexpr TDuration GuaranteeIndexationInterval = TDuration::Seconds(10);
     static constexpr i64 GuaranteeIndexationStartBytesLimit = (i64)5 * 1024 * 1024 * 1024;
 
     TControlWrapper BlobWriteGrouppingEnabled;

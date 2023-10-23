@@ -67,6 +67,16 @@ public:
     virtual TDuration GetTTLDefaultWaitingDuration(const TDuration defaultValue) const {
         return defaultValue;
     }
+    virtual TDuration GetGuaranteeIndexationInterval(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual ui64 GetGuaranteeIndexationStartBytesLimit(const ui64 defaultValue) const {
+        return defaultValue;
+    }
+    virtual TDuration GetOptimizerFreshnessCheckDuration(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+
     virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& /*tiers*/) {
     }
 

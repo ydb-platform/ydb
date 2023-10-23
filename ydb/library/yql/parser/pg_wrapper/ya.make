@@ -17,7 +17,7 @@ ADDINCL(
     ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/sort
     ydb/library/yql/parser/pg_wrapper/postgresql/src/common
     ydb/library/yql/parser/pg_wrapper/postgresql/src/include
-    contrib/libs/postgresql/src/port
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/port
 )
 
 SRCS(

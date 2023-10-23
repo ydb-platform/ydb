@@ -1,29 +1,66 @@
 #include "mkql_time_order_recover.h"
+#include "mkql_saveload.h"
+
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <queue>
 
 namespace NKikimr::NMiniKQL {
 
 namespace {
 
-class TTimeOrderRecover : public TStatefulFlowComputationNode<TTimeOrderRecover> {
-    using TBaseComputation = TStatefulFlowComputationNode<TTimeOrderRecover>;
+constexpr ui32 StateVersion = 1;
+
+class TTimeOrderRecover : public TStatefulFlowComputationNode<TTimeOrderRecover, true> {
+    using TBaseComputation = TStatefulFlowComputationNode<TTimeOrderRecover, true>;
 public:
     class TState: public TComputationValue<TState> {
     public:
         using TTimestamp = i64; //use signed integers to simplify arithmetics
         using TTimeinterval = i64;
+        using TSelf = TTimeOrderRecover;
 
-        TState(TMemoryUsageInfo* memInfo, TTimeinterval delay, TTimeinterval ahead, ui32 rowLimit)
+        TState(
+            TMemoryUsageInfo* memInfo,
+            const TSelf* self,
+            TTimeinterval delay,
+            TTimeinterval ahead,
+            ui32 rowLimit,
+            TComputationContext& ctx)
             : TComputationValue<TState>(memInfo)
+            , Self(self)
             , Heap(Greater)
             , Delay(delay)
             , Ahead(ahead)
             , RowLimit(rowLimit + 1)
             , Latest(0)
             , Terminating(false)
+            , Ctx(ctx)
         {}
+
+    private:
+        using TEntry = std::pair<TTimestamp, NUdf::TUnboxedValue>;
+        static constexpr auto Greater = [](const TEntry& lhs, const TEntry& rhs) {
+            return lhs.first > rhs.first;
+        };
+        using TStdHeap = std::priority_queue<
+            TEntry,
+            std::vector<TEntry, TMKQLAllocator<TEntry>>,
+            decltype(Greater)>;
+
+
+        struct THeap: public TStdHeap {
+            template<typename...TArgs>
+            THeap(TArgs... args) : TStdHeap(args...) {}
+            
+            auto begin() const { return c.begin(); }
+            auto end() const { return c.end(); }
+            auto clear() { return c.clear(); }
+    };
+
+    public:
+
         NUdf::TUnboxedValue GetOutputIfReady() {
             if (Terminating && Heap.empty()) {
                 return NUdf::TUnboxedValue::MakeFinish();
@@ -57,21 +94,57 @@ public:
         void Finish() {
             Terminating = true;
         }
+
     private:
-        using TEntry = std::pair<TTimestamp, NUdf::TUnboxedValue>;
-        static constexpr auto Greater = [](const TEntry& lhs, const TEntry& rhs) {
-            return lhs.first > rhs.first;
-        };
-        using THeap = std::priority_queue<
-            TEntry,
-            std::vector<TEntry, TMKQLAllocator<TEntry>>,
-            decltype(Greater)>;
+        void Load(const NUdf::TStringRef& state) override {
+            TStringBuf in(state.Data(), state.Size());
+
+            const auto stateVersion = ReadUi32(in);
+            if (stateVersion == 1) {
+                const auto heapSize = ReadUi32(in);
+                ClearState();
+                for (auto i = 0U; i < heapSize; ++i) {
+                    TTimestamp t = ReadUi64(in);
+                    NUdf::TUnboxedValue row = ReadUnboxedValue(in, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx);
+                    Heap.emplace(t, std::move(row));
+                }
+                Latest = ReadUi64(in);
+                Terminating = ReadBool(in);
+            } else {
+                THROW yexception() << "Invalid state version " << stateVersion;
+            }
+        }
+
+        NUdf::TUnboxedValue Save() const override {
+            TString out;
+            WriteUi32(out, StateVersion);
+            WriteUi32(out, Heap.size());
+
+            for (const TEntry& entry : Heap) {
+                WriteUi64(out, entry.first);
+                WriteUnboxedValue(out, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), entry.second);
+            }
+            WriteUi64(out, Latest);
+            WriteBool(out, Terminating);
+            auto strRef = NUdf::TStringRef(out.data(), out.size());
+            return MakeString(strRef);
+        }
+
+        void ClearState() {
+            Heap.clear();
+            Latest = 0;
+            Terminating = false;
+        }
+
+    private:
+        const TSelf *const Self;
         THeap Heap;
         const TTimeinterval Delay;
         const TTimeinterval Ahead;
         const ui32 RowLimit;
         TTimestamp Latest;
         bool Terminating; //not applicable for streams, but useful for debug and testing
+        TComputationContext& Ctx;
     };
 
     TTimeOrderRecover(
@@ -84,8 +157,8 @@ public:
         ui32 outOfOrderColumnIndex,
         IComputationNode* delay,
         IComputationNode* ahead,
-        IComputationNode* rowLimit
-    )
+        IComputationNode* rowLimit,
+        TType* stateType)
         : TBaseComputation(mutables, inputFlow, kind)
         , InputFlow(inputFlow)
         , InputRowArg(inputRowArg)
@@ -96,15 +169,28 @@ public:
         , Ahead(ahead)
         , RowLimit(rowLimit)
         , Cache(mutables)
-    {}
+        , StateType(stateType)
+        , Packer(mutables)
+    { }
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue& stateValue, TComputationContext& ctx) const {
         if (stateValue.IsInvalid()) {
             stateValue = ctx.HolderFactory.Create<TState>(
+                this,
                 Delay->GetValue(ctx).Get<i64>(),
                 Ahead->GetValue(ctx).Get<i64>(),
-                RowLimit->GetValue(ctx).Get<ui32>()
-            );
+                RowLimit->GetValue(ctx).Get<ui32>(),
+                ctx);
+        } else if (stateValue.HasValue() && !stateValue.IsBoxed()) {
+            // Load from saved state.
+            NUdf::TUnboxedValue state = ctx.HolderFactory.Create<TState>(
+                this,
+                Delay->GetValue(ctx).Get<i64>(),
+                Ahead->GetValue(ctx).Get<i64>(),
+                RowLimit->GetValue(ctx).Get<ui32>(),
+                ctx);
+            state.Load(stateValue.AsStringRef());
+            stateValue = state;
         }
         auto& state = *static_cast<TState *>(stateValue.AsBoxed().Get());
         while (true) {
@@ -161,6 +247,8 @@ private:
     const IComputationNode* Ahead;
     const IComputationNode* RowLimit;
     const TContainerCacheOnContext Cache;
+    TType* const StateType;
+    TMutableObjectOverBoxedValue<TValuePackerBoxed> Packer;
 };
 
 } //namespace
@@ -175,6 +263,8 @@ IComputationNode* TimeOrderRecover(const TComputationNodeFactoryContext& ctx,
     TRuntimeNode ahead,
     TRuntimeNode rowLimit)
 {
+    auto* rowType = AS_TYPE(TStructType, AS_TYPE(TFlowType, inputFlow.GetStaticType())->GetItemType());
+
     return new TTimeOrderRecover(ctx.Mutables
         , GetValueRepresentation(inputFlow.GetStaticType())
         , LocateNode(ctx.NodeLocator, *inputFlow.GetNode())
@@ -185,6 +275,7 @@ IComputationNode* TimeOrderRecover(const TComputationNodeFactoryContext& ctx,
         , LocateNode(ctx.NodeLocator, *delay.GetNode())
         , LocateNode(ctx.NodeLocator, *ahead.GetNode())
         , LocateNode(ctx.NodeLocator, *rowLimit.GetNode())
+        , rowType
     );
 }
 

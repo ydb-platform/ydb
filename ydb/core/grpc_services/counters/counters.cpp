@@ -113,10 +113,12 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutDatabase;
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutToken;
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutTls;
+    ::NMonitoring::THistogramPtr Histo;
     std::array<::NMonitoring::TDynamicCounters::TCounterPtr, 2>  GRpcStatusCounters;
 
     TYdbRpcCounters YdbCounters;
 
+    std::function<void()> InitFn;
 private:
 
     std::shared_ptr<TResponseStatusCounter> GetResponseCounterByStatus(ui32 status) {
@@ -187,8 +189,11 @@ public:
     }
 
     void FinishProcessing(ui32 requestSize, ui32 responseSize, bool ok, ui32 status,
-        TDuration /*requestDuration*/) override
+        TDuration requestDuration) override
     {
+        static std::once_flag flag;
+        std::call_once(flag, InitFn);
+
         InflyCounter->Dec();
         *InflyRequestBytes -= requestSize;
         *ResponseBytes += responseSize;
@@ -203,6 +208,8 @@ public:
         } else if (!Streaming) {
             *GetResponseCounterByStatus(status) += 1;
         }
+
+        Histo->Collect(requestDuration.MilliSeconds());
     }
 
     NGrpc::ICounterBlockPtr Clone() override {
@@ -307,6 +314,12 @@ TYdbCounterBlock::TYdbCounterBlock(const ::NMonitoring::TDynamicCounterPtr& coun
     auto subgroup = group->GetSubgroup(streaming ? "stream" : "request", requestName);
     TotalCounter = subgroup->GetCounter("total", true);
     InflyCounter = subgroup->GetCounter("infly", false);
+
+    InitFn = [this, subgroup] () {
+        auto h = NMonitoring::ExplicitHistogram(
+            NMonitoring::TBucketBounds{5, 10, 50, 100, 500, 1000, 5000, 10000, 20000, 60000});
+        Histo = subgroup->GetHistogram("LatencyMs", std::move(h));
+    };
 }
 
 using TYdbCounterBlockPtr = TIntrusivePtr<TYdbCounterBlock>;

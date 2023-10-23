@@ -18,46 +18,111 @@ struct TLookupNodes {
     TVector<TCoArgument> Args;
 };
 
-TDqCnUnionAll CreateLookupStageWithConnection(const TDqStage& computeKeysStage, size_t index,
-    const NYql::TKikimrTableMetadata& meta, TExprNode::TPtr _false,
-    TPositionHandle pos, TExprContext& ctx)
+TDqCnUnionAll CreateLookupStageWithConnection(const TDqStage& computeKeysStage, size_t stageOut,
+    const NYql::TKikimrTableMetadata& mainTableMeta, int indexId, TExprNode::TPtr _false,
+    std::pair<TExprNode::TPtr, size_t> pkChecks, TPositionHandle pos, TExprContext& ctx)
 {
-    auto lookupKeysPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
+    const NYql::TKikimrTableMetadata* meta;
+    if (indexId == -1) {
+        pkChecks.first.Reset();
+        meta = &mainTableMeta;
+    } else {
+        YQL_ENSURE((size_t)indexId < mainTableMeta.SecondaryGlobalIndexMetadata.size());
+        meta = mainTableMeta.SecondaryGlobalIndexMetadata[indexId].Get();
+    }
+
+    TVector<TExprBase> inputs;
+    TVector<TCoArgument> args;
+
+    inputs.emplace_back(Build<TDqPhyPrecompute>(ctx, pos)
         .Connection<TDqCnValue>()
            .Output()
                .Stage(computeKeysStage)
-               .Index().Build(IntToString<10>(index))
+               .Index().Build(IntToString<10>(stageOut))
                .Build()
            .Build()
-        .Done();
+        .Done()
+    );
 
+    args.emplace_back(
+        Build<TCoArgument>(ctx, pos)
+            .Name(TString("arg0"))
+            .Done()
+    );
+
+    NYql::TExprNode::TPtr lambda;
+    TVector<TExprBase> columnsToSelect;
+
+    if (pkChecks.first) {
+        columnsToSelect.reserve(mainTableMeta.KeyColumnNames.size());
+
+        inputs.emplace_back(Build<TDqPhyPrecompute>(ctx, pos)
+            .Connection<TDqCnValue>()
+                .Output()
+                    .Stage(computeKeysStage)
+                    .Index().Build(IntToString<10>(pkChecks.second))
+                    .Build()
+                .Build()
+            .Done()
+        );
+
+        args.emplace_back(Build<TCoArgument>(ctx, pos)
+            .Name(TString("arg1"))
+            .Done()
+        );
+
+        for (const auto& key : mainTableMeta.KeyColumnNames) {
+            columnsToSelect.emplace_back(Build<TCoAtom>(ctx, pos)
+                .Value(key)
+                .Done()
+            );
+        }
+
+        lambda = Build<TCoLambda>(ctx, pos)
+            .Args({"row_from_index"})
+            .Body<TCoOptionalIf>()
+                .Predicate<TCoNot>()
+                    .Value<TCoContains>()
+                        .Collection(args[1])
+                        .Lookup("row_from_index")
+                        .Build()
+                    .Build()
+                .Value(_false)
+                .Build()
+            .Done()
+            .Ptr();
+    } else {
+        lambda = Build<TCoLambda>(ctx, pos)
+            .Args({"row"})
+            .Body<TCoJust>()
+                .Input(_false)
+                .Build()
+            .Done()
+            .Ptr();
+    }
 
     auto stage = Build<TDqStage>(ctx, pos)
         .Inputs()
-            .Add(lookupKeysPrecompute)
+            .Add(inputs)
             .Build()
         .Program()
-            .Args({"keys_list"})
-            .Body<TCoMap>()
+            .Args(args)
+            .Body<TCoFlatMap>()
                 .Input<TCoTake>()
                     .Input<TKqpLookupTable>()
-                        .Table(BuildTableMeta(meta, pos, ctx))
+                        .Table(BuildTableMeta(*meta, pos, ctx))
                         .LookupKeys<TCoIterator>()
-                            .List("keys_list")
+                            .List(args[0])
                             .Build()
-                        .Columns()
+                        .Columns<TCoAtomList>()
+                            .Add(columnsToSelect)
                             .Build()
                         .Build()
                     .Count<TCoUint64>()
                         .Literal().Build("1")
                         .Build()
                     .Build()
-                .Lambda()
-                    .Args({"row"})
-                    .Body<TCoJust>()
-                        .Input(_false)
-                        .Build()
-                    .Build()
+                .Lambda(lambda)
                 .Build()
             .Build()
         .Settings().Build()
@@ -71,16 +136,39 @@ TDqCnUnionAll CreateLookupStageWithConnection(const TDqStage& computeKeysStage, 
         .Done();
 }
 
+NYql::TExprNode::TPtr MakeUniqCheckDict(const TCoLambda& selector,
+    const TExprBase& rowsListArg, TPositionHandle pos, TExprContext& ctx)
+{
+    return Build<TCoToDict>(ctx, pos)
+        .List(rowsListArg)
+        .KeySelector(selector)
+        .PayloadSelector()
+            .Args({"stub"})
+            .Body<TCoVoid>()
+                .Build()
+            .Build()
+        .Settings()
+            .Add().Build("One")
+            .Add().Build("Hashed")
+            .Build()
+        .Done().Ptr();
 }
 
-TVector<TUniqBuildHelper::TUniqCheckNodes> TUniqBuildHelper::Prepare(const TCoArgument& rowsListArg,
+}
+
+std::pair<TVector<TUniqBuildHelper::TUniqCheckNodes>, NYql::TExprNode::TPtr> TUniqBuildHelper::Prepare(const TCoArgument& rowsListArg,
     const TKikimrTableDescription& table,
     TPositionHandle pos, TExprContext& ctx, bool skipPkCheck)
 {
     TVector<TUniqCheckNodes> checks;
+    NYql::TExprNode::TPtr pkDict;
 
     if (!skipPkCheck) {
         checks.emplace_back(MakeUniqCheckNodes(MakeTableKeySelector(table.Metadata, pos, ctx), rowsListArg, pos, ctx));
+    } else {
+        // In case of update we must make additional filtering to exclude duplicate checks
+        // non pk constraint for rows where pk was given
+        pkDict = MakeUniqCheckDict(MakeTableKeySelector(table.Metadata, pos, ctx), rowsListArg, pos, ctx);
     }
 
     // make uniq check for each uniq constraint
@@ -111,7 +199,7 @@ TVector<TUniqBuildHelper::TUniqCheckNodes> TUniqBuildHelper::Prepare(const TCoAr
         checks.back().IndexId = i;
     }
 
-    return checks;
+    return {checks, pkDict};
 }
 
 TUniqBuildHelper::TUniqBuildHelper(const TKikimrTableDescription& table,
@@ -124,19 +212,8 @@ TUniqBuildHelper::TUniqCheckNodes TUniqBuildHelper::MakeUniqCheckNodes(const TCo
     const TExprBase& rowsListArg, TPositionHandle pos, TExprContext& ctx)
 {
     TUniqCheckNodes result;
-    auto dict = Build<TCoToDict>(ctx, pos)
-        .List(rowsListArg)
-        .KeySelector(selector)
-        .PayloadSelector()
-            .Args({"stub"})
-            .Body<TCoVoid>()
-                .Build()
-            .Build()
-        .Settings()
-            .Add().Build("One")
-            .Add().Build("Hashed")
-            .Build()
-        .Done().Ptr();
+
+    auto dict = MakeUniqCheckDict(selector, rowsListArg, pos, ctx);
 
     result.DictKeys = Build<TCoDictKeys>(ctx, pos)
         .Dict(dict)
@@ -155,14 +232,18 @@ TUniqBuildHelper::TUniqCheckNodes TUniqBuildHelper::MakeUniqCheckNodes(const TCo
 }
 
 size_t TUniqBuildHelper::GetChecksNum() const {
-    return Checks.size();
+    return Checks.Size();
+}
+
+size_t TUniqBuildHelper::CalcComputeKeysStageOutputNum() const {
+    return Checks.Size() * 2 + 1;
 }
 
 TDqStage TUniqBuildHelper::CreateComputeKeysStage(const TCondenseInputResult& condenseResult,
     TPositionHandle pos, TExprContext& ctx) const
 {
     // Number of items for output list 2 for each table + 1 for params itself
-    const size_t nItems = Checks.size() * 2 + 1;
+    const size_t nItems = CalcComputeKeysStageOutputNum();
     TVector<TExprBase> types;
     types.reserve(nItems);
 
@@ -172,7 +253,7 @@ TDqStage TUniqBuildHelper::CreateComputeKeysStage(const TCondenseInputResult& co
             .Done()
     );
 
-    for (size_t i = 0; i < Checks.size(); i++) {
+    for (size_t i = 0; i < Checks.Size(); i++) {
         types.emplace_back(
             Build<TCoTypeOf>(ctx, pos)
                 .Value(Checks[i].DictKeys)
@@ -181,6 +262,14 @@ TDqStage TUniqBuildHelper::CreateComputeKeysStage(const TCondenseInputResult& co
         types.emplace_back(
             Build<TCoTypeOf>(ctx, pos)
                 .Value(Checks[i].UniqCmp)
+                .Done()
+        );
+    }
+
+    if (auto dict = Checks.GetPkDict()) {
+        types.emplace_back(
+            Build<TCoTypeOf>(ctx, pos)
+                .Value(dict)
                 .Done()
         );
     }
@@ -202,7 +291,8 @@ TDqStage TUniqBuildHelper::CreateComputeKeysStage(const TCondenseInputResult& co
             .Done()
     );
 
-    for (size_t i = 0, ch = 1; i < Checks.size(); i++) {
+    size_t ch = 1;
+    for (size_t i = 0; i < Checks.Size(); i++) {
         variants.emplace_back(
             Build<TCoVariant>(ctx, pos)
                 .Item(Checks[i].DictKeys)
@@ -213,6 +303,16 @@ TDqStage TUniqBuildHelper::CreateComputeKeysStage(const TCondenseInputResult& co
         variants.emplace_back(
             Build<TCoVariant>(ctx, pos)
                 .Item(Checks[i].UniqCmp)
+                .Index().Build(IntToString<10>(ch++))
+                .VarType(variantType)
+                .Done()
+        );
+    }
+
+    if (auto dict = Checks.GetPkDict()) {
+        variants.emplace_back(
+            Build<TCoVariant>(ctx, pos)
+                .Item(dict)
                 .Index().Build(IntToString<10>(ch++))
                 .VarType(variantType)
                 .Done()
@@ -256,8 +356,8 @@ TVector<TExprBase> TUniqBuildHelper::CreateUniquePrecompute(const TDqStage& comp
     TPositionHandle pos, TExprContext& ctx) const
 {
     TVector<TExprBase> uniquePrecomputes;
-    uniquePrecomputes.reserve(Checks.size());
-    for (size_t i = 0, output_index = 2; i < Checks.size(); i++, output_index += 2) {
+    uniquePrecomputes.reserve(Checks.Size());
+    for (size_t i = 0, output_index = 2; i < Checks.Size(); i++, output_index += 2) {
         uniquePrecomputes.emplace_back(Build<TDqPhyPrecompute>(ctx, pos)
             .Connection<TDqCnValue>()
                 .Output()
@@ -274,25 +374,21 @@ TVector<TExprBase> TUniqBuildHelper::CreateUniquePrecompute(const TDqStage& comp
 TDqStage TUniqBuildHelper::CreateLookupExistStage(const TDqStage& computeKeysStage,
     const TKikimrTableDescription& table, TExprNode::TPtr _true, TPositionHandle pos, TExprContext& ctx) const
 {
-    TLookupNodes lookupNodes(Checks.size());
+    TLookupNodes lookupNodes(Checks.Size());
 
     auto _false = MakeBool(pos, false, ctx);
 
+    // last stage output is pk dict for update mode
+    int pkDictOutputId = Checks.GetPkDict() ? CalcComputeKeysStageOutputNum() : -1;
+
     // 0 output - input stream itself so start with output 1
     // Each check produces 2 outputs
-    for (size_t i = 0, stage_out = 1; i < Checks.size(); i++, stage_out += 2) {
+    for (size_t i = 0, stage_out = 1; i < Checks.Size(); i++, stage_out += 2) {
         const auto indexId = Checks[i].IndexId;
-        if (indexId == TUniqCheckNodes::NOT_INDEX_ID) {
-            lookupNodes.Stages.emplace_back(
-                CreateLookupStageWithConnection(computeKeysStage, stage_out, *table.Metadata, _false, pos, ctx)
-            );
-        } else {
-            YQL_ENSURE((size_t)indexId < table.Metadata->SecondaryGlobalIndexMetadata.size());
-            lookupNodes.Stages.emplace_back(
-                CreateLookupStageWithConnection(computeKeysStage, stage_out,
-                    *(table.Metadata->SecondaryGlobalIndexMetadata[indexId]), _false, pos, ctx)
-            );
-        }
+        lookupNodes.Stages.emplace_back(
+            CreateLookupStageWithConnection(computeKeysStage, stage_out, *table.Metadata, indexId,
+                _false, {Checks.GetPkDict(), pkDictOutputId}, pos, ctx)
+        );
 
         lookupNodes.Args.emplace_back(
             Build<TCoArgument>(ctx, pos)

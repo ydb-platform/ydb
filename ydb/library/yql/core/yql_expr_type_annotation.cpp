@@ -323,6 +323,17 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         } else if (from == EDataSlot::Timestamp && to == EDataSlot::TzTimestamp) {
             allow = true;
             useCast = true;
+        } else if (from == EDataSlot::Json && to == EDataSlot::Utf8) {
+            allow = true;
+            useCast = true;
+        } else if ((from == EDataSlot::Yson || from == EDataSlot::Json) && to == EDataSlot::String) {
+            node =  ctx.Builder(node->Pos())
+                .Callable("ToBytes")
+                    .Add(0, node)
+                .Seal()
+                .Build();
+
+            return IGraphTransformer::TStatus::Repeat;
         } else if (IsDataTypeIntegral(from) && to == EDataSlot::Timestamp) {
             node =  ctx.Builder(node->Pos())
                 .Callable("UnsafeTimestampCast")
@@ -4164,6 +4175,11 @@ TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2) {
     }
 
     if (IsDataTypeString(dataSlot1) && IsDataTypeString(dataSlot2)) {
+        if (dataSlot1 == EDataSlot::Json && dataSlot2 == EDataSlot::Utf8 ||
+            dataSlot1 == EDataSlot::Utf8 && dataSlot2 == EDataSlot::Json)
+        {
+            return EDataSlot::Utf8;
+        }
         return EDataSlot::String;
     }
 

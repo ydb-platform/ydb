@@ -1486,6 +1486,27 @@
             "uri": "file://test.test_epochs-reset_sortness_on_append--Results_/extracted"
         }
     ],
+    "test.test[expr-cast_string_implicit-default.txt-Debug]": [
+        {
+            "checksum": "47ce9b44cc3866c646c585b765b20521",
+            "size": 1573,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/b2f07850d2b08ff437b030045e856abfff71f416/resource.tar.gz#test.test_expr-cast_string_implicit-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-cast_string_implicit-default.txt-Plan]": [
+        {
+            "checksum": "8ddfa95f10135fbea51411372a704ae9",
+            "size": 5055,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/b2f07850d2b08ff437b030045e856abfff71f416/resource.tar.gz#test.test_expr-cast_string_implicit-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[expr-cast_string_implicit-default.txt-Results]": [
+        {
+            "checksum": "60eaa095793601463ebfaf5c4e24d890",
+            "size": 10738,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/b2f07850d2b08ff437b030045e856abfff71f416/resource.tar.gz#test.test_expr-cast_string_implicit-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[expr-double_join_with_list_from_range--Debug]": [
         {
             "checksum": "ce7a234d0602157c588e83eaa4b9f22a",

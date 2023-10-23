@@ -4815,6 +4815,13 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1936997/00f46808be87e2ae2d4ac3ac45675b659c5ace45/resource.tar.gz#test_sql2yql.test_expr-cast_reverse_list_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-cast_string_implicit]": [
+        {
+            "checksum": "ebc0c6ee713f907fa1b53c21782b4ab7",
+            "size": 9546,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/fc2e2272b44dc3151e48b91e7cd8bb9987c40aa0/resource.tar.gz#test_sql2yql.test_expr-cast_string_implicit_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-cast_struct]": [
         {
             "checksum": "8d61a81c296392b2dcb58bb57467ce7c",
@@ -21711,6 +21718,13 @@
             "checksum": "6db6f1eeed8090531843e524b939e379",
             "size": 137,
             "uri": "https://storage.yandex-team.ru/get-devtools/1599023/4bd7e6892a9762eec433e60bda88f20cddadc74c/resource.tar.gz#test_sql_format.test_expr-cast_reverse_list_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-cast_string_implicit]": [
+        {
+            "checksum": "d478730e186113dd13d5a8885ff79f0a",
+            "size": 688,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/fc2e2272b44dc3151e48b91e7cd8bb9987c40aa0/resource.tar.gz#test_sql_format.test_expr-cast_string_implicit_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-cast_struct]": [

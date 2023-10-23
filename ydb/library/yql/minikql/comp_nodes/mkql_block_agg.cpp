@@ -1512,7 +1512,7 @@ private:
 
                     if constexpr (Many) {
                         for (ui32 i = 0; i < Streams_.size(); ++i) {
-                            MKQL_ENSURE(ptr[i], "Missing partial aggregation state");
+                            MKQL_ENSURE(ptr[i], "Missing partial aggregation state for stream #" << i);
                         }
 
                         ptr += Streams_.size();

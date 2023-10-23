@@ -25,6 +25,12 @@ class RecordBatch;
 
 namespace NKikimr::NYDBTest {
 
+enum class EOptimizerCompactionWeightControl {
+    Disable,
+    Default,
+    Force
+};
+
 class ICSController {
 private:
     YDB_READONLY(TAtomicCounter, OnSortingPolicyCounter, 0);
@@ -63,6 +69,9 @@ public:
     }
     bool OnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
         return DoOnStartCompaction(changes);
+    }
+    virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
+        return EOptimizerCompactionWeightControl::Force;
     }
     virtual TDuration GetTTLDefaultWaitingDuration(const TDuration defaultValue) const {
         return defaultValue;

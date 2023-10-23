@@ -198,7 +198,7 @@ private:
         return true;
     }
 public:
-    void Validate(const std::shared_ptr<TPortionInfo>& portion) const {
+    bool Validate(const std::shared_ptr<TPortionInfo>& portion) const {
         if (portion) {
             AFL_VERIFY(!PreActuals.contains(portion->GetPortionId()));
             AFL_VERIFY(!Actuals.contains(portion->GetPortionId()));
@@ -235,6 +235,7 @@ public:
                 AFL_VERIFY(!f.second.contains(i.first));
             }
         }
+        return true;
     }
 
     bool IsEmpty() const {
@@ -519,6 +520,14 @@ public:
         const ui64 count = BucketInfo.GetCount() + ((mainPortion && !isFinal) ? 1 : 0);
         const ui64 recordsCount = BucketInfo.GetRecordsCount() + ((mainPortion && !isFinal) ? mainPortion->GetRecordsCount() : 0);
         const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetBlobBytes() : 0);
+        if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Disable) {
+            return 0;
+        }
+        const ui64 weight = (10000000000.0 * count - sumBytes) * (isFinal ? 1 : 10);
+        if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Force) {
+            return (count > 1) ? weight : 0;
+        }
+
         if (count > 1 && (sumBytes > 32 * 1024 * 1024 || !isFinal || count > 100 || recordsCount > 100000)) {
             return (10000000000.0 * count - sumBytes) * (isFinal ? 1 : 10);
         } else {
@@ -562,8 +571,8 @@ private:
         }
     }
 
-    void Validate() const {
-        Others.Validate(MainPortion);
+    bool Validate() const {
+        return Others.Validate(MainPortion);
     }
 public:
     class TModificationGuard: TNonCopyable {
@@ -577,11 +586,11 @@ public:
             , IsEmptyOthers(Owner.Others.ActualsEmpty())
             , HasNextBorder(Owner.NextBorder)
         {
-//            Owner.Validate();
+            AFL_VERIFY_DEBUG(Owner.Validate());
         }
 
         ~TModificationGuard() {
-//            Owner.Validate();
+            AFL_VERIFY_DEBUG(Owner.Validate());
             if (!Owner.MainPortion) {
                 return;
             }
@@ -957,7 +966,7 @@ public:
         } else {
             if (itFrom == Buckets.end()) {
                 const TDuration freshness = now - TInstant::MilliSeconds(portion->RecordSnapshotMax().GetPlanStep());
-                if (freshness < GetCommonFreshnessCheckDuration()) {
+                if (freshness < GetCommonFreshnessCheckDuration() || portion->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
                     AddOther(portion, now);
                     return;
                 }
@@ -1017,7 +1026,11 @@ protected:
         Buckets.Actualize(currentInstant);
     }
     virtual TOptimizationPriority DoGetUsefulMetric() const override {
-        return TOptimizationPriority::Critical(Buckets.GetWeight());
+        if (Buckets.GetWeight()) {
+            return TOptimizationPriority::Critical(Buckets.GetWeight());
+        } else {
+            return TOptimizationPriority::Zero();
+        }
     }
     virtual TString DoDebugString() const override {
         return Buckets.DebugString();

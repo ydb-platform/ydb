@@ -2537,7 +2537,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         --planStep;
         --txId;
 
-        ui32 numRows = numWrites * (triggerPortionSize - overlapSize) + overlapSize;
+        const ui32 fullNumRows = numWrites * (triggerPortionSize - overlapSize) + overlapSize;
 
         for (ui32 i = 0; i < 2; ++i) {
             {
@@ -2570,11 +2570,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
                 if (testBlobOptions.SameValueColumns.contains("timestamp")) {
                     UNIT_ASSERT(!testBlobOptions.SameValueColumns.contains("message"));
-                    UNIT_ASSERT(DataHas<std::string>(readData, schema, { 0, numRows }, true, "message"));
+                    UNIT_ASSERT(DataHas<std::string>(readData, schema, { 0, fullNumRows}, true, "message"));
                 } else {
                     UNIT_ASSERT(isStrPk0
-                        ? DataHas<std::string>(readData, schema, { 0, numRows }, true, "timestamp")
-                        : DataHas(readData, schema, { 0, numRows }, true, "timestamp"));
+                        ? DataHas<std::string>(readData, schema, { 0, fullNumRows}, true, "timestamp")
+                        : DataHas(readData, schema, { 0, fullNumRows}, true, "timestamp"));
                 }
             }
 
@@ -2584,9 +2584,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             std::vector<ui32> val9999 = { 99999 };
             std::vector<ui32> val1M = { 1000000000 };
             std::vector<ui32> val1M_1 = { 1000000001 };
-            std::vector<ui32> valNumRows = { numRows };
-            std::vector<ui32> valNumRows_1 = { numRows - 1 };
-            std::vector<ui32> valNumRows_2 = { numRows - 2 };
+            std::vector<ui32> valNumRows = {fullNumRows};
+            std::vector<ui32> valNumRows_1 = {fullNumRows - 1 };
+            std::vector<ui32> valNumRows_2 = {fullNumRows - 2 };
 
             {
                 UNIT_ASSERT(table.Pk.size() >= 2);
@@ -2598,9 +2598,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 val9999 = { sameValue, 99999 };
                 val1M = { sameValue, 1000000000 };
                 val1M_1 = { sameValue, 1000000001 };
-                valNumRows = { sameValue, numRows };
-                valNumRows_1 = { sameValue, numRows - 1 };
-                valNumRows_2 = { sameValue, numRows - 2 };
+                valNumRows = { sameValue, fullNumRows};
+                valNumRows_1 = { sameValue, fullNumRows - 1 };
+                valNumRows_2 = { sameValue, fullNumRows - 2 };
             }
 
             using TBorder = TTabletReadPredicateTest::TBorder;
@@ -2632,7 +2632,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
-
         { // Get index stats
             ScanIndexStats(runtime, sender, {tableId, 42}, NOlap::TSnapshot(planStep, txId), 0);
             auto scanInited = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanInitActor>(handle);
@@ -2649,6 +2648,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
             ui64 sumCompactedBytes = 0;
             ui64 sumCompactedRows = 0;
+            ui64 sumInsertedBytes = 0;
+            ui64 sumInsertedRows = 0;
             for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
                 auto paths = batchStats->GetColumnByName("PathId");
                 auto kinds = batchStats->GetColumnByName("Kind");
@@ -2671,16 +2672,22 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                         sumCompactedRows += numRows;
                         //UNIT_ASSERT(numRawBytes > numBytes);
                     }
+                    if (kind == (ui32)NOlap::NPortion::EProduced::INSERTED) {
+                        sumInsertedBytes += numBytes;
+                        sumInsertedRows += numRows;
+                        //UNIT_ASSERT(numRawBytes > numBytes);
+                    }
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL(numRows, 0);
                     UNIT_ASSERT_VALUES_EQUAL(numBytes, 0);
                     UNIT_ASSERT_VALUES_EQUAL(numRawBytes, 0);
                 }
             }
-            const ui64 fullSize = (triggerPortionSize - overlapSize) * numWrites + overlapSize;
-            Cerr << "compacted=" << sumCompactedRows << ";expected=" << fullSize << ";" << Endl;
-            UNIT_ASSERT(sumCompactedRows == fullSize);
-            UNIT_ASSERT(sumCompactedBytes > sumCompactedRows);
+            Cerr << "compacted=" << sumCompactedRows << ";inserted=" << sumInsertedRows << ";expected=" << fullNumRows << ";" << Endl;
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+            UNIT_ASSERT(sumCompactedRows + sumInsertedRows == fullNumRows);
+            UNIT_ASSERT(sumCompactedRows > sumInsertedRows);
+            UNIT_ASSERT(sumCompactedBytes > sumInsertedBytes);
         }
     }
 

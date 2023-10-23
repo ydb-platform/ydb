@@ -1,8 +1,6 @@
 #include "granule.h"
 #include "storage.h"
 #include <library/cpp/actors/core/log.h>
-#include "optimizer/intervals/optimizer.h"
-#include "optimizer/levels/optimizer.h"
 #include "optimizer/lbuckets/optimizer.h"
 
 namespace NKikimr::NOlap {
@@ -167,7 +165,7 @@ TGranuleMeta::TGranuleMeta(const ui64 pathId, std::shared_ptr<TGranulesStorage> 
     , PortionInfoGuard(Owner->GetCounters().BuildPortionBlobsGuard())
 {
     Y_ABORT_UNLESS(Owner);
-    OptimizerPlanner = std::make_shared<NStorageOptimizer::NLevels::TLevelsOptimizerPlanner>(PathId, owner->GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
+    OptimizerPlanner = std::make_shared<NStorageOptimizer::NBuckets::TOptimizerPlanner>(PathId, owner->GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
 
 }
 

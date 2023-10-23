@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
 
 namespace NKikimr {
@@ -14,6 +15,7 @@ using namespace NOlap;
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
+using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
 namespace {
 
@@ -572,6 +574,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
     Y_UNIT_TEST(IndexWriteOverload) {
         TTestDbWrapper db;
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);;
 
         ui64 pathId = 1;

@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) The c-ares project
+ *
+ * Permission to use, copy, modify, and distribute this
+ * software and its documentation for any purpose and without
+ * fee is hereby granted, provided that the above copyright
+ * notice appear in all copies and that both that copyright
+ * notice and this permission notice appear in supporting
+ * documentation, and that the name of M.I.T. not be used in
+ * advertising or publicity pertaining to distribution of the
+ * software without specific, written prior permission.
+ * M.I.T. makes no representations about the suitability of
+ * this software for any purpose.  It is provided "as is"
+ * without express or implied warranty.
+ *
+ * SPDX-License-Identifier: MIT
+ */
 // -*- mode: c++ -*-
 #ifndef ARES_TEST_H
 #define ARES_TEST_H
@@ -145,6 +162,15 @@ class MockServer {
   void SetReplyData(const std::vector<byte>& reply) { reply_ = reply; }
   void SetReply(const DNSPacket* reply) { SetReplyData(reply->data()); }
   void SetReplyQID(int qid) { qid_ = qid; }
+  void Disconnect() {
+    for (int fd : connfds_) {
+      sclose(fd);
+    }
+    connfds_.clear();
+    free(tcp_data_);
+    tcp_data_ = NULL;
+    tcp_data_len_ = 0;
+  }
 
   // The set of file descriptors that the server handles.
   std::set<int> fds() const;
@@ -168,6 +194,8 @@ class MockServer {
   std::set<int> connfds_;
   std::vector<byte> reply_;
   int qid_;
+  unsigned char *tcp_data_;
+  size_t tcp_data_len_;
 };
 
 // Test fixture that uses a mock DNS server.
@@ -229,6 +257,10 @@ ACTION_P2(SetReplyQID, mockserver, qid) {
 // gMock action to cancel a channel.
 ACTION_P2(CancelChannel, mockserver, channel) {
   ares_cancel(channel);
+}
+// gMock action to disconnect all connections.
+ACTION_P2(Disconnect, mockserver) {
+  mockserver->Disconnect();
 }
 
 // C++ wrapper for struct hostent.

@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) The c-ares project
+ *
+ * Permission to use, copy, modify, and distribute this
+ * software and its documentation for any purpose and without
+ * fee is hereby granted, provided that the above copyright
+ * notice appear in all copies and that both that copyright
+ * notice and this permission notice appear in supporting
+ * documentation, and that the name of M.I.T. not be used in
+ * advertising or publicity pertaining to distribution of the
+ * software without specific, written prior permission.
+ * M.I.T. makes no representations about the suitability of
+ * this software for any purpose.  It is provided "as is"
+ * without express or implied warranty.
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 // Include ares internal file for DNS protocol details
 #include "ares_setup.h"
@@ -16,7 +33,7 @@ std::string HexDump(std::vector<byte> data) {
   std::stringstream ss;
   for (size_t ii = 0; ii < data.size();  ii++) {
     char buffer[2 + 1];
-    sprintf(buffer, "%02x", data[ii]);
+    snprintf(buffer, sizeof(buffer), "%02x", data[ii]);
     ss << buffer;
   }
   return ss.str();
@@ -159,17 +176,17 @@ std::string AddressToString(const void* vaddr, int len) {
   std::stringstream ss;
   if (len == 4) {
     char buffer[4*4 + 3 + 1];
-    sprintf(buffer, "%u.%u.%u.%u",
-            (unsigned char)addr[0],
-            (unsigned char)addr[1],
-            (unsigned char)addr[2],
-            (unsigned char)addr[3]);
+    snprintf(buffer, sizeof(buffer), "%u.%u.%u.%u",
+             (unsigned char)addr[0],
+             (unsigned char)addr[1],
+             (unsigned char)addr[2],
+             (unsigned char)addr[3]);
     ss << buffer;
   } else if (len == 16) {
     for (int ii = 0; ii < 16;  ii+=2) {
       if (ii > 0) ss << ':';
       char buffer[4 + 1];
-      sprintf(buffer, "%02x%02x", (unsigned char)addr[ii], (unsigned char)addr[ii+1]);
+      snprintf(buffer, sizeof(buffer), "%02x%02x", (unsigned char)addr[ii], (unsigned char)addr[ii+1]);
       ss << buffer;
     }
   } else {

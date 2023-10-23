@@ -1,7 +1,6 @@
 c-ares Unit Test Suite
 ======================
 
-
 This directory holds unit tests for the c-ares library.  To build the tests:
 
  - Build the main c-ares library first, in the directory above this.  To

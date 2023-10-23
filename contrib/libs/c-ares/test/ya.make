@@ -2,7 +2,9 @@
 
 GTEST(arestest)
 
-WITHOUT_LICENSE_TEXTS()
+LICENSE(MIT)
+
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 SIZE(MEDIUM)
 

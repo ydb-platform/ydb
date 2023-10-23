@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) The c-ares project
+ *
+ * Permission to use, copy, modify, and distribute this
+ * software and its documentation for any purpose and without
+ * fee is hereby granted, provided that the above copyright
+ * notice appear in all copies and that both that copyright
+ * notice and this permission notice appear in supporting
+ * documentation, and that the name of M.I.T. not be used in
+ * advertising or publicity pertaining to distribution of the
+ * software without specific, written prior permission.
+ * M.I.T. makes no representations about the suitability of
+ * this software for any purpose.  It is provided "as is"
+ * without express or implied warranty.
+ *
+ * SPDX-License-Identifier: MIT
+ */
 #include "ares-test.h"
 #include "dns-proto.h"
 
@@ -508,6 +525,22 @@ TEST(Misc, OnionDomain) {
   EXPECT_EQ(1, ares__is_onion_domain("YES.ONION"));
   EXPECT_EQ(1, ares__is_onion_domain("YES.ONION."));
 }
+
+TEST_F(LibraryTest, CatDomain) {
+  char *s;
+
+  ares__cat_domain("foo", "example.net", &s);
+  EXPECT_STREQ("foo.example.net", s);
+  ares_free(s);
+
+  ares__cat_domain("foo", ".", &s);
+  EXPECT_STREQ("foo.", s);
+  ares_free(s);
+
+  ares__cat_domain("foo", "example.net.", &s);
+  EXPECT_STREQ("foo.example.net.", s);
+  ares_free(s);
+}
 #endif
 
 #ifdef CARES_EXPOSE_STATICS
@@ -605,26 +638,10 @@ const struct ares_socket_functions VirtualizeIO::default_functions = {
     }
     return s;
   },
-  [](ares_socket_t s, void * p) {
-    return :: sclose(s);
-  },
-  [](ares_socket_t s, const struct sockaddr * addr, socklen_t len, void *) {
-    return ::connect(s, addr, len);
-  },
-  [](ares_socket_t s, void * dst, size_t len, int flags, struct sockaddr * addr, socklen_t * alen, void *) -> ares_ssize_t {
-#ifdef HAVE_RECVFROM
-    return ::recvfrom(s, reinterpret_cast<RECV_TYPE_ARG2>(dst), len, flags, addr, alen);
-#else
-    return sread(s, dst, len);
-#endif
-  },
-  [](ares_socket_t s, const struct iovec * vec, int len, void *) {
-#ifndef HAVE_WRITEV
-    return ares_writev(s, vec, len);
-#else
-    return :: writev(s, vec, len);
-#endif
-  }
+  NULL,
+  NULL,
+  NULL,
+  NULL
 };
 
 

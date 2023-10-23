@@ -1,3 +1,20 @@
+/*
+ * Copyright (C) Brad House
+ *
+ * Permission to use, copy, modify, and distribute this
+ * software and its documentation for any purpose and without
+ * fee is hereby granted, provided that the above copyright
+ * notice appear in all copies and that both that copyright
+ * notice and this permission notice appear in supporting
+ * documentation, and that the name of M.I.T. not be used in
+ * advertising or publicity pertaining to distribution of the
+ * software without specific, written prior permission.
+ * M.I.T. makes no representations about the suitability of
+ * this software for any purpose.  It is provided "as is"
+ * without express or implied warranty.
+ *
+ * SPDX-License-Identifier: MIT
+ */
 #include "ares_setup.h"
 #include "ares.h"
 #include "ares_nameser.h"
@@ -84,9 +101,11 @@ void ProcessWork(ares_channel channel,
       }
     }
 
-    // Wait for activity or timeout.
-    tv.tv_sec = 0;
-    tv.tv_usec = 100000;  // 100ms
+    /* If ares_timeout returns NULL, it means there are no requests in queue,
+     * so we can break out */
+    if (ares_timeout(channel, NULL, &tv) == NULL)
+      return;
+
     count = select(nfds, &readers, &writers, nullptr, &tv);
     if (count < 0) {
       fprintf(stderr, "select() failed, errno %d\n", errno);
@@ -175,6 +194,8 @@ void DefaultChannelModeTest::Process() {
 MockServer::MockServer(int family, int port)
   : udpport_(port), tcpport_(port), qid_(-1) {
   // Create a TCP socket to receive data on.
+  tcp_data_ = NULL;
+  tcp_data_len_ = 0;
   tcpfd_ = socket(family, SOCK_STREAM, 0);
   EXPECT_NE(-1, tcpfd_);
   int optval = 1;
@@ -260,6 +281,7 @@ MockServer::~MockServer() {
   }
   sclose(tcpfd_);
   sclose(udpfd_);
+  free(tcp_data_);
 }
 
 void MockServer::ProcessPacket(int fd, struct sockaddr_storage *addr, socklen_t addrlen,
@@ -345,36 +367,38 @@ void MockServer::ProcessFD(int fd) {
   byte buffer[2048];
   int len = recvfrom(fd, BYTE_CAST buffer, sizeof(buffer), 0,
                      (struct sockaddr *)&addr, &addrlen);
-  byte* data = buffer;
 
   if (fd != udpfd_) {
     if (len == 0) {
       connfds_.erase(std::find(connfds_.begin(), connfds_.end(), fd));
       sclose(fd);
+      free(tcp_data_);
+      tcp_data_ = NULL;
+      tcp_data_len_ = 0;
       return;
     }
-    if (len < 2) {
-      std::cerr << "Packet too short (" << len << ")" << std::endl;
-      return;
-    }
+    tcp_data_ = (unsigned char *)realloc(tcp_data_, tcp_data_len_ + len);
+    memcpy(tcp_data_ + tcp_data_len_, buffer, len);
+    tcp_data_len_ += len;
+
     /* TCP might aggregate the various requests into a single packet, so we
      * need to split */
-    while (len) {
-      int tcplen = (data[0] << 8) + data[1];
-      data += 2;
-      len -= 2;
-      if (tcplen > len) {
-        std::cerr << "Warning: TCP length " << tcplen
-                  << " doesn't match remaining data length " << len << std::endl;
+    while (tcp_data_len_ > 2) {
+      size_t tcplen = (tcp_data_[0] << 8) + tcp_data_[1];
+      if (tcp_data_len_ - 2 < tcplen)
+        break;
+
+      ProcessPacket(fd, &addr, addrlen, tcp_data_ + 2, tcplen);
+
+      /* strip off processed data if connection not terminated */
+      if (tcp_data_ != NULL) {
+        memmove(tcp_data_, tcp_data_ + tcplen + 2, tcp_data_len_ - 2 - tcplen);
+        tcp_data_len_ -= 2 + tcplen;
       }
-      int process_len = (tcplen > len)?len:tcplen;
-      ProcessPacket(fd, &addr, addrlen, data, process_len);
-      len -= process_len;
-      data += process_len;
     }
   } else {
     /* UDP is always a single packet */
-    ProcessPacket(fd, &addr, addrlen, data, len);
+    ProcessPacket(fd, &addr, addrlen, buffer, len);
   }
 
 }

@@ -5,15 +5,17 @@ LIBRARY()
 LICENSE(
     BSD-3-Clause AND
     ISC AND
+    LicenseRef-scancode-mit-no-advert-export-control AND
     MIT AND
-    NTP
+    NTP AND
+    Public-Domain
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.19.1)
+VERSION(1.20.1)
 
-ORIGINAL_SOURCE(https://github.com/c-ares/c-ares/archive/cares-1_19_1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/c-ares/c-ares/archive/cares-1_20_1.tar.gz)
 
 PEERDIR(
     contrib/libs/libc_compat
@@ -46,11 +48,17 @@ ENDIF()
 SRCS(
     src/lib/ares__addrinfo2hostent.c
     src/lib/ares__addrinfo_localhost.c
+    src/lib/ares__buf.c
     src/lib/ares__close_sockets.c
     src/lib/ares__get_hostent.c
+    src/lib/ares__htable.c
+    src/lib/ares__htable_asvp.c
+    src/lib/ares__htable_stvp.c
+    src/lib/ares__llist.c
     src/lib/ares__parse_into_addrinfo.c
     src/lib/ares__read_line.c
     src/lib/ares__readaddrinfo.c
+    src/lib/ares__slist.c
     src/lib/ares__sortaddrinfo.c
     src/lib/ares__timeval.c
     src/lib/ares_android.c
@@ -72,7 +80,6 @@ SRCS(
     src/lib/ares_getsock.c
     src/lib/ares_init.c
     src/lib/ares_library_init.c
-    src/lib/ares_llist.c
     src/lib/ares_mkquery.c
     src/lib/ares_nowarn.c
     src/lib/ares_options.c
@@ -99,7 +106,6 @@ SRCS(
     src/lib/ares_strsplit.c
     src/lib/ares_timeout.c
     src/lib/ares_version.c
-    src/lib/ares_writev.c
     src/lib/atomic.cpp
     src/lib/bitncmp.c
     src/lib/inet_net_pton.c

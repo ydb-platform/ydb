@@ -1,8 +1,30 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/cpu_id.h>
+#include "simd.h"
+
+template<typename TTraits>
+void Reverse(ui8* buf, ui8 *result_buf, int len) {
+    using TSimdUI8 = typename TTraits::template TSimd8<ui8>;
+    int id = 0;
+    while (id + TTraits::Size <= len) {
+        TSimdUI8 x(buf + id);
+        (~x).Store(result_buf + id);
+        id += TTraits::Size;
+    }
+    while (id < len) {
+        *(result_buf + id) = ~(*(buf + id));
+        id += 1;
+    }
+}
+
+struct TTestFactory {
+    template<typename T>
+    int Create() const {
+        return T::Size;
+    }
+};
 
 #pragma clang attribute push(__attribute__((target("avx2"))), apply_to=function)
-#include <ydb/library/yql/utils/simd/simd_avx2.h>
 Y_UNIT_TEST_SUITE(TSimdAVX2) {
     using namespace NSimd::NAVX2;
     Y_UNIT_TEST(SimdBool) {
@@ -86,11 +108,27 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
         UNIT_ASSERT_EQUAL(((a + b) == a3).Any(), true);
         UNIT_ASSERT_EQUAL(((a - b) == a2).Any(), true);
     }
+
+    Y_UNIT_TEST(SimdTrait) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
+
+        ui8 buf[1000];
+        for (int i = 0; i < 1000; i += 1) {
+            buf[i] = i;
+        }
+        ui8 result_buf[1000] = {0};
+        Reverse<NSimd::TSimdAVX2Traits>(buf, result_buf, 1000);
+        for (int i = 0; i < 1000; i += 1) {
+            UNIT_ASSERT_EQUAL(result_buf[i], ui8(~buf[i]));
+        }
+    }
 }
+
 #pragma clang attribute pop
 
 #pragma clang attribute push(__attribute__((target("sse4.2"))), apply_to=function)
-#include <ydb/library/yql/utils/simd/simd_sse42.h>
 Y_UNIT_TEST_SUITE(TSimdSSE42) {
     using namespace NSimd::NSSE42;
     Y_UNIT_TEST(SimdBool) {
@@ -174,5 +212,46 @@ Y_UNIT_TEST_SUITE(TSimdSSE42) {
         UNIT_ASSERT_EQUAL(((a + b) == a3).Any(), true);
         UNIT_ASSERT_EQUAL(((a - b) == a2).Any(), true);
     }
+
+    Y_UNIT_TEST(SimdTrait) {
+        if (!NX86::HaveSSE42()) {
+            return;
+        }
+
+        ui8 buf[1000];
+        for (int i = 0; i < 1000; i += 1) {
+            buf[i] = i;
+        }
+        ui8 result_buf[1000] = {0};
+        Reverse<NSimd::TSimdSSE42Traits>(buf, result_buf, 1000);
+        for (int i = 0; i < 1000; i += 1) {
+            UNIT_ASSERT_EQUAL(result_buf[i], ui8(~buf[i]));
+        }
+    }
 }
 #pragma clang attribute pop
+
+Y_UNIT_TEST_SUITE(SimdFallback) {
+    Y_UNIT_TEST(SimdTrait) {
+        ui8 buf[1000];
+        for (int i = 0; i < 1000; i += 1) {
+            buf[i] = i;
+        }
+        ui8 result_buf[1000] = {0};
+        Reverse<NSimd::TSimdFallbackTraits>(buf, result_buf, 1000);
+        for (int i = 0; i < 1000; i += 1) {
+            UNIT_ASSERT_EQUAL(result_buf[i], ui8(~buf[i]));
+        }
+    }
+
+    Y_UNIT_TEST(BestTrait) {
+        TTestFactory x;
+        if (NX86::HaveAVX2()) {
+            UNIT_ASSERT_EQUAL(NSimd::SelectSimdTraits(x), 32);
+        } else if (NX86::HaveSSE42()) {
+            UNIT_ASSERT_EQUAL(NSimd::SelectSimdTraits(x), 16);
+        } else {
+            UNIT_ASSERT_EQUAL(NSimd::SelectSimdTraits(x), 8);
+        }
+    }
+}

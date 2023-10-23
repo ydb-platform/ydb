@@ -3,6 +3,9 @@
 #include <cstdint>
 #include <immintrin.h>
 
+
+#pragma clang attribute push(__attribute__((target("avx2"))), apply_to=function)
+
 namespace NSimd {
 namespace NAVX2 {
 
@@ -21,24 +24,24 @@ struct TBase {
         : Value(value) {
     }
 
-    inline operator const __m256i&() const {
+    explicit inline operator const __m256i&() const {
         return this->Value;
     }
-    inline operator __m256i&() {
+    explicit inline operator __m256i&() {
         return this->Value;
     }
 
     inline Child operator|(const Child other) const {
-        return _mm256_or_si256(*this, other);
+        return _mm256_or_si256(this->Value, other.Value);
     }
     inline Child operator&(const Child other) const {
-        return _mm256_and_si256(*this, other);
+        return _mm256_and_si256(this->Value, other.Value);
     }
     inline Child operator^(const Child other) const {
-        return _mm256_xor_si256(*this, other);
+        return _mm256_xor_si256(this->Value, other.Value);
     }
     inline Child BitAndNot(const Child other) const {
-        return _mm256_andnot_si256(*this, other);
+        return _mm256_andnot_si256(this->Value, other.Value);
     };
     inline Child& operator|=(const Child other) {
         auto cast = static_cast<Child*>(*this);
@@ -71,7 +74,7 @@ struct TBase8: TBase<TSimd8<T>> {
     }
 
     friend inline Mask operator==(const TSimd8<T> lhs, const TSimd8<T> rhs) {
-        return _mm256_cmpeq_epi8(lhs, rhs);
+        return _mm256_cmpeq_epi8(lhs.Value, rhs.Value);
     }
 
     static const int SIZE = sizeof(TBase<T>::Value);
@@ -100,7 +103,7 @@ struct TSimd8<bool>: TBase8<bool> {
     }
 
     inline bool Any() const {
-        return !_mm256_testz_si256(*this, *this);
+        return !_mm256_testz_si256(this->Value, this->Value);
     }
     
     inline TSimd8<bool> operator~() const {
@@ -143,14 +146,14 @@ struct TBase8Numeric: TBase8<T> {
     }
 
     inline void Store(T dst[32]) const {
-        return _mm256_storeu_si256(reinterpret_cast<__m256i *>(dst), *this);
+        return _mm256_storeu_si256(reinterpret_cast<__m256i *>(dst), this->Value);
     }
 
     inline TSimd8<T> operator+(const TSimd8<T> other) const {
-        return _mm256_add_epi8(*this, other);
+        return _mm256_add_epi8(this->Value, other.Value);
     }
     inline TSimd8<T> operator-(const TSimd8<T> other) const {
-        return _mm256_sub_epi8(*this, other);
+        return _mm256_sub_epi8(this->Value, other.Value);
     }
     inline TSimd8<T>& operator+=(const TSimd8<T> other) {
         *this = *this + other;
@@ -212,16 +215,16 @@ struct TSimd8<i8> : TBase8Numeric<i8> {
     }
 
     inline TSimd8<i8> MaxValue(const TSimd8<i8> other) const {
-        return _mm256_max_epi8(*this, other);
+        return _mm256_max_epi8(this->Value, other.Value);
     }
     inline TSimd8<i8> MinValue(const TSimd8<i8> other) const {
-        return _mm256_min_epi8(*this, other);
+        return _mm256_min_epi8(this->Value, other.Value);
     }
     inline TSimd8<bool> operator>(const TSimd8<i8> other) const {
-        return _mm256_cmpgt_epi8(*this, other);
+        return _mm256_cmpgt_epi8(this->Value, other.Value);
     }
     inline TSimd8<bool> operator<(const TSimd8<i8> other) const {
-        return _mm256_cmpgt_epi8(other, *this);
+        return _mm256_cmpgt_epi8(other.Value, this->Value);
     }
 };
 
@@ -268,10 +271,10 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
     }
     
     inline TSimd8<ui8> MaxValue(const TSimd8<ui8> other) const {
-        return _mm256_max_epu8(*this, other);
+        return _mm256_max_epu8(this->Value, other.Value);
     }
     inline TSimd8<ui8> MinValue(const TSimd8<ui8> other) const {
-        return _mm256_min_epu8(other, *this);
+        return _mm256_min_epu8(other.Value, this->Value);
     }
     inline TSimd8<bool> operator<=(const TSimd8<ui8> other) const {
         return other.MaxValue(*this) == other;
@@ -287,13 +290,13 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
         return ~this->BitsNotSet();
     }
     inline bool BitsNotSetAnywhere() const {
-        return _mm256_testz_si256(*this, *this);
+        return _mm256_testz_si256(this->Value, this->Value);
     }
     inline bool AnyBitsSetAnywhere() const {
         return !BitsNotSetAnywhere();
     }
     inline bool BitsNotSetAnywhere(TSimd8<ui8> bits) const {
-        return _mm256_testz_si256(*this, bits);
+        return _mm256_testz_si256(this->Value, bits.Value);
     }
     inline bool AnyBitsSetAnywhere(TSimd8<ui8> bits) const {
         return !BitsNotSetAnywhere(bits);
@@ -301,18 +304,20 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
     
     template<int N>
     inline TSimd8<ui8> Shr() const {
-        return TSimd8<ui8>(_mm256_srli_epi16(*this, N)) & ui8(0xFFu >> N);
+        return TSimd8<ui8>(_mm256_srli_epi16(this->Value, N)) & ui8(0xFFu >> N);
     }
     template<int N>
     inline TSimd8<ui8> Shl() const {
-        return TSimd8<ui8>(_mm256_slli_epi16(*this, N)) & ui8(0xFFu << N);
+        return TSimd8<ui8>(_mm256_slli_epi16(this->Value, N)) & ui8(0xFFu << N);
     }
     
     template<int N>
     inline int GetBit() const {
-        return _mm256_movemask_epi8(_mm256_slli_epi16(*this, 7-N));
+        return _mm256_movemask_epi8(_mm256_slli_epi16(this->Value, 7-N));
     }
 };
 
 }
 }
+
+#pragma clang attribute pop

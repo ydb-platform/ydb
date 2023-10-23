@@ -466,7 +466,7 @@ std::pair<TFormat, TMaybe<TSmallJobFile>> TFormatBuilder::CreateNodeFormat(
     ythrow TApiUsageError()
         << "Cannot derive exact " << type <<  " type for intermediate " << direction << " table for job "
         << TJobFactory::Get()->GetJobName(&job)
-        << "; use one of TMapReduceOperationSpec::Hint* methods to specifiy intermediate table structure";
+        << "; use one of TMapReduceOperationSpec::Hint* methods to specify intermediate table structure";
 }
 
 [[noreturn]] static void ThrowUnexpectedDifferentDescriptors(

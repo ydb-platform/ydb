@@ -1163,7 +1163,7 @@ TRichYPath MaybeWithSchema(const TRichYPath& path, const TSortColumns& sortBy = 
 ///  - If path has associated range list and the list is not empty, function returns this list.
 ///  - If path has associated range list and this list is empty, exception is thrown.
 ///
-/// Before YT-17683 RichYPath didn't support empty range list and empty range actualy meant universal range.
+/// Before YT-17683 RichYPath didn't support empty range list and empty range actually meant universal range.
 /// This function emulates this old behavior.
 ///
 /// @see https://st.yandex-team.ru/YT-17683

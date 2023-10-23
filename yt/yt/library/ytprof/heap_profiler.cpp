@@ -236,7 +236,7 @@ int AbslStackUnwinder(
             return count;
         }
 
-        // IP point's to return address. Substract 1 to get accurate line information for profiler.
+        // IP point's to return address. Subtract 1 to get accurate line information for profiler.
         frames[i] = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(cursor.GetCurrentIP()) - 1);
         count++;
 

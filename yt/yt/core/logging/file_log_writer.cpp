@@ -230,7 +230,7 @@ private:
             auto count = GetFileCountToKeep(fileNames);
             for (int index = count; index < ssize(fileNames); ++index) {
                 auto filePath = NFS::CombinePaths(DirectoryName_, fileNames[index]);
-                YT_LOG_DEBUG("Remove log segement (FilePath: %v)", filePath);
+                YT_LOG_DEBUG("Remove log segment (FilePath: %v)", filePath);
                 NFS::Remove(filePath);
             }
             fileNames.resize(count);
@@ -289,7 +289,7 @@ private:
             auto newFileName = Format(formatString, FileNamePrefix_, index);
             auto oldPath = NFS::CombinePaths(DirectoryName_, fileNames[index - 1]);
             auto newPath = NFS::CombinePaths(DirectoryName_, newFileName);
-            YT_LOG_DEBUG("Rename log segement (OldFilePath: %v, NewFilePath: %v)", oldPath, newPath);
+            YT_LOG_DEBUG("Rename log segment (OldFilePath: %v, NewFilePath: %v)", oldPath, newPath);
             NFS::Rename(oldPath, newPath);
         }
     }

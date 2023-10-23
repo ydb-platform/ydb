@@ -529,7 +529,7 @@ void TJaegerTracer::Flush()
 
     DequeueAll(config);
 
-    if (TInstant::Now() - LastSuccessfullFlushTime_ > config->QueueStallTimeout) {
+    if (TInstant::Now() - LastSuccessfulFlushTime_ > config->QueueStallTimeout) {
         DropFullQueue();
     }
 
@@ -575,7 +575,7 @@ void TJaegerTracer::Flush()
         if (channel.Push(batches, spanCount)) {
             DropQueue(batchCount, endpoint);
             YT_LOG_DEBUG("Spans sent (Endpoint: %v)", endpoint);
-            LastSuccessfullFlushTime_ = flushStartTime;
+            LastSuccessfulFlushTime_ = flushStartTime;
         }
     }
 

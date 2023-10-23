@@ -322,7 +322,7 @@ struct TSimpleRawOperationIoSpec
 
     /// @brief Describes format for both input and output.
     ///
-    /// @note `Format' is overriden by `InputFormat' and `OutputFormat'.
+    /// @note `Format' is overridden by `InputFormat' and `OutputFormat'.
     FLUENT_FIELD_OPTION(TFormat, Format);
 
     /// Describes input format.
@@ -344,7 +344,7 @@ public:
 
     /// @brief Describes format for both input and output of mapper.
     ///
-    /// @note `MapperFormat' is overriden by `MapperInputFormat' and `MapperOutputFormat'.
+    /// @note `MapperFormat' is overridden by `MapperInputFormat' and `MapperOutputFormat'.
     FLUENT_FIELD_OPTION(TFormat, MapperFormat);
 
     /// Describes mapper input format.
@@ -355,7 +355,7 @@ public:
 
     /// @brief Describes format for both input and output of reduce combiner.
     ///
-    /// @note `ReduceCombinerFormat' is overriden by `ReduceCombinerInputFormat' and `ReduceCombinerOutputFormat'.
+    /// @note `ReduceCombinerFormat' is overridden by `ReduceCombinerInputFormat' and `ReduceCombinerOutputFormat'.
     FLUENT_FIELD_OPTION(TFormat, ReduceCombinerFormat);
 
     /// Describes reduce combiner input format.
@@ -366,7 +366,7 @@ public:
 
     /// @brief Describes format for both input and output of reducer.
     ///
-    /// @note `ReducerFormat' is overriden by `ReducerInputFormat' and `ReducerOutputFormat'.
+    /// @note `ReducerFormat' is overridden by `ReducerInputFormat' and `ReducerOutputFormat'.
     FLUENT_FIELD_OPTION(TFormat, ReducerFormat);
 
     /// Describes reducer input format.
@@ -703,7 +703,7 @@ struct TJobProfilerSpec
     /// @brief Type of the profiler.
     FLUENT_FIELD_OPTION(EProfilerType, ProfilerType);
 
-    /// @brief Probabiliy of the job being selected for profiling.
+    /// @brief Probability of the job being selected for profiling.
     FLUENT_FIELD_OPTION(double, ProfilingProbability);
 
     /// @brief For sampling profilers, sets the number of samples per second.
@@ -2001,7 +2001,7 @@ public:
     ///
     /// @brief This methods are called when creating table reader and writer for the job.
     ///
-    /// Override them if you want to implement custom input logic. (e.g. addtitional bufferization)
+    /// Override them if you want to implement custom input logic. (e.g. additional bufferization)
     virtual TRawTableReaderPtr CreateCustomRawJobReader(int fd) const;
     virtual THolder<IProxyOutput> CreateCustomRawJobWriter(size_t outputTableCount) const;
 

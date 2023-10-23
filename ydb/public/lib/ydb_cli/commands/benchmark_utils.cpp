@@ -112,7 +112,8 @@ public:
         return ServerTiming;
     }
 
-    bool Scan(NTable::TScanQueryPartIterator& it) {
+    template <typename TIterator>
+    bool Scan(TIterator& it) {
         for (;;) {
             auto streamPart = it.ReadNext().GetValueSync();
             if (!streamPart.IsSuccess()) {
@@ -123,8 +124,15 @@ public:
                 break;
             }
 
-            if (streamPart.HasQueryStats()) {
-                ServerTiming = streamPart.GetQueryStats().GetTotalDuration();
+            if constexpr (std::is_same_v<TIterator, NTable::TScanQueryPartIterator>) {
+                if (streamPart.HasQueryStats()) {
+                    ServerTiming = streamPart.GetQueryStats().GetTotalDuration();
+                }  
+            } else {
+                const auto& stats = streamPart.GetStats();
+                if (stats) {
+                    ServerTiming = stats->GetTotalDuration();
+                }
             }
 
             if (streamPart.HasResultSet()) {
@@ -236,6 +244,27 @@ TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client
     TStreamExecScanQuerySettings settings;
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
     auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
+    ThrowOnError(it);
+
+    std::shared_ptr<TYSONResultScanner> scannerYson = std::make_shared<TYSONResultScanner>();
+    std::shared_ptr<TCSVResultScanner> scannerCSV = std::make_shared<TCSVResultScanner>();
+    TQueryResultScannerComposite composite;
+    composite.AddScanner(scannerYson);
+    composite.AddScanner(scannerCSV);
+    if (!composite.Scan(it)) {
+        return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
+    } else {
+        return TQueryBenchmarkResult::Result(scannerYson->GetResult(), *scannerCSV, composite.GetServerTiming());
+    }
+}
+
+TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client) {
+    NQuery::TExecuteQuerySettings settings;
+    settings.StatsMode(NQuery::EStatsMode::Full);
+    auto it = client.StreamExecuteQuery(
+        query,
+        NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+        settings).GetValueSync();
     ThrowOnError(it);
 
     std::shared_ptr<TYSONResultScanner> scannerYson = std::make_shared<TYSONResultScanner>();

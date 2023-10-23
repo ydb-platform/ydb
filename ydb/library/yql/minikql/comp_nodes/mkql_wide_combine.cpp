@@ -218,7 +218,12 @@ public:
                 row[i].UnRef();
             }
         }
-        IsEmpty();
+
+        ExtractIt.reset();
+        Storage.clear();
+        States.Clear();
+
+        CleanupCurrentContext();
     }
 
     bool TasteIt() {

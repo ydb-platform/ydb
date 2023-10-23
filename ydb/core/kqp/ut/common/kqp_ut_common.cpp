@@ -580,6 +580,15 @@ TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query,
     return result;
 }
 
+void FillProfile(NYdb::NQuery::TExecuteQueryPart& streamPart, NYson::TYsonWriter& writer, TVector<TString>* profiles,
+    ui32 profileIndex)
+{
+    Y_UNUSED(streamPart);
+    Y_UNUSED(writer);
+    Y_UNUSED(profiles);
+    Y_UNUSED(profileIndex);
+}
+
 void FillProfile(NYdb::NTable::TScanQueryPart& streamPart, NYson::TYsonWriter& writer, TVector<TString>* profiles,
     ui32 profileIndex)
 {
@@ -644,6 +653,10 @@ TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles, bool t
     writer.OnEndList();
 
     return out.Str();
+}
+
+TString StreamResultToYson(NYdb::NQuery::TExecuteQueryIterator& it, bool throwOnTimeout, const NYdb::EStatus& opStatus, const TString& issueMessageSubString) {
+    return StreamResultToYsonImpl(it, nullptr, throwOnTimeout, opStatus, issueMessageSubString);
 }
 
 TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it, bool throwOnTimeout, const NYdb::EStatus& opStatus, const TString& issueMessageSubString) {

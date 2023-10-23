@@ -2,6 +2,7 @@
 
 #include <library/cpp/json/json_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 
 #include <vector>
 
@@ -87,6 +88,7 @@ TString FullTablePath(const TString& database, const TString& table);
 void ThrowOnError(const TStatus& status);
 bool HasCharsInString(const TString& str);
 TQueryBenchmarkResult Execute(const TString & query, NTable::TTableClient & client);
+TQueryBenchmarkResult Execute(const TString & query, NQuery::TQueryClient & client);
 NJson::TJsonValue GetQueryLabels(ui32 queryId);
 NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, ui32 queryId);
 NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, ui32 queryId);

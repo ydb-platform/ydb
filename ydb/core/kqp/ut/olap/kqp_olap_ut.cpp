@@ -5103,6 +5103,32 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         CompareYson(output, R"([[10u;]])");
     }
 
+    Y_UNIT_TEST(OlapRead_StreamGenericQuery) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetForceColumnTablesCompositeMarks(true);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        {
+            WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        }
+
+        auto db = kikimr.GetQueryClient();
+
+        auto it = db.StreamExecuteQuery(R"(
+            SELECT COUNT(*) FROM `/Root/tableWithNulls`;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+        TString output = StreamResultToYson(it);
+        Cout << output << Endl;
+        CompareYson(output, R"([[10u;]])");
+    }
+
     Y_UNIT_TEST(OlapRead_ScanQuery) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)

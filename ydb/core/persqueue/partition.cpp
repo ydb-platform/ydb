@@ -178,7 +178,7 @@ ui64 TPartition::MeteringDataSize(const TActorContext& /*ctx*/) const {
     // maintained by the background process. However, the last block may contain several irrelevant
     // messages. Because of them, we throw out the size of the entire blob.
     ui64 size = Size() - DataKeysBody[0].Size;
-    Y_VERIFY_DEBUG(size >= 0, "Metering data size must be positive");
+    Y_DEBUG_ABORT_UNLESS(size >= 0, "Metering data size must be positive");
     return std::max<ui64>(size, 0);
 }
 

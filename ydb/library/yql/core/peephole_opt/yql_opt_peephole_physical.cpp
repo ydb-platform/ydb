@@ -5585,7 +5585,19 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
         return ctx.ChangeChild(input, 0U, ctx.ChangeChild(*node, 0U, input.HeadPtr()));
     } else if (const auto unused = UnusedArgs<1U>({&node->Tail()}); !unused.empty()) {
-        if (input.IsCallable("WideCombiner")) {
+        if (input.IsCallable({"WideFilter", "WideSkipWhile", "WideSkipWhileInclusive", "WideTakeWhile", "WideTakeWhileInclusive"})) {
+            if (const auto actualUnused = UnusedArgs<2U>({&node->Tail(), input.Child(1U)}); !actualUnused.empty()) {
+                YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << actualUnused.size() << " unused fields.";
+                auto children = input.ChildrenList();
+                children.front() = MakeWideMapForDropUnused(std::move(children.front()), actualUnused, ctx);
+                children[1U] = DropUnusedArgs(*children[1U], actualUnused, ctx);
+                return ctx.Builder(node->Pos())
+                    .Callable(node->Content())
+                        .Add(0, ctx.ChangeChildren(input, std::move(children)))
+                        .Add(1, DropUnusedArgs(node->Tail(), actualUnused, ctx))
+                    .Seal().Build();
+            }
+        } else if (input.IsCallable("WideCombiner")) {
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << unused.size() << " unused fields.";
             return ctx.Builder(node->Pos())
                 .Callable(node->Content())
@@ -5618,7 +5630,7 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                         .Add(1, DropUnusedArgs(node->Tail(), actualUnused, ctx))
                     .Seal().Build();
             }
-        } else if (input.IsCallable({"WideFromBlocks", "WideTakeBlocks", "WideSkipBlocks"})) {
+        } else if (input.IsCallable({"WideFromBlocks", "WideTakeBlocks", "WideSkipBlocks", "BlockExpandChunked"})) {
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << unused.size() << " unused fields.";
             return ctx.Builder(node->Pos())
                 .Callable(node->Content())

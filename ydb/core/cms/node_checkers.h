@@ -61,6 +61,8 @@ public:
 
     void LockNode(ui32 nodeId) override;
     void UnlockNode(ui32 nodeId) override;
+
+    const THashMap<ui32, ENodeState>& GetNodeToState() const;
 };
 
 /**

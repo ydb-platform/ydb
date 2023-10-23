@@ -21,6 +21,7 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
+#include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
@@ -71,6 +72,158 @@ void TCms::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext 
     LOG_INFO(ctx, NKikimrServices::CMS, "OnTabletDead: %" PRIu64, TabletID());
 
     Die(ctx);
+}
+
+namespace {
+    struct TNodeVDisksStatus {
+        ui32 Up;
+        ui32 Down;
+        ui32 Restart;
+    };
+
+    void CalculateNodeVDisksStatus(const TClusterInfoPtr clusterInfo, const TNodeInfoPtr node,
+                                   THashMap<ui32, TNodeVDisksStatus>& nodeVDisksStatus) {
+        ui32 up = 0;
+        ui32 down = 0;
+        ui32 restart = 0;
+        for (const auto& vdiskID : node->VDisks) {
+            const auto& vdisk = clusterInfo->VDisk(vdiskID);
+            switch (vdisk.State) {
+                case NKikimrCms::EState::UNKNOWN:
+                    break;
+                case NKikimrCms::EState::DOWN:
+                    ++down;
+                    break;
+                case NKikimrCms::EState::RESTART:
+                    ++restart;
+                    break;
+                case NKikimrCms::EState::UP:
+                    ++up;
+                    break;
+            }
+        }
+        nodeVDisksStatus[node->NodeId].Up = up;
+        nodeVDisksStatus[node->NodeId].Down = down;
+        nodeVDisksStatus[node->NodeId].Restart = restart;
+    }
+} // namespace
+
+void TCms::GenerateNodeState(IOutputStream& out)
+{
+    THashMap<ui32, TNodeVDisksStatus> nodeVDisksStatusMap;
+
+    ui32 totalVDisksUp = 0;
+    ui32 totalVDisksRestart = 0;
+    ui32 totalVDisksDown = 0;
+
+    for (const auto& node: ClusterInfo->AllNodes()) {
+        CalculateNodeVDisksStatus(ClusterInfo, node.second, nodeVDisksStatusMap);
+        totalVDisksUp += nodeVDisksStatusMap[node.first].Up;
+        totalVDisksDown += nodeVDisksStatusMap[node.first].Down;
+        totalVDisksRestart += nodeVDisksStatusMap[node.first].Restart;
+    }
+
+    const auto& nodeState = ClusterInfo->ClusterNodes->GetNodeToState();
+    HTML(out) {
+        TAG(TH3) {
+            out << "Nodes with state";
+        }
+        TAG(TH4) {
+            out << "ClusterInfo last update timestamp: " << ClusterInfo->GetTimestamp();
+        }
+        TAG(TH4) {
+            out << "Total VDisks State. UP: " << totalVDisksUp << ", Restart = " << totalVDisksRestart << ", Down = " << totalVDisksDown;
+        }
+        TABLE_SORTABLE() {
+            TABLEHEAD() {
+                TABLER() {
+                    TABLED() {
+                        out << "NodeID";
+                    }
+                    TABLED() {
+                        out << "Host";
+                    }
+                    TABLED() {
+                        out << "State";
+                    }
+                    TABLED() {
+                        out << "InMemoryState";
+                    }
+                    TABLED() {
+                        out << "Tenant";
+                    }
+                    TABLED() {
+                        out << "VDisksUp";
+                    }
+                    TABLED() {
+                        out << "VDisksDown";
+                    }
+                    TABLED() {
+                        out << "VDisksRestart";
+                    }
+                }
+            }
+            TABLEBODY() {
+                for (const auto& node : ClusterInfo->AllNodes()) {
+                    auto currentInMemoryState = INodesChecker::NODE_STATE_UNSPECIFIED;
+                    if (nodeState.contains(node.first)) {
+                        currentInMemoryState = nodeState.at(node.first);
+                    }
+                    TABLER() {
+                        TABLED() {
+                            out << node.first;
+                        }
+                        TABLED() {
+                            out << node.second->Host;
+                        }
+                        TABLED() {
+                            out << node.second->State;
+                        }
+                        TABLED() {
+                            out << currentInMemoryState;
+                        }
+                        TABLED() {
+                            out << node.second->Tenant;
+                        }
+                        if (node.second->VDisks) {
+                            TABLED() {
+                                out << nodeVDisksStatusMap[node.first].Up;
+                            }
+                            TABLED() {
+                                out << nodeVDisksStatusMap[node.first].Down;
+                            }
+                            TABLED() {
+                                out << nodeVDisksStatusMap[node.first].Restart;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+TString TCms::GenerateStat()
+{
+    TStringStream str;
+    HTML(str) {
+        TAG(TH2) { str << "Cluster management system tablet";}
+        GenerateNodeState(str);
+    }
+    return str.Str();
+}
+
+bool TCms::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx)
+{
+    if (!ev) {
+        return true;
+    }
+
+    ScheduleUpdateClusterInfo(ctx, true);
+
+    TString str = GenerateStat();
+    ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(std::move(str)));
+    return true;
 }
 
 void TCms::Enqueue(TAutoPtr<IEventHandle> &ev)

@@ -1,5 +1,107 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 23.3 {#23-3}
+
+Release date: October 12, 2023.
+
+**Functionality:**
+
+* Implemented visibility of own changes. With this feature enabled you can read changed values from the current transaction, which has not been committed yet. This functionality also allows multiple modifying operations in one transaction on a table with secondary indexes.
+* Added support for [column tables](concepts/datamodel/table.md#column-tables). It is now possible to create analytical reports based on stored data in YDB with performance comparable to specialized analytical DBMS.
+* Added support for Kafka API for topics. YDB topics can now be accessed via a Kafka-compatible API designed for migrating existing applications. Support for Kafka protocol version 3.4.0 is provided.
+* Added the ability to [write to a topic without deduplication](concepts/topic.md#no-dedup). This is important in cases where message processing order is not critical.
+* YQL has added the capabilities to [create](yql/reference/syntax/create_topic.md), [modify](yql/reference/syntax/alter_topic.md), and delete topics.
+* Added support of assigning and revoking access rights using the YQL `GRANT` and `REVOKE` commands.
+* Added support of DML-operations logging in the audit log.
+* **_(Experimental)_** When writing messages to a topic, it is now possible to pass metadata. To enable this functionality, add `enable_topic_message_meta: true` to the [configuration file](deploy/configuration/config.md).
+* **_(Experimental)_** Added support for [reading from topics in a transaction](reference/ydb-sdk/topic.md#read-tx). It is now possible to read from topics and write to tables within a transaction, simplifying the data transfer scenario from a topic to a table. To enable this functionality, add `enable_topic_service_tx: true` to the [configuration file](deploy/configuration/config.md).
+* **_(Experimental)_** Added support for PostgreSQL compatibility. This involves executing SQL queries in PostgreSQL dialect on the YDB infrastructure using the PostgreSQL network protocol. With this capability, familiar PostgreSQL tools such as psql and drivers (e.g., pq for Golang and psycopg2 for Python) can be used. Queries can be developed using the familiar PostgreSQL syntax and take advantage of YDB's benefits such as horizontal scalability and fault tolerance.
+* **_(Experimental)_** Added support for federated queries. This enables retrieving information from various data sources without the need to move the data into YDB. Federated queries support interaction with ClickHouse and PostgreSQL databases, as well as S3 class data stores (Object Storage). YQL queries can be used to access these databases without duplicating data between systems.
+
+**Embedded UI:**
+
+* TBD
+
+**Performance:**
+
+* Implemented read iterators. This feature allows to separate reads and computations. Read iterators allow datashards to increase read queries throughput.
+* The performance of writing to YDB topics has been optimized.
+* Improved tablet balancing during node overload.
+
+**Bug fixes:**
+
+* Fixed an error regarding potential blocking of reading iterators of snapshots, of which the coordinators were unaware.
+* Memory leak when closing the connection in Kafka proxy has been fixed.
+* Fixed an issue where snapshots taken through reading iterators may fail to recover on restarts.
+* Fixed an issue with an incorrect residual predicate for the IS NULL condition on a column.
+* Fixed an occurring verification error: VERIFY failed: SendResult(): requirement ChunksLimiter.Take(sendBytes) failed.
+* Fixed ALTER TABLE for TTL on column-based tables.
+* Implemented a FeatureFlag that allows enabling/disabling work with CS and DS.
+* Fixed a 50ms time difference between coordinator time in 23-2 and 23-3.
+* Fixed an error where the storage endpoint was returning extra groups when the viewer backend had the node_id parameter in the request.
+* Added a usage filter to the /storage endpoint in the viewer backend.
+* Fixed an issue in Storage v2 where an incorrect number was returned in the Degraded field.
+* Fixed an issue with cancelling subscriptions from sessions during tablet restarts.
+* Fixed an error where healthcheck alerts for storage were flickering during rolling restarts when going through a load balancer.
+* Updated CPU usage metrics in YDB.
+* Fixed an issue where NULL was being ignored when specifying NOT NULL in the table schema.
+* Implemented logging of DDL operations in the common log.
+* Implemented restriction for the ydb table attribute add/drop command to only work with tables and not with any other objects.
+* Disabled CloseOnIdle for interconnect.
+* Fixed the doubling of read speed in the UI.
+* Fixed an issue where data could be lost on block-4-2.
+* Added a check for topic name validity.
+* Fixed a possible deadlock in the actor system.
+* Fixed the KqpScanArrowInChanels::AllTypesColumns test.
+* Fixed the KqpScan::SqlInParameter test.
+* Fixed parallelism issues for OLAP queries.
+* Fixed the insertion of ClickBench parquet files.
+* Added a missing call to CheckChangesQueueOverflow in the general CheckDataTxReject.
+* Fixed an error that returned an empty status in ReadRows API calls.
+* Fixed incorrect retry behavior in the final stage of export.
+* Fixed an issue with infinite quota for the number of records in a CDC topic.
+* Fixed the import error of string and parquet columns into an OLAP string column.
+* Fixed a crash in KqpOlapTypes.Timestamp under tsan.
+* Fixed a viewer backend crash when attempting to execute a query against the database due to version incompatibility.
+* Fixed an error where the viewer did not return a response from the healthcheck due to a timeout.
+* Fixed an error where incorrect ExpectedSerial values could be saved in Pdisks.
+* Fixed an error where database nodes were crashing due to segfault in the S3 actor.
+* Fixed a race condition in ThreadSanitizer: data race KqpService::ToDictCache-UseCache.
+* Fixed a race condition in GetNextReadId.
+* Fixed an issue with an inflated result in SELECT COUNT(*) immediately after import.
+* Fixed an error where TEvScan could return an empty dataset in the case of shard splitting.
+* Added a separate issue/error code in case of available space exhaustion.
+* Fixed a GRPC_LIBRARY Assertion failed error.
+* Fixed an error where scanning queries on secondary indexes returned an empty result.
+* Fixed validation of CommitOffset in TopicAPI.
+* Reduced shared cache consumption when approaching OOM.
+* Merged scheduler logic from data executer and scan executer into one class.
+* Added discovery and proxy handlers to the query execution process in the viewer backend.
+* Fixed an error where the /cluster endpoint returned the root domain name, such as /ru, in the viewer backend.
+* Implemented a seamless table update scheme for QueryService.
+* Fixed an issue where DELETE returned data and did not delete it.
+* Fixed an error in DELETE ON operation in query service.
+* Fixed an unexpected batching disablement in default schema settings.
+* Fixed a triggering check VERIFY failed: MoveUserTable(): requirement move.ReMapIndexesSize() == newTableInfo->Indexes.size().
+* Increased the default timeout for grpc-streaming.
+* Excluded unused messages and methods from QueryService.
+* Added sorting by Rack in /nodes in the viewer backend.
+* Fixed an error where sorting queries returned an error in descending order.
+* Improved interaction between KQP and NodeWhiteboard.
+* Removed support for old parameter formats.
+* Fixed an error where DefineBox was not being applied to disks with a static group.
+* Fixed a SIGSEGV error in the dinnode during CSV import via YDB CLI.
+* Fixed an error that caused a crash when processing NGRpcService::TRefreshTokenImpl.
+* Implemented a gossip protocol for exchanging cluster resource information.
+* Fixed an error in DeserializeValuePickleV1(): requirement data.GetTransportVersion() == (ui32) NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 failed.
+* Implemented auto-increment columns.
+* Use UNAVAILABLE status instead of GENERIC_ERROR when shard identification fails.
+* Added support for rope payload in TEvVGet.
+* Added ignoring of deprecated events.
+* Fixed a crash of write sessions on an invalid topic name.
+* Fixed an error in CheckExpected(): requirement newConstr failed, message: Rewrite error, missing Distinct((id)) constraint in node FlatMap'.
+* Enabled self-heal by default.
+
 ## Version 23.2 {#23-2}
 
 Release date: August 14, 2023.

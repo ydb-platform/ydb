@@ -308,18 +308,18 @@ TMaybe<TCondenseInputResult> CheckUniqueConstraint(const TExprBase& inputRows, c
         return {};
     }
 
-    TUniqBuildHelper helper(table, pos, ctx, true);
-    if (helper.GetChecksNum() == 0) {
+    auto helper = CreateUpsertUniqBuildHelper(table, pos, ctx);
+    if (helper->GetChecksNum() == 0) {
         return condenseResult;
     }
 
-    auto computeKeysStage = helper.CreateComputeKeysStage(condenseResult.GetRef(), pos, ctx);
-    auto inputPrecompute = helper.CreateInputPrecompute(computeKeysStage, pos, ctx);
-    auto uniquePrecomputes = helper.CreateUniquePrecompute(computeKeysStage, pos, ctx);
+    auto computeKeysStage = helper->CreateComputeKeysStage(condenseResult.GetRef(), pos, ctx);
+    auto inputPrecompute = helper->CreateInputPrecompute(computeKeysStage, pos, ctx);
+    auto uniquePrecomputes = helper->CreateUniquePrecompute(computeKeysStage, pos, ctx);
 
     auto _true = MakeBool(pos, true, ctx);
 
-    auto aggrStage = helper.CreateLookupExistStage(computeKeysStage, table, _true, pos, ctx);
+    auto aggrStage = helper->CreateLookupExistStage(computeKeysStage, table, _true, pos, ctx);
 
     // Returns <bool>: <true> - no existing keys, <false> - at least one key exists
     auto noExistingKeysPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
@@ -341,9 +341,9 @@ TMaybe<TCondenseInputResult> CheckUniqueConstraint(const TExprBase& inputRows, c
         }
         TVector<TExprNode::TPtr> Bodies;
         TVector<TCoArgument> Args;
-    } uniqueCheckNodes(helper.GetChecksNum());
+    } uniqueCheckNodes(helper->GetChecksNum());
 
-    for (size_t i = 0; i < helper.GetChecksNum(); i++) {
+    for (size_t i = 0; i < helper->GetChecksNum(); i++) {
         uniqueCheckNodes.Args.emplace_back(ctx.NewArgument(pos, "are_keys_unique"));
         uniqueCheckNodes.Bodies.emplace_back(Build<TKqpEnsure>(ctx, pos)
             .Value(_true)

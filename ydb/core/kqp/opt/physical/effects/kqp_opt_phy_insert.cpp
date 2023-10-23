@@ -16,15 +16,15 @@ TMaybeNode<TDqCnUnionAll> MakeConditionalInsertRows(const TExprBase& input, cons
         return {};
     }
 
-    TUniqBuildHelper helper(table, pos, ctx, false);
-    auto computeKeysStage = helper.CreateComputeKeysStage(condenseResult.GetRef(), pos, ctx);
+    auto helper = CreateInsertUniqBuildHelper(table, pos, ctx);
+    auto computeKeysStage = helper->CreateComputeKeysStage(condenseResult.GetRef(), pos, ctx);
 
-    auto inputPrecompute = helper.CreateInputPrecompute(computeKeysStage, pos, ctx);
-    auto uniquePrecomputes = helper.CreateUniquePrecompute(computeKeysStage, pos, ctx);
+    auto inputPrecompute = helper->CreateInputPrecompute(computeKeysStage, pos, ctx);
+    auto uniquePrecomputes = helper->CreateUniquePrecompute(computeKeysStage, pos, ctx);
 
     auto _true = MakeBool(pos, true, ctx);
 
-    auto aggrStage = helper.CreateLookupExistStage(computeKeysStage, table, _true, pos, ctx);
+    auto aggrStage = helper->CreateLookupExistStage(computeKeysStage, table, _true, pos, ctx);
 
     // Returns <bool>: <true> - no existing keys, <false> - at least one key exists
     auto noExistingKeysPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
@@ -43,14 +43,14 @@ TMaybeNode<TDqCnUnionAll> MakeConditionalInsertRows(const TExprBase& input, cons
         }
         TVector<TExprNode::TPtr> Bodies;
         TVector<TCoArgument> Args;
-    } uniqueCheckNodes(helper.GetChecksNum());
+    } uniqueCheckNodes(helper->GetChecksNum());
 
     TCoArgument noExistingKeysArg(ctx.NewArgument(pos, "no_existing_keys"));
     TExprNode::TPtr noExistingKeysCheck;
 
     // Build condition checks depending on INSERT kind
     if (abortOnError) {
-        for (size_t i = 0; i < helper.GetChecksNum(); i++) {
+        for (size_t i = 0; i < helper->GetChecksNum(); i++) {
             uniqueCheckNodes.Args.emplace_back(ctx.NewArgument(pos, "are_keys_unique"));
             uniqueCheckNodes.Bodies.emplace_back(Build<TKqpEnsure>(ctx, pos)
                 .Value(_true)
@@ -68,7 +68,7 @@ TMaybeNode<TDqCnUnionAll> MakeConditionalInsertRows(const TExprBase& input, cons
             .Message(MakeMessage("Conflict with existing key.", pos, ctx))
             .Done().Ptr();
     } else {
-        for (size_t i = 0; i < helper.GetChecksNum(); i++) {
+        for (size_t i = 0; i < helper->GetChecksNum(); i++) {
             uniqueCheckNodes.Args.emplace_back(ctx.NewArgument(pos, "are_keys_unique"));
             uniqueCheckNodes.Bodies.emplace_back(uniqueCheckNodes.Args.back().Ptr());
         }

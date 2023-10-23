@@ -11,10 +11,7 @@ namespace NKikimr::NKqp::NOpt {
 
 class TUniqBuildHelper {
 public:
-    // table - metadata of table
-    // skipPkCheck - false for insert mode, generate check on PK to issue an arror on PK conflict
-    TUniqBuildHelper(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
-        NYql::TExprContext& ctx, bool skipPkCheck);
+    using TPtr = std::unique_ptr<TUniqBuildHelper>;
     size_t GetChecksNum() const;
 
     NYql::NNodes::TDqStage CreateComputeKeysStage(const TCondenseInputResult& condenseResult,
@@ -27,7 +24,14 @@ public:
         const NYql::TKikimrTableDescription& table, NYql::TExprNode::TPtr _true,
         NYql::TPositionHandle pos, NYql::TExprContext& ctx) const;
 
-private:
+    virtual ~TUniqBuildHelper() = default;
+protected:
+    // table - metadata of table
+    // skipPkCheck - false for insert mode, generate check on PK to issue an arror on PK conflict
+    TUniqBuildHelper(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
+        NYql::TExprContext& ctx, bool skipPkCheck);
+    size_t CalcComputeKeysStageOutputNum() const;
+
     struct TUniqCheckNodes {
         using TIndexId = int;
         static constexpr TIndexId NOT_INDEX_ID = -1;
@@ -36,11 +40,11 @@ private:
         TIndexId IndexId = NOT_INDEX_ID;
     };
 
+private:
     class TChecks {
         public:
-            TChecks(std::pair<TVector<TUniqCheckNodes>, NYql::TExprNode::TPtr>&& pair)
-                : Checks(std::move(pair.first))
-                , PkDict(pair.second)
+            TChecks(TVector<TUniqCheckNodes> nodes)
+                : Checks(std::move(nodes))
             {}
 
             size_t Size() const {
@@ -51,24 +55,32 @@ private:
                 return Checks[i];
             }
 
-            const NYql::TExprNode::TPtr GetPkDict() const {
-                return PkDict;
-            }
         private:
             const TVector<TUniqCheckNodes> Checks;
-            const NYql::TExprNode::TPtr PkDict;
     };
 
-    size_t CalcComputeKeysStageOutputNum() const;
 
     static TUniqCheckNodes MakeUniqCheckNodes(const NYql::NNodes::TCoLambda& selector,
         const NYql::NNodes::TExprBase& rowsListArg, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
-    static std::pair<TVector<TUniqCheckNodes>, NYql::TExprNode::TPtr> Prepare(const NYql::NNodes::TCoArgument& rowsListArg,
+    static TVector<TUniqCheckNodes> Prepare(const NYql::NNodes::TCoArgument& rowsListArg,
         const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos, NYql::TExprContext& ctx,
         bool skipPkCheck);
 
-    NYql::NNodes::TCoArgument RowsListArg;
+    virtual NYql::NNodes::TDqCnUnionAll CreateLookupStageWithConnection(const NYql::NNodes::TDqStage& computeKeysStage,
+        size_t stageOut, const NYql::TKikimrTableMetadata& mainTableMeta, TUniqCheckNodes::TIndexId indexId,
+        NYql::TPositionHandle pos, NYql::TExprContext& ctx) const = 0;
+    virtual const NYql::TExprNode::TPtr GetPkDict() const = 0;
+
+protected:
+    const NYql::NNodes::TCoArgument RowsListArg;
+    const NYql::TExprNode::TPtr False;
+private:
     const TChecks Checks;
 };
 
+TUniqBuildHelper::TPtr CreateInsertUniqBuildHelper(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
+        NYql::TExprContext& ctx);
+
+TUniqBuildHelper::TPtr CreateUpsertUniqBuildHelper(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
+        NYql::TExprContext& ctx);
 }

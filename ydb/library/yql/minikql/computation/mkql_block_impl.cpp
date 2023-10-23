@@ -133,9 +133,7 @@ arrow::Datum MakeArrayFromScalar(const arrow::Scalar& scalar, size_t len, TType*
     auto builder = MakeArrayBuilder(TTypeInfoHelper(), type, pool, len, nullptr);
 
     auto scalarItem = reader->GetScalarItem(scalar);
-    for (size_t i = 0; i < len; ++i) {
-        builder->Add(scalarItem);
-    }
+    builder->Add(scalarItem, len);
 
     return builder->Build(true);
 }

@@ -341,10 +341,15 @@ public:
         return BodySize + Head.PackedSize;
     }
 
+    // The size of the data realy was persisted in the storage by the partition
     ui64 MeteringDataSize(const TActorContext& ctx) const;
+    // The size of the storage that was reserved by the partition
     ui64 ReserveSize() const;
+    // The size of the storage that usud by the partition. That included combination of the reserver and realy persisted data.
     ui64 StorageSize(const TActorContext& ctx) const;
     ui64 UsedReserveSize(const TActorContext& ctx) const;
+    // Minimal offset, the data from which cannot be deleted, because it is required by an important consumer
+    ui64 ImportantClientsMinOffset() const;
 
 
     //Bootstrap sends kvRead

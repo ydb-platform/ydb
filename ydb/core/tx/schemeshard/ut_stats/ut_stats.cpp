@@ -436,21 +436,23 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
             PartitionPerTablet: 3
             PQTabletConfig {
                 PartitionConfig {
-                    LifetimeSeconds: 11
+                    LifetimeSeconds: 2678400
                     WriteSpeedInBytesPerSecond : 17
                 }
                 MeteringMode: METERING_MODE_RESERVED_CAPACITY
             }
         )");
         env.TestWaitNotification(runtime, txId);
-        Assert(3 * 11 * 17, 0); // 561, 0 
+        Assert(3 * 2678400 * 17, 0); // 136598400, 0
+
+        auto msg = TString(24_MB, '_');
 
         ui32 msgSeqNo = 100;
-        WriteToTopic(runtime, topicPath, msgSeqNo, "Message 100");
+        WriteToTopic(runtime, topicPath, msgSeqNo, msg);
 
         env.SimulateSleep(runtime, TDuration::Seconds(3)); // Wait TEvPeriodicTopicStats
 
-        Assert(3 * 11 * 17, 69); // 69 - it is unstable value. it can change if internal message store change
+        Assert(3 * 2678400 * 17, 16975296); // 16975296 - it is unstable value. it can change if internal message store change
     }
 
     Y_UNIT_TEST(TopicPeriodicStatMeteringModeRequest) {
@@ -504,15 +506,17 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         UNIT_ASSERT_EQUAL_C(0, stats->Record.GetDataSize(), "DataSize from ReadBalancer");
         UNIT_ASSERT_EQUAL_C(0, stats->Record.GetUsedReserveSize(), "UsedReserveSize from ReadBalancer");
 
+        auto msg = TString(24_MB, '_');
+
         ui32 msgSeqNo = 100;
-        WriteToTopic(runtime, topicPath, msgSeqNo, "Message 100");
+        WriteToTopic(runtime, topicPath, ++msgSeqNo, msg);
 
         env.SimulateSleep(runtime, TDuration::Seconds(3)); // Wait TEvPeriodicTopicStats
 
-        Assert(69, 0); //  69 - it is unstable value. it can change if internal message store change
+        Assert(16975296, 0); //  69 - it is unstable value. it can change if internal message store change
 
         stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
-        UNIT_ASSERT_EQUAL_C(69, stats->Record.GetDataSize(), "DataSize from ReadBalancer");
+        UNIT_ASSERT_EQUAL_C(16975296, stats->Record.GetDataSize(), "DataSize from ReadBalancer");
         UNIT_ASSERT_EQUAL_C(0, stats->Record.GetUsedReserveSize(), "UsedReserveSize from ReadBalancer");
 
         appData.PQConfig.SetBalancerWakeupIntervalSec(30);
@@ -520,7 +524,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         GracefulRestartTablet(runtime, balancerId, sender);
 
         stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
-        UNIT_ASSERT_EQUAL_C(69, stats->Record.GetDataSize(), "DataSize from ReadBalancer after reload");
+        UNIT_ASSERT_EQUAL_C(16975296, stats->Record.GetDataSize(), "DataSize from ReadBalancer after reload");
         UNIT_ASSERT_EQUAL_C(0, stats->Record.GetUsedReserveSize(), "UsedReserveSize from ReadBalancer after reload");
     }
 

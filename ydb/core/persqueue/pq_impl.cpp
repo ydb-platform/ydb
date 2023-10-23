@@ -922,7 +922,9 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
         return;
     }
 
-    TSet<EMeteringJson> whichToFlush{EMeteringJson::PutEventsV1, EMeteringJson::ResourcesReservedV1};
+    TSet<EMeteringJson> whichToFlush{EMeteringJson::PutEventsV1,
+                                     EMeteringJson::ResourcesReservedV1,
+                                     EMeteringJson::UsedStorageV1};
     ui64 storageLimitBytes{Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
         Config.GetPartitionConfig().GetLifetimeSeconds()};
 
@@ -930,7 +932,8 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
         storageLimitBytes = Config.GetPartitionConfig().GetStorageLimitBytes();
         whichToFlush = TSet<EMeteringJson>{EMeteringJson::PutEventsV1,
                                            EMeteringJson::ThroughputV1,
-                                           EMeteringJson::StorageV1};
+                                           EMeteringJson::StorageV1,
+                                           EMeteringJson::UsedStorageV1};
     }
 
     switch (Config.GetMeteringMode()) {

@@ -159,29 +159,27 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
 }
 
 void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
+    const auto now = ctx.Now();
     Responses.emplace_back(
         message.Body,
-        WriteQuota->GetQuotedTime(ctx.Now()) - message.QuotedTime,
-        (ctx.Now() - TInstant::Zero()) - message.QueueTime,
-        ctx.Now()
+        WriteQuota->GetQuotedTime(now) - message.QuotedTime,
+        (now - TInstant::Zero()) - message.QueueTime,
+        now
     );
 }
 
-ui64 TPartition::MeteringDataSize(const TActorContext& ctx) const {
-    ui64 size = Size();
-    if (!DataKeysBody.empty()) {
-        size -= DataKeysBody.front().Size;
+ui64 TPartition::MeteringDataSize(const TActorContext& /*ctx*/) const {
+    if (DataKeysBody.size() <= 1) {
+        // tiny optimization - we do not meter very small queues up to 16MB
+        return 0;
     }
-    auto expired = ctx.Now() - TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds());
-    for(size_t i = 0; i < HeadKeys.size(); ++i) {
-        auto& key = HeadKeys[i];
-        if (expired < key.Timestamp) {
-            break;
-        }
-        size -= key.Size;
-    }
-    Y_ABORT_UNLESS(size >= 0, "Metering data size must be positive");
-    return size;
+
+    // We assume that DataKyesBody contains an up-to-date set of blobs, their relevance is
+    // maintained by the background process. However, the last block may contain several irrelevant
+    // messages. Because of them, we throw out the size of the entire blob.
+    ui64 size = Size() - DataKeysBody[0].Size;
+    Y_VERIFY_DEBUG(size >= 0, "Metering data size must be positive");
+    return std::max<ui64>(size, 0);
 }
 
 ui64 TPartition::ReserveSize() const {
@@ -200,8 +198,24 @@ ui64 TPartition::GetUsedStorage(const TActorContext& ctx) {
     const auto now = ctx.Now();
     const auto duration = now - LastUsedStorageMeterTimestamp;
     LastUsedStorageMeterTimestamp = now;
-    ui64 size = MeteringDataSize(ctx);
+
+    ui64 size = std::max<ui64>(MeteringDataSize(ctx) - ReserveSize(), 0);
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
+}
+
+ui64 TPartition::ImportantClientsMinOffset() const {
+    const auto& partConfig = Config.GetPartitionConfig();
+
+    ui64 minOffset = EndOffset;
+    for (const auto& importantClientId : partConfig.GetImportantClientId()) {
+        const TUserInfo* userInfo = UsersInfoStorage->GetIfExists(importantClientId);
+        ui64 curOffset = StartOffset;
+        if (userInfo && userInfo->Offset >= 0) //-1 means no offset
+            curOffset = userInfo->Offset;
+        minOffset = Min<ui64>(minOffset, curOffset);
+    }
+
+    return minOffset;    
 }
 
 void TPartition::HandleWakeup(const TActorContext& ctx) {
@@ -304,15 +318,8 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         return false;
 
     const auto& partConfig = Config.GetPartitionConfig();
-    ui64 minOffset = EndOffset;
-    for (const auto& importantClientId : partConfig.GetImportantClientId()) {
-        TUserInfo* userInfo = UsersInfoStorage->GetIfExists(importantClientId);
-        ui64 curOffset = StartOffset;
-        if (userInfo && userInfo->Offset >= 0) //-1 means no offset
-            curOffset = userInfo->Offset;
-        minOffset = Min<ui64>(minOffset, curOffset);
-    }
 
+    ui64 minOffset = ImportantClientsMinOffset();
     bool hasDrop = false;
     ui64 endOffset = StartOffset;
 
@@ -320,36 +327,34 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         ? std::optional<ui64>{partConfig.GetStorageLimitBytes()} : std::nullopt;
     const TDuration lifetimeLimit{TDuration::Seconds(partConfig.GetLifetimeSeconds())};
 
-    if (DataKeysBody.size() > 1) {
-        auto retentionCondition = [&]() -> bool {
-            const auto bodySize = BodySize - DataKeysBody.front().Size;
-            const bool timeRetention = (ctx.Now() >= (DataKeysBody.front().Timestamp + lifetimeLimit));
-            return storageLimit.has_value()
-                ? ((bodySize >= *storageLimit) || timeRetention)
-                : timeRetention;
-        };
+    auto retentionCondition = [&]() -> bool {
+        const auto bodySize = BodySize - DataKeysBody.front().Size;
+        const bool timeRetention = (ctx.Now() >= (DataKeysBody.front().Timestamp + lifetimeLimit));
+        return storageLimit.has_value()
+            ? ((bodySize >= *storageLimit) || timeRetention)
+            : timeRetention;
+    };
 
-        while (DataKeysBody.size() > 1 &&
-               retentionCondition() &&
-               (minOffset > DataKeysBody[1].Key.GetOffset() ||
-                (minOffset == DataKeysBody[1].Key.GetOffset() &&
-                 DataKeysBody[1].Key.GetPartNo() == 0))) { // all offsets from blob[0] are readed, and don't delete last blob
-            BodySize -= DataKeysBody.front().Size;
+    while (DataKeysBody.size() > 1 &&
+           retentionCondition() &&
+            (minOffset > DataKeysBody[1].Key.GetOffset() ||
+            (minOffset == DataKeysBody[1].Key.GetOffset() &&
+             DataKeysBody[1].Key.GetPartNo() == 0))) { // all offsets from blob[0] are readed, and don't delete last blob
+        BodySize -= DataKeysBody.front().Size;
 
-            DataKeysBody.pop_front();
-            if (!GapOffsets.empty() && DataKeysBody.front().Key.GetOffset() == GapOffsets.front().second) {
-                GapSize -= GapOffsets.front().second - GapOffsets.front().first;
-                GapOffsets.pop_front();
-            }
-            hasDrop = true;
+        DataKeysBody.pop_front();
+        if (!GapOffsets.empty() && DataKeysBody.front().Key.GetOffset() == GapOffsets.front().second) {
+            GapSize -= GapOffsets.front().second - GapOffsets.front().first;
+            GapOffsets.pop_front();
         }
+        hasDrop = true;
+    }
 
-        Y_ABORT_UNLESS(!DataKeysBody.empty());
+    Y_ABORT_UNLESS(!DataKeysBody.empty());
 
-        endOffset = DataKeysBody.front().Key.GetOffset();
-        if (DataKeysBody.front().Key.GetPartNo() > 0) {
-            ++endOffset;
-        }
+    endOffset = DataKeysBody.front().Key.GetOffset();
+    if (DataKeysBody.front().Key.GetPartNo() > 0) {
+        ++endOffset;
     }
 
     if (!hasDrop)
@@ -1213,7 +1218,7 @@ void TPartition::ReportCounters(const TActorContext& ctx, bool force) {
 
 void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorContext&) {
     for (auto& [consumerStr, quota] : ev->Get()->UpdatedConsumerQuotas) {
-        TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumerStr);
+        const TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumerStr);
         if (userInfo) {
             userInfo->LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Set(quota);
         }

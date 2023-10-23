@@ -1502,7 +1502,16 @@ bool TPartition::WaitingForPreviousBlobQuota() const {
 }
 
 bool TPartition::WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 withSize) const {
-    return SubDomainOutOfSpace && AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() && MeteringDataSize(ctx) + withSize > ReserveSize();
+    if (!SubDomainOutOfSpace || !AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota()) {
+        return false;
+    }
+
+    if (NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS == Config.GetMeteringMode()) {
+        // We allow one message to be written even when the SubDomainOutOfSpace.
+        return withSize > 0 || Size() > 0;
+    }
+
+    return MeteringDataSize(ctx) + withSize > ReserveSize();
 }
 
 void TPartition::WriteBlobWithQuota(const TActorContext& ctx, THolder<TEvKeyValue::TEvRequest>&& request) {

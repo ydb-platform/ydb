@@ -269,7 +269,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 if (hasPassword) {
                     return TMsgPqCodes("incorrect client service type password", Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
                 }
-                if (AppData(ctx)->PQConfig.GetForceClientServiceTypePasswordCheck()) { // no password and check is required
+                if (pqConfig.GetForceClientServiceTypePasswordCheck()) { // no password and check is required
                     return TMsgPqCodes("no client service type password provided", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
                 }
             }
@@ -292,7 +292,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         if (rr.important()) {
-            if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            if (pqConfig.GetTopicsAreFirstClassCitizen() && !AppData(ctx)->FeatureFlags.GetEnableTopicDiskSubDomainQuota()) {
                 return TMsgPqCodes(TStringBuilder() << "important flag is forbiden for consumer " << rr.name(), Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
             }
             config->MutablePartitionConfig()->AddImportantClientId(consumerName);

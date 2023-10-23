@@ -3178,8 +3178,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         auto stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
         UNIT_ASSERT_EQUAL_C(false, stats->Record.GetSubDomainOutOfSpace(), "SubDomainOutOfSpace from ReadBalancer");
         
+        auto msg = TString(24_MB, '_');
+
         ui32 seqNo = 100;
-        WriteToTopic(runtime, "/MyRoot/USER_1/Topic1", ++seqNo, "Message 0");
+        WriteToTopic(runtime, "/MyRoot/USER_1/Topic1", ++seqNo, msg);
         env.SimulateSleep(runtime, TDuration::Seconds(3)); // Wait TEvPeriodicTopicStats
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_1"),

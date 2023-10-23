@@ -167,6 +167,41 @@ Y_UNIT_TEST(FlushStorageV1) {
     UNIT_ASSERT_VALUES_EQUAL(fullMetering, referenceStorageJson);
 }
 
+Y_UNIT_TEST(UsedStorageV1) {
+    TString fullMetering;
+    const ui64 creationTs = 1651752943168786;
+    const ui64 flushTs    = 1651754943168786;
+    const ui32 partitions = 7;
+    const ui64 reservedSpace = 42_GB;
+
+    TMeteringSink meteringSink;
+    meteringSink.Create(TInstant::FromValue(creationTs), {
+            .FlushInterval = TDuration::Seconds(10),
+            .TabletId = "tabletId",
+            .YcCloudId = "cloudId",
+            .YcFolderId = "folderId",
+            .YdbDatabaseId = "databaseId",
+            .StreamName = "streamName",
+            .ResourceId = "streamPath",
+            .PartitionsSize = partitions,
+            .ReservedSpace = reservedSpace,
+        }, {EMeteringJson::UsedStorageV1}, [&](TString json) {
+            fullMetering = TStringBuilder() << fullMetering << '\n' << json;
+        });
+
+    const ui32 quantity = 13;
+
+    meteringSink.IncreaseQuantity(EMeteringJson::UsedStorageV1, quantity);
+    meteringSink.MayFlushForcibly(TInstant::FromValue(flushTs));
+
+    const TString referenceStorageJson = TStringBuilder() <<
+        "\n{\"cloud_id\":\"cloudId\",\"folder_id\":\"folderId\",\"resource_id\":\"streamPath\","
+        << "\"id\":\"used_storage-databaseId-tabletId-1651752943168-" << meteringSink.GetMeteringCounter() << "\","
+        << "\"schema\":\"ydb.serverless.v1\",\"tags\":{\"ydb_size\":6815},\"usage\":{\"quantity\":2000,\"unit\":\"byte*second\",\"start\":1651752943,\"finish\":1651754943},"
+        << "\"labels\":{\"datastreams_stream_name\":\"streamName\",\"ydb_database\":\"databaseId\"},\"version\":\"1.0.0\",\"source_id\":\"tabletId\",\"source_wt\":1651754943}\n";
+    UNIT_ASSERT_VALUES_EQUAL(fullMetering, referenceStorageJson);
+}
+
 } // Y_UNIT_TEST_SUITE(MeteringSink)
 
 } // namespace NKikimr::NPQ

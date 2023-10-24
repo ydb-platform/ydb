@@ -693,6 +693,7 @@ void TCommandExplain::Config(TConfig& config) {
 
     AddFormats(config, {
             EOutputFormat::Pretty,
+            EOutputFormat::PrettyTable,
             EOutputFormat::JsonUnicode,
             EOutputFormat::JsonBase64
     });

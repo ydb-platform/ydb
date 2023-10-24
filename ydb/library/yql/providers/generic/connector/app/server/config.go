@@ -28,10 +28,12 @@ func validateServerConfig(c *config.TServerConfig) error {
 }
 
 func validateConnectorServerConfig(c *config.TConnectorServerConfig) error {
-	// TODO: make it required after YQ-2057
-	// if c == nil {
-	// 	return fmt.Errorf("required field is missing")
-	// }
+	if c == nil {
+		// TODO: make it required after YQ-2057
+		// return fmt.Errorf("required field is missing")
+		return nil
+	}
+
 	if err := validateEndpoint(c.Endpoint); err != nil {
 		return fmt.Errorf("validate `endpoint`: %w", err)
 	}

@@ -30,7 +30,7 @@ namespace NKikimr {
             TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriersEssence =
                 snap.BarriersSnap.CreateEssence(snap.HullCtx);
             NHullComp::TStrategyStorageRatio<TKeyLogoBlob, TMemRecLogoBlob>
-                (snap.HullCtx, snap.LogoBlobsSnap, std::move(barriersEssence)).Work();
+                (snap.HullCtx, snap.LogoBlobsSnap, std::move(barriersEssence), true).Work();
 
             snap.LogoBlobsSnap.Output(STR);
             STR << "\n";
@@ -44,7 +44,7 @@ namespace NKikimr {
             TTask task;
             NHullComp::TSelectorParams params = {boundaries, 1.0, TInstant::Seconds(0), {}};
             TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
-                    &task);
+                    &task, true);
             auto action = strategy.Select();
             STR << "action = " << NHullComp::ActionToStr(action) << "\n";
         }

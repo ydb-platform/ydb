@@ -24,7 +24,7 @@ namespace NKikimr {
                    const TMemRecLogoBlob &memRec,
                    ui32 recsMerged,
                    bool allowKeepFlags) const {
-            return BarriersEssence->Keep(key, memRec, recsMerged, allowKeepFlags).KeepData;
+            return BarriersEssence->Keep(key, memRec, recsMerged, allowKeepFlags, false /*allowGarbageCollection*/).KeepData;
         }
 
         TIntrusivePtr<THullCtx> HullCtx;
@@ -92,10 +92,10 @@ namespace NKikimr {
             const auto& topology = *HullCtx->VCtx->Top; // topology we have
             Y_ABORT_UNLESS(topology.BelongsToSubgroup(self, CurKey.Hash())); // check that blob belongs to subgroup
 
-            //if (!Filter->Check(CurKey, CurIt.GetMemRec(), CurIt.GetMemRecsMerged(), HullCtx->AllowKeepFlags)) {
-            //    // filter check returned false
-            //    return false;
-            //}
+            if (!Filter->Check(CurKey, CurIt.GetMemRec(), CurIt.GetMemRecsMerged(), HullCtx->AllowKeepFlags)) {
+                // filter check returned false
+                return false;
+            }
 
             const TSubgroupPartLayout layout = TSubgroupPartLayout::CreateFromIngress(CurIngress, topology.GType);
             const ui32 idxInSubgroup = topology.GetIdxInSubgroup(self, CurKey.Hash());

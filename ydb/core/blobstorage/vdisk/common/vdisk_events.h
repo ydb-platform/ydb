@@ -3075,4 +3075,6 @@ namespace NKikimr {
         }
     };
 
+    struct TEvPermitGarbageCollection : TEventLocal<TEvPermitGarbageCollection, TEvBlobStorage::EvPermitGarbageCollection> {};
+
 } // NKikimr

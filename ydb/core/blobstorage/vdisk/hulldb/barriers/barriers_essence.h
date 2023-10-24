@@ -35,33 +35,29 @@ namespace NGcOpt {
         NGc::TKeepStatus Keep(const TKeyLogoBlob &key,
                               const TMemRecLogoBlob &memRec,
                               ui32 recsMerged,
-                              bool allowKeepFlags) const {
+                              bool allowKeepFlags,
+                              bool allowGarbageCollection) const {
             const TIngress ingress = memRec.GetIngress();
             Y_DEBUG_ABORT_UNLESS(recsMerged >= 1);
-            return KeepLogoBlob(key.LogoBlobID(), ingress, recsMerged, allowKeepFlags);
+            return KeepLogoBlob(key.LogoBlobID(), ingress, recsMerged, allowKeepFlags, allowGarbageCollection);
         }
 
-        NGc::TKeepStatus Keep(const TKeyBlock &key,
-                              const TMemRecBlock &memRec,
-                              ui32 recsMerged,
-                              bool allowKeepFlags) const {
-            Y_UNUSED(key);
-            Y_UNUSED(memRec);
-            Y_UNUSED(recsMerged);
-            Y_UNUSED(allowKeepFlags);
+        NGc::TKeepStatus Keep(const TKeyBlock& /*key*/,
+                              const TMemRecBlock& /*memRec*/,
+                              ui32 /*recsMerged*/,
+                              bool /*allowKeepFlags*/,
+                              bool /*allowGarbageCollection*/) const {
             // NOTE: We never delete block records, we only merge them. Merge rules are
             //       very simple, i.e. last block wins. As a result, after full merge
             //       blocks db size is equal to number of tablets on this vdisk.
             return NGc::TKeepStatus(true);
         }
 
-        NGc::TKeepStatus Keep(const TKeyBarrier &key,
-                              const TMemRecBarrier &memRec,
-                              ui32 recsMerged,
-                              bool allowKeepFlags) const {
-            Y_UNUSED(memRec);
-            Y_UNUSED(recsMerged);
-            Y_UNUSED(allowKeepFlags);
+        NGc::TKeepStatus Keep(const TKeyBarrier& key,
+                              const TMemRecBarrier& /*memRec*/,
+                              ui32 /*recsMerged*/,
+                              bool /*allowKeepFlags*/,
+                              bool /*allowGarbageCollection*/) const {
             return KeepBarrier(key);
         }
 
@@ -82,7 +78,8 @@ namespace NGcOpt {
         NGc::TKeepStatus KeepLogoBlob(const TLogoBlobID &id,
                                       const TIngress &ingress,
                                       const ui32 recsMerged,
-                                      const bool allowKeepFlags) const;
+                                      const bool allowKeepFlags,
+                                      bool allowGarbageCollection) const;
     };
 
 } // NGcOpt

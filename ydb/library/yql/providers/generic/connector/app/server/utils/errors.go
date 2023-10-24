@@ -10,12 +10,17 @@ import (
 )
 
 var (
-	ErrTableDoesNotExist      = fmt.Errorf("table does not exist")
-	ErrDataSourceNotSupported = fmt.Errorf("data source not supported")
-	ErrDataTypeNotSupported   = fmt.Errorf("data type not supported")
-	ErrReadLimitExceeded      = fmt.Errorf("read limit exceeded")
-	ErrInvalidRequest         = fmt.Errorf("invalid request")
-	ErrValueOutOfTypeBounds   = fmt.Errorf("value is out of possible range of values for the type")
+	ErrTableDoesNotExist          = fmt.Errorf("table does not exist")
+	ErrDataSourceNotSupported     = fmt.Errorf("data source not supported")
+	ErrDataTypeNotSupported       = fmt.Errorf("data type not supported")
+	ErrReadLimitExceeded          = fmt.Errorf("read limit exceeded")
+	ErrInvalidRequest             = fmt.Errorf("invalid request")
+	ErrValueOutOfTypeBounds       = fmt.Errorf("value is out of possible range of values for the type")
+	ErrUnimplemented              = fmt.Errorf("unimplemented")
+	ErrUnimplementedTypedValue    = fmt.Errorf("unimplemented typed value")
+	ErrUnimplementedExpression    = fmt.Errorf("unimplemented expression")
+	ErrUnimplementedOperation     = fmt.Errorf("unimplemented operation")
+	ErrUnimplementedPredicateType = fmt.Errorf("unimplemented predicate type")
 )
 
 func NewSuccess() *api_service_protos.TError {
@@ -49,6 +54,16 @@ func NewAPIErrorFromStdError(err error) *api_service_protos.TError {
 	case errors.Is(err, ErrDataTypeNotSupported):
 		status = Ydb.StatusIds_UNSUPPORTED
 	case errors.Is(err, ErrValueOutOfTypeBounds):
+		status = Ydb.StatusIds_UNSUPPORTED
+	case errors.Is(err, ErrUnimplementedTypedValue):
+		status = Ydb.StatusIds_UNSUPPORTED
+	case errors.Is(err, ErrUnimplementedExpression):
+		status = Ydb.StatusIds_UNSUPPORTED
+	case errors.Is(err, ErrUnimplementedOperation):
+		status = Ydb.StatusIds_UNSUPPORTED
+	case errors.Is(err, ErrUnimplementedPredicateType):
+		status = Ydb.StatusIds_UNSUPPORTED
+	case errors.Is(err, ErrUnimplemented):
 		status = Ydb.StatusIds_UNSUPPORTED
 	default:
 		status = Ydb.StatusIds_INTERNAL_ERROR

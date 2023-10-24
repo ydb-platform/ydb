@@ -231,11 +231,22 @@ namespace NYql {
                             tableMeta.ItemType = parse;
                             if (const auto ins = replaces.emplace(read.Raw(), TExprNode::TPtr()); ins.second) {
                                 // clang-format off
+                                auto row = Build<TCoArgument>(ctx, read.Pos())
+                                    .Name("row")
+                                    .Done();
+                                auto emptyPredicate = Build<TCoLambda>(ctx, read.Pos())
+                                    .Args({row})
+                                    .Body<TCoBool>()
+                                        .Literal().Build("true")
+                                        .Build()
+                                    .Done().Ptr();
+
                                 ins.first->second = Build<TGenReadTable>(ctx, read.Pos())
                                     .World(read.World())
                                     .DataSource(read.DataSource())
                                     .Table().Value(tableName).Build()
                                     .Columns<TCoVoid>().Build()
+                                    .FilterPredicate(emptyPredicate)
                                 .Done().Ptr();
                                 // clang-format on
                             }

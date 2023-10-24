@@ -7,17 +7,23 @@
 
 namespace NYql {
 
+    TGenericConfiguration::TGenericConfiguration() {
+        REGISTER_SETTING(*this, UsePredicatePushdown);
+    }
+
     void TGenericConfiguration::Init(const NYql::TGenericGatewayConfig& gatewayConfig,
                                      const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
                                      NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
                                      const TCredentials::TPtr& credentials)
     {
+        Dispatch(gatewayConfig.GetDefaultSettings());
+
         for (const auto& cluster : gatewayConfig.GetClusterMapping()) {
             AddCluster(cluster, databaseResolver, databaseAuth, credentials);
         }
 
         // TODO: check if it's necessary
-        this->FreezeDefaults();
+        FreezeDefaults();
     }
 
     void TGenericConfiguration::AddCluster(const TGenericClusterConfig& clusterConfig,

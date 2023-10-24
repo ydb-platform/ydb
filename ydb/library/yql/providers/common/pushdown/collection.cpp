@@ -1,15 +1,13 @@
-#include "kqp_opt_phy_olap_filter_collection.h"
+#include "collection.h"
 
-#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <vector>
 
-namespace NKikimr::NKqp::NOpt {
+namespace NYql::NPushdown {
 
-using namespace NYql;
-using namespace NYql::NNodes;
+using namespace NNodes;
 
 namespace {
 
@@ -32,7 +30,7 @@ bool IsLikeOperator(const TCoCompare& predicate) {
         || predicate.Maybe<TCoCmpEndsWith>();
 }
 
-bool IsSupportedLike(const TExprBase& left, const TExprBase& right) {
+bool IsSupportedLikeForUtf8(const TExprBase& left, const TExprBase& right) {
     if ((left.Maybe<TCoMember>() && ExprHasUtf8Type(left))
         || (right.Maybe<TCoMember>() && ExprHasUtf8Type(right)))
     {
@@ -41,7 +39,7 @@ bool IsSupportedLike(const TExprBase& left, const TExprBase& right) {
     return false;
 }
 
-bool IsSupportedPredicate(const TCoCompare& predicate) {
+bool IsSupportedPredicate(const TCoCompare& predicate, const TSettings& settings) {
     if (predicate.Maybe<TCoCmpEqual>()) {
         return true;
     } else if (predicate.Maybe<TCoCmpLess>()) {
@@ -56,7 +54,7 @@ bool IsSupportedPredicate(const TCoCompare& predicate) {
         return true;
     } else if (predicate.Maybe<TCoCmpLessOrEqual>()) {
         return true;
-    } else if (NKikimr::NSsa::RuntimeVersion >= 2U && IsLikeOperator(predicate)) {
+    } else if (settings.IsEnabled(TSettings::EFeatureFlag::LikeOperator) && IsLikeOperator(predicate)) {
         return true;
     }
 
@@ -241,7 +239,7 @@ std::vector<TExprBase> GetComparisonNodes(const TExprBase& node) {
     return res;
 }
 
-bool CheckComparisonNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg) {
+bool CheckComparisonNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TSettings& settings) {
     if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
         if (!IsSupportedCast(maybeSafeCast.Cast())) {
             return false;
@@ -254,7 +252,7 @@ bool CheckComparisonNodeForPushdown(const TExprBase& node, const TExprNode* lamb
         if (maybeMember.Cast().Struct().Raw() != lambdaArg) {
             return false;
         }
-    } else if (NKikimr::NSsa::RuntimeVersion >= 3U && node.Maybe<TCoJsonQueryBase>()) {
+    } else if (settings.IsEnabled(TSettings::EFeatureFlag::JsonQueryOperators) && node.Maybe<TCoJsonQueryBase>()) {
         if (!node.Maybe<TCoJsonValue>()) {
             return false;
         }
@@ -270,7 +268,7 @@ bool CheckComparisonNodeForPushdown(const TExprBase& node, const TExprNode* lamb
     return true;
 }
 
-bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& input) {
+bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& input, const TSettings& settings) {
     const TTypeAnnotationNode* inputType = input.Ptr()->GetTypeAnn();
     switch (inputType->GetKind()) {
         case ETypeAnnotationKind::Flow:
@@ -278,6 +276,8 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
             break;
         case ETypeAnnotationKind::Stream:
             inputType = inputType->Cast<TStreamExprType>()->GetItemType();
+            break;
+        case ETypeAnnotationKind::Struct:
             break;
         default:
             YQL_ENSURE(false, "Unsupported type of incoming data: " << (ui32)inputType->GetKind());
@@ -297,14 +297,14 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
     YQL_ENSURE(leftList.size() == rightList.size(), "Different sizes of lists in comparison!");
 
     for (size_t i = 0; i < leftList.size(); ++i) {
-        if (!CheckComparisonNodeForPushdown(leftList[i], lambdaArg) || !CheckComparisonNodeForPushdown(rightList[i], lambdaArg)) {
+        if (!CheckComparisonNodeForPushdown(leftList[i], lambdaArg, settings) || !CheckComparisonNodeForPushdown(rightList[i], lambdaArg, settings)) {
             return false;
         }
         if (!IsComparableTypes(leftList[i], rightList[i], equality, inputType)) {
             return false;
         }
-        if (IsLikeOperator(compare) && NKikimr::NSsa::RuntimeVersion < 3U && !IsSupportedLike(leftList[i], rightList[i])) {
-            // In SSA_RUNTIME_VERSION == 2 Column Shard doesn't have LIKE kernel for binary strings
+        if (IsLikeOperator(compare) && settings.IsEnabled(TSettings::EFeatureFlag::LikeOperatorOnlyForUtf8) && !IsSupportedLikeForUtf8(leftList[i], rightList[i])) {
+            // (KQP OLAP) If SSA_RUNTIME_VERSION == 2 Column Shard doesn't have LIKE kernel for binary strings
             return false;
         }
     }
@@ -312,19 +312,19 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
     return true;
 }
 
-bool CompareCanBePushed(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
-    if (!IsSupportedPredicate(compare)) {
+bool CompareCanBePushed(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+    if (!IsSupportedPredicate(compare, settings)) {
         return false;
     }
 
-    if (!CheckComparisonParametersForPushdown(compare, lambdaArg, lambdaBody)) {
+    if (!CheckComparisonParametersForPushdown(compare, lambdaArg, lambdaBody, settings)) {
         return false;
     }
 
     return true;
 }
 
-bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg) {
+bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg, const TSettings& settings) {
     /*
      * There are three ways of comparison in following format:
      *
@@ -345,7 +345,7 @@ bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg) 
     YQL_ENSURE(leftList.size() == rightList.size(), "Different sizes of lists in comparison!");
 
     for (size_t i = 0; i < leftList.size(); ++i) {
-        if (!CheckComparisonNodeForPushdown(leftList[i], lambdaArg) || !CheckComparisonNodeForPushdown(rightList[i], lambdaArg)) {
+        if (!CheckComparisonNodeForPushdown(leftList[i], lambdaArg, settings) || !CheckComparisonNodeForPushdown(rightList[i], lambdaArg, settings)) {
             return false;
         }
     }
@@ -361,7 +361,7 @@ bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg) 
     }
 
     auto predicate = maybePredicate.Cast();
-    if (!IsSupportedPredicate(predicate)) {
+    if (!IsSupportedPredicate(predicate, settings)) {
         return false;
     }
 
@@ -380,17 +380,17 @@ bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists, const TExprNode* lam
     return true;
 }
 
-bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
+bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     if (!coalesce.Value().Maybe<TCoBool>()) {
         return false;
     }
     auto predicate = coalesce.Predicate();
 
     if (auto maybeCompare = predicate.Maybe<TCoCompare>()) {
-        return CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody);
+        return CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, settings);
     } else if (auto maybeFlatmap = predicate.Maybe<TCoFlatMap>()) {
-        return SafeCastCanBePushed(maybeFlatmap.Cast(), lambdaArg);
-    } else if (NKikimr::NSsa::RuntimeVersion >= 3U && predicate.Maybe<TCoJsonExists>()) {
+        return SafeCastCanBePushed(maybeFlatmap.Cast(), lambdaArg, settings);
+    } else if (settings.IsEnabled(TSettings::EFeatureFlag::JsonExistsOperator) && predicate.Maybe<TCoJsonExists>()) {
         auto jsonExists = predicate.Cast<TCoJsonExists>();
         return JsonExistsCanBePushed(jsonExists, lambdaArg);
     }
@@ -409,7 +409,7 @@ bool ExistsCanBePushed(const TCoExists& exists, const TExprNode* lambdaArg) {
     return true;
 }
 
-void CollectPredicatesForBinaryBoolOperators(const TExprBase& opNode, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
+void CollectPredicatesForBinaryBoolOperators(const TExprBase& opNode, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     if (!opNode.Maybe<TCoAnd>() && !opNode.Maybe<TCoOr>() && !opNode.Maybe<TCoOr>()) {
         return;
     }
@@ -417,7 +417,7 @@ void CollectPredicatesForBinaryBoolOperators(const TExprBase& opNode, TPredicate
     predicateTree.CanBePushed = true;
     for (auto& childNodePtr: opNode.Ptr()->Children()) {
         TPredicateNode child(childNodePtr);
-        CollectPredicates(TExprBase(childNodePtr), child, lambdaArg, lambdaBody);
+        CollectPredicates(TExprBase(childNodePtr), child, lambdaArg, lambdaBody, settings);
         predicateTree.Children.emplace_back(child);
         predicateTree.CanBePushed &= child.CanBePushed;
     }
@@ -425,48 +425,13 @@ void CollectPredicatesForBinaryBoolOperators(const TExprBase& opNode, TPredicate
 
 } // anonymous namespace end
 
-bool TPredicateNode::IsValid() const {
-    bool res = true;
-    if (Op != EBoolOp::Undefined) {
-        res &= !Children.empty();
-        for (auto& child : Children) {
-            res &= child.IsValid();
-        }
-    }
-
-    return res && ExprNode.IsValid();
-}
-
-void TPredicateNode::SetPredicates(const std::vector<TPredicateNode>& predicates, TExprContext& ctx, TPositionHandle pos) {
-    auto predicatesSize = predicates.size();
-    if (predicatesSize == 0) {
-        return;
-    } else if (predicatesSize == 1) {
-        *this = predicates[0];
-    } else {
-        Op = EBoolOp::And;
-        Children = predicates;
-        CanBePushed = true;
-
-        TVector<TExprBase> exprNodes;
-        exprNodes.reserve(predicatesSize);
-        for (auto& pred : predicates) {
-            exprNodes.emplace_back(pred.ExprNode.Cast());
-            CanBePushed &= pred.CanBePushed;
-        }
-        ExprNode = Build<TCoAnd>(ctx, pos)
-            .Add(exprNodes)
-            .Done();
-    }
-}
-
-void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody) {
+void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     if (predicate.Maybe<TCoCoalesce>()) {
         auto coalesce = predicate.Cast<TCoCoalesce>();
-        predicateTree.CanBePushed = CoalesceCanBePushed(coalesce, lambdaArg, lambdaBody);
+        predicateTree.CanBePushed = CoalesceCanBePushed(coalesce, lambdaArg, lambdaBody, settings);
     } else if (predicate.Maybe<TCoCompare>()) {
         auto compare = predicate.Cast<TCoCompare>();
-        predicateTree.CanBePushed = CompareCanBePushed(compare, lambdaArg, lambdaBody);
+        predicateTree.CanBePushed = CompareCanBePushed(compare, lambdaArg, lambdaBody, settings);
     } else if (predicate.Maybe<TCoExists>()) {
         auto exists = predicate.Cast<TCoExists>();
         predicateTree.CanBePushed = ExistsCanBePushed(exists, lambdaArg);
@@ -474,19 +439,19 @@ void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree
         predicateTree.Op = EBoolOp::Not;
         auto notOp = predicate.Cast<TCoNot>();
         TPredicateNode child(notOp.Value());
-        CollectPredicates(notOp.Value(), child, lambdaArg, lambdaBody);
+        CollectPredicates(notOp.Value(), child, lambdaArg, lambdaBody, settings);
         predicateTree.CanBePushed = child.CanBePushed;
         predicateTree.Children.emplace_back(child);
     } else if (predicate.Maybe<TCoAnd>()) {
         predicateTree.Op = EBoolOp::And;
-        CollectPredicatesForBinaryBoolOperators(predicate.Cast<TCoAnd>(), predicateTree, lambdaArg, lambdaBody);
+        CollectPredicatesForBinaryBoolOperators(predicate.Cast<TCoAnd>(), predicateTree, lambdaArg, lambdaBody, settings);
     } else if (predicate.Maybe<TCoOr>()) {
         predicateTree.Op = EBoolOp::Or;
-        CollectPredicatesForBinaryBoolOperators(predicate.Cast<TCoOr>(), predicateTree, lambdaArg, lambdaBody);
+        CollectPredicatesForBinaryBoolOperators(predicate.Cast<TCoOr>(), predicateTree, lambdaArg, lambdaBody, settings);
     } else if (predicate.Maybe<TCoXor>()) {
         predicateTree.Op = EBoolOp::Xor;
-        CollectPredicatesForBinaryBoolOperators(predicate.Cast<TCoXor>(), predicateTree, lambdaArg, lambdaBody);
-    } else if (NKikimr::NSsa::RuntimeVersion >= 3U && predicate.Maybe<TCoJsonExists>()) {
+        CollectPredicatesForBinaryBoolOperators(predicate.Cast<TCoXor>(), predicateTree, lambdaArg, lambdaBody, settings);
+    } else if (settings.IsEnabled(TSettings::EFeatureFlag::JsonExistsOperator) && predicate.Maybe<TCoJsonExists>()) {
         auto jsonExists = predicate.Cast<TCoJsonExists>();
         predicateTree.CanBePushed = JsonExistsCanBePushed(jsonExists, lambdaArg);
     } else {
@@ -494,4 +459,4 @@ void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree
     }
 }
 
-} // namespace NKikimr::NKqp::NOpt
+} // namespace NYql::NPushdown

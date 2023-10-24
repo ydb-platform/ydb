@@ -1,10 +1,11 @@
 #include "kqp_opt_phy_rules.h"
-#include "kqp_opt_phy_olap_filter_collection.h"
 
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
 
 #include <unordered_set>
 
@@ -21,6 +22,15 @@ static const std::unordered_set<std::string> SecondLevelFilters = {
     "string_contains",
     "starts_with",
     "ends_with"
+};
+
+struct TPushdownSettings : public NPushdown::TSettings {
+    TPushdownSettings() {
+        using EFlag = NPushdown::TSettings::EFeatureFlag;
+        Enable(EFlag::LikeOperator, NSsa::RuntimeVersion >= 2U);
+        Enable(EFlag::LikeOperatorOnlyForUtf8, NSsa::RuntimeVersion < 3U);
+        Enable(EFlag::JsonQueryOperators | EFlag::JsonExistsOperator, NSsa::RuntimeVersion >= 3U);
+    }
 };
 
 struct TFilterOpsLevels {
@@ -511,7 +521,7 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, TExprContext& ctx
     return TFilterOpsLevels(ops, NullNode);
 }
 
-void SplitForPartialPushdown(const TPredicateNode& predicateTree, TPredicateNode& predicatesToPush, TPredicateNode& remainingPredicates,
+void SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree, NPushdown::TPredicateNode& predicatesToPush, NPushdown::TPredicateNode& remainingPredicates,
     TExprContext& ctx, TPositionHandle pos)
 {
     if (predicateTree.CanBePushed) {
@@ -520,7 +530,7 @@ void SplitForPartialPushdown(const TPredicateNode& predicateTree, TPredicateNode
         return;
     }
 
-    if (predicateTree.Op != EBoolOp::And) {
+    if (predicateTree.Op != NPushdown::EBoolOp::And) {
         // We can partially pushdown predicates from AND operator only.
         // For OR operator we would need to have several read operators which is not acceptable.
         // TODO: Add support for NOT(op1 OR op2), because it expands to (!op1 AND !op2).
@@ -529,8 +539,8 @@ void SplitForPartialPushdown(const TPredicateNode& predicateTree, TPredicateNode
     }
 
     bool isFoundNotStrictOp = false;
-    std::vector<TPredicateNode> pushable;
-    std::vector<TPredicateNode> remaining;
+    std::vector<NPushdown::TPredicateNode> pushable;
+    std::vector<NPushdown::TPredicateNode> remaining;
     for (auto& predicate : predicateTree.Children) {
         if (predicate.CanBePushed && !isFoundNotStrictOp) {
             pushable.emplace_back(predicate);
@@ -578,12 +588,12 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     }
 
     auto optionalIf = maybeOptionalIf.Cast();
-    TPredicateNode predicateTree(optionalIf.Predicate());
-    CollectPredicates(optionalIf.Predicate(), predicateTree, lambdaArg, read.Process().Body());
+    NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
+    CollectPredicates(optionalIf.Predicate(), predicateTree, lambdaArg, read.Process().Body(), TPushdownSettings());
     YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
 
-    TPredicateNode predicatesToPush;
-    TPredicateNode remainingPredicates;
+    NPushdown::TPredicateNode predicatesToPush;
+    NPushdown::TPredicateNode remainingPredicates;
     SplitForPartialPushdown(predicateTree, predicatesToPush, remainingPredicates, ctx, node.Pos());
     if (!predicatesToPush.IsValid()) {
         return node;

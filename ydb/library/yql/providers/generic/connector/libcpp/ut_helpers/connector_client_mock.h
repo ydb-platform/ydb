@@ -18,6 +18,7 @@
 #include <google/protobuf/util/message_differencer.h>
 
 #include <memory>
+#include <type_traits>
 
 namespace NYql::NConnector::NTest {
     using namespace testing;
@@ -67,22 +68,53 @@ namespace NYql::NConnector::NTest {
         }                                                                       \
     }
 
+    // Make arrow array for one column.
+    // Returns field for schema and array with data.
+    // Designed for call with MakeRecordBatch function.
     template <class TArrowBuilderType, class TColDataType>
-    std::shared_ptr<arrow::RecordBatch> MakeRecordBatch(
-        const TString& columnName,
-        const std::vector<TColDataType>& input,
-        std::shared_ptr<arrow::DataType> dataType) {
+    std::tuple<std::shared_ptr<arrow::Field>, std::shared_ptr<arrow::Array>>
+    MakeArray(const TString& columnName,
+              const std::vector<TColDataType>& input,
+              std::shared_ptr<arrow::DataType> dataType) {
         TArrowBuilderType builder;
         UNIT_ASSERT_EQUAL(builder.AppendValues(input), arrow::Status::OK());
         std::shared_ptr<arrow::Array> columnData;
         UNIT_ASSERT_EQUAL(builder.Finish(&columnData), arrow::Status::OK());
         auto field = arrow::field(columnName, std::move(dataType));
+        return {std::move(field), std::move(columnData)};
+    }
+
+    // Make record batch with the only column.
+    template <class TArrowBuilderType, class TColDataType>
+    std::shared_ptr<arrow::RecordBatch> MakeRecordBatch(
+        const TString& columnName,
+        const std::vector<TColDataType>& input,
+        std::shared_ptr<arrow::DataType> dataType) {
+        auto [field, columnData] = MakeArray<TArrowBuilderType, TColDataType>(columnName, input, dataType);
         auto schema = arrow::schema({field});
         return arrow::RecordBatch::Make(schema, columnData->length(), {columnData});
     }
 
+    template <class T>
+    concept TFieldAndArray = std::is_same_v<T, std::tuple<std::shared_ptr<arrow::Field>, std::shared_ptr<arrow::Array>>>;
+
+    // Make record batch from several results of MakeArray calls with different params.
+    template <TFieldAndArray... TArrayFieldTuple>
+    std::shared_ptr<arrow::RecordBatch> MakeRecordBatch(const TArrayFieldTuple&... fields) {
+        auto schema = arrow::schema({std::get<0>(fields)...});
+        std::vector<std::shared_ptr<arrow::Array>> data = {std::get<1>(fields)...};
+        UNIT_ASSERT(data.size());
+        for (const auto& d : data) {
+            UNIT_ASSERT_VALUES_EQUAL(d->length(), data[0]->length());
+        }
+        return arrow::RecordBatch::Make(schema, data[0]->length(), std::move(data));
+    }
+
     // Make record batch with schema with no columns
     std::shared_ptr<arrow::RecordBatch> MakeEmptyRecordBatch(size_t rowsCount);
+
+    template <class T>
+    void SetSimpleValue(const T& value, Ydb::TypedValue* proto);
 
     template <class TParent>
     struct TWithParentBuilder {
@@ -170,9 +202,9 @@ namespace NYql::NConnector::NTest {
 
     class TConnectorClientMock: public NYql::NConnector::IClient {
     public:
-        MOCK_METHOD(TDescribeTableAsyncResult, DescribeTable, (const NApi::TDescribeTableRequest& request), (override));
-        MOCK_METHOD(TIteratorAsyncResult<IListSplitsStreamIterator>, ListSplits, (const NApi::TListSplitsRequest& request), (override));
-        MOCK_METHOD(TIteratorAsyncResult<IReadSplitsStreamIterator>, ReadSplits, (const NApi::TReadSplitsRequest& request), (override));
+        MOCK_METHOD(TResult<NApi::TDescribeTableResponse>, DescribeTableImpl, (const NApi::TDescribeTableRequest& request));
+        MOCK_METHOD(TIteratorResult<IListSplitsStreamIterator>, ListSplitsImpl, (const NApi::TListSplitsRequest& request));
+        MOCK_METHOD(TIteratorResult<IReadSplitsStreamIterator>, ReadSplitsImpl, (const NApi::TReadSplitsRequest& request));
 
         //
         // Expectation helpers
@@ -260,13 +292,20 @@ namespace NYql::NConnector::NTest {
             TBuilder& Status(const Ydb::StatusIds_StatusCode value) {
                 this->Result_->mutable_error()->set_status(value);
                 return static_cast<TBuilder&>(*this);
-            };
+            }
 
             // TODO: add nonprimitive types
             TBuilder& Column(const TString& name, Ydb::Type::PrimitiveTypeId typeId) {
                 auto* col = this->Result_->mutable_schema()->add_columns();
                 col->set_name(name);
                 col->mutable_type()->set_type_id(typeId);
+                return *this;
+            }
+
+            TBuilder& NullableColumn(const TString& name, Ydb::Type::PrimitiveTypeId typeId) {
+                auto* col = this->Result_->mutable_schema()->add_columns();
+                col->set_name(name);
+                col->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(typeId);
                 return *this;
             }
 
@@ -308,15 +347,150 @@ namespace NYql::NConnector::NTest {
 
         private:
             void SetExpectation() {
-                auto future = NThreading::MakeFuture<TResult<NApi::TDescribeTableResponse>>({NGrpc::TGrpcStatus(), *ResponseResult_});
-
-                EXPECT_CALL(*Mock_, DescribeTable(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(future));
+                EXPECT_CALL(*Mock_, DescribeTableImpl(ProtobufRequestMatcher(*Result_)))
+                    .WillOnce(Return(
+                        TResult<NApi::TDescribeTableResponse>(
+                            {NGrpc::TGrpcStatus(),
+                             *ResponseResult_})));
             }
 
         private:
             TConnectorClientMock* Mock_ = nullptr;
             std::shared_ptr<NApi::TDescribeTableResponse> ResponseResult_ = std::make_shared<NApi::TDescribeTableResponse>();
+        };
+
+        template <class TParent = void /* no parent by default */>
+        struct TExpressionBuilder: public TProtoBuilder<TParent, NApi::TExpression> {
+            using TBuilder = TExpressionBuilder<TParent>;
+
+            TExpressionBuilder(NApi::TExpression* result = nullptr, TParent* parent = nullptr)
+                : TProtoBuilder<TParent, NApi::TExpression>(result, parent)
+            {
+                FillWithDefaults();
+            }
+
+            SETTER(Column, column);
+
+            template <class T>
+            TBuilder& Value(const T& value) {
+                SetSimpleValue(value, this->Result_->mutable_typed_value());
+                return *this;
+            }
+
+            void FillWithDefaults() {
+            }
+        };
+
+        template <class TParent = void /* no parent by default */>
+        struct TComparisonBaseBuilder: public TProtoBuilder<TParent, NApi::TPredicate::TComparison> {
+            using TBuilder = TComparisonBaseBuilder<TParent>;
+
+            TComparisonBaseBuilder(NApi::TPredicate::TComparison* result = nullptr, TParent* parent = nullptr)
+                : TProtoBuilder<TParent, NApi::TPredicate::TComparison>(result, parent)
+            {
+                FillWithDefaults();
+            }
+
+            TBuilder& Arg(const NApi::TExpression& expr) {
+                MutableArg()->CopyFrom(expr);
+                return *this;
+            }
+            TExpressionBuilder<TBuilder> Arg() {
+                return TExpressionBuilder<TBuilder>(MutableArg(), this);
+            }
+
+            TBuilder& Column(const TString& name) {
+                return Arg().Column(name).Done();
+            }
+
+            TBuilder& Value(const auto& value) {
+                return Arg().Value(value).Done();
+            }
+
+            void FillWithDefaults() {
+            }
+
+        protected:
+            SETTER(Operation, operation);
+
+        private:
+            NApi::TExpression* MutableArg() {
+                if (!this->Result_->has_left_value()) {
+                    return this->Result_->mutable_left_value();
+                }
+                UNIT_ASSERT(!this->Result_->has_right_value());
+                return this->Result_->mutable_right_value();
+            }
+        };
+
+        template <NApi::TPredicate::TComparison::EOperation operation, class TParent = void /* no parent by default */>
+        struct TComparisonBuilder: public TComparisonBaseBuilder<TParent> {
+            using TBuilder = TComparisonBuilder<operation, TParent>;
+
+            TComparisonBuilder(NApi::TPredicate::TComparison* result = nullptr, TParent* parent = nullptr)
+                : TComparisonBaseBuilder<TParent>(result, parent)
+            {
+                FillWithDefaults();
+            }
+
+            void FillWithDefaults() {
+                this->Operation(operation);
+            }
+        };
+
+        template <class TParent>
+        using TEqualBuilder = TComparisonBuilder<NApi::TPredicate::TComparison::EQ, TParent>;
+
+        template <class TParent>
+        using TNotEqualBuilder = TComparisonBuilder<NApi::TPredicate::TComparison::NE, TParent>;
+
+        template <class TParent>
+        using TLessBuilder = TComparisonBuilder<NApi::TPredicate::TComparison::L, TParent>;
+
+        template <class TParent>
+        using TLessOrEqualBuilder = TComparisonBuilder<NApi::TPredicate::TComparison::LE, TParent>;
+
+        template <class TParent>
+        using TGreaterBuilder = TComparisonBuilder<NApi::TPredicate::TComparison::G, TParent>;
+
+        template <class TParent>
+        using TGreaterOrEqualBuilder = TComparisonBuilder<NApi::TPredicate::TComparison::GE, TParent>;
+
+        template <class TParent = void /* no parent by default */>
+        struct TPredicateBuilder: public TProtoBuilder<TParent, NApi::TPredicate> {
+            using TBuilder = TPredicateBuilder<TParent>;
+
+            explicit TPredicateBuilder(NApi::TPredicate* result = nullptr, TParent* parent = nullptr)
+                : TProtoBuilder<TParent, NApi::TPredicate>(result, parent)
+            {
+                FillWithDefaults();
+            }
+
+            SUBPROTO_BUILDER(Equal, mutable_comparison, NApi::TPredicate::TComparison, TEqualBuilder<TBuilder>);
+            SUBPROTO_BUILDER(NotEqual, mutable_comparison, NApi::TPredicate::TComparison, TNotEqualBuilder<TBuilder>);
+            SUBPROTO_BUILDER(Less, mutable_comparison, NApi::TPredicate::TComparison, TLessBuilder<TBuilder>);
+            SUBPROTO_BUILDER(LessOrEqual, mutable_comparison, NApi::TPredicate::TComparison, TLessOrEqualBuilder<TBuilder>);
+            SUBPROTO_BUILDER(Greater, mutable_comparison, NApi::TPredicate::TComparison, TGreaterBuilder<TBuilder>);
+            SUBPROTO_BUILDER(GreaterOrEqual, mutable_comparison, NApi::TPredicate::TComparison, TGreaterOrEqualBuilder<TBuilder>);
+
+            void FillWithDefaults() {
+            }
+        };
+
+        template <class TParent = void /* no parent by default */>
+        struct TWhereBuilder: public TProtoBuilder<TParent, NApi::TSelect::TWhere> {
+            using TBuilder = TWhereBuilder<TParent>;
+
+            explicit TWhereBuilder(NApi::TSelect::TWhere* result = nullptr, TParent* parent = nullptr)
+                : TProtoBuilder<TParent, NApi::TSelect::TWhere>(result, parent)
+            {
+                FillWithDefaults();
+            }
+
+            SUBPROTO_BUILDER(Filter, mutable_filter_typed, NApi::TPredicate, TPredicateBuilder<TBuilder>);
+
+            void FillWithDefaults() {
+            }
         };
 
         template <class TParent = void /* no parent by default */>
@@ -337,6 +511,13 @@ namespace NYql::NConnector::NTest {
                 return *this;
             }
 
+            TBuilder& NullableColumn(const TString& name, Ydb::Type::PrimitiveTypeId typeId) {
+                auto* col = this->Result_->add_items()->mutable_column();
+                col->set_name(name);
+                col->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(typeId);
+                return *this;
+            }
+
             void FillWithDefaults() {
             }
         };
@@ -354,6 +535,7 @@ namespace NYql::NConnector::NTest {
             EXPR_SETTER(Table, mutable_from()->set_table);
             DATA_SOURCE_INSTANCE_SUBBUILDER();
             SUBPROTO_BUILDER(What, mutable_what, NApi::TSelect::TWhat, TWhatBuilder<TBuilder>);
+            SUBPROTO_BUILDER(Where, mutable_where, NApi::TSelect::TWhere, TWhereBuilder<TBuilder>);
 
             void FillWithDefaults() {
                 Table(DEFAULT_TABLE);
@@ -433,10 +615,8 @@ namespace NYql::NConnector::NTest {
 
         private:
             void SetExpectation() {
-                auto future = NThreading::MakeFuture<TIteratorResult<IListSplitsStreamIterator>>(
-                    TIteratorResult<IListSplitsStreamIterator>{NGrpc::TGrpcStatus(), ResponseResult_});
-                EXPECT_CALL(*Mock_, ListSplits(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(future));
+                EXPECT_CALL(*Mock_, ListSplitsImpl(ProtobufRequestMatcher(*Result_)))
+                    .WillOnce(Return(TIteratorResult<IListSplitsStreamIterator>{NGrpc::TGrpcStatus(), ResponseResult_}));
             }
 
         private:
@@ -464,7 +644,7 @@ namespace NYql::NConnector::NTest {
                 response.mutable_error()->CopyFrom(error);
                 response.set_arrow_ipc_streaming(ser.Serialize(recordBatch));
                 return static_cast<TBuilder&>(*this);
-            };
+            }
 
             void FillWithDefaults() {
             }
@@ -504,10 +684,8 @@ namespace NYql::NConnector::NTest {
 
         private:
             void SetExpectation() {
-                auto future = NThreading::MakeFuture<TIteratorResult<IReadSplitsStreamIterator>>(
-                    TIteratorResult<IReadSplitsStreamIterator>{NGrpc::TGrpcStatus(), ResponseResult_});
-                EXPECT_CALL(*Mock_, ReadSplits(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(future));
+                EXPECT_CALL(*Mock_, ReadSplitsImpl(ProtobufRequestMatcher(*Result_)))
+                    .WillOnce(Return(TIteratorResult<IReadSplitsStreamIterator>{NGrpc::TGrpcStatus(), ResponseResult_}));
             }
 
         private:
@@ -525,6 +703,54 @@ namespace NYql::NConnector::NTest {
 
         TReadSplitsExpectationBuilder ExpectReadSplits() {
             return TReadSplitsExpectationBuilder(this);
+        }
+
+        TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request) override {
+            Cerr << "Call DescribeTable.\n"
+                 << request.Utf8DebugString() << Endl;
+            auto result = DescribeTableImpl(request);
+            Cerr << "DescribeTable result.\n"
+                 << StatusToDebugString(result.Status);
+            if (result.Response) {
+                Cerr << '\n'
+                     << result.Response->Utf8DebugString();
+            }
+            Cerr << Endl;
+            return NThreading::MakeFuture(std::move(result));
+        }
+
+        TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request) override {
+            Cerr << "Call ListSplits.\n"
+                 << request.Utf8DebugString() << Endl;
+            auto result = ListSplitsImpl(request);
+            Cerr << "ListSplits result.\n"
+                 << StatusToDebugString(result.Status) << Endl;
+            return NThreading::MakeFuture(std::move(result));
+        }
+
+        TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request) override {
+            Cerr << "Call ReadSplits.\n"
+                 << request.Utf8DebugString() << Endl;
+            auto result = ReadSplitsImpl(request);
+            Cerr << "ReadSplits result.\n"
+                 << StatusToDebugString(result.Status) << Endl;
+            return NThreading::MakeFuture(std::move(result));
+        }
+
+    protected:
+        static TString StatusToDebugString(const NGrpc::TGrpcStatus& status) {
+            TStringBuilder s;
+            s << "GRpcStatusCode: " << status.GRpcStatusCode << '\n';
+            if (status.Msg) {
+                s << status.Msg;
+            }
+            if (status.Details) {
+                s << " (" << status.Details << ')';
+            }
+            if (status.InternalError) {
+                s << " (internal error)";
+            }
+            return std::move(s);
         }
     };
 } // namespace NYql::NConnector::NTest

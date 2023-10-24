@@ -4,6 +4,7 @@ SRCS(
     doc.go
     handler.go
     handler_factory.go
+    predicate_builder.go
     schema_builder.go
 )
 

@@ -1,6 +1,7 @@
 #include "yql_generic_dq_integration.h"
 
 #include "yql_generic_mkql_compiler.h"
+#include "yql_generic_predicate_pushdown.h"
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -70,6 +71,7 @@ namespace NYql {
                                 .Name().Build(token)
                                 .Build()
                             .Columns(std::move(columns))
+                            .FilterPredicate(genReadTable.FilterPredicate())
                             .Build()
                         .RowType(ExpandType(genReadTable.Pos(), *rowType, ctx))
                         .DataSource(genReadTable.DataSource().Cast<TCoDataSource>())
@@ -137,6 +139,13 @@ namespace NYql {
                         // assign column type
                         auto type = NConnector::GetColumnTypeByName(tableMeta.value()->Schema, columnName);
                         column->mutable_type()->CopyFrom(type);
+                    }
+
+                    if (auto predicate = settings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
+                        TStringBuilder err;
+                        if (!SerializeFilterPredicate(predicate, select->mutable_where()->mutable_filter_typed(), err)) {
+                            ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
+                        }
                     }
 
                     // store data source instance

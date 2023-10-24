@@ -157,6 +157,16 @@ func (h *handlerImpl[CONN]) ReadSplit(
 	sb.WriteString(" FROM ")
 	sb.WriteString(tableName)
 
+	if split.Select.Where != nil {
+		statement, err := FormatWhereStatement(split.Select.Where)
+		if err != nil {
+			logger.Error("Failed to format WHERE statement", log.Error(err), log.String("where", split.Select.Where.String()))
+		} else {
+			sb.WriteString(" ")
+			sb.WriteString(statement)
+		}
+	}
+
 	// execute query
 
 	query := sb.String()

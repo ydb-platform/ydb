@@ -610,6 +610,8 @@ message TGenericGatewayConfig {
     // MDB API endpoint (do not fill in case of on-prem deployment)
     optional string MdbGateway = 4;
 
+    repeated TAttr DefaultSettings = 6;
+
     reserved 1, 2;
 }
 

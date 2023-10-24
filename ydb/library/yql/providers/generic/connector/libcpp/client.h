@@ -94,8 +94,7 @@ namespace NYql::NConnector {
         virtual TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request) = 0;
         virtual TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request) = 0;
         virtual TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request) = 0;
-        virtual ~IClient() {
-        }
+        virtual ~IClient() = default;
     };
 
     IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& cfg);

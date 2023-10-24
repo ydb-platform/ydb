@@ -9,12 +9,18 @@ namespace NYql {
 
     struct TGenericSettings {
         using TConstPtr = std::shared_ptr<const TGenericSettings>;
+
+        NCommon::TConfSetting<bool, false> UsePredicatePushdown;
+
+        struct TDefault {
+            static constexpr bool UsePredicatePushdown = false;
+        };
     };
 
     struct TGenericConfiguration: public TGenericSettings, public NCommon::TSettingDispatcher {
         using TPtr = TIntrusivePtr<TGenericConfiguration>;
 
-        TGenericConfiguration(){};
+        TGenericConfiguration();
         TGenericConfiguration(const TGenericConfiguration&) = delete;
 
         void Init(const NYql::TGenericGatewayConfig& gatewayConfig,

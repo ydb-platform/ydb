@@ -6,6 +6,17 @@ namespace NYql::NConnector::NTest {
 
     using namespace fmt::literals;
 
+#define DEFINE_SIMPLE_TYPE_SETTER(T, primitiveTypeId, value_name)         \
+    template <>                                                           \
+    void SetSimpleValue(const T& value, Ydb::TypedValue* proto) {         \
+        proto->mutable_type()->set_type_id(::Ydb::Type::primitiveTypeId); \
+        proto->mutable_value()->Y_CAT(set_, value_name)(value);           \
+    }
+
+    DEFINE_SIMPLE_TYPE_SETTER(bool, BOOL, bool_value);
+    DEFINE_SIMPLE_TYPE_SETTER(i32, INT32, int32_value);
+    DEFINE_SIMPLE_TYPE_SETTER(ui32, UINT32, uint32_value);
+
     void CreatePostgreSQLExternalDataSource(
         const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
         const TString& dataSourceName,

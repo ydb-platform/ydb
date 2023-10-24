@@ -114,10 +114,9 @@ namespace NKikimr::NKqp {
 
             const TString query = fmt::format(
                 R"(
-                SELECT * FROM {data_source_name}.`{database_name}.{table_name}`;
+                SELECT * FROM {data_source_name}.{table_name};
             )",
                 "data_source_name"_a = DEFAULT_DATA_SOURCE_NAME,
-                "database_name"_a = DEFAULT_DATABASE,
                 "table_name"_a = DEFAULT_TABLE);
 
             auto db = kikimr->GetQueryClient();
@@ -206,11 +205,10 @@ namespace NKikimr::NKqp {
 
             const TString query = fmt::format(
                 R"(
-                SELECT 42 FROM {data_source_name}.`{database_name}.{table_name}`;
-                SELECT 42 FROM {data_source_name}.`{database_name}.{table_name}`;
+                SELECT 42 FROM {data_source_name}.{table_name};
+                SELECT 42 FROM {data_source_name}.{table_name};
             )",
                 "data_source_name"_a = DEFAULT_DATA_SOURCE_NAME,
-                "database_name"_a = DEFAULT_DATABASE,
                 "table_name"_a = DEFAULT_TABLE);
 
             auto db = kikimr->GetQueryClient();
@@ -297,10 +295,9 @@ namespace NKikimr::NKqp {
 
             const TString query = fmt::format(
                 R"(
-                SELECT COUNT(*) FROM {data_source_name}.`{database_name}.{table_name}`;
+                SELECT COUNT(*) FROM {data_source_name}.{table_name};
             )",
                 "data_source_name"_a = DEFAULT_DATA_SOURCE_NAME,
-                "database_name"_a = DEFAULT_DATABASE,
                 "table_name"_a = DEFAULT_TABLE);
 
             auto db = kikimr->GetQueryClient();
@@ -322,6 +319,110 @@ namespace NKikimr::NKqp {
 
         Y_UNIT_TEST(ClickHouseSelectCount) {
             TestSelectCount(EProviderType::ClickHouse);
+        }
+
+        void TestFilterPushdown(EProviderType providerType) {
+            // prepare mock
+            auto clientMock = std::make_shared<TConnectorClientMock>();
+
+            const NApi::TDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+            // clang-format off
+            const NApi::TSelect select = TConnectorClientMock::TSelectBuilder<>()
+                .DataSourceInstance(dataSourceInstance)
+                .What()
+                    .NullableColumn("data_column", Ydb::Type::STRING)
+                    .NullableColumn("filtered_column", Ydb::Type::INT32)
+                    .Done()
+                .Where()
+                    .Filter()
+                        .Equal()
+                            .Column("filtered_column")
+                            .Value<i32>(42)
+                            .Done()
+                        .Done()
+                    .Done()
+                .GetResult();
+            // clang-format on
+
+            // step 1: DescribeTable
+            // clang-format off
+            clientMock->ExpectDescribeTable()
+                .DataSourceInstance(dataSourceInstance)
+                .Response()
+                    .NullableColumn("filtered_column", Ydb::Type::INT32)
+                    .NullableColumn("data_column", Ydb::Type::STRING);
+            // clang-format on
+
+            // step 2: ListSplits
+            // clang-format off
+            clientMock->ExpectListSplits()
+                .Select(select)
+                .Result()
+                    .AddResponse(NewSuccess())
+                        .Description("some binary description")
+                        .Select(select);
+            // clang-format on
+
+            // step 3: ReadSplits
+            // Return data such that it contains values not satisfying the filter conditions.
+            // Then check that, despite that connector reads additional data,
+            // our generic provider then filters it out.
+            std::vector<std::string> colData = {"Filtered text", "Text"};
+            std::vector<i32> filterColumnData = {42, 24};
+            // clang-format off
+            clientMock->ExpectReadSplits()
+                .DataSourceInstance(dataSourceInstance)
+                .Split()
+                    .Description("some binary description")
+                    .Select(select)
+                    .Done()
+                .Result()
+                    .AddResponse(MakeRecordBatch(
+                        MakeArray<arrow::StringBuilder>("data_column", colData, arrow::utf8()),
+                        MakeArray<arrow::Int32Builder>("filtered_column", filterColumnData, arrow::int32())),
+                        NewSuccess());
+            // clang-format on
+
+            // prepare database resolver mock
+            std::shared_ptr<TDatabaseAsyncResolverMock> databaseAsyncResolverMock;
+            if (providerType == EProviderType::ClickHouse) {
+                databaseAsyncResolverMock = std::make_shared<TDatabaseAsyncResolverMock>();
+                databaseAsyncResolverMock->AddClickHouseCluster();
+            }
+
+            // run test
+            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock);
+
+            CreateExternalDataSource(providerType, kikimr);
+
+            const TString query = fmt::format(
+                R"(
+                PRAGMA generic.UsePredicatePushdown="true";
+                SELECT data_column FROM {data_source_name}.{table_name} WHERE filtered_column = 42;
+            )",
+                "data_source_name"_a = DEFAULT_DATA_SOURCE_NAME,
+                "table_name"_a = DEFAULT_TABLE);
+
+            auto db = kikimr->GetQueryClient();
+            auto queryResult = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), EStatus::SUCCESS, queryResult.GetIssues().ToString());
+
+            TResultSetParser resultSet(queryResult.GetResultSetParser(0));
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+            // check every row
+            // Check that, despite returning nonfiltered data in connector, response will be correct
+            std::vector<TMaybe<TString>> result = {"Filtered text"}; // Only data satisfying filter conditions
+            MATCH_RESULT_WITH_INPUT(result, resultSet, GetOptionalString);
+        }
+
+        Y_UNIT_TEST(PostgreSQLFilterPushdown) {
+            TestFilterPushdown(EProviderType::PostgreSQL);
+        }
+
+        Y_UNIT_TEST(ClickHouseFilterPushdown) {
+            TestFilterPushdown(EProviderType::ClickHouse);
         }
     }
 }

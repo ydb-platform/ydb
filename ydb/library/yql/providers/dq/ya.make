@@ -16,4 +16,5 @@ RECURSE(
     task_runner
     task_runner_actor
     worker_manager
+    metrics
 )

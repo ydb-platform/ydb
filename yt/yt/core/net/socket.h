@@ -31,7 +31,7 @@ void BindSocket(SOCKET serverSocket, const TNetworkAddress& address);
 //! Returned socket has CLOEXEC and NONBLOCK flags set.
 int AcceptSocket(SOCKET serverSocket, TNetworkAddress* clientAddress);
 
-void ListenSocket(SOCKET serverSocket, int backlog);\
+void ListenSocket(SOCKET serverSocket, int backlog);
 
 void CloseSocket(SOCKET socket);
 

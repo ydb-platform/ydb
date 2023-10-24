@@ -382,15 +382,15 @@ public:
 
                 Self->ObjectToTabletMetrics[tablet.ObjectId].IncreaseCount();
                 Self->TabletTypeToTabletMetrics[tablet.Type].IncreaseCount();
-                tablet.AllowedNodes = tabletRowset.GetValue<Schema::Tablet::AllowedNodes>();
+                tablet.NodeFilter.AllowedNodes = tabletRowset.GetValue<Schema::Tablet::AllowedNodes>();
                 if (tabletRowset.HaveValue<Schema::Tablet::AllowedDataCenters>()) {
                     // this is priority format due to migration issues; when migration is complete, this code will
                     // be removed
                     for (const ui32 dcId : tabletRowset.GetValue<Schema::Tablet::AllowedDataCenters>()) {
-                        tablet.AllowedDataCenters.push_back(DataCenterToString(dcId));
+                        tablet.NodeFilter.AllowedDataCenters.push_back(DataCenterToString(dcId));
                     }
                 } else {
-                    tablet.AllowedDataCenters = tabletRowset.GetValueOrDefault<Schema::Tablet::AllowedDataCenterIds>();
+                    tablet.NodeFilter.AllowedDataCenters = tabletRowset.GetValueOrDefault<Schema::Tablet::AllowedDataCenterIds>();
                 }
                 tablet.DataCentersPreference = tabletRowset.GetValueOrDefault<Schema::Tablet::DataCentersPreference>();
                 TVector<TSubDomainKey> allowedDomains = tabletRowset.GetValueOrDefault<Schema::Tablet::AllowedDomains>();
@@ -549,16 +549,16 @@ public:
                     followerGroup.SetFollowerCount(tabletFollowerGroupRowset.GetValue<Schema::TabletFollowerGroup::FollowerCount>());
                     followerGroup.AllowLeaderPromotion = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowLeaderPromotion>();
                     followerGroup.AllowClientRead = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowClientRead>();
-                    followerGroup.AllowedNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedNodes>();
+                    followerGroup.NodeFilter.AllowedNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedNodes>();
 
                     if (tabletFollowerGroupRowset.HaveValue<Schema::TabletFollowerGroup::AllowedDataCenters>()) {
                         // this is priority format due to migration issues; when migration is complete, this code will
                         // be removed
                         for (const ui32 dcId : tabletFollowerGroupRowset.GetValue<Schema::TabletFollowerGroup::AllowedDataCenters>()) {
-                            followerGroup.AllowedDataCenters.push_back(DataCenterToString(dcId));
+                            followerGroup.NodeFilter.AllowedDataCenters.push_back(DataCenterToString(dcId));
                         }
                     } else {
-                        followerGroup.AllowedDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedDataCenterIds>();
+                        followerGroup.NodeFilter.AllowedDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedDataCenterIds>();
                     }
 
                     followerGroup.RequireAllDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>();

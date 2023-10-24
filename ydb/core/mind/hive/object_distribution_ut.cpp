@@ -1,4 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
+#include "hive_impl.h"
 #include "object_distribution.h"
 
 #include <map>
@@ -7,14 +8,17 @@
 using namespace NKikimr;
 using namespace NHive;
 
+
 Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
     Y_UNIT_TEST(TestImbalanceCalcualtion) {
-        TObjectDistributions objectDistributions;
-
         static constexpr size_t NUM_NODES = 8;
         static constexpr size_t NUM_OBJECTS = 250;
         static constexpr size_t NUM_OPERATIONS = 10'000;
+        static constexpr TSubDomainKey TEST_DOMAIN = {1, 1};
 
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        THive hive(hiveStorage.Get(), TActorId());
         std::map<std::pair<TNodeId, TFullObjectId>, ui64> trueDistribution;
 
         std::mt19937 engine(42);
@@ -22,12 +26,20 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
         std::uniform_int_distribution<TNodeId> pickNode(0, NUM_NODES - 1);
         std::bernoulli_distribution subtract(0.2);
 
-        for (TNodeId node = 0; node < NUM_NODES; ++node) {
-            objectDistributions.AddNode(node);
+        std::unordered_map<TNodeId, TNodeInfo> nodes;
+        TObjectDistributions objectDistributions(nodes);
+        for (TNodeId nodeId = 0; nodeId < NUM_NODES; ++nodeId) {
+            TNodeInfo& node = nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, hive)).first->second;
+            node.ServicedDomains.push_back(TEST_DOMAIN);
+            node.RegisterInDomains();
+            node.LocationAcquired = true;
         }
 
         for (size_t i = 0; i < NUM_OPERATIONS; i++) {
-            TFullObjectId object = {0, pickObject(engine)};
+            TLeaderTabletInfo tablet(0, hive);
+            tablet.AssignDomains(TEST_DOMAIN, {});
+            tablet.ObjectId.second = pickObject(engine);
+            TFullObjectId object = tablet.ObjectId;
             TNodeId node = pickNode(engine);
             ui64& curCount = trueDistribution[{node, object}];
             i64 diff = 1;
@@ -35,7 +47,7 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
                 diff = -1;
             }
             curCount += diff;
-            objectDistributions.UpdateCount(object, node, diff);
+            objectDistributions.UpdateCountForTablet(tablet, nodes.at(node), diff);
         }
 
         ui64 imbalancedObjects = 0;

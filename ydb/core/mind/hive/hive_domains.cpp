@@ -6,8 +6,6 @@ namespace NHive {
 
 void TDomainsView::RegisterNode(const TNodeInfo& node) {
     for (auto &domainKey: node.ServicedDomains) {
-        BLOG_TRACE("Node(" << node.Id << ")"
-                   << " RegisterInDomain (" << domainKey << ") : " << TotalCount[domainKey] << " -> " << TotalCount[domainKey] + 1);
         ++TotalCount[domainKey];
     }
 }

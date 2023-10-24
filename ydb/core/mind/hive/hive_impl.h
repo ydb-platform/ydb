@@ -659,7 +659,7 @@ public:
     void ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     void UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     TDuration GetBalancerCooldown() const;
-    void UpdateObjectCount(TFullObjectId object, TNodeId node, i64 diff);
+    void UpdateObjectCount(const TLeaderTabletInfo& tablet, const TNodeInfo& node, i64 diff);
     ui64 GetObjectImbalance(TFullObjectId object);
 
     ui32 GetEventPriority(IEventHandle* ev);

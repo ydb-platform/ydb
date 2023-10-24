@@ -269,6 +269,12 @@ struct TBalancerStats {
     ui64 LastRunMovements = 0;
 };
 
+struct TNodeFilter {
+    TVector<TSubDomainKey> AllowedDomains;
+    TVector<TNodeId> AllowedNodes;
+    TVector<TDataCenterId> AllowedDataCenters;
+};
+
 } // NHive
 } // NKikimr
 

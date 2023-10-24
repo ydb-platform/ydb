@@ -31,8 +31,17 @@ public:
             if (tablet == nullptr) {
                 continue;
             }
+            auto node = tablet->GetNode();
             auto oldObject = tablet->GetObjectId();
+
+            if (tablet->HasCounter() && node != nullptr) {
+                Self->UpdateObjectCount(*tablet, *node, -1);
+            }
             tablet->ObjectId.second = objectId;
+            if (tablet->HasCounter() && node != nullptr) {
+                Self->UpdateObjectCount(*tablet, *node, +1);
+            }
+
             auto newObject = tablet->GetObjectId(); // It should be the same on every iteration
             if (oldObject == newObject) {
                 continue;
@@ -56,10 +65,6 @@ public:
             if (auto node = tablet->GetNode(); node != nullptr) {
                 node->TabletsOfObject[oldObject].erase(tablet);
                 node->TabletsOfObject[newObject].emplace(tablet);
-                if (tablet->HasCounter()) {
-                    Self->UpdateObjectCount(oldObject, node->Id, -1);
-                    Self->UpdateObjectCount(newObject, node->Id, +1);
-                }
             }
 
             db.Table<Schema::Tablet>().Key(tabletId).Update<Schema::Tablet::ObjectID>(objectId);

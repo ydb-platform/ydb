@@ -269,8 +269,7 @@ public:
         PostponedStart = nextStart;
     }
 
-    const TVector<TNodeId>& GetAllowedNodes() const;
-    const TVector<TDataCenterId>& GetAllowedDataCenters() const;
+    const TNodeFilter& GetNodeFilter() const;
     bool InitiateStart(TNodeInfo* node);
 
     const NKikimrTabletBase::TMetrics& GetResourceValues() const {

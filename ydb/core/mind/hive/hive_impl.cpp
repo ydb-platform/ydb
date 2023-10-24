@@ -105,6 +105,7 @@ void THive::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
         if (node != nullptr) {
             Erase(node->PipeServers, ev->Get()->ServerId);
             if (node->PipeServers.empty() && node->IsUnknown() && node->CanBeDeleted()) {
+                ObjectDistributions.RemoveNode(*node);
                 DeleteNode(node->Id);
             }
         }
@@ -475,7 +476,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
                    << " VolatileState:"
                    << TTabletInfo::EVolatileStateName(tablet.GetVolatileState()));
         }
-        for (const auto& domain : tablet.EffectiveAllowedDomains) {
+        for (const auto& domain : tablet.NodeFilter.AllowedDomains) {
             SeenDomain(domain);
         }
         if (tablet.ObjectDomain) {
@@ -1265,7 +1266,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
                             << " to run the tablet " << tablet.ToString()
                             << " node domains " << nodeInfo.ServicedDomains
                             << " tablet object domain " << tablet.GetLeader().ObjectDomain
-                            << " tablet allowed domains " << tablet.GetLeader().EffectiveAllowedDomains);
+                            << " tablet allowed domains " << tablet.GetNodeFilter().AllowedDomains);
             }
         }
         if (!selectedNodes.empty()) {
@@ -1333,7 +1334,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
         }
         nodesLeft -= debugState.NodesWithSomeoneFromOurFamily;
         if (debugState.NodesWithoutDomain == nodesLeft) {
-            tablet.BootState = TStringBuilder() << "Can't find domain " << tablet.GetLeader().EffectiveAllowedDomains;
+            tablet.BootState = TStringBuilder() << "Can't find domain " << tablet.GetNodeFilter().AllowedDomains;
             return TBestNodeResult(true);
         }
         nodesLeft -= debugState.NodesWithoutDomain;
@@ -2584,14 +2585,14 @@ TDuration THive::GetBalancerCooldown() const {
     }
 }
 
-void THive::UpdateObjectCount(TFullObjectId object, TNodeId node, i64 diff) {
+void THive::UpdateObjectCount(const TLeaderTabletInfo& tablet, const TNodeInfo& node, i64 diff) {
     if (!GetSpreadNeighbours()) {
         return;
     }
-    ObjectDistributions.UpdateCount(object, node, diff);
+    ObjectDistributions.UpdateCountForTablet(tablet, node, diff);
     TabletCounters->Simple()[NHive::COUNTER_IMBALANCED_OBJECTS].Set(ObjectDistributions.GetImbalancedObjectsCount());
     TabletCounters->Simple()[NHive::COUNTER_WORST_OBJECT_VARIANCE].Set(ObjectDistributions.GetWorstObjectVariance());
-    BLOG_TRACE("UpdateObjectCount " << "for " << object << " on " << node << " (" << diff << ") ~> Imbalance: " << ObjectDistributions.GetMaxImbalance());
+    BLOG_TRACE("UpdateObjectCount " << "for " << tablet.ObjectId << " on " << node.Id << " (" << diff << ") ~> Imbalance: " << ObjectDistributions.GetMaxImbalance());
 }
 
 ui64 THive::GetObjectImbalance(TFullObjectId object) {
@@ -2614,6 +2615,7 @@ THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(PipeClientCacheConfig))
     , PipeTracker(*PipeClientCache)
     , PipeRetryPolicy()
+    , ObjectDistributions(Nodes)
     , ResponsivenessPinger(nullptr)
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<

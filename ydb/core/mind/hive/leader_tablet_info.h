@@ -30,8 +30,7 @@ public:
     TTabletTypes::EType Type;
     TFullObjectId ObjectId;
     TSubDomainKey ObjectDomain;
-    TVector<TNodeId> AllowedNodes;
-    TVector<TDataCenterId> AllowedDataCenters;
+    TNodeFilter NodeFilter;
     NKikimrHive::TDataCentersPreference DataCentersPreference;
     TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
     TChannelsBindings BoundChannels;
@@ -42,7 +41,6 @@ public:
     TList<TFollowerGroup> FollowerGroups;
     TList<TFollowerTabletInfo> Followers;
     TOwnerIdxType::TValueType Owner;
-    TVector<TSubDomainKey> EffectiveAllowedDomains; // AllowedDomains | ObjectDomain
     NKikimrHive::ETabletBootMode BootMode;
     TVector<TActorId> StorageInfoSubscribers;
     TActorId LockedToActor;

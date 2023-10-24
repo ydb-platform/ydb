@@ -376,8 +376,8 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     if (Node != nullptr) {
         Node->UpdateResourceValues(this, before, after);
         i64 deltaCounter = counterAfter - counterBefore;
-        if (deltaCounter != 0) {
-            Hive.UpdateObjectCount(GetObjectId(), Node->Id, deltaCounter);
+        if (deltaCounter != 0 && IsLeader()) {
+            Hive.UpdateObjectCount(AsLeader(), *Node, deltaCounter);
         }
     }
 }
@@ -446,19 +446,11 @@ void TTabletInfo::ActualizeCounter() {
     ResourceValues.SetCounter(value);
 }
 
-const TVector<TNodeId>& TTabletInfo::GetAllowedNodes() const {
+const TNodeFilter& TTabletInfo::GetNodeFilter() const {
     if (IsLeader()) {
-        return AsLeader().AllowedNodes;
+        return AsLeader().NodeFilter;
     } else {
-        return AsFollower().FollowerGroup.AllowedNodes;
-    }
-}
-
-const TVector<TDataCenterId>& TTabletInfo::GetAllowedDataCenters() const {
-    if (IsLeader()) {
-        return AsLeader().AllowedDataCenters;
-    } else {
-        return AsFollower().FollowerGroup.AllowedDataCenters;
+        return AsFollower().FollowerGroup.NodeFilter;
     }
 }
 

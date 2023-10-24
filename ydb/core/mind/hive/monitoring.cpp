@@ -3341,8 +3341,8 @@ public:
         result["AllowLeaderPromotion"] = group.AllowLeaderPromotion;
         result["AllowClientRead"] = group.AllowClientRead;
         result["RequireAllDataCenters"] = group.RequireAllDataCenters;
-        result["AllowedNodes"] = MakeFrom(group.AllowedNodes);
-        result["AllowedDataCenters"] = MakeFrom(group.AllowedDataCenters);
+        result["AllowedNodes"] = MakeFrom(group.NodeFilter.AllowedNodes);
+        result["AllowedDataCenters"] = MakeFrom(group.NodeFilter.AllowedDataCenters);
         result["LocalNodeOnly"] = group.LocalNodeOnly;
         result["RequireDifferentNodes"] = group.RequireDifferentNodes;
         result["FollowerCountPerDataCenter"] = group.FollowerCountPerDataCenter;
@@ -3357,8 +3357,8 @@ public:
         result["Type"] = TTabletTypes::EType_Name(tablet.Type);
         result["ObjectId"] = TStringBuilder() << tablet.ObjectId;
         result["ObjectDomain"] = TStringBuilder() << tablet.ObjectDomain;
-        result["AllowedNodes"] = MakeFrom(tablet.AllowedNodes);
-        result["AllowedDataCenters"] = MakeFrom(tablet.AllowedDataCenters);
+        result["AllowedNodes"] = MakeFrom(tablet.NodeFilter.AllowedNodes);
+        result["AllowedDataCenters"] = MakeFrom(tablet.NodeFilter.AllowedDataCenters);
         result["DataCenterPreference"] = MakeFrom(tablet.DataCentersPreference);
         result["TabletStorageInfo"] = MakeFrom(tablet.TabletStorageInfo);
         result["BoundChannels"] = MakeFrom(tablet.BoundChannels);
@@ -3367,7 +3367,7 @@ public:
         result["KnownGeneration"] = tablet.KnownGeneration;
         result["BootMode"] = NKikimrHive::ETabletBootMode_Name(tablet.BootMode);
         result["Owner"] = TStringBuilder() << tablet.Owner;
-        result["EffectiveAllowedDomain"] = MakeFrom(tablet.EffectiveAllowedDomains);
+        result["EffectiveAllowedDomain"] = MakeFrom(tablet.NodeFilter.AllowedDomains);
         result["StorageInfoSubscribers"] = MakeFrom(tablet.StorageInfoSubscribers);
         result["LockedToActor"] = MakeFrom(tablet.LockedToActor);
         result["LockedReconnectTimeout"] = tablet.LockedReconnectTimeout.ToString();

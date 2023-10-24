@@ -51,6 +51,7 @@ public:
                 SideEffects.Send(pipeServer, new TEvents::TEvPoisonPill());
             }
             node->PipeServers.clear();
+            Self->ObjectDistributions.RemoveNode(*node);
             if (node->CanBeDeleted()) {
                 db.Table<Schema::Node>().Key(NodeId).Delete();
                 Self->DeleteNode(NodeId);
@@ -58,7 +59,6 @@ public:
                 db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Local>(TActorId());
             }
         }
-        Self->ObjectDistributions.RemoveNode(NodeId);
         return true;
     }
 

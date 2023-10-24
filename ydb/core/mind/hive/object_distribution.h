@@ -2,6 +2,8 @@
 
 #include "hive.h"
 #include "hive_log.h"
+#include "node_info.h"
+#include "tablet_info.h"
 
 #include <set>
 #include <unordered_map>
@@ -16,8 +18,12 @@ struct TObjectDistribution {
     const TFullObjectId Id;
     double Mean = 0;
     double VarianceNumerator = 0;
+    TNodeFilter NodeFilter; // We assume all tablets of one object have the same filter
 
-    TObjectDistribution(TFullObjectId id) : Id(id) {}
+    TObjectDistribution(const TLeaderTabletInfo& tablet) : Id(tablet.ObjectId)
+                                                         , NodeFilter(tablet.NodeFilter)
+    {
+    }
 
     double GetImbalance() const {
         if (SortedDistribution.empty()) {
@@ -50,8 +56,8 @@ struct TObjectDistribution {
         Mean = meanWithoutNode;
     }
 
-    void UpdateCount(TNodeId node, i64 diff) {
-        auto [it, newNode] = Distribution.insert({node, 0});
+    void UpdateCount(const TNodeInfo& node, i64 diff) {
+        auto [it, newNode] = Distribution.insert({node.Id, 0});
         i64& value = it->second;
         i64 numNodes = Distribution.size();
         if (!newNode) {
@@ -86,8 +92,10 @@ struct TObjectDistributions {
     std::multiset<TObjectDistribution> SortedDistributions;
     std::unordered_map<TFullObjectId, std::multiset<TObjectDistribution>::iterator> Distributions;
     ui64 ImbalancedObjects = 0;
-    std::unordered_set<TNodeId> Nodes;
+    const std::unordered_map<TNodeId, TNodeInfo>& Nodes;
     bool Enabled = true;
+
+    TObjectDistributions(const std::unordered_map<TNodeId, TNodeInfo>& nodes) : Nodes(nodes) {}
 
     double GetMaxImbalance() {
         if (SortedDistributions.empty()) {
@@ -112,9 +120,6 @@ struct TObjectDistributions {
         i64 maxCnt = *dist.SortedDistribution.rbegin();
         TObjectToBalance result(dist.Id);
         for (const auto& [node, cnt] : dist.Distribution) {
-            ui64 n = node;
-            i64 c = cnt;
-            BLOG_TRACE("Node " << n << "has " << c << ", maximum: " << maxCnt);
             if (cnt == maxCnt) {
                 result.Nodes.push_back(node);
             }
@@ -162,43 +167,56 @@ struct TObjectDistributions {
     }
 
 
-    void UpdateCount(TFullObjectId object, TNodeId node, i64 diff) {
+    bool UpdateCount(TFullObjectId object, const TNodeInfo& node, i64 diff) {
+        auto updateFunc = [&](TObjectDistribution& dist) {
+            dist.UpdateCount(node, diff);
+        };
+        return UpdateDistribution(object, updateFunc);
+    }
+
+    void UpdateCountForTablet(const TLeaderTabletInfo& tablet, const TNodeInfo& node, i64 diff) {
         if (!Enabled) {
             return;
         }
-        auto updateFunc = [=](TObjectDistribution& dist) {
-            dist.UpdateCount(node, diff);
-        };
-        if (!UpdateDistribution(object, updateFunc)) {
-            TObjectDistribution dist(object);
-            for (auto node : Nodes) {
-                dist.UpdateCount(node, 0);
+        if (!node.IsAllowedToRunTablet(tablet) && diff <= 0) {
+            return;
+        }
+        auto object = tablet.ObjectId;
+        if (!UpdateCount(object, node, diff)) {
+            if (diff <= 0) {
+                return;
+            }
+            TObjectDistribution dist(tablet);
+            for (const auto& [nodeId, node] : Nodes) {
+                if (node.IsAllowedToRunTablet(tablet)) {
+                    dist.UpdateCount(node, 0);
+                }
             }
             dist.UpdateCount(node, diff);
             auto sortedDistIt = SortedDistributions.insert(std::move(dist));
             Distributions.emplace(object, sortedDistIt);
-            return;
         }
-        // std::cerr << object << ": " << diff << " ~>" << GetTotalImbalance() << std::endl;
     }
 
-    void AddNode(TNodeId node) {
+    void AddNode(const TNodeInfo& node) {
         if (!Enabled) {
             return;
         }
-        Nodes.insert(node);
         for (const auto& [obj, it] : Distributions) {
             UpdateCount(obj, node, 0);
         }
+        for (const auto& [obj, tablets] : node.TabletsOfObject) {
+            UpdateCount(obj, node, tablets.size());
+        }
     }
 
-    void RemoveNode(TNodeId node) {
+    void RemoveNode(const TNodeInfo& node) {
         if (!Enabled) {
             return;
         }
-        Nodes.erase(node);
+        TNodeId nodeId = node.Id;
         auto updateFunc = [=](TObjectDistribution& dist) {
-            dist.RemoveNode(node);
+            dist.RemoveNode(nodeId);
         };
         for (auto it = Distributions.begin(); it != Distributions.end();) {
             UpdateDistribution((it++)->first, updateFunc);
@@ -207,7 +225,6 @@ struct TObjectDistributions {
 
     void Disable() {
         Enabled = false;
-        Nodes.clear();
         SortedDistributions.clear();
         Distributions.clear();
     }

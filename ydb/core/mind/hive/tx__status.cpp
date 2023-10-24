@@ -47,7 +47,7 @@ public:
                 BLOG_D("THive::TTxStatus(" << nodeId << ")::Complete - continuing node drain");
                 Self->StartHiveDrain(nodeId, {.Persist = true, .KeepDown = node.Down});
             }
-            Self->ObjectDistributions.AddNode(nodeId);
+            Self->ObjectDistributions.AddNode(node);
         } else {
             BLOG_W("THive::TTxStatus(status=" << static_cast<int>(status)
                    << " node=" << TNodeInfo::EVolatileStateName(node.GetVolatileState()) << ") - killing node " << node.Id);

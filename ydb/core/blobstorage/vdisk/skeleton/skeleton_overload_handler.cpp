@@ -57,6 +57,12 @@ namespace NKikimr {
             , AnubisOsirisPutHandler(std::move(aoput))
         {}
 
+        ~TEmergencyQueue() {
+            while (Queue.Head()) {
+                Queue.Pop();
+            }
+        }
+
         void Push(TEvBlobStorage::TEvVMovedPatch::TPtr ev) {
             ++Mon.EmergencyMovedPatchQueueItems();
             Mon.EmergencyMovedPatchQueueBytes() += ev->Get()->Record.ByteSize();

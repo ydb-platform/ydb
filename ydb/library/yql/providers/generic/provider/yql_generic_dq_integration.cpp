@@ -154,7 +154,17 @@ namespace NYql {
                     // preserve source description for read actor
                     protoSettings.PackFrom(srcDesc);
 
-                    sourceType = "GenericSource";
+                    switch (srcDesc.data_source_instance().kind()) {
+                        case NYql::NConnector::NApi::CLICKHOUSE:
+                            sourceType = "ClickHouseGeneric";
+                            break;
+                        case NYql::NConnector::NApi::POSTGRESQL:
+                            sourceType = "PostgreSqlGeneric";
+                            break;
+                        default:
+                            ythrow yexception() << "Data source kind is unknown or not specified";
+                            break;
+                    }
                 }
             }
 

@@ -16,6 +16,7 @@ struct TTotalStatistics {
     ui64 TotalOutputRows = 0;
     ui64 TotalOutputBytes = 0;
     ui64 TotalIngressBytes = 0;
+    ui64 TotalEgressBytes = 0;
     TAggregates Aggregates;
 };
 
@@ -91,6 +92,10 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
                 if (name == "Ingress") {
                     if (auto* ingressNode = item.GetValueByPath("Ingress.Bytes.Sum")) {
                         totals.TotalIngressBytes += ingressNode->GetIntegerSafe();
+                    }
+                } else if (name == "Egress") {
+                    if (auto* egressNode = item.GetValueByPath("Egress.Bytes.Sum")) {
+                        totals.TotalEgressBytes += egressNode->GetIntegerSafe();
                     }
                 }
             }
@@ -310,6 +315,13 @@ TString GetV1StatFromV2Plan(const TString& plan) {
                             writer.OnBeginMap();
                                 writer.OnKeyedItem("sum");
                                 writer.OnInt64Scalar(totals.TotalIngressBytes);
+                            writer.OnEndMap();
+                        }
+                        if (totals.TotalEgressBytes) {
+                            writer.OnKeyedItem("TotalEgressBytes");
+                            writer.OnBeginMap();
+                                writer.OnKeyedItem("sum");
+                                writer.OnInt64Scalar(totals.TotalEgressBytes);
                             writer.OnEndMap();
                         }
                         writer.OnEndMap();

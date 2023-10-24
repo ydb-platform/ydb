@@ -278,6 +278,9 @@ namespace NYql::NDq {
 
             // Preserve stream message to return it to ComputeActor later
             LastReadSplitsResponse_ = std::move(ev->Get()->Response);
+            IngressStats_.Bytes += LastReadSplitsResponse_->ByteSizeLong();
+            IngressStats_.Chunks++;
+            IngressStats_.Resume();
             NotifyComputeActorWithData();
 
             YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling finished";
@@ -379,6 +382,7 @@ namespace NYql::NDq {
                     YQL_CLOG(INFO, ProviderGeneric) << "GetAsyncInputData :: data reading finished";
                 }
 
+                IngressStats_.TryPause();
                 return 0;
             }
 

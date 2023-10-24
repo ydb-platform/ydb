@@ -182,6 +182,10 @@ namespace NTypeAnnImpl {
         case ETypeAnnotationKind::Null:
         case ETypeAnnotationKind::EmptyList:
         case ETypeAnnotationKind::EmptyDict:
+        case ETypeAnnotationKind::Error:
+        case ETypeAnnotationKind::Pg:
+        case ETypeAnnotationKind::Block:
+        case ETypeAnnotationKind::Scalar:
             return { input, type };
 
         case ETypeAnnotationKind::Optional: {
@@ -418,7 +422,16 @@ namespace NTypeAnnImpl {
             return { ctx.NewCallable(input->Pos(), "Visit", std::move(visitArgs)), newVType };
         }
 
-        default:
+        case ETypeAnnotationKind::Unit:
+        case ETypeAnnotationKind::World:
+        case ETypeAnnotationKind::Callable:
+        case ETypeAnnotationKind::Item:
+        case ETypeAnnotationKind::Type:
+        case ETypeAnnotationKind::Generic:
+        case ETypeAnnotationKind::Stream:
+        case ETypeAnnotationKind::Flow:
+        case ETypeAnnotationKind::Multi:
+        case ETypeAnnotationKind::LastType:
             return { nullptr, nullptr };
         }
     }

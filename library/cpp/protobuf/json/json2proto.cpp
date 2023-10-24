@@ -260,23 +260,29 @@ Json2SingleField(const NJson::TJsonValue& json,
     const Reflection* reflection = proto.GetReflection();
     Y_ASSERT(!!reflection);
 
-    TString name;
+    const NJson::TJsonValue* fieldJsonPtr = &json;
+    TString nameHolder;
+    TStringBuf name;
     if (!isMapValue) {
-        name = GetFieldName(field, config);
-        if (!json.Has(name) || json[name].GetType() == NJson::JSON_UNDEFINED || json[name].GetType() == NJson::JSON_NULL) {
+        nameHolder = GetFieldName(field, config);
+        name = nameHolder;
+        const NJson::TJsonValue& fieldJson = json[name];
+        if (auto fieldJsonType = fieldJson.GetType(); fieldJsonType == NJson::JSON_UNDEFINED || fieldJsonType == NJson::JSON_NULL) {
             if (field.is_required() && !field.has_default_value() && !reflection->HasField(proto, &field) && config.CheckRequiredFields) {
                 ythrow yexception() << "JSON has no field for required field "
                                     << name << ".";
             }
-
             return;
+        }
+        if (name) {  // For compatibility with previous implementation. Not sure if GetFieldName is allowed to return empty strings,
+            fieldJsonPtr = &fieldJson;
         }
     }
 
-    const NJson::TJsonValue& fieldJson = name ? json[name] : json;
+    const NJson::TJsonValue& fieldJson = *fieldJsonPtr;
 
     if (name && config.UnknownFieldsCollector) {
-        config.UnknownFieldsCollector->OnEnterMapItem(name);
+        config.UnknownFieldsCollector->OnEnterMapItem(nameHolder);
     }
 
     switch (field.cpp_type()) {
@@ -415,8 +421,6 @@ Json2RepeatedField(const NJson::TJsonValue& json,
     using namespace google::protobuf;
 
     TString name = GetFieldName(field, config);
-    if (!json.Has(name))
-        return;
 
     const NJson::TJsonValue& fieldJson = json[name];
     if (fieldJson.GetType() == NJson::JSON_UNDEFINED || fieldJson.GetType() == NJson::JSON_NULL)

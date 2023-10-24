@@ -150,7 +150,7 @@ TExprNode::TPtr BuildIgnoreTypeV3Remapper(const TStructExprType* rowType, TExprC
 }
 
 TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion,
-    TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider)
+    TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider, bool enableViewIsolation)
 {
     NSQLTranslation::TTranslationSettings settings;
     settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
@@ -159,7 +159,10 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
     settings.SyntaxVersion = syntaxVersion;
     settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
     settings.FileAliasPrefix = "view_" + randomProvider.GenUuid4().AsGuidString() + "/";
-    settings.FileAliasPrefix.clear(); // disable FileAliasPrefix while preserving number of randomProvider calls
+    if (!enableViewIsolation) {
+        settings.FileAliasPrefix.clear(); // disable FileAliasPrefix while preserving number of randomProvider calls
+    }
+
     NYql::TAstParseResult sqlRes = NSQLTranslation::SqlToYql(sql, settings);
     ctx.IssueManager.RaiseIssues(sqlRes.Issues);
     if (!sqlRes.IsOk()) {
@@ -241,10 +244,10 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
 
 
 bool TYtViewDescription::Fill(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion, TExprContext& ctx,
-    IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider)
+    IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider, bool enableViewIsolation)
 {
     Sql = sql;
-    CompiledSql = CompileViewSql(provider, cluster, sql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider);
+    CompiledSql = CompileViewSql(provider, cluster, sql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider, enableViewIsolation);
     return bool(CompiledSql);
 }
 
@@ -255,7 +258,7 @@ void TYtViewDescription::CleanupCompiledSQL()
 
 bool TYtTableDescriptionBase::Fill(const TString& provider, const TString& cluster, const TString& table,
     const TStructExprType* type, const TString& viewSql, ui16 syntaxVersion, const THashMap<TString, TString>& metaAttrs,
-    TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider)
+    TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider, bool enableViewIsolation)
 {
     // (1) row type
     RawRowType = type;
@@ -334,13 +337,13 @@ bool TYtTableDescriptionBase::Fill(const TString& provider, const TString& clust
     }
 
     // (3) views
-    if (!FillViews(provider, cluster, table, metaAttrs, ctx, moduleResolver, urlListerManager, randomProvider)) {
+    if (!FillViews(provider, cluster, table, metaAttrs, ctx, moduleResolver, urlListerManager, randomProvider, enableViewIsolation)) {
         return false;
     }
 
     if (viewSql) {
         if (!View) {
-            if (!View.ConstructInPlace().Fill(provider, cluster, viewSql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider)) {
+            if (!View.ConstructInPlace().Fill(provider, cluster, viewSql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider, enableViewIsolation)) {
                 ctx.AddError(TIssue(TPosition(),
                     TStringBuilder() << "Can't load sql view, table: " << cluster << '.' << table));
                 return false;
@@ -353,7 +356,7 @@ bool TYtTableDescriptionBase::Fill(const TString& provider, const TString& clust
 
 bool TYtTableDescriptionBase::FillViews(const TString& provider, const TString& cluster, const TString& table,
     const THashMap<TString, TString>& metaAttrs, TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager,
-    IRandomProvider& randomProvider)
+    IRandomProvider& randomProvider, bool allowViewIsolation)
 {
     for (auto& view: Views) {
         TYtViewDescription& viewDesc = view.second;
@@ -381,7 +384,7 @@ bool TYtTableDescriptionBase::FillViews(const TString& provider, const TString& 
                 }
             }
 
-            if (!viewDesc.Fill(provider, cluster, viewSql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider)) {
+            if (!viewDesc.Fill(provider, cluster, viewSql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider, allowViewIsolation)) {
                 ctx.AddError(TIssue(TPosition(),
                     TStringBuilder() << "Can't load sql view " << viewSql.Quote()
                     << ", table: " << cluster << '.' << table

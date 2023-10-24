@@ -49,7 +49,7 @@ struct TYtViewDescription {
     const TTypeAnnotationNode* RowType = nullptr; // Filled only if scheme requested
 
     bool Fill(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion, TExprContext& ctx,
-        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider);
+        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider, bool enableViewIsolation);
     void CleanupCompiledSQL();
 };
 
@@ -70,10 +70,12 @@ struct TYtTableDescriptionBase {
 
     bool Fill(const TString& provider, const TString& cluster, const TString& table, const TStructExprType* type,
         const TString& viewSql, ui16 syntaxVersion, const THashMap<TString, TString>& metaAttrs, TExprContext& ctx,
-        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider);
+        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
+        bool enableViewIsolation);
     void CleanupCompiledSQL();
     bool FillViews(const TString& provider, const TString& cluster, const TString& table, const THashMap<TString, TString>& metaAttrs,
-        TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider);
+        TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
+        bool enableViewIsolation);
 };
 
 }

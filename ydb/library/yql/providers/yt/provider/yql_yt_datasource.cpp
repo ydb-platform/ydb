@@ -730,7 +730,9 @@ private:
                 YQL_ENSURE(root, "View is not initialized: " << view);
                 TOptimizeExprSettings settings(nullptr);
                 settings.VisitChanges = true;
-                auto status = OptimizeExpr(root, root, [newReadNode, rightOverRead, &readNode](const TExprNode::TPtr& node, TExprContext& ctx) {
+                TExprNode::TListType innerWorlds;
+                const bool enableViewIsolation = State_->Configuration->ViewIsolation.Get().GetOrElse(false);
+                auto status = OptimizeExpr(root, root, [newReadNode, rightOverRead, &readNode, enableViewIsolation, &innerWorlds](const TExprNode::TPtr& node, TExprContext& ctx) {
                     if (auto world = TMaybeNode<TCoLeft>(node).Input().Maybe<TCoRead>().World()) {
                         return world.Cast().Ptr();
                     }
@@ -752,6 +754,12 @@ private:
                             YQL_ENSURE(false, "Unknown table name (should be self or self_raw): " << tableName);
                         }
 
+                        if (enableViewIsolation) {
+                            if (read.World().Raw()->Type() != TExprNode::World) {
+                                innerWorlds.push_back(read.World().Ptr());
+                            }
+                        }
+
                         return selfRead;
                     }
 
@@ -766,6 +774,13 @@ private:
                 if (status.Level == IGraphTransformer::TStatus::Error) {
                     return {};
                 }
+
+                if (!innerWorlds.empty()) {
+                    innerWorlds.push_back(origReadNode.World().Ptr());
+                    auto combined = ctx.NewCallable(origReadNode.World().Pos(), "Sync!", std::move(innerWorlds));
+                    root = ctx.ReplaceNode(std::move(root), *origReadNode.World().Raw(), combined);
+                }
+
                 newReadNode = root;
                 ctx.Step
                     .Repeat(TExprStep::ExpandApplyForLambdas)

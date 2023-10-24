@@ -451,6 +451,7 @@ TYtConfiguration::TYtConfiguration()
             }
             return res;
         });
+    REGISTER_SETTING(*this, ViewIsolation);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

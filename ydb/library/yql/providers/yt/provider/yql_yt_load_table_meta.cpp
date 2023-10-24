@@ -102,7 +102,8 @@ public:
                         // Intents/views can be updated since evaluation phase
                         if (!tableDesc.FillViews(
                             clusterAndTable.first, clusterAndTable.second, ctx,
-                            State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider
+                            State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
+                            State_->Configuration->ViewIsolation.Get().GetOrElse(false)
                         )) {
                             return TStatus::Error;
                         }
@@ -229,7 +230,8 @@ public:
                 if (0 == LoadCtx->Epoch) {
                     if (!tableDesc.Fill(
                         cluster, tableName, ctx,
-                        State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider
+                        State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
+                        State_->Configuration->ViewIsolation.Get().GetOrElse(false)
                     )) {
                         return TStatus::Error;
                     }

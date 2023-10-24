@@ -752,18 +752,7 @@ private:
                             YQL_ENSURE(false, "Unknown table name (should be self or self_raw): " << tableName);
                         }
 
-                        if (read.World().Ptr()->Type() == TExprNode::World) {
-                            return selfRead;
-                        }
-
-                        return ctx.Builder(node->Pos())
-                            .Callable("Right!")
-                                .Callable(0, "Cons!")
-                                    .Add(0, read.World().Ptr())
-                                    .Add(1, selfRead)
-                                .Seal()
-                            .Seal()
-                            .Build();
+                        return selfRead;
                     }
 
                     // Inject original Read! dependencies

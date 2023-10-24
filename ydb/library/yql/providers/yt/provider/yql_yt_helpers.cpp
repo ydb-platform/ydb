@@ -362,7 +362,7 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
             auto cons = right.Cast().Input().Maybe<TCoCons>();
             if (cons) {
                 remaps[node.Get()] = cons.Cast().Input().Ptr();
-                return true;
+                return false;
             }
         }
 

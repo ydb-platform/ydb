@@ -6,36 +6,6 @@
 
 namespace NKikimr {
 
-namespace NGRpcService {
-
-IActor* CreateExtAlterTableRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg, ui64 flags);
-
-class TExtendedAlterTableRequest : public Ydb::Table::AlterTableRequest {
-public:
-    TExtendedAlterTableRequest(NKqpProto::TKqpSchemeOperation::TAlterTable&& alter)
-        : Ydb::Table::AlterTableRequest(std::move(*alter.MutableReq()))
-        , ExtendedFlags(alter.GetFlags())
-    {}
-
-    ui64 GetExtendedFlags() const {
-        return ExtendedFlags;
-    }
-private:
-    const ui64 ExtendedFlags;
-};
-
-using TEvAlterTableRequest = NGRpcService::TGrpcRequestOperationCall<TExtendedAlterTableRequest,
-    Ydb::Table::AlterTableResponse>;
-
-struct TEvPgAlterTableRequest : public TEvAlterTableRequest {
-    static IActor* CreateRpcActor(IRequestOpCtx* ctx) {
-        auto request = static_cast<const TExtendedAlterTableRequest*>(ctx->GetRequest());
-        return CreateExtAlterTableRpcActor(ctx, request->GetExtendedFlags());
-    }
-};
-
-} // NGRpcService
-
 namespace NKqp {
 
 using namespace NYql;
@@ -55,13 +25,6 @@ IKikimrGateway::TGenericResult GenericResultFromSyncOperation(const Operations::
         const auto& yqlStatus = NYql::YqlStatusFromYdbStatus(op.status());
         return ResultFromIssues<IKikimrGateway::TGenericResult>(yqlStatus, issues);
     }
-}
-
-void DoAlterTableSameMailbox(NKqpProto::TKqpSchemeOperation::TAlterTable&& req, TAlterTableRespHandler&& cb,
-    const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& type)
-{
-    NRpcService::DoLocalRpcSameMailbox<NGRpcService::TEvPgAlterTableRequest>(std::move(req), std::move(cb),
-        database, token, type, TlsActivationContext->AsActorContext());
 }
 
 }

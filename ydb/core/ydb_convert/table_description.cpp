@@ -332,7 +332,9 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
 
     if (OpType == EAlterOperationKind::Attribute) {
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
-        modifyScheme->AddApplyIf()->SetPathId(resolvedPathId.LocalPathId);
+        if (resolvedPathId) {
+            modifyScheme->AddApplyIf()->SetPathId(resolvedPathId.LocalPathId);
+        }
 
         auto& alter = *modifyScheme->MutableAlterUserAttributes();
         alter.SetPathName(name);

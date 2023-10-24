@@ -3,10 +3,10 @@
 
 #include "rpc_deferrable.h"
 
+#include <ydb/core/ydb_convert/tx_proxy_status.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
-namespace NKikimr {
-namespace NGRpcService {
+namespace NKikimr::NGRpcService {
 
 template <typename TDerived, typename TRequest>
 class TRpcSchemeRequestActor : public TRpcOperationRequestActor<TDerived, TRequest> {
@@ -47,9 +47,7 @@ protected:
         }
     }
 
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&, const TActorContext &ctx) {
         NYql::TIssues issues;
         issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
             TStringBuilder() << "Connection to tablet was lost."));
@@ -57,96 +55,61 @@ protected:
     }
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
-        const TEvTxUserProxy::TEvProposeTransactionStatus* msg = ev->Get();
-        const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
+        TEvTxUserProxy::TEvProposeTransactionStatus* msg = ev->Get();
         auto issueMessage = msg->Record.GetIssues();
-        switch (status) {
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete: {
-                if (msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusSuccess ||
-                    msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists)
-                {
-                    return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, ctx);
-                }
-                break;
-            }
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress: {
-                ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
-                IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, schemeShardTabletId);
-                Y_ABORT_UNLESS(pipeActor);
-                SchemePipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
 
-                auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
-                request->Record.SetTxId(msg->Record.GetTxId());
-                NTabletPipe::SendData(ctx, SchemePipeActorId_, request.Release());
-                return;
-            }
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest: {
-                return this->ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, issueMessage, ctx);
-            }
-            case TEvTxUserProxy::TResultStatus::AccessDenied: {
-                return this->ReplyWithResult(Ydb::StatusIds::UNAUTHORIZED, issueMessage, ctx);
-            }
-            case TEvTxUserProxy::TResultStatus::ProxyShardNotAvailable: {
-                return this->ReplyWithResult(Ydb::StatusIds::UNAVAILABLE, issueMessage, ctx);
-            }
-            case TEvTxUserProxy::TResultStatus::ResolveError: {
-                return this->ReplyWithResult(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx);
-            }
-            case TEvTxUserProxy::TResultStatus::ExecError: {
-                switch (msg->Record.GetSchemeShardStatus()) {
-                    case NKikimrScheme::EStatus::StatusMultipleModifications: {
-                        return this->ReplyWithResult(Ydb::StatusIds::OVERLOADED, issueMessage, ctx);
-                    }
-                    case NKikimrScheme::EStatus::StatusInvalidParameter: {
-                        return this->ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, issueMessage, ctx);
-                    }
-                    case NKikimrScheme::EStatus::StatusSchemeError:
-                    case NKikimrScheme::EStatus::StatusNameConflict:
-
-                    case NKikimrScheme::EStatus::StatusPathDoesNotExist: {
-                        return this->ReplyWithResult(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx);
-                    }
-                    case NKikimrScheme::EStatus::StatusQuotaExceeded: {
-                        // FIXME: clients may start aggressive retries when receiving 'overloaded'
-                        return this->ReplyWithResult(Ydb::StatusIds::OVERLOADED, issueMessage, ctx);
-                    }
-                    case NKikimrScheme::EStatus::StatusResourceExhausted:
-                    case NKikimrScheme::EStatus::StatusPreconditionFailed: {
-                        return this->ReplyWithResult(Ydb::StatusIds::PRECONDITION_FAILED, issueMessage, ctx);
-                    }
-                    default: {
-                        return this->ReplyWithResult(Ydb::StatusIds::GENERIC_ERROR, issueMessage, ctx);
-                    }
-                }
-            }
-            default: {
-                TStringStream str;
-                str << "Got unknown TEvProposeTransactionStatus (" << status << ") response from TxProxy";
-                const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, str.Str());
-                auto tmp = issueMessage.Add();
-                NYql::IssueToMessage(issue, tmp);
-                return this->ReplyWithResult(Ydb::StatusIds::INTERNAL_ERROR, issueMessage, ctx);
-            }
+        Ydb::StatusIds::StatusCode ydbStatus = NKikimr::YdbStatusFromProxyStatus(msg);
+        if (!NKikimr::IsTxProxyInProgress(ydbStatus)) {
+            return this->ReplyWithResult(ydbStatus, issueMessage, ctx);
         }
-        return this->ReplyWithResult(Ydb::StatusIds::INTERNAL_ERROR, issueMessage, ctx);
+    
+        ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
+        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(msg->Record.GetTxId());
+        SetSchemeShardId(schemeShardTabletId);
+        ForwardToSchemeShard(ctx, std::move(request));
+        return;
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
-        NTabletPipe::CloseClient(ctx, SchemePipeActorId_);
-        return this->ReplyNotifyTxCompletionResult(ev, ctx);
+        return this->OnNotifyTxCompletionResult(ev, ctx);
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {
     }
 
-    virtual void ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
+    virtual void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
         return this->Reply(Ydb::StatusIds::SUCCESS, ctx);
     }
 
+    void PassAway() override {
+        if (SchemePipeActorId_) {
+            NTabletPipe::CloseClient(this->SelfId(), SchemePipeActorId_);
+        }
+
+        TBase::PassAway();
+    }
+
+    void SetSchemeShardId(ui64 schemeShardTabletId) {
+        SchemeShardTabletId = schemeShardTabletId;
+    }
+
+    template<typename TEv>
+    void ForwardToSchemeShard(const TActorContext& ctx, std::unique_ptr<TEv>&& ev) {
+        if (!SchemePipeActorId_) {
+            Y_ABORT_UNLESS(SchemeShardTabletId);
+            NTabletPipe::TClientConfig clientConfig;
+            clientConfig.RetryPolicy = {.RetryLimitCount = 3};
+            SchemePipeActorId_ = ctx.ExecutorThread.RegisterActor(NTabletPipe::CreateClient(ctx.SelfID, SchemeShardTabletId));
+        }
+
+        Y_ABORT_UNLESS(SchemePipeActorId_);
+        NTabletPipe::SendData(this->SelfId(), SchemePipeActorId_, ev.release());
+    }
+
 private:
+    ui64 SchemeShardTabletId = 0;
     TActorId SchemePipeActorId_;
 };
 
-} // namespace NGRpcService
-} // namespace NKikimr
+} // namespace NKikimr::NGRpcService

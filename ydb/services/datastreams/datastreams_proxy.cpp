@@ -1042,7 +1042,7 @@ namespace NKikimr::NDataStreams::V1 {
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                    const NKikimrSchemeOp::TDirEntry& selfInfo);
-        void ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override;
+        void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override;
 
     private:
         TString ConsumerName;
@@ -1098,7 +1098,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TRegisterStreamConsumerActor::ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
+    void TRegisterStreamConsumerActor::OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
         Ydb::DataStreams::V1::RegisterStreamConsumerResult result;
         auto consumer = result.Mutableconsumer();

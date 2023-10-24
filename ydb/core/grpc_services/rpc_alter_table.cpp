@@ -59,18 +59,9 @@ class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTab
     using TBase = TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTableRequest>;
     using EOp = NKikimr::EAlterOperationKind;
 
-    void PassAway() override {
-        if (SSPipeClient) {
-            NTabletPipe::CloseClient(SelfId(), SSPipeClient);
-            SSPipeClient = TActorId();
-        }
-        IActor::PassAway();
-    }
-
 public:
-    TAlterTableRPC(IRequestOpCtx* msg, ui64 flags = NKqpProto::TKqpSchemeOperation::FLAG_UNSPECIFIED)
+    TAlterTableRPC(IRequestOpCtx* msg)
         : TBase(msg)
-        , Flags(flags)
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -109,7 +100,7 @@ public:
             return;
 
         case EOp::AddIndex:
-            if (!BuildAlterTableAddIndexRequest(req, &IndexBuildSettings, Flags, code, error)) {
+            if (!BuildAlterTableAddIndexRequest(req, &IndexBuildSettings, 0, code, error)) {
                 Reply(code, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 return;
             }
@@ -139,6 +130,7 @@ private:
            HFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
            HFunc(NSchemeShard::TEvIndexBuilder::TEvCreateResponse, Handle);
+           HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
            default: TBase::StateWork(ev);
         }
     }
@@ -200,7 +192,6 @@ private:
 
         const auto* msg = ev->Get();
         TxId = msg->TxId;
-        TxProxyMon = msg->TxProxyMon;
         LogPrefix = TStringBuilder() << "[AlterTableAddIndex " << SelfId() << " TxId# " << TxId << "] ";
 
         Navigate(msg->Services.SchemeCache, ctx);
@@ -285,14 +276,13 @@ private:
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
         }
 
-        SchemeshardId = domainInfo->ExtractSchemeShard();
-        SSPipeClient = CreatePipeClient(SchemeshardId, ctx);
-        SendAddIndexOpToSS(ctx);
+        SendAddIndexOpToSS(ctx, domainInfo->ExtractSchemeShard());
     }
 
-    void SendAddIndexOpToSS(const TActorContext& ctx) {
-        auto ev = new NSchemeShard::TEvIndexBuilder::TEvCreateRequest(TxId, DatabaseName, std::move(IndexBuildSettings));
-        NTabletPipe::SendData(ctx, SSPipeClient, ev);
+    void SendAddIndexOpToSS(const TActorContext& ctx, ui64 schemeShardId) {
+        SetSchemeShardId(schemeShardId);
+        auto ev = std::make_unique<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>(TxId, DatabaseName, std::move(IndexBuildSettings));
+        ForwardToSchemeShard(ctx, std::move(ev));
     }
 
     void Handle(NSchemeShard::TEvIndexBuilder::TEvCreateResponse::TPtr& ev, const TActorContext& ctx) {
@@ -315,8 +305,7 @@ private:
             if (response.HasSchemeStatus() && response.GetSchemeStatus() == NKikimrScheme::EStatus::StatusAlreadyExists) {
                 Reply(status, issuesProto, ctx);
             } else if (GetOperationMode() == Ydb::Operations::OperationParams::SYNC) {
-                CreateSSOpSubscriber(SchemeshardId, TxId, DatabaseName, TOpType::BuildIndex, std::move(Request_), ctx);
-                Die(ctx);
+                DoSubscribe(ctx);
             } else {
                 auto op = response.GetIndexBuild();
                 Ydb::Operations::Operation operation;
@@ -329,7 +318,40 @@ private:
         }
     }
 
-    void AlterTable(const TActorContext &ctx) {
+    void GetIndexStatus(const TActorContext& ctx) {
+        auto request = std::make_unique<NSchemeShard::TEvIndexBuilder::TEvGetRequest>(DatabaseName, TxId);
+        ForwardToSchemeShard(ctx, std::move(request));
+    }
+
+    void DoSubscribe(const TActorContext& ctx) {
+        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(TxId);
+        ForwardToSchemeShard(ctx, std::move(request));
+    }
+
+    void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override {
+        if (OpType == EOp::AddIndex) {
+            GetIndexStatus(ctx);
+        } else {
+            TBase::OnNotifyTxCompletionResult(ev, ctx);
+        }
+    }
+
+    void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record;
+
+        TXLOG_D("Handle TEvIndexBuilder::TEvGetResponse: record# " << record.ShortDebugString());
+
+        if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            Request_->ReplyWithYdbStatus(record.GetStatus());
+        } else {
+            Ydb::Operations::Operation op;
+            ::NKikimr::NGRpcService::ToOperation(record.GetIndexBuild(), &op);
+            Request_->SendOperation(op);
+        }
+        Die(ctx);
+    }
+
+    void AlterTable(const TActorContext &ctx) { 
         const auto req = GetProtoRequest();
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         auto modifyScheme = proposeRequest->Record.MutableTransaction()->MutableModifyScheme();
@@ -344,25 +366,14 @@ private:
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 
-    void ReplyWithStatus(StatusIds::StatusCode status,
-                         const TActorContext &ctx) {
-        Request_->ReplyWithYdbStatus(status);
-        Die(ctx);
-    }
-
     ui64 TxId = 0;
-    ui64 SchemeshardId = 0;
     TString DatabaseName;
-    TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
     TString LogPrefix;
-    TActorId SSPipeClient;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TPathId ResolvedPathId;
     TTableProfiles Profiles;
     EOp OpType;
     NKikimrIndexBuilder::TIndexBuildSettings IndexBuildSettings;
-
-    const ui64 Flags;
 };
 
 void DoAlterTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
@@ -372,10 +383,6 @@ void DoAlterTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvid
 template<>
 IActor* TEvAlterTableRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return new TAlterTableRPC(msg);
-}
-
-IActor* CreateExtAlterTableRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg, ui64 flags) {
-    return new TAlterTableRPC(msg, flags);
 }
 
 

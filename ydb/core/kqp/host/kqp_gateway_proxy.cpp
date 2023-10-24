@@ -1,6 +1,7 @@
 #include "kqp_host_impl.h"
 
 #include <ydb/core/grpc_services/table_settings.h>
+#include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 
 namespace NKikimr::NKqp {
@@ -548,26 +549,76 @@ public:
     {
         CHECK_PREPARED_DDL(AlterTable);
 
-        if (IsPrepare()) {
-            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-            auto& phyTx = *phyQuery.AddTransactions();
-            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-            auto alter = phyTx.MutableSchemeOperation()->MutableAlterTable();
-            alter->MutableReq()->Swap(&req);
-            if (requestType) {
-                alter->SetType(*requestType);
-            }
-
-            alter->SetFlags(flags);
-
-            auto promise = NewPromise<TGenericResult>();
-            TGenericResult result;
-            result.SetSuccess();
-            promise.SetValue(result);
-            return promise.GetFuture();
-        } else {
+        if (!IsPrepare()) {
             return Gateway->AlterTable(cluster, std::move(req), requestType, flags);
         }
+        auto &phyQuery =
+            *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+        auto &phyTx = *phyQuery.AddTransactions();
+        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+        auto promise = NewPromise<TGenericResult>();
+        const auto ops = GetAlterOperationKinds(&req);
+        if (ops.size() != 1) {
+            auto code = Ydb::StatusIds::BAD_REQUEST;
+            auto error = TStringBuilder() << "Unqualified alter table request.";
+            IKqpGateway::TGenericResult errResult;
+            errResult.AddIssue(NYql::TIssue(error));
+            errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+            promise.SetValue(errResult);
+            return promise.GetFuture();
+        }
+
+        const auto opType = *ops.begin();
+        auto tablePromise = NewPromise<TGenericResult>();
+        if (opType == EAlterOperationKind::AddIndex) {
+            auto buildOp = phyTx.MutableSchemeOperation()->MutableBuildOperation();
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!BuildAlterTableAddIndexRequest(&req, buildOp, flags, code, error)) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();      
+            }
+            TGenericResult result;
+            result.SetSuccess();
+            tablePromise.SetValue(result);
+            return tablePromise.GetFuture();
+        }
+
+        auto profilesFuture = Gateway->GetTableProfiles();
+        auto sessionCtx = SessionCtx;
+        profilesFuture.Subscribe(
+            [tablePromise, sessionCtx, alterReq = std::move(req)](
+                const TFuture<IKqpGateway::TKqpTableProfilesResult> &future) mutable {
+                auto profilesResult = future.GetValue();
+                if (!profilesResult.Success()) {
+                    tablePromise.SetValue(ResultFromIssues<TGenericResult>(
+                        profilesResult.Status(), profilesResult.Issues()));
+                    return;
+                }
+
+                auto &phyQuery =
+                    *sessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto &phyTx = *phyQuery.AddTransactions();
+                auto alter = phyTx.MutableSchemeOperation()->MutableAlterTable();
+                const TPathId invalidPathId;
+                Ydb::StatusIds::StatusCode code;
+                TString error;
+                if (!BuildAlterTableModifyScheme(&alterReq, alter, profilesResult.Profiles, invalidPathId, code, error)) {
+                    IKqpGateway::TGenericResult errResult;
+                    errResult.AddIssue(NYql::TIssue(error));
+                    errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                    tablePromise.SetValue(errResult);
+                    return;
+                }
+                TGenericResult result;
+                result.SetSuccess();
+                tablePromise.SetValue(result);
+            });
+
+        return tablePromise.GetFuture();
     }
 
     TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) override {
@@ -599,6 +650,8 @@ public:
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
             auto& phyTx = *phyQuery.AddTransactions();
             phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            
+
             phyTx.MutableSchemeOperation()->MutableDropTable()->Swap(&schemeTx);
             phyTx.MutableSchemeOperation()->MutableDropTable()->SetSuccessOnNotExist(settings.SuccessOnNotExist);
             TGenericResult result;

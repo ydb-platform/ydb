@@ -82,7 +82,7 @@ namespace NKikimr::NBsController {
 
         // returns pair of previous VDisk and PDisk id's
         std::pair<TVDiskIdShort, TPDiskId> SanitizeGroup(TGroupMapper &mapper, TGroupId groupId, TGroupMapper::TGroupDefinition &group,
-                TGroupMapper::TForbiddenPDisks forbid, i64 requiredSpace) const {
+                const THashMap<TVDiskIdShort, TPDiskId>& /*replacedDisks*/, TGroupMapper::TForbiddenPDisks forbid, i64 requiredSpace) const {
             TString error;
             auto misplacedVDisks = mapper.FindMisplacedVDisks(group);
             if (misplacedVDisks.Disks.size() == 0) {

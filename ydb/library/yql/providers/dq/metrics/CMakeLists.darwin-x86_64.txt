@@ -18,5 +18,5 @@ target_link_libraries(providers-dq-metrics PUBLIC
   providers-solomon-async_io
 )
 target_sources(providers-dq-metrics PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/metrics/metrics_pusher.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/metrics/metrics_printer.cpp
 )

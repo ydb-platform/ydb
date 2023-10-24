@@ -2,7 +2,7 @@ LIBRARY()
 
 SET(
     SOURCE
-    metrics_pusher.cpp
+    metrics_printer.cpp
 )
 
 SRCS(

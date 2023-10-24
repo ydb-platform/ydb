@@ -5,7 +5,7 @@
 #include <ydb/library/yql/providers/dq/actors/yt/yt_wrapper.h>
 #include <ydb/library/yql/providers/dq/actors/yt/worker_registrator.h>
 #include <ydb/library/yql/providers/dq/actors/yt/nodeid_cleaner.h>
-#include <ydb/library/yql/providers/dq/metrics/metrics_pusher.h>
+#include <ydb/library/yql/providers/dq/metrics/metrics_printer.h>
 #include <ydb/library/yql/providers/dq/stats_collector/pool_stats_collector.h>
 #include <ydb/library/yql/providers/dq/actors/dynamic_nameserver.h>
 #include <ydb/library/yql/providers/dq/actors/execution_helpers.h>

@@ -1,4 +1,4 @@
-#include <ydb/library/yql/providers/dq/metrics/metrics_pusher.h>
+#include <ydb/library/yql/providers/dq/metrics/metrics_printer.h>
 #include <ydb/library/yql/providers/dq/actors/yt/resource_manager.h>
 #include <ydb/library/yql/providers/dq/actors/dynamic_nameserver.h>
 #include <ydb/library/yql/providers/dq/stats_collector/pool_stats_collector.h>

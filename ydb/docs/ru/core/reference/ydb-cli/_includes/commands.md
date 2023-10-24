@@ -65,6 +65,9 @@ table attribute drop | Удаление атрибута таблицы
 [table ttl reset](../table-ttl-reset.md) | Сброс параметров TTL
 [tools copy](../tools-copy.md) | Копирование таблиц
 [tools dump](../export_import/tools_dump.md) | Выгрузка директории или таблицы в файловую систему
+{% if ydb-cli == "ydb" %}
+[tools pg-convert](../../../postgresql/pg-dump.md#pg-convert) | Конвертация дампа PostgreSQL, полученного утилитой pg_dump, в формат, понятный YDB
+{% endif %}
 [tools rename](../commands/tools/rename.md) | Переименование таблиц
 [tools restore](../export_import/tools_restore.md) | Восстановление из файловой системы
 [topic create](../topic-create.md) | Создание топика

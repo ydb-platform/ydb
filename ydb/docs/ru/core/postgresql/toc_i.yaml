@@ -11,3 +11,6 @@ items:
 - name: Функции PostgreSQL
   href: functions.md
   hidden: false
+- name: Импорт данных из PostgreSQL
+  href: pg-dump.md
+  hidden: false

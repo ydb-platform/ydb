@@ -23,6 +23,7 @@ private:
     bool HasPkMinMax() const;
     TPortionMeta Meta;
     std::shared_ptr<NOlap::IBlobsStorageOperator> BlobsOperator;
+    ui64 DeprecatedGranuleId = 0;
 public:
     ui64 GetPathId() const {
         return PathId;
@@ -179,6 +180,10 @@ public:
         return Portion;
     }
 
+    ui64 GetDeprecatedGranuleId() const {
+        return DeprecatedGranuleId;
+    }
+
     TPortionAddress GetAddress() const {
         return TPortionAddress(PathId, Portion);
     }
@@ -189,6 +194,10 @@ public:
 
     void SetPortion(const ui64 portion) {
         Portion = portion;
+    }
+
+    void SetDeprecatedGranuleId(const ui64 granuleId) {
+        DeprecatedGranuleId = granuleId;
     }
 
     const TSnapshot& GetMinSnapshot() const {

@@ -245,7 +245,7 @@ struct Schema : NIceDb::Schema {
         struct Size : Column<13, NScheme::NTypeIds::Uint32> {};
         struct PathId : Column<14, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<Index, Granule, ColumnIdx, PlanStep, TxId, Portion, Chunk, PathId>;
+        using TKey = TableKey<Index, Granule, ColumnIdx, PlanStep, TxId, Portion, Chunk>;
         using TColumns = TableColumns<Index, Granule, ColumnIdx, PlanStep, TxId, Portion, Chunk,
                                     XPlanStep, XTxId, Blob, Metadata, Offset, Size, PathId>;
     };
@@ -511,20 +511,21 @@ struct Schema : NIceDb::Schema {
         if (proto) {
             *rowProto.MutablePortionMeta() = std::move(*proto);
         }
-        db.Table<IndexColumns>().Key(index, 0, row.ColumnId,
-            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk, portion.GetPathId()).Update(
+        db.Table<IndexColumns>().Key(index, portion.GetDeprecatedGranuleId(), row.ColumnId,
+            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
                 NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
                 NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
                 NIceDb::TUpdate<IndexColumns::Blob>(row.SerializedBlobId()),
                 NIceDb::TUpdate<IndexColumns::Metadata>(rowProto.SerializeAsString()),
                 NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset),
-                NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size)
+                NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size),
+                NIceDb::TUpdate<IndexColumns::PathId>(portion.GetPathId())
             );
     }
 
     static void IndexColumns_Erase(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
-        db.Table<IndexColumns>().Key(index, 0, row.ColumnId,
-            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk, portion.GetPathId()).Delete();
+        db.Table<IndexColumns>().Key(index, portion.GetDeprecatedGranuleId(), row.ColumnId,
+            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
     }
 
     static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index,

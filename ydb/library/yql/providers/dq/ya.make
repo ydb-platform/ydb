@@ -5,6 +5,8 @@ RECURSE(
     config
     counters
     expr_nodes
+    scheduler
+    global_worker_manager
     interface
     mkql
     opt

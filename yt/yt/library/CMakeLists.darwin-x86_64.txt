@@ -6,7 +6,13 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(auth)
+add_subdirectory(decimal)
+add_subdirectory(erasure)
+add_subdirectory(numeric)
 add_subdirectory(profiling)
+add_subdirectory(quantile_digest)
+add_subdirectory(re2)
 add_subdirectory(syncmap)
 add_subdirectory(tracing)
 add_subdirectory(tvm)

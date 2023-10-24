@@ -6,7 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(events)
 add_subdirectory(ut)
+add_subdirectory(yt)
 
 add_library(providers-dq-actors)
 target_compile_options(providers-dq-actors PRIVATE
@@ -33,6 +35,7 @@ target_link_libraries(providers-dq-actors PUBLIC
   yql-dq-tasks
   yql-utils-failure_injector
   providers-common-metrics
+  dq-actors-events
   dq-api-grpc
   dq-api-protos
   providers-dq-common
@@ -47,6 +50,8 @@ target_link_libraries(providers-dq-actors PUBLIC
 )
 target_sources(providers-dq-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/compute_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/dummy_lock.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/dynamic_nameserver.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/events.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/executer_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/execution_helpers.cpp

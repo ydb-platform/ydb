@@ -2,6 +2,8 @@ LIBRARY()
 
 SRCS(
     compute_actor.cpp
+    dummy_lock.cpp
+    dynamic_nameserver.cpp
     events.cpp
     executer_actor.cpp
     execution_helpers.cpp
@@ -35,6 +37,7 @@ PEERDIR(
     ydb/library/yql/dq/tasks
     ydb/library/yql/utils/failure_injector
     ydb/library/yql/providers/common/metrics
+    ydb/library/yql/providers/dq/actors/events
     ydb/library/yql/providers/dq/api/grpc
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/common
@@ -51,6 +54,11 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    events
+    yt
+)
 
 RECURSE_FOR_TESTS(
     ut

@@ -20,7 +20,11 @@ Release date: October 12, 2023.
 
 **Embedded UI:**
 
-* TBD
+* A new option `PostgreSQL` has been added to the query type selector settings, which is available when the `Enable additional query modes` parameter is enabled. Also, the query history now takes into account the syntax used when executing the query.
+* The YQL query template for creating a table has been updated. Added a description of the available parameters.
+* Now sorting and filtering for Storage and Nodes tables takes place on the server. To use this functionality, you need to enable the parameter `Offload tables filters and sorting to backend` in the experiments section.
+* Buttons for creating, changing and deleting [topics](https://ydb.tech/ru/docs/concepts/topic) have been added to the context menu.
+* Added sorting by criticality for all issues in the tree in `Healthcheck`.
 
 **Performance:**
 

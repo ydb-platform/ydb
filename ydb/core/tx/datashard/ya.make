@@ -22,6 +22,7 @@ SRCS(
     change_exchange_split.cpp
     change_record.cpp
     change_record_body_serializer.cpp
+    change_record_cdc_serializer.cpp
     change_sender.cpp
     change_sender_async_index.cpp
     change_sender_cdc_stream.cpp

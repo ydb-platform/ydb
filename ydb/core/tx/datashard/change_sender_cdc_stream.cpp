@@ -1,5 +1,6 @@
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
+#include "change_record_cdc_serializer.h"
 #include "change_sender_common_ops.h"
 #include "change_sender_monitoring.h"
 #include "datashard_user_table.h"
@@ -7,7 +8,6 @@
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
-#include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -86,22 +86,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         }
     }
 
-    static NJson::TJsonWriterConfig DefaultJsonConfig() {
-        NJson::TJsonWriterConfig jsonConfig;
-        jsonConfig.ValidateUtf8 = false;
-        jsonConfig.WriteNanAsString = true;
-        return jsonConfig;
-    }
-
     void Handle(TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         NKikimrClient::TPersQueueRequest request;
-
-        const auto awsJsonOpts = TChangeRecord::TAwsJsonOptions{
-            .AwsRegion = Stream.AwsRegion.GetOrElse(AppData()->AwsCompatibilityConfig.GetAwsRegion()),
-            .StreamMode = Stream.Mode,
-            .ShardId = DataShard.TabletId,
-        };
 
         for (const auto& record : ev->Get()->Records) {
             if (record.GetSeqNo() <= MaxSeqNo) {
@@ -109,80 +96,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
             }
 
             auto& cmd = *request.MutablePartitionRequest()->AddCmdWrite();
-            cmd.SetSeqNo(record.GetSeqNo());
             cmd.SetSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
-            cmd.SetCreateTimeMS(record.GetApproximateCreationDateTime().MilliSeconds());
             cmd.SetIgnoreQuotaDeadline(true);
-
-            NKikimrPQClient::TDataChunk data;
-            data.SetCodec(0 /* CODEC_RAW */);
-
-            switch (Stream.Format) {
-                case NKikimrSchemeOp::ECdcStreamFormatProto: {
-                    NKikimrChangeExchange::TChangeRecord protoRecord;
-                    record.SerializeToProto(protoRecord);
-                    data.SetData(protoRecord.SerializeAsString());
-                    cmd.SetData(data.SerializeAsString());
-                    break;
-                }
-
-                case NKikimrSchemeOp::ECdcStreamFormatJson:
-                case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson: {
-                    NJson::TJsonValue json;
-                    if (Stream.Format == NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson) {
-                        record.SerializeToDynamoDBStreamsJson(json, awsJsonOpts);
-                    } else {
-                        record.SerializeToYdbJson(json, Stream.VirtualTimestamps);
-                    }
-
-                    TStringStream str;
-                    WriteJson(&str, &json, DefaultJsonConfig());
-                    data.SetData(str.Str());
-
-                    if (record.GetKind() == TChangeRecord::EKind::CdcDataChange) {
-                        cmd.SetData(data.SerializeAsString());
-                        cmd.SetPartitionKey(record.GetPartitionKey());
-                    } else if (record.GetKind() == TChangeRecord::EKind::CdcHeartbeat) {
-                        auto& heartbeat = *cmd.MutableHeartbeat();
-                        heartbeat.SetStep(record.GetStep());
-                        heartbeat.SetTxId(record.GetTxId());
-                        heartbeat.SetData(data.SerializeAsString());
-                    } else {
-                        Y_FAIL_S("Unexpected cdc record"
-                            << ": kind# " << record.GetKind());
-                    }
-                    break;
-                }
-
-                case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson: {
-                    NJson::TJsonValue keyJson;
-                    NJson::TJsonValue valueJson;
-                    record.SerializeToDebeziumJson(keyJson, valueJson, Stream.Mode);
-
-                    TStringStream keyStr;
-                    WriteJson(&keyStr, &keyJson, DefaultJsonConfig());
-
-                    TStringStream valueStr;
-                    WriteJson(&valueStr, &valueJson, DefaultJsonConfig());
-
-                    // Add key in the same way as Kafka integration does
-                    auto messageMeta = data.AddMessageMeta();
-                    messageMeta->set_key("__key"); // Kafka integration stores kafka key in "__key" metadata
-                    messageMeta->set_value(keyStr.Str());
-
-                    // Add value
-                    data.SetData(valueStr.Str());
-                    cmd.SetData(data.SerializeAsString());
-                    cmd.SetPartitionKey(record.GetPartitionKey());
-                    break;
-                }
-
-                default: {
-                    LOG_E("Unknown format"
-                        << ": format# " << static_cast<int>(Stream.Format));
-                    return Leave();
-                }
-            }
+            Serializer->Serialize(cmd, record);
 
             Pending.push_back(record.GetSeqNo());
         }
@@ -327,8 +243,14 @@ public:
         , DataShard(dataShard)
         , PartitionId(partitionId)
         , ShardId(shardId)
-        , Stream(stream)
         , SourceId(ToString(DataShard.TabletId))
+        , Serializer(CreateChangeRecordSerializer({
+            .StreamFormat = stream.Format,
+            .StreamMode = stream.Mode,
+            .AwsRegion = stream.AwsRegion.GetOrElse(AppData()->AwsCompatibilityConfig.GetAwsRegion()),
+            .VirtualTimestamps = stream.VirtualTimestamps,
+            .ShardId = DataShard.TabletId,
+        }))
     {
     }
 
@@ -350,8 +272,8 @@ private:
     const TDataShardId DataShard;
     const ui32 PartitionId;
     const ui64 ShardId;
-    const TUserTable::TCdcStream Stream;
     const TString SourceId;
+    THolder<IChangeRecordSerializer> Serializer;
     mutable TMaybe<TString> LogPrefix;
 
     TActorId Writer;

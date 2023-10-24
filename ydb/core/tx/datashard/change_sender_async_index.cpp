@@ -131,7 +131,7 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
             }
 
             auto& proto = *records->Record.AddRecords();
-            record.SerializeToProto(proto);
+            record.Serialize(proto);
             Adjust(proto);
         }
 

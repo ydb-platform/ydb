@@ -6,5 +6,6 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(dq_cli)
 add_subdirectory(service_node)
 add_subdirectory(worker_node)

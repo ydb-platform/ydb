@@ -7,50 +7,48 @@
 
 
 
-add_executable(ydb-services-ydb-index_ut)
-target_compile_options(ydb-services-ydb-index_ut PRIVATE
+add_executable(ydb-core-kqp-ut-idx_test)
+target_compile_options(ydb-core-kqp-ut-idx_test PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_include_directories(ydb-services-ydb-index_ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb
+target_include_directories(ydb-core-kqp-ut-idx_test PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp
 )
-target_link_libraries(ydb-services-ydb-index_ut PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(ydb-core-kqp-ut-idx_test PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-cpuid_check
   cpp-testing-unittest_main
-  ydb-services-ydb
-  core-testlib-default
+  ydb-core-kqp
+  kqp-ut-common
   public-lib-idx_test
   public-lib-yson_value
   cpp-client-ydb_scheme
   cpp-client-ydb_table
+  yql-sql-pg_dummy
 )
-target_link_options(ydb-services-ydb-index_ut PRIVATE
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
+target_link_options(ydb-core-kqp-ut-idx_test PRIVATE
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
+  -framework
+  CoreFoundation
 )
-target_sources(ydb-services-ydb-index_ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_index_ut.cpp
+target_sources(ydb-core-kqp-ut-idx_test PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/idx_test/ydb_index_ut.cpp
 )
 set_property(
   TARGET
-  ydb-services-ydb-index_ut
+  ydb-core-kqp-ut-idx_test
   PROPERTY
   SPLIT_FACTOR
   5
 )
 add_yunittest(
   NAME
-  ydb-services-ydb-index_ut
+  ydb-core-kqp-ut-idx_test
   TEST_TARGET
-  ydb-services-ydb-index_ut
+  ydb-core-kqp-ut-idx_test
   TEST_ARG
   --print-before-suite
   --print-before-test
@@ -60,26 +58,26 @@ add_yunittest(
 )
 set_yunittest_property(
   TEST
-  ydb-services-ydb-index_ut
+  ydb-core-kqp-ut-idx_test
   PROPERTY
   LABELS
   MEDIUM
 )
 set_yunittest_property(
   TEST
-  ydb-services-ydb-index_ut
+  ydb-core-kqp-ut-idx_test
   PROPERTY
   PROCESSORS
   1
 )
 set_yunittest_property(
   TEST
-  ydb-services-ydb-index_ut
+  ydb-core-kqp-ut-idx_test
   PROPERTY
   TIMEOUT
   600
 )
-target_allocator(ydb-services-ydb-index_ut
-  cpp-malloc-jemalloc
+target_allocator(ydb-core-kqp-ut-idx_test
+  system_allocator
 )
-vcs_info(ydb-services-ydb-index_ut)
+vcs_info(ydb-core-kqp-ut-idx_test)

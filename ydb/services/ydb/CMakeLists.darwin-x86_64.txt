@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(index_ut)
 add_subdirectory(sdk_credprovider_ut)
 add_subdirectory(sdk_sessions_pool_ut)
 add_subdirectory(sdk_sessions_ut)

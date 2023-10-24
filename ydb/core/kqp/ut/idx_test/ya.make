@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/services/ydb)
+UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
 
@@ -22,11 +22,12 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/testlib/default
+    ydb/core/kqp/ut/common
     ydb/public/lib/idx_test
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_table
+    ydb/library/yql/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

@@ -37,7 +37,6 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
-    index_ut
     sdk_credprovider_ut
     sdk_sessions_ut
     sdk_sessions_pool_ut

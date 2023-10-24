@@ -4,6 +4,7 @@ RECURSE_FOR_TESTS(
     effects
     federated_query
     indexes
+    idx_test
     join
     olap
     opt

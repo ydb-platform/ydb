@@ -1,9 +1,9 @@
 #include <ydb/public/lib/idx_test/idx_test.h>
-
-#include "ydb_common_ut.h"
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NKikimr::NKqp;
 using namespace NIdxTest;
 
 struct TRunSettings {
@@ -12,23 +12,22 @@ struct TRunSettings {
     const bool WithDataColumn;
 };
 
+static const TString TABLE_PATH = "Root/TestIdx";
+
 static void RunTest(ui32 shardsCount, ui32 rowsCount, ui32 indexCount, const TRunSettings& settings) {
     bool pkOverlap = settings.PkOverlap;
     bool indexOverlap = settings.IndexOverlap;
     bool withDataColumn = settings.WithDataColumn;
 
-    TKikimrWithGrpcAndRootSchema server;
-    ui16 grpc = server.GetPort();
-
-    TString location = TStringBuilder() << "localhost:" << grpc;
+    TKikimrRunner kikimr(SyntaxV1Settings());
 
     auto driver = NYdb::TDriver(
         TDriverConfig()
-            .SetEndpoint(location));
+            .SetEndpoint(kikimr.GetEndpoint()));
 
-    auto uploader = CreateUploader(driver, "Root/Test", TUploaderParams{shardsCount});
+    auto uploader = CreateUploader(driver, TABLE_PATH, TUploaderParams{shardsCount});
 
-    const TString& keyColumnName = "key";
+    static const TString keyColumnName = "key";
     auto builder = TTableBuilder()
         .AddNullableColumn(keyColumnName, EPrimitiveType::Uint64);
 
@@ -67,9 +66,9 @@ static void RunTest(ui32 shardsCount, ui32 rowsCount, ui32 indexCount, const TRu
         IWorkLoader::LC_UPDATE_ON |
         IWorkLoader::LC_DELETE_ON |
         IWorkLoader::LC_DELETE;
-    workLoader->Run("Root/Test", stms, IWorkLoader::TRunSettings{rowsCount, 5, 1});
+    workLoader->Run(TABLE_PATH, stms, IWorkLoader::TRunSettings{rowsCount, 5, 1});
     auto checker = CreateChecker(driver);
-    checker->Run("Root/Test");
+    checker->Run(TABLE_PATH);
     driver.Stop(true);
 }
 
@@ -123,19 +122,15 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
     }
 
     void RunOnlineBuildTest(bool withDataColumn) {
-
-        TKikimrWithGrpcAndRootSchema server;
-        ui16 grpc = server.GetPort();
-
-        TString location = TStringBuilder() << "localhost:" << grpc;
+        TKikimrRunner kikimr(SyntaxV1Settings());
 
         auto driver = NYdb::TDriver(
             TDriverConfig()
-                .SetEndpoint(location));
+                .SetEndpoint(kikimr.GetEndpoint()));
 
-        auto uploader = CreateUploader(driver, "Root/Test", TUploaderParams{1});
+        auto uploader = CreateUploader(driver, TABLE_PATH, TUploaderParams{1});
 
-        const TString& keyColumnName = "key";
+        static const TString keyColumnName = "key";
         auto builder = TTableBuilder()
             .AddNullableColumn(keyColumnName, EPrimitiveType::Uint64)
             .AddNullableColumn("value", EPrimitiveType::Utf8)
@@ -153,9 +148,9 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
             ui32 stms =
                 IWorkLoader::LC_UPSERT |
                 (withDataColumn ? IWorkLoader::LC_ALTER_ADD_INDEX_WITH_DATA_COLUMN : IWorkLoader::LC_ALTER_ADD_INDEX);
-            workLoader->Run("Root/Test", stms, IWorkLoader::TRunSettings{2000, 1, 1});
+            workLoader->Run(TABLE_PATH, stms, IWorkLoader::TRunSettings{2000, 1, 1});
             auto checker = CreateChecker(driver);
-            checker->Run("Root/Test");
+            checker->Run(TABLE_PATH);
             driver.Stop(true);
         } catch (const std::exception& ex) {
             Cerr << ex.what() << Endl;

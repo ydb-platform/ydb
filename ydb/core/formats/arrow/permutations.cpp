@@ -142,14 +142,23 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
 
         std::unique_ptr<arrow::ArrayBuilder> builder;
         TStatusValidator::Validate(arrow::MakeBuilder(arrow::default_memory_pool(), source->type(), &builder));
+        auto& builderImpl = static_cast<TBuilder&>(*builder);
+
+        if constexpr (arrow::has_string_view<typename TWrap::T>::value) {
+            ui64 sumByIndexes = 0;
+            for (auto&& idx : indexes) {
+                sumByIndexes += column.GetView(idx).size();
+            }
+            TStatusValidator::Validate(builderImpl.ReserveData(sumByIndexes));
+        }
+
         TStatusValidator::Validate(builder->Reserve(indexes.size()));
 
         {
-            auto& builderImpl = static_cast<TBuilder&>(*builder);
             const ui32 arraySize = column.length();
             for (auto&& i : indexes) {
                 Y_ABORT_UNLESS(i < arraySize);
-                TStatusValidator::Validate(builderImpl.Append(column.GetView(i)));
+                builderImpl.UnsafeAppend(column.GetView(i));
             }
         }
 

@@ -19,7 +19,9 @@ std::optional<std::vector<NKikimr::NArrow::TSerializedBatch>> TBuildSlicesTask::
         return {};
     }
 
-    auto splitResult = NArrow::SplitByBlobSize(batch, NColumnShard::TLimits::GetMaxBlobSize());
+    NArrow::TBatchSplitttingContext context(NColumnShard::TLimits::GetMaxBlobSize());
+    context.SetFieldsForSpecialKeys(PrimaryKeySchema);
+    auto splitResult = NArrow::SplitByBlobSize(batch, context);
     if (!splitResult) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", TStringBuilder() << "cannot split batch in according to limits: " + splitResult.GetErrorMessage());
         return {};

@@ -117,7 +117,8 @@ private:
 
         TFullSplitData result(numShards);
         if (numShards == 1) {
-            NArrow::TSplitBlobResult blobsSplitted = NArrow::SplitByBlobSize(batch, NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
+            NArrow::TBatchSplitttingContext context(NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
+            NArrow::TSplitBlobResult blobsSplitted = NArrow::SplitByBlobSize(batch, context);
             if (!blobsSplitted) {
                 return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "cannot split batch in according to limits: " + blobsSplitted.GetErrorMessage());
             }
@@ -145,7 +146,8 @@ private:
         THashMap<ui64, TString> out;
         for (size_t i = 0; i < sharded.size(); ++i) {
             if (sharded[i]) {
-                NArrow::TSplitBlobResult blobsSplitted = NArrow::SplitByBlobSize(sharded[i], NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
+                NArrow::TBatchSplitttingContext context(NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
+                NArrow::TSplitBlobResult blobsSplitted = NArrow::SplitByBlobSize(sharded[i], context);
                 if (!blobsSplitted) {
                     return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "cannot split batch in according to limits: " + blobsSplitted.GetErrorMessage());
                 }

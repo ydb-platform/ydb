@@ -32,7 +32,7 @@ TString TSpecialKeys::SerializeToStringDataOnlyNoCompression() const {
     return NArrow::SerializeBatchNoCompression(Data);
 }
 
-TFirstLastSpecialKeys::TFirstLastSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::vector<TString>& columnNames /*= {}*/) {
+TFirstLastSpecialKeys::TFirstLastSpecialKeys(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TString>& columnNames /*= {}*/) {
     Y_ABORT_UNLESS(batch);
     Y_ABORT_UNLESS(batch->num_rows());
     std::shared_ptr<arrow::RecordBatch> keyBatch = batch;

@@ -318,58 +318,67 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         return false;
 
     const auto& partConfig = Config.GetPartitionConfig();
-
-    ui64 minOffset = ImportantClientsMinOffset();
-    bool hasDrop = false;
-    ui64 endOffset = StartOffset;
-
-    const std::optional<ui64> storageLimit = partConfig.HasStorageLimitBytes()
-        ? std::optional<ui64>{partConfig.GetStorageLimitBytes()} : std::nullopt;
     const TDuration lifetimeLimit{TDuration::Seconds(partConfig.GetLifetimeSeconds())};
 
-    auto retentionCondition = [&]() -> bool {
-        const auto bodySize = BodySize - DataKeysBody.front().Size;
-        const bool timeRetention = (ctx.Now() >= (DataKeysBody.front().Timestamp + lifetimeLimit));
-        return storageLimit.has_value()
-            ? ((bodySize >= *storageLimit) || timeRetention)
-            : timeRetention;
-    };
+    const bool hasStorageLimit = partConfig.HasStorageLimitBytes();
+    const auto now = ctx.Now();
+    const ui64 importantConsumerMinOffset = ImportantClientsMinOffset();
 
-    while (DataKeysBody.size() > 1 &&
-           retentionCondition() &&
-            (minOffset > DataKeysBody[1].Key.GetOffset() ||
-            (minOffset == DataKeysBody[1].Key.GetOffset() &&
-             DataKeysBody[1].Key.GetPartNo() == 0))) { // all offsets from blob[0] are readed, and don't delete last blob
-        BodySize -= DataKeysBody.front().Size;
+    bool hasDrop = false;
+    while(DataKeysBody.size() > 1) {
+        auto& nextKey = DataKeysBody[1].Key;
+        if (importantConsumerMinOffset < nextKey.GetOffset()) {
+            // The first message in the next blob was not read by an important consumer.
+            // We also save the current blob, since not all messages from it could be read.
+            break;
+        }
+        if (importantConsumerMinOffset == nextKey.GetOffset() && nextKey.GetPartNo() != 0) {
+            // We save all the blobs that contain parts of the last message read by an important consumer.
+            break;
+        }
 
+        auto& firstKey = DataKeysBody.front();
+        if (hasStorageLimit) {
+            const auto bodySize = BodySize - firstKey.Size;
+            if (bodySize < partConfig.GetStorageLimitBytes()) {
+                break;
+            }
+        } else {
+            if (now < firstKey.Timestamp + lifetimeLimit) {
+                break;
+            }
+        }
+
+        BodySize -= firstKey.Size;
         DataKeysBody.pop_front();
-        if (!GapOffsets.empty() && DataKeysBody.front().Key.GetOffset() == GapOffsets.front().second) {
+
+        if (!GapOffsets.empty() && nextKey.GetOffset() == GapOffsets.front().second) {
             GapSize -= GapOffsets.front().second - GapOffsets.front().first;
             GapOffsets.pop_front();
         }
+
         hasDrop = true;
     }
 
     Y_ABORT_UNLESS(!DataKeysBody.empty());
 
-    endOffset = DataKeysBody.front().Key.GetOffset();
-    if (DataKeysBody.front().Key.GetPartNo() > 0) {
-        ++endOffset;
-    }
-
     if (!hasDrop)
         return false;
 
-    StartOffset = endOffset;
+    const auto& lastKey = DataKeysBody.front().Key;
+
+    StartOffset = lastKey.GetOffset();
+    if (lastKey.GetPartNo() > 0) {
+        ++StartOffset;
+    }
 
     TKey firstKey(TKeyPrefix::TypeData, Partition, 0, 0, 0, 0); //will drop all that could not be dropped before of case of full disks
-    const TDataKey& lastKey = DataKeysBody.front();
 
     auto del = request->Record.AddCmdDeleteRange();
     auto range = del->MutableRange();
     range->SetFrom(firstKey.Data(), firstKey.Size());
     range->SetIncludeFrom(true);
-    range->SetTo(lastKey.Key.Data(), lastKey.Key.Size());
+    range->SetTo(lastKey.Data(), lastKey.Size());
     range->SetIncludeTo(StartOffset == EndOffset);
 
     return true;

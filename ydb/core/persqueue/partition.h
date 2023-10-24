@@ -201,6 +201,9 @@ private:
     bool AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx,
         TSourceIdWriter& sourceIdWriter, THeartbeatEmitter& heartbeatEmitter);
     bool CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+
+    // Removes blobs that are no longer required. Blobs are no longer required if the storage time of all messages
+    // stored in this blob has expired and they have been read by all important consumers.
     bool CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx);
     bool IsQuotingEnabled() const;
     bool ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, const TActorContext& ctx);

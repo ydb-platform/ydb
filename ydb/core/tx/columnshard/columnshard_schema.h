@@ -35,6 +35,7 @@ struct Schema : NIceDb::Schema {
 
     enum EIndexTables : ui32 {
         InsertTableId = 255,
+        GranulesTableId,
         ColumnsTableId,
         CountersTableId,
         OperationsTableId,
@@ -215,9 +216,22 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Committed, PlanStep, WriteTxId, PathId, DedupId, BlobId, Meta, IndexPlanStep, IndexTxId, SchemaVersion>;
     };
 
+    struct IndexGranules : NIceDb::Schema::Table<GranulesTableId> {
+        struct Index : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct PathId : Column<2, NScheme::NTypeIds::Uint64> {};    // Logical table (if many)
+        struct IndexKey : Column<3, NScheme::NTypeIds::String> {};  // Effective part of PK (serialized)
+        struct Granule : Column<4, NScheme::NTypeIds::Uint64> {};   // FK: {Index, Granule} -> TIndexColumns
+        struct PlanStep : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct TxId : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct Metadata : Column<7, NScheme::NTypeIds::String> {};  // NKikimrTxColumnShard.TIndexGranuleMeta
+
+        using TKey = TableKey<Index, PathId, IndexKey>;
+        using TColumns = TableColumns<Index, PathId, IndexKey, Granule, PlanStep, TxId, Metadata>;
+    };
+
     struct IndexColumns : NIceDb::Schema::Table<ColumnsTableId> {
         struct Index : Column<1, NScheme::NTypeIds::Uint32> {};
-        struct PathId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Granule : Column<2, NScheme::NTypeIds::Uint64> {};
         struct ColumnIdx : Column<3, NScheme::NTypeIds::Uint32> {};
         struct PlanStep : Column<4, NScheme::NTypeIds::Uint64> {};
         struct TxId : Column<5, NScheme::NTypeIds::Uint64> {};
@@ -229,10 +243,11 @@ struct Schema : NIceDb::Schema {
         struct Metadata : Column<11, NScheme::NTypeIds::String> {}; // NKikimrTxColumnShard.TIndexColumnMeta
         struct Offset : Column<12, NScheme::NTypeIds::Uint32> {};
         struct Size : Column<13, NScheme::NTypeIds::Uint32> {};
+        struct PathId : Column<14, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<Index, PathId, ColumnIdx, PlanStep, TxId, Portion, Chunk>;
-        using TColumns = TableColumns<Index, PathId, ColumnIdx, PlanStep, TxId, Portion, Chunk,
-                                    XPlanStep, XTxId, Blob, Metadata, Offset, Size>;
+        using TKey = TableKey<Index, Granule, ColumnIdx, PlanStep, TxId, Portion, Chunk, PathId>;
+        using TColumns = TableColumns<Index, Granule, ColumnIdx, PlanStep, TxId, Portion, Chunk,
+                                    XPlanStep, XTxId, Blob, Metadata, Offset, Size, PathId>;
     };
 
     struct IndexCounters : NIceDb::Schema::Table<CountersTableId> {
@@ -285,6 +300,7 @@ struct Schema : NIceDb::Schema {
         BlobsToKeep,
         BlobsToDelete,
         InsertTable,
+        IndexGranules,
         IndexColumns,
         IndexCounters,
         SmallBlobs,
@@ -495,8 +511,8 @@ struct Schema : NIceDb::Schema {
         if (proto) {
             *rowProto.MutablePortionMeta() = std::move(*proto);
         }
-        db.Table<IndexColumns>().Key(index, portion.GetPathId(), row.ColumnId,
-            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
+        db.Table<IndexColumns>().Key(index, 0, row.ColumnId,
+            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk, portion.GetPathId()).Update(
                 NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
                 NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
                 NIceDb::TUpdate<IndexColumns::Blob>(row.SerializedBlobId()),
@@ -507,8 +523,8 @@ struct Schema : NIceDb::Schema {
     }
 
     static void IndexColumns_Erase(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
-        db.Table<IndexColumns>().Key(index, portion.GetPathId(), row.ColumnId,
-            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
+        db.Table<IndexColumns>().Key(index, 0, row.ColumnId,
+            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk, portion.GetPathId()).Delete();
     }
 
     static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index,

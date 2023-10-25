@@ -13,8 +13,7 @@ IActor* CreateColumnShard(const TActorId& tablet, TTabletStorageInfo* info) {
 
 namespace NKikimr::NColumnShard {
 
-void TColumnShard::CleanupActors(const TActorContext& ctx)
-{
+void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     StoragesManager->Stop();
     if (Tiers) {
@@ -22,8 +21,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx)
     }
 }
 
-void TColumnShard::BecomeBroken(const TActorContext& ctx)
-{
+void TColumnShard::BecomeBroken(const TActorContext& ctx) {
     Become(&TThis::StateBroken);
     ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
     CleanupActors(ctx);
@@ -41,6 +39,12 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
 
     Become(&TThis::StateWork);
     SignalTabletActive(ctx);
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SignalTabletActive");
+    TryRegisterMediatorTimeCast();
+    // Trigger progress: planned or outdated tx
+    EnqueueProgressTx(ctx);
+    EnqueueBackgroundActivities();
+    ctx.Schedule(ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {

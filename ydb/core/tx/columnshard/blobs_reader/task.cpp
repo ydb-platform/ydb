@@ -122,7 +122,7 @@ void ITask::OnDataReady() {
 }
 
 bool ITask::OnError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
-    ACFL_DEBUG("event", "OnError")("task", DebugString());
+    ACFL_DEBUG("event", "OnError")("status", status.GetStatus())("task", DebugString());
     return DoOnError(range, status);
 }
 

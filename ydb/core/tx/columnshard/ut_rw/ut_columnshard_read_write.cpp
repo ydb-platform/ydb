@@ -326,28 +326,6 @@ bool CheckColumns(const TString& blob, const NKikimrTxColumnShard::TMetadata& me
     return CheckColumns(batch, colNames, rowsCount);
 }
 
-struct TestTableDescription {
-    std::vector<std::pair<TString, TTypeInfo>> Schema = TTestSchema::YdbSchema();
-    std::vector<std::pair<TString, TTypeInfo>> Pk = TTestSchema::YdbPkSchema();
-    bool InStore = true;
-};
-
-void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
-                 const TestTableDescription& table = {}, TString codec = "none") {
-    NOlap::TSnapshot snap(10, 10);
-    TString txBody;
-    auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
-    if (table.InStore) {
-        txBody = TTestSchema::CreateTableTxBody(pathId, table.Schema, table.Pk, specials);
-    } else {
-        txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
-    }
-    bool ok = ProposeSchemaTx(runtime, sender, txBody, snap);
-    UNIT_ASSERT(ok);
-
-    PlanSchemaTx(runtime, sender, snap);
-}
-
 std::vector<TString> ReadManyResults(TTestBasicRuntime& runtime, TString& schema,
                                      NKikimrTxColumnShard::TMetadata& meta, ui32 expected = 1000) {
     std::vector<TString> readData;
@@ -1870,65 +1848,6 @@ void TestReadAggregate(const std::vector<std::pair<TString, TTypeInfo>>& ydbSche
 }
 
 Y_UNIT_TEST_SUITE(EvWrite) {
-    class TArrowData : public NKikimr::NEvents::IDataConstructor {
-        std::vector<std::pair<TString, TTypeInfo>> YdbSchema;
-        ui64 Index;
-
-    public:
-        TArrowData(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, const ui64 idx)
-            : YdbSchema(ydbSchema)
-            , Index(idx)
-        {
-        }
-
-        void Serialize(NKikimrDataEvents::TOperationData& proto) const override {
-            for (ui32 i = 0; i < YdbSchema.size(); ++i) {
-                proto.AddColumnIds(i + 1);
-            }
-            proto.MutableArrowData()->SetPayloadIndex(Index);
-        }
-
-        ui64 GetSchemaVersion() const override {
-            return 1;
-        }
-    };
-
-    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<std::pair<TString, TTypeInfo>>& schema) {
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-        runtime.DispatchEvents(options);
-
-        TestTableDescription tableDescription;
-        tableDescription.Schema = schema;
-        tableDescription.Pk = { schema[0] };
-        TActorId sender = runtime.AllocateEdgeActor();
-        SetupSchema(runtime, sender, tableId, tableDescription);
-    }
-
-    std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<std::pair<TString, TTypeInfo>>& schema) {
-        TActorId sender = runtime.AllocateEdgeActor();
-
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
-                new TEvColumnShard::TEvRead(sender, TTestTxConfig::TxTablet1, snapshot.GetPlanStep(), snapshot.GetTxId(), tableId));
-
-        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-        while(true) {
-            TAutoPtr<IEventHandle> handle;
-            auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-            UNIT_ASSERT(event);
-            auto b = event->GetArrowBatch();
-            if (b) {
-                batches.push_back(b);
-            }
-            if (!event->HasMore()) {
-                break;
-            }
-        }
-        auto res = NArrow::CombineBatches(batches);
-        return res ? res : NArrow::MakeEmptyBatch(NArrow::MakeArrowSchema(schema));
-    }
 
     Y_UNIT_TEST(WriteInTransaction) {
         using namespace NArrow;
@@ -1953,7 +1872,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId);
-        auto dataPtr = std::make_shared<TArrowData>(schema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
+        auto dataPtr = std::make_shared<TArrowDataConstructor>(schema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
         evWrite->AddReplaceOp(tableId, dataPtr);
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -1975,7 +1894,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2048);
     }
 
-    Y_UNIT_TEST(AbotrInTransaction) {
+    Y_UNIT_TEST(AbortInTransaction) {
         using namespace NArrow;
 
         TTestBasicRuntime runtime;
@@ -1998,7 +1917,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId);
-        auto dataPtr = std::make_shared<TArrowData>(schema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
+        auto dataPtr = std::make_shared<TArrowDataConstructor>(schema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
         evWrite->AddReplaceOp(tableId, dataPtr);
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -2042,7 +1961,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         UNIT_ASSERT(blobData.size() > TLimits::GetMaxBlobSize());
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId);
-        auto dataPtr = std::make_shared<TArrowData>(schema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
+        auto dataPtr = std::make_shared<TArrowDataConstructor>(schema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
         evWrite->AddReplaceOp(tableId, dataPtr);
 
         TActorId sender = runtime.AllocateEdgeActor();

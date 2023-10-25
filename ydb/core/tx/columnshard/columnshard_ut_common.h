@@ -527,4 +527,41 @@ namespace NKikimr::NColumnShard {
 
     NOlap::TIndexInfo BuildTableInfo(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
                          const std::vector<std::pair<TString, NScheme::TTypeInfo>>& key);
+
+
+    struct TestTableDescription {
+        std::vector<std::pair<TString, NScheme::TTypeInfo>> Schema = NTxUT::TTestSchema::YdbSchema();
+        std::vector<std::pair<TString, NScheme::TTypeInfo>> Pk = NTxUT::TTestSchema::YdbPkSchema();
+        bool InStore = true;
+    };
+
+    class TArrowDataConstructor : public NKikimr::NEvents::IDataConstructor {
+        std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
+        ui64 Index;
+
+    public:
+        TArrowDataConstructor(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, const ui64 idx)
+            : YdbSchema(ydbSchema)
+            , Index(idx)
+        {
+        }
+
+        void Serialize(NKikimrDataEvents::TOperationData& proto) const override {
+            for (ui32 i = 0; i < YdbSchema.size(); ++i) {
+                proto.AddColumnIds(i + 1);
+            }
+            proto.MutableArrowData()->SetPayloadIndex(Index);
+        }
+
+        ui64 GetSchemaVersion() const override {
+            return 1;
+        }
+    };
+
+    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
+                 const TestTableDescription& table = {}, TString codec = "none");
+
+    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema);
+
+    std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema);
 }

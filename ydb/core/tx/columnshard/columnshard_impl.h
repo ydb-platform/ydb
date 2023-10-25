@@ -13,6 +13,7 @@
 #include "counters/columnshard.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
+#include "normalizer/abstract/abstract.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -408,6 +409,8 @@ private:
     const TIndexationCounters CompactionCounters = TIndexationCounters("GeneralCompaction");
     const TIndexationCounters IndexationCounters = TIndexationCounters("Indexation");
     const TIndexationCounters EvictionCounters = TIndexationCounters("Eviction");
+
+    std::vector<NOlap::INormalizerComponent::TPtr> Normalizers;
 
     const TCSCounters CSCounters;
     TWritesMonitor WritesMonitor;

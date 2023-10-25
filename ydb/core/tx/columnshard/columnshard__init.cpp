@@ -2,6 +2,7 @@
 #include "columnshard_ttl.h"
 #include "columnshard_private_events.h"
 #include "columnshard_schema.h"
+#include "hooks/abstract/abstract.h"
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 
 #include <ydb/core/tablet/tablet_exception.h>
@@ -11,9 +12,7 @@ namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
 
-// TTxInit => SwitchToWork
 
-/// Load data from local database
 class TTxInit : public TTransactionBase<TColumnShard> {
 public:
     TTxInit(TColumnShard* self)
@@ -204,21 +203,9 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 }
 
 void TTxInit::Complete(const TActorContext& ctx) {
-    LOG_S_DEBUG("TTxInit.Complete at tablet " << Self->TabletID());
     Self->SwitchToWork(ctx);
-    Self->TryRegisterMediatorTimeCast();
-
-    // Trigger progress: planned or outdated tx
-    Self->EnqueueProgressTx(ctx);
-    Self->EnqueueBackgroundActivities();
-
-    // Start periodic wakeups
-    ctx.Schedule(Self->ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
 }
 
-// TTxUpdateSchema => TTxInit
-
-/// Update local database on tablet start
 class TTxUpdateSchema : public TTransactionBase<TColumnShard> {
 public:
     TTxUpdateSchema(TColumnShard* self)
@@ -228,20 +215,47 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_UPDATE_SCHEMA; }
+
+private:
+    bool WaitNormalization = false;
 };
 
 bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
-    Y_UNUSED(txc);
-    LOG_S_DEBUG("TTxUpdateSchema.Execute at tablet " << Self->TabletID());
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
+    ACFL_INFO("step", "TTxUpdateSchema.Execute_Start");
+
+    for (auto&& normalizer : Self->Normalizers) {
+        if (!normalizer->NormalizationRequired()) {
+            ACFL_INFO("step", "TTxUpdateSchema.Execute")("skip_normalizer", normalizer->GetName());
+            continue;
+        }
+
+        ACFL_INFO("step", "TTxUpdateSchema.Execute")("start_normalizer", normalizer->GetName());
+        NOlap::TNormalizationContext nCtx(Self->InsertTaskSubscription);
+        auto status = normalizer->NormalizeData(nCtx, txc);
+
+        if (status == NOlap::ENormalizerResult::Failed) {
+            ACFL_INFO("step", "TTxUpdateSchema.Execute")("fail_normalizer", normalizer->GetName());
+            return false;
+        } else if (status == NOlap::ENormalizerResult::Wait) {
+            ACFL_INFO("step", "TTxUpdateSchema.Execute")("start_normalizer", normalizer->GetName());
+            WaitNormalization = true;
+        } else if (status == NOlap::ENormalizerResult::Skip) {
+            ACFL_INFO("step", "TTxUpdateSchema.Execute")("pass_normalizer", normalizer->GetName());
+        } else {
+            ACFL_INFO("step", "TTxUpdateSchema.Execute")("finish_normalizer", normalizer->GetName());
+        }
+    }
+    ACFL_INFO("step", "TTxUpdateSchema.Execute_Finish");
     return true;
 }
 
 void TTxUpdateSchema::Complete(const TActorContext& ctx) {
-    LOG_S_DEBUG("TTxUpdateSchema.Complete at tablet " << Self->TabletID());
-    Self->Execute(new TTxInit(Self), ctx);
+    ACFL_INFO("step", "TTxUpdateSchema.Complete");
+    if (!WaitNormalization) {
+        Self->Execute(new TTxInit(Self), ctx);
+    }
 }
-
-// TTxInitSchema => TTxUpdateSchema
 
 /// Create local database on tablet start if none
 class TTxInitSchema : public TTransactionBase<TColumnShard> {
@@ -258,13 +272,18 @@ public:
 bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     LOG_S_DEBUG("TxInitSchema.Execute at tablet " << Self->TabletID());
 
-    bool isCreate = txc.DB.GetScheme().IsEmpty();
+    const bool isFirstRun = txc.DB.GetScheme().IsEmpty();
     NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
 
-    if (isCreate) {
+    if (isFirstRun) {
         txc.DB.Alter().SetExecutorAllowLogBatching(gAllowLogBatchingDefaultValue);
         txc.DB.Alter().SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
         txc.DB.Alter().SetExecutorCacheSize(500000);
+    } else {
+        auto localBaseModifier = NYDBTest::TControllers::GetColumnShardController()->BuildLocalBaseModifier();
+        if (localBaseModifier) {
+            localBaseModifier->Apply(txc);
+        }
     }
 
     // Enable compression for the SmallBlobs table

@@ -25,6 +25,9 @@
 #include "resource_subscriber/counters.h"
 #include "blobs_reader/actor.h"
 
+#include <ydb/core/tx/columnshard/normalizer/granule/normalizer.h>
+// #include <ydb/core/tx/columnshard/normalizer/portion/normalizer.h>
+
 namespace NKikimr::NColumnShard {
 
 // NOTE: We really want to batch log records by default in columnshards!
@@ -174,6 +177,10 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
         ETxTypes_descriptor
     >());
     TabletCounters = TabletCountersPtr.get();
+
+    Normalizers.emplace_back(std::make_shared<NOlap::TGranulesNormalizer>());
+    // Normalizers.emplace_back(std::make_shared<NOlap::TPortionsNormalizer>(Info()));
+
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {

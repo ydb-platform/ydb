@@ -1,4 +1,7 @@
 #pragma once
+
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+
 #include <ydb/services/metadata/abstract/fetcher.h>
 #include <ydb/core/tx/tiering/snapshot.h>
 
@@ -29,6 +32,15 @@ enum class EOptimizerCompactionWeightControl {
     Disable,
     Default,
     Force
+};
+
+class ILocalDBModifier {
+public:
+    using TPtr = std::shared_ptr<ILocalDBModifier>;
+
+    virtual ~ILocalDBModifier() {}
+
+    virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const = 0;
 };
 
 class ICSController {
@@ -87,6 +99,10 @@ public:
     }
 
     virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& /*tiers*/) {
+    }
+
+    virtual ILocalDBModifier::TPtr BuildLocalBaseModifier() const {
+        return nullptr;
     }
 
     virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const {

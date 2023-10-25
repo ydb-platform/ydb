@@ -327,13 +327,12 @@ ICoordinationHelper::TPtr CreateCoordiantionHelper(const NProto::TDqConfig::TYtC
             config.HasUser() ? TMaybe<TString>(config.GetUser()) : TMaybe<TString>(),
             config.HasTokenFile() ? TMaybe<TString>(config.GetTokenFile()) : TMaybe<TString>()
         );
-
-        Y_ABORT_UNLESS(!token.empty());
     }
 
     auto prefix = config.GetPrefix();
 
     if (config.GetLockType() != "dummy") {
+        Y_ABORT_UNLESS(!token.empty());
         Y_ABORT_UNLESS(!clusterName.empty());
         Y_ABORT_UNLESS(!userName.empty());
         Y_ABORT_UNLESS(!prefix.empty());

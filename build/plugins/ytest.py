@@ -624,6 +624,9 @@ def onadd_check(unit, *args):
     if check_type in ("check.data", "check.resource") and unit.get('VALIDATE_DATA') == "no":
         return
 
+    if check_type == "check.external" and (len(flat_args) == 1 or not flat_args[1]):
+        return
+
     test_dir = _common.get_norm_unit_path(unit)
 
     test_timeout = ''

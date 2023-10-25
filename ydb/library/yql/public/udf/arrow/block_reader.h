@@ -308,7 +308,7 @@ public:
             return {};
         }
 
-        return Inner->GetItem(*data.child_data[0], index).MakeOptional();
+        return Inner->GetItem(*data.child_data.front(), index).MakeOptional();
     }
 
     TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
@@ -317,11 +317,11 @@ public:
         }
 
         const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
-        return Inner->GetScalarItem(*structScalar.value[0]).MakeOptional();
+        return Inner->GetScalarItem(*structScalar.value.front()).MakeOptional();
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const final {
-        return data.length + Inner->GetDataWeight(*data.child_data[0]);
+        return data.length + Inner->GetDataWeight(*data.child_data.front());
     }
 
     ui64 GetDataWeight(TBlockItem item) const final {
@@ -341,7 +341,7 @@ public:
         }
         out.PushChar(1);
 
-        Inner->SaveItem(*data.child_data[0], index, out);
+        Inner->SaveItem(*data.child_data.front(), index, out);
     }
 
     void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
@@ -351,7 +351,7 @@ public:
         out.PushChar(1);
 
         const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
-        Inner->SaveScalarItem(*structScalar.value[0], out);
+        Inner->SaveScalarItem(*structScalar.value.front(), out);
     }
 
 private:
@@ -374,7 +374,7 @@ struct TReaderTraits {
             return std::make_unique<TFixedSize<ui64, true>>();
         } else {
             return std::make_unique<TStrings<arrow::BinaryType, true>>();
-        }        
+        }
     }
 };
 

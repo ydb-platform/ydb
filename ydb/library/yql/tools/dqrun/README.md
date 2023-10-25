@@ -6,8 +6,8 @@
 
 - `-s`: if specified, SQL is used; if not specified, the query plan execution specified in s-expression is used.
 - `-p <file>`: specify a file with a SQL query.
-- `--gateways-cfg <file>`: specify a file with the engine configuration. (Example: [examples/gateways.cfg](examples/gateways.cfg))
-- `--fs-cfg <file>`: specify a file with the file cache configuration. (Example: [examples/fs.cfg](examples/fs.cfg))
+- `--gateways-cfg <file>`: specify a file with the engine configuration. (Example: [examples/gateways.cfg](examples/gateways.conf))
+- `--fs-cfg <file>`: specify a file with the file cache configuration. (Example: [examples/fs.cfg](examples/fs.conf))
 - `--bindings-file <file>`: specify a file with the data schema. (Examples: [examples/bindings_tpch.json](examples/bindings_tpch.json), [examples/bindings_tpch_pg.json](examples/bindings_tpch_pg.json))
 - `--dq-host <host>`: set the host to connect to the test utilities `service_node` and `worker_node`.
 - `--dq-port <port>`: set the port to connect to the test utilities `service_node` and `worker_node`.
@@ -85,3 +85,40 @@ An example of a data schema file for queries from the TPC-H benchmark using Post
   // Other tables from the TPC-H benchmark
 }
 ```
+
+**Example of gateways.conf:**
+
+```conf
+Dq {
+    DefaultSettings {
+        Name: "HashJoinMode"
+        Value: "grace"
+    }
+
+    DefaultSettings {
+        Name: "UseOOBTransport"
+        Value: "true"
+    }
+
+    DefaultSettings {
+        Name: "UseWideChannels"
+        Value: "true"
+    }
+}
+
+S3 {
+    ClusterMapping {
+        Name: "yq-clickbench-local"
+        Url: "file://./clickbench/"
+    }
+    ClusterMapping {
+        Name: "yq-tpc-local"
+        Url: "file://./tpc/"
+    }
+}
+```
+
+In the `Dq` section, parameters for the distributed engine are specified. The complete list of parameters can be found [here](../../providers/dq/common/yql_dq_settings.h).
+
+In the `S3` section, either S3 clusters or directories pretending to be S3 clusters are specified. In this example, the "cluster" `yq-tpc-local` points to the `tpc` directory located locally.
+

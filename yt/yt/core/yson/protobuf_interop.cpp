@@ -657,10 +657,11 @@ public:
         for (int index = 0; index < Underlying_->value_count(); ++index) {
             const auto* valueDescriptor = Underlying_->value(index);
             auto literal = Registry_->GetYsonLiteral(valueDescriptor);
-            YT_VERIFY(LiteralToValue_.emplace(literal, valueDescriptor->number()).second);
-            // Allow aliases, i.e. different literals for the same tag, which can be helpful during migration.
+            int number = valueDescriptor->number();
+            // Allow aliases, i.e. different literals for the same tag or same literal for different tags.
             // The first literal is selected as canonical for each tag.
-            ValueToLiteral_.try_emplace(valueDescriptor->number(), literal);
+            YT_VERIFY(LiteralToValue_.try_emplace(literal, number).first->second == number);
+            ValueToLiteral_.try_emplace(number, literal);
         }
     }
 

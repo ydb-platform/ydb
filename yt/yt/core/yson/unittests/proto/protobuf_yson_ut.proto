@@ -20,6 +20,7 @@ enum EFlag
     Flag_No = 0 [(NYT.NYson.NProto.enum_value_name) = "no"];
     Flag_True = 1 [(NYT.NYson.NProto.enum_value_name) = "true"];
     Flag_Yes = 1 [(NYT.NYson.NProto.enum_value_name) = "yes"];
+    Flag_AnotherYes = 1 [(NYT.NYson.NProto.enum_value_name) = "yes"];
 }
 
 message TNestedMessage

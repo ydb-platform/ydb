@@ -2211,6 +2211,7 @@ TEST(TProtobufEnums, FindLiteralByValueWithAlias)
     static const auto* type = ReflectProtobufEnumType(NYT::NYson::NProto::EFlag_descriptor());
     ASSERT_EQ("true", FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::Flag_True));
     ASSERT_EQ("true", FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::Flag_Yes));
+    ASSERT_EQ("true", FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::Flag_AnotherYes));
 }
 
 TEST(TProtobufEnums, ConvertToProtobufEnumValueUntyped)

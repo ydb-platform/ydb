@@ -6,9 +6,13 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(counter_time_keeper)
-add_subdirectory(deprecated)
-add_subdirectory(obfuscate)
-add_subdirectory(tests)
-add_subdirectory(topic_parser)
-add_subdirectory(topic_parser_public)
+
+add_library(persqueue-deprecated-read_batch_converter)
+target_link_libraries(persqueue-deprecated-read_batch_converter PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  api-protos-persqueue-deprecated
+)
+target_sources(persqueue-deprecated-read_batch_converter PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/deprecated/read_batch_converter/read_batch_converter.cpp
+)

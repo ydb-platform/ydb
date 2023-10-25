@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package NPersQueue;
+
+option java_package = "com.yandex.persqueue";
+option java_outer_classname = "PersqueueGrpc";
+
+import "ydb/services/deprecated/persqueue_v0/api/protos/persqueue.proto";
+
+service PersQueueService {
+
+    /**
+     * Creates Write Session
+     * Pipeline:
+     * client                  server
+     *         Init(Topic, SourceId, ...)
+     *        ---------------->
+     *         Init(Partition, MaxSeqNo, ...)
+     *        <----------------
+     *         write(data1, seqNo1)
+     *        ---------------->
+     *         write(data2, seqNo2)
+     *        ---------------->
+     *         ack(seqNo1, offset1, ...)
+     *        <----------------
+     *         write(data3, seqNo3)
+     *        ---------------->
+     *         ack(seqNo2, offset2, ...)
+     *        <----------------
+     *         error(description, errorCode)
+     *        <----------------
+     */
+
+    rpc WriteSession(stream WriteRequest) returns (stream WriteResponse);
+
+    /**
+     * Creates Read Session
+     * Pipeline:
+     * client                  server
+     *         Init(Topics, ClientId, ...)
+     *        ---------------->
+     *         Init(SessionId)
+     *        <----------------
+     *         read1
+     *        ---------------->
+     *         read2
+     *        ---------------->
+     *         lock(Topic1,Partition1, ...) - locks and releases are optional
+     *        <----------------
+     *         lock(Topic2, Partition2, ...)
+     *        <----------------
+     *         release(Topic1, Partition1, ...)
+     *        <----------------
+     *         locked(Topic2, Partition2, ...) - client must respond to lock request with this message. Only after this client will start recieving messages from this partition
+     *        ---------------->
+     *         read result(data, ...)
+     *        <----------------
+     *         commit(cookie1)
+     *        ---------------->
+     *         commit result(cookie1)
+     *        <----------------
+     *         error(description, errorCode)
+     *        <----------------
+     */
+
+    rpc ReadSession(stream ReadRequest) returns (stream ReadResponse);
+
+    rpc MoveTopic(MoveTopicRequest) returns (MoveTopicResponse);
+}

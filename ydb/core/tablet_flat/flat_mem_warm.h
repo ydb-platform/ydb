@@ -299,8 +299,8 @@ namespace NMem {
                         rop = ERowOp::Reset;
                     }
 
-                    ScratchMergeTagsLast.swap(ScratchMergeTags);
-                    ScratchMergeTagsLast.clear();
+                    ScratchMergeTags.swap(ScratchMergeTagsLast);
+                    ScratchMergeTags.clear();
 
                     auto have = ScratchUpdateTags.begin();
                     auto haveLast = ScratchMergeTagsLast.begin();

@@ -2604,15 +2604,15 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto result = db.ExecuteQuery(R"(
                 INSERT INTO t VALUES ('a', 1);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Failed to convert 'id': pgtext to pgint4"));
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type integer: \"a\""));
         }
         {
             auto result = db.ExecuteQuery(R"(
                 INSERT INTO nopg VALUES ('a');
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("Failed to convert 'id': pgtext to Optional<Uint64>"));
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("Failed to convert 'id': pgunknown to Optional<Uint64>"));
         }
     }
 

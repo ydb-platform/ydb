@@ -361,7 +361,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
                             (PgResultItem '"kind" (Void) (lambda '() (PgConst '"test" (PgType 'unknown))))))
                         '('from '('((Right! read0) '"input" '())))
                         '('join_ops '('()))
-                        '('where (PgWhere (Void) (lambda '() (PgOp '"=" (PgColumnRef '"kind") (PgConst '"testtest" (PgType 'unknown))))))))))
+                        '('where (PgWhere (Void) (lambda '() (PgOp '"=" (PgColumnRef '"kind") (PgConst '"testtest" (PgType 'unknown)))))) '('unknowns_allowed)))))
                         '('set_ops '('push)))
                     )
                 )

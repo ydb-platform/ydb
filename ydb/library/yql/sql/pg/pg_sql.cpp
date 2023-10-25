@@ -534,7 +534,7 @@ public:
     }
 
     [[nodiscard]]
-    TAstNode* ParseValuesList(List* valuesLists) {
+    TAstNode* ParseValuesList(List* valuesLists, bool buildCommonType) {
         TVector<TAstNode*> valNames;
         uint64 colIdx = 0;
 
@@ -562,17 +562,6 @@ public:
             }
         }
 
-        const auto buildValuesTupleList = [this] (TVector<TVector<TAstNode*>>& values) {
-            TVector<TAstNode*> valueRows;
-            valueRows.reserve(values.size() + 1);
-            valueRows.push_back(A("AsList"));
-
-            for (auto& row: values) {
-                valueRows.push_back(QVL(row.data(), row.size()));
-            }
-            return VL(valueRows);
-        };
-
         TVector<TPgConst> pgConsts;
         bool allValsAreLiteral = ExtractPgConstsForAutoParam(valuesLists, pgConsts);
         if (allValsAreLiteral) {
@@ -585,7 +574,7 @@ public:
 
         TVector<TAstNode*> valueRows;
         valueRows.reserve(ListLength(valuesLists));
-        valueRows.push_back(A("AsList"));
+        valueRows.push_back(A(buildCommonType ? "PgValuesList" : "AsList"));
         for (int valueIndex = 0; valueIndex < ListLength(valuesLists); ++valueIndex) {
             auto node = ListNodeNth(valuesLists, valueIndex);
             if (NodeTag(node) != T_List) {
@@ -621,8 +610,12 @@ public:
         TVector <TAstNode*> targetColumns = {},
         bool allowEmptyResSet = false,
         bool emitPgStar = false,
-        bool fillTargetColumns = false
+        bool fillTargetColumns = false,
+        bool unknownsAllowed = false
     ) {
+        // TODO: temporarily use fillTargetColumns to indicate Select represents VALUES as part of INSERT stmt.
+        bool isValuesClauseOfInsertStmt = fillTargetColumns;
+
         CTE.emplace_back();
         Y_DEFER {
             CTE.pop_back();
@@ -989,7 +982,7 @@ public:
             if (ListLength(x->targetList) > 0) {
                 setItemOptions.push_back(QL(QA("result"), QVL(res.data(), res.size())));
             } else {
-                auto valuesList = ParseValuesList(x->valuesLists);
+                auto valuesList = ParseValuesList(x->valuesLists, /*buildCommonType=*/!isValuesClauseOfInsertStmt);
                 if (!valuesList) {
                     return nullptr;
                 }
@@ -1029,6 +1022,10 @@ public:
 
             if (setItems.size() == 1 && sort) {
                 setItemOptions.push_back(QL(QA("sort"), sort));
+            }
+
+            if (unknownsAllowed) {
+                setItemOptions.push_back(QL(QA("unknowns_allowed")));
             }
 
             auto setItem = L(A("PgSetItem"), QVL(setItemOptions.data(), setItemOptions.size()));
@@ -1292,7 +1289,8 @@ public:
                 targetColumns,
                 /*allowEmptyResSet=*/false,
                 /*emitPgStar=*/false,
-                /*fillTargetColumns=*/true)
+                /*fillTargetColumns=*/true,
+                /*unknownsAllowed=*/true)
             : L(A("Void"));
         if (!select) {
             return nullptr;
@@ -1331,7 +1329,9 @@ public:
             /* inner */ true,
             /* targetColumns */{},
             /* allowEmptyResSet */ true,
-            /*emitPgStar=*/true
+            /*emitPgStar=*/true,
+            /*fillTargetColumns=*/false,
+            /*unknownsAllowed=*/true
         );
         if (!select) {
             return nullptr;

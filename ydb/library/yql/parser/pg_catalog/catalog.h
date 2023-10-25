@@ -1,9 +1,11 @@
 #pragma once
+#include "ydb/library/yql/public/issue/yql_issue.h"
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 #include <variant>
+#include <functional>
 
 namespace NYql::NPg {
 
@@ -215,8 +217,8 @@ void EnumProc(std::function<void(ui32, const TProcDesc&)> f);
 bool HasType(const TString& name);
 const TTypeDesc& LookupType(const TString& name);
 const TTypeDesc& LookupType(ui32 typeId);
-const TTypeDesc& LookupCommonType(const TVector<ui32>& typeIds);
-const TTypeDesc& LookupCommonType(const TVector<ui32>& typeIds, bool& castsNeeded);
+TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>& GetPosition, const TTypeDesc*& typeDesc);
+TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>& GetPosition, const TTypeDesc*& typeDesc, bool& castsNeeded);
 void EnumTypes(std::function<void(ui32, const TTypeDesc&)> f);
 
 bool HasCast(ui32 sourceId, ui32 targetId);
@@ -244,6 +246,7 @@ bool HasConversion(const TString& from, const TString& to);
 const TConversionDesc& LookupConversion(const TString& from, const TString& to);
 
 bool IsCompatibleTo(ui32 actualType, ui32 expectedType);
+bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType);
 
 inline bool IsArrayType(const TTypeDesc& typeDesc) noexcept {
     return typeDesc.ArrayTypeId == typeDesc.TypeId;

@@ -12163,6 +12163,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["PgResolvedOp"] = &PgOpWrapper;
         ExtFunctions["PgSelect"] = &PgSelectWrapper;
         ExtFunctions["PgSetItem"] = &PgSetItemWrapper;
+        ExtFunctions["PgValuesList"] = &PgValuesListWrapper;
         ExtFunctions["TablePath"] = &TablePathWrapper;
         ExtFunctions["TableRecord"] = &TableRecordWrapper;
         ExtFunctions["Random"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Double>;

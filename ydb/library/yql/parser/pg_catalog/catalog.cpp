@@ -2021,6 +2021,12 @@ bool CanCastImplicitly(ui32 fromTypeId, ui32 toTypeId, const TCatalog& catalog) 
 
 }  // NPrivate
 
+bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType) {
+    const auto& catalog = TCatalog::Instance();
+
+    return NPrivate::IsCoercible(fromTypeId, toTypeId, coercionType, catalog);
+}
+
 std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
     auto procIdPtr = catalog.ProcByName.FindPtr(to_lower(name));
@@ -2149,17 +2155,17 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
     NPrivate::ThrowProcNotFound(name, argTypeIds);
 }
 
-const TTypeDesc& LookupCommonType(const TVector<ui32>& typeIds, bool& castsNeeded) {
-    if (0 == typeIds.size()) {
-        throw yexception() << "Cannot infer common type for empty list of types";
-    }
+TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>& GetPosition, const TTypeDesc*& typeDesc, bool& castsNeeded) {
+    Y_ENSURE(0 != typeIds.size());
+
     const auto& catalog = TCatalog::Instance();
 
     const TTypeDesc* commonType = &LookupType(typeIds[0]);
     char commonCategory = commonType->Category;
     size_t unknownsCnt = (commonType->TypeId == UnknownOid) ? 1 : 0;
-    castsNeeded = false;
-    for (auto typeId = typeIds.cbegin() + 1; typeId != typeIds.cend(); ++typeId) {
+    castsNeeded = (unknownsCnt != 0);
+    size_t i = 1;
+    for (auto typeId = typeIds.cbegin() + 1; typeId != typeIds.cend(); ++typeId, ++i) {
         if (*typeId == UnknownOid || *typeId == InvalidOid) {
             ++unknownsCnt;
             castsNeeded = true;
@@ -2176,30 +2182,33 @@ const TTypeDesc& LookupCommonType(const TVector<ui32>& typeIds, bool& castsNeede
         }
         if (otherType.Category != commonCategory) {
             // https://www.postgresql.org/docs/14/typeconv-union-case.html, step 4
-            throw yexception() << "Cannot infer common type for types "
-                << commonType->TypeId << " and " << otherType.TypeId;
+            return TIssue(GetPosition(i), TStringBuilder() << "Cannot infer common type for types "
+                << commonType->TypeId << " and " << otherType.TypeId);
         }
         castsNeeded = true;
         if (NPrivate::CanCastImplicitly(otherType.TypeId, commonType->TypeId, catalog)) {
             continue;
         }
         if (commonType->IsPreferred || !NPrivate::CanCastImplicitly(commonType->TypeId, otherType.TypeId, catalog)) {
-            throw yexception() << "Cannot infer common type for types "
-                << commonType->TypeId << " and " << otherType.TypeId;
+            return TIssue(GetPosition(i), TStringBuilder() << "Cannot infer common type for types "
+                << commonType->TypeId << " and " << otherType.TypeId);
         }
         commonType = &otherType;
     }
+
     // https://www.postgresql.org/docs/14/typeconv-union-case.html, step 3
     if (unknownsCnt == typeIds.size()) {
         castsNeeded = true;
-        return LookupType("text");
+        typeDesc = &LookupType("text");
+    } else {
+        typeDesc = commonType;
     }
-    return *commonType;
+    return {};
 }
 
-const TTypeDesc& LookupCommonType(const TVector<ui32>& typeIds) {
+TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>&GetPosition, const TTypeDesc*& typeDesc) {
     bool _;
-    return LookupCommonType(typeIds, _);
+    return LookupCommonType(typeIds, GetPosition, typeDesc, _);
 }
 
 

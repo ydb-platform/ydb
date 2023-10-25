@@ -3739,9 +3739,9 @@
     ],
     "test.test[pg-pg_types_window1-default.txt-Debug]": [
         {
-            "checksum": "1955586ccf686074901f1bfb5bd05c3d",
-            "size": 1538,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1817427/bdf8a9232c0b03359cc825928f232aca1eecdc9a/resource.tar.gz#test.test_pg-pg_types_window1-default.txt-Debug_/opt.yql_patched"
+            "checksum": "341a07997ab8fe13f4f91d0b8dd5ee75",
+            "size": 1494,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937150/ccea38e2b87125be205d99a9b6f64d33133b8508/resource.tar.gz#test.test_pg-pg_types_window1-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-pg_types_window1-default.txt-Plan]": [

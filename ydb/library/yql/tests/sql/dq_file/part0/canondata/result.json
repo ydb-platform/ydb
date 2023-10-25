@@ -3863,9 +3863,9 @@
     ],
     "test.test[pg-aggregate_ctx-default.txt-Debug]": [
         {
-            "checksum": "7dbc94ff0b209b21bf04718adb7f6d51",
-            "size": 1307,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1599023/d2137b438ce6355d21fe37288934c78251d91561/resource.tar.gz#test.test_pg-aggregate_ctx-default.txt-Debug_/opt.yql_patched"
+            "checksum": "e8f24627c572446f4b9ef71a992a39c5",
+            "size": 1251,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1923547/85f44cb0cfca78e310a5256bafbc1bccccec78e1/resource.tar.gz#test.test_pg-aggregate_ctx-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-aggregate_ctx-default.txt-Plan]": [
@@ -3885,9 +3885,9 @@
     ],
     "test.test[pg-aggregate_distinct-default.txt-Debug]": [
         {
-            "checksum": "d8c5f096ec761fbf183072eb74c887d1",
-            "size": 2602,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1599023/d2137b438ce6355d21fe37288934c78251d91561/resource.tar.gz#test.test_pg-aggregate_distinct-default.txt-Debug_/opt.yql_patched"
+            "checksum": "e650dfd675c03ce5d887d7ea01a3b64c",
+            "size": 2475,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1923547/85f44cb0cfca78e310a5256bafbc1bccccec78e1/resource.tar.gz#test.test_pg-aggregate_distinct-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-aggregate_distinct-default.txt-Plan]": [
@@ -3973,9 +3973,9 @@
     ],
     "test.test[pg-pg_types_window2-default.txt-Debug]": [
         {
-            "checksum": "717c5e648636a400c80331c732b4adf6",
-            "size": 1251,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1599023/d2137b438ce6355d21fe37288934c78251d91561/resource.tar.gz#test.test_pg-pg_types_window2-default.txt-Debug_/opt.yql_patched"
+            "checksum": "356c89f034d15f0b1c83fe1bc39c1918",
+            "size": 1207,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1923547/85f44cb0cfca78e310a5256bafbc1bccccec78e1/resource.tar.gz#test.test_pg-pg_types_window2-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-pg_types_window2-default.txt-Plan]": [
@@ -4626,23 +4626,23 @@
     "test.test[pg-tpch-q05-default.txt-Results]": [],
     "test.test[pg-values-default.txt-Analyze]": [
         {
-            "checksum": "b4dd508a329723c74293d80f0278c705",
-            "size": 505,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1936997/591f0acb71515b0bb712ded29f51ce71ca4d2b90/resource.tar.gz#test.test_pg-values-default.txt-Analyze_/plan.txt"
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1936997/da5ac30f52d89f8bfdf8a6294be5e9bda8cb775b/resource.tar.gz#test.test_pg-values-default.txt-Analyze_/plan.txt"
         }
     ],
     "test.test[pg-values-default.txt-Debug]": [
         {
-            "checksum": "1f91dcc8edc0e063677733eef9df4932",
-            "size": 517,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1942100/a4c7af0cfa6de91d520eb74fb8af1e64b13ecf0a/resource.tar.gz#test.test_pg-values-default.txt-Debug_/opt.yql_patched"
+            "checksum": "b5a12937b414175ccdacc8bfa3234cf1",
+            "size": 760,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1936997/da5ac30f52d89f8bfdf8a6294be5e9bda8cb775b/resource.tar.gz#test.test_pg-values-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-values-default.txt-Plan]": [
         {
-            "checksum": "b4dd508a329723c74293d80f0278c705",
-            "size": 505,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1936997/591f0acb71515b0bb712ded29f51ce71ca4d2b90/resource.tar.gz#test.test_pg-values-default.txt-Plan_/plan.txt"
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1936997/da5ac30f52d89f8bfdf8a6294be5e9bda8cb775b/resource.tar.gz#test.test_pg-values-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[pg-values-default.txt-Results]": [],

@@ -3441,9 +3441,9 @@
     ],
     "test.test[pg-aggregate_ctx-default.txt-Debug]": [
         {
-            "checksum": "8d2fd5c5952921dcdd2ea4d21b1891bf",
-            "size": 1247,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1942671/478db0206171f558c769480ac26d4ca14dd7cb07/resource.tar.gz#test.test_pg-aggregate_ctx-default.txt-Debug_/opt.yql"
+            "checksum": "b8ecaca51ba8d7302c361eb9a41f0b16",
+            "size": 1191,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937150/62001bbbf79d2dc43771c791620315c22471044d/resource.tar.gz#test.test_pg-aggregate_ctx-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-aggregate_ctx-default.txt-Plan]": [
@@ -3462,9 +3462,9 @@
     ],
     "test.test[pg-aggregate_distinct-default.txt-Debug]": [
         {
-            "checksum": "6d1b91a2f3f9e1b77c509519dd64b003",
-            "size": 2541,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1942671/478db0206171f558c769480ac26d4ca14dd7cb07/resource.tar.gz#test.test_pg-aggregate_distinct-default.txt-Debug_/opt.yql"
+            "checksum": "99ae843cd80919530279e6dfe9b956c9",
+            "size": 2414,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937150/62001bbbf79d2dc43771c791620315c22471044d/resource.tar.gz#test.test_pg-aggregate_distinct-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-aggregate_distinct-default.txt-Plan]": [
@@ -3546,9 +3546,9 @@
     ],
     "test.test[pg-pg_types_window2-default.txt-Debug]": [
         {
-            "checksum": "3739921addc6df5cc918d6f2c1fbfa9d",
-            "size": 1191,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1942671/478db0206171f558c769480ac26d4ca14dd7cb07/resource.tar.gz#test.test_pg-pg_types_window2-default.txt-Debug_/opt.yql"
+            "checksum": "e95ab52bcfed161fe9a518128cf15cf9",
+            "size": 1147,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937150/62001bbbf79d2dc43771c791620315c22471044d/resource.tar.gz#test.test_pg-pg_types_window2-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-pg_types_window2-default.txt-Plan]": [
@@ -4176,23 +4176,23 @@
     ],
     "test.test[pg-values-default.txt-Debug]": [
         {
-            "checksum": "954a9bd4aca2e52ba7f6c708051ea790",
-            "size": 461,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1900335/201c17850f3d884460ef89a0906d884640af0a5b/resource.tar.gz#test.test_pg-values-default.txt-Debug_/opt.yql"
+            "checksum": "209e3e4eae371028f700e310e7484258",
+            "size": 700,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937424/a65360bfb489d9d6525c651f16fa32e9f23573bd/resource.tar.gz#test.test_pg-values-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-values-default.txt-Plan]": [
         {
-            "checksum": "b4dd508a329723c74293d80f0278c705",
-            "size": 505,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1946324/462a543d9d17870634ca734dfebf976b43a8f5b8/resource.tar.gz#test.test_pg-values-default.txt-Plan_/plan.txt"
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937424/a65360bfb489d9d6525c651f16fa32e9f23573bd/resource.tar.gz#test.test_pg-values-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[pg-values-default.txt-Results]": [
         {
-            "checksum": "9ca61403154fa4325d4d4cc0447879b6",
-            "size": 1054,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1903885/ac7a8ae10fb972437c16f0f4da4d075bd1e5fa11/resource.tar.gz#test.test_pg-values-default.txt-Results_/results.txt"
+            "checksum": "2fcdd3c0808567f58c47e50cc2b97bf5",
+            "size": 1714,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937424/a65360bfb489d9d6525c651f16fa32e9f23573bd/resource.tar.gz#test.test_pg-values-default.txt-Results_/results.txt"
         }
     ],
     "test.test[produce-discard_process_with_lambda-default.txt-Debug]": [

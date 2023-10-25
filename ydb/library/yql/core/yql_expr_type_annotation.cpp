@@ -1,4 +1,5 @@
 #include "yql_expr_type_annotation.h"
+#include "ydb/library/yql/core/type_ann/type_ann_pg.h"
 #include "yql_opt_proposed_by_data.h"
 #include "yql_opt_rewrite_io.h"
 #include "yql_opt_utils.h"
@@ -9,6 +10,7 @@
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/core/sql_types/simple_types.h>
+#include "ydb/library/yql/parser/pg_catalog/catalog.h"
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -97,7 +99,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             case ETypeAnnotationKind::List:
             case ETypeAnnotationKind::Flow:
             if (const auto itemType = expectedType.Cast<TStreamExprType>()->GetItemType(); IsSameAnnotation(*itemType, *GetSeqItemType(&sourceType))) {
-                node = ctx.NewCallable(node->Pos(), "ToStream", {std::move(node)});
+                auto pos = node->Pos();
+                node = ctx.NewCallable(pos, "ToStream", {std::move(node)});
                 return IGraphTransformer::TStatus::Repeat;
             }
             break;
@@ -112,8 +115,13 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         }
 
         if (sourceType.GetKind() == ETypeAnnotationKind::Pg) {
-            if (sourceType.Cast<TPgExprType>()->GetName() == "unknown") {
-                node = ctx.NewCallable(node->Pos(), "PgCast", { node, ExpandType(node->Pos(), expectedType, ctx) });
+            const auto fromTypeId = sourceType.Cast<TPgExprType>()->GetId();
+            const auto toTypeId = expectedType.Cast<TPgExprType>()->GetId();
+
+            // https://www.postgresql.org/docs/14/typeconv-query.html, step 2.
+            if (fromTypeId == NPg::UnknownOid || NPg::IsCoercible(fromTypeId, toTypeId, NPg::ECoercionCode::Assignment)) {
+                auto pos = node->Pos();
+                node = ctx.NewCallable(pos, "PgCast", { std::move(node), ExpandType(pos, expectedType, ctx) });
                 return IGraphTransformer::TStatus::Repeat;
             }
         }
@@ -277,7 +285,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         const auto from = sourceType.Cast<TDataExprType>()->GetSlot();
         const auto to = expectedType.Cast<TDataExprType>()->GetSlot();
         if (from == EDataSlot::Utf8 && to == EDataSlot::String) {
-            node = ctx.NewCallable(node->Pos(), "ToString", { std::move(node) });
+            auto pos = node->Pos();
+            node = ctx.NewCallable(pos, "ToString", { std::move(node) });
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -958,10 +967,6 @@ NUdf::TCastResultOptions CastResult(const TDataExprType* source, const TDataExpr
 
 template <bool Strong>
 NUdf::TCastResultOptions CastResult(const TPgExprType* source, const TPgExprType* target) {
-    if (source->GetName() == "unknown") {
-        return NUdf::ECastOptions::Complete;
-    }
-
     if (source->GetId() != target->GetId()) {
         return NUdf::ECastOptions::Impossible;
     }

@@ -134,7 +134,6 @@ def onjava_module(unit, *args):
     }
     if unit.get('ENABLE_PREVIEW_VALUE') == 'yes' and (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION')) in (
         '15',
-        '16',
         '17',
         '18',
         '19',
@@ -405,10 +404,8 @@ def on_jdk_version_macro_check(unit, *args):
         unit.message(["error", "Invalid syntax. Single argument required."])
     jdk_version = args[0]
     available_versions = (
-        '10',
         '11',
         '15',
-        '16',
         '17',
         '18',
         '19',

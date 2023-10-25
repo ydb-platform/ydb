@@ -77,6 +77,8 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
       ```bash
       mkdir ~/ydbd && cd ~/ydbd
+      mkdir ydb_data
+      mkdir ydb_certs
       ```
    2. Pull the current version of the Docker image:
 

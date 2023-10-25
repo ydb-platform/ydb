@@ -740,6 +740,14 @@ void TTableDescription::AddAsyncSecondaryIndex(const TString& indexName, const T
     AddSecondaryIndex(indexName, EIndexType::GlobalAsync, indexColumns, dataColumns);
 }
 
+void TTableDescription::AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns) {
+    AddSecondaryIndex(indexName, EIndexType::GlobalUnique, indexColumns);
+}
+
+void TTableDescription::AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns) {
+    AddSecondaryIndex(indexName, EIndexType::GlobalUnique, indexColumns, dataColumns);
+}
+
 void TTableDescription::AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns) {
     AddSyncSecondaryIndex(indexName, indexColumns);
 }
@@ -1182,6 +1190,14 @@ TTableBuilder& TTableBuilder::AddSecondaryIndex(const TString& indexName, const 
 
 TTableBuilder& TTableBuilder::AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns) {
     return AddSyncSecondaryIndex(indexName, indexColumns);
+}
+
+TTableBuilder& TTableBuilder::AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns) {
+    return AddSecondaryIndex(indexName, EIndexType::GlobalUnique, indexColumns, dataColumns);
+}
+
+TTableBuilder& TTableBuilder::AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns) {
+    return AddSecondaryIndex(indexName, EIndexType::GlobalUnique, indexColumns);
 }
 
 TTableBuilder& TTableBuilder::AddSecondaryIndex(const TString& indexName, const TString& indexColumn) {
@@ -2235,6 +2251,9 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     case TProto::kGlobalAsyncIndex:
         type = EIndexType::GlobalAsync;
         break;
+    case TProto::kGlobalUniqueIndex:
+        type = EIndexType::GlobalUnique;
+        break;
     default: // fallback to global sync
         type = EIndexType::GlobalSync;
         break;
@@ -2262,6 +2281,9 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         break;
     case EIndexType::GlobalAsync:
         *proto.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
+        break;
+    case EIndexType::GlobalUnique:
+        *proto.mutable_global_unique_index() = Ydb::Table::GlobalUniqueIndex();
         break;
     case EIndexType::Unknown:
         break;

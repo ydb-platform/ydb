@@ -707,6 +707,9 @@ void FillIndexDescriptionImpl(TYdbProto& out,
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
             *index->mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
             break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
+            *index->mutable_global_unique_index() = Ydb::Table::GlobalUniqueIndex();
+            break;
         default:
             break;
         };
@@ -767,6 +770,10 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
 
         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync);
+            break;
+
+        case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
             break;
 
         default:

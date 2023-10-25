@@ -2270,6 +2270,66 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateTableWithUniqConstraint) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            TString create_index_query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key),
+                    INDEX uniq_value_idx GLOBAL UNIQUE SYNC ON (`Value`)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+
+            auto indexDesc = result.GetTableDescription().GetIndexDescriptions();
+
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "uniq_value_idx");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), EIndexType::GlobalUnique);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableWithUniqConstraintPublicApi) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto builder = TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key")
+                .AddUniqueSecondaryIndex("uniq_value_idx", {"Value"});
+
+            auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+
+            auto indexDesc = result.GetTableDescription().GetIndexDescriptions();
+
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "uniq_value_idx");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), EIndexType::GlobalUnique);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
+        }
+    }
+
     Y_UNIT_TEST(AlterTableWithDecimalColumn) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

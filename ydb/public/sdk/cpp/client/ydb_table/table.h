@@ -552,6 +552,10 @@ private:
     // async
     void AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
     void AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+    // unique
+    void AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
+    void AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+
     // default
     void AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
     void AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
@@ -765,6 +769,10 @@ public:
     TTableBuilder& AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
     TTableBuilder& AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
     TTableBuilder& AddAsyncSecondaryIndex(const TString& indexName, const TString& indexColumn);
+
+    // unique
+    TTableBuilder& AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
+    TTableBuilder& AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
 
     // default
     TTableBuilder& AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);

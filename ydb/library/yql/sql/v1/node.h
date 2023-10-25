@@ -994,6 +994,7 @@ namespace NSQLTranslationV1 {
         enum class EType {
             GlobalSync,
             GlobalAsync,
+            GlobalSyncUnique,
         };
 
         TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)

@@ -52,6 +52,9 @@ message GlobalIndex {
 message GlobalAsyncIndex {
 }
 
+message GlobalUniqueIndex {
+}
+
 // Represent secondary index
 message TableIndex {
     // Name of index
@@ -62,6 +65,7 @@ message TableIndex {
     oneof type {
        GlobalIndex global_index = 3;
        GlobalAsyncIndex global_async_index = 4;
+       GlobalUniqueIndex global_unique_index = 6;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -84,6 +88,7 @@ message TableIndexDescription {
     oneof type {
        GlobalIndex global_index = 3;
        GlobalAsyncIndex global_async_index = 5;
+       GlobalUniqueIndex global_unique_index = 8;
     }
     Status status = 4;
     // list of columns content to be copied in to index table

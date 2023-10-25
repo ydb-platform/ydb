@@ -27,6 +27,7 @@ enum class EBuildIndexState {
 enum class EIndexType {
     GlobalSync,
     GlobalAsync,
+    GlobalUnique,
 
     Unknown = std::numeric_limits<int>::max()
 };

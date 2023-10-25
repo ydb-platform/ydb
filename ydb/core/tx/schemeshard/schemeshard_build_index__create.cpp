@@ -218,6 +218,9 @@ private:
             case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
                 buildInfo->IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
                 break;
+            case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
+                explain = "unsupported index type to build";
+                return false;
             case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
                 explain = "invalid or unset index type";
                 return false;

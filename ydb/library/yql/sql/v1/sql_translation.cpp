@@ -561,15 +561,23 @@ bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<
     switch (indexType.Alt_case()) {
         case TRule_table_index_type::kAltTableIndexType1: {
             auto globalIndex = indexType.GetAlt_table_index_type1().GetRule_global_index1();
+            bool uniqIndex = false;
             if (globalIndex.HasBlock2()) {
-                ctx.AltNotImplemented("unique", indexType);
-                return false;
+                uniqIndex = true;
             }
             if (globalIndex.HasBlock3()) {
                 const TString token = to_lower(ctx.Token(globalIndex.GetBlock3().GetToken1()));
                 if (token == "sync") {
-                    indexes.back().Type = TIndexDescription::EType::GlobalSync;
+                    if (uniqIndex) {
+                        indexes.back().Type = TIndexDescription::EType::GlobalSyncUnique;
+                    } else {
+                        indexes.back().Type = TIndexDescription::EType::GlobalSync;
+                    }
                 } else if (token == "async") {
+                    if (uniqIndex) {
+                        ctx.AltNotImplemented("unique", indexType);
+                        return false;
+                    }
                     indexes.back().Type = TIndexDescription::EType::GlobalAsync;
                 } else {
                     Y_ABORT("You should change implementation according to grammar changes");

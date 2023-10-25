@@ -227,7 +227,7 @@ namespace NKikimr {
             // schedule fresh if required
             CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx, FullCompactionState.ForceFreshCompaction(RTCtx),
                 AllowGarbageCollection);
-            if (!RunLevelCompactionSelector(ctx)) {
+            if (!Config->BaseInfo.ReadOnly && !RunLevelCompactionSelector(ctx)) {
                 ScheduleCompactionWakeup(ctx);
             }
         }

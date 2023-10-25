@@ -486,7 +486,7 @@ namespace NKikimr {
                         LocRecCtx->VCtx,
                         ui32(LocRecCtx->PDiskCtx->Dsk->ChunkSize),
                         ui32(LocRecCtx->PDiskCtx->Dsk->PrefetchSizeBytes),
-                        Config->FreshCompaction,
+                        Config->FreshCompaction && !Config->BaseInfo.ReadOnly,
                         Config->GCOnlySynced,
                         Config->AllowKeepFlags,
                         Config->BarrierValidation,

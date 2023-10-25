@@ -613,7 +613,6 @@ public:
         bool fillTargetColumns = false,
         bool unknownsAllowed = false
     ) {
-        // TODO: temporarily use fillTargetColumns to indicate Select represents VALUES as part of INSERT stmt.
         bool isValuesClauseOfInsertStmt = fillTargetColumns;
 
         CTE.emplace_back();

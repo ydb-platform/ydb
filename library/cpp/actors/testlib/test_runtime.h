@@ -305,14 +305,16 @@ namespace NActors {
             {
             }
 
-            ~TEventObserverHolder() {
+            ~TEventObserverHolder()
+            {
                 Remove();
             }
 
             void Remove()
             {
-                if(Iter == List.end())
+                if (Iter == List.end()) {
                     return;
+                }
 
                 List.erase(Iter);
                 Iter = List.end();

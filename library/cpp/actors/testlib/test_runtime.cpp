@@ -1208,7 +1208,7 @@ namespace NActors {
 
                                         for (auto observer : ObserverFuncs) {
                                             observer(ev);
-                                            if(!ev) break;
+                                            if (!ev) break;
                                         }
 
                                         if(ev && ObserverFunc(ev) != EEventAction::DROP && ev)

@@ -3693,22 +3693,24 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         std::vector<std::unique_ptr<IEventHandle>> readResults;
 
         auto readObserverHolder = runtime.AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
-            if (blockReads)
+            if (blockReads) {
                 reads.emplace_back(ev.Release());
-            else
+            } else {
                 ev->Get()->Record.SetMaxRowsInResult(1);
+            }
         });
         auto readResultObserverHolder = runtime.AddObserver<TEvDataShard::TEvReadResult>([&](auto& ev) {
             if (!haveReadResult) {
                 haveReadResult = true;
                 haveReadResultSnapshot = ev->Get()->Record.HasSnapshot();
-            }
-            else if (blockReadResults)
+            } else if (blockReadResults) {
                 readResults.emplace_back(ev.Release());
+            }
         });
         auto readAckObserverHolder = runtime.AddObserver<TEvDataShard::TEvReadAck>([&](auto& ev) {
-            if (blockReadAcks)
+            if (blockReadAcks) {
                 readAcks.emplace_back(ev.Release());
+            }
         });
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");

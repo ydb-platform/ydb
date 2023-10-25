@@ -24,6 +24,7 @@
 
 #include <util/stream/file.h>
 #include <util/system/env.h>
+#include <util/system/fs.h>
 
 namespace NYql::NDqs {
     using namespace NActors;
@@ -296,7 +297,9 @@ namespace NYql::NDqs {
             ? *maybeTokenFile
             : home + "/.yt/token";
 
-        TString token = TFileInput(tokenFile).ReadLine();
+        TString token = NFs::Exists(tokenFile) 
+            ? TFileInput(tokenFile).ReadLine()
+            : "";
 
         return std::make_tuple(userName, token);
     }

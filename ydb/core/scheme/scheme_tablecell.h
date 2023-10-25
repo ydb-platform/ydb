@@ -101,9 +101,19 @@ public:
         return ReadUnaligned<T>(Data());
     }
 
-    template<typename T, typename = TStdLayout<T>>
-    static inline TCell Make(const T &val) noexcept
-    {
+    template <typename T, typename = TStdLayout<T>>
+    bool ToStream(IOutputStream& out, TStringBuilder& err) const noexcept {
+        if(sizeof(T) != Size()) {
+            err << "AsValue<T>() type doesn't match TCell";
+            return false;
+        }
+
+        out << ReadUnaligned<T>(Data());
+        return true;
+    }
+
+    template <typename T, typename = TStdLayout<T>>
+    static inline TCell Make(const T& val) noexcept {
         auto *ptr = static_cast<const char*>(static_cast<const void*>(&val));
 
         return TCell{ ptr, sizeof(val) };

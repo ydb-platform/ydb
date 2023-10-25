@@ -2258,4 +2258,35 @@ namespace NSchemeShardUT_Private {
         data.push_back({1, message});
         NKikimr::NPQ::CmdWrite(&runtime, tabletId, edge, partitionId, "sourceid0", msgSeqNo, data, false, {}, true, cookie, 0);
     }
+
+    void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<ui32>& recordIds)
+    {
+        auto tableDesc = DescribePath(runtime, tablePath, true, true);
+        const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+        UNIT_ASSERT(partitionIdx < tablePartitions.size());
+
+        auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+        ev->Record.SetTableId(tableDesc.GetPathId());
+
+        auto& scheme = *ev->Record.MutableRowScheme();
+        for (ui32 tag : keyTags) {
+            scheme.AddKeyColumnIds(tag);
+        }
+        for (ui32 tag : valueTags) {
+            scheme.AddValueColumnIds(tag);
+        }
+
+        for (ui32 i : recordIds) {
+            auto key = TVector<TCell>{TCell::Make(i)};
+            auto value = TVector<TCell>{TCell::Make(i)};
+
+            auto& row = *ev->Record.AddRows();
+            row.SetKeyColumns(TSerializedCellVec::Serialize(key));
+            row.SetValueColumns(TSerializedCellVec::Serialize(value));
+        }
+
+        const auto& sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, tablePartitions[partitionIdx].GetDatashardId(), sender, ev.Release());
+        runtime.GrabEdgeEvent<TEvDataShard::TEvUploadRowsResponse>(sender);
+    }
 }

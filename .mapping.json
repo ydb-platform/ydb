@@ -7644,6 +7644,7 @@
   "ydb/library/yql/providers/dq/service/CMakeLists.linux-aarch64.txt":"",
   "ydb/library/yql/providers/dq/service/CMakeLists.linux-x86_64.txt":"",
   "ydb/library/yql/providers/dq/service/CMakeLists.txt":"",
+  "ydb/library/yql/providers/dq/service/CMakeLists.windows-x86_64.txt":"",
   "ydb/library/yql/providers/dq/stats_collector/CMakeLists.darwin-x86_64.txt":"",
   "ydb/library/yql/providers/dq/stats_collector/CMakeLists.linux-aarch64.txt":"",
   "ydb/library/yql/providers/dq/stats_collector/CMakeLists.linux-x86_64.txt":"",

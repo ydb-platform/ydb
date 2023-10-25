@@ -29,6 +29,7 @@ target_link_libraries(providers-dq-global_worker_manager PUBLIC
   providers-dq-task_runner
   dq-actors-yt
   providers-dq-scheduler
+  providers-dq-service
 )
 target_sources(providers-dq-global_worker_manager PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/benchmark.cpp

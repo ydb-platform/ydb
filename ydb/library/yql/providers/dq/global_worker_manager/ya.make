@@ -14,6 +14,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/task_runner
     ydb/library/yql/providers/dq/actors/yt
     ydb/library/yql/providers/dq/scheduler
+    ydb/library/yql/providers/dq/service
 )
 
 YQL_LAST_ABI_VERSION()

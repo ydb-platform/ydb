@@ -53,6 +53,9 @@ def execute_scan_query(driver, yql_text, table_path):
     while retries > 0 and not success:
         retries -= 1
 
+        if yql_text.startswith('--'):
+            return []
+
         it = driver.table_client.scan_query(yql_text)
         result = []
         while True:
@@ -67,6 +70,8 @@ def execute_scan_query(driver, yql_text, table_path):
             except Exception:
                 if retries == 0:
                     raise
+
+                break
 
 
 def explain_scan_query(driver, yql_text, table_path):

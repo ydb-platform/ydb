@@ -676,9 +676,6 @@ namespace {
             std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
         NTopic::TTopicClient topicClient(*driver);
 
-        auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
-
         auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
 
         {
@@ -807,9 +804,6 @@ namespace {
         auto driver =
             std::make_unique<TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
         NTopic::TTopicClient topicClient(*driver);
-
-        auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
-        ThrowOnError(topicDescription);
 
         {
             auto writeSession = NTopic::TTopicClient(*driver).CreateWriteSession(std::move(PrepareWriteSessionSettings()));

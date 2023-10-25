@@ -24,8 +24,8 @@ namespace NKikimr::NTable::NPage {
         TBtreeIndexNode page binary layout
         - TLabel - page label
         - THeader - page header
-        - TKey[N] - keys data                <-- var-size
         - TPgSize[N] - keys offsets
+        - TKey[N] - keys data                <-- var-size
         - TChild[N+1] - children
     */
 
@@ -118,7 +118,8 @@ namespace NKikimr::NTable::NPage {
 
             TString ToString() const noexcept
             {
-                return TStringBuilder() << "PageId: " << PageId << " Count: " << Count << " Size: " << Size;
+                // copy values to prevent 'reference binding to misaligned address' error
+                return TStringBuilder() << "PageId: " << TPageId(PageId) << " Count: " << TRowId(Count) << " Size: " << ui64(Size);
             }
         } Y_PACKED;
 
@@ -137,11 +138,11 @@ namespace NKikimr::NTable::NPage {
             Keys.Count = header->KeysCount;
             size_t offset = sizeof(THeader);
 
-            Keys.Base = Raw.data();
-            offset += header->KeysSize;
-
             Keys.Offsets = TDeref<const TRecordsEntry>::At(header, offset);
             offset += Keys.Count * sizeof(TRecordsEntry);
+
+            Keys.Base = Raw.data();
+            offset += header->KeysSize;
 
             Children = TDeref<const TChild>::At(header, offset);
             offset += (1 + Keys.Count) * sizeof(TChild);
@@ -177,4 +178,7 @@ namespace NKikimr::NTable::NPage {
         const TChild* Children;
     };
 
+    struct TBtreeIndexMeta : public TBtreeIndexNode::TChild {
+        size_t LevelsCount;
+    };
 }

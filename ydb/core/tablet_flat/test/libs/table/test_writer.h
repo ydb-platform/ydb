@@ -164,6 +164,11 @@ namespace NTest {
                 { new TWriteStats(written), std::move(scheme), std::move(Parts) };
         }
 
+        TStore& Back() noexcept
+        {
+            return Store ? *Store : *(Store = new TStore(Groups, NextGlobOffset));
+        }
+
     private:
         TPageId WriteOuter(TSharedData blob) noexcept override
         {
@@ -184,11 +189,6 @@ namespace NTest {
         {
             Growth->Pass(ref);
             return Back().WriteLarge(TSharedData::Copy(blob));
-        }
-
-        TStore& Back() noexcept
-        {
-            return Store ? *Store : *(Store = new TStore(Groups, NextGlobOffset));
         }
 
         void Finish(TString overlay) noexcept override

@@ -1,5 +1,6 @@
 #include "flat_page_btree_index.h"
 #include "flat_page_btree_index_writer.h"
+#include "test/libs/table/test_writer.h"
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -52,19 +53,38 @@ namespace {
         return TSerializedCellVec::Serialize(cells);
     }
 
-    void Dump(const NPage::TBtreeIndexNode& node, const TPartScheme& scheme) noexcept
+    TChild MakeChild(ui32 index) {
+        return TChild{index + 10000, index + 100, index + 30, index + 1000};
+    }
+
+    void Dump(TChild page, const TPartScheme& scheme, const TStore& store, ui32 level = 0) noexcept
     {
+        TString intend(level * 2, ' ');
+        auto dumpChild = [&] (TChild child) {
+            if (child.PageId < 1000) {
+                Dump(child, scheme, store, level + 1);
+            } else {
+                Cerr << intend << "| " << child.ToString() << Endl;
+            }
+        };
+
+        auto node = TBtreeIndexNode(*store.GetPage(0, page.PageId));
+
         auto label = node.Label();
 
         Cerr
-            << " + BTreeIndex{" << (ui16)label.Type << " rev "
-            << label.Format << ", " << label.Size << "b}"
+            << intend
+            << "+ BTreeIndex{id=" << page.PageId << ", "
+            << "cnt=" << page.Count << ", "
+            << "size=" << page.Size << ", "
+            << (ui16)label.Type << " rev " << label.Format << ", " 
+            << label.Size << "b}"
             << Endl;
 
-        Cerr << node.GetChild(0).ToString() << Endl;
+        dumpChild(node.GetChild(0));
 
         for (TRecIdx i : xrange(node.GetKeysCount())) {
-            Cerr << "> ";
+            Cerr << intend << "|-> ";
 
             auto cells = node.GetKeyCells(i, scheme.Groups[0].ColsKeyIdx);
             for (TPos pos : xrange(cells.Count())) {
@@ -77,10 +97,17 @@ namespace {
             }
 
             Cerr << Endl;
-            Cerr << node.GetChild(i + 1).ToString() << Endl;
+            dumpChild(node.GetChild(i + 1));
         }
 
         Cerr << Endl;
+    }
+
+    void Dump(TSharedData node, const TPartScheme& scheme) {
+        TWriterBundle pager(1, TLogoBlobID());
+        auto pageId = ((IPageWriter*)&pager)->Write(node, EPage::BTreeIndex, 0);
+        TChild page{pageId, 0, 0, 0};
+        Dump(page, scheme, pager.Back());
     }
 
     void CheckKeys(const NPage::TBtreeIndexNode& node, const TVector<TString>& keys, const TPartScheme& scheme) {
@@ -98,6 +125,12 @@ namespace {
             auto actual = TSerializedCellVec::Serialize(actualCells);
             UNIT_ASSERT_VALUES_EQUAL(actual, keys[i]);
         }
+    }
+
+    void CheckKeys(TPageId pageId, const TVector<TString>& keys, const TPartScheme& scheme, const TStore& store) {
+        auto page = store.GetPage(0, pageId);
+        auto node = TBtreeIndexNode(*page);
+        CheckKeys(node, keys, scheme);
     }
 
     void CheckChildren(const NPage::TBtreeIndexNode& node, const TVector<TChild>& children) {
@@ -155,11 +188,12 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         TVector<TChild> children;
         for (ui32 i : xrange(keys.size() + 1)) {
-            children.push_back(TChild{i * 10, i * 100, i * 30, i * 1000});
+            children.push_back(MakeChild(i));
         }
 
         for (auto k : keys) {
-            writer.AddKey(k);
+            TSerializedCellVec deserialized(k);
+            writer.AddKey(deserialized.GetCells());
         }
         for (auto c : children) {
             writer.AddChild(c);
@@ -169,7 +203,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         auto node = TBtreeIndexNode(serialized);
 
-        Dump(node, *writer.Scheme);
+        Dump(serialized, *writer.Scheme);
         CheckKeys(node, keys, *writer.Scheme);
         CheckChildren(node, children);
     }
@@ -185,11 +219,12 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
             
             TVector<TChild> children;
             for (ui32 i : xrange(keys.size() + 1)) {
-                children.push_back(TChild{i * 10, i * 100, i * 30, i * 1000});
+                children.push_back(MakeChild(i));
             }
 
             for (auto k : keys) {
-                writer.AddKey(k);
+                TSerializedCellVec deserialized(k);
+                writer.AddKey(deserialized.GetCells());
             }
             for (auto c : children) {
                 writer.AddChild(c);
@@ -199,7 +234,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
             auto node = TBtreeIndexNode(serialized);
 
-            Dump(node, *writer.Scheme);
+            Dump(serialized, *writer.Scheme);
             CheckKeys(node, keys, *writer.Scheme);
             CheckChildren(node, children);
         };
@@ -227,11 +262,12 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
         
         TVector<TChild> children;
         for (ui32 i : xrange(keys.size() + 1)) {
-            children.push_back(TChild{i * 10, i * 100, i * 30, i * 1000});
+            children.push_back(MakeChild(i));
         }
 
         for (auto k : keys) {
-            writer.AddKey(k);
+            TSerializedCellVec deserialized(k);
+            writer.AddKey(deserialized.GetCells());
         }
         for (auto c : children) {
             writer.AddChild(c);
@@ -241,7 +277,8 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
         keys.erase(keys.begin());
         children.erase(children.begin());
         for (auto k : keys) {
-            writer.AddKey(k);
+            TSerializedCellVec deserialized(k);
+            writer.AddKey(deserialized.GetCells());
         }
         for (auto c : children) {
             writer.AddChild(c);
@@ -251,7 +288,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         auto node = TBtreeIndexNode(serialized);
 
-        Dump(node, *writer.Scheme);
+        Dump(serialized, *writer.Scheme);
         CheckKeys(node, keys, *writer.Scheme);
         CheckChildren(node, children);
     }
@@ -281,11 +318,12 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
         
         TVector<TChild> children;
         for (ui32 i : xrange(fullKeys.size() + 1)) {
-            children.push_back(TChild{i * 10, i * 100, i * 30, i * 1000});
+            children.push_back(MakeChild(i));
         }
 
         for (auto k : cutKeys) {
-            writer.AddKey(k);
+            TSerializedCellVec deserialized(k);
+            writer.AddKey(deserialized.GetCells());
         }
         for (auto c : children) {
             writer.AddChild(c);
@@ -295,9 +333,168 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         auto node = TBtreeIndexNode(serialized);
 
-        Dump(node, *writer.Scheme);
+        Dump(serialized, *writer.Scheme);
         CheckKeys(node, fullKeys, *writer.Scheme);
         CheckChildren(node, children);
+    }
+
+}
+
+Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
+    using namespace NTest;
+    using TChild = TBtreeIndexNode::TChild;
+
+    Y_UNIT_TEST(OneNode) {
+        TLayoutCook lay = MakeLayout();
+        TIntrusivePtr<TPartScheme> scheme = new TPartScheme(lay.RowScheme()->Cols);
+
+        TBtreeIndexBuilder builder(scheme, { }, Max<ui32>(), Max<ui32>(), Max<ui32>());
+        
+        TVector<TString> keys;
+        for (ui32 i : xrange(10)) {
+            keys.push_back(MakeKey(i, std::string{char('a' + i)}, i % 2, i * 10));
+        }
+        TVector<TChild> children;
+        for (ui32 i : xrange(keys.size() + 1)) {
+            children.push_back(MakeChild(i));
+        }
+
+        for (auto k : keys) {
+            TSerializedCellVec deserialized(k);
+            builder.AddKey(deserialized.GetCells());
+        }
+        for (auto c : children) {
+            builder.AddChild(c);
+        }
+
+        TWriterBundle pager(1, TLogoBlobID());
+        auto result = builder.Flush(pager, true);
+        UNIT_ASSERT(result);
+
+        Dump(*result, *scheme, pager.Back());
+
+        UNIT_ASSERT_VALUES_EQUAL(result->LevelsCount, 1);
+        CheckKeys(result->PageId, keys, *scheme, pager.Back());
+    }
+
+    Y_UNIT_TEST(FewNodes) {
+        TLayoutCook lay = MakeLayout();
+        TIntrusivePtr<TPartScheme> scheme = new TPartScheme(lay.RowScheme()->Cols);
+
+        TBtreeIndexBuilder builder(scheme, { }, Max<ui32>(), 1, 2);
+        
+        TVector<TString> keys;
+        for (ui32 i : xrange(20)) {
+            keys.push_back(MakeKey(i, std::string{char('a' + i)}, i % 2, i * 10));
+        }
+        TVector<TChild> children;
+        for (ui32 i : xrange(keys.size() + 1)) {
+            children.push_back(MakeChild(i));
+        }
+
+        TWriterBundle pager(1, TLogoBlobID());
+
+        builder.AddChild(children[0]);
+        for (ui32 i : xrange(keys.size())) {
+            TSerializedCellVec deserialized(keys[i]);
+            builder.AddKey(deserialized.GetCells());
+            builder.AddChild(children[i + 1]);
+            UNIT_ASSERT(!builder.Flush(pager, false));
+        }
+
+        auto result = builder.Flush(pager, true);
+        UNIT_ASSERT(result);
+
+        Dump(*result, *scheme, pager.Back());
+        
+        UNIT_ASSERT_VALUES_EQUAL(result->LevelsCount, 3);
+        
+        auto checkKeys = [&](TPageId pageId, const TVector<TString>& keys) {
+            CheckKeys(pageId, keys, *scheme, pager.Back());
+        };
+
+        // Level 0:
+        checkKeys(0, {
+            keys[0], keys[1]
+        });
+        // -> keys[2]
+        checkKeys(1, {
+            keys[3], keys[4]
+        });
+        // -> keys[5]
+        checkKeys(2, {
+            keys[6], keys[7]
+        });
+        // -> keys[8]
+        checkKeys(3, {
+            keys[9], keys[10]
+        });
+        // -> keys[11]
+        checkKeys(4, {
+            keys[12], keys[13]
+        });
+        // -> keys[14]
+        checkKeys(6, {
+            keys[15], keys[16]
+        });
+        // -> keys[17]
+        checkKeys(7, {
+            keys[18], keys[19]
+        });
+
+        // Level 1:
+        checkKeys(5, {
+            keys[2], keys[5]
+        });
+        checkKeys(8, {
+            keys[11], keys[14], keys[17]
+        });
+
+        // Level 2 (root):
+        checkKeys(9, {
+            keys[8]
+        });
+
+        TChild expected{9, 0, 0, 0};
+        for (auto c : children) {
+            expected.Count += c.Count;
+            expected.ErasedCount += c.ErasedCount;
+            expected.Size += c.Size;
+        }
+        UNIT_ASSERT_EQUAL(*result, expected);
+    }
+
+    Y_UNIT_TEST(SplitBySize) {
+        TLayoutCook lay = MakeLayout();
+        TIntrusivePtr<TPartScheme> scheme = new TPartScheme(lay.RowScheme()->Cols);
+
+        TBtreeIndexBuilder builder(scheme, { }, 600, 1, Max<ui32>());
+        
+        TVector<TString> keys;
+        for (ui32 i : xrange(100)) {
+            keys.push_back(MakeKey(i, TString(i + 1, 'x')));
+        }
+        TVector<TChild> children;
+        for (ui32 i : xrange(keys.size() + 1)) {
+            children.push_back(MakeChild(i));
+        }
+
+        TWriterBundle pager(1, TLogoBlobID());
+
+        builder.AddChild(children[0]);
+        for (ui32 i : xrange(keys.size())) {
+            TSerializedCellVec deserialized(keys[i]);
+            builder.AddKey(deserialized.GetCells());
+            builder.AddChild(children[i + 1]);
+            UNIT_ASSERT(!builder.Flush(pager, false));
+        }
+
+        auto result = builder.Flush(pager, true);
+        UNIT_ASSERT(result);
+
+        Dump(*result, *scheme, pager.Back());
+        
+        UNIT_ASSERT_VALUES_EQUAL(result->LevelsCount, 3);
     }
 
 }

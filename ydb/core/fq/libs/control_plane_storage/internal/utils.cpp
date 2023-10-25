@@ -153,29 +153,27 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
         }
     }
 
-    if (ingress) {
-        auto ingressMBytes = (ingress + 1_MB - 1) >> 20; // round up to 1 MB boundary
-        if (ingressMBytes < 10) {
-            ingressMBytes = 10;
-        }
-
-        auto now = Now();
-        result.emplace_back(TBillRecord()
-            .Id(jobId + "_i")
-            .Schema("yq.ingress.v1")
-            .FolderId(TScope(scope).ParseFolder())
-            .SourceWt(now)
-            .SourceId(sourceId)
-            .Usage(TBillRecord::TUsage()
-                .Type(TBillRecord::TUsage::EType::Delta)
-                .Unit(TBillRecord::TUsage::EUnit::MByte)
-                .Quantity(ingressMBytes)
-                .Start(now)
-                .Finish(now)
-            )
-            .ToString()
-        );
+    auto ingressMBytes = (ingress + 1_MB - 1) >> 20; // round up to 1 MB boundary
+    if (ingressMBytes < 10) {
+        ingressMBytes = 10;
     }
+
+    auto now = Now();
+    result.emplace_back(TBillRecord()
+        .Id(jobId + "_i")
+        .Schema("yq.ingress.v1")
+        .FolderId(TScope(scope).ParseFolder())
+        .SourceWt(now)
+        .SourceId(sourceId)
+        .Usage(TBillRecord::TUsage()
+            .Type(TBillRecord::TUsage::EType::Delta)
+            .Unit(TBillRecord::TUsage::EUnit::MByte)
+            .Quantity(ingressMBytes)
+            .Start(now)
+            .Finish(now)
+        )
+        .ToString()
+    );
 
     return result;
 }

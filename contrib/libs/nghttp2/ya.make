@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.56.0)
+VERSION(1.57.0)
 
-ORIGINAL_SOURCE(https://github.com/nghttp2/nghttp2/archive/v1.56.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/nghttp2/nghttp2/archive/v1.57.0.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/nghttp2/lib/includes
@@ -47,10 +47,12 @@ SRCS(
     lib/nghttp2_pq.c
     lib/nghttp2_priority_spec.c
     lib/nghttp2_queue.c
+    lib/nghttp2_ratelim.c
     lib/nghttp2_rcbuf.c
     lib/nghttp2_session.c
     lib/nghttp2_stream.c
     lib/nghttp2_submit.c
+    lib/nghttp2_time.c
     lib/nghttp2_version.c
     lib/sfparse.c
 )

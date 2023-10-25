@@ -296,6 +296,50 @@ namespace NActors {
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetDynamicCounters(ui32 nodeIndex = 0);
         void SetupMonitoring();
 
+        using TEventObserverCollection = std::list<std::function<void(TAutoPtr<IEventHandle>& event)>>;
+        class TEventObserverHolder {
+        public:
+            TEventObserverHolder(TEventObserverCollection& list, TEventObserverCollection::iterator&& iter)
+                : List(list)
+                , Iter(iter)
+            {
+            }
+
+            ~TEventObserverHolder() {
+                Remove();
+            }
+
+            void Remove()
+            {
+                if(Iter == List.end())
+                    return;
+
+                List.erase(Iter);
+                Iter = List.end();
+            }
+        private:
+            TEventObserverCollection& List;
+            TEventObserverCollection::iterator Iter;
+        };
+
+        template <typename TEvType>
+        TEventObserverHolder AddObserver(std::function<void(typename TEvType::TPtr&)> observerFunc)
+        {
+            auto baseFunc = [observerFunc](TAutoPtr<IEventHandle>& event) {
+                if (event && event->GetTypeRewrite() == TEvType::EventType)
+                    observerFunc(*(reinterpret_cast<typename TEvType::TPtr*>(&event)));
+            };
+
+            auto iter = ObserverFuncs.insert(ObserverFuncs.end(), baseFunc);
+            return TEventObserverHolder(ObserverFuncs, std::move(iter));
+        }
+
+        TEventObserverHolder AddObserver(std::function<void(TAutoPtr<IEventHandle>&)> observerFunc)
+        {
+            auto iter = ObserverFuncs.insert(ObserverFuncs.end(), observerFunc);
+            return TEventObserverHolder(ObserverFuncs, std::move(iter));
+        }
+
         template<typename T>
         void AppendToLogSettings(NLog::EComponent minVal, NLog::EComponent maxVal, T func) {
             Y_ABORT_UNLESS(!IsInitialized);
@@ -653,6 +697,7 @@ namespace NActors {
         TDuration DispatchTimeout;
         TDuration ReschedulingDelay;
         TEventObserver ObserverFunc;
+        TEventObserverCollection ObserverFuncs;
         TScheduledEventsSelector ScheduledEventsSelectorFunc;
         TEventFilter EventFilterFunc;
         TScheduledEventFilter ScheduledEventFilterFunc;

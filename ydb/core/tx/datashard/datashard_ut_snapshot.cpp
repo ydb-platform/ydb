@@ -3691,41 +3691,25 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         std::vector<std::unique_ptr<IEventHandle>> reads;
         std::vector<std::unique_ptr<IEventHandle>> readAcks;
         std::vector<std::unique_ptr<IEventHandle>> readResults;
-        auto observer = [&](TAutoPtr<IEventHandle>& ev) -> auto {
-            switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvRead::EventType: {
-                    auto* msg = ev->Get<TEvDataShard::TEvRead>();
-                    if (blockReads) {
-                        reads.emplace_back(ev.Release());
-                        return TTestActorRuntime::EEventAction::DROP;
-                    }
-                    msg->Record.SetMaxRowsInResult(1);
-                    break;
-                }
-                case TEvDataShard::TEvReadResult::EventType: {
-                    auto* msg = ev->Get<TEvDataShard::TEvReadResult>();
-                    if (!haveReadResult) {
-                        haveReadResult = true;
-                        haveReadResultSnapshot = msg->Record.HasSnapshot();
-                        break;
-                    }
-                    if (blockReadResults) {
-                        readResults.emplace_back(ev.Release());
-                        return TTestActorRuntime::EEventAction::DROP;
-                    }
-                    break;
-                }
-                case TEvDataShard::TEvReadAck::EventType: {
-                    if (blockReadAcks) {
-                        readAcks.emplace_back(ev.Release());
-                        return TTestActorRuntime::EEventAction::DROP;
-                    }
-                    break;
-                }
+
+        auto readObserverHolder = runtime.AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            if (blockReads)
+                reads.emplace_back(ev.Release());
+            else
+                ev->Get()->Record.SetMaxRowsInResult(1);
+        });
+        auto readResultObserverHolder = runtime.AddObserver<TEvDataShard::TEvReadResult>([&](auto& ev) {
+            if (!haveReadResult) {
+                haveReadResult = true;
+                haveReadResultSnapshot = ev->Get()->Record.HasSnapshot();
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        auto prevObserver = runtime.SetObserverFunc(observer);
+            else if (blockReadResults)
+                readResults.emplace_back(ev.Release());
+        });
+        auto readAckObserverHolder = runtime.AddObserver<TEvDataShard::TEvReadAck>([&](auto& ev) {
+            if (blockReadAcks)
+                readAcks.emplace_back(ev.Release());
+        });
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
         auto readFuture = SendRequest(runtime,
@@ -3818,7 +3802,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         // Wait until mediator goes idle
         size_t timecastUpdates = 0;
-        auto observer = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+        auto observerHolder = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvMediatorTimecast::TEvUpdate::EventType: {
                     ++timecastUpdates;
@@ -3830,9 +3814,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                     break;
                 }
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        auto prevObserverFunc = runtime.SetObserverFunc(observer);
+        });
 
         auto waitFor = [&](const auto& condition, const TString& description) {
             if (!condition()) {

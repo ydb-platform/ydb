@@ -1201,11 +1201,20 @@ namespace NActors {
                                     isEdgeMailbox = true;
                                     TEventsList events;
                                     mbox.second->Capture(events);
+
+                                    TEventsList eventsToPush;
                                     for (auto& ev : events) {
                                         TInverseGuard<TMutex> inverseGuard(Mutex);
-                                        ObserverFunc(ev);
+
+                                        for (auto observer : ObserverFuncs) {
+                                            observer(ev);
+                                            if(!ev) break;
+                                        }
+
+                                        if(ev && ObserverFunc(ev) != EEventAction::DROP && ev)
+                                            eventsToPush.push_back(ev);
                                     }
-                                    mbox.second->PushFront(events);
+                                    mbox.second->PushFront(eventsToPush);
                                 }
 
                                 if (!isEdgeMailbox) {
@@ -1228,28 +1237,37 @@ namespace NActors {
                                     }
 
                                     hasProgress = true;
-                                    EEventAction action;
+                                    EEventAction action = EEventAction::PROCESS;
                                     {
                                         TInverseGuard<TMutex> inverseGuard(Mutex);
-                                        action = ObserverFunc(ev);
+
+                                        for (auto observer : ObserverFuncs) {
+                                            observer(ev);
+                                            if(!ev) break;
+                                        }
+
+                                        if (ev)
+                                            action = ObserverFunc(ev);
                                     }
 
-                                    switch (action) {
-                                        case EEventAction::PROCESS:
-                                            UpdateFinalEventsStatsForEachContext(*ev);
-                                            SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
-                                        break;
-                                        case EEventAction::DROP:
-                                            // do nothing
-                                        break;
-                                        case EEventAction::RESCHEDULE: {
-                                            TInstant deadline = TInstant::MicroSeconds(CurrentTimestamp) + ReschedulingDelay;
-                                            mbox.second->Freeze(deadline);
-                                            mbox.second->PushFront(ev);
-                                            break;
+                                    if (ev) {
+                                        switch (action) {
+                                            case EEventAction::PROCESS:
+                                                UpdateFinalEventsStatsForEachContext(*ev);
+                                                SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
+                                                break;
+                                            case EEventAction::DROP:
+                                                // do nothing
+                                                break;
+                                            case EEventAction::RESCHEDULE: {
+                                                TInstant deadline = TInstant::MicroSeconds(CurrentTimestamp) + ReschedulingDelay;
+                                                mbox.second->Freeze(deadline);
+                                                mbox.second->PushFront(ev);
+                                                break;
+                                            }
+                                            default:
+                                                Y_ABORT("Unknown action");
                                         }
-                                        default:
-                                            Y_ABORT("Unknown action");
                                     }
                                 }
                             }

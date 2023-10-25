@@ -1,0 +1,87 @@
+# dqrun - Utility for Local Debugging of Distributed SQL Engine
+
+`dqrun` is a utility designed for local debugging of a distributed SQL engine. It allows you to run all components of a distributed engine in a single process for more convenient debugging.
+
+## Command-Line Options
+
+- `-s`: if specified, SQL is used; if not specified, the query plan execution specified in s-expression is used.
+- `-p <file>`: specify a file with a SQL query.
+- `--gateways-cfg <file>`: specify a file with the engine configuration. (Example: [examples/gateways.cfg](examples/gateways.cfg))
+- `--fs-cfg <file>`: specify a file with the file cache configuration. (Example: [examples/fs.cfg](examples/fs.cfg))
+- `--bindings-file <file>`: specify a file with the data schema. (Examples: [examples/bindings_tpch.json](examples/bindings_tpch.json), [examples/bindings_tpch_pg.json](examples/bindings_tpch_pg.json))
+- `--dq-host <host>`: set the host to connect to the test utilities `service_node` and `worker_node`.
+- `--dq-port <port>`: set the port to connect to the test utilities `service_node` and `worker_node`.
+
+## Example of Local Usage
+
+```bash
+dqrun -s -p query.sql --gateways-cfg examples/gateways.cfg --fs-cfg examples/fs.cfg --bindings-file examples/bindings_tpch.json
+```
+
+In this example, `dqrun` will use SQL from the file `query.sql`, engine configuration from the file [examples/gateways.cfg](examples/gateways.cfg), file cache configuration from the file [examples/fs.cfg](examples/fs.cfg), and data schema from the file [examples/bindings_tpch.json](examples/bindings_tpch.json).
+
+## Example of Usage as a Client to Test Utilities
+
+```bash
+dqrun --dq-host localhost --dq-port 8080 -s -p query.sql --gateways-cfg examples/gateways.cfg --fs-cfg examples/fs.cfg --bindings-file examples/bindings_tpch.json
+```
+
+In this example, `dqrun` will use SQL from the file `query.sql`, engine configuration from the file [examples/gateways.cfg](examples/gateways.cfg), file cache configuration from the file [examples/fs.cfg](examples/fs.cfg), and data schema from the file [examples/bindings_tpch.json](examples/bindings_tpch.json). Additionally, the utility will act as a client to the test utilities `service_node` and `worker_node`, using the specified host and port.
+
+## Data Schema File Example (bindings_tpch.json)
+
+An example of a data schema file for queries from the TPC-H benchmark.
+
+```json
+{
+  "customer": {
+    "ClusterType": "s3",
+    "path": "h/1/customer/",
+    "cluster": "yq-tpc-local",
+    "format": "parquet",
+    "schema": [
+      "StructType",
+      [
+        ["c_acctbal", ["DataType", "Double"]],
+        ["c_address", ["DataType", "String"]],
+        ["c_comment", ["DataType", "String"]],
+        ["c_custkey", ["DataType", "Int32"]],
+        ["c_mktsegment", ["DataType", "String"]],
+        ["c_name", ["DataType", "String"]],
+        ["c_nationkey", ["DataType", "Int32"]],
+        ["c_phone", ["DataType", "String"]]
+      ]
+    ]
+  },
+  // Other tables from the TPC-H benchmark
+}
+```
+
+## Data Schema File Example with PostgreSQL Syntax (bindings_tpch_pg.json)
+
+An example of a data schema file for queries from the TPC-H benchmark using PostgreSQL syntax.
+
+```json
+{
+  "customer": {
+    "ClusterType": "s3",
+    "path": "h/1/customer/",
+    "cluster": "yq-tpc-local",
+    "format": "parquet",
+    "schema": [
+      "StructType",
+      [
+        ["c_acctbal", ["PgType", "numeric"]],
+        ["c_address", ["PgType", "text"]],
+        ["c_comment", ["PgType", "text"]],
+        ["c_custkey", ["PgType", "int4"]],
+        ["c_mktsegment", ["PgType", "text"]],
+        ["c_name", ["PgType", "text"]],
+        ["c_nationkey", ["PgType", "int4"]],
+        ["c_phone", ["PgType", "text"]]
+      ]
+    ]
+  },
+  // Other tables from the TPC-H benchmark
+}
+```

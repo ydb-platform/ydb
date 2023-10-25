@@ -20,20 +20,34 @@ public:
     }
 };
 
+class TIntervalStat {
+private:
+    YDB_READONLY(ui32, SourcesCount, 0);
+    YDB_READONLY(bool, IsPoint, false);
+public:
+    TIntervalStat(const ui32 sourcesCount, const bool isPoint)
+        : SourcesCount(sourcesCount)
+        , IsPoint(isPoint)
+    {
+
+    }
+};
+
 class TScanHead {
 private:
     TPlainReadData& Reader;
     std::deque<std::shared_ptr<IDataSource>> Sources;
     std::vector<std::shared_ptr<arrow::Field>> ResultFields;
+    std::shared_ptr<arrow::Schema> ResultSchema;
     YDB_READONLY_DEF(std::vector<TString>, ResultFieldNames);
     THashMap<ui32, std::shared_ptr<IDataSource>> SourceByIdx;
     std::map<NIndexedReader::TSortableBatchPosition, TDataSourceEndpoint> BorderPoints;
     std::map<ui32, std::shared_ptr<IDataSource>> CurrentSegments;
     std::optional<NIndexedReader::TSortableBatchPosition> CurrentStart;
     std::deque<TFetchingInterval> FetchingIntervals;
+    THashMap<ui32, std::shared_ptr<arrow::RecordBatch>> ReadyIntervals;
     ui32 SegmentIdxCounter = 0;
-    std::shared_ptr<NIndexedReader::TMergePartialStream> Merger;
-
+    std::vector<TIntervalStat> IntervalStats;
     void DrainSources();
 
 public:
@@ -67,6 +81,14 @@ public:
 
     TReadContext& GetContext();
 
+    TString DebugString() const {
+        TStringBuilder sb;
+        for (auto&& i : IntervalStats) {
+            sb << (i.GetIsPoint() ? "^" : "") << i.GetSourcesCount() << ";";
+        }
+        return sb;
+    }
+
     void OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 intervalIdx);
     std::shared_ptr<IDataSource> GetSourceVerified(const ui32 idx) const {
         auto it = SourceByIdx.find(idx);
@@ -78,7 +100,7 @@ public:
 
     bool BuildNextInterval();
 
-    void DrainResults();
+    std::shared_ptr<NIndexedReader::TMergePartialStream> BuildMerger() const;
 
 };
 

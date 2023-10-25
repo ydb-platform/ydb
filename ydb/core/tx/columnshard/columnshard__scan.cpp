@@ -281,13 +281,7 @@ private:
         const i64 maxSteps = ReadMetadataRanges.size();
         for (i64 step = 0; step <= maxSteps; ++step) {
             ContinueProcessingStep();
-
-            // Only exist the loop if either:
-            // * we have finished scanning ALL the ranges
-            // * or there is an in-flight blob read or ScanData message for which
-            //   we will get a reply and will be able to proceed further
-            if  (!ScanIterator || !ChunksLimiter.HasMore() || InFlightReads
-                || MemoryAccessor->InWaiting()) {
+            if  (!ScanIterator || !ChunksLimiter.HasMore() || InFlightReads || MemoryAccessor->InWaiting() || ScanCountersPool.InWaiting()) {
                 return;
             }
         }
@@ -436,7 +430,7 @@ private:
                 << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
                 << " bytes: " << Bytes << " rows: " << Rows << " page faults: " << Result->PageFaults
                 << " finished: " << Result->Finished << " pageFault: " << Result->PageFault
-                << " stats:" << Stats.DebugString();
+                << " stats:" << Stats.DebugString() << ";iterator:" << (ScanIterator ? ScanIterator->DebugString(false) : "NO");
         } else {
             Y_ABORT_UNLESS(ChunksLimiter.Take(Bytes));
             Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();

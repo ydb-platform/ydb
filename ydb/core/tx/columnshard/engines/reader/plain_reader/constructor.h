@@ -17,6 +17,7 @@ protected:
     std::shared_ptr<const TReadMetadata> ReadMetadata;
     TReadContext Context;
     THashMap<TBlobRange, ui32> NullBlocks;
+    NColumnShard::TCounterGuard TasksGuard;
     virtual bool DoOnError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override;
 public:
     IFetchTaskConstructor(IDataReader& reader, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks, const IDataSource& source, const TString& taskCustomer)
@@ -26,6 +27,7 @@ public:
         , ReadMetadata(reader.GetReadMetadata())
         , Context(reader.GetContext())
         , NullBlocks(std::move(nullBlocks))
+        , TasksGuard(reader.GetCounters().GetReadTasksGuard())
     {
 
     }

@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/conveyor_task.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 
 namespace NKikimr::NOlap::NPlainReader {
@@ -15,6 +16,7 @@ private:
 protected:
     std::shared_ptr<arrow::RecordBatch> Result;
     const ui32 SourceIdx;
+    const NColumnShard::TCounterGuard TaskGuard;
     virtual bool DoExecute() override;
 public:
     virtual TString GetTaskClassIdentifier() const override {
@@ -22,7 +24,7 @@ public:
     }
 
     TAssembleBatch(const NActors::TActorId& scanActorId, TPortionInfo::TPreparedBatchData&& batchConstructor,
-        const ui32 sourceIdx, const std::shared_ptr<NArrow::TColumnFilter>& filter);
+        const ui32 sourceIdx, const std::shared_ptr<NArrow::TColumnFilter>& filter, NColumnShard::TCounterGuard&& taskGuard);
 };
 
 class TAssembleFFBatch: public TAssembleBatch {

@@ -161,6 +161,9 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
     const std::vector<TString>& columnNames) {
+    if (!srcBatch) {
+        return srcBatch;
+    }
     if (columnNames.empty()) {
         return nullptr;
     }

@@ -21,6 +21,7 @@ namespace NKikimr::NOlap::NPlainReader {
         bool AllowEarlyFilter = false;
         std::set<ui32> FilterColumnIds;
         const bool UseFilter = true;
+        const NColumnShard::TCounterGuard TaskGuard;
     protected:
         virtual bool DoApply(IDataReader& owner) const override;
         virtual bool DoExecute() override;
@@ -31,13 +32,14 @@ namespace NKikimr::NOlap::NPlainReader {
         }
 
         TAssembleFilter(const NActors::TActorId& scanActorId, TPortionInfo::TPreparedBatchData&& batchConstructor, NOlap::TReadMetadata::TConstPtr readMetadata,
-            const ui32 sourceIdx, const std::set<ui32>& filterColumnIds, const bool useFilter)
+            const ui32 sourceIdx, const std::set<ui32>& filterColumnIds, const bool useFilter, NColumnShard::TCounterGuard&& taskGuard)
             : TBase(scanActorId)
             , BatchConstructor(batchConstructor)
             , SourceIdx(sourceIdx)
             , ReadMetadata(readMetadata)
             , FilterColumnIds(filterColumnIds)
             , UseFilter(useFilter)
+            , TaskGuard(std::move(taskGuard))
         {
             TBase::SetPriority(TBase::EPriority::Normal);
         }

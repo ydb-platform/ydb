@@ -100,6 +100,9 @@ public:
         bool IsEqual() const {
             return !GreaterIfNotEqual;
         }
+        bool IsLess() const {
+            return !!GreaterIfNotEqual && !*GreaterIfNotEqual;
+        }
         bool IsGreater() const {
             return !!GreaterIfNotEqual && *GreaterIfNotEqual;
         }

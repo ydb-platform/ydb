@@ -32,12 +32,12 @@ TPortionInfo::TPreparedBatchData TAssembleColumnsTaskConstructor::BuildBatchAsse
 
 void TEFTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     NConveyor::TScanServiceOperator::SendTaskToExecute(std::make_shared<TAssembleFilter>(ScanActorId, BuildBatchAssembler(),
-        ReadMetadata, SourceIdx, ColumnIds, UseEarlyFilter));
+        ReadMetadata, SourceIdx, ColumnIds, UseEarlyFilter, Context.GetCounters().GetAssembleTasksGuard()));
 }
 
 void TFFColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     NConveyor::TScanServiceOperator::SendTaskToExecute(std::make_shared<TAssembleFFBatch>(ScanActorId, BuildBatchAssembler(),
-        SourceIdx, AppliedFilter));
+        SourceIdx, AppliedFilter, Context.GetCounters().GetAssembleTasksGuard()));
 }
 
 void TCommittedColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
@@ -45,7 +45,7 @@ void TCommittedColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NReso
     Y_ABORT_UNLESS(NullBlocks.size() == 0);
     Y_ABORT_UNLESS(blobs.size() == 1);
     NConveyor::TScanServiceOperator::SendTaskToExecute(std::make_shared<TCommittedAssembler>(ScanActorId, blobs.begin()->second,
-        ReadMetadata, SourceIdx, CommittedBlob));
+        ReadMetadata, SourceIdx, CommittedBlob, Context.GetCounters().GetAssembleTasksGuard()));
 }
 
 bool IFetchTaskConstructor::DoOnError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {

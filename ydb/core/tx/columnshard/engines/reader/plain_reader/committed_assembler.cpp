@@ -21,13 +21,14 @@ bool TCommittedAssembler::DoApply(IDataReader& owner) const {
 }
 
 TCommittedAssembler::TCommittedAssembler(const NActors::TActorId& scanActorId, const TString& blobData, const TReadMetadata::TConstPtr& readMetadata, const ui32 sourceIdx,
-    const TCommittedBlob& cBlob)
+    const TCommittedBlob& cBlob, NColumnShard::TCounterGuard&& taskGuard)
     : TBase(scanActorId)
     , BlobData(blobData)
     , ReadMetadata(readMetadata)
     , SourceIdx(sourceIdx)
     , SchemaVersion(cBlob.GetSchemaVersion())
     , DataSnapshot(cBlob.GetSnapshot())
+    , TaskGuard(std::move(taskGuard))
 {
 }
 

@@ -28,12 +28,16 @@ private:
     TFetchBlobsQueue PriorityQueue;
     bool AbortedFlag = false;
 protected:
-    virtual TString DoDebugString() const override {
-        return TStringBuilder() <<
+    virtual TString DoDebugString(const bool verbose) const override {
+        TStringBuilder sb;
+        sb <<
             "ef=" << EFColumns->DebugString() << ";" <<
             "pk=" << PKColumns->DebugString() << ";" <<
-            "ff=" << FFColumns->DebugString() << ";"
-            ;
+            "ff=" << FFColumns->DebugString() << ";";
+        if (verbose) {
+            sb << "intervals_schema=" << Scanner->DebugString();
+        }
+        return sb;
     }
 
     virtual std::vector<TPartialReadResult> DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) override;
@@ -64,7 +68,15 @@ public:
         }
     }
 
-    void OnIntervalResult(std::shared_ptr<arrow::RecordBatch> batch);
+    const TScanHead& GetScanner() const {
+        return *Scanner;
+    }
+
+    TScanHead& MutableScanner() {
+        return *Scanner;
+    }
+
+    void OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch);
 
     TPlainReadData(TReadMetadata::TConstPtr readMetadata, const TReadContext& context);
     ~TPlainReadData() {

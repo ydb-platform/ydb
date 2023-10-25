@@ -162,11 +162,53 @@ public:
     TScanAggregations BuildAggregations();
 };
 
+class TCounterGuard: TNonCopyable {
+private:
+    std::shared_ptr<TAtomicCounter> Counter;
+public:
+    TCounterGuard(TCounterGuard&& guard) {
+        Counter = guard.Counter;
+        guard.Counter = nullptr;
+    }
+
+    TCounterGuard(const std::shared_ptr<TAtomicCounter>& counter)
+        : Counter(counter)
+    {
+        AFL_VERIFY(Counter);
+        Counter->Inc();
+    }
+    ~TCounterGuard() {
+        if (Counter) {
+            AFL_VERIFY(Counter->Dec() >= 0);
+        }
+    }
+
+};
+
 class TConcreteScanCounters: public TScanCounters {
 private:
     using TBase = TScanCounters;
+    std::shared_ptr<TAtomicCounter> MergeTasksCount;
+    std::shared_ptr<TAtomicCounter> AssembleTasksCount;
+    std::shared_ptr<TAtomicCounter> ReadTasksCount;
 public:
     TScanAggregations Aggregations;
+
+    TCounterGuard GetMergeTasksGuard() const {
+        return TCounterGuard(MergeTasksCount);
+    }
+
+    TCounterGuard GetReadTasksGuard() const {
+        return TCounterGuard(ReadTasksCount);
+    }
+
+    TCounterGuard GetAssembleTasksGuard() const {
+        return TCounterGuard(AssembleTasksCount);
+    }
+
+    bool InWaiting() const {
+        return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val();
+    }
 
     void OnBlobsWaitDuration(const TDuration d, const TDuration fullScanDuration) const {
         TBase::OnBlobsWaitDuration(d);
@@ -175,6 +217,9 @@ public:
 
     TConcreteScanCounters(const TScanCounters& counters)
         : TBase(counters)
+        , MergeTasksCount(std::make_shared<TAtomicCounter>())
+        , AssembleTasksCount(std::make_shared<TAtomicCounter>())
+        , ReadTasksCount(std::make_shared<TAtomicCounter>())
         , Aggregations(TBase::BuildAggregations())
     {
 

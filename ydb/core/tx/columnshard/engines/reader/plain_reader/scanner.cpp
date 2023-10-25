@@ -6,11 +6,22 @@
 namespace NKikimr::NOlap::NPlainReader {
 
 void TScanHead::OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 intervalIdx) {
+    AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, batch).second);
     Y_ABORT_UNLESS(FetchingIntervals.size());
-    Y_ABORT_UNLESS(FetchingIntervals.front().GetIntervalIdx() == intervalIdx);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "interval_result")("interval", FetchingIntervals.front().GetIntervalIdx())("count", batch ? batch->num_rows() : 0);
-    FetchingIntervals.pop_front();
-    Reader.OnIntervalResult(batch);
+    while (FetchingIntervals.size()) {
+        auto it = ReadyIntervals.find(FetchingIntervals.front().GetIntervalIdx());
+        if (it == ReadyIntervals.end()) {
+            break;
+        }
+        const std::shared_ptr<arrow::RecordBatch>& batch = it->second;
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "interval_result")("interval", FetchingIntervals.front().GetIntervalIdx())("count", batch ? batch->num_rows() : 0);
+        FetchingIntervals.pop_front();
+        Reader.OnIntervalResult(batch);
+        ReadyIntervals.erase(it);
+    }
+    if (FetchingIntervals.empty()) {
+        AFL_VERIFY(ReadyIntervals.empty());
+    }
 }
 
 TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, TPlainReadData& reader)
@@ -22,15 +33,14 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, TPlainR
         ResultFields.emplace_back(resultSchema->GetFieldByColumnIdVerified(f));
         ResultFieldNames.emplace_back(ResultFields.back()->name());
     }
-    Merger = std::make_shared<NIndexedReader::TMergePartialStream>(reader.GetReadMetadata()->GetReplaceKey(), std::make_shared<arrow::Schema>(ResultFields), reader.GetReadMetadata()->IsDescSorted());
+    ResultSchema = std::make_shared<arrow::Schema>(ResultFields);
     DrainSources();
 }
 
 bool TScanHead::BuildNextInterval() {
     while (BorderPoints.size()) {
-        auto position = BorderPoints.begin()->first;
         auto firstBorderPointInfo = std::move(BorderPoints.begin()->second);
-        const bool isIncludeStart = CurrentSegments.empty();
+        bool includeStart = firstBorderPointInfo.GetStartSources().size();
 
         for (auto&& i : firstBorderPointInfo.GetStartSources()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("add_source", i->GetSourceIdx());
@@ -38,9 +48,11 @@ bool TScanHead::BuildNextInterval() {
         }
 
         if (firstBorderPointInfo.GetStartSources().size() && firstBorderPointInfo.GetFinishSources().size()) {
+            includeStart = false;
             FetchingIntervals.emplace_back(
                 BorderPoints.begin()->first, BorderPoints.begin()->first, SegmentIdxCounter++, CurrentSegments,
                 *this, std::make_shared<NIndexedReader::TRecordBatchBuilder>(ResultFields), true, true);
+            IntervalStats.emplace_back(CurrentSegments.size(), true);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "new_interval")("interval", FetchingIntervals.back().DebugJson());
         }
 
@@ -56,23 +68,16 @@ bool TScanHead::BuildNextInterval() {
             const bool includeFinish = BorderPoints.begin()->second.GetStartSources().empty();
             FetchingIntervals.emplace_back(
                 *CurrentStart, BorderPoints.begin()->first, SegmentIdxCounter++, CurrentSegments,
-                *this, std::make_shared<NIndexedReader::TRecordBatchBuilder>(ResultFields), includeFinish, isIncludeStart);
+                *this, std::make_shared<NIndexedReader::TRecordBatchBuilder>(ResultFields), includeFinish, includeStart);
+            IntervalStats.emplace_back(CurrentSegments.size(), false);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "new_interval")("interval", FetchingIntervals.back().DebugJson());
             return true;
+        } else {
+            IntervalStats.emplace_back(CurrentSegments.size(), false);
         }
 
     }
     return false;
-}
-
-void TScanHead::DrainResults() {
-    while (FetchingIntervals.size()) {
-        if (!FetchingIntervals.front().HasMerger()) {
-            FetchingIntervals.front().StartMerge(Merger);
-        } else {
-            break;
-        }
-    }
 }
 
 void TScanHead::DrainSources() {
@@ -94,6 +99,10 @@ bool TScanHead::IsReverse() const {
 
 NKikimr::NOlap::NPlainReader::TFetchingPlan TScanHead::GetColumnsFetchingPlan(const bool exclusiveSource) const {
     return Reader.GetColumnsFetchingPlan(exclusiveSource);
+}
+
+std::shared_ptr<NKikimr::NOlap::NIndexedReader::TMergePartialStream> TScanHead::BuildMerger() const {
+    return std::make_shared<NIndexedReader::TMergePartialStream>(Reader.GetReadMetadata()->GetReplaceKey(), ResultSchema, Reader.GetReadMetadata()->IsDescSorted());
 }
 
 }

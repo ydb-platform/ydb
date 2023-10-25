@@ -60,7 +60,6 @@ TPlainReadData::TPlainReadData(TReadMetadata::TConstPtr readMetadata, const TRea
 }
 
 std::vector<NKikimr::NOlap::TPartialReadResult> TPlainReadData::DoExtractReadyResults(const int64_t maxRowsInBatch) {
-    Scanner->DrainResults();
     if (ReadyResultsCount < maxRowsInBatch && !Scanner->IsFinished()) {
         return {};
     }
@@ -104,7 +103,7 @@ std::shared_ptr<NBlobOperations::NRead::ITask> TPlainReadData::DoExtractNextRead
     return nullptr;
 }
 
-void TPlainReadData::OnIntervalResult(std::shared_ptr<arrow::RecordBatch> batch) {
+void TPlainReadData::OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch) {
     if (batch && batch->num_rows()) {
         TPartialReadResult result(std::make_shared<TScanMemoryLimiter::TGuard>(Context.GetMemoryAccessor()), batch);
         ReadyResultsCount += result.GetRecordsCount();

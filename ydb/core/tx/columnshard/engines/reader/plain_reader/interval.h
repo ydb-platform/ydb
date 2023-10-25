@@ -6,17 +6,37 @@ namespace NKikimr::NOlap::NPlainReader {
 
 class TScanHead;
 
-class TFetchingInterval: TNonCopyable {
-private:
-    TScanHead& Scanner;
+class TMergingContext {
+protected:
     NIndexedReader::TSortableBatchPosition Start;
     NIndexedReader::TSortableBatchPosition Finish;
     const bool IncludeFinish = true;
     const bool IncludeStart = false;
-    std::map<ui32, std::shared_ptr<IDataSource>> Sources;
-    YDB_READONLY(ui32, IntervalIdx, 0);
-    std::shared_ptr<NIndexedReader::TMergePartialStream> Merger;
     std::shared_ptr<NIndexedReader::TRecordBatchBuilder> RBBuilder;
+    ui32 IntervalIdx = 0;
+public:
+    TMergingContext(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
+        const ui32 intervalIdx, std::shared_ptr<NIndexedReader::TRecordBatchBuilder> builder, const bool includeFinish, const bool includeStart)
+        : Start(start)
+        , Finish(finish)
+        , IncludeFinish(includeFinish)
+        , IncludeStart(includeStart)
+        , RBBuilder(builder)
+        , IntervalIdx(intervalIdx) {
+
+    }
+
+    ui32 GetIntervalIdx() const {
+        return IntervalIdx;
+    }
+};
+
+class TFetchingInterval: public TMergingContext, TNonCopyable {
+private:
+    using TBase = TMergingContext;
+    bool ResultConstructionInProgress = false;
+    TScanHead& Scanner;
+    std::map<ui32, std::shared_ptr<IDataSource>> Sources;
 
     bool IsExclusiveSource() const;
     void ConstructResult();
@@ -56,10 +76,6 @@ public:
         }
         result.InsertValue("include_finish", IncludeFinish);
         return result;
-    }
-
-    bool HasMerger() const {
-        return !!Merger;
     }
 
     void OnSourceFetchStageReady(const ui32 sourceIdx);

@@ -122,7 +122,8 @@ public:
 
     }
     virtual std::shared_ptr<NOlap::NBlobOperations::NRead::ITask> GetNextTaskToRead() { return nullptr; }
-    virtual TString DebugString() const {
+    virtual TString DebugString(const bool verbose = false) const {
+        Y_UNUSED(verbose);
         return "NO_DATA";
     }
 };

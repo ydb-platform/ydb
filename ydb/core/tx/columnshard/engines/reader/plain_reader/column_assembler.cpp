@@ -27,11 +27,12 @@ bool TAssembleFFBatch::DoApply(IDataReader& owner) const {
 }
 
 TAssembleBatch::TAssembleBatch(const NActors::TActorId& scanActorId, TPortionInfo::TPreparedBatchData&& batchConstructor,
-    const ui32 sourceIdx, const std::shared_ptr<NArrow::TColumnFilter>& filter)
+    const ui32 sourceIdx, const std::shared_ptr<NArrow::TColumnFilter>& filter, NColumnShard::TCounterGuard&& taskGuard)
     : TBase(scanActorId)
     , BatchConstructor(batchConstructor)
     , Filter(filter)
     , SourceIdx(sourceIdx)
+    , TaskGuard(std::move(taskGuard))
 {
     TBase::SetPriority(TBase::EPriority::High);
 }

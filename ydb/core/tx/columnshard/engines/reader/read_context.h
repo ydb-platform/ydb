@@ -55,7 +55,7 @@ protected:
     TReadContext Context;
     std::shared_ptr<const TReadMetadata> ReadMetadata;
     virtual std::shared_ptr<NBlobOperations::NRead::ITask> DoExtractNextReadTask(const bool hasReadyResults) = 0;
-    virtual TString DoDebugString() const = 0;
+    virtual TString DoDebugString(const bool verbose) const = 0;
     virtual void DoAbort() = 0;
     virtual bool DoIsFinished() const = 0;
     virtual std::vector<TPartialReadResult> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
@@ -109,12 +109,12 @@ public:
         return DoIsFinished();
     }
 
-    TString DebugString() const {
+    TString DebugString(const bool verbose) const {
         TStringBuilder sb;
         sb << "internal:" << Context.GetIsInternalRead() << ";"
            << "has_buffer:" << (GetMemoryAccessor() ? GetMemoryAccessor()->HasBuffer() : true) << ";"
             ;
-        sb << DoDebugString();
+        sb << DoDebugString(verbose);
         return sb;
     }
     std::shared_ptr<NBlobOperations::NRead::ITask> ExtractNextReadTask(const bool hasReadyResults) {

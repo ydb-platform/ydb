@@ -87,10 +87,10 @@ public:
         return ReadyResults.size();
     }
 
-    virtual TString DebugString() const override {
+    virtual TString DebugString(const bool verbose) const override {
         return TStringBuilder()
             << "ready_results:(" << ReadyResults.DebugString() << ");"
-            << "indexed_data:(" << IndexedData->DebugString() << ")"
+            << "indexed_data:(" << IndexedData->DebugString(verbose) << ")"
             ;
     }
 

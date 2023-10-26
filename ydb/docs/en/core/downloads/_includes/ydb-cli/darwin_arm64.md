@@ -1,6 +1,7 @@
 | Version | Release date | Download | Changelog |
 :--- | :--- | :--- | :---
-| v.2.6.0 | 07/08/2023 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.6.0/darwin/arm64/ydb) | [See the changelog](../../../changelog-cli.md#2-6-0) |
+| v.2.7.0 | 23/10/2023 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.7.0/darwin/arm64/ydb) | [See the changelog](../../../changelog-cli.md#2-7-0) |
+| v.2.6.0 | 07/09/2023 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.6.0/darwin/arm64/ydb) | [See the changelog](../../../changelog-cli.md#2-6-0) |
 | v.2.5.0 | 20/06/2023 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/darwin/arm64/ydb) | [See the changelog](../../../changelog-cli.md#2-5-0) |
 | v.2.4.0 | 24/05/2023 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.4.0/darwin/arm64/ydb) | [See the changelog](../../../changelog-cli.md#2-4-0) |
 | v.2.3.0 | 01/05/2023 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.3.0/darwin/arm64/ydb) | [See the changelog](../../../changelog-cli.md#2-3-0) |

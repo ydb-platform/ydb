@@ -2,7 +2,39 @@
 
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.7.0 {#2-7-0}
+
+Released on October 23, 2023. To update to version **2.7.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+**Features:**
+
+* Added the `ydb tools pg-convert` command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
+
+* Added the `ydb workload query` load testing command, which loads the database with [script execution queries](reference/ydb-cli/yql.md) in multiple threads.
+
+* Added a command `ydb scheme permissions list` to list permissions.
+
+* In the commands [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md), and [ydb scripting yql](reference/ydb-cli/scripting-yql.md), the `--flame-graph` option has been added, specifying the path to the file in which you need to save the visualization of query execution statistics.
+
+* [Special commands](reference/ydb-cli/interactive-cli.md#spec-commands) in the interactive query execution mode are now case-insensitive.
+
+* Added validation for [special commands](reference/ydb-cli/interactive-cli.md#spec-commands) and their [parameters](reference/ydb-cli/interactive-cli.md#internal-vars).
+
+* Added table reading in the scenario with transactions in the command `ydb workload transfer topic-to-table run`.
+
+* Added the `--commit-messages` option to the command `ydb workload transfer topic-to-table run`, specifying the number of messages in a single transaction.
+
+* Added the options `--only-table-in-tx` and `--only-topic-in-tx` in the command `ydb workload transfer topic-to-table run`, specifying restrictions on the types of queries in a single transaction.
+
+* Added new columns `Select time` and `Upsert time` in the statistics table in the command `ydb workload transfer topic-to-table run`.
+
+**Bug fixes:**
+
+* Fixed an error when loading an empty JSON list by commands: [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb scripting yql](reference/ydb-cli/scripting-yql.md) and [ydb yql](reference/ydb-cli/yql.md).
+
 ## Version 2.6.0 {#2-6-0}
+
+Released on September 7, 2023. To update to version **2.6.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
 **Features:**
 

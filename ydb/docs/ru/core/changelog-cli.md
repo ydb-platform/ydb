@@ -2,6 +2,36 @@
 
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.7.0 {#2-7-0}
+
+Дата выхода 23 октября 2023. Для обновления до версии **2.7.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+**Функциональность:**
+
+* Добавлена команда `ydb tools pg-convert`, выполняющая подготовку дампа, полученного утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), к загрузке в postgres-совместимую прослойку YDB.
+
+* Добавлена команда нагрузочного тестирования `ydb workload query`, которая нагружает базу [запросами выполнения скрипта](reference/ydb-cli/yql.md) в несколько потоков.
+
+* Добавлена команда для просмотра списка разрешений `ydb scheme permissions list`.
+
+* В командах [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md) и [ydb scripting yql](reference/ydb-cli/scripting-yql.md) добавлена опция `--flame-graph`, задающая путь до файла, в котором необходимо сохранить визуализацию статистики выполнения запросов.
+
+* [Специальные команды](reference/ydb-cli/interactive-cli.md#spec-commands) интерактивного режима выполнения запросов теперь не чувствительны к регистру.
+
+* Добавлена валидация [специальных команд](reference/ydb-cli/interactive-cli.md#spec-commands) и их [параметров](reference/ydb-cli/interactive-cli.md#internal-vars).
+
+* Добавлено чтение из таблицы в сценарии с транзакциями в команде [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run).
+
+* Добавлена опция `--commit-messages` в команде [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run), задающая число сообщений в одной транзакции.
+
+* Добавлены опции `--only-table-in-tx` и `--only-topic-in-tx` в команде [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run), задающие ограничения на виды запросов в одной транзакции.
+
+* Добавлены новые колонки `Select time` и `Upsert time` в таблице статистики в команде [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run).
+
+**Исправления ошибок:**
+
+* Исправлена ошибка при загрузке пустого JSON списка командами [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb scripting yql](reference/ydb-cli/scripting-yql.md) и [ydb yql](reference/ydb-cli/yql.md).
+
 ## Версия 2.6.0 {#2-6-0}
 
 Дата выхода 7 сентября 2023. Для обновления до версии **2.6.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).

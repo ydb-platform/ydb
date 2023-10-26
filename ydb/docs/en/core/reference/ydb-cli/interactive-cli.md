@@ -22,7 +22,7 @@ Hotkey | Description
 
 ## Special commands {#spec-commands}
 
-Special commands are CLI-specific commands and are not part of the YQL syntax. They are intended for performing various functions that cannot be accomplished through a YQL query. Special commands are case sensitive.
+Special commands are CLI-specific commands and are not part of the YQL syntax. They are intended for performing various functions that cannot be accomplished through a YQL query.
 
 Command | Description
 ---|---

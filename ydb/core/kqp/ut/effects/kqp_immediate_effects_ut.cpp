@@ -2180,6 +2180,94 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
+    Y_UNIT_TEST(ImmediateUpdate) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE t
+                (
+                    id Uint64,
+                    val String,
+                    created_on Uint64,
+                    PRIMARY KEY(id)
+                );
+            )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = Q_(R"(
+                UPSERT INTO t (id, val, created_on) VALUES
+                (123, 'xxx', 1);
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                UPDATE t SET created_on = 11;
+                UPDATE t SET val = 'abc' WHERE created_on = 11;
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = session.ExecuteDataQuery(R"(
+                SELECT * FROM t;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[[11u];[123u];["abc"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ImmediateUpdateSelect) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE t
+                (
+                    id Uint64,
+                    val String,
+                    created_on Uint64,
+                    PRIMARY KEY(id)
+                );
+            )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = Q_(R"(
+                UPSERT INTO t (id, val, created_on) VALUES
+                (123, 'xxx', 1);
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                UPDATE t SET created_on = 11;
+                UPDATE t SET val = 'abc' WHERE created_on = 11;
+                SELECT * FROM t;
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[[11u];[123u];["abc"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+            result = session.ExecuteDataQuery(R"(
+                SELECT * FROM t;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[[11u];[123u];["abc"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
 }
 
 } // namespace NKqp

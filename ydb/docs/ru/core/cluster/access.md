@@ -48,3 +48,10 @@ ALTER GROUP `DATA-WRITERS` ADD USER myuser1;
 * [{#T}](../yql/reference/syntax/create-user.md).
 * [{#T}](../yql/reference/syntax/alter-user.md).
 * [{#T}](../yql/reference/syntax/drop-user.md).
+
+## Управление правами доступа операторами YQL
+
+Для назначения или отзыва прав доступа на объекты схемы для пользователей или групп воспользуйтесь операторами YQL:
+
+* [{#T}](../yql/reference/syntax/grant.md).
+* [{#T}](../yql/reference/syntax/revoke.md).

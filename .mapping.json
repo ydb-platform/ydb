@@ -7580,7 +7580,6 @@
   "ydb/library/yql/providers/dq/global_worker_manager/ut/CMakeLists.linux-aarch64.txt":"",
   "ydb/library/yql/providers/dq/global_worker_manager/ut/CMakeLists.linux-x86_64.txt":"",
   "ydb/library/yql/providers/dq/global_worker_manager/ut/CMakeLists.txt":"",
-  "ydb/library/yql/providers/dq/global_worker_manager/ut/CMakeLists.windows-x86_64.txt":"",
   "ydb/library/yql/providers/dq/interface/CMakeLists.darwin-x86_64.txt":"",
   "ydb/library/yql/providers/dq/interface/CMakeLists.linux-aarch64.txt":"",
   "ydb/library/yql/providers/dq/interface/CMakeLists.linux-x86_64.txt":"",

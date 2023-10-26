@@ -952,9 +952,6 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     // Allow migrate requests between session during session balancing
     FLUENT_SETTING_DEFAULT(bool, AllowRequestMigration, true);
 
-    // This feature has been removed as inefficient
-    // the settings will be removed in next releases
-    FLUENT_SETTING_DEFAULT(ui32, SettlerSessionPoolTTL, 100);
     // Settings of session pool
     FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
 };

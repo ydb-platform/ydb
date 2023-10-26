@@ -1521,6 +1521,20 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         {
             const auto query = Q_(R"(
                 --!syntax_pg
+                CREATE TABLE test2(
+                    id int8,
+                    fk int8,
+                    primary key(id)
+                );
+                CREATE INDEX "test_fk_idx" ON test2 (fk);
+                )");
+
+            auto result = session.ExecuteQuery(query, txCtrl).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
                 CREATE INDEX "test_fk_idx" ON test (fk);
                 )");
 

@@ -917,10 +917,13 @@ const TPath::TChecker& TPath::TChecker::IsNameUniqGrandParentLevel(EStatus statu
         return *this;
     }
 
+    // must be a copy here
     auto path = Path.Parent();
     if (!path.IsResolved()) {
         return *this;
     }
+
+    auto parentPathId = path->PathId;
 
     path.Rise();
     if (!path.IsResolved()) {
@@ -929,9 +932,29 @@ const TPath::TChecker& TPath::TChecker::IsNameUniqGrandParentLevel(EStatus statu
 
     const auto& myName = Path.NameParts.back();
 
+    auto raiseErr = [this](EStatus st, const TString& myName, const TString& conflict) -> const TPath::TChecker& {
+        return Fail(st, TStringBuilder() << "name " << myName
+            << " is not uniq. Found in: " << conflict);
+    };
+
     if (path.Elements.back()->FindChild(myName)) {
-        return Fail(status, TStringBuilder() << "name " << myName
-            << " is not uniq. Found in: " << path.PathString());
+        return raiseErr(status, myName, path.PathString());
+    }
+
+    TVector<TPathId> uncles;
+    uncles.reserve(path.Elements.back()->GetChildren().size());
+    for (const auto& [x, unclePathId] : path.Elements.back()->GetChildren()) {
+        if (unclePathId != parentPathId) {
+            uncles.emplace_back(unclePathId);
+        }
+    }
+
+    for (const auto& pathid : uncles) {
+        auto& uncle = path.DiveByPathId(pathid);
+        if (uncle->FindChild(myName)) {
+            return raiseErr(status, myName, uncle.PathString());
+        }
+        uncle.Rise();
     }
 
     return *this;

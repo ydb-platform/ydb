@@ -2109,6 +2109,13 @@ void TQueueLeader::OnInflyLoaded(ui64 shard, const TSqsEvents::TEvExecuted::TRec
         shardInfo.InflyVersion = val["inflyVersion"];
         LOG_SQS_DEBUG("Infly version for shard " << TLogQueueName(UserName_, QueueName_, shard) << ": " << shardInfo.InflyVersion);
 
+        if (!val["messageCount"].HaveValue() ||
+            !val["inflyCount"].HaveValue() ||
+            !val["readOffset"].HaveValue() ||
+            !val["createdTimestamp"].HaveValue()
+        ) {
+            return;  
+        }
         SetMessagesCount(shard, val["messageCount"]);
         SetInflyMessagesCount(shard, val["inflyCount"]);
         shardInfo.ReadOffset = val["readOffset"];

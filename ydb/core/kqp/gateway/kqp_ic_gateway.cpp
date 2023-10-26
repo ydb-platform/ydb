@@ -467,6 +467,55 @@ private:
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 };
 
+class TKqpSchemeExecuterRequestHandler: public TActorBootstrapped<TKqpSchemeExecuterRequestHandler> {
+public:
+    using TResult = IKqpGateway::TGenericResult;
+
+    TKqpSchemeExecuterRequestHandler(TKqpPhyTxHolder::TConstPtr phyTx, const TMaybe<TString>& requestType, const TString& database,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken, TPromise<TResult> promise)
+        : PhyTx(std::move(phyTx))
+        , Database(database)
+        , UserToken(std::move(userToken))
+        , Promise(promise)
+        , RequestType(requestType)
+    {}
+
+    void Bootstrap() {
+        auto ctx = MakeIntrusive<TUserRequestContext>();
+        IActor* actor = CreateKqpSchemeExecuter(PhyTx, SelfId(), RequestType, Database, UserToken, false /* temporary */, TString() /* sessionId */, ctx);
+        Register(actor);
+        Become(&TThis::WaitState);
+    }
+
+    STATEFN(WaitState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(TEvKqpExecuter::TEvTxResponse, Handle);
+        }
+    }
+
+    void Handle(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+        auto* response = ev->Get()->Record.MutableResponse();
+
+        TResult result;
+        if (response->GetStatus() == Ydb::StatusIds::SUCCESS) {
+            result.SetSuccess();
+        } else {
+            for (auto& issue : response->GetIssues()) {
+                result.AddIssue(NYql::IssueFromMessage(issue));
+            }
+        }
+
+        Promise.SetValue(result);
+        this->PassAway();
+    }
+
+private:
+    TKqpPhyTxHolder::TConstPtr PhyTx;
+    const TString Database;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TPromise<TResult> Promise;
+    const TMaybe<TString> RequestType;
+};
 
 class TKqpExecLiteralRequestHandler: public TActorBootstrapped<TKqpExecLiteralRequestHandler> {
 public:
@@ -798,23 +847,11 @@ public:
         }
     }
 
-    TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>& requestType, ui64 flags) override
+    TFuture<TGenericResult> AlterTable(const TString&, Ydb::Table::AlterTableRequest&&, const TMaybe<TString>&, ui64) override
     {
         try {
-            YQL_ENSURE(!flags); //Supported only for prepared mode
-            if (!CheckCluster(cluster)) {
-                return InvalidCluster<TGenericResult>(cluster);
-            }
-
-            // FIXME: should be defined in grpc_services/rpc_calls.h, but cause cyclic dependency
-            using namespace NGRpcService;
-            using TEvAlterTableRequest = TGrpcRequestOperationCall<Ydb::Table::AlterTableRequest,
-                Ydb::Table::AlterTableResponse>;
-
-            return SendLocalRpcRequestNoResult<TEvAlterTableRequest>(std::move(req), Database, GetTokenCompat(), requestType);
-        }
-        catch (yexception& e) {
+            YQL_ENSURE(false, "gateway doesn't implement alter");
+        } catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
     }
@@ -2072,6 +2109,13 @@ private:
         IActor* requestHandler = new TSchemeOpRequestHandler(request, promise, failedOnAlreadyExists);
         RegisterActor(requestHandler);
 
+        return promise.GetFuture();
+    }
+
+    TFuture<TGenericResult> SendSchemeExecuterRequest(const TString&, const TMaybe<TString>& requestType, const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder>& phyTx) override {
+        auto promise = NewPromise<TGenericResult>();
+        IActor* requestHandler = new TKqpSchemeExecuterRequestHandler(phyTx, requestType, Database, UserToken, promise);
+        RegisterActor(requestHandler);
         return promise.GetFuture();
     }
 

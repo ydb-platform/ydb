@@ -94,9 +94,10 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
     TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 
-IActor* CreateKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc,
-    bool temporary, TString SessionId);
+IActor* CreateKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target,
+    const TMaybe<TString>& requestType, const TString& database,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+    bool temporary, TString SessionId, TIntrusivePtr<TUserRequestContext> ctx);
 
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
     IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner, const TIntrusivePtr<TUserRequestContext>& userRequestContext);

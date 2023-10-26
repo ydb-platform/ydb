@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             )");
 
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         }
 
         {
@@ -1031,7 +1031,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             )");
 
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         }
 
         {

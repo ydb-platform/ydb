@@ -1,4 +1,5 @@
 #include "kqp_executer.h"
+#include "kqp_executer_impl.h"
 
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/local_rpc/helper.h>
@@ -8,14 +9,9 @@
 
 namespace NKikimr::NKqp {
 
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << ". " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << ". " << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << ". " << stream)
-
 using namespace NThreading;
 
 namespace {
-
 
 static bool CheckAlterAccess(const NACLib::TUserToken& userToken, const NSchemeCache::TSchemeCacheNavigate* navigate) {
     bool isDatabase = true; // first entry is always database
@@ -53,20 +49,22 @@ public:
         return NKikimrServices::TActivity::KQP_EXECUTER_ACTOR;
     }
 
-    TKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
-        TIntrusiveConstPtr<NACLib::TUserToken> userToken, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc,
-        bool temporary, TString sessionId)
+    TKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TMaybe<TString>& requestType, 
+        const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+        bool temporary, TString sessionId, TIntrusivePtr<TUserRequestContext> ctx)
         : PhyTx(phyTx)
         , Target(target)
         , Database(database)
         , UserToken(userToken)
         , Temporary(temporary)
         , SessionId(sessionId)
+        , RequestContext(std::move(ctx))
+        , RequestType(requestType)
     {
         YQL_ENSURE(PhyTx);
         YQL_ENSURE(PhyTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(txAlloc);
+        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(nullptr);
     }
 
     void StartBuildOperation() {
@@ -83,6 +81,10 @@ public:
         ev->Record.SetDatabaseName(Database);
         if (UserToken) {
             ev->Record.SetUserToken(UserToken->GetSerializedToken());
+        }
+
+        if (RequestType) {
+            ev->Record.SetRequestType(*RequestType);
         }
 
         const auto& schemeOp = PhyTx->GetSchemeOperation();
@@ -123,7 +125,7 @@ public:
             case NKqpProto::TKqpSchemeOperation::kAlterTable: {
                 auto modifyScheme = schemeOp.GetAlterTable();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
-                return;
+                break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kBuildOperation: {
@@ -269,6 +271,10 @@ public:
         IActor::PassAway();
     }
 
+    const TIntrusivePtr<TUserRequestContext>& GetUserRequestContext() const {
+        return RequestContext;
+    }
+
     void Handle(NSchemeShard::TEvIndexBuilder::TEvCreateResponse::TPtr& ev) {
         const auto& response = ev->Get()->Record;
         const auto status = response.GetStatus();
@@ -376,6 +382,7 @@ private:
     void UnexpectedEvent(const TString& state, ui32 eventType) {
         LOG_C("TKqpSchemeExecuter, unexpected event: " << eventType
             << ", at state:" << state << ", selfID: " << SelfId());
+
         InternalError(TStringBuilder() << "Unexpected event at TKqpSchemeExecuter, state: " << state
             << ", event: " << eventType);
     }
@@ -419,14 +426,18 @@ private:
     ui64 TxId = 0;
     TActorId SchemePipeActorId_;
     ui64 SchemeShardTabletId = 0;
+    TIntrusivePtr<TUserRequestContext> RequestContext;
+    const TMaybe<TString> RequestType;
 };
 
 } // namespace
 
-IActor* CreateKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc, bool temporary, TString sessionId)
+IActor* CreateKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target,
+    const TMaybe<TString>& requestType, const TString& database,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool temporary, TString sessionId,
+    TIntrusivePtr<TUserRequestContext> ctx)
 {
-    return new TKqpSchemeExecuter(phyTx, target, database, userToken, txAlloc, temporary, sessionId);
+    return new TKqpSchemeExecuter(phyTx, target, requestType, database, userToken, temporary, sessionId, std::move(ctx));
 }
 
 } // namespace NKikimr::NKqp

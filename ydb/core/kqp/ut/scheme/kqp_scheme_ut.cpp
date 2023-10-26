@@ -1151,7 +1151,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
 
             const auto result = session.ExecuteSchemeQuery(query << ";").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
 
         {
@@ -1459,13 +1459,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         createTable(R"(Interval("-P1D") ON Ts)", EStatus::GENERIC_ERROR, "Interval value cannot be negative");
 
-        createTable(R"(Interval("P1D") ON CreatedAt)", EStatus::GENERIC_ERROR, "Cannot enable TTL on unknown column");
+        createTable(R"(Interval("P1D") ON CreatedAt)", EStatus::SCHEME_ERROR, "Cannot enable TTL on unknown column");
 
-        createTable(R"(Interval("P1D") ON StringValue)", EStatus::GENERIC_ERROR, "Unsupported column type");
+        createTable(R"(Interval("P1D") ON StringValue)", EStatus::SCHEME_ERROR, "Unsupported column type");
 
-        createTable(R"(Interval("P1D") ON Uint32Value)", EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
-        createTable(R"(Interval("P1D") ON Uint64Value)", EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
-        createTable(R"(Interval("P1D") ON DyNumberValue)", EStatus::GENERIC_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
+        createTable(R"(Interval("P1D") ON Uint32Value)", EStatus::SCHEME_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
+        createTable(R"(Interval("P1D") ON Uint64Value)", EStatus::SCHEME_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
+        createTable(R"(Interval("P1D") ON DyNumberValue)", EStatus::SCHEME_ERROR, "'ValueSinceUnixEpochModeSettings' should be specified");
 
         createTable(R"(Interval("P1D") ON Ts)");
         {
@@ -2409,7 +2409,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         }
     }
 
@@ -3568,7 +3568,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
 
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST,
                                        result.GetIssues().ToString());
         }
     }
@@ -4217,7 +4217,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 STORE = COLUMN
             );)";
         result = session.ExecuteSchemeQuery(query3).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateAlterDropColumnTableInStore) {
@@ -4358,7 +4358,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateDropColumnTableNegative) {
@@ -4399,7 +4399,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
 
         { // disallow nullable key
@@ -4416,7 +4416,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
     }
 

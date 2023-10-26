@@ -35,6 +35,7 @@ void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPt
 
 void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch&& rows) {
     YQL_ENSURE(idx < TxResults.size());
+    YQL_ENSURE(AllocState);
     ResultRowsCount += rows.RowCount();
     ResultRowsBytes += rows.Size();
     auto guard = AllocState->TypeEnv.BindAllocator();
@@ -48,7 +49,7 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch
 }
 
 TEvKqpExecuter::TEvTxResponse::~TEvTxResponse() {
-    if (!TxResults.empty()) {
+    if (!TxResults.empty() && Y_LIKELY(AllocState)) {
         with_lock(AllocState->Alloc) {
             TxResults.crop(0);
         }

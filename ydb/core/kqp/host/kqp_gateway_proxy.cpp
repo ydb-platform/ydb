@@ -544,18 +544,10 @@ public:
         return tablePromise.GetFuture();
     }
 
-    TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>& requestType, ui64 flags) override
+    TFuture<TGenericResult> PrepareAlterTable(const TString&, Ydb::Table::AlterTableRequest&& req,
+        const TMaybe<TString>&, ui64 flags)
     {
-        CHECK_PREPARED_DDL(AlterTable);
-
-        if (!IsPrepare()) {
-            return Gateway->AlterTable(cluster, std::move(req), requestType, flags);
-        }
-        auto &phyQuery =
-            *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-        auto &phyTx = *phyQuery.AddTransactions();
-        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+        YQL_ENSURE(SessionCtx->Query().PreparingQuery);
         auto promise = NewPromise<TGenericResult>();
         const auto ops = GetAlterOperationKinds(&req);
         if (ops.size() != 1) {
@@ -571,6 +563,10 @@ public:
         const auto opType = *ops.begin();
         auto tablePromise = NewPromise<TGenericResult>();
         if (opType == EAlterOperationKind::AddIndex) {
+            auto &phyQuery =
+                *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto &phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
             auto buildOp = phyTx.MutableSchemeOperation()->MutableBuildOperation();
             Ydb::StatusIds::StatusCode code;
             TString error;
@@ -602,6 +598,8 @@ public:
                 auto &phyQuery =
                     *sessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
                 auto &phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
                 auto alter = phyTx.MutableSchemeOperation()->MutableAlterTable();
                 const TPathId invalidPathId;
                 Ydb::StatusIds::StatusCode code;
@@ -617,6 +615,69 @@ public:
                 result.SetSuccess();
                 tablePromise.SetValue(result);
             });
+
+        return tablePromise.GetFuture();
+    }
+
+    TFuture<TGenericResult> SendSchemeExecuterRequest(const TString& cluster, const TMaybe<TString>& requestType,
+        const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder> &phyTx) override
+    {
+        return Gateway->SendSchemeExecuterRequest(cluster, requestType, phyTx);
+    }
+
+    TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
+        const TMaybe<TString>& requestType, ui64 flags) override
+    {
+        CHECK_PREPARED_DDL(AlterTable);
+
+        auto tablePromise = NewPromise<TGenericResult>();
+    
+        if (!IsPrepare()) {
+            SessionCtx->Query().PrepareOnly = false;
+            if (SessionCtx->Query().PreparingQuery) {
+                auto code = Ydb::StatusIds::BAD_REQUEST;
+                auto error = TStringBuilder() << "multiple transactions are not supported for alter table operation.";
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();
+            }
+
+            SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        }
+
+        auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags);
+        if (IsPrepare())
+            return prepareFuture;
+
+        auto sessionCtx = SessionCtx;
+        auto gateway = Gateway;
+        prepareFuture.Subscribe([cluster, requestType, tablePromise, sessionCtx, gateway](const TFuture<IKqpGateway::TGenericResult> &future) mutable {
+            auto result = future.GetValue();
+            TPreparedQueryHolder::TConstPtr preparedQuery = std::make_shared<TPreparedQueryHolder>(sessionCtx->Query().PreparingQuery.release(), nullptr);
+            if (result.Success()) {
+                auto executeFuture = gateway->SendSchemeExecuterRequest(cluster, requestType, preparedQuery->GetPhyTx(0));
+                executeFuture.Subscribe([tablePromise](const TFuture<IKqpGateway::TGenericResult> &future) mutable {
+                    auto fresult = future.GetValue();
+                    if (fresult.Success()) {
+                        TGenericResult result;
+                        result.SetSuccess();
+                        tablePromise.SetValue(result);
+                    } else {
+                        tablePromise.SetValue(
+                            ResultFromIssues<TGenericResult>(fresult.Status(), fresult.Issues())
+                        );
+                    }
+                });
+                return;
+            } else {
+                tablePromise.SetValue(ResultFromIssues<TGenericResult>(
+                    result.Status(), result.Issues()));
+
+                return;
+            }
+        });
 
         return tablePromise.GetFuture();
     }

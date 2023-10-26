@@ -74,6 +74,7 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
         const auto& txResult = Proto->GetResults(i);
         auto& result = TxResultsMeta[i];
 
+        YQL_ENSURE(Alloc);
         result.MkqlItemType = ImportTypeFromProto(txResult.GetItemType(), Alloc->TypeEnv);
         //Hack to prevent data race. Side effect of IsPresortSupported - fill cached value.
         //So no more concurent write subsequently
@@ -107,9 +108,14 @@ const NKikimr::NKqp::TStagePredictor& TKqpPhyTxHolder::GetCalculationPredictor(c
 TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry)
     : Proto(proto)
-    , Alloc(std::move(std::make_shared<TPreparedQueryAllocHolder>(functionRegistry)))
+    , Alloc(nullptr)
     , TableConstInfoById(MakeIntrusive<TTableConstInfoMap>())
 {
+
+    if (functionRegistry) {
+        Alloc = std::make_shared<TPreparedQueryAllocHolder>(functionRegistry);
+    }
+
     THashSet<TString> tablesSet;
     const auto& phyQuery = Proto->GetPhysicalQuery();
     Transactions.reserve(phyQuery.TransactionsSize());

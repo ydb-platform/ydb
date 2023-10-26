@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 );
             )___").ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
         }
 
         {
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 );
             )___").ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
         }
     }
 
@@ -1147,11 +1147,11 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 PRIMARY KEY (Key)
             );
         )___").ExtractValueSync();
-        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
 
         auto ref = R"___(<main>: Error: Execution, code: 1060
     <main>:5:30: Error: Executing CREATE TABLE
-        <main>: Error: Scheme operation failed, status: ExecError, reason: Column Key has wrong key type Double
+        <main>: Error: Column Key has wrong key type Double, code: 2003
 )___";
         UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), ref);
     }

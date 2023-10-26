@@ -16,6 +16,7 @@
 #include <ydb/services/metadata/manager/abstract.h>
 
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -27,6 +28,10 @@
 namespace NKikimr {
     namespace NMiniKQL {
         class IFunctionRegistry;
+    }
+
+    namespace NKqp {
+        class TKqpPhyTxHolder;
     }
 }
 
@@ -766,6 +771,10 @@ public:
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> SendSchemeExecuterRequest(const TString& cluster,
+        const TMaybe<TString>& requestType,
+        const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder> &phyTx) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
         const TMaybe<TString>& requestType, ui64 flags) = 0;

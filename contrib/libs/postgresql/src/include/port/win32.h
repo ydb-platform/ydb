@@ -1,5 +1,4 @@
 /* src/include/port/win32.h */
-#pragma once
 
 /*
  * We always rely on the WIN32 macro being set by our build system,

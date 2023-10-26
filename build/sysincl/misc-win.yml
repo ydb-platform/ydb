@@ -23,6 +23,7 @@
   includes:
   - arpa/inet.h:   contrib/libs/postgresql/src/include/port/win32/arpa/inet.h
   - dirent.h:      contrib/libs/postgresql/src/include/port/win32_msvc/dirent.h
+  - dlfcn.h:       contrib/libs/postgresql/src/include/port/win32/dlfcn.h
   - grp.h:         contrib/libs/postgresql/src/include/port/win32/grp.h
   - netdb.h:       contrib/libs/postgresql/src/include/port/win32/netdb.h
   - netinet/in.h:  contrib/libs/postgresql/src/include/port/win32/netinet/in.h

@@ -1,0 +1,108 @@
+
+#include <util/generic/ptr.h>
+#include <util/system/cpu_id.h>
+#include <util/system/types.h>
+
+#include <ydb/library/yql/utils/simd/simd.h>
+
+struct TPerfomancer {
+    TPerfomancer() = default;
+
+    struct TWrapWorker {
+        virtual int StreamLoad(bool log) = 0;
+        virtual ~TWrapWorker() = default;
+    };
+
+    template<typename TTraits>
+    struct TWorker : TWrapWorker {
+        template<typename T>
+        using TSimd = typename TTraits::template TSimd8<T>;
+        TWorker() = default;
+
+        void Info() {
+            if (TTraits::Size == 8) {
+                Cerr << "Fallback implementation:" << Endl;
+            } else if (TTraits::Size == 16) {
+                Cerr << "SSE42 implementation:" << Endl;
+            } else if (TTraits::Size == 32) {
+                Cerr << "AVX2 implementation:" << Endl;
+            }
+        }
+
+        int StreamLoad(bool log = true) override {
+            const size_t batch = 32 / TTraits::Size;
+            const size_t batch_size = TTraits::Size / 8;
+            size_t log_batch_size = 0;
+            if (TTraits::Size == 8) {
+                log_batch_size = 0;
+            } else if (TTraits::Size == 16) {
+                log_batch_size = 1;
+            } else {
+                log_batch_size = 2;
+            }
+            
+            const size_t size = (32LL << 17);
+            i64 buf[size / 8] __attribute__((aligned(32)));
+            i64 tmp[4];
+            for (size_t i = 0; i < 4; i += 1) {
+                tmp[i] = i;
+            }
+            TSimd<i8> tmpSimd[batch];
+            for (int i = 0; i < 4; i += batch_size) {
+                tmpSimd[i >> log_batch_size] = TSimd<i8>((i8*) (tmp + i));
+            }
+
+            std::chrono::steady_clock::time_point begin01 =
+                    std::chrono::steady_clock::now();
+
+            const size_t size_loop = size / 8;
+
+            for (size_t i = 0; i < size_loop; i += 4) {
+                for (size_t j = 0; j < batch; j += 1) {
+                    tmpSimd[j].StoreStream((i8*)(buf + i + j * batch_size));
+                }
+            }
+
+            bool is_ok = true;
+
+            for (size_t i = 0; i < size_loop; i += 1) {
+                if (buf[i] != i % 4) {
+                    is_ok = false;
+                }
+            }
+            
+            std::chrono::steady_clock::time_point end01 =
+                std::chrono::steady_clock::now();
+
+            ui64 microseconds =
+                std::chrono::duration_cast<std::chrono::microseconds>(end01 - begin01)
+                    .count();
+            if (log) {
+                Info();
+                Cerr << "Time for stream load = " << microseconds << "[microseconds]"
+                        << Endl;
+                Cerr << "Data size =  " << (size / (1024 * 1024))
+                        << " [MB]" << Endl;
+                Cerr << "Stream load/save/accum speed = "
+                        << (size * 1000 * 1000) /
+                            (1024 * 1024 * (microseconds + 1))
+                        << " MB/sec" << Endl;
+                Cerr << Endl;
+            }
+            return is_ok;
+        }
+        
+        ~TWorker() = default;
+    };
+
+    template<typename TTraits>
+    THolder<TWrapWorker> Create() const {
+        return MakeHolder<TWorker<TTraits>>();
+    };
+};
+
+int main() {
+    TPerfomancer tp;
+    auto worker = NSimd::SelectSimdTraits(tp);
+    return !worker->StreamLoad(false);
+}

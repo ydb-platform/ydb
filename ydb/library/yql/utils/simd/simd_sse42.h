@@ -3,8 +3,11 @@
 #include <cstdint>
 #include <immintrin.h>
 
-#pragma clang attribute push(__attribute__((target("sse4.2"))), apply_to=function)
+#include <util/system/types.h>
+#include <util/generic/string.h>
+#include <util/stream/output.h>
 
+#pragma clang attribute push(__attribute__((target("sse4.2"))), apply_to=function)
 namespace NSimd {
 namespace NSSE42 {
 
@@ -67,9 +70,18 @@ struct TBase8: TBase<TSimd8<T>> {
     {
     }
     
-    inline TBase8(const __m128i _value)
-        : TBase<TSimd8<T>>(_value)
+    inline TBase8(const __m128i value)
+        : TBase<TSimd8<T>>(value)
     {
+    }
+
+    template<int N>
+    inline TSimd8<T> Blend16(const TSimd8<T> other) {
+        return _mm_blend_epi16(this->Value, other->Value, N);
+    }
+
+    inline TSimd8<T> BlendVar(const TSimd8<T> other, const TSimd8<T> mask) {
+        return _mm_blendv_epi8(this->Value, other->Value, mask);
     }
 
     friend inline Mask operator==(const TSimd8<T> lhs, const TSimd8<T> rhs) {
@@ -132,6 +144,27 @@ struct TBase8Numeric: TBase8<T> {
         return _mm_loadu_si128(reinterpret_cast<const __m128i *>(values));
     }
 
+    static inline TSimd8<T> LoadAligned(const T values[16]) {
+        return _mm_load_si128(reinterpret_cast<const __m128i *>(values));
+    }
+    
+    
+    inline void LoadStream(T dst[16]) const {
+        return _mm_stream_load_si128(reinterpret_cast<__m128i *>(dst), this->Value);
+    }
+
+    inline void Store(T dst[16]) const {
+        return _mm_storeu_si128(reinterpret_cast<__m128i *>(dst), this->Value);
+    }
+
+    inline void StoreAligned(T dst[16]) const {
+        return _mm_store_si128(reinterpret_cast<__m128i *>(dst), this->Value);
+    }
+
+    inline void StoreStream(T dst[16]) const {
+        return _mm_stream_si128(reinterpret_cast<__m128i *>(dst), this->Value);
+    }
+
     static inline TSimd8<T> Repeat16(
         T v0,  T v1,  T v2,  T v3,  T v4,  T v5,  T v6,  T v7,
         T v8,  T v9,  T v10, T v11, T v12, T v13, T v14, T v15
@@ -142,8 +175,32 @@ struct TBase8Numeric: TBase8<T> {
         );
     }
 
-    inline void Store(T dst[16]) const {
-        return _mm_storeu_si128(reinterpret_cast<__m128i *>(dst), this->Value);
+    
+
+    template<typename TOut>
+    void Log(IOutputStream& out, TString delimeter = " ", TString end = "\n") {
+        const size_t n = sizeof(this->Value) / sizeof(TOut);
+        TOut buf[n];
+        Store((i8*) buf);
+        if (n == sizeof(this->Value)) {
+            for (size_t i = 0; i < n; i += 1) {
+                out << int(buf[i]);
+                if (i + 1 < n) {
+                    out << delimeter;
+                } else {
+                    out << end;
+                }
+            }
+        } else {
+            for (size_t i = 0; i < n; i += 1) {
+                out << buf[i];
+                if (i + 1 < n) {
+                    out << delimeter;
+                } else {
+                    out << end;
+                }
+            }
+        }
     }
 
     inline TSimd8<T> operator+(const TSimd8<T> other) const {

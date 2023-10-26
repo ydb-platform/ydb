@@ -3,9 +3,11 @@
 #include <cstdint>
 #include <immintrin.h>
 
+#include <util/system/types.h>
+#include <util/stream/output.h>
+#include <util/generic/string.h>
 
 #pragma clang attribute push(__attribute__((target("avx2"))), apply_to=function)
-
 namespace NSimd {
 namespace NAVX2 {
 
@@ -73,6 +75,15 @@ struct TBase8: TBase<TSimd8<T>> {
     {
     }
 
+    template<int N>
+    inline TSimd8<T> Blend16(const TSimd8<T> other) {
+        return _mm256_blend_epi16(this->Value, other->Value, N);
+    }
+
+    inline TSimd8<T> BlendVar(const TSimd8<T> other, const TSimd8<T> mask) {
+        return _mm256_blendv_epi8(this->Value, other->Value, mask);
+    }
+
     friend inline Mask operator==(const TSimd8<T> lhs, const TSimd8<T> rhs) {
         return _mm256_cmpeq_epi8(lhs.Value, rhs.Value);
     }
@@ -133,6 +144,26 @@ struct TBase8Numeric: TBase8<T> {
         return _mm256_loadu_si256(reinterpret_cast<const __m256i *>(values));
     }
 
+    static inline TSimd8<T> LoadAligned(const T values[32]) {
+        return _mm256_load_si256(reinterpret_cast<const __m256i *>(values));
+    }
+
+    inline void LoadStream(T dst[16]) const {
+        return _mm256_stream_load_si256(reinterpret_cast<__m256i *>(dst), this->Value);
+    }
+
+    inline void Store(T dst[32]) const {
+        return _mm256_storeu_si256(reinterpret_cast<__m256i *>(dst), this->Value);
+    }
+
+    inline void StoreAligned(T dst[32]) const {
+        return _mm256_store_si256(reinterpret_cast<__m256i *>(dst), this->Value);
+    }
+
+    inline void StoreStream(T dst[16]) const {
+        return _mm256_stream_si256(reinterpret_cast<__m256i *>(dst), this->Value);
+    }
+
     static inline TSimd8<T> Repeat16(
         T v0,  T v1,  T v2,  T v3,  T v4,  T v5,  T v6,  T v7,
         T v8,  T v9,  T v10, T v11, T v12, T v13, T v14, T v15
@@ -145,8 +176,27 @@ struct TBase8Numeric: TBase8<T> {
         );
     }
 
-    inline void Store(T dst[32]) const {
-        return _mm256_storeu_si256(reinterpret_cast<__m256i *>(dst), this->Value);
+    template<typename TOut>
+    void Log(IOutputStream& out, TString delimeter = " ", TString end = "\n") {
+        const size_t n = sizeof(this->Value) / sizeof(TOut);
+        TOut buf[n];
+        this->Store((i8*) buf);
+        if (n == sizeof(this->Value)) {
+            for (size_t i = 0; i < n; i += 1) {
+                out << int(buf[i]);
+                if (i + 1 < n) {
+                    out << delimeter;
+                }
+            }
+        } else {
+            for (size_t i = 0; i < n; i += 1) {
+                out << buf[i];
+                if (i + 1 < n) {
+                    out << delimeter;
+                }
+            }
+        }
+        out << end;
     }
 
     inline TSimd8<T> operator+(const TSimd8<T> other) const {

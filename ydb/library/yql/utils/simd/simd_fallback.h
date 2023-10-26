@@ -3,6 +3,10 @@
 #include <cstdint>
 #include <immintrin.h>
 
+#include <util/system/types.h>
+#include <util/stream/output.h>
+#include <util/generic/string.h>
+
 namespace NSimd {
 namespace NFallback {
 
@@ -70,6 +74,33 @@ struct TBase8: TBase<TSimd8<T>> {
     {
     }
 
+    template<int N>
+    inline TSimd8<T> Blend16(const TSimd8<T> other) {
+        ui64 dst = 0;
+        size_t j = (1 << 16) - 1;
+        for (size_t i = 0; i < 4; i += 1, j <<= 16) {
+            if (N & (1LL << i)) {
+                dst |= other->Value & j;
+            } else {
+                dst |= this->Value & j;
+            }
+        }
+        return TSimd8<T>(dst);
+    }
+
+    inline TSimd8<T> BlendVar(const TSimd8<T> other, const TSimd8<T> mask) {
+        ui64 dst = 0;
+        size_t j = (1 << 8) - 1;
+        for (size_t i = 0; i < 8; i += 1, j <<= 8) {
+            if (mask.Value & (1LL << i)) {
+                dst |= other->Value & j;
+            } else {
+                dst |= this->Value & j;
+            }
+        }
+        return TSimd8<T>(dst);
+    }
+
     friend inline Mask operator==(const TSimd8<T> lhs, const TSimd8<T> rhs) {
         return lhs.Value == rhs.Value;
     }
@@ -134,8 +165,50 @@ struct TBase8Numeric: TBase8<T> {
         return TSimd8<T>(*((const ui64*) values));
     }
 
+    static inline TSimd8<T> LoadAligned(const T values[8]) {
+        return Load(values);
+    }
+
+    static inline TSimd8<T> LoadStream(const T values[8]) {
+        return Load(values);
+    }
+
     inline void Store(T dst[8]) const {
         *((ui64*) dst) = this->Value;
+    }
+
+    inline void StoreAligned(T dst[8]) const {
+        Store(dst);
+    }
+
+    inline void StoreStream(T dst[8]) const {
+        Store(dst);
+    }
+
+    template<typename TOut>
+    void Log(IOutputStream& out, TString delimeter = " ", TString end = "\n") {
+        const size_t n = sizeof(this->Value) / sizeof(TOut);
+        TOut buf[n];
+        Store((i8*) buf);
+        if (n == sizeof(this->Value)) {
+            for (size_t i = 0; i < n; i += 1) {
+                out << int(buf[i]);
+                if (i + 1 < n) {
+                    out << delimeter;
+                } else {
+                    out << end;
+                }
+            }
+        } else {
+            for (size_t i = 0; i < n; i += 1) {
+                out << buf[i];
+                if (i + 1 < n) {
+                    out << delimeter;
+                } else {
+                    out << end;
+                }
+            }
+        }
     }
 
     inline TSimd8<T> operator+(const TSimd8<T> other) const {

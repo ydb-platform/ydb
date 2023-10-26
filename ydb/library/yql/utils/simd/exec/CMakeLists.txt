@@ -6,5 +6,4 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(exec)
-add_subdirectory(ut)
+add_subdirectory(stream_store)

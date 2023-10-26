@@ -1,9 +1,13 @@
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/ptr.h>
 #include <util/system/cpu_id.h>
+#include <util/system/types.h>
+
 #include "simd.h"
 
 template<typename TTraits>
-void Reverse(ui8* buf, ui8 *result_buf, int len) {
+void Reverse(ui8* buf, ui8* result_buf, int len) {
     using TSimdUI8 = typename TTraits::template TSimd8<ui8>;
     int id = 0;
     while (id + TTraits::Size <= len) {
@@ -18,6 +22,7 @@ void Reverse(ui8* buf, ui8 *result_buf, int len) {
 }
 
 struct TTestFactory {
+
     template<typename T>
     int Create() const {
         return T::Size;
@@ -247,11 +252,14 @@ Y_UNIT_TEST_SUITE(SimdFallback) {
     Y_UNIT_TEST(BestTrait) {
         TTestFactory x;
         if (NX86::HaveAVX2()) {
-            UNIT_ASSERT_EQUAL(NSimd::SelectSimdTraits(x), 32);
+            auto y = NSimd::SelectSimdTraits<TTestFactory>(x);
+            UNIT_ASSERT_EQUAL(y, 32);
         } else if (NX86::HaveSSE42()) {
-            UNIT_ASSERT_EQUAL(NSimd::SelectSimdTraits(x), 16);
+            auto y = NSimd::SelectSimdTraits<TTestFactory>(x);
+            UNIT_ASSERT_EQUAL(y, 16);
         } else {
-            UNIT_ASSERT_EQUAL(NSimd::SelectSimdTraits(x), 8);
+            auto y = NSimd::SelectSimdTraits<TTestFactory>(x);
+            UNIT_ASSERT_EQUAL(y, 8);
         }
     }
 }

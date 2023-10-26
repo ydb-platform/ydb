@@ -1,5 +1,10 @@
 #pragma once
 
+#include <util/system/cpu_id.h>
+#include <util/system/types.h>
+
+#include <stdlib.h>
+
 #include "simd_avx2.h"
 #include "simd_sse42.h"
 #include "simd_fallback.h"
@@ -8,9 +13,9 @@ namespace NSimd {
 
 template<int RegisterSize, typename TBaseRegister, template<typename> typename TSimd>
 struct TSimdTraits {
+    using TRegister = TBaseRegister;
     template<typename T>
     using TSimd8 = TSimd<T>;
-    using TRegister = TBaseRegister;
 
     static constexpr int Size = RegisterSize;
 };

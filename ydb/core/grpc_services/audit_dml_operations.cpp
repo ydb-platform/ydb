@@ -38,16 +38,45 @@ namespace {
         }
         ctx->AddAuditLogPart("commit_tx", ToString(tx_control.commit_tx()));
     }
+
+    std::tuple<TString, TString, TString> GetDatabaseCloudIds(const std::vector<std::pair<TString, TString>>& databaseAttrs) {
+        if (databaseAttrs.empty()) {
+            return {};
+        }
+        auto getAttr = [&d = databaseAttrs](const TString &name) -> TString {
+            const auto& found = std::find_if(d.begin(), d.end(), [name](const auto& item) { return item.first == name; });
+            if (found != d.end()) {
+                return found->second;
+            }
+            return {};
+        };
+        return std::make_tuple(
+            getAttr("cloud_id"),
+            getAttr("folder_id"),
+            getAttr("database_id")
+        );
+    }
 }
 
 namespace NKikimr::NGRpcService {
 
-void AuditContextStart(IRequestCtxBase* ctx, const TString& database, const TString& userSID) {
+void AuditContextStart(IRequestCtxBase* ctx, const TString& database, const TString& userSID, const std::vector<std::pair<TString, TString>>& databaseAttrs) {
     ctx->AddAuditLogPart("remote_address", NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName()));
     ctx->AddAuditLogPart("subject", userSID);
     ctx->AddAuditLogPart("database", database);
     ctx->AddAuditLogPart("operation", ctx->GetRequestName());
     ctx->AddAuditLogPart("start_time", TInstant::Now().ToString());
+
+    auto [cloud_id, folder_id, database_id] = GetDatabaseCloudIds(databaseAttrs);
+    if (cloud_id) {
+        ctx->AddAuditLogPart("cloud_id", cloud_id);
+    }
+    if (folder_id) {
+        ctx->AddAuditLogPart("folder_id", folder_id);
+    }
+    if (database_id) {
+        ctx->AddAuditLogPart("resource_id", database_id);
+    }
 }
 
 void AuditContextEnd(IRequestCtxBase* ctx) {

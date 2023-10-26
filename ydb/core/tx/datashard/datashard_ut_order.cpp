@@ -1895,7 +1895,8 @@ Y_UNIT_TEST(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
         auto result = KqpSimpleBegin(runtime, sessionId, txId, Q_(R"(
              SELECT * FROM `/Root/table-1` WHERE key = 1
              UNION ALL
-             SELECT * FROM `/Root/table-2` WHERE key = 2)"));
+             SELECT * FROM `/Root/table-2` WHERE key = 2
+             ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(
             result,
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "

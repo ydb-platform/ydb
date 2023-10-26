@@ -1968,7 +1968,7 @@ void TTcpConnection::TryEstablishSslSession()
 
         if (Config_->PrivateKey->FileName) {
             const auto& privateKeyFile = GET_CERT_FILE_PATH(*Config_->PrivateKey->FileName);
-            if (SSL_use_RSAPrivateKey_file(Ssl_.get(), privateKeyFile.data(), SSL_FILETYPE_PEM) != 1) {
+            if (SSL_use_PrivateKey_file(Ssl_.get(), privateKeyFile.data(), SSL_FILETYPE_PEM) != 1) {
                 Abort(TError(NBus::EErrorCode::SslError, "Failed to load private key file: %v", GetLastSslErrorString()));
                 return;
             }

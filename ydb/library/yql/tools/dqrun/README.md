@@ -5,9 +5,9 @@
 ## Command-Line Options
 
 - `-s`: if specified, SQL is used; if not specified, the query plan execution specified in s-expression is used.
-- `-p <file>`: specify a file with a SQL query.
-- `--gateways-cfg <file>`: specify a file with the engine configuration. (Example: [examples/gateways.cfg](examples/gateways.conf))
-- `--fs-cfg <file>`: specify a file with the file cache configuration. (Example: [examples/fs.cfg](examples/fs.conf))
+- `-p <file>`: specify a file with an SQL query or a s-expression.
+- `--gateways-cfg <file>`: specify a file with the engine configuration. (Example: [examples/gateways.conf](examples/gateways.conf))
+- `--fs-cfg <file>`: specify a file with the file cache configuration. (Example: [examples/fs.conf](examples/fs.conf))
 - `--bindings-file <file>`: specify a file with the data schema. (Examples: [examples/bindings_tpch.json](examples/bindings_tpch.json), [examples/bindings_tpch_pg.json](examples/bindings_tpch_pg.json))
 - `--dq-host <host>`: set the host to connect to the test utilities `service_node` and `worker_node`.
 - `--dq-port <port>`: set the port to connect to the test utilities `service_node` and `worker_node`.
@@ -18,15 +18,15 @@
 dqrun -s -p query.sql --gateways-cfg examples/gateways.cfg --fs-cfg examples/fs.cfg --bindings-file examples/bindings_tpch.json
 ```
 
-In this example, `dqrun` will use SQL from the file `query.sql`, engine configuration from the file [examples/gateways.cfg](examples/gateways.cfg), file cache configuration from the file [examples/fs.cfg](examples/fs.cfg), and data schema from the file [examples/bindings_tpch.json](examples/bindings_tpch.json).
+In this example, `dqrun` will use SQL from the file `query.sql`, engine configuration from the file [examples/gateways.conf](examples/gateways.conf), file cache configuration from the file [examples/fs.conf](examples/fs.conf), and data schema from the file [examples/bindings_tpch.json](examples/bindings_tpch.json).
 
 ## Example of Usage as a Client to Test Utilities
 
 ```bash
-dqrun --dq-host localhost --dq-port 8080 -s -p query.sql --gateways-cfg examples/gateways.cfg --fs-cfg examples/fs.cfg --bindings-file examples/bindings_tpch.json
+dqrun --dq-host localhost --dq-port 8080 -s -p query.sql --gateways-cfg examples/gateways.conf --fs-cfg examples/fs.conf --bindings-file examples/bindings_tpch.json
 ```
 
-In this example, `dqrun` will use SQL from the file `query.sql`, engine configuration from the file [examples/gateways.cfg](examples/gateways.cfg), file cache configuration from the file [examples/fs.cfg](examples/fs.cfg), and data schema from the file [examples/bindings_tpch.json](examples/bindings_tpch.json). Additionally, the utility will act as a client to the test utilities `service_node` and `worker_node`, using the specified host and port.
+In this example, `dqrun` will use SQL from the file `query.sql`, engine configuration from the file [examples/gateways.conf](examples/gateways.conf), file cache configuration from the file [examples/fs.conf](examples/fs.conf), and data schema from the file [examples/bindings_tpch.json](examples/bindings_tpch.json). Additionally, the utility will act as a client to the test utilities `service_node` and `worker_node`, using the specified host and port.
 
 ## Data Schema File Example (bindings_tpch.json)
 

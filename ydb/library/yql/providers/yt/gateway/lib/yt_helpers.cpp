@@ -570,12 +570,16 @@ void CreateParents(const TVector<TString>& tables, NYT::IClientBasePtr tx) {
     }
 }
 
+TIssue MakeIssueFromYtError(const NYT::TYtError& e, TStringBuf what, TPosition pos, bool shortErrors) {
+    TString errMsg = shortErrors || GetEnv("YQL_DETERMINISTIC_MODE") ? e.ShortDescription() : TString(what);
+    EYqlIssueCode rootIssueCode = IssueCodeForYtError(e);
+    return YqlIssue(pos, rootIssueCode, errMsg);
+}
+
 namespace {
 
 void FillResultFromOperationError(NCommon::TOperationResult& result, const NYT::TOperationFailedError& e, TPosition pos, bool shortErrors) {
-    TString errMsg = shortErrors || GetEnv("YQL_DETERMINISTIC_MODE") ? e.GetError().ShortDescription() : TString(e.what());
-    EYqlIssueCode rootIssueCode = IssueCodeForYtError(e.GetError());
-    TIssue rootIssue = YqlIssue(pos, rootIssueCode, errMsg);
+    TIssue rootIssue = MakeIssueFromYtError(e.GetError(), e.what(), pos, shortErrors);
 
     if (!e.GetFailedJobInfo().empty()) {
         TSet<TString> uniqueErrors;
@@ -600,10 +604,7 @@ void FillResultFromOperationError(NCommon::TOperationResult& result, const NYT::
 }
 
 void FillResultFromErrorResponse(NCommon::TOperationResult& result, const NYT::TErrorResponse& e, TPosition pos, bool shortErrors) {
-    TString errMsg = shortErrors || GetEnv("YQL_DETERMINISTIC_MODE") ? e.GetError().ShortDescription() : TString(e.what());
-
-    EYqlIssueCode rootIssueCode = IssueCodeForYtError(e.GetError());
-    TIssue rootIssue = YqlIssue(pos, rootIssueCode, errMsg);
+    TIssue rootIssue = MakeIssueFromYtError(e.GetError(), e.what(), pos, shortErrors);
 
     result.SetStatus(TIssuesIds::DEFAULT_ERROR);
     result.AddIssue(rootIssue);

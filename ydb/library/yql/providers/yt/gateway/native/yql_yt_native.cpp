@@ -523,8 +523,9 @@ public:
                 auto resolveRes = f.GetValue();
 
                 TFolderResult res;
+                res.AddIssues(resolveRes.Issues());
+
                 if (!resolveRes.Success()) {
-                    res.AddIssues(resolveRes.Issues());
                     res.SetStatus(resolveRes.Status());
                     return res;
                 }

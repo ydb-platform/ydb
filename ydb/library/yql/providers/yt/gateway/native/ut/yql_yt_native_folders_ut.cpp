@@ -37,6 +37,12 @@ constexpr auto CYPRES_NODE_A_CONTENT = R"(
                 "broken" = %true;
                 "type" = "link";
             > "link_broken";
+            <
+                "user_attributes" = {};
+                "target_path" = "//link_access_denied";
+                "broken" = %false;
+                "type" = "link";
+            > "link_access_denied";
         ];
     };
 ]
@@ -51,10 +57,23 @@ constexpr auto CYPRES_LINK_DEST = R"(
   };
 ]
 )";
+
+constexpr auto CYPRES_ACCESS_ERROR = R"(
+[
+    {
+        "error" = {
+            "code" = 901;
+            "message" = "Access denied";
+        }
+    }
+]
+)";
+
 TVector<IYtGateway::TFolderResult::TFolderItem> EXPECTED_ITEMS {
     {"test/a/a", "table", R"({"user_attributes"={}})"},
     {"test/a/b", "table", R"({"user_attributes"={}})"},
-    {"test/a/link", "table", R"({"user_attributes"={}})"}
+    {"test/a/link", "table", R"({"user_attributes"={}})"},
+    {"test/a/link_access_denied", "unknown", "{}"}
 };
 
 TGatewaysConfig MakeGatewaysConfig(size_t port)
@@ -99,6 +118,10 @@ public:
 
 private:
     void CheckReqAttributes(TStringBuf path, const NYT::TNode& attributes) {
+        if (!requiredAttributes.contains(path)) {
+            return;
+        }
+
         THashSet<TString> attributesSet;
         for (const auto& attribute : attributes.AsList()) {
             attributesSet.insert(attribute.AsString());
@@ -123,6 +146,10 @@ private:
         THttpResponse resp{HTTP_OK};
         if (path == "//link_dest") {
             resp.SetContent(CYPRES_LINK_DEST);
+            return resp;
+        }
+        if (path == "//link_access_denied") {
+            resp.SetContent(CYPRES_ACCESS_ERROR);
             return resp;
         }
 
@@ -187,10 +214,14 @@ Y_UNIT_TEST(GetFolder) {
     folderFuture.Wait();
     ytState->Gateway->CloseSession({ytState->SessionId});
     auto folderRes = folderFuture.GetValue();
+
     UNIT_ASSERT_EQUAL_C(folderRes.Success(), true, folderRes.Issues().ToString());
     UNIT_ASSERT_EQUAL(
         folderRes.ItemsOrFileLink, 
         (std::variant<TVector<IYtGateway::TFolderResult::TFolderItem>, TFileLinkPtr>(EXPECTED_ITEMS)));
+
+    UNIT_ASSERT_EQUAL(folderRes.Issues().Size(), 1);
+    UNIT_ASSERT_EQUAL(folderRes.Issues().back().Severity, TSeverityIds::S_WARNING);
 }
 }
 

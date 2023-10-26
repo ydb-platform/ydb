@@ -67,4 +67,6 @@ IYtGateway::TCanonizedPath CanonizedPath(const TString& path);
 
 void EnsureSpecDoesntUseNativeYtTypes(const NYT::TNode& spec, TStringBuf tableName, bool read);
 
+TIssue MakeIssueFromYtError(const NYT::TYtError& e, TStringBuf what, TPosition pos = {}, bool shortErrors = false);
+
 } // NYql

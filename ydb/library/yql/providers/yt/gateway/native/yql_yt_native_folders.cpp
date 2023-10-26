@@ -116,11 +116,12 @@ TFileLinkPtr SaveItemsToTempFile(const TExecContext<IYtGateway::TBatchFolderOpti
 IYtGateway::TBatchFolderResult ExecResolveLinks(const TExecContext<IYtGateway::TResolveOptions>::TPtr& execCtx) {
     try {
         auto batchGet = execCtx->GetEntry()->Tx->CreateBatchRequest();
-        TVector<TFuture<IYtGateway::TBatchFolderResult::TFolderItem>> batchRes;
+        using TFolderItemWithWarning = std::pair<IYtGateway::TBatchFolderResult::TFolderItem, TMaybe<TIssue>>;
+        TVector<TFuture<TFolderItemWithWarning>> batchRes;
 
         for (const auto& [item, reqAttributes]: execCtx->Options_.Items()) {
             if (item.Type != "link") {
-                batchRes.push_back(MakeFuture<IYtGateway::TBatchFolderResult::TFolderItem>(std::move(item)));
+                batchRes.push_back(MakeFuture<TFolderItemWithWarning>({std::move(item), {}}));
                 continue;
             }
             if (item.Attributes["broken"].AsBool()) {
@@ -132,9 +133,16 @@ IYtGateway::TBatchFolderResult ExecResolveLinks(const TExecContext<IYtGateway::T
 
             batchRes.push_back(
                 batchGet->Get(targetPath, TGetOptions().AttributeFilter(attrFilter))
-                    .Apply([path] (const auto& f) {
-                        const auto linkNode = f.GetValue();
-                        return MakeFolderItem(linkNode, path);
+                    .Apply([path, pos = execCtx->Options_.Pos()] (const auto& f) ->TFolderItemWithWarning {
+                        try {
+                            const auto linkNode = f.GetValue();
+                            return {MakeFolderItem(linkNode, path), {}};
+                        } catch (const NYT::TErrorResponse& e) {
+                            auto warn = MakeIssueFromYtError(e.GetError(), e.what(), pos);
+                            warn.Severity = TSeverityIds::S_WARNING;
+
+                            return {MakeFolderItem(NYT::TNode::CreateMap(), path), MakeMaybe(warn)};
+                        }
                     })
             );
         }
@@ -148,7 +156,11 @@ IYtGateway::TBatchFolderResult ExecResolveLinks(const TExecContext<IYtGateway::T
         batchGet->ExecuteBatch();
         WaitAll(batchRes).Wait();
         for (auto& f : batchRes) {
-            res.Items.emplace_back(f.ExtractValue());
+            auto [item, maybeWarn] = f.ExtractValue();
+            if (maybeWarn) {
+                res.AddIssue(maybeWarn.GetRef());
+            }
+            res.Items.push_back(std::move(item));
         }
         return res;
     }

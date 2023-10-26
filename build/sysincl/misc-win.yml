@@ -10,13 +10,16 @@
 - source_filter: "^contrib/libs/libpq/src"
   includes:
   - arpa/inet.h:   contrib/libs/libpq/src/include/port/win32/arpa/inet.h
-  - netdb.h: contrib/libs/libpq/src/include/port/win32/netdb.h
-  - netinet/in.h: contrib/libs/libpq/src/include/port/win32/netinet/in.h
-  - pwd.h: contrib/libs/libpq/src/include/port/win32/pwd.h
+  - netdb.h:       contrib/libs/libpq/src/include/port/win32/netdb.h
+  - netinet/in.h:  contrib/libs/libpq/src/include/port/win32/netinet/in.h
+  - netinet/tcp.h: contrib/libs/libpq/src/include/port/win32/netinet/tcp.h
+  - pwd.h:         contrib/libs/libpq/src/include/port/win32/pwd.h
   - sys/file.h:    contrib/libs/libpq/src/include/port/win32_msvc/sys/file.h
   - sys/param.h:   contrib/libs/libpq/src/include/port/win32_msvc/sys/param.h
+  - sys/select.h:  contrib/libs/libpq/src/include/port/win32/sys/select.h
   - sys/socket.h:  contrib/libs/libpq/src/include/port/win32/sys/socket.h
   - sys/time.h:    contrib/libs/libpq/src/include/port/win32_msvc/sys/time.h
+  - sys/un.h:      contrib/libs/libpq/src/include/port/win32/sys/un.h
   - unistd.h:      contrib/libs/libpq/src/include/port/win32_msvc/unistd.h
 
 - source_filter: "^contrib/libs/postgresql/src"

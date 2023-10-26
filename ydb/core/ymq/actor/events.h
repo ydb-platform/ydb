@@ -136,6 +136,8 @@ struct TSqsEvents {
         EvReloadStateResponse,
         EvLeaderStarted,
 
+        EvActionCounterChanged,
+
         EvEnd,
     };
 
@@ -395,6 +397,10 @@ struct TSqsEvents {
             , Shard(other.Shard)
         {
         }
+    };
+
+    struct TEvActionCounterChanged: public NActors::TEventPB<TEvActionCounterChanged, NKikimrClient::TSqsActionCounterChanged, EvActionCounterChanged> {
+        using TEventPB::TEventPB;
     };
 
     // Request that is sent from proxy to sqs service actor on other (leader) node

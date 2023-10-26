@@ -81,3 +81,31 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
             'sensor': 'ReceiveMessage_EmptyCount',
         })
         assert receive_message_empty_count == 1
+
+    def test_sqs_action_counters(self):
+        queue_url = self._create_queue_and_assert(self.queue_name, False, True)
+        message_payload = "foobar"
+        self._sqs_api.send_message(queue_url, message_payload)
+        self._read_while_not_empty(queue_url, 1)
+
+        sqs_counters = self._get_sqs_counters()
+
+        successes = self._get_counter_value(sqs_counters, {
+            'queue': self.queue_name,
+            'sensor': 'ReceiveMessage_Success',
+        })
+        assert successes == 1
+
+        durations = self._get_counter(sqs_counters, {
+            'queue': self.queue_name,
+            'sensor': 'ReceiveMessage_Duration',
+        })
+        duration_buckets = durations['hist']['buckets']
+        assert any(map(lambda x: x > 0, duration_buckets))
+
+        working_durations = self._get_counter(sqs_counters, {
+            'queue': self.queue_name,
+            'sensor': 'ReceiveMessage_WorkingDuration',
+        })
+        working_duration_buckets = working_durations['hist']['buckets']
+        assert any(map(lambda x: x > 0, working_duration_buckets))

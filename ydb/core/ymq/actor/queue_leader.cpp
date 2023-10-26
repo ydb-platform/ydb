@@ -126,6 +126,7 @@ STATEFN(TQueueLeader::StateInit) {
         // interface
         cFunc(TEvPoisonPill::EventType, PassAway); // from service
         hFunc(TSqsEvents::TEvGetConfiguration, HandleGetConfigurationWhileIniting); // from action actors
+        hFunc(TSqsEvents::TEvActionCounterChanged, HandleActionCounterChanged);
         hFunc(TSqsEvents::TEvExecute, HandleExecuteWhileIniting); // from action actors
         hFunc(TSqsEvents::TEvClearQueueAttributesCache, HandleClearQueueAttributesCache); // from set queue attributes
         hFunc(TSqsEvents::TEvPurgeQueue, HandlePurgeQueue); // from purge queue actor
@@ -152,6 +153,7 @@ STATEFN(TQueueLeader::StateWorking) {
         // interface
         cFunc(TEvPoisonPill::EventType, PassAway); // from service
         hFunc(TSqsEvents::TEvGetConfiguration, HandleGetConfigurationWhileWorking); // from action actors
+        hFunc(TSqsEvents::TEvActionCounterChanged, HandleActionCounterChanged);
         hFunc(TSqsEvents::TEvExecute, HandleExecuteWhileWorking); // from action actors
         hFunc(TSqsEvents::TEvClearQueueAttributesCache, HandleClearQueueAttributesCache); // from set queue attributes
         hFunc(TSqsEvents::TEvPurgeQueue, HandlePurgeQueue); // from purge queue actor
@@ -343,6 +345,42 @@ void TQueueLeader::HandleGetConfigurationWhileWorking(TSqsEvents::TEvGetConfigur
         LWPROBE(QueueAttributesCacheMiss, ev->Get()->UserName, ev->Get()->QueueName, ev->Get()->RequestId);
         GetConfigurationRequests_.emplace_back(ev);
         AskQueueAttributes();
+    }
+}
+
+void TQueueLeader::HandleActionCounterChanged(TSqsEvents::TEvActionCounterChanged::TPtr& ev) {
+    auto actionNumber = ev->Get()->Record.GetAction();
+    if (actionNumber > EAction::ActionsArraySize) {
+        LOG_SQS_DEBUG("Action with number " << actionNumber << " doesn't exist.");
+        return;
+    }
+    EAction action = static_cast<EAction>(actionNumber);
+    if (!IsActionForMessage(action) && !Counters_->NeedToShowDetailedCounters()) {
+        return;
+    }
+    ui32 errorsCount = ev->Get()->Record.GetErrorsCount();
+    TCountersCouple<TActionCounters*> actionCountersCouple{nullptr, nullptr};
+    if (IsActionForQueue(action)) {
+        actionCountersCouple.SqsCounters = &Counters_->SqsActionCounters[action];
+        if (errorsCount > 0) {
+            ADD_COUNTER(actionCountersCouple.SqsCounters, Errors, errorsCount);
+        } else {
+            INC_COUNTER(actionCountersCouple.SqsCounters, Success);
+        }
+    }
+    if (IsActionForQueueYMQ(action)) {
+        actionCountersCouple.YmqCounters = &Counters_->YmqActionCounters[action];
+        if (errorsCount > 0) {
+            ADD_COUNTER(actionCountersCouple.YmqCounters, Errors, errorsCount);
+        } else {
+            INC_COUNTER(actionCountersCouple.YmqCounters, Success);
+        }
+    }
+    if (actionCountersCouple.Defined()) {
+        COLLECT_HISTOGRAM_COUNTER_COUPLE(actionCountersCouple, Duration, ev->Get()->Record.GetDurationMs());
+        auto workingDuration = ev->Get()->Record.GetWorkingDurationMs();
+        LOG_SQS_DEBUG("Request " << action << " working duration: " << workingDuration << "ms");
+        COLLECT_HISTOGRAM_COUNTER_COUPLE(actionCountersCouple, WorkingDuration, workingDuration);
     }
 }
 

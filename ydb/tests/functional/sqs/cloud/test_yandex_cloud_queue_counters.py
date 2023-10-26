@@ -140,3 +140,32 @@ class TestYmqQueueCounters(get_test_with_sqs_tenant_installation(KikimrSqsTestBa
             'name': 'queue.messages.empty_receive_attempts_count_per_second',
         })
         assert receive_message_empty_count == 1
+
+    def test_sqs_action_counters(self):
+
+        self._sqs_api = self._create_api_for_user(self._username, raise_on_error=True, force_private=True, iam_token=self.iam_token, folder_id=self.folder_id)
+
+        queue_url = self._sqs_api.create_queue(self.queue_name)
+        queue_resource_id = self._get_queue_resource_id(queue_url, self.queue_name)
+
+        message_payload = "foobar"
+
+        self._sqs_api.send_message(queue_url, message_payload)
+        self._read_while_not_empty(queue_url, 1)
+
+        ymq_counters = self._get_ymq_counters(cloud=self.cloud_id, folder=self.folder_id)
+
+        successes = self._get_counter_value(ymq_counters, {
+            'queue': queue_resource_id,
+            'method': 'receive_message',
+            'name': 'api.http.requests_count_per_second',
+        })
+        assert successes == 1
+
+        durations = self._get_counter(ymq_counters, {
+            'queue': queue_resource_id,
+            'method': 'receive_message',
+            'name': 'api.http.request_duration_milliseconds',
+        })
+        duration_buckets = durations['hist']['buckets']
+        assert any(map(lambda x: x > 0, duration_buckets))

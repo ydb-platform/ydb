@@ -249,31 +249,45 @@ protected:
 
     void SendReplyAndDie() {
         RLOG_SQS_TRACE("SendReplyAndDie from action actor " << Response_);
-        auto actionCountersCouple = GetActionCounters();
         auto* detailedCounters = UserCounters_ ? UserCounters_->GetDetailedCounters() : nullptr;
         const size_t errors = ErrorsCount(Response_, detailedCounters ? &detailedCounters->APIStatuses : nullptr);
-        if (actionCountersCouple.SqsCounters) {
-            if (errors) {
-                ADD_COUNTER(actionCountersCouple.SqsCounters, Errors, errors);
-            } else {
-                INC_COUNTER(actionCountersCouple.SqsCounters, Success);
-            }
-        }
-        if (actionCountersCouple.YmqCounters) {
-            if (errors) {
-                ADD_COUNTER(actionCountersCouple.YmqCounters, Errors, errors);
-            } else {
-                INC_COUNTER(actionCountersCouple.YmqCounters, Success);
-            }
-        }
-        FinishTs_ = TActivationContext::Now();
+
+        const TDuration duration = GetRequestDuration();
         const TDuration workingDuration = GetRequestWorkingDuration();
-        RLOG_SQS_DEBUG("Request " << Action_ << " working duration: " << workingDuration.MilliSeconds() << "ms");
-        if (actionCountersCouple.Defined()) {
-            const TDuration duration = GetRequestDuration();
-            COLLECT_HISTOGRAM_COUNTER_COUPLE(actionCountersCouple, Duration, duration.MilliSeconds());
-            COLLECT_HISTOGRAM_COUNTER_COUPLE(actionCountersCouple, WorkingDuration, workingDuration.MilliSeconds());
+        if (QueueLeader_ && (IsActionForQueue(Action_) || IsActionForQueueYMQ(Action_))) {
+            auto counterChangedEvent = MakeHolder<TSqsEvents::TEvActionCounterChanged>();
+            counterChangedEvent->Record.set_action(Action_);
+            counterChangedEvent->Record.set_durationms(duration.MilliSeconds());
+            counterChangedEvent->Record.set_workingdurationms(workingDuration.MilliSeconds());
+            counterChangedEvent->Record.set_errorscount(errors);
+            this->Send(QueueLeader_, counterChangedEvent.Release());
+        } else if (UserCounters_ && UserCounters_->NeedToShowDetailedCounters()) {
+            TCountersCouple<TActionCounters*> userCounters{nullptr, nullptr};
+            if (IsActionForUser(Action_)) {
+                userCounters.SqsCounters = &UserCounters_->SqsActionCounters[Action_];
+                if (errors) {
+                    ADD_COUNTER(userCounters.SqsCounters, Errors, errors);
+                } else {
+                    INC_COUNTER(userCounters.SqsCounters, Success);
+                }
+            }
+            if (IsActionForUserYMQ(Action_)) {
+                userCounters.YmqCounters = &UserCounters_->YmqActionCounters[Action_];
+                if (errors) {
+                    ADD_COUNTER(userCounters.YmqCounters, Errors, errors);
+                } else {
+                    INC_COUNTER(userCounters.YmqCounters, Success);
+                }
+            }
+
+            if (userCounters.Defined()) {
+                COLLECT_HISTOGRAM_COUNTER_COUPLE(userCounters, Duration, duration.MilliSeconds());
+                RLOG_SQS_DEBUG("Request " << Action_ << " working duration: " << workingDuration.MilliSeconds() << "ms");
+                COLLECT_HISTOGRAM_COUNTER_COUPLE(userCounters, WorkingDuration, workingDuration.MilliSeconds());
+            }
         }
+
+        FinishTs_ = TActivationContext::Now();
         if (IsRequestSlow()) {
             PrintSlowRequestWarning();
         }

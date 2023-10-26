@@ -1,3 +1,5 @@
+#include <ydb/core/util/address_classifier.h>
+
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
@@ -41,7 +43,7 @@ namespace {
 namespace NKikimr::NGRpcService {
 
 void AuditContextStart(IRequestCtxBase* ctx, const TString& database, const TString& userSID) {
-    ctx->AddAuditLogPart("remote_address", ctx->GetPeerName());
+    ctx->AddAuditLogPart("remote_address", NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName()));
     ctx->AddAuditLogPart("subject", userSID);
     ctx->AddAuditLogPart("database", database);
     ctx->AddAuditLogPart("operation", ctx->GetRequestName());

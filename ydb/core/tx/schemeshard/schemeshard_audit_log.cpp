@@ -4,6 +4,7 @@
 
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/util/address_classifier.h>
 #include <util/string/vector.h>
 
 namespace NKikimr::NSchemeShard {
@@ -73,7 +74,7 @@ void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransac
 
         TPath databasePath = DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
         auto [cloud_id, folder_id, database_id] = GetDatabaseCloudIds(databasePath);
-        auto peerName = request.GetPeerName();
+        auto peerName = NKikimr::NAddressClassifier::ExtractAddress(request.GetPeerName());
 
         AUDIT_LOG(
             AUDIT_PART("component", SchemeshardComponentName)

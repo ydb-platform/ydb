@@ -219,9 +219,6 @@ Y_UNIT_TEST(GetFolder) {
     UNIT_ASSERT_EQUAL(
         folderRes.ItemsOrFileLink, 
         (std::variant<TVector<IYtGateway::TFolderResult::TFolderItem>, TFileLinkPtr>(EXPECTED_ITEMS)));
-
-    UNIT_ASSERT_EQUAL(folderRes.Issues().Size(), 1);
-    UNIT_ASSERT_EQUAL(folderRes.Issues().back().Severity, TSeverityIds::S_WARNING);
 }
 }
 

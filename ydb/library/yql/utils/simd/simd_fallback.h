@@ -68,7 +68,7 @@ struct TBase8: TBase<TSimd8<T>> {
         : TBase<TSimd8<T>>()
     {
     }
-    
+
     inline TBase8(const ui64 _value)
         : TBase<TSimd8<T>>(_value)
     {
@@ -115,12 +115,12 @@ struct TSimd8<bool>: TBase8<bool> {
         : TBase8()
     {
     }
-    
+
     inline TSimd8<bool>(const ui64 value)
         : TBase8<bool>(value)
     {
     }
-    
+
     inline TSimd8<bool>(bool value)
         : TBase8<bool>(Set(value))
     {
@@ -133,7 +133,7 @@ struct TSimd8<bool>: TBase8<bool> {
     inline bool Any() const {
         return Value != 0;
     }
-    
+
     inline TSimd8<bool> operator~() const {
         return *this ^ true;
     }
@@ -141,7 +141,7 @@ struct TSimd8<bool>: TBase8<bool> {
 
 template<typename T>
 struct TBase8Numeric: TBase8<T> {
-   
+
     inline TBase8Numeric()
         : TBase8<T>()
     {
@@ -183,6 +183,24 @@ struct TBase8Numeric: TBase8<T> {
 
     inline void StoreStream(T dst[8]) const {
         Store(dst);
+    }
+
+    inline TSimd8<T> Shuffle(const TSimd8<T> other) const {
+        TSimd8<T> dst(T(0));
+        ui64 mask_byte = 255;
+        for (size_t i = 0; i < 8; i += 1) {
+            size_t j = i * 8;
+            ui64 mask = 15;
+            if (!((1ULL << (j + 7)) & other.Value)) {
+                ui64 index = (other.Value >> j) & mask;
+                dst.Value |= (this->Value & (mask_byte << (index * 8)));
+            }
+        }
+        return dst;
+    }
+
+    inline TSimd8<T> Shuffle128(const TSimd8<T> other) const {
+        return Shuffle(other);
     }
 
     template<typename TOut>
@@ -236,8 +254,8 @@ template<>
 struct TSimd8<i8> : TBase8Numeric<i8> {
     inline TSimd8()
         : TBase8Numeric<i8>()
-    {    
-    }    
+    {
+    }
     inline TSimd8(const ui64 value)
         : TBase8Numeric<i8>(value)
     {
@@ -250,10 +268,15 @@ struct TSimd8<i8> : TBase8Numeric<i8> {
         : TSimd8(Load(values))
     {
     }
-    inline TSimd8(
-        i8 v0,  i8 v1,  i8 v2,  i8 v3,  i8 v4,  i8 v5,  i8 v6,  i8 v7
-    ) : TSimd8({v0, v1, v2, v3, v4, v5, v6, v7})
-    {
+    inline TSimd8(i8 v0,  i8 v1,  i8 v2,  i8 v3,  i8 v4,  i8 v5,  i8 v6,  i8 v7) {
+        this->Value = ui8(v7);
+        this->Value = (this->Value << 8) | ui8(v6);
+        this->Value = (this->Value << 8) | ui8(v5);
+        this->Value = (this->Value << 8) | ui8(v4);
+        this->Value = (this->Value << 8) | ui8(v3);
+        this->Value = (this->Value << 8) | ui8(v2);
+        this->Value = (this->Value << 8) | ui8(v1);
+        this->Value = (this->Value << 8) | ui8(v0);
     }
 
     inline TSimd8<i8> MaxValue(const TSimd8<i8> other) const {
@@ -278,7 +301,7 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
     {
     }
     inline TSimd8(const ui64 _value)
-        : TBase8Numeric<ui8>(_value) 
+        : TBase8Numeric<ui8>(_value)
     {
     }
     inline TSimd8(ui8 _value)
@@ -286,13 +309,19 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
     {
     }
     inline TSimd8(const ui8 values[8])
-        : TSimd8(Load(values)) 
+        : TSimd8(Load(values))
     {
     }
-    inline TSimd8(
-        ui8 v0,  ui8 v1,  ui8 v2,  ui8 v3,  ui8 v4,  ui8 v5,  ui8 v6,  ui8 v7
-    ) : TSimd8({v0, v1, v2, v3, v4, v5, v6, v7}
-    ) {}
+    inline TSimd8(ui8 v0,  ui8 v1,  ui8 v2,  ui8 v3,  ui8 v4,  ui8 v5,  ui8 v6,  ui8 v7) {
+        this->Value = v7;
+        this->Value = (this->Value << 8) | v6;
+        this->Value = (this->Value << 8) | v5;
+        this->Value = (this->Value << 8) | v4;
+        this->Value = (this->Value << 8) | v3;
+        this->Value = (this->Value << 8) | v2;
+        this->Value = (this->Value << 8) | v1;
+        this->Value = (this->Value << 8) | v0;
+    }
 
     inline TSimd8<ui8> MaxValue(const TSimd8<ui8> other) const {
         return this->Value > other.Value ? *this : other;

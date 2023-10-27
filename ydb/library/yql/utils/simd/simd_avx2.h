@@ -69,7 +69,7 @@ struct TBase8: TBase<TSimd8<T>> {
         : TBase<TSimd8<T>>()
     {
     }
-    
+
     inline TBase8(const __m256i _value)
         : TBase<TSimd8<T>>(_value)
     {
@@ -98,12 +98,12 @@ struct TSimd8<bool>: TBase8<bool> {
         : TBase8()
     {
     }
-    
+
     inline TSimd8<bool>(const __m256i value)
         : TBase8<bool>(value)
     {
     }
-    
+
     inline TSimd8<bool>(bool value)
         : TBase8<bool>(Set(value))
     {
@@ -116,7 +116,7 @@ struct TSimd8<bool>: TBase8<bool> {
     inline bool Any() const {
         return !_mm256_testz_si256(this->Value, this->Value);
     }
-    
+
     inline TSimd8<bool> operator~() const {
         return *this ^ true;
     }
@@ -124,7 +124,7 @@ struct TSimd8<bool>: TBase8<bool> {
 
 template<typename T>
 struct TBase8Numeric: TBase8<T> {
-   
+
     inline TBase8Numeric()
         : TBase8<T>()
     {
@@ -162,6 +162,19 @@ struct TBase8Numeric: TBase8<T> {
 
     inline void StoreStream(T dst[16]) const {
         return _mm256_stream_si256(reinterpret_cast<__m256i *>(dst), this->Value);
+    }
+
+    inline TSimd8<T> Shuffle(const TSimd8<T> other) const {
+        TSimd8<T> mask0(0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70,
+                        0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0);
+        TSimd8<T> mask1(0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
+                        0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70);
+        TSimd8<T> perm = _mm256_permute4x64_epi64(this->Value, 0x4E);
+        return Shuffle128(other + mask0) | perm.Shuffle128(other + mask1);
+    }
+
+    inline TSimd8<T> Shuffle128(const TSimd8<T> other) const {
+        return _mm256_shuffle_epi8(this->Value, other.Value);
     }
 
     static inline TSimd8<T> Repeat16(
@@ -224,8 +237,8 @@ template<>
 struct TSimd8<i8> : TBase8Numeric<i8> {
     inline TSimd8()
         : TBase8Numeric<i8>()
-    {    
-    }    
+    {
+    }
     inline TSimd8(const __m256i value)
         : TBase8Numeric<i8>(value)
     {
@@ -251,7 +264,7 @@ struct TSimd8<i8> : TBase8Numeric<i8> {
     ))
     {
     }
-    
+
     inline static TSimd8<i8> Repeat16(
         i8 v0,  i8 v1,  i8 v2,  i8 v3,  i8 v4,  i8 v5,  i8 v6,  i8 v7,
         i8 v8,  i8 v9,  i8 v10, i8 v11, i8 v12, i8 v13, i8 v14, i8 v15
@@ -285,7 +298,7 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
     {
     }
     inline TSimd8(const __m256i _value)
-        : TBase8Numeric<ui8>(_value) 
+        : TBase8Numeric<ui8>(_value)
     {
     }
     inline TSimd8(ui8 _value)
@@ -319,7 +332,7 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
             v8, v9, v10,v11,v12,v13,v14,v15
         );
     }
-    
+
     inline TSimd8<ui8> MaxValue(const TSimd8<ui8> other) const {
         return _mm256_max_epu8(this->Value, other.Value);
     }
@@ -351,7 +364,7 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
     inline bool AnyBitsSetAnywhere(TSimd8<ui8> bits) const {
         return !BitsNotSetAnywhere(bits);
     }
-    
+
     template<int N>
     inline TSimd8<ui8> Shr() const {
         return TSimd8<ui8>(_mm256_srli_epi16(this->Value, N)) & ui8(0xFFu >> N);
@@ -360,7 +373,7 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
     inline TSimd8<ui8> Shl() const {
         return TSimd8<ui8>(_mm256_slli_epi16(this->Value, N)) & ui8(0xFFu << N);
     }
-    
+
     template<int N>
     inline int GetBit() const {
         return _mm256_movemask_epi8(_mm256_slli_epi16(this->Value, 7-N));

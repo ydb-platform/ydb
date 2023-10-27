@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
 
         TSimd8<bool> bit_or = tr | fal;
         UNIT_ASSERT_EQUAL(bit_or.Any(), tr.Any());
-        
+
         TSimd8<bool> tr_m(_mm256_set_epi32(-1, -1, -1, -1, -1, -1, -1, -1));
         UNIT_ASSERT_EQUAL((tr_m == tr).Any(), TSimd8<bool>(true).Any());
     }
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
         UNIT_ASSERT_EQUAL((a == b).Any(), true);
         UNIT_ASSERT_EQUAL((b == c).Any(), true);
         UNIT_ASSERT_EQUAL((c == TSimd8<ui8>::Zero()).Any(), true);
-        
+
         a = TSimd8<ui8>(ui8(50));
         b = TSimd8<ui8>(ui8(49));
         UNIT_ASSERT_EQUAL((a.MaxValue(b) == a).Any(), true);
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
         UNIT_ASSERT_EQUAL(a.BitsNotSet().Any(), false);
         UNIT_ASSERT_EQUAL(a.AnyBitsSet().Any(), true);
 
-        
+
         TSimd8<ui8> a2(ui8(100));
         TSimd8<ui8> a3(ui8(25));
         UNIT_ASSERT_EQUAL((a.Shl<1>() == a2).Any(), true);
@@ -98,14 +98,14 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
         UNIT_ASSERT_EQUAL((a == b).Any(), true);
         UNIT_ASSERT_EQUAL((b == c).Any(), true);
         UNIT_ASSERT_EQUAL((c == TSimd8<i8>::Zero()).Any(), true);
-        
+
         a = TSimd8<i8>(i8(50));
         b = TSimd8<i8>(i8(49));
         UNIT_ASSERT_EQUAL((a.MaxValue(b) == a).Any(), true);
         UNIT_ASSERT_EQUAL((a.MinValue(b) == b).Any(), true);
         UNIT_ASSERT_EQUAL((a.MinValue(b) == a).Any(), false);
 
-        
+
         TSimd8<i8> a2(i8(5));
         TSimd8<i8> a3(i8(25));
         a = TSimd8<i8>(i8(15));
@@ -128,6 +128,26 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
         for (int i = 0; i < 1000; i += 1) {
             UNIT_ASSERT_EQUAL(result_buf[i], ui8(~buf[i]));
         }
+    }
+
+    Y_UNIT_TEST(Shuffle) {
+        TSimd8<i8> index(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
+                        16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+        TSimd8<i8> tmp( 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7,
+                        0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7);
+        TSimd8<i8> result = tmp.Shuffle(index);
+        UNIT_ASSERT_EQUAL((result == TSimd8<i8>(7, 6, 5, 4, 3, 2, 1, 0, 7, 6, 5, 4, 3, 2, 1, 0,
+                                                7, 6, 5, 4, 3, 2, 1, 0, 7, 6, 5, 4, 3, 2, 1, 0)).Any(), true);
+    }
+
+    Y_UNIT_TEST(Shuffle128) {
+        TSimd8<i8> index(   0, -1, 2, -1, 4, -1, 6, -1, 0, -1, 2, -1, 4, -1, 6, -1,
+                            0, -1, 2, -1, 4, -1, 6, -1, 0, -1, 2, -1, 4, -1, 6, -1);
+        TSimd8<i8> tmp( 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7,
+                        0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7);
+        TSimd8<i8> result = tmp.Shuffle128(index);
+        UNIT_ASSERT_EQUAL((result == TSimd8<i8>(0, 0, 2, 0, 4, 0, 6, 0, 0, 0, 2, 0, 4, 0, 6, 0,
+                                                0, 0, 2, 0, 4, 0, 6, 0, 0, 0, 2, 0, 4, 0, 6, 0)).Any(), true);
     }
 }
 
@@ -153,7 +173,7 @@ Y_UNIT_TEST_SUITE(TSimdSSE42) {
 
         TSimd8<bool> bit_or = tr | fal;
         UNIT_ASSERT_EQUAL(bit_or.Any(), tr.Any());
-        
+
         TSimd8<bool> tr_m(_mm_set_epi32(-1, -1, -1, -1));
         UNIT_ASSERT_EQUAL((tr_m == tr).Any(), TSimd8<bool>(true).Any());
     }
@@ -170,7 +190,7 @@ Y_UNIT_TEST_SUITE(TSimdSSE42) {
         UNIT_ASSERT_EQUAL((a == b).Any(), true);
         UNIT_ASSERT_EQUAL((b == c).Any(), true);
         UNIT_ASSERT_EQUAL((c == TSimd8<ui8>::Zero()).Any(), true);
-        
+
         a = TSimd8<ui8>(ui8(50));
         b = TSimd8<ui8>(ui8(49));
         UNIT_ASSERT_EQUAL((a.MaxValue(b) == a).Any(), true);
@@ -181,7 +201,7 @@ Y_UNIT_TEST_SUITE(TSimdSSE42) {
         UNIT_ASSERT_EQUAL(a.BitsNotSet().Any(), false);
         UNIT_ASSERT_EQUAL(a.AnyBitsSet().Any(), true);
 
-        
+
         TSimd8<ui8> a2(ui8(100));
         TSimd8<ui8> a3(ui8(25));
         UNIT_ASSERT_EQUAL((a.Shl<1>() == a2).Any(), true);
@@ -202,14 +222,14 @@ Y_UNIT_TEST_SUITE(TSimdSSE42) {
         UNIT_ASSERT_EQUAL((a == b).Any(), true);
         UNIT_ASSERT_EQUAL((b == c).Any(), true);
         UNIT_ASSERT_EQUAL((c == TSimd8<i8>::Zero()).Any(), true);
-        
+
         a = TSimd8<i8>(i8(50));
         b = TSimd8<i8>(i8(49));
         UNIT_ASSERT_EQUAL((a.MaxValue(b) == a).Any(), true);
         UNIT_ASSERT_EQUAL((a.MinValue(b) == b).Any(), true);
         UNIT_ASSERT_EQUAL((a.MinValue(b) == a).Any(), false);
 
-        
+
         TSimd8<i8> a2(i8(5));
         TSimd8<i8> a3(i8(25));
         a = TSimd8<i8>(i8(15));
@@ -233,10 +253,18 @@ Y_UNIT_TEST_SUITE(TSimdSSE42) {
             UNIT_ASSERT_EQUAL(result_buf[i], ui8(~buf[i]));
         }
     }
+
+    Y_UNIT_TEST(Shuffle) {
+        TSimd8<i8> index(0, -1, 2, -1, 4, -1, 6, -1, 0, -1, 2, -1, 4, -1, 6, -1);
+        TSimd8<i8> tmp(0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7);
+        TSimd8<i8> result = tmp.Shuffle(index);
+        UNIT_ASSERT_EQUAL((result == TSimd8<i8>(0, 0, 2, 0, 4, 0, 6, 0, 0, 0, 2, 0, 4, 0, 6, 0)).Any(), true);
+    }
 }
 #pragma clang attribute pop
 
 Y_UNIT_TEST_SUITE(SimdFallback) {
+    using namespace NSimd::NFallback;
     Y_UNIT_TEST(SimdTrait) {
         ui8 buf[1000];
         for (int i = 0; i < 1000; i += 1) {
@@ -261,5 +289,12 @@ Y_UNIT_TEST_SUITE(SimdFallback) {
             auto y = NSimd::SelectSimdTraits<TTestFactory>(x);
             UNIT_ASSERT_EQUAL(y, 8);
         }
+    }
+
+    Y_UNIT_TEST(Shuffle) {
+        TSimd8<i8> index(0, -1, 2, -1, 4, -1, 6, -1);
+        TSimd8<i8> tmp(0, 1, 2, 3, 4, 5, 6, 7);
+        TSimd8<i8> result = tmp.Shuffle(index);
+        UNIT_ASSERT_EQUAL((result == TSimd8<i8>(0, 0, 2, 0, 4, 0, 6, 0)).Any(), true);
     }
 }

@@ -40,9 +40,10 @@ struct TPerfomancer {
             } else {
                 log_batch_size = 2;
             }
-            
-            const size_t size = (32LL << 17);
-            i64 buf[size / 8] __attribute__((aligned(32)));
+
+            size_t size = (32LL << 21);
+            i64* buf __attribute__((aligned(32))) = new i64[size];
+
             i64 tmp[4];
             for (size_t i = 0; i < 4; i += 1) {
                 tmp[i] = i;
@@ -63,6 +64,10 @@ struct TPerfomancer {
                 }
             }
 
+
+            std::chrono::steady_clock::time_point end01 =
+                std::chrono::steady_clock::now();
+
             bool is_ok = true;
 
             for (size_t i = 0; i < size_loop; i += 1) {
@@ -70,9 +75,6 @@ struct TPerfomancer {
                     is_ok = false;
                 }
             }
-            
-            std::chrono::steady_clock::time_point end01 =
-                std::chrono::steady_clock::now();
 
             ui64 microseconds =
                 std::chrono::duration_cast<std::chrono::microseconds>(end01 - begin01)
@@ -91,7 +93,7 @@ struct TPerfomancer {
             }
             return is_ok;
         }
-        
+
         ~TWorker() = default;
     };
 

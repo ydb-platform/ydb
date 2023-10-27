@@ -69,7 +69,7 @@ struct TBase8: TBase<TSimd8<T>> {
         : TBase<TSimd8<T>>()
     {
     }
-    
+
     inline TBase8(const __m128i value)
         : TBase<TSimd8<T>>(value)
     {
@@ -98,12 +98,12 @@ struct TSimd8<bool>: TBase8<bool> {
         : TBase8()
     {
     }
-    
+
     inline TSimd8<bool>(const __m128i value)
         : TBase8<bool>(value)
     {
     }
-    
+
     inline TSimd8<bool>(bool value)
         : TBase8<bool>(Set(value))
     {
@@ -116,7 +116,7 @@ struct TSimd8<bool>: TBase8<bool> {
     inline bool Any() const {
         return !_mm_testz_si128(this->Value, this->Value);
     }
-    
+
     inline TSimd8<bool> operator~() const {
         return *this ^ true;
     }
@@ -124,7 +124,7 @@ struct TSimd8<bool>: TBase8<bool> {
 
 template<typename T>
 struct TBase8Numeric: TBase8<T> {
-   
+
     inline TBase8Numeric()
         : TBase8<T>()
     {
@@ -147,8 +147,8 @@ struct TBase8Numeric: TBase8<T> {
     static inline TSimd8<T> LoadAligned(const T values[16]) {
         return _mm_load_si128(reinterpret_cast<const __m128i *>(values));
     }
-    
-    
+
+
     inline void LoadStream(T dst[16]) const {
         return _mm_stream_load_si128(reinterpret_cast<__m128i *>(dst), this->Value);
     }
@@ -165,6 +165,14 @@ struct TBase8Numeric: TBase8<T> {
         return _mm_stream_si128(reinterpret_cast<__m128i *>(dst), this->Value);
     }
 
+    inline TSimd8<T> Shuffle(const TSimd8<T> other) const {
+        return _mm_shuffle_epi8(this->Value, other.Value);
+    }
+
+    inline TSimd8<T> Shuffle128(const TSimd8<T> other) const {
+        return Shuffle(other);
+    }
+
     static inline TSimd8<T> Repeat16(
         T v0,  T v1,  T v2,  T v3,  T v4,  T v5,  T v6,  T v7,
         T v8,  T v9,  T v10, T v11, T v12, T v13, T v14, T v15
@@ -175,7 +183,7 @@ struct TBase8Numeric: TBase8<T> {
         );
     }
 
-    
+
 
     template<typename TOut>
     void Log(IOutputStream& out, TString delimeter = " ", TString end = "\n") {
@@ -228,8 +236,8 @@ template<>
 struct TSimd8<i8> : TBase8Numeric<i8> {
     inline TSimd8()
         : TBase8Numeric<i8>()
-    {    
-    }    
+    {
+    }
     inline TSimd8(const __m128i value)
         : TBase8Numeric<i8>(value)
     {
@@ -251,7 +259,7 @@ struct TSimd8<i8> : TBase8Numeric<i8> {
     ))
     {
     }
-    
+
     inline static TSimd8<i8> Repeat16(
         i8 v0,  i8 v1,  i8 v2,  i8 v3,  i8 v4,  i8 v5,  i8 v6,  i8 v7,
         i8 v8,  i8 v9,  i8 v10, i8 v11, i8 v12, i8 v13, i8 v14, i8 v15
@@ -283,7 +291,7 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
     {
     }
     inline TSimd8(const __m128i _value)
-        : TBase8Numeric<ui8>(_value) 
+        : TBase8Numeric<ui8>(_value)
     {
     }
     inline TSimd8(ui8 _value)
@@ -291,7 +299,7 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
     {
     }
     inline TSimd8(const ui8 values[16])
-        : TSimd8(Load(values)) 
+        : TSimd8(Load(values))
     {
     }
     inline TSimd8(
@@ -311,7 +319,7 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
             v8, v9, v10,v11,v12,v13,v14,v15
         );
     }
-    
+
     inline TSimd8<ui8> MaxValue(const TSimd8<ui8> other) const {
         return _mm_max_epu8(this->Value, other.Value);
     }
@@ -343,7 +351,7 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
     inline bool AnyBitsSetAnywhere(TSimd8<ui8> bits) const {
         return !BitsNotSetAnywhere(bits);
     }
-    
+
     template<int N>
     inline TSimd8<ui8> Shr() const {
         return TSimd8<ui8>(_mm_srli_epi16(this->Value, N)) & ui8(0xFFu >> N);
@@ -352,7 +360,7 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
     inline TSimd8<ui8> Shl() const {
         return TSimd8<ui8>(_mm_slli_epi16(this->Value, N)) & ui8(0xFFu << N);
     }
-    
+
     template<int N>
     inline int GetBit() const {
         return _mm_movemask_epi8(_mm_slli_epi16(this->Value, 7-N));

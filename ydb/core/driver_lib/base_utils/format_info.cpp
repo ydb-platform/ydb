@@ -88,7 +88,7 @@ void TCmdFormatInfoConfig::Parse(int argc, char **argv) {
 
     MainKey = {};
     for (auto& key : MainKeyTmp) {
-        MainKey.push_back(key);
+        MainKey.Keys.push_back(key);
     }
 }
 

@@ -58,8 +58,8 @@ public:
             DiskSize = (ui64)ChunkSize * numChunks;
             PDiskGuid = Now().GetValue();
             PDiskKey = 1;
-            MainKey = {1};
-            FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.back(), "incrhuge",
+            MainKey = NPDisk::TMainKey{ .Keys = { 1 }, .IsInitialized = true };
+            FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.Keys.back(), "incrhuge",
                 false, false, nullptr, false);
         }
 

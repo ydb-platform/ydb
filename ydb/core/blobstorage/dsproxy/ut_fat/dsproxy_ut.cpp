@@ -4227,7 +4227,7 @@ public:
                 pDiskConfig->SectorMap = SectorMapByPath[filePath];
                 pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
 
-                NPDisk::TMainKey mainKeys = { mainKey };
+                NPDisk::TMainKey mainKeys = NPDisk::TMainKey{ .Keys = { mainKey }, .IsInitialized = true };
                 TActorSetupCmd pDiskSetup(
                     CreatePDisk(pDiskConfig.Get(), mainKeys, counters),
                     TMailboxType::Revolving, 0);

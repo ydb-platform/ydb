@@ -1,7 +1,6 @@
 #pragma once
 #include "conveyor_task.h"
 #include "description.h"
-#include "read_context.h"
 #include "read_filter_merger.h"
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/columnshard/blob.h>
@@ -21,6 +20,8 @@ class TScanIteratorBase;
 }
 
 namespace NKikimr::NOlap {
+
+class TReadContext;
 
 struct TReadStats {
     TInstant BeginTimestamp;
@@ -111,7 +112,7 @@ public:
 
     virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const = 0;
     virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const = 0;
-    virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const NOlap::TReadContext& readContext) const = 0;
+    virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const = 0;
 
     // TODO:  can this only be done for base class?
     friend IOutputStream& operator << (IOutputStream& out, const TReadMetadataBase& meta) {
@@ -139,7 +140,7 @@ public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
     NIndexedReader::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
-    std::shared_ptr<IDataReader> BuildReader(const NOlap::TReadContext& context, const TConstPtr& self) const;
+    std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<NOlap::TReadContext>& context) const;
 
     const std::vector<ui32>& GetAllColumns() const {
         return AllColumns;
@@ -256,7 +257,7 @@ public:
         return SelectInfo->Stats().Blobs;
     }
 
-    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const NOlap::TReadContext& readContext) const override;
+    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const override;
 
     void Dump(IOutputStream& out) const override {
         out << "columns: " << GetSchemaColumnsCount()
@@ -297,7 +298,7 @@ public:
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
 
-    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const NOlap::TReadContext& readContext) const override;
+    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const override;
 };
 
 }

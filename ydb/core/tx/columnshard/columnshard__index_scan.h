@@ -73,14 +73,14 @@ public:
 
 class TColumnShardScanIterator: public TScanIteratorBase {
 private:
-    NOlap::TReadContext Context;
+    std::shared_ptr<NOlap::TReadContext> Context;
+    const NOlap::TReadMetadata::TConstPtr ReadMetadata;
     TReadyResults ReadyResults;
-    NOlap::TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<NOlap::IDataReader> IndexedData;
     ui64 ItemsRead = 0;
     const i64 MaxRowsInBatch = 5000;
 public:
-    TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata, const NOlap::TReadContext& context);
+    TColumnShardScanIterator(const std::shared_ptr<NOlap::TReadContext>& context, const NOlap::TReadMetadata::TConstPtr& readMetadata);
     ~TColumnShardScanIterator();
 
     virtual std::optional<ui32> GetAvailableResultsCount() const override {
@@ -103,7 +103,7 @@ public:
     std::optional<NOlap::TPartialReadResult> GetBatch() override;
     virtual void PrepareResults() override;
 
-    virtual std::shared_ptr<NOlap::NBlobOperations::NRead::ITask> GetNextTaskToRead() override;
+    virtual bool ReadNextInterval() override;
 
 private:
     void FillReadyResults();

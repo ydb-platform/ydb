@@ -101,6 +101,22 @@ ui64 TPortionInfo::GetRawBytes(const std::vector<ui32>& columnIds) const {
     return sum;
 }
 
+ui64 TPortionInfo::GetRawBytes(const std::set<ui32>& columnIds) const {
+    ui64 sum = 0;
+    const ui32 numRows = NumRows();
+    for (auto&& i : TIndexInfo::GetSpecialColumnIds()) {
+        if (columnIds.contains(i)) {
+            sum += numRows * TIndexInfo::GetSpecialColumnByteWidth(i);
+        }
+    }
+    for (auto&& r : Records) {
+        if (columnIds.contains(r.ColumnId)) {
+            sum += r.GetMeta().GetRawBytesVerified();
+        }
+    }
+    return sum;
+}
+
 int TPortionInfo::CompareSelfMaxItemMinByPk(const TPortionInfo& item, const TIndexInfo& info) const {
     return CompareByColumnIdsImpl<TMaxGetter, TMinGetter>(item, info.KeyColumns);
 }

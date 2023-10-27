@@ -10,7 +10,7 @@ void ITask::OnAllocationSuccess(const ui64 taskId, const NActors::TActorId& send
     DoOnAllocationSuccess(std::make_shared<TResourcesGuard>(taskId, ExternalTaskId, *this, senderId, Context));
 }
 
-void ITask::Start(const NActors::TActorId& actorId, const std::shared_ptr<ITask>& task) {
+void ITask::StartResourceSubscription(const NActors::TActorId& actorId, const std::shared_ptr<ITask>& task) {
     NActors::TActorContext::AsActorContext().Send(actorId, std::make_unique<TEvStartTask>(task));
 }
 
@@ -34,6 +34,17 @@ TResourcesGuard::TResourcesGuard(const ui64 taskId, const TString& externalTaskI
 {
     Context.GetCounters()->GetBytesAllocated()->Add(Memory);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "allocate_resources")("external_task_id", ExternalTaskId)("task_id", TaskId)("mem", Memory)("cpu", Cpu);
+}
+
+void TResourcesGuard::Update(const ui64 memNew) {
+    Context.GetCounters()->GetBytesAllocated()->Remove(Memory);
+    AFL_VERIFY(NActors::TlsActivationContext);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "update_resources")("task_id", TaskId)("external_task_id", ExternalTaskId)("mem", memNew)("cpu", Cpu)("mem_old", Memory);
+    Memory = memNew;
+    auto ev = std::make_unique<IEventHandle>(NKikimr::NResourceBroker::MakeResourceBrokerID(), Sender, new NKikimr::NResourceBroker::TEvResourceBroker::TEvUpdateTask(TaskId, {{Cpu, Memory}},
+        Context.GetTypeName(), 1000));
+    NActors::TActorContext::AsActorContext().Send(std::move(ev));
+    Context.GetCounters()->GetBytesAllocated()->Add(Memory);
 }
 
 }

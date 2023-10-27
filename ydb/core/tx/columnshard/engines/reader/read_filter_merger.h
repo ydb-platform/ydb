@@ -409,6 +409,7 @@ public:
     }
 
     void AddRecord(const TSortableBatchPosition& position);
+    void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema);
 };
 
 }

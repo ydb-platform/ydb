@@ -58,6 +58,7 @@ void TMergePartialStream::CheckSequenceInDebug(const TSortableBatchPosition& nex
 
 bool TMergePartialStream::DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish) {
     Y_ABORT_UNLESS((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
+    builder.ValidateDataSchema(DataSchema);
     PutControlPoint(std::make_shared<TSortableBatchPosition>(readTo));
     bool cpReachedFlag = false;
     while (SortHeap.Size() && !cpReachedFlag) {
@@ -121,6 +122,11 @@ std::shared_ptr<arrow::RecordBatch> TMergePartialStream::SingleSourceDrain(const
         SortHeap.RemoveTop();
     } else {
         SortHeap.UpdateTop();
+    }
+    if (SortHeap.Empty()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("pos", readTo.DebugJson().GetStringRobust())("heap", "EMPTY");
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("pos", readTo.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
     }
     return result;
 }
@@ -189,6 +195,10 @@ NJson::TJsonValue TMergePartialStream::TBatchIterator::DebugJson() const {
     result["is_cp"] = IsControlPoint();
     result["key"] = KeyColumns.DebugJson();
     return result;
+}
+
+void TRecordBatchBuilder::ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema) {
+    AFL_VERIFY(IsSameFieldsSequence(schema->fields(), Fields));
 }
 
 void TRecordBatchBuilder::AddRecord(const TSortableBatchPosition& position) {

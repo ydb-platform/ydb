@@ -12,8 +12,7 @@ namespace NKikimr::NOlap {
 // Represents a batch of rows produced by ASC or DESC scan with applied filters and partial aggregation
 class TPartialReadResult {
 private:
-    std::shared_ptr<TScanMemoryLimiter::TGuard> MemoryGuardExternal;
-    std::shared_ptr<TScanMemoryLimiter::TGuard> MemoryGuardInternal;
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>, ResourcesGuards);
     std::shared_ptr<arrow::RecordBatch> ResultBatch;
 
     // This 1-row batch contains the last key that was read while producing the ResultBatch.
@@ -57,13 +56,9 @@ public:
         if (!program.HasProgram()) {
             return;
         }
-        Y_ABORT_UNLESS(!MemoryGuardInternal);
         auto status = program.ApplyProgram(ResultBatch);
         if (!status.ok()) {
             ErrorString = status.message();
-        } else if (MemoryGuardExternal) {
-            MemoryGuardInternal = MemoryGuardExternal->MakeSame();
-            MemoryGuardInternal->Take(NArrow::GetBatchMemorySize(ResultBatch));
         }
     }
 
@@ -84,18 +79,18 @@ public:
     std::string ErrorString;
 
     explicit TPartialReadResult(
-        std::shared_ptr<TScanMemoryLimiter::TGuard> memGuard,
+        const std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>& resourcesGuards,
         std::shared_ptr<arrow::RecordBatch> batch)
-        : MemoryGuardExternal(memGuard)
+        : ResourcesGuards(resourcesGuards)
         , ResultBatch(batch)
     {
         Y_ABORT_UNLESS(ResultBatch);
     }
 
     explicit TPartialReadResult(
-        std::shared_ptr<TScanMemoryLimiter::TGuard> memGuard,
+        const std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>& resourcesGuards,
         std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<arrow::RecordBatch> lastKey)
-        : MemoryGuardExternal(memGuard)
+        : ResourcesGuards(resourcesGuards)
         , ResultBatch(batch)
         , LastReadKey(lastKey)
     {
@@ -121,7 +116,7 @@ public:
     virtual void PrepareResults() {
 
     }
-    virtual std::shared_ptr<NOlap::NBlobOperations::NRead::ITask> GetNextTaskToRead() { return nullptr; }
+    virtual bool ReadNextInterval() { return false; }
     virtual TString DebugString(const bool verbose = false) const {
         Y_UNUSED(verbose);
         return "NO_DATA";

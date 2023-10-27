@@ -1,6 +1,7 @@
 #pragma once
 #include "common/owner.h"
 #include <ydb/core/tx/columnshard/resources/memory.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NColumnShard {
@@ -63,6 +64,10 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr LogScanIntervals;
 
 public:
+
+    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters> ResourcesSubscriberCounters;
+
+
     NMonitoring::TDynamicCounters::TCounterPtr PortionBytes;
     NMonitoring::TDynamicCounters::TCounterPtr FilterBytes;
     NMonitoring::TDynamicCounters::TCounterPtr PostFilterBytes;
@@ -191,6 +196,7 @@ private:
     std::shared_ptr<TAtomicCounter> MergeTasksCount;
     std::shared_ptr<TAtomicCounter> AssembleTasksCount;
     std::shared_ptr<TAtomicCounter> ReadTasksCount;
+    std::shared_ptr<TAtomicCounter> ResourcesAllocationTasksCount;
 public:
     TScanAggregations Aggregations;
 
@@ -202,12 +208,16 @@ public:
         return TCounterGuard(ReadTasksCount);
     }
 
+    TCounterGuard GetResourcesAllocationTasksGuard() const {
+        return TCounterGuard(ResourcesAllocationTasksCount);
+    }
+
     TCounterGuard GetAssembleTasksGuard() const {
         return TCounterGuard(AssembleTasksCount);
     }
 
     bool InWaiting() const {
-        return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val();
+        return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val() || ResourcesAllocationTasksCount->Val();
     }
 
     void OnBlobsWaitDuration(const TDuration d, const TDuration fullScanDuration) const {
@@ -220,6 +230,7 @@ public:
         , MergeTasksCount(std::make_shared<TAtomicCounter>())
         , AssembleTasksCount(std::make_shared<TAtomicCounter>())
         , ReadTasksCount(std::make_shared<TAtomicCounter>())
+        , ResourcesAllocationTasksCount(std::make_shared<TAtomicCounter>())
         , Aggregations(TBase::BuildAggregations())
     {
 

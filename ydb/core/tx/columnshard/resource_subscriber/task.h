@@ -23,10 +23,15 @@ private:
     const ui64 TaskId;
     const TString ExternalTaskId;
     const NActors::TActorId Sender;
-    const ui64 Memory;
+    ui64 Memory;
     const ui32 Cpu;
     const TTaskContext Context;
 public:
+    TString DebugString() const {
+        return TStringBuilder() << "(mem=" << Memory << ";cpu=" << Cpu << ";)";
+    }
+
+    void Update(const ui64 memNew);
     TResourcesGuard(const ui64 taskId, const TString& externalTaskId, const ITask& task, const NActors::TActorId& sender, const TTaskContext& context);
     ~TResourcesGuard();
 };
@@ -63,7 +68,7 @@ public:
     virtual ~ITask() = default;
     void OnAllocationSuccess(const ui64 taskId, const NActors::TActorId& senderId);
 
-    static void Start(const NActors::TActorId& actorId, const std::shared_ptr<ITask>& task);
+    static void StartResourceSubscription(const NActors::TActorId& actorId, const std::shared_ptr<ITask>& task);
 };
 
 }

@@ -335,13 +335,17 @@ public:
     }
 
     ui64 GetRawBytes(const std::vector<ui32>& columnIds) const;
-
-    ui64 RawBytesSum() const {
+    ui64 GetRawBytes(const std::set<ui32>& columnIds) const;
+    ui64 GetRawBytes() const {
         ui64 result = 0;
         for (auto&& i : Records) {
             result += i.GetMeta().GetRawBytesVerified();
         }
         return result;
+    }
+
+    ui64 RawBytesSum() const {
+        return GetRawBytes();
     }
 
 private:

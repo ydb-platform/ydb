@@ -59,7 +59,10 @@ TScanCounters::TScanCounters(const TString& module)
     , HistogramBlobsWaitingDuration(TBase::GetHistogram("BlobsWaitingDuration", NMonitoring::ExponentialHistogram(20, 2, 256)))
 
     , BlobsReceivedCount(TBase::GetDeriviative("BlobsReceivedCount"))
-    , BlobsReceivedBytes(TBase::GetDeriviative("BlobsReceivedBytes")) {
+    , BlobsReceivedBytes(TBase::GetDeriviative("BlobsReceivedBytes"))
+{
+    ResourcesSubscriberCounters = std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>();
+
 }
 
 NKikimr::NColumnShard::TScanAggregations TScanCounters::BuildAggregations() {

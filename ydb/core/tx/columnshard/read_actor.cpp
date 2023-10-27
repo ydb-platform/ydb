@@ -5,6 +5,8 @@
 #include <ydb/core/tx/conveyor/usage/events.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include "blobs_reader/actor.h"
+#include "engines/reader/read_context.h"
+#include "resource_subscriber/actor.h"
 
 namespace NKikimr::NColumnShard {
 namespace {
@@ -146,8 +148,14 @@ public:
         }
     }
 
+    virtual void PassAway() override {
+        Send(ResourceSubscribeActorId, new TEvents::TEvPoisonPill);
+        IActor::PassAway();
+    }
+
     void Bootstrap(const TActorContext& ctx) {
-        IndexedData = ReadMetadata->BuildReader(NOlap::TReadContext(Storages, Counters, true), ReadMetadata);
+        ResourceSubscribeActorId = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletId, SelfId()));
+        IndexedData = ReadMetadata->BuildReader(std::make_shared<NOlap::TReadContext>(Storages, Counters, true, ReadMetadata, SelfId(), ResourceSubscribeActorId));
         LOG_S_DEBUG("Starting read (" << IndexedData->DebugString(false) << ") at tablet " << TabletId);
 
         bool earlyExit = false;
@@ -165,8 +173,7 @@ public:
             SendTimeouts(ctx);
             ctx.Send(SelfId(), new TEvents::TEvPoisonPill());
         } else {
-            while (auto task = IndexedData->ExtractNextReadTask(false)) {
-                Register(new NOlap::NBlobOperations::NRead::TActor(task));
+            while (IndexedData->ReadNextInterval()) {
             }
             BuildResult(ctx);
         }
@@ -194,6 +201,7 @@ private:
     TActorId DstActor;
     TActorId BlobCacheActorId;
     std::unique_ptr<TEvColumnShard::TEvReadResult> Result;
+    TActorId ResourceSubscribeActorId;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<NOlap::IDataReader> IndexedData;
     TInstant Deadline;

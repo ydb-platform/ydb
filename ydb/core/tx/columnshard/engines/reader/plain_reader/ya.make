@@ -11,6 +11,7 @@ SRCS(
     column_assembler.cpp
     committed_assembler.cpp
     columns_set.cpp
+    context.cpp
 )
 
 PEERDIR(

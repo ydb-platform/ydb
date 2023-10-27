@@ -21,6 +21,7 @@
 #include <ydb/services/metadata/request/common.h>
 #include <util/generic/noncopyable.h>
 #include "blobs_reader/actor.h"
+#include "resource_subscriber/actor.h"
 
 namespace NKikimr::NColumnShard {
 
@@ -58,6 +59,7 @@ constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 class TColumnShardScan : public TActorBootstrapped<TColumnShardScan>, NArrow::IRowWriter {
 private:
     std::shared_ptr<NOlap::TActorBasedMemoryAccesor> MemoryAccessor;
+    TActorId ResourceSubscribeActorId;
     const std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
 public:
     static constexpr auto ActorActivityType() {
@@ -65,6 +67,11 @@ public:
     }
 
 public:
+    virtual void PassAway() override {
+        Send(ResourceSubscribeActorId , new TEvents::TEvPoisonPill);
+        IActor::PassAway();
+    }
+
     TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
                      const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
                      ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie,
@@ -99,7 +106,10 @@ public:
 
         Y_ABORT_UNLESS(!ScanIterator);
         MemoryAccessor = std::make_shared<NOlap::TActorBasedMemoryAccesor>(SelfId(), "CSScan/Result");
-        NOlap::TReadContext context(StoragesManager, ScanCountersPool, MemoryAccessor, false);
+        ResourceSubscribeActorId = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletId, SelfId()));
+
+        std::shared_ptr<NOlap::TReadContext> context = std::make_shared<NOlap::TReadContext>(StoragesManager, ScanCountersPool, false,
+            ReadMetadataRanges[ReadMetadataIndex], SelfId(), ResourceSubscribeActorId);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
@@ -127,14 +137,7 @@ private:
     }
 
     bool ReadNextBlob() {
-        while (true) {
-            std::shared_ptr<NOlap::NBlobOperations::NRead::ITask> task = ScanIterator->GetNextTaskToRead();
-            if (!task) {
-                break;
-            }
-            ++InFlightReads;
-            Stats.RequestSent(task->GetExpectedRanges());
-            Register(new NOlap::NBlobOperations::NRead::TActor(task));
+        while (ScanIterator->ReadNextInterval()) {
         }
         return true;
     }
@@ -362,7 +365,7 @@ private:
             return Finish();
         }
 
-        NOlap::TReadContext context(StoragesManager, ScanCountersPool, MemoryAccessor, false);
+        auto context = std::make_shared<NOlap::TReadContext>(StoragesManager, ScanCountersPool, false, ReadMetadataRanges[ReadMetadataIndex], SelfId(), ResourceSubscribeActorId);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
         // Used in TArrowToYdbConverter
         ResultYqlSchema.clear();
@@ -1008,12 +1011,14 @@ class TCurrentBatch {
 private:
     std::vector<std::shared_ptr<arrow::RecordBatch>> Batches;
     ui32 RecordsCount = 0;
+    std::vector<std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>> Guards;
 public:
-    void AddChunk(const std::shared_ptr<arrow::RecordBatch>& chunk) {
+    void AddChunk(const std::shared_ptr<arrow::RecordBatch>& chunk, const std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>& rGuards) {
         AFL_VERIFY(chunk);
         AFL_VERIFY(chunk->num_rows());
         Batches.emplace_back(chunk);
         RecordsCount += chunk->num_rows();
+        Guards.emplace_back(rGuards);
     }
 
     ui32 GetRecordsCount() const {
@@ -1025,10 +1030,16 @@ public:
         if (mergePartsToMax) {
             auto res = NArrow::CombineBatches(Batches);
             AFL_VERIFY(res);
-            result.emplace_back(TPartialReadResult(nullptr, res));
+            std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>> guards;
+            for (auto&& i : Guards) {
+                guards.insert(guards.end(), i.begin(), i.end());
+            }
+            result.emplace_back(TPartialReadResult(guards, res));
         } else {
+            ui32 idx = 0;
             for (auto&& i : Batches) {
-                result.emplace_back(TPartialReadResult(nullptr, i));
+                result.emplace_back(TPartialReadResult(Guards[idx], i));
+                ++idx;
             }
         }
     }
@@ -1042,11 +1053,11 @@ std::vector<NKikimr::NOlap::TPartialReadResult> TPartialReadResult::SplitResults
         while (currentBatchSplitting && currentBatchSplitting->num_rows()) {
             const ui32 currentRecordsCount = currentBatch.GetRecordsCount();
             if (currentRecordsCount + currentBatchSplitting->num_rows() < maxRecordsInResult) {
-                currentBatch.AddChunk(currentBatchSplitting);
+                currentBatch.AddChunk(currentBatchSplitting, i.GetResourcesGuards());
                 currentBatchSplitting = nullptr;
             } else {
                 auto currentSlice = currentBatchSplitting->Slice(0, maxRecordsInResult - currentRecordsCount);
-                currentBatch.AddChunk(currentSlice);
+                currentBatch.AddChunk(currentSlice, i.GetResourcesGuards());
                 resultBatches.emplace_back(std::move(currentBatch));
                 currentBatch = TCurrentBatch();
                 currentBatchSplitting = currentBatchSplitting->Slice(maxRecordsInResult - currentRecordsCount);

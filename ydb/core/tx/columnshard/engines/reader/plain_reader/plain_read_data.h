@@ -13,27 +13,14 @@ class TPlainReadData: public IDataReader, TNonCopyable {
 private:
     using TBase = IDataReader;
     std::shared_ptr<TScanHead> Scanner;
-    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, EFColumns);
-    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, PKColumns);
-    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FFColumns);
-    std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
-    std::shared_ptr<TColumnsSet> PKFFColumns;
-    std::shared_ptr<TColumnsSet> EFPKColumns;
-    std::shared_ptr<TColumnsSet> FFMinusEFColumns;
-    std::shared_ptr<TColumnsSet> FFMinusEFPKColumns;
-    const bool TrivialEFFlag = false;
+    std::shared_ptr<TSpecialReadContext> SpecialReadContext;
     std::vector<TPartialReadResult> PartialResults;
     ui32 ReadyResultsCount = 0;
-    TFetchBlobsQueue Queue;
-    TFetchBlobsQueue PriorityQueue;
     bool AbortedFlag = false;
 protected:
     virtual TString DoDebugString(const bool verbose) const override {
         TStringBuilder sb;
-        sb <<
-            "ef=" << EFColumns->DebugString() << ";" <<
-            "pk=" << PKColumns->DebugString() << ";" <<
-            "ff=" << FFColumns->DebugString() << ";";
+        sb << SpecialReadContext->DebugString() << ";";
         if (verbose) {
             sb << "intervals_schema=" << Scanner->DebugString();
         }
@@ -41,6 +28,7 @@ protected:
     }
 
     virtual std::vector<TPartialReadResult> DoExtractReadyResults(const int64_t /*maxRowsInBatch*/) override;
+    virtual bool DoReadNextInterval() override;
 
     virtual void DoAbort() override {
         AbortedFlag = true;
@@ -51,21 +39,19 @@ protected:
     virtual bool DoIsFinished() const override {
         return (Scanner->IsFinished() && PartialResults.empty());
     }
-
-    virtual std::shared_ptr<NBlobOperations::NRead::ITask> DoExtractNextReadTask(const bool hasReadyResults) override;
 public:
+    const TReadMetadata::TConstPtr& GetReadMetadata() const {
+        return SpecialReadContext->GetReadMetadata();
+    }
+
+    const std::shared_ptr<TSpecialReadContext>& GetSpecialReadContext() const {
+        return SpecialReadContext;
+    }
+
     TFetchingPlan GetColumnsFetchingPlan(const bool exclusiveSource) const;
 
     IDataSource& GetSourceByIdxVerified(const ui32 sourceIdx) {
         return *Scanner->GetSourceVerified(sourceIdx);
-    }
-
-    void AddForFetch(const ui64 objectId, const std::shared_ptr<NBlobOperations::NRead::ITask>& readTask, const bool priority) {
-        if (priority) {
-            PriorityQueue.emplace_back(objectId, readTask);
-        } else {
-            Queue.emplace_back(objectId, readTask);
-        }
     }
 
     const TScanHead& GetScanner() const {
@@ -76,9 +62,9 @@ public:
         return *Scanner;
     }
 
-    void OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch);
+    void OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard);
 
-    TPlainReadData(TReadMetadata::TConstPtr readMetadata, const TReadContext& context);
+    TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& context);
     ~TPlainReadData() {
         if (!AbortedFlag) {
             Abort();

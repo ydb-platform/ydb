@@ -4,6 +4,7 @@
 #include "constructor.h"
 #include "plain_read_data.h"
 #include <ydb/core/formats/arrow/serializer/full.h>
+#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 
 namespace NKikimr::NOlap::NPlainReader {
 
@@ -21,7 +22,7 @@ void IDataSource::InitFetchStageData(const std::shared_ptr<arrow::RecordBatch>& 
     FetchStageData = std::make_shared<TFetchStageData>(batch);
     auto intervals = Intervals;
     for (auto&& i : intervals) {
-        i->OnSourceFetchStageReady(GetSourceIdx());
+        i.second->OnSourceFetchStageReady(GetSourceIdx());
     }
 }
 
@@ -34,14 +35,13 @@ void IDataSource::InitFilterStageData(const std::shared_ptr<NArrow::TColumnFilte
     }
     auto intervals = Intervals;
     for (auto&& i : intervals) {
-        i->OnSourceFilterStageReady(GetSourceIdx());
+        i.second->OnSourceFilterStageReady(GetSourceIdx());
     }
     DoStartFetchStage();
 }
 
 void IDataSource::InitFetchingPlan(const TFetchingPlan& fetchingPlan) {
-    if (!FilterStageFlag) {
-        FilterStageFlag = true;
+    if (AtomicCas(&FilterStageFlag, 1, 0)) {
         Y_ABORT_UNLESS(!FetchingPlan);
         FetchingPlan = fetchingPlan;
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
@@ -50,10 +50,14 @@ void IDataSource::InitFetchingPlan(const TFetchingPlan& fetchingPlan) {
 }
 
 bool IDataSource::OnIntervalFinished(const ui32 intervalIdx) {
-    Y_ABORT_UNLESS(Intervals.size());
-    Y_ABORT_UNLESS(Intervals.front()->GetIntervalIdx() == intervalIdx);
-    Intervals.pop_front();
+    auto it = Intervals.find(intervalIdx);
+    Y_ABORT_UNLESS(it != Intervals.end());
+    Intervals.erase(it);
     return Intervals.empty();
+}
+
+void IDataSource::RegisterInterval(TFetchingInterval* interval) {
+    AFL_VERIFY(Intervals.emplace(interval->GetIntervalIdx(), interval).second);
 }
 
 void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,
@@ -91,8 +95,8 @@ void TPortionDataSource::DoStartFilterStage() {
     NeedFetchColumns(columnIds, readAction, nullBlocks, nullptr);
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
-    auto constructor = std::make_shared<TEFTaskConstructor>(ReadData, actions, std::move(nullBlocks), columnIds, *this, FetchingPlan->CanUseEarlyFilterImmediately(), "ReaderFilter");
-    ReadData.AddForFetch(GetSourceIdx(), constructor, false);
+    auto constructor = std::make_shared<TEFTaskConstructor>(GetContext(), actions, std::move(nullBlocks), columnIds, *this, FetchingPlan->CanUseEarlyFilterImmediately(), "ReaderFilter");
+    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
 }
 
 void TPortionDataSource::DoStartFetchStage() {
@@ -108,8 +112,8 @@ void TPortionDataSource::DoStartFetchStage() {
         NeedFetchColumns(columnIds, readAction, nullBlocks, GetFilterStageData().GetActualFilter());
         if (readAction->GetExpectedBlobsCount()) {
             std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
-            auto constructor = std::make_shared<TFFColumnsTaskConstructor>(ReadData, actions, std::move(nullBlocks), columnIds, *this, "ReaderFetcher");
-            ReadData.AddForFetch(GetSourceIdx(), constructor, true);
+            auto constructor = std::make_shared<TFFColumnsTaskConstructor>(GetContext(), actions, std::move(nullBlocks), columnIds, *this, "ReaderFetcher");
+            NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
             return;
         }
     } else {
@@ -127,15 +131,15 @@ void TCommittedDataSource::DoFetch() {
         Y_ABORT_UNLESS(!ResultReady);
         ReadStarted = true;
 
-        std::shared_ptr<IBlobsStorageOperator> storageOperator = ReadData.GetContext().GetStoragesManager()->GetInsertOperator();
+        std::shared_ptr<IBlobsStorageOperator> storageOperator = GetContext()->GetCommonContext()->GetStoragesManager()->GetInsertOperator();
         auto readAction = storageOperator->StartReadingAction("CS::READ::COMMITTED");
         readAction->SetIsBackgroundProcess(false);
         readAction->AddRange(CommittedBlob.GetBlobRange());
 
         THashMap<TBlobRange, ui32> nullBlocks;
         std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
-        auto constructor = std::make_shared<TCommittedColumnsTaskConstructor>(ReadData, actions, std::move(nullBlocks), *this, "ReaderCommitted");
-        ReadData.AddForFetch(GetSourceIdx(), constructor, true);
+        auto constructor = std::make_shared<TCommittedColumnsTaskConstructor>(GetContext(), actions, std::move(nullBlocks), *this, "ReaderCommitted");
+        NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
     }
 }
 

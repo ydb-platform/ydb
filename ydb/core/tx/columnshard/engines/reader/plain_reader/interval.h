@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/reader/read_filter_merger.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include "source.h"
 
 namespace NKikimr::NOlap::NPlainReader {
@@ -12,16 +13,18 @@ protected:
     NIndexedReader::TSortableBatchPosition Finish;
     const bool IncludeFinish = true;
     const bool IncludeStart = false;
-    std::shared_ptr<NIndexedReader::TRecordBatchBuilder> RBBuilder;
     ui32 IntervalIdx = 0;
 public:
+    bool IsExclusiveInterval(const ui32 sourcesCount) const {
+        return IncludeFinish && IncludeStart && sourcesCount == 1;
+    }
+
     TMergingContext(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
-        const ui32 intervalIdx, std::shared_ptr<NIndexedReader::TRecordBatchBuilder> builder, const bool includeFinish, const bool includeStart)
+        const ui32 intervalIdx, const bool includeFinish, const bool includeStart)
         : Start(start)
         , Finish(finish)
         , IncludeFinish(includeFinish)
         , IncludeStart(includeStart)
-        , RBBuilder(builder)
         , IntervalIdx(intervalIdx) {
 
     }
@@ -31,14 +34,16 @@ public:
     }
 };
 
-class TFetchingInterval: public TMergingContext, TNonCopyable {
+class TFetchingInterval: public TMergingContext, public TNonCopyable, public NResourceBroker::NSubscribe::ITask {
 private:
+    using TTaskBase = NResourceBroker::NSubscribe::ITask;
     using TBase = TMergingContext;
     bool ResultConstructionInProgress = false;
-    TScanHead& Scanner;
+    std::shared_ptr<TSpecialReadContext> Context;
+    NColumnShard::TCounterGuard TaskGuard;
     std::map<ui32, std::shared_ptr<IDataSource>> Sources;
 
-    bool IsExclusiveSource() const;
+    bool IsExclusiveInterval() const;
     void ConstructResult();
 
     IDataSource& GetSourceVerified(const ui32 idx) {
@@ -55,9 +60,20 @@ private:
         }
         return true;
     }
+    std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+protected:
+    virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) override;
 
 public:
     ~TFetchingInterval();
+
+    const std::map<ui32, std::shared_ptr<IDataSource>>& GetSources() const {
+        return Sources;
+    }
+
+    const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& GetResourcesGuard() const {
+        return ResourcesGuard;
+    }
 
     void Abort() {
         for (auto&& i : Sources) {
@@ -78,14 +94,13 @@ public:
         return result;
     }
 
+    void OnInitResourcesGuard(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard);
     void OnSourceFetchStageReady(const ui32 sourceIdx);
     void OnSourceFilterStageReady(const ui32 sourceIdx);
 
-    void StartMerge(std::shared_ptr<NIndexedReader::TMergePartialStream> merger);
-
     TFetchingInterval(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
-        const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, TScanHead& scanner,
-        std::shared_ptr<NIndexedReader::TRecordBatchBuilder> builder, const bool includeFinish, const bool includeStart);
+        const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
+        const bool includeFinish, const bool includeStart);
 };
 
 }

@@ -1,6 +1,8 @@
 #pragma once
-#include "fetched_data.h"
+#include "context.h"
 #include "columns_set.h"
+#include "fetched_data.h"
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/columnshard/engines/reader/read_filter_merger.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
@@ -17,52 +19,40 @@ class TFetchingInterval;
 class TPlainReadData;
 class IFetchTaskConstructor;
 
-class TFetchingPlan {
-private:
-    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FilterStage);
-    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FetchingStage);
-    bool CanUseEarlyFilterImmediatelyFlag = false;
-public:
-    TFetchingPlan(const std::shared_ptr<TColumnsSet>& filterStage, const std::shared_ptr<TColumnsSet>& fetchingStage, const bool canUseEarlyFilterImmediately)
-        : FilterStage(filterStage)
-        , FetchingStage(fetchingStage)
-        , CanUseEarlyFilterImmediatelyFlag(canUseEarlyFilterImmediately)
-    {
-
-    }
-
-    TString DebugString() const {
-        return TStringBuilder() << "{filter=" << (FilterStage ? FilterStage->DebugString() : "NO") << ";fetching=" << (FetchingStage ? FetchingStage->DebugString() : "NO") << "}";
-    }
-
-    bool CanUseEarlyFilterImmediately() const {
-        return CanUseEarlyFilterImmediatelyFlag;
-    }
-};
-
 class IDataSource {
 private:
     YDB_READONLY(ui32, SourceIdx, 0);
     YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Start);
     YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Finish);
+    YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
+    YDB_READONLY(ui32, IntervalsCount, 0);
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     bool MergingStartedFlag = false;
+    bool AbortedFlag = false;
 protected:
-    TPlainReadData& ReadData;
-    std::deque<TFetchingInterval*> Intervals;
+    THashMap<ui32, TFetchingInterval*> Intervals;
 
     std::shared_ptr<TFilterStageData> FilterStageData;
     std::shared_ptr<TFetchStageData> FetchStageData;
 
     std::optional<TFetchingPlan> FetchingPlan;
 
-    bool FilterStageFlag = false;
+    TAtomic FilterStageFlag = 0;
 
     virtual void DoStartFilterStage() = 0;
     virtual void DoStartFetchStage() = 0;
     virtual void DoAbort() = 0;
-
 public:
+    void IncIntervalsCount() {
+        ++IntervalsCount;
+    }
+
+    bool IsFinished() const {
+        return Intervals.empty();
+    }
+
+    virtual ui64 GetRawBytes(const std::set<ui32>& columnIds) const = 0;
+
     const TFetchingPlan& GetFetchingPlan() const {
         Y_ABORT_UNLESS(FetchingPlan);
         return *FetchingPlan;
@@ -78,6 +68,7 @@ public:
     }
 
     void Abort() {
+        AbortedFlag = true;
         DoAbort();
     }
 
@@ -113,15 +104,13 @@ public:
     void InitFilterStageData(const std::shared_ptr<NArrow::TColumnFilter>& appliedFilter, const std::shared_ptr<NArrow::TColumnFilter>& earlyFilter, const std::shared_ptr<arrow::RecordBatch>& batch);
     void InitFetchStageData(const std::shared_ptr<arrow::RecordBatch>& batch);
 
-    void RegisterInterval(TFetchingInterval* interval) {
-        Intervals.emplace_back(interval);
-    }
+    void RegisterInterval(TFetchingInterval* interval);
 
-    IDataSource(const ui32 sourceIdx, TPlainReadData& readData, const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish)
+    IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish)
         : SourceIdx(sourceIdx)
         , Start(start)
         , Finish(finish)
-        , ReadData(readData)
+        , Context(context)
     {
         if (Start.IsReverseSort()) {
             std::swap(Start, Finish);
@@ -130,7 +119,7 @@ public:
     }
 
     virtual ~IDataSource() {
-        Y_ABORT_UNLESS(Intervals.empty());
+        Y_ABORT_UNLESS(AbortedFlag || Intervals.empty());
     }
 };
 
@@ -154,6 +143,10 @@ private:
 
     virtual void DoAbort() override;
 public:
+    virtual ui64 GetRawBytes(const std::set<ui32>& columnIds) const override {
+        return Portion->GetRawBytes(columnIds);
+    }
+
     const TPortionInfo& GetPortionInfo() const {
         return *Portion;
     }
@@ -162,9 +155,9 @@ public:
         return Portion;
     }
 
-    TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, TPlainReadData& reader,
+    TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context,
         const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish)
-        : TBase(sourceIdx, reader, start, finish)
+        : TBase(sourceIdx, context, start, finish)
         , Portion(portion) {
 
     }
@@ -196,13 +189,17 @@ private:
         return result;
     }
 public:
+    virtual ui64 GetRawBytes(const std::set<ui32>& /*columnIds*/) const override {
+        return CommittedBlob.GetBlobRange().Size;
+    }
+
     const TCommittedBlob& GetCommitted() const {
         return CommittedBlob;
     }
 
-    TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, TPlainReadData& reader,
+    TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context,
         const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish)
-        : TBase(sourceIdx, reader, start, finish)
+        : TBase(sourceIdx, context, start, finish)
         , CommittedBlob(committed) {
 
     }

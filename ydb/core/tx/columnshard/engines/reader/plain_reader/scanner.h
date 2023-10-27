@@ -35,16 +35,12 @@ public:
 
 class TScanHead {
 private:
-    TPlainReadData& Reader;
-    std::deque<std::shared_ptr<IDataSource>> Sources;
-    std::vector<std::shared_ptr<arrow::Field>> ResultFields;
-    std::shared_ptr<arrow::Schema> ResultSchema;
-    YDB_READONLY_DEF(std::vector<TString>, ResultFieldNames);
+    std::shared_ptr<TSpecialReadContext> Context;
     THashMap<ui32, std::shared_ptr<IDataSource>> SourceByIdx;
     std::map<NIndexedReader::TSortableBatchPosition, TDataSourceEndpoint> BorderPoints;
     std::map<ui32, std::shared_ptr<IDataSource>> CurrentSegments;
     std::optional<NIndexedReader::TSortableBatchPosition> CurrentStart;
-    std::deque<TFetchingInterval> FetchingIntervals;
+    std::map<ui32, std::shared_ptr<TFetchingInterval>> FetchingIntervals;
     THashMap<ui32, std::shared_ptr<arrow::RecordBatch>> ReadyIntervals;
     ui32 SegmentIdxCounter = 0;
     std::vector<TIntervalStat> IntervalStats;
@@ -58,7 +54,7 @@ public:
 
     void Abort() {
         for (auto&& i : FetchingIntervals) {
-            i.Abort();
+            i.second->Abort();
         }
         FetchingIntervals.clear();
         BorderPoints.clear();
@@ -69,17 +65,7 @@ public:
         return BorderPoints.empty() && FetchingIntervals.empty();
     }
 
-    void AddSourceByIdx(const std::shared_ptr<IDataSource>& source) {
-        Y_ABORT_UNLESS(source);
-        SourceByIdx.emplace(source->GetSourceIdx(), source);
-    }
-
-    void RemoveSourceByIdx(const std::shared_ptr<IDataSource>& source) {
-        Y_ABORT_UNLESS(source);
-        SourceByIdx.erase(source->GetSourceIdx());
-    }
-
-    TReadContext& GetContext();
+    const TReadContext& GetContext() const;
 
     TString DebugString() const {
         TStringBuilder sb;
@@ -89,18 +75,16 @@ public:
         return sb;
     }
 
-    void OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 intervalIdx);
+    void OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 intervalIdx, TPlainReadData& reader);
     std::shared_ptr<IDataSource> GetSourceVerified(const ui32 idx) const {
         auto it = SourceByIdx.find(idx);
         Y_ABORT_UNLESS(it != SourceByIdx.end());
         return it->second;
     }
 
-    TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, TPlainReadData& reader);
+    TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
 
     bool BuildNextInterval();
-
-    std::shared_ptr<NIndexedReader::TMergePartialStream> BuildMerger() const;
 
 };
 

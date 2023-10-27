@@ -65,4 +65,26 @@ public:
     TColumnsSet operator-(const TColumnsSet& external) const;
 };
 
+class TFetchingPlan {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FilterStage);
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FetchingStage);
+    bool CanUseEarlyFilterImmediatelyFlag = false;
+public:
+    TFetchingPlan(const std::shared_ptr<TColumnsSet>& filterStage, const std::shared_ptr<TColumnsSet>& fetchingStage, const bool canUseEarlyFilterImmediately)
+        : FilterStage(filterStage)
+        , FetchingStage(fetchingStage)
+        , CanUseEarlyFilterImmediatelyFlag(canUseEarlyFilterImmediately) {
+
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << "{filter=" << (FilterStage ? FilterStage->DebugString() : "NO") << ";fetching=" << (FetchingStage ? FetchingStage->DebugString() : "NO") << "}";
+    }
+
+    bool CanUseEarlyFilterImmediately() const {
+        return CanUseEarlyFilterImmediatelyFlag;
+    }
+};
+
 }

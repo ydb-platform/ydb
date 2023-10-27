@@ -1,4 +1,5 @@
 #include "read_metadata.h"
+#include "read_context.h"
 #include "plain_reader/plain_read_data.h"
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
@@ -26,8 +27,8 @@ std::vector<NOlap::TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(const 
     return std::move(InsertTable->Read(readDescription.PathId, readDescription.GetSnapshot(), pkSchema));
 }
 
-std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan(const NOlap::TReadContext& readContext) const {
-    return std::make_unique<NColumnShard::TColumnShardScanIterator>(this->shared_from_this(), readContext);
+std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const {
+    return std::make_unique<NColumnShard::TColumnShardScanIterator>(readContext, this->shared_from_this());
 }
 
 bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor, std::string& error) {
@@ -146,7 +147,7 @@ std::vector<std::pair<TString, NScheme::TTypeInfo>> TReadStatsMetadata::GetKeyYq
     return NOlap::GetColumns(NColumnShard::PrimaryIndexStatsSchema, NColumnShard::PrimaryIndexStatsSchema.KeyColumns);
 }
 
-std::unique_ptr<NColumnShard::TScanIteratorBase> TReadStatsMetadata::StartScan(const NOlap::TReadContext& /*readContext*/) const {
+std::unique_ptr<NColumnShard::TScanIteratorBase> TReadStatsMetadata::StartScan(const std::shared_ptr<NOlap::TReadContext>& /*readContext*/) const {
     return std::make_unique<NColumnShard::TStatsIterator>(this->shared_from_this());
 }
 
@@ -170,8 +171,8 @@ void TReadStats::PrintToLog() {
         ;
 }
 
-std::shared_ptr<NKikimr::NOlap::IDataReader> TReadMetadata::BuildReader(const NOlap::TReadContext& context, const TConstPtr& self) const {
-    return std::make_shared<NPlainReader::TPlainReadData>(self, context);
+std::shared_ptr<NKikimr::NOlap::IDataReader> TReadMetadata::BuildReader(const std::shared_ptr<NOlap::TReadContext>& context) const {
+    return std::make_shared<NPlainReader::TPlainReadData>(context);
 //    auto result = std::make_shared<TIndexedReadData>(self, context);
 //    result->InitRead();
 //    return result;

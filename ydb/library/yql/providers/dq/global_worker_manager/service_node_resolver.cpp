@@ -9,7 +9,7 @@
 
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/yt/yt_wrapper.h>
-#include <ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.h>
+#include <ydb/library/yql/providers/dq/common/attrs.h>
 
 #include <util/system/mutex.h>
 #include <util/random/random.h>

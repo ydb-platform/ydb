@@ -10,15 +10,15 @@
 
 - gRPC
 
-  - [Эндпоинт](../../../../concepts/connect.md#endpoint): `grpc://localhost:2136`
-  - [Путь базы данных](../../../../concepts/connect.md#database): `/local`
-  - [Аутентификация](../../../../concepts/auth.md): Анонимная (без аутентификации)
+  - [Эндпоинт](../../../concepts/connect.md#endpoint): `grpc://localhost:2136`
+  - [Путь базы данных](../../../concepts/connect.md#database): `/local`
+  - [Аутентификация](../../../concepts/auth.md): Анонимная (без аутентификации)
 
 - gRPCs/TLS
 
-  - [Эндпоинт](../../../../concepts/connect.md#endpoint): `grpcs://localhost:2135`
-  - [Путь базы данных](../../../../concepts/connect.md#database): `/local`
-  - [Аутентификация](../../../../concepts/auth.md): Анонимная (без аутентификации)
+  - [Эндпоинт](../../../concepts/connect.md#endpoint): `grpcs://localhost:2135`
+  - [Путь базы данных](../../../concepts/connect.md#database): `/local`
+  - [Аутентификация](../../../concepts/auth.md): Анонимная (без аутентификации)
 
 {% endlist %}
 
@@ -83,6 +83,7 @@ docker run -d --rm --name ydb-local -h localhost \
       {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
     ```
 {% endlist %}
+
 При успешном запуске будет выведен идентификатор созданного контейнера.
 ### Параметры запуска {#start-pars}
 `-d`: Запустить Docker-контейнер в фоновом режиме.
@@ -96,14 +97,14 @@ docker run -d --rm --name ydb-local -h localhost \
 - `YDB_DEFAULT_LOG_LEVEL`: Уровень логирования. Допустимые значения: `CRIT`, `ERROR`, `WARN`, `NOTICE`, `INFO`. По умолчанию `NOTICE`.
 - `GRPC_PORT`: Порт для нешифрованных соединений. По умолчанию 2136.
 - `GRPC_TLS_PORT`: Порт для соединений с использованием TLS. По умолчанию 2135.
-- `MON_PORT`: Порт для встроенного web-ui со средствами [мониторинга и интроспекции](../../../../maintenance/embedded_monitoring/ydb_monitoring.md). По умолчанию 8765.
+- `MON_PORT`: Порт для встроенного web-ui со средствами [мониторинга и интроспекции](../../../maintenance/embedded_monitoring/ydb_monitoring.md). По умолчанию 8765.
 - `YDB_PDISK_SIZE`: Размер диска для хранения данных в формате `<NUM>GB` (например, `YDB_PDISK_SIZE=128GB`). Допустимые значения: от `80GB` и выше. По умолчанию 80GB.
 - `YDB_USE_IN_MEMORY_PDISKS`: Использование дисков в памяти. Допустимые значения `true`, `false`, по умолчанию `false`. Во включенном состоянии не использует файловую систему контейнера для работы с данными, все данные хранятся только в памяти процесса, и теряются при его остановке. В настоящее время запуск контейнера на процессоре Apple Silicon (M1 или M2) возможен только в этом режиме.
 - `YDB_FEATURE_FLAGS`: Флаги, позволяющие включить функции, отключенные по-умолчанию. Используется для функций, находящихся в разработке (по-умолчанию они выключены). Перечисляются через запятую.
 - `POSTGRES_USER` - создать пользователя с указанным логином, используется для подключения через postgres-протокол.
 - `POSTGRES_PASSWORD` - задать пароль пользователя для подключения через postgres-протокол.
 - `YDB_TABLE_ENABLE_PREPARED_DDL` - временная опция, нужна для запуска Postgres-слоя совместимости, в будущем будет удалена.
-{% include [_includes/storage-device-requirements.md](../../../../_includes/storage-device-requirements.md) %}
+{% include [_includes/storage-device-requirements.md](../../../_includes/storage-device-requirements.md) %}
 `-p`: Опубликовать порты контейнера на хост-системе. Все применяемые порты должны быть явно перечислены, даже если используются значения по умолчанию.
 {% note info %}
 Инициализация Docker-контейнера, в зависимости от выделенных ресурсов, может занять несколько минут. До окончания инициализации база данных будет недоступна.
@@ -111,7 +112,7 @@ docker run -d --rm --name ydb-local -h localhost \
 
 ## Выполнение запросов {#request}
 
-[Установите](../../../../reference/ydb-cli/install.md) YDB CLI и выполните запрос, например:
+[Установите](../../../reference/ydb-cli/install.md) YDB CLI и выполните запрос, например:
 
 ```bash
 ydb -e grpc://localhost:2136 -d /local scheme ls
@@ -123,7 +124,7 @@ ydb -e grpc://localhost:2136 -d /local scheme ls
 ydb -e grpcs://localhost:2135 --ca-file ydb_certs/ca.pem -d /local scheme ls
 ```
 
-Предсобранная версия [YDB CLI](../../../../reference/ydb-cli/index.md) также доступа внутри образа:
+Предсобранная версия [YDB CLI](../../../reference/ydb-cli/index.md) также доступа внутри образа:
 
 ```bash
 docker exec <container_id> /ydb -e grpc://localhost:2136 -d /local scheme ls
@@ -132,7 +133,6 @@ docker exec <container_id> /ydb -e grpc://localhost:2136 -d /local scheme ls
 , где
 
 `<container_id>`: идентификатор контейнера, выведенный при его [запуске](#start).
-
 
 
 ## Остановка {#stop}

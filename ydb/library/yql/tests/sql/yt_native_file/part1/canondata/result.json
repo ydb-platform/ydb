@@ -1720,6 +1720,27 @@
             "uri": "file://test.test_flatten_by-flatten_with_group_by--Results_/extracted"
         }
     ],
+    "test.test[flexible_types-inside_evaluate-default.txt-Debug]": [
+        {
+            "checksum": "dd804f7e44afcfdc797d9ac884843323",
+            "size": 230,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1936842/7d8406846c0aeec42271b9715b56b71090e46675/resource.tar.gz#test.test_flexible_types-inside_evaluate-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[flexible_types-inside_evaluate-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1936842/7d8406846c0aeec42271b9715b56b71090e46675/resource.tar.gz#test.test_flexible_types-inside_evaluate-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[flexible_types-inside_evaluate-default.txt-Results]": [
+        {
+            "checksum": "c3e9fe2c4f1a2c442e14bbb4fd152940",
+            "size": 668,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1936842/7d8406846c0aeec42271b9715b56b71090e46675/resource.tar.gz#test.test_flexible_types-inside_evaluate-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[flexible_types-text_and_bytes-default.txt-Debug]": [
         {
             "checksum": "3d6c5fc83d39049f77e641ca4aefb10c",

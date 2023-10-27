@@ -498,11 +498,6 @@ TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString&
         { {"ensureconvertibleto", 1}, EColumnRefState::Deny },
         { {"ensureconvertibleto", 2}, EColumnRefState::Deny },
 
-        // TODO: switch to Deny here
-        { {"evaluateexpr", 0},        EColumnRefState::AsStringLiteral },
-        { {"evaluateatom", 0},        EColumnRefState::AsStringLiteral },
-        { {"evaluatetype", 0},        EColumnRefState::AsStringLiteral },
-
         { {"nothing", 0},             EColumnRefState::Deny },
         { {"formattype", 0},          EColumnRefState::Deny },
         { {"instanceof", 0},          EColumnRefState::Deny },

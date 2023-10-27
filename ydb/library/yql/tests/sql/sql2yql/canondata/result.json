@@ -6061,6 +6061,13 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1871182/6b10ad6d9884e5faf3a77187ffb9b38b59b46458/resource.tar.gz#test_sql2yql.test_flexible_types-basic_/sql.yql"
         }
     ],
+    "test_sql2yql.test[flexible_types-evaluate_expr]": [
+        {
+            "checksum": "1f7f54164b56b209ce58bca277c4b540",
+            "size": 2005,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/5935e017848cde5b19a4b29142d9e7a8b96d76b4/resource.tar.gz#test_sql2yql.test_flexible_types-evaluate_expr_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[flexible_types-flatten_by]": [
         {
             "checksum": "f41260b56c27e1f81cc024a0f2725c61",
@@ -6087,6 +6094,13 @@
             "checksum": "6d2e436a30556250e4267b69d8d83940",
             "size": 2942,
             "uri": "https://storage.yandex-team.ru/get-devtools/1936997/d01e529b02a008637591c42bdd9c20f7eeda6588/resource.tar.gz#test_sql2yql.test_flexible_types-group_by_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[flexible_types-inside_evaluate]": [
+        {
+            "checksum": "43080cf26863a2b23fc6bcb3f0294dde",
+            "size": 1466,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/5935e017848cde5b19a4b29142d9e7a8b96d76b4/resource.tar.gz#test_sql2yql.test_flexible_types-inside_evaluate_/sql.yql"
         }
     ],
     "test_sql2yql.test[flexible_types-struct_literals_vs_columns]": [
@@ -22987,6 +23001,13 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1599023/4bd7e6892a9762eec433e60bda88f20cddadc74c/resource.tar.gz#test_sql_format.test_flexible_types-basic_/formatted.sql"
         }
     ],
+    "test_sql_format.test[flexible_types-evaluate_expr]": [
+        {
+            "checksum": "fe22adfeec642ca32136013b56144e32",
+            "size": 113,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/5935e017848cde5b19a4b29142d9e7a8b96d76b4/resource.tar.gz#test_sql_format.test_flexible_types-evaluate_expr_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[flexible_types-flatten_by]": [
         {
             "checksum": "9219160ad38540b0af2d54c7cc25174d",
@@ -23013,6 +23034,13 @@
             "checksum": "33a2155bf964054e5258fc440104fed1",
             "size": 379,
             "uri": "https://storage.yandex-team.ru/get-devtools/1599023/4bd7e6892a9762eec433e60bda88f20cddadc74c/resource.tar.gz#test_sql_format.test_flexible_types-group_by_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[flexible_types-inside_evaluate]": [
+        {
+            "checksum": "3cf0ed5a3d2cc2ab2ea9dbe5de26c84f",
+            "size": 387,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/5935e017848cde5b19a4b29142d9e7a8b96d76b4/resource.tar.gz#test_sql_format.test_flexible_types-inside_evaluate_/formatted.sql"
         }
     ],
     "test_sql_format.test[flexible_types-struct_literals_vs_columns]": [

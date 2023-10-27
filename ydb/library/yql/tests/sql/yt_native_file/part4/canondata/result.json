@@ -1774,6 +1774,27 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1031349/eb01bd7ff66ea4e3791b69ec15b5a2ac35547ace/resource.tar.gz#test.test_file-parse_file_in_select_as_str--Results_/results.txt"
         }
     ],
+    "test.test[flexible_types-evaluate_expr-default.txt-Debug]": [
+        {
+            "checksum": "d83ab9aa82d5cd2b7e2294c8fead5321",
+            "size": 411,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1936842/3f2d198533ab283a4ed0b65cedb84a451e0f286b/resource.tar.gz#test.test_flexible_types-evaluate_expr-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[flexible_types-evaluate_expr-default.txt-Plan]": [
+        {
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1936842/3f2d198533ab283a4ed0b65cedb84a451e0f286b/resource.tar.gz#test.test_flexible_types-evaluate_expr-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[flexible_types-evaluate_expr-default.txt-Results]": [
+        {
+            "checksum": "75f50ccda31dc749d9a3cd50ffe68e20",
+            "size": 1339,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1936842/3f2d198533ab283a4ed0b65cedb84a451e0f286b/resource.tar.gz#test.test_flexible_types-evaluate_expr-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[hor_join-empty_out_hor_join-default.txt-Debug]": [
         {
             "checksum": "a1bad8591f8d6c9e4b864aa63850fe26",

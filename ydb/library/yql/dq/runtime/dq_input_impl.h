@@ -66,6 +66,7 @@ public:
 
         if (IsPaused()) {
             ui64 batchesCount = GetBatchesBeforePause();
+            Y_ABORT_UNLESS(batchesCount > 0);
             Y_ABORT_UNLESS(batchesCount <= Batches.size());
 
             if (batch.IsWide()) {
@@ -122,6 +123,7 @@ public:
             static_cast<TDerived*>(this)->PopStats.Chunks++;
         }
 
+        Y_ABORT_UNLESS(!batch.empty());
         return true;
     }
 

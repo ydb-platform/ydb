@@ -96,19 +96,29 @@ public:
     template<typename T, typename = TStdLayout<T>>
     T AsValue() const noexcept
     {
-        Y_ABORT_UNLESS(sizeof(T) == Size(), "AsValue<T>() type doesn't match TCell");
+        Y_ABORT_UNLESS(sizeof(T) == Size(), "AsValue<T>() type size %" PRIu64 " doesn't match TCell size %" PRIu32, sizeof(T), Size());
 
         return ReadUnaligned<T>(Data());
     }
 
     template <typename T, typename = TStdLayout<T>>
-    bool ToStream(IOutputStream& out, TStringBuilder& err) const noexcept {
-        if(sizeof(T) != Size()) {
-            err << "AsValue<T>() type doesn't match TCell";
+    bool ToValue(T& value, TString& err) const noexcept {
+        if (sizeof(T) != Size()) {
+            err = Sprintf("ToValue<T>() type size %" PRIu64 " doesn't match TCell size %" PRIu32, sizeof(T), Size());
             return false;
         }
 
-        out << ReadUnaligned<T>(Data());
+        value = ReadUnaligned<T>(Data());
+        return true;
+    }
+
+    template <typename T, typename = TStdLayout<T>>
+    bool ToStream(IOutputStream& out, TString& err) const noexcept {
+        T value;
+        if (!ToValue(value, err))
+            return false;
+
+        out << value;
         return true;
     }
 

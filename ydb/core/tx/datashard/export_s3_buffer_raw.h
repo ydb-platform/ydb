@@ -42,7 +42,7 @@ protected:
     ui64 BytesRead;
     TBuffer Buffer;
 
-    TStringBuilder ErrorString;
+    TString ErrorString;
 }; // TS3BufferRaw
 
 } // NDataShard

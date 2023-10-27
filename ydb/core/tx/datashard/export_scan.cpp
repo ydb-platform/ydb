@@ -205,6 +205,7 @@ public:
         if (!Buffer->Collect(row)) {
             Success = false;
             Error = Buffer->GetError();
+            EXPORT_LOG_E("Error read data from table: " << Error);
             return EScan::Final;
         }
 

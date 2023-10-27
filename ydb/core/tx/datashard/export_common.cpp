@@ -87,7 +87,7 @@ TString DyNumberToString(TStringBuf data) {
     return result;
 }
 
-bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TStringBuilder& err) {
+bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TString& err) {
     Y_UNUSED(err);
     using namespace NYql::NDecimal;
 
@@ -96,10 +96,10 @@ bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TStri
     return true;
 }
 
-bool DyNumberToStream(TStringBuf data, IOutputStream& out, TStringBuilder& err) {
+bool DyNumberToStream(TStringBuf data, IOutputStream& out, TString& err) {
     auto result = NDyNumber::DyNumberToString(data);
     if (!result.Defined()) {
-        err << "Invalid DyNumber binary representation";
+        err = "Invalid DyNumber binary representation";
         return false;
     }
     out << *result;

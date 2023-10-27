@@ -37,6 +37,12 @@ ydbd_service_grpc_port=$(read_config_value grpc_port) || exit 2
 ydbd_service_ic_port=$(read_config_value ic_port) || exit 2
 ydbd_service_mon_port=$(read_config_value mon_port) || exit 2
 ydbd_service_database=$(read_config_value database) || exit 2
+ydbd_service_minidumps_path=$(read_config_value minidumps_path)
+
+if [ -n "$ydbd_service_minidumps_path" ]; then
+  export LD_PRELOAD=libbreakpad_init.so
+  export BREAKPAD_MINIDUMPS_PATH="$ydbd_service_minidumps_path"
+fi
 
 taskset=""
 ydbd_service_taskset=$(read_config_value taskset) || exit 2

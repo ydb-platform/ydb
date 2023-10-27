@@ -2180,7 +2180,7 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
                     return false;
                 }
 
-                if (node->IsCallable({"Member", "Nth"}) && node->Head().IsArgument()) {
+                if (node->IsCallable({"Member", "Nth", "Just", "Plus", "Minus", "Abs", "Not"}) && node->Head().IsArgument()) {
                     return false;
                 }
 

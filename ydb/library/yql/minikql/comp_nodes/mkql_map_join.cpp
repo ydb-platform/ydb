@@ -350,7 +350,7 @@ public:
         if constexpr (WithoutRight) {
             this->GenFillLeftStruct(current.second, getters);
 
-            if (RightRequired) {
+            if constexpr (RightRequired) {
                 BranchInst::Create(loop, step, none, block);
             } else {
                 result->addIncoming(ConstantInt::get(resultType, i32(EFetchResult::One)), block);
@@ -362,9 +362,7 @@ public:
             const auto cont = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Contains>(Type::getInt1Ty(context), dict, ctx.Codegen, block, keysPtr);
 
             if constexpr (!IsTuple) {
-                if (this->IsUnusedInput(this->LeftKeyColumns.front())) {
-                    ValueCleanup(GetValueRepresentation(this->DictType->GetKeyType()), keysPtr, ctx, block);
-                }
+                ValueCleanup(GetValueRepresentation(this->DictType->GetKeyType()), keysPtr, ctx, block);
             }
 
             result->addIncoming(ConstantInt::get(resultType, i32(EFetchResult::One)), block);
@@ -392,9 +390,7 @@ public:
             const auto lookup = new LoadInst(valueType, lookupPtr, "lookup", block);
 
             if constexpr (!IsTuple) {
-                if (this->IsUnusedInput(this->LeftKeyColumns.front())) {
-                    ValueCleanup(GetValueRepresentation(this->DictType->GetKeyType()), keysPtr, ctx, block);
-                }
+                ValueCleanup(GetValueRepresentation(this->DictType->GetKeyType()), keysPtr, ctx, block);
             }
 
             const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, lookup, zero, "ok", block);

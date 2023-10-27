@@ -2,6 +2,37 @@
 
 namespace NYdb::NQuery {
 
+std::optional<EStatsMode> ParseStatsMode(std::string_view statsMode) {
+    if (statsMode == "unspecified") {
+        return EStatsMode::Unspecified;
+    } else if (statsMode == "none") {
+        return EStatsMode::None;
+    } else if (statsMode == "basic") {
+        return EStatsMode::Basic;
+    } else if (statsMode == "full") {
+        return EStatsMode::Full;
+    } else if (statsMode == "profile") {
+        return EStatsMode::Profile;
+    }
+
+    return {};
+}
+
+std::string_view StatsModeToString(const EStatsMode statsMode) {
+    switch (statsMode) {
+    case EStatsMode::Unspecified:
+        return "unspecified";
+    case EStatsMode::None:
+        return "none";
+    case EStatsMode::Basic:
+        return "basic";
+    case EStatsMode::Full:
+        return "full";
+    case EStatsMode::Profile:
+        return "profile";
+    }
+}
+
 const TVector<TResultSet>& TExecuteQueryResult::GetResultSets() const {
     return ResultSets_;
 }

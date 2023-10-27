@@ -63,8 +63,8 @@ TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& execu
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    bool isDataQuery, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext)
+    bool useDataQueryPool, bool localComputeTasks, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+    bool doOptimization, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
     : TxId(txId)
     , ExecuterId(executer)
     , Snapshot(snapshot)
@@ -78,7 +78,8 @@ TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& execu
     , ExecuterSpan(executerSpan)
     , ExecuterRetriesConfig(executerRetriesConfig)
     , TasksGraph(graph)
-    , IsDataQuery(isDataQuery)
+    , UseDataQueryPool(useDataQueryPool)
+    , LocalComputeTasks(localComputeTasks)
     , MkqlMemoryLimit(mkqlMemoryLimit)
     , AsyncIoFactory(asyncIoFactory)
     , DoOptimization(doOptimization)
@@ -182,7 +183,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     request.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
     request.SetStartAllOrFail(true);
-    if (IsDataQuery) {
+    if (UseDataQueryPool) {
         request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::DATA);
     } else {
         request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::SCAN);
@@ -395,12 +396,13 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
 
     LOG_D("Total tasks: " << nScanTasks + nComputeTasks << ", readonly: true"  // TODO ???
         << ", " << nScanTasks << " scan tasks on " << TasksPerNode.size() << " nodes"
-        << ", execType: " << (IsDataQuery ? "Data" : "Scan")
+        << ", pool: " << (UseDataQueryPool ? "Data" : "Scan")
+        << ", localComputeTasks: " << LocalComputeTasks
         << ", snapshot: {" << GetSnapshot().TxId << ", " << GetSnapshot().Step << "}");
 
     nComputeTasks = ComputeTasks.size();
 
-    if (IsDataQuery) {
+    if (LocalComputeTasks) {
         bool shareMailbox = (ComputeTasks.size() <= 1);
         for (ui64 taskId : ComputeTasks) {
             ExecuteDataComputeTask(taskId, shareMailbox, /* optimizeProtoForLocalExecution = */ true);
@@ -408,7 +410,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
         ComputeTasks.clear();
     }
     
-    if (nComputeTasks == 0 && TasksPerNode.size() == 1 && (AsyncIoFactory != nullptr) && DoOptimization && IsDataQuery) {
+    if (nComputeTasks == 0 && TasksPerNode.size() == 1 && (AsyncIoFactory != nullptr) && DoOptimization && LocalComputeTasks) {
         // query affects a single key or shard, so it might be more effective
         // to execute this task locally so we can avoid useless overhead for remote task launching.
         for (auto& [shardId, tasks]: TasksPerNode) {
@@ -519,12 +521,13 @@ std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 t
     const Ydb::Table::QueryStatsCollection::Mode& statsMode,
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    bool isDataQuery, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization,
+    bool useDataQueryPool, bool localComputeTasks, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext)
 {
     return std::make_unique<TKqpPlanner>(tasksGraph, txId, executer, snapshot,
         database, userToken, deadline, statsMode, withSpilling, rlPath, executerSpan,
-        std::move(resourcesSnapshot), executerRetriesConfig, isDataQuery, mkqlMemoryLimit, asyncIoFactory, doOptimization, userRequestContext);
+        std::move(resourcesSnapshot), executerRetriesConfig, useDataQueryPool,
+        localComputeTasks, mkqlMemoryLimit, asyncIoFactory, doOptimization, userRequestContext);
 }
 
 } // namespace NKikimr::NKqp

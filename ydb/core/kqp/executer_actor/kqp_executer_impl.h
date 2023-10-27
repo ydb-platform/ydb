@@ -1003,6 +1003,80 @@ protected:
         }
     }
 
+    ui32 GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount) const {
+        if (AggregationSettings.HasAggregationComputeThreads()) {
+            return std::max<ui32>(1, AggregationSettings.GetAggregationComputeThreads());
+        } else if (nodesCount) {
+            const TStagePredictor& predictor = stageInfo.Meta.Tx.Body->GetCalculationPredictor(stageInfo.Id.StageId);
+            return predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), previousTasksCount / nodesCount) * nodesCount;
+        } else {
+            return 1;
+        }
+    }
+
+    void BuildComputeTasks(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
+        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+        ui32 partitionsCount = 1;
+        ui32 inputTasks = 0;
+        bool isShuffle = false;
+        for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
+            const auto& input = stage.GetInputs(inputIndex);
+
+            // Current assumptions:
+            // 1. `Broadcast` can not be the 1st stage input unless it's a single input
+            // 2. All stage's inputs, except 1st one, must be a `Broadcast` or `UnionAll`
+            if (inputIndex == 0) {
+                if (stage.InputsSize() > 1) {
+                    YQL_ENSURE(input.GetTypeCase() != NKqpProto::TKqpPhyConnection::kBroadcast);
+                }
+            } else {
+                switch (input.GetTypeCase()) {
+                    case NKqpProto::TKqpPhyConnection::kBroadcast:
+                    case NKqpProto::TKqpPhyConnection::kHashShuffle:
+                    case NKqpProto::TKqpPhyConnection::kUnionAll:
+                    case NKqpProto::TKqpPhyConnection::kMerge:
+                    case NKqpProto::TKqpPhyConnection::kStreamLookup:
+                        break;
+                    default:
+                        YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase() << Endl
+                            << this->DebugString());
+                }
+            }
+
+            auto& originStageInfo = TasksGraph.GetStageInfo(NYql::NDq::TStageId(stageInfo.Id.TxId, input.GetStageIndex()));
+
+            switch (input.GetTypeCase()) {
+                case NKqpProto::TKqpPhyConnection::kHashShuffle: {
+                    inputTasks += originStageInfo.Tasks.size();
+                    isShuffle = true;
+                    break;
+                }
+
+                case NKqpProto::TKqpPhyConnection::kStreamLookup:
+                    UnknownAffectedShardCount = true;
+                case NKqpProto::TKqpPhyConnection::kMap:
+                    partitionsCount = originStageInfo.Tasks.size();
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+        if (isShuffle) {
+            partitionsCount = std::max(partitionsCount, GetMaxTasksAggregation(stageInfo, inputTasks, ShardsOnNode.size()));
+        }
+
+        for (ui32 i = 0; i < partitionsCount; ++i) {
+            auto& task = TasksGraph.AddTask(stageInfo);
+            task.Meta.Type = TTaskMeta::TTaskType::Compute;
+            task.Meta.ExecuterId = SelfId();
+            BuildSinks(stage, task, secureParams);
+            LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
+        }
+    }
+
     void FillReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse, bool sorted) const
     {
         if (taskMeta.Reads && !taskMeta.Reads.GetRef().empty()) {
@@ -1579,6 +1653,7 @@ protected:
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
     bool HasOlapTable;
+    bool UnknownAffectedShardCount = false;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
@@ -1589,7 +1664,8 @@ private:
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
+    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
     TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 

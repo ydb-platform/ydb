@@ -1477,65 +1477,6 @@ private:
         }
     }
 
-    void BuildComputeTasks(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
-        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-
-        ui32 partitionsCount = 1;
-        for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
-            const auto& input = stage.GetInputs(inputIndex);
-
-            // Current assumptions:
-            // 1. `Broadcast` can not be the 1st stage input unless it's a single input
-            // 2. All stage's inputs, except 1st one, must be a `Broadcast` or `UnionAll`
-            if (inputIndex == 0) {
-                if (stage.InputsSize() > 1) {
-                    YQL_ENSURE(input.GetTypeCase() != NKqpProto::TKqpPhyConnection::kBroadcast);
-                }
-            } else {
-                switch (input.GetTypeCase()) {
-                    case NKqpProto::TKqpPhyConnection::kBroadcast:
-                    case NKqpProto::TKqpPhyConnection::kHashShuffle:
-                    case NKqpProto::TKqpPhyConnection::kUnionAll:
-                    case NKqpProto::TKqpPhyConnection::kMerge:
-                        break;
-                    default:
-                        YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase() << Endl
-                            << this->DebugString());
-                }
-            }
-
-            auto& originStageInfo = TasksGraph.GetStageInfo(TStageId(stageInfo.Id.TxId, input.GetStageIndex()));
-
-            switch (input.GetTypeCase()) {
-                case NKqpProto::TKqpPhyConnection::kHashShuffle: {
-                    partitionsCount = std::max(partitionsCount, (ui32)originStageInfo.Tasks.size());
-                    break;
-                }
-
-                case NKqpProto::TKqpPhyConnection::kStreamLookup:
-                    UnknownAffectedShardCount = true;
-                case NKqpProto::TKqpPhyConnection::kMap: {
-                    partitionsCount = originStageInfo.Tasks.size();
-                    break;
-                }
-
-                default: {
-                    break;
-                }
-            }
-        }
-
-        for (ui32 i = 0; i < partitionsCount; ++i) {
-            auto& task = TasksGraph.AddTask(stageInfo);
-            task.Meta.ExecuterId = SelfId();
-            task.Meta.Type = TTaskMeta::TTaskType::Compute;
-
-            BuildSinks(stage, task, secureParams);
-
-            LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
-        }
-    }
-
     void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx, const bool isOlap)
     {
         TShardState shardState;
@@ -2197,14 +2138,12 @@ private:
         }
 
         const bool enableOptForTasks = !UnknownAffectedShardCount && !HasExternalSources;
-        bool dataQueryPool = true;
-        if (HasExternalSources && DatashardTxs.size() == 0) {
-            dataQueryPool = false;
-        }
+        const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.size() == 0);
+        const bool localComputeTasks = !((HasExternalSources || HasOlapTable) && DatashardTxs.size() == 0);
 
         Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, false, Nothing(),
-            ExecuterSpan, std::move(ResourceSnapshot), ExecuterRetriesConfig, dataQueryPool /* isDataQuery */, Request.MkqlMemoryLimit, AsyncIoFactory, enableOptForTasks, GetUserRequestContext());
+            ExecuterSpan, std::move(ResourceSnapshot), ExecuterRetriesConfig, useDataQueryPool, localComputeTasks, Request.MkqlMemoryLimit, AsyncIoFactory, enableOptForTasks, GetUserRequestContext());
 
         auto err = Planner->PlanExecution();
         if (err) {
@@ -2407,7 +2346,6 @@ private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     bool StreamResult = false;
 
-    bool UnknownAffectedShardCount = false;
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
     bool ResourceSnapshotRequired = false;
@@ -2445,8 +2383,8 @@ private:
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
+    const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
+    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
     TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig,

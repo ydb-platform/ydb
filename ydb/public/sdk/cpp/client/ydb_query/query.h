@@ -37,6 +37,9 @@ enum class EStatsMode {
     Profile = 40,
 };
 
+std::optional<EStatsMode> ParseStatsMode(std::string_view statsMode);
+std::string_view StatsModeToString(const EStatsMode statsMode);
+
 enum class EExecStatus {
     Unspecified = 0,
     Starting = 10,

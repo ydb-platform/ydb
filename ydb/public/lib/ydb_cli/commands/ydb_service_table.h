@@ -3,10 +3,11 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/ydb_cli/common/parameters.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 
@@ -105,8 +106,14 @@ public:
 
     int ExecuteSchemeQuery(TConfig& config);
 
+    int ExecuteGenericQuery(TConfig& config);
     int ExecuteScanQuery(TConfig& config);
-    bool PrintScanQueryResponse(NTable::TScanQueryPartIterator& result);
+
+    template <typename TClient>
+    int ExecuteQueryImpl(TConfig& config);
+
+    template <typename TIterator>
+    bool PrintQueryResponse(TIterator& result);
 
     void PrintFlameGraph(const TMaybe<TString>& plan);
 

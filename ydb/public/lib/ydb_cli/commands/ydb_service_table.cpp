@@ -348,9 +348,9 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     TTableCommand::Config(config);
     AddExamplesOption(config);
 
-    config.Opts->AddLongOption('t', "type", "Query type [data, scheme, scan]")
+    config.Opts->AddLongOption('t', "type", "Query type [data, scheme, scan, generic]")
         .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType);
-    config.Opts->AddLongOption("stats", "Collect statistics mode (for data & scan queries) [none, basic, full]")
+    config.Opts->AddLongOption("stats", "Collect statistics mode (for data & scan & generic queries) [none, basic, full]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
     config.Opts->AddLongOption("flame-graph", "Builds resource usage flame graph, based on statistics info")
             .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
@@ -415,6 +415,9 @@ int TCommandExecuteQuery::Run(TConfig& config) {
     if (QueryType) {
         if (QueryType == "data") {
             return ExecuteDataQuery(config);
+        }
+        if (QueryType == "generic") {
+            return ExecuteGenericQuery(config);
         }
         if (QueryType == "scheme") {
             return ExecuteSchemeQuery(config);
@@ -531,64 +534,182 @@ int TCommandExecuteQuery::ExecuteSchemeQuery(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
+namespace {
+    template <typename TClient>
+    using TPartIterator = std::conditional_t<
+        std::is_same_v<TClient, NTable::TTableClient>,
+        NTable::TScanQueryPartIterator,
+        NQuery::TExecuteQueryIterator>;
+
+    template <typename TClient>
+    using TAsyncPartIterator = std::conditional_t<
+        std::is_same_v<TClient, NTable::TTableClient>,
+        NTable::TAsyncScanQueryPartIterator,
+        NQuery::TAsyncExecuteQueryIterator>;
+
+    template <typename TClient>
+    using TSettings = std::conditional_t<
+        std::is_same_v<TClient, NTable::TTableClient>,
+        NTable::TStreamExecScanQuerySettings,
+        NQuery::TExecuteQuerySettings>;
+
+    template <typename TClient>
+    auto GetSettings(const TString& collectStatsMode, const bool basicStats) {
+        if constexpr (std::is_same_v<TClient, NTable::TTableClient>) {
+            const auto defaultStatsMode = basicStats
+                ? NTable::ECollectQueryStatsMode::Basic
+                : NTable::ECollectQueryStatsMode::None;
+            NTable::TStreamExecScanQuerySettings settings;
+            settings.CollectQueryStats(ParseQueryStatsModeOrThrow(collectStatsMode, defaultStatsMode));
+            return settings;
+        } else if constexpr (std::is_same_v<TClient, NQuery::TQueryClient>) {
+            const auto defaultStatsMode = basicStats
+                ? NQuery::EStatsMode::Basic
+                : NQuery::EStatsMode::None;
+            NQuery::TExecuteQuerySettings settings;
+            settings.StatsMode(ParseQueryStatsModeOrThrow(collectStatsMode, defaultStatsMode));
+            return settings;
+        }
+        Y_UNREACHABLE();
+    }
+
+    template <typename TClient>
+    auto StreamExecuteQuery(
+        TClient client,
+        const TString& query,
+        const TSettings<TClient>& settings,
+        const std::optional<TParams>& params = std::nullopt) {
+        if constexpr (std::is_same_v<TClient, NTable::TTableClient>) {
+            if (params) {
+                return client.StreamExecuteScanQuery(
+                    query,
+                    *params,
+                    settings
+                );
+            } else {
+                return client.StreamExecuteScanQuery(
+                    query,
+                    settings
+                );
+            }
+        } else if constexpr (std::is_same_v<TClient, NQuery::TQueryClient>) {
+            if (params) {
+                return client.StreamExecuteQuery(
+                    query,
+                    NQuery::TTxControl::BeginTx().CommitTx(),
+                    *params,
+                    settings
+                );
+            } else {
+                return client.StreamExecuteQuery(
+                    query,
+                    NQuery::TTxControl::BeginTx().CommitTx(),
+                    settings
+                );
+            }
+        }
+        Y_UNREACHABLE();
+    }
+
+    template <typename TQueryPart>
+    bool HasStats(const TQueryPart& part) {
+        if constexpr (std::is_same_v<TQueryPart, NTable::TScanQueryPart>) {
+            return part.HasQueryStats();
+        } else if constexpr (std::is_same_v<TQueryPart, NQuery::TExecuteQueryPart>) {
+            return !part.GetStats().Empty();
+        }
+        Y_UNREACHABLE();
+    }
+    
+    template <typename TQueryPart>
+    const NQuery::TExecStats& GetStats(const TQueryPart& part) {
+        if constexpr (std::is_same_v<TQueryPart, NTable::TScanQueryPart>) {
+            return part.GetQueryStats();
+        } else if constexpr (std::is_same_v<TQueryPart, NQuery::TExecuteQueryPart>) {
+            return *part.GetStats();
+        }
+        Y_UNREACHABLE();
+    }
+
+    template <typename TClient, typename TOperationFunc>
+    TAsyncStatus RunOperation(TClient client, TOperationFunc&& operation) {
+        if constexpr (std::is_same_v<TClient, NTable::TTableClient>) {
+            return client.RetryOperation(std::move(operation));
+        } else if constexpr (std::is_same_v<TClient, NQuery::TQueryClient>) {
+            // I guess streaming generic queries aren't supposed to be retried?
+            return operation(client);
+        }
+        Y_UNREACHABLE();
+    }
+}
+
+int TCommandExecuteQuery::ExecuteGenericQuery(TConfig& config) {
+    return ExecuteQueryImpl<NQuery::TQueryClient>(config);
+}
+
 int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    return ExecuteQueryImpl<NTable::TTableClient>(config);
+}
 
-    auto defaultStatsMode = BasicStats ? NTable::ECollectQueryStatsMode::Basic : NTable::ECollectQueryStatsMode::None;
-    NTable::TStreamExecScanQuerySettings settings;
-    settings.CollectQueryStats(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
+template <typename TClient>
+int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
+    TClient client(CreateDriver(config));
+    const auto settings = GetSettings<TClient>(CollectStatsMode, BasicStats);
 
-    NTable::TAsyncScanQueryPartIterator asyncResult;
+    TAsyncPartIterator<TClient> asyncResult;
     SetInterruptHandlers();
     if (!Parameters.empty() || !IsStdinInteractive()) {
         ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
             ExplainQuery(config, Query, NScripting::ExplainYqlRequestMode::Validate));
         THolder<TParamsBuilder> paramBuilder;
         while (GetNextParams(paramBuilder)) {
-            auto operation = [this, &paramBuilder, &settings, &asyncResult](NTable::TTableClient client) {
-                auto promise = NThreading::NewPromise<NTable::TScanQueryPartIterator>();
+            auto operation = [this, &paramBuilder, &settings, &asyncResult](TClient client) {
+                auto promise = NThreading::NewPromise<TPartIterator<TClient>>();
                 asyncResult = promise.GetFuture();
-                auto result = client.StreamExecuteScanQuery(
+                auto result = StreamExecuteQuery(
+                    client,
                     Query,
-                    paramBuilder->Build(),
-                    settings
+                    settings,
+                    paramBuilder->Build()
                 );
-                return result.Apply([promise](const NTable::TAsyncScanQueryPartIterator& result) mutable {
+                return result.Apply([promise](const auto& result) mutable {
                     promise.SetValue(result.GetValue());
                     return static_cast<TStatus>(result.GetValue());
                 });
             };
-            auto status = client.RetryOperation(std::move(operation)).GetValueSync();
+            auto status = RunOperation(client, operation).GetValueSync();
             ThrowOnError(status);
             auto result = asyncResult.GetValueSync();
-            if (!PrintScanQueryResponse(result)) {
+            if (!PrintQueryResponse(result)) {
                 return EXIT_FAILURE;
             }
         }
     } else {
-        auto operation = [this, &settings, &asyncResult](NTable::TTableClient client) {
-            auto promise = NThreading::NewPromise<NTable::TScanQueryPartIterator>();
+        auto operation = [this, &settings, &asyncResult](TClient client) {
+            auto promise = NThreading::NewPromise<TPartIterator<TClient>>();
             asyncResult = promise.GetFuture();
-            auto result = client.StreamExecuteScanQuery(
+            auto result = StreamExecuteQuery(
+                client,
                 Query,
                 settings
             );
-            return result.Apply([promise](const NTable::TAsyncScanQueryPartIterator& result) mutable {
+            return result.Apply([promise](const auto& result) mutable {
                 promise.SetValue(result.GetValue());
                 return static_cast<TStatus>(result.GetValue());
             });
         };
-        auto status = client.RetryOperation(std::move(operation)).GetValueSync();
+        auto status = RunOperation(client, operation).GetValueSync();
         ThrowOnError(status);
         auto result = asyncResult.GetValueSync();
-        if (!PrintScanQueryResponse(result)) {
+        if (!PrintQueryResponse(result)) {
             return EXIT_FAILURE;
         }
     }
     return EXIT_SUCCESS;
 }
 
-bool TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator& result) {
+template <typename TIterator>
+bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
     TMaybe<TString> stats;
     TMaybe<TString> fullStats;
     {
@@ -607,8 +728,8 @@ bool TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator
                 printer.Print(streamPart.GetResultSet());
             }
 
-            if (streamPart.HasQueryStats()) {
-                const auto& queryStats = streamPart.GetQueryStats();
+            if (HasStats(streamPart)) {
+                const auto& queryStats = GetStats(streamPart);
                 stats = queryStats.ToString();
 
                 if (queryStats.GetPlan()) {
@@ -682,7 +803,7 @@ void TCommandExplain::Config(TConfig& config) {
     config.Opts->AddLongOption("ast", "Print query AST")
         .StoreTrue(&PrintAst);
 
-    config.Opts->AddLongOption('t', "type", "Query type [data, scan]")
+    config.Opts->AddLongOption('t', "type", "Query type [data, scan, generic]")
         .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType);
     config.Opts->AddLongOption("analyze", "Run query and collect execution statistics")
         .NoArgument().SetFlag(&Analyze);
@@ -744,7 +865,41 @@ int TCommandExplain::Run(TConfig& config) {
         if (IsInterrupted()) {
             Cerr << "<INTERRUPTED>" << Endl;
         }
+    } else if (QueryType == "generic") {
+        NQuery::TQueryClient client(CreateDriver(config));
+        NQuery::TExecuteQuerySettings settings;
 
+        if (Analyze) {
+            settings.StatsMode(NQuery::EStatsMode::Full);
+        } else {
+            settings.ExecMode(NQuery::EExecMode::Explain);
+        }
+
+        auto result = client.StreamExecuteQuery(
+            Query,
+            NQuery::TTxControl::BeginTx().CommitTx(),
+            settings).GetValueSync();
+        ThrowOnError(result);
+
+        SetInterruptHandlers();
+        while (!IsInterrupted()) {
+            auto tablePart = result.ReadNext().GetValueSync();
+            if (!tablePart.IsSuccess()) {
+                if (tablePart.EOS()) {
+                    break;
+                }
+                ThrowOnError(tablePart);
+            }
+            if (tablePart.GetStats()) {
+                auto proto = NYdb::TProtoAccessor::GetProto(*tablePart.GetStats());
+                planJson = proto.query_plan();
+                ast = proto.query_ast();
+            }
+        }
+
+        if (IsInterrupted()) {
+            Cerr << "<INTERRUPTED>" << Endl;
+        }
     } else if (QueryType == "data" && (Analyze || FlameGraphPath)) {
         NTable::TExecDataQuerySettings settings;
         settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);

@@ -109,7 +109,7 @@ void TPortionDataSource::DoStartFetchStage() {
         auto readAction = Portion->GetBlobsStorage()->StartReadingAction("CS::READ::FETCHING");
         readAction->SetIsBackgroundProcess(false);
         THashMap<TBlobRange, ui32> nullBlocks;
-        NeedFetchColumns(columnIds, readAction, nullBlocks, GetFilterStageData().GetActualFilter());
+        NeedFetchColumns(columnIds, readAction, nullBlocks, GetFilterStageData().GetAppliedFilter());
         if (readAction->GetExpectedBlobsCount()) {
             std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
             auto constructor = std::make_shared<TFFColumnsTaskConstructor>(GetContext(), actions, std::move(nullBlocks), columnIds, *this, "ReaderFetcher");

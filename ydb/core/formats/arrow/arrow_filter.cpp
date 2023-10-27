@@ -5,6 +5,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <library/cpp/actors/core/log.h>
 
 namespace NKikimr::NArrow {
 
@@ -521,7 +522,7 @@ TColumnFilter::TIterator TColumnFilter::GetIterator(const bool reverse, const ui
     if ((IsTotalAllowFilter() || IsTotalDenyFilter()) && !Filter.size()) {
         return TIterator(reverse, expectedSize, LastValue);
     } else {
-        Y_ABORT_UNLESS(expectedSize == Size());
+        AFL_VERIFY(expectedSize == Size())("expected", expectedSize)("size", Size())("reverse", reverse);
         return TIterator(reverse, Filter, GetStartValue(reverse));
     }
 }

@@ -105,7 +105,7 @@ void TFetchingInterval::ConstructResult() {
     } else {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "start_construct_result")("interval_idx", IntervalIdx);
     }
-    AFL_VERIFY(!ResultConstructionInProgress);
+    AFL_VERIFY(!ResultConstructionInProgress)("interval_idx", IntervalIdx);
     ResultConstructionInProgress = true;
     auto merger = Context->BuildMerger();
     for (auto&& [_, i] : Sources) {
@@ -125,6 +125,7 @@ void TFetchingInterval::ConstructResult() {
 }
 
 void TFetchingInterval::OnInitResourcesGuard(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "allocated")("interval_idx", IntervalIdx);
     AFL_VERIFY(guard);
     AFL_VERIFY(!ResourcesGuard);
     ResourcesGuard = guard;
@@ -132,10 +133,12 @@ void TFetchingInterval::OnInitResourcesGuard(const std::shared_ptr<NResourceBrok
 }
 
 void TFetchingInterval::OnSourceFetchStageReady(const ui32 /*sourceIdx*/) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetched")("interval_idx", IntervalIdx);
     ConstructResult();
 }
 
 void TFetchingInterval::OnSourceFilterStageReady(const ui32 /*sourceIdx*/) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "filtered")("interval_idx", IntervalIdx);
     ConstructResult();
 }
 

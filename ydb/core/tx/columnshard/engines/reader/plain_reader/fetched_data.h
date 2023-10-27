@@ -26,14 +26,6 @@ public:
         return (AppliedFilter && AppliedFilter->IsTotalDenyFilter()) || (NotAppliedEarlyFilter && NotAppliedEarlyFilter->IsTotalDenyFilter());
     }
 
-    std::shared_ptr<NArrow::TColumnFilter> GetActualFilter() const {
-        if (NotAppliedEarlyFilter) {
-            return NotAppliedEarlyFilter;
-        } else {
-            return AppliedFilter;
-        }
-    }
-
     TFilterStageData(std::shared_ptr<NArrow::TColumnFilter> appliedFilter, std::shared_ptr<NArrow::TColumnFilter> earlyFilter, std::shared_ptr<arrow::RecordBatch> batch)
         : TBase(batch)
         , AppliedFilter(appliedFilter)

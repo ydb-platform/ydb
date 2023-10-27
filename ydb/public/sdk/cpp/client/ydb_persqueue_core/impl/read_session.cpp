@@ -351,8 +351,13 @@ void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions
 
 bool TReadSession::Close(TDuration timeout) {
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Closing read session. Close timeout: " << timeout);
-    // Log final counters.
-    CountersLogger->Stop();
+
+
+    // the program may not have reached SetupCountersLogger
+    if (CountersLogger) {
+        // Log final counters.
+        CountersLogger->Stop();
+    }
 
     std::vector<TSingleClusterReadSessionImpl<true>::TPtr> sessions;
     NThreading::TPromise<bool> promise = NThreading::NewPromise<bool>();

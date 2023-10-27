@@ -6879,7 +6879,7 @@ private:
                             continue;
                         }
 
-                        if (mergeOutRowSpec.GetAllConstraints(ctx).GetConstraint<TDistinctConstraintNode>()) {
+                        if (mergeOutRowSpec.GetAllConstraints(ctx).GetConstraint<TDistinctConstraintNode>() || mergeOutRowSpec.GetAllConstraints(ctx).GetConstraint<TUniqueConstraintNode>()) {
                             continue;
                         }
                     }

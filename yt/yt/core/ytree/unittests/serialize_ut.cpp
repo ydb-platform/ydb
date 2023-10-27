@@ -41,8 +41,8 @@ using namespace NYson;
 ////////////////////////////////////////////////////////////////////////////////
 
 DEFINE_ENUM(ETestEnum,
-    (One)
-    (FortyTwo)
+    ((One)      (1) )
+    ((FortyTwo) (42))
 );
 
 DEFINE_BIT_ENUM(ETestBitEnum,
@@ -530,6 +530,27 @@ TEST(TSerializationTest, PointersFromEntity)
 
     auto intrusiveFromPullParser = PullParserConvert<TTestClassRCPtr>(yson);
     check("intrusive:FromNode", intrusiveFromPullParser);
+}
+
+TEST(TDeserializeTest, Enums)
+{
+    {
+        auto originalYson = BuildYsonNodeFluently()
+            .BeginList()
+                .Item().Value(1)
+                .Item().Value("forty_two")
+            .EndList();
+        auto expectedEnums = std::vector<ETestEnum>{ETestEnum::One, ETestEnum::FortyTwo};
+
+        std::vector<ETestEnum> deserialized;
+        Deserialize(deserialized, originalYson);
+        EXPECT_EQ(deserialized, expectedEnums);
+
+        deserialized.clear();
+        EXPECT_THROW(
+            Deserialize(deserialized, BuildYsonNodeFluently().BeginList().Item().Value(1.42).EndList()),
+            std::exception);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

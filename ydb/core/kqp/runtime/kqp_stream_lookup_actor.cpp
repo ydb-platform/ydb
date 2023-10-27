@@ -395,7 +395,8 @@ private:
 
         read.State = EReadState::Running;
 
-        const auto [readIt, succeeded] = Reads.insert({read.Id, std::move(read)});
+        auto readId = read.Id;
+        const auto [readIt, succeeded] = Reads.insert({readId, std::move(read)});
         YQL_ENSURE(succeeded);
         ReadsPerShard[shardId].Reads.push_back(&readIt->second);
 

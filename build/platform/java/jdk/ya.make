@@ -48,3 +48,7 @@ RECURSE(
     jdk21
     testing
 )
+
+IF(YA_IDE_IDEA)
+    RECURSE(base_jdk_test)
+ENDIF()

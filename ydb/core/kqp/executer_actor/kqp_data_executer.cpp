@@ -28,7 +28,6 @@
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 
 namespace NKikimr {
 namespace NKqp {

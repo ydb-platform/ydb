@@ -1,6 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <util/generic/size_literals.h>
 
 namespace NKikimr {
 namespace NKqp {

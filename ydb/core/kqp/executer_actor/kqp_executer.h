@@ -7,8 +7,6 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 
 namespace NKikimr {

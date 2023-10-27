@@ -13,11 +13,9 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
-#include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
@@ -25,11 +23,9 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/persqueue_v1/rpc_calls.h>
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>

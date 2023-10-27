@@ -8,7 +8,6 @@
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/system/mutex.h>
-#include <util/generic/noncopyable.h>
 
 namespace NKikimr::NKqp {
 

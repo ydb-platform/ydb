@@ -27,7 +27,6 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/log.h>
-#include <util/system/info.h>
 
 namespace NKikimr {
 namespace NKqp {

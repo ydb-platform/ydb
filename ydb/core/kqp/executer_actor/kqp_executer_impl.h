@@ -16,8 +16,6 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
-#include <ydb/core/protos/tx_datashard.pb.h>
-#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -31,8 +29,6 @@
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/library/yql/dq/proto/dq_transport.pb.h>
-#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>

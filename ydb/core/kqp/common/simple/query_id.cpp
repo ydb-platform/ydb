@@ -1,12 +1,10 @@
 #include "query_id.h"
 #include "helpers.h"
 
-#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <google/protobuf/util/message_differencer.h>
 
 #include <util/generic/yexception.h>
 
-#include <map>
 #include <memory>
 
 namespace NKikimr::NKqp {

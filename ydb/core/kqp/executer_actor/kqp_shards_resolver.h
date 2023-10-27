@@ -1,7 +1,6 @@
 #pragma once
 
 #include <library/cpp/actors/core/actor.h>
-#include <util/generic/set.h>
 
 namespace NKikimr::NKqp {
 

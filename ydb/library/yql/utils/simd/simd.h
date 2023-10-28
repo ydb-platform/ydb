@@ -36,4 +36,42 @@ auto SelectSimdTraits(const TFactory& factory) {
     }
 }
 
+// Creates unpack mask for Simd register content. dataSize - value in bytes to unpack, stripeSize - distance between content parts.
+// when needOffset is true, first data part starts at stipeSize bytes in result register  
+template<typename TTraits>
+auto CreateUnpackMask(ui32 dataSize, ui32 stripeSize, bool needOffset) {
+
+    using TSimdI8 = typename TTraits::template TSimd8<i8>;
+    i8 indexes[TTraits::Size];
+
+    bool insideStripe = needOffset;
+    ui32 stripeOffset = 0;
+    ui32 currOffset = 0;
+    ui32 dataOffset = 0;
+    ui32 currDataSize = 0;
+
+    while ( currOffset < TTraits::Size) {
+        if (insideStripe) {
+            if (stripeOffset >= stripeSize) {
+                insideStripe = false;
+                currDataSize = 0;
+                stripeOffset = 0;
+            } else {
+                indexes[currOffset++] = -1;
+                stripeOffset++;
+            }
+        } else {
+            indexes[currOffset++] = dataOffset++;
+            currDataSize++;
+            if (currDataSize >= dataSize) {
+                insideStripe = true;
+                currDataSize = 0;
+                stripeOffset = 0;
+            }
+        }
+    }
+
+    return TSimdI8(indexes);
+}
+
 }

@@ -149,6 +149,13 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
         UNIT_ASSERT_EQUAL((result == TSimd8<i8>(0, 0, 2, 0, 4, 0, 6, 0, 0, 0, 2, 0, 4, 0, 6, 0,
                                                 0, 0, 2, 0, 4, 0, 6, 0, 0, 0, 2, 0, 4, 0, 6, 0)).Any(), true);
     }
+
+    Y_UNIT_TEST(UnpackMask) {
+        TSimd8<i8> unpackMask = NSimd::CreateUnpackMask<NSimd::TSimdAVX2Traits>(2, 1, false);
+        unpackMask.Log<i8>(Cerr);
+        UNIT_ASSERT_EQUAL((unpackMask == TSimd8<i8>(0, 1, -1, 2, 3, -1, 4, 5, -1, 6, 7, -1, 8, 9, -1, 10, 11, 
+                                                        -1, 12, 13, -1, 14, 15, -1, 16, 17, -1, 18, 19, -1, 20, 21)).Any(), true);
+    }
 }
 
 #pragma clang attribute pop
@@ -260,6 +267,13 @@ Y_UNIT_TEST_SUITE(TSimdSSE42) {
         TSimd8<i8> result = tmp.Shuffle(index);
         UNIT_ASSERT_EQUAL((result == TSimd8<i8>(0, 0, 2, 0, 4, 0, 6, 0, 0, 0, 2, 0, 4, 0, 6, 0)).Any(), true);
     }
+
+    Y_UNIT_TEST(UnpackMask) {
+        TSimd8<i8> unpackMask = NSimd::CreateUnpackMask<NSimd::TSimdSSE42Traits>(2, 1, false);
+        UNIT_ASSERT_EQUAL((unpackMask == TSimd8<i8>(0, 1, -1, 2, 3, -1, 4, 5, -1, 6, 7, -1, 8, 9, -1, 10)).Any(), true);
+    }
+
+
 }
 #pragma clang attribute pop
 
@@ -297,4 +311,10 @@ Y_UNIT_TEST_SUITE(SimdFallback) {
         TSimd8<i8> result = tmp.Shuffle(index);
         UNIT_ASSERT_EQUAL((result == TSimd8<i8>(0, 0, 2, 0, 4, 0, 6, 0)).Any(), true);
     }
+
+    Y_UNIT_TEST(UnpackMask) {
+        TSimd8<i8> unpackMask = NSimd::CreateUnpackMask<NSimd::TSimdFallbackTraits>(2, 1, false);
+        UNIT_ASSERT_EQUAL((unpackMask == TSimd8<i8>(0, 1, -1, 2, 3, -1, 4, 5)).Any(), true);
+    }
+
 }

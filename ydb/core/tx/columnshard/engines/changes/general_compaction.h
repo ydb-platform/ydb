@@ -16,6 +16,13 @@ protected:
     }
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
+    virtual ui64 DoCalcMemoryForUsage() const override {
+        ui64 result = 0;
+        for (auto& p : SwitchedPortions) {
+            result += 2 * p.GetBlobBytes();
+        }
+        return result;
+    }
 public:
     using TBase::TBase;
 

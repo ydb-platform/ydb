@@ -404,6 +404,7 @@ private:
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters> SubscribeCounters;
     NOlap::NResourceBroker::NSubscribe::TTaskContext InsertTaskSubscription;
+    NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     const TScanCounters ReadCounters;
     const TScanCounters ScanCounters;
     const TIndexationCounters CompactionCounters = TIndexationCounters("GeneralCompaction");

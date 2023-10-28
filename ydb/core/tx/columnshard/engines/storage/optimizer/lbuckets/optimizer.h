@@ -345,15 +345,29 @@ public:
         return Actuals;
     }
 
-    std::vector<std::shared_ptr<TPortionInfo>> GetActualsVector(const bool withPreActual) const {
-        std::vector<std::shared_ptr<TPortionInfo>> result;
+    std::vector<std::shared_ptr<TPortionInfo>> GetOptimizerTaskPortions(const ui64 sizeLimit, std::optional<NArrow::TReplaceKey>& separatePoint) const {
+        std::vector<std::shared_ptr<TPortionInfo>> sorted;
         for (auto&& i : Actuals) {
-            result.emplace_back(i.second);
+            sorted.emplace_back(i.second);
         }
-        if (withPreActual) {
-            for (auto&& i : PreActuals) {
-                result.emplace_back(i.second);
+        for (auto&& i : PreActuals) {
+            sorted.emplace_back(i.second);
+        }
+        const auto pred = [](const std::shared_ptr<TPortionInfo>& l, const std::shared_ptr<TPortionInfo>& r) {
+            return l->IndexKeyStart() < r->IndexKeyStart();
+        };
+        std::sort(sorted.begin(), sorted.end(), pred);
+
+        std::vector<std::shared_ptr<TPortionInfo>> result;
+        ui64 currentSize = 0;
+        for (auto&& i : sorted) {
+            if (currentSize > sizeLimit && result.size() > 1) {
+                break;
             }
+            result.emplace_back(i);
+        }
+        if (result.size() < sorted.size()) {
+            separatePoint = sorted[result.size()]->IndexKeyStart();
         }
         return result;
     }
@@ -694,14 +708,15 @@ public:
         }
         std::optional<NArrow::TReplaceKey> stopPoint;
         std::optional<TInstant> stopInstant;
-        std::vector<std::shared_ptr<TPortionInfo>> portions = Others.GetActualsVector(true);
+        std::vector<std::shared_ptr<TPortionInfo>> portions = Others.GetOptimizerTaskPortions(128 * 1024 * 1024, stopPoint);
         if (nextBorder) {
             if (MainPortion) {
                 portions.emplace_back(MainPortion);
             }
-            stopPoint = *nextBorder;
+            if (!stopPoint) {
+                stopPoint = *nextBorder;
+            }
         } else {
-            stopPoint = Others.GetFutureBorder();
             if (MainPortion) {
                 for (auto&& i : portions) {
                     if (MainPortion->CrossPKWith(*i)) {
@@ -710,7 +725,10 @@ public:
                     }
                 }
             }
-            stopInstant = Others.GetFutureStartInstant();
+            if (!stopPoint) {
+                stopPoint = Others.GetFutureBorder();
+                stopInstant = Others.GetFutureStartInstant();
+            }
         }
         AFL_VERIFY(portions.size() > 1);
         ui64 size = 0;

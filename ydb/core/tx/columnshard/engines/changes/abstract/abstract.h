@@ -173,7 +173,12 @@ protected:
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const = 0;
 
     const TString TaskIdentifier = TGUID::Create().AsGuidString();
+    virtual ui64 DoCalcMemoryForUsage() const = 0;
 public:
+    ui64 CalcMemoryForUsage() const {
+        return DoCalcMemoryForUsage();
+    }
+
     TString GetTaskIdentifier() const {
         return TaskIdentifier;
     }

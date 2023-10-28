@@ -166,6 +166,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
     , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>())
     , InsertTaskSubscription(NOlap::TInsertColumnEngineChanges::StaticTypeName(), SubscribeCounters)
+    , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), SubscribeCounters)
     , ReadCounters("Read")
     , ScanCounters("Scan")
     , WritesMonitor(*this)
@@ -740,10 +741,8 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
 
     std::vector<NOlap::TInsertedData> data;
     data.reserve(dataToIndex.size());
-    ui64 memoryNeed = 0;
     for (auto& ptr : dataToIndex) {
         data.push_back(*ptr);
-        memoryNeed += ptr->GetMeta().GetRawBytes();
     }
 
     Y_ABORT_UNLESS(data.size());
@@ -760,7 +759,7 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
 
     NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
         ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
-                                std::make_shared<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), IndexationCounters), 0, memoryNeed, externalTaskId, InsertTaskSubscription));
+                                std::make_shared<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), IndexationCounters), 0, indexChanges->CalcMemoryForUsage(), externalTaskId, InsertTaskSubscription));
 }
 
 void TColumnShard::SetupIndexation() {
@@ -825,7 +824,12 @@ void TColumnShard::SetupCompaction() {
 
         auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, Settings.CacheDataAfterCompaction);
-        ActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(std::make_shared<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters)));
+        const TString externalTaskId = indexChanges->GetTaskIdentifier();
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "compaction")("external_task_id", externalTaskId);
+
+        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
+            ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
+                std::make_shared<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters), 0, indexChanges->CalcMemoryForUsage(), externalTaskId, CompactTaskSubscription));
     }
 
     LOG_S_DEBUG("ActiveCompactions: " << BackgroundController.GetCompactionsCount() << " at tablet " << TabletID());

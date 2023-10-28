@@ -21,6 +21,13 @@ protected:
     virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
+    virtual ui64 DoCalcMemoryForUsage() const override {
+        ui64 result = 0;
+        for (auto& ptr : DataToIndex) {
+            result += ptr.GetMeta().GetRawBytes();
+        }
+        return result;
+    }
 public:
     const TMark DefaultMark;
     THashMap<ui64, std::vector<NIndexedReader::TSortableBatchPosition>> PathToGranule; // pathId -> positions (sorted by pk)

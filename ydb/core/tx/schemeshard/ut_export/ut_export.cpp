@@ -1373,7 +1373,7 @@ partitioning_settings {
         TestGetExport(runtime, exportId, "/MyRoot");
     }
 
-    Y_UNIT_TEST(CorruptedBadDyNumber) {
+    Y_UNIT_TEST(CorruptedDyNumber) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().DisableStatsBatching(true));
         ui64 txId = 100;

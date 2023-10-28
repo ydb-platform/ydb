@@ -199,9 +199,11 @@ int main(int argc, char** argv) {
         coordinatorConfig.SetLockType("dummy");
     }
 
-    auto coordinator = CreateCoordiantionHelper(coordinatorConfig, NProto::TDqConfig::TScheduler(), "service_node", interconnectPort);
-    hostName = coordinator->GetHostname();
-    localAddress = coordinator->GetIp();
+    std::tie(hostName, localAddress) = NYql::NDqs::GetLocalAddress(
+        coordinatorConfig.HasHostName() ? &coordinatorConfig.GetHostName() : nullptr
+    );
+
+    auto coordinator = CreateCoordiantionHelper(coordinatorConfig, NProto::TDqConfig::TScheduler(), "service_node", interconnectPort, hostName, localAddress);
 
     Cerr << hostName + ":" + ToString(localAddress) << Endl;
 

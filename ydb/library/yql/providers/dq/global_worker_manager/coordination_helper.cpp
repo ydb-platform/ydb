@@ -34,15 +34,15 @@ public:
         const NProto::TDqConfig::TYtCoordinator& config,
         const NProto::TDqConfig::TScheduler& schedulerConfig,
         const TString& role,
-        ui16 interconnectPort)
+        ui16 interconnectPort,
+        const TString& hostName,
+        const TString& ip)
         : Config(config), SchedulerConfig(schedulerConfig)
         , Role(role)
+        , Host(hostName)
+        , Ip(ip)
         , InterconnectPort(interconnectPort)
-    {
-        std::tie(Host, Ip) = NYql::NDqs::GetLocalAddress(
-            config.HasHostName() ? &config.GetHostName() : nullptr
-        );
-    }
+    { }
 
     ui32 GetNodeId() override
     {
@@ -281,8 +281,10 @@ public:
         const NProto::TDqConfig::TYtCoordinator& config,
         const NProto::TDqConfig::TScheduler& schedulerConfig,
         const TString& role,
-        ui16 interconnectPort)
-        : TCoordinationHelper(config, schedulerConfig, role, interconnectPort)
+        ui16 interconnectPort,
+        const TString& host,
+        const TString& ip)
+        : TCoordinationHelper(config, schedulerConfig, role, interconnectPort, host, ip)
     { }
 
     NActors::IActor* CreateLockOnCluster(NActors::TActorId ytWrapper, const TString& prefix, const TString& lockName, bool temporary) override {
@@ -310,7 +312,7 @@ public:
     }
 };
 
-ICoordinationHelper::TPtr CreateCoordiantionHelper(const NProto::TDqConfig::TYtCoordinator& cfg, const NProto::TDqConfig::TScheduler& schedulerConfig, const TString& role, ui16 interconnectPort)
+ICoordinationHelper::TPtr CreateCoordiantionHelper(const NProto::TDqConfig::TYtCoordinator& cfg, const NProto::TDqConfig::TScheduler& schedulerConfig, const TString& role, ui16 interconnectPort, const TString& host, const TString& ip)
 {
     NProto::TDqConfig::TYtCoordinator config = cfg;
     auto clusterName = config.GetClusterName();
@@ -344,9 +346,9 @@ ICoordinationHelper::TPtr CreateCoordiantionHelper(const NProto::TDqConfig::TYtC
     config.SetToken(token);
 
     if (config.GetLockType() == "dummy") {
-        return new TCoordinationHelperWithDummyLock(config, schedulerConfig, role, interconnectPort);
+        return new TCoordinationHelperWithDummyLock(config, schedulerConfig, role, interconnectPort, host, ip);
     } else {
-        return new TCoordinationHelper(config, schedulerConfig, role, interconnectPort);
+        return new TCoordinationHelper(config, schedulerConfig, role, interconnectPort, host, ip);
     }
 }
 

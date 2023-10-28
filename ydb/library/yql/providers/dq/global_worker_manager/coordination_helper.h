@@ -60,6 +60,6 @@ public:
     virtual TString GetRevision() = 0;
 };
 
-ICoordinationHelper::TPtr CreateCoordiantionHelper(const NProto::TDqConfig::TYtCoordinator& config, const NProto::TDqConfig::TScheduler& schedulerConfig, const TString& role, ui16 interconnectPort);
+ICoordinationHelper::TPtr CreateCoordiantionHelper(const NProto::TDqConfig::TYtCoordinator& config, const NProto::TDqConfig::TScheduler& schedulerConfig, const TString& role, ui16 interconnectPort, const TString& host, const TString& ip);
 
 } // namespace NYql

@@ -247,11 +247,12 @@ int main(int argc, char** argv) {
     TRangeWalker<int> portWalker(startPort, startPort+100);
     auto ports = BindInRange(portWalker);
 
-    auto coordinator = CreateCoordiantionHelper(coordinatorConfig, NProto::TDqConfig::TScheduler(), "worker_node", ports[1].Addr.GetPort());
-    coordinatorConfig = coordinator->GetConfig();
+    std::tie(host, ip) = NYql::NDqs::GetLocalAddress(
+        coordinatorConfig.HasHostName() ? &coordinatorConfig.GetHostName() : nullptr
+    );
 
-    host = coordinator->GetHostname();
-    ip = coordinator->GetIp();
+    auto coordinator = CreateCoordiantionHelper(coordinatorConfig, NProto::TDqConfig::TScheduler(), "worker_node", ports[1].Addr.GetPort(), host, ip);
+    coordinatorConfig = coordinator->GetConfig();
 
     NProto::TDqConfig::TYtBackend backendConfig;
     backendConfig.SetUploadPrefix(coordinatorConfig.GetPrefix());

@@ -1191,7 +1191,7 @@ def get_canonical_test_resources(unit):
 
 def _load_canonical_file(filename, unit_path):
     try:
-        with open(filename) as results_file:
+        with open(filename, 'rb') as results_file:
             return json.load(results_file)
     except Exception as e:
         print("malformed canonical data in {}: {} ({})".format(unit_path, e, filename), file=sys.stderr)

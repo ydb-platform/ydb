@@ -166,13 +166,13 @@ int main(int argc, char** argv) {
     opts.AddLongOption("threads", "Threads");
     opts.AddLongOption("yttoken", "Yt token");
     opts.AddLongOption("ytuser", "Yt user");
-    opts.AddLongOption("enabled_failure_injector", "Enabled failure injections");
+    opts.AddLongOption("enabled_failure_injector", "Enabled failure injections").NoArgument();
     opts.AddLongOption("revision", "Revision");
     opts.AddLongOption("heartbeat", "HeartbeatPeriod");
     opts.AddLongOption("solomon", "Solomon Token");
-    opts.AddLongOption("print_metrics", "Print Metrics");
+    opts.AddLongOption("print_metrics", "Print Metrics").NoArgument();
     opts.AddLongOption("announce_cluster_name", "Send this name in pings");
-    opts.AddLongOption("disable_pipe", "Disable pipe");
+    opts.AddLongOption("disable_pipe", "Disable pipe").NoArgument();
     opts.AddLongOption("log_level", "Log Level");
     opts.AddLongOption("ipv4", "Use ipv4").NoArgument();
 

@@ -143,11 +143,11 @@ int main(int argc, char** argv) {
     opts.AddLongOption("vanilla_job", "Vanilla job biary");
 
     opts.AddLongOption('u', "udfs", "UdfsPath");
-    opts.AddLongOption("enabled_failure_injector", "Enabled failure injections");
-    opts.AddLongOption("dump_stats", "Dump Statitics");
+    opts.AddLongOption("enabled_failure_injector", "Enabled failure injections").NoArgument();
+    opts.AddLongOption("dump_stats", "Dump Statitics").NoArgument();
 
     opts.AddLongOption("revision", "Revision for debug");
-    opts.AddLongOption("force_leader", "Disable leader election");
+    opts.AddLongOption("force_leader", "Disable leader election").NoArgument();
     opts.AddLongOption("log_level", "Log Level");
     opts.AddLongOption("ipv4", "Use ipv4").NoArgument();
 

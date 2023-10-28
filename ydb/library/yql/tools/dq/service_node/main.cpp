@@ -149,6 +149,7 @@ int main(int argc, char** argv) {
     opts.AddLongOption("revision", "Revision for debug");
     opts.AddLongOption("force_leader", "Disable leader election");
     opts.AddLongOption("log_level", "Log Level");
+    opts.AddLongOption("ipv4", "Use ipv4").NoArgument();
 
     TOptsParseResult res(&opts, argc, argv);
 
@@ -200,7 +201,8 @@ int main(int argc, char** argv) {
     }
 
     std::tie(hostName, localAddress) = NYql::NDqs::GetLocalAddress(
-        coordinatorConfig.HasHostName() ? &coordinatorConfig.GetHostName() : nullptr
+        coordinatorConfig.HasHostName() ? &coordinatorConfig.GetHostName() : nullptr,
+        res.Has("ipv4") ? AF_INET : AF_INET6
     );
 
     auto coordinator = CreateCoordiantionHelper(coordinatorConfig, NProto::TDqConfig::TScheduler(), "service_node", interconnectPort, hostName, localAddress);

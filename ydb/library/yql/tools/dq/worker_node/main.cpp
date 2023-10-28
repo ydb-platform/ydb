@@ -174,6 +174,7 @@ int main(int argc, char** argv) {
     opts.AddLongOption("announce_cluster_name", "Send this name in pings");
     opts.AddLongOption("disable_pipe", "Disable pipe");
     opts.AddLongOption("log_level", "Log Level");
+    opts.AddLongOption("ipv4", "Use ipv4").NoArgument();
 
     ui32 threads = THREAD_PER_NODE;
     TString host;
@@ -248,7 +249,8 @@ int main(int argc, char** argv) {
     auto ports = BindInRange(portWalker);
 
     std::tie(host, ip) = NYql::NDqs::GetLocalAddress(
-        coordinatorConfig.HasHostName() ? &coordinatorConfig.GetHostName() : nullptr
+        coordinatorConfig.HasHostName() ? &coordinatorConfig.GetHostName() : nullptr,
+        res.Has("ipv4") ? AF_INET : AF_INET6
     );
 
     auto coordinator = CreateCoordiantionHelper(coordinatorConfig, NProto::TDqConfig::TScheduler(), "worker_node", ports[1].Addr.GetPort(), host, ip);

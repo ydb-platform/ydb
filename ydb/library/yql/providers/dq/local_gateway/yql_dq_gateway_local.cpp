@@ -37,9 +37,8 @@ public:
     {
         ui32 nodeId = 1;
 
-        TString hostName;
-        TString localAddress;
-        std::tie(hostName, localAddress) = NDqs::GetLocalAddress();
+        TString hostName = "localhost";
+        TString localAddress = "::1";
 
         NDqs::TServiceNodeConfig config = {
             nodeId,
@@ -272,7 +271,7 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
             threads,
             metricsRegistry,
             metricsPusherFactory),
-        CreateDqGateway(std::get<0>(NDqs::GetLocalAddress()), grpcPort.Addr.GetPort()));
+        CreateDqGateway("[::1]", grpcPort.Addr.GetPort()));
 }
 
 } // namespace NYql

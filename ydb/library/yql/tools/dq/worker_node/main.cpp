@@ -245,6 +245,7 @@ int main(int argc, char** argv) {
         TFailureInjector::Activate();
     }
 
+    int portIndex = res.Has("ipv4") ? 0 : 1;
     TRangeWalker<int> portWalker(startPort, startPort+100);
     auto ports = BindInRange(portWalker);
 
@@ -253,7 +254,7 @@ int main(int argc, char** argv) {
         res.Has("ipv4") ? AF_INET : AF_INET6
     );
 
-    auto coordinator = CreateCoordiantionHelper(coordinatorConfig, NProto::TDqConfig::TScheduler(), "worker_node", ports[1].Addr.GetPort(), host, ip);
+    auto coordinator = CreateCoordiantionHelper(coordinatorConfig, NProto::TDqConfig::TScheduler(), "worker_node", ports[portIndex].Addr.GetPort(), host, ip);
     coordinatorConfig = coordinator->GetConfig();
 
     NProto::TDqConfig::TYtBackend backendConfig;
@@ -290,8 +291,8 @@ int main(int argc, char** argv) {
         std::tie(setup, logSettings) = BuildActorSetup(
             nodeId,
             ip,
-            ports[1].Addr.GetPort(),
-            ports[1].Socket->Release(),
+            ports[portIndex].Addr.GetPort(),
+            ports[portIndex].Socket->Release(),
             {threads},
             dqSensors,
             [](const TIntrusivePtr<NActors::TTableNameserverSetup>& setup) {

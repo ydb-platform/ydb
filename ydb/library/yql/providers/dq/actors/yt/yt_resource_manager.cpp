@@ -8,10 +8,10 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/utils/log/log.h>
 
+#include <ydb/library/yql/providers/dq/common/attrs.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events/events.h>
 #include <ydb/library/yql/providers/dq/actors/yt/resource_manager.h>
-#include <ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.h>
 #include <ydb/library/yql/providers/dq/global_worker_manager/coordination_helper.h>
 
 #include <library/cpp/actors/core/events.h>

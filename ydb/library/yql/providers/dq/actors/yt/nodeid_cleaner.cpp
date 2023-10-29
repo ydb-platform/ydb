@@ -1,8 +1,8 @@
 #include "nodeid_cleaner.h"
-#include "nodeid_assigner.h"
 #include "yt_wrapper.h"
 
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
+#include <ydb/library/yql/providers/dq/common/attrs.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event.h>

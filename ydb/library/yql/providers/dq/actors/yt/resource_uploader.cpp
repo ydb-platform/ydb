@@ -1,5 +1,4 @@
 
-#include "nodeid_assigner.h"
 #include "yt_wrapper.h"
 
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -9,6 +8,7 @@
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/yt/resource_manager.h>
 #include <ydb/library/yql/providers/dq/actors/events/events.h>
+#include <ydb/library/yql/providers/dq/common/attrs.h>
 
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/hfunc.h>

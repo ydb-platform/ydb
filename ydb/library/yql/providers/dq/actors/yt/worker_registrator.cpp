@@ -1,10 +1,10 @@
 #include "worker_registrator.h"
-#include "nodeid_assigner.h"
 #include "yt_wrapper.h"
 
 #include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
 
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
+#include <ydb/library/yql/providers/dq/common/attrs.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 

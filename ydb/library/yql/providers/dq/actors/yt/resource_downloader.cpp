@@ -1,5 +1,4 @@
 
-#include "nodeid_assigner.h"
 #include "yt_wrapper.h"
 
 #include <ydb/library/yql/utils/yql_panic.h>

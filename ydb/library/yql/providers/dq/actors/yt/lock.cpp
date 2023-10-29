@@ -1,6 +1,5 @@
 #include "lock.h"
 
-#include "nodeid_assigner.h"
 #include "yt_wrapper.h"
 
 #include <ydb/library/yql/utils/log/log.h>
@@ -14,6 +13,7 @@
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/svnversion/svnversion.h>
 
+#include <ydb/library/yql/providers/dq/common/attrs.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events/events.h>
 

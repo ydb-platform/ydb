@@ -15,8 +15,16 @@ bool TCommittedAssembler::DoExecute() {
 
 bool TCommittedAssembler::DoApply(IDataReader& owner) const {
     auto& source = owner.GetMeAs<TPlainReadData>().GetSourceByIdxVerified(SourceIdx);
-    source.InitFilterStageData(nullptr, EarlyFilter, NArrow::ExtractColumns(ResultBatch, source.GetFetchingPlan().GetFilterStage()->GetSchema(), true));
-    source.InitFetchStageData(NArrow::ExtractColumnsValidate(ResultBatch, source.GetFetchingPlan().GetFetchingStage()->GetColumnNamesVector()));
+    if (source.GetFetchingPlan().GetFilterStage()->GetSchema()) {
+        source.InitFilterStageData(nullptr, EarlyFilter, NArrow::ExtractColumns(ResultBatch, source.GetFetchingPlan().GetFilterStage()->GetSchema(), true));
+    } else {
+        source.InitFilterStageData(nullptr, EarlyFilter, nullptr);
+    }
+    if (source.GetFetchingPlan().GetFetchingStage()->GetSchema()) {
+        source.InitFetchStageData(NArrow::ExtractColumns(ResultBatch, source.GetFetchingPlan().GetFetchingStage()->GetSchema(), true));
+    } else {
+        source.InitFetchStageData(nullptr);
+    }
     return true;
 }
 

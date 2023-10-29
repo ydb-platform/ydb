@@ -26,7 +26,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
             default:
-                break;
+                AFL_VERIFY(false);
         }
     }
 

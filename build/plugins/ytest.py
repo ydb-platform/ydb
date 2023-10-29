@@ -311,7 +311,7 @@ def validate_test(unit, kw):
                 )
 
     if tags:
-        valid_kw['TAG'] = serialize_list(tags)
+        valid_kw['TAG'] = serialize_list(sorted(tags))
 
     unit_path = _common.get_norm_unit_path(unit)
     if (
@@ -488,7 +488,7 @@ def onadd_ytest(unit, *args):
     elif flat_args[1] == "no.test":
         return
     test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
-    test_tags = serialize_list(_get_test_tags(unit, spec_args))
+    test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
     test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
     test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
 
@@ -974,7 +974,7 @@ def onjava_test(unit, *args):
         'FORK-MODE': unit.get('TEST_FORK_MODE') or '',
         'SPLIT-FACTOR': unit.get('TEST_SPLIT_FACTOR') or '',
         'CUSTOM-DEPENDENCIES': ' '.join(get_values_list(unit, 'TEST_DEPENDS_VALUE')),
-        'TAG': serialize_list(_get_test_tags(unit)),
+        'TAG': serialize_list(sorted(_get_test_tags(unit))),
         'SIZE': unit.get('TEST_SIZE_NAME') or '',
         'REQUIREMENTS': serialize_list(get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')),
         'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
@@ -1119,7 +1119,7 @@ def _dump_test(
         'FORK-TEST-FILES': fork_test_files,
         'TEST-FILES': serialize_list(test_files),
         'SIZE': test_size,
-        'TAG': serialize_list(tags),
+        'TAG': serialize_list(sorted(tags)),
         'REQUIREMENTS': serialize_list(requirements),
         'USE_ARCADIA_PYTHON': use_arcadia_python or '',
         'OLD_PYTEST': 'yes' if old_pytest else 'no',

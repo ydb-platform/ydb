@@ -28,7 +28,8 @@ public:
     std::vector<TValue> Get(const std::vector<TKey>& keys);
 
     //! Returns the previous value, if any.
-    std::optional<TValue> Set(const TKey& key, TValue value);
+    template <class K>
+    std::optional<TValue> Set(K&& key, TValue value);
     void Invalidate(const TKey& key);
     void Clear();
 
@@ -37,15 +38,6 @@ public:
 private:
     struct TEntry
     {
-        TEntry(
-            NProfiling::TCpuInstant lastAccessTime,
-            NProfiling::TCpuInstant lastUpdateTime,
-            TValue value);
-
-        TEntry(TEntry&& entry);
-        TEntry& operator=(TEntry&& other);
-
-        std::atomic<NProfiling::TCpuInstant> LastAccessTime;
         NProfiling::TCpuInstant LastUpdateTime;
         TValue Value;
     };

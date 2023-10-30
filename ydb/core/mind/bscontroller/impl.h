@@ -1501,6 +1501,7 @@ private:
     bool GroupLayoutSanitizerEnabled = false;
     bool AllowMultipleRealmsOccupation = true;
     bool StorageConfigObtained = false;
+    bool Loaded = false;
 
     std::set<std::tuple<TGroupId, TNodeId>> GroupToNode;
 
@@ -1743,6 +1744,8 @@ private:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev);
     void Handle(TEvents::TEvUndelivered::TPtr ev);
+    void ApplyStorageConfig();
+    void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
     void ProcessPostQuery(const NActorsProto::TRemoteHttpInfo& query, TActorId sender);
@@ -2048,6 +2051,7 @@ public:
             cFunc(TEvPrivate::EvVSlotNotReadyHistogramUpdate, VSlotNotReadyHistogramUpdate);
             cFunc(TEvPrivate::EvProcessIncomingEvent, ProcessIncomingEvent);
             hFunc(TEvNodeWardenStorageConfig, Handle);
+            hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -2073,6 +2077,8 @@ public:
         UpdateSystemViews();
         UpdateSelfHealCounters();
         SignalTabletActive(TActivationContext::AsActorContext());
+        Loaded = true;
+        ApplyStorageConfig();
 
         for (const auto& [id, info] : GroupMap) {
             if (info->VirtualGroupState) {

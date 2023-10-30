@@ -155,12 +155,104 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     if (!std::exchange(StorageConfigObtained, true) && HostRecords) {
         Execute(CreateTxInitScheme());
     }
+
+    if (Loaded) {
+        ApplyStorageConfig();
+    }
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
     if (ev->Get()->SourceType == TEvNodeWardenQueryStorageConfig::EventType) {
         Y_DEBUG_ABORT_UNLESS(false);
     }
+}
+
+void TBlobStorageController::ApplyStorageConfig() {
+    if (!StorageConfig.HasBlobStorageConfig()) {
+        return;
+    }
+    const auto& bsConfig = StorageConfig.GetBlobStorageConfig();
+
+    if (!bsConfig.HasAutoconfigSettings()) {
+        return;
+    }
+    const auto& autoconfigSettings = bsConfig.GetAutoconfigSettings();
+
+    if (!autoconfigSettings.GetAutomaticBoxManagement()) {
+        return;
+    }
+
+    if (Boxes.size() > 1) {
+        return;
+    }
+    std::optional<ui64> generation;
+    if (!Boxes.empty()) {
+        const auto& [boxId, box] = *Boxes.begin();
+
+        THashSet<THostConfigId> unusedHostConfigs;
+        for (const auto& [hostConfigId, _] : HostConfigs) {
+            unusedHostConfigs.insert(hostConfigId);
+        }
+        for (const auto& [_, host] : box.Hosts) {
+            if (!HostConfigs.contains(host.HostConfigId)) {
+                return;
+            }
+            unusedHostConfigs.erase(host.HostConfigId);
+        }
+
+        if (!unusedHostConfigs.empty()) {
+            return;
+        }
+
+        generation = box.Generation.GetOrElse(0);
+    }
+
+    auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+    auto& r = ev->Record;
+    auto *request = r.MutableRequest();
+    for (const auto& hostConfig : autoconfigSettings.GetDefineHostConfig()) {
+        auto *cmd = request->AddCommand();
+        cmd->MutableDefineHostConfig()->CopyFrom(hostConfig);
+    }
+    auto *cmd = request->AddCommand();
+    auto *defineBox = cmd->MutableDefineBox();
+    defineBox->CopyFrom(autoconfigSettings.GetDefineBox());
+    defineBox->SetBoxId(1);
+    for (auto& host : *defineBox->MutableHost()) {
+        const ui32 nodeId = host.GetEnforcedNodeId();
+        host.ClearEnforcedNodeId();
+        auto *key = host.MutableKey();
+        const auto& resolved = HostRecords->GetHostId(nodeId);
+        Y_ABORT_UNLESS(resolved);
+        const auto& [fqdn, port] = *resolved;
+        key->SetFqdn(fqdn);
+        key->SetIcPort(port);
+    }
+    if (generation) {
+        defineBox->SetItemConfigGeneration(*generation);
+    }
+
+    THashSet<THostConfigId> unusedHostConfigs;
+    for (const auto& [hostConfigId, _] : HostConfigs) {
+        unusedHostConfigs.insert(hostConfigId);
+    }
+    for (const auto& host : defineBox->GetHost()) {
+        unusedHostConfigs.erase(host.GetHostConfigId());
+    }
+    for (const THostConfigId hostConfigId : unusedHostConfigs) {
+        auto *cmd = request->AddCommand();
+        auto *del = cmd->MutableDeleteHostConfig();
+        del->SetHostConfigId(hostConfigId);
+        del->SetItemConfigGeneration(HostConfigs[hostConfigId].Generation.GetOrElse(0));
+    }
+
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC14, "ApplyStorageConfig", (Request, r));
+
+    Send(SelfId(), ev.release());
+}
+
+void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC15, "TEvControllerConfigResponse", (Response, ev->Get()->Record));
 }
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateGroupStat::TPtr& ev) {

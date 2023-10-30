@@ -208,7 +208,7 @@ namespace NKikimr {
             NKikimrBlobStorage::THostKey NormalizeHostKey(const NKikimrBlobStorage::THostKey& host) const {
                 NKikimrBlobStorage::THostKey res(host);
                 if (!NormalizeHostKey(&res)) {
-                    throw TExHostNotFound(host) << "HostKey# " << host.DebugString() << " incorrect";
+                    throw TExHostNotFound(host) << " HostKey# " << host.DebugString() << " incorrect";
                 }
                 return res;
             }

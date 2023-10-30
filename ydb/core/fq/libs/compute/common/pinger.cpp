@@ -236,7 +236,12 @@ private:
 
     void Handle(TEvents::TEvForwardPingRequest::TPtr& ev) {
         Y_ABORT_UNLESS(ev->Cookie != ContinueLeaseRequestCookie);
-        Y_ABORT_UNLESS(!Finishing);
+        if (Finishing) {
+            LOG_E("Attempt to send a ping request to the terminating actor " << ev->Get()->Request);
+            Send(ReplyToSender ? ev->Sender : Parent, new TEvents::TEvForwardPingResponse(false, FederatedQuery::QueryAction::QUERY_ACTION_UNSPECIFIED), 0, ev->Cookie);
+            return;
+        }
+
         if (ev->Get()->Final) {
             Finishing = true;
             SchedulerCookieHolder.Reset(nullptr);

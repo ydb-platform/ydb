@@ -13,12 +13,12 @@ using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TQueryStatistics::AddInnerStatistics(const TQueryStatistics& statistics)
+void TQueryStatistics::AddInnerStatistics(TQueryStatistics statistics)
 {
-    InnerStatistics.push_back(statistics);
     IncompleteInput |= statistics.IncompleteInput;
     IncompleteOutput |= statistics.IncompleteOutput;
     MemoryUsage = std::max(MemoryUsage, statistics.MemoryUsage);
+    InnerStatistics.push_back(std::move(statistics));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

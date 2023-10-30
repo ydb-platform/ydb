@@ -860,22 +860,23 @@ namespace Tests {
                 );
                 
                 std::shared_ptr<NFq::TDatabaseAsyncResolverImpl> databaseAsyncResolver;
-                if (queryServiceConfig.HasMdbGateway() && queryServiceConfig.HasMdbTransformHost()) {
+                if (queryServiceConfig.GetGeneric().HasMdbGateway() && queryServiceConfig.HasMdbTransformHost()) {
                     databaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                         Runtime->GetActorSystem(nodeIdx),
                         databaseResolverActorId,
                         "",
-                        queryServiceConfig.GetMdbGateway(),
+                        queryServiceConfig.GetGeneric().GetMdbGateway(),
                         NFq::MakeMdbEndpointGeneratorGeneric(queryServiceConfig.GetMdbTransformHost())
                     );
                 }
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NYql::IHTTPGateway::Make(&queryServiceConfig.GetHttpGateway()),
-                    NYql::NConnector::MakeClientGRPC(queryServiceConfig.GetConnector()),
+                    NYql::NConnector::MakeClientGRPC(queryServiceConfig.GetGeneric().GetConnector()),
                     nullptr,
                     databaseAsyncResolver,
-                    queryServiceConfig.GetS3()
+                    queryServiceConfig.GetS3(),
+                    queryServiceConfig.GetGeneric()
                 );
             }
 

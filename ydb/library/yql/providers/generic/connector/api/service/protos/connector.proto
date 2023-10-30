@@ -39,7 +39,21 @@ message TDescribeTableRequest {
     TDataSourceInstance data_source_instance = 1;
     // Table to describe
     string table = 2;
+    // Rules for type mapping
+    TTypeMappingSettings type_mapping_settings = 3;
 }
+
+message TTypeMappingSettings {
+    // Determines the format of date or time representation
+    EDateTimeFormat date_time_format = 1;
+}
+
+enum EDateTimeFormat {
+    DATE_TIME_FORMAT_UNSPECIFIED = 0;
+    STRING_FORMAT = 1;
+    YQL_FORMAT = 2;
+}
+
 
 // TDescribeTableResponse returns table metadata
 message TDescribeTableResponse {
@@ -183,7 +197,7 @@ message TReadSplitsRequest {
     repeated TSplit splits = 2;
 
     enum EMode {
-        MODE_RESERVED = 0;
+        MODE_UNSPECIFIED = 0;
         // Connector will read splits in a single thread one by one.
         // The data will be returned in the order corresponding to the order of requested splits.
         ORDERED = 1;
@@ -196,7 +210,7 @@ message TReadSplitsRequest {
     EMode mode = 3;
 
     enum EFormat {
-        FORMAT_RESERVED = 0;
+        FORMAT_UNSPECIFIED = 0;
         // Arrow IPC Streaming format:
         // https://arrow.apache.org/docs/format/Columnar.html#ipc-streaming-format
         ARROW_IPC_STREAMING = 2;
@@ -359,7 +373,7 @@ message TPredicate {
     message TComparison {
         // An operation code.
         enum EOperation {
-            RESERVED = 0;
+            OPERATION_UNSPECIFIED = 0;
             L = 1;  // "$column < value"
             LE = 2; // "$column <= value"
             EQ = 3; // "$column = value"

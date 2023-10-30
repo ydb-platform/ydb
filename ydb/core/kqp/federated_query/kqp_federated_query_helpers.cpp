@@ -65,12 +65,9 @@ namespace NKikimr::NKqp {
         }
 
         // Initialize Connector client
-        if (queryServiceConfig.HasConnector()) {
-            ConnectorClient = NYql::NConnector::MakeClientGRPC(queryServiceConfig.GetConnector());
-
-            if (queryServiceConfig.HasMdbGateway()) {
-                MdbGateway = queryServiceConfig.GetMdbGateway();
-            }
+        if (queryServiceConfig.HasGeneric()) {
+            GenericGatewaysConfig = queryServiceConfig.GetGeneric();
+            ConnectorClient = NYql::NConnector::MakeClientGRPC(GenericGatewaysConfig.GetConnector());
 
             if (queryServiceConfig.HasMdbTransformHost()) {
                 MdbEndpointGenerator = NFq::MakeMdbEndpointGeneratorGeneric(queryServiceConfig.GetMdbTransformHost());
@@ -99,15 +96,16 @@ namespace NKikimr::NKqp {
             ConnectorClient,
             CredentialsFactory,
             nullptr,
-            S3GatewayConfig};
+            S3GatewayConfig,
+            GenericGatewaysConfig};
 
         // Init DatabaseAsyncResolver only if all requirements are met
-        if (DatabaseResolverActorId && MdbGateway && MdbEndpointGenerator) {
+        if (DatabaseResolverActorId && GenericGatewaysConfig.HasMdbGateway() && MdbEndpointGenerator) {
             result.DatabaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                 actorSystem,
                 DatabaseResolverActorId.value(),
                 "", // TODO: use YDB Gateway endpoint?
-                MdbGateway.value(),
+                GenericGatewaysConfig.GetMdbGateway(),
                 MdbEndpointGenerator);
         }
 

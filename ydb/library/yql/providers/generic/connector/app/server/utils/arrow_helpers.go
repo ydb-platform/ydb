@@ -105,10 +105,8 @@ func primitiveTypeToArrow(typeID Ydb.Type_PrimitiveTypeId, column *Ydb.Column, a
 		field = arrow.Field{Name: column.Name, Type: arrow.PrimitiveTypes.Float64}
 		builder = array.NewFloat64Builder(arrowAllocator)
 	case Ydb.Type_STRING:
-		// TODO: what about LargeBinary?
-		// https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4N5arrow4Type4type12LARGE_BINARYE
-		field = arrow.Field{Name: column.Name, Type: arrow.BinaryTypes.Binary}
-		builder = array.NewBinaryBuilder(arrowAllocator, arrow.BinaryTypes.Binary)
+		field = arrow.Field{Name: column.Name, Type: arrow.BinaryTypes.String}
+		builder = array.NewStringBuilder(arrowAllocator)
 	case Ydb.Type_UTF8:
 		// TODO: what about LargeString?
 		// https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4N5arrow4Type4type12LARGE_STRINGE

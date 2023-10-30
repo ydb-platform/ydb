@@ -93,74 +93,12 @@ namespace NYql {
             Results_.reserve(pendingTables.size());
 
             for (const auto& item : pendingTables) {
-                NConnector::NApi::TDescribeTableRequest request;
-
                 const auto& clusterName = item.first;
                 const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(clusterName);
                 YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it, "cluster not found: " << clusterName);
 
-                const auto& clusterConfig = it->second;
-                const auto dataSourceKind = clusterConfig.GetKind();
-
-                auto dsi = request.mutable_data_source_instance();
-                dsi->mutable_endpoint()->CopyFrom(clusterConfig.GetEndpoint());
-                dsi->set_kind(dataSourceKind);
-                dsi->mutable_credentials()->CopyFrom(clusterConfig.GetCredentials());
-                dsi->set_use_tls(clusterConfig.GetUseSsl());
-                dsi->set_protocol(clusterConfig.GetProtocol());
-
-                // for backward compability full path can be used (cluster_name.`db_name.table`)
-                // TODO: simplify during https://st.yandex-team.ru/YQ-2494
-                const auto& tablePath = item.second;
-                const auto& dbNameFromConfig = clusterConfig.GetDatabaseName();
-                TStringBuf dbNameTarget, tableName;
-                auto isFullPath = TStringBuf(tablePath).TrySplit('.', dbNameTarget, tableName);
-
-                switch (dataSourceKind) {
-                    case NYql::NConnector::NApi::CLICKHOUSE:
-                        break;
-                    case NYql::NConnector::NApi::POSTGRESQL: {
-                        // for backward compability set schema "public" by default
-                        // TODO: simplify during https://st.yandex-team.ru/YQ-2494
-                        TString schema;
-                        const auto options_it = clusterConfig.GetDataSourceOptions().find(TString("schema"));
-                        if (options_it != clusterConfig.GetDataSourceOptions().end()) {
-                            schema = options_it->second;
-                        }
-                        if (!schema) {
-                            schema = TString("public");
-                        }
-
-                        dsi->mutable_pg_options()->Setschema(schema);
-                    } break;
-
-                    default:
-                        ythrow yexception() << "Unexpected data source kind: '"
-                                            << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
-                }
-
-                if (!dbNameFromConfig.empty()) {
-                    dbNameTarget = dbNameFromConfig;
-                    if (!isFullPath) {
-                        tableName = tablePath;
-                    }
-                } else if (!isFullPath) {
-                    tableName = tablePath;
-                    switch (dataSourceKind) {
-                        case NYql::NConnector::NApi::CLICKHOUSE:
-                            dbNameTarget = "default";
-                            break;
-                        case NYql::NConnector::NApi::POSTGRESQL:
-                            dbNameTarget = "postgres";
-                            break;
-                        default:
-                            ythrow yexception() << "Unexpected data source kind: '"
-                                                << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
-                    }
-                } // else take database name from table path
-
-                dsi->set_database(TString(dbNameTarget));
-                request.set_table(TString(tableName));
+                NConnector::NApi::TDescribeTableRequest request;
+                FillDescribeTableRequest(request, it->second, item.second);
 
                 auto promise = NThreading::NewPromise();
                 handles.emplace_back(promise.GetFuture());
@@ -310,6 +248,89 @@ namespace NYql {
         } catch (std::exception&) {
             ctx.AddError(TIssue({}, TStringBuilder() << "Failed to parse table metadata: " << CurrentExceptionMessage()));
             return nullptr;
+        }
+
+        void FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig, const TString& tablePath) {
+            const auto dataSourceKind = clusterConfig.GetKind();
+            auto dsi = request.mutable_data_source_instance();
+
+            *dsi->mutable_endpoint() = clusterConfig.GetEndpoint();
+            dsi->set_kind(dataSourceKind);
+            *dsi->mutable_credentials() = clusterConfig.GetCredentials();
+            dsi->set_use_tls(clusterConfig.GetUseSsl());
+            dsi->set_protocol(clusterConfig.GetProtocol());
+            FillTypeMappingSettings(request);
+            FillDataSourceOptions(request, clusterConfig);
+            FillTablePath(request, clusterConfig, tablePath);
+        }
+
+        void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
+            const auto dataSourceKind = clusterConfig.GetKind();
+            switch (dataSourceKind) {
+                case NYql::NConnector::NApi::CLICKHOUSE:
+                    break;
+                case NYql::NConnector::NApi::POSTGRESQL: {
+                    // for backward compability set schema "public" by default
+                    // TODO: simplify during https://st.yandex-team.ru/YQ-2494
+                    TString schema;
+                    const auto it = clusterConfig.GetDataSourceOptions().find("schema");
+                    if (it != clusterConfig.GetDataSourceOptions().end()) {
+                        schema = it->second;
+                    }
+                    if (!schema) {
+                        schema = "public";
+                    }
+
+                    request.mutable_data_source_instance()->mutable_pg_options()->set_schema(schema);
+                } break;
+
+                default:
+                    ythrow yexception() << "Unexpected data source kind: '"
+                                        << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
+            }
+        }
+
+        void FillTypeMappingSettings(NConnector::NApi::TDescribeTableRequest& request) {
+            const auto dateTimeFormat = *State_->Configuration->DateTimeFormat.Get();
+            if (dateTimeFormat == "string") {
+                request.mutable_type_mapping_settings()->set_date_time_format(NConnector::NApi::STRING_FORMAT);
+            } else if (dateTimeFormat == "YQL") {
+                request.mutable_type_mapping_settings()->set_date_time_format(NConnector::NApi::YQL_FORMAT);
+            } else {
+                ythrow yexception() << "Unexpected date/time format: '" << dateTimeFormat << "'";
+            }
+        }
+
+        void FillTablePath(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig, const TString& tablePath) {
+            // for backward compability full path can be used (cluster_name.`db_name.table`)
+            // TODO: simplify during https://st.yandex-team.ru/YQ-2494
+            const auto dataSourceKind = clusterConfig.GetKind();
+            const auto& dbNameFromConfig = clusterConfig.GetDatabaseName();
+            TStringBuf dbNameTarget, tableName;
+            auto isFullPath = TStringBuf(tablePath).TrySplit('.', dbNameTarget, tableName);
+
+            if (!dbNameFromConfig.empty()) {
+                dbNameTarget = dbNameFromConfig;
+                if (!isFullPath) {
+                    tableName = tablePath;
+                }
+            } else if (!isFullPath) {
+                tableName = tablePath;
+                switch (dataSourceKind) {
+                    case NYql::NConnector::NApi::CLICKHOUSE:
+                        dbNameTarget = "default";
+                        break;
+                    case NYql::NConnector::NApi::POSTGRESQL:
+                        dbNameTarget = "postgres";
+                        break;
+                    default:
+                        ythrow yexception() << "Unexpected data source kind: '"
+                                            << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
+                }
+            } // else take database name from table path
+
+            request.mutable_data_source_instance()->set_database(TString(dbNameTarget));
+            request.set_table(TString(tableName));
         }
 
     private:

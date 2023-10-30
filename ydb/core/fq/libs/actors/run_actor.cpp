@@ -1881,6 +1881,9 @@ private:
         *gatewaysConfig.MutableS3() = Params.Config.GetGateways().GetS3();
         gatewaysConfig.MutableS3()->ClearClusterMapping();
 
+        *gatewaysConfig.MutableGeneric() = Params.Config.GetGateways().GetGeneric();
+        gatewaysConfig.MutableGeneric()->ClearClusterMapping();
+
         THashMap<TString, TString> clusters;
 
         TString monitoringEndpoint = Params.Config.GetCommon().GetMonitoringEndpoint();

@@ -46,7 +46,7 @@ namespace NYql {
             if (compare.Maybe<TCoCmpEqual>()) {
                 proto->set_operation(TPredicate::TComparison::EQ);
             }
-            if (proto->operation() == TPredicate::TComparison::RESERVED) { // Unknown operation
+            if (proto->operation() == TPredicate::TComparison::OPERATION_UNSPECIFIED) { // Unknown operation
                 err << "unknown operation: " << compare.Raw()->Content();
                 return false;
             }

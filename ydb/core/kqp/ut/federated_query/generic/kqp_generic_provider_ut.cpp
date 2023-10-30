@@ -51,6 +51,21 @@ namespace NKikimr::NKqp {
         }
     }
 
+    NKikimrConfig::TAppConfig CreateDefaultAppConfig() {
+        NKikimrConfig::TAppConfig appConfig;
+        NYql::TAttr dateTimeFormat;
+        dateTimeFormat.SetName("DateTimeFormat");
+        dateTimeFormat.SetValue("string");
+        appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableDefaultSettings()->Add(std::move(dateTimeFormat));
+        return appConfig;
+    }
+
+    NApi::TTypeMappingSettings MakeTypeMappingSettings(NApi::EDateTimeFormat dateTimeFormat) {
+        NApi::TTypeMappingSettings settings;
+        settings.set_date_time_format(dateTimeFormat);
+        return settings;
+    }
+
     Y_UNIT_TEST_SUITE(GenericFederatedQuery) {
         void TestSelectAllFields(EProviderType providerType) {
             // prepare mock
@@ -62,6 +77,7 @@ namespace NKikimr::NKqp {
             // clang-format off
             clientMock->ExpectDescribeTable()
                 .DataSourceInstance(dataSourceInstance)
+                .TypeMappingSettings(MakeTypeMappingSettings(NYql::NConnector::NApi::STRING_FORMAT))
                 .Response()
                     .Column("col1", Ydb::Type::UINT16);
 
@@ -108,7 +124,8 @@ namespace NKikimr::NKqp {
             }
 
             // run test
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock);
+            auto appConfig = CreateDefaultAppConfig();
+            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -157,6 +174,7 @@ namespace NKikimr::NKqp {
             // clang-format off
             clientMock->ExpectDescribeTable()
                 .DataSourceInstance(dataSourceInstance)
+                .TypeMappingSettings(MakeTypeMappingSettings(NYql::NConnector::NApi::STRING_FORMAT))
                 .Response()
                     .Column("col1", Ydb::Type::UINT16)
                     .Column("col2", Ydb::Type::DOUBLE);
@@ -199,7 +217,8 @@ namespace NKikimr::NKqp {
             }
 
             // run test
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock);
+            auto appConfig = CreateDefaultAppConfig();
+            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -247,6 +266,7 @@ namespace NKikimr::NKqp {
             // step 1: DescribeTable
             clientMock->ExpectDescribeTable()
                 .DataSourceInstance(dataSourceInstance)
+                .TypeMappingSettings(MakeTypeMappingSettings(NYql::NConnector::NApi::STRING_FORMAT))
                 .Response()
                     .Column("col1", Ydb::Type::UINT16)
                     .Column("col2", Ydb::Type::DOUBLE);
@@ -289,7 +309,8 @@ namespace NKikimr::NKqp {
             }
 
             // run test
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock);
+            auto appConfig = CreateDefaultAppConfig();
+            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
 
             CreateExternalDataSource(providerType, kikimr);
 
@@ -348,6 +369,7 @@ namespace NKikimr::NKqp {
             // clang-format off
             clientMock->ExpectDescribeTable()
                 .DataSourceInstance(dataSourceInstance)
+                .TypeMappingSettings(MakeTypeMappingSettings(NYql::NConnector::NApi::STRING_FORMAT))
                 .Response()
                     .NullableColumn("filtered_column", Ydb::Type::INT32)
                     .NullableColumn("data_column", Ydb::Type::STRING);
@@ -391,7 +413,8 @@ namespace NKikimr::NKqp {
             }
 
             // run test
-            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock);
+            auto appConfig = CreateDefaultAppConfig();
+            auto kikimr = MakeKikimrRunner(nullptr, clientMock, databaseAsyncResolverMock, appConfig);
 
             CreateExternalDataSource(providerType, kikimr);
 

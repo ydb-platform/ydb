@@ -1530,7 +1530,7 @@ private:
             FuncRegistry,
             FederatedQuerySetup->DatabaseAsyncResolver,
             FederatedQuerySetup->ConnectorClient,
-            nullptr
+            FederatedQuerySetup->GenericGatewayConfig
         );
 
         TypesCtx->AddDataSource(NYql::GenericProviderName, NYql::CreateGenericDataSource(state));

@@ -24,6 +24,22 @@ func (r rows) Close() error {
 	return nil
 }
 
+func (r rows) MakeAcceptors() ([]any, error) {
+	fields := r.FieldDescriptions()
+	acceptors := make([]any, 0, len(fields))
+
+	for _, field := range fields {
+		acceptor, err := acceptorFromOID(field.DataTypeOID)
+		if err != nil {
+			return nil, fmt.Errorf("get acceptor from OID: %w", err)
+		}
+
+		acceptors = append(acceptors, acceptor)
+	}
+
+	return acceptors, nil
+}
+
 type Connection struct {
 	*pgx.Conn
 	logger utils.QueryLogger

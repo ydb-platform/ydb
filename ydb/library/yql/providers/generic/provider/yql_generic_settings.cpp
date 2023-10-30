@@ -9,6 +9,7 @@ namespace NYql {
 
     TGenericConfiguration::TGenericConfiguration() {
         REGISTER_SETTING(*this, UsePredicatePushdown);
+        REGISTER_SETTING(*this, DateTimeFormat);
     }
 
     void TGenericConfiguration::Init(const NYql::TGenericGatewayConfig& gatewayConfig,

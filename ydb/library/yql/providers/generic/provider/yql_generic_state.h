@@ -31,16 +31,14 @@ namespace NYql {
             const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
             const std::shared_ptr<NYql::IDatabaseAsyncResolver>& databaseResolver,
             const NConnector::IClient::TPtr& genericClient,
-            const TGatewaysConfig* gatewaysConfig = nullptr)
+            const TGenericGatewayConfig& gatewayConfig)
             : Types(types)
             , Configuration(MakeIntrusive<TGenericConfiguration>())
             , FunctionRegistry(functionRegistry)
             , DatabaseResolver(databaseResolver)
             , GenericClient(genericClient)
         {
-            if (gatewaysConfig) {
-                Configuration->Init(gatewaysConfig->GetGeneric(), databaseResolver, DatabaseAuth, types->Credentials);
-            }
+            Configuration->Init(gatewayConfig, databaseResolver, DatabaseAuth, types->Credentials);
         }
 
         void AddTable(const TStringBuf& clusterName, const TStringBuf& tableName, TTableMeta&& tableMeta);

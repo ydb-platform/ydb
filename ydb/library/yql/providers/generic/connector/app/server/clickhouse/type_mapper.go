@@ -4,23 +4,27 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"time"
 
 	"github.com/apache/arrow/go/v13/arrow/array"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
+	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
 var _ utils.TypeMapper = typeMapper{}
 
 type typeMapper struct {
 	isFixedString *regexp.Regexp
+	isDateTime    *regexp.Regexp
 	isDateTime64  *regexp.Regexp
 	isNullable    *regexp.Regexp
 }
 
-func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string) (*Ydb.Column, error) {
-	var ydbType *Ydb.Type
+func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string, rules *api_service_protos.TTypeMappingSettings) (*Ydb.Column, error) {
+	var (
+		ydbType *Ydb.Type
+		err     error
+	)
 
 	// By default all columns in CH are non-nullable, so
 	// we wrap YDB types into Optional type only in such cases:
@@ -67,22 +71,29 @@ func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string) (*Ydb.Colum
 	case tm.isFixedString.MatchString(typeName):
 		ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_STRING}}
 	case typeName == "Date":
-		nullable = true
-		ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_DATE}}
+		var overflow bool
+		ydbType, overflow, err = makeYdbDateTimeType(Ydb.Type_DATE, rules.GetDateTimeFormat())
+		nullable = overflow || nullable
 	// FIXME: https://st.yandex-team.ru/YQ-2295
 	// Date32 is not displayed correctly.
 	// case typeName == "Date32":
 	//  nullable = true
 	// 	ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_DATE}}
-	case typeName == "DateTime":
-		nullable = true
-		ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_DATETIME}}
 	case tm.isDateTime64.MatchString(typeName):
 		// NOTE: ClickHouse's DateTime64 value range is much more wide than YDB's Timestamp value range
-		nullable = true
-		ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_TIMESTAMP}}
+		var overflow bool
+		ydbType, overflow, err = makeYdbDateTimeType(Ydb.Type_TIMESTAMP, rules.GetDateTimeFormat())
+		nullable = overflow || nullable
+	case tm.isDateTime.MatchString(typeName):
+		var overflow bool
+		ydbType, overflow, err = makeYdbDateTimeType(Ydb.Type_DATETIME, rules.GetDateTimeFormat())
+		nullable = overflow || nullable
 	default:
-		return nil, fmt.Errorf("convert type '%s': %w", typeName, utils.ErrDataTypeNotSupported)
+		err = fmt.Errorf("convert type '%s': %w", typeName, utils.ErrDataTypeNotSupported)
+	}
+
+	if err != nil {
+		return nil, err
 	}
 
 	// If the column is nullable, wrap it into YQL's optional
@@ -96,71 +107,68 @@ func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string) (*Ydb.Colum
 	}, nil
 }
 
-func (tm typeMapper) YDBTypeToAcceptor(ydbType *Ydb.Type) (any, error) {
-	var (
-		acceptor any
-		err      error
-	)
-
-	switch t := ydbType.Type.(type) {
-	// Primitive types
-	case *Ydb.Type_TypeId:
-		acceptor, err = acceptorFromPrimitiveYDBType(t.TypeId, false)
-		if err != nil {
-			return nil, fmt.Errorf("make acceptor from primitive YDB type: %w", err)
-		}
-	case *Ydb.Type_OptionalType:
-		acceptor, err = acceptorFromPrimitiveYDBType(t.OptionalType.Item.GetTypeId(), true)
-		if err != nil {
-			return nil, fmt.Errorf("make acceptor from optional YDB type: %w", err)
-		}
+func makeYdbDateTimeType(ydbTypeID Ydb.Type_PrimitiveTypeId, format api_service_protos.EDateTimeFormat) (*Ydb.Type, bool, error) {
+	switch format {
+	case api_service_protos.EDateTimeFormat_YQL_FORMAT:
+		// type marked as nullable because ClickHouse's type value range is much more wide than YDB's type value range
+		return &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: ydbTypeID}}, true, nil
+	case api_service_protos.EDateTimeFormat_STRING_FORMAT:
+		return &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_STRING}}, false, nil
 	default:
-		return nil, fmt.Errorf("only primitive types are supported, got '%v' instead", ydbType)
-	}
-
-	return acceptor, nil
-}
-
-func allocatePrimitiveAcceptor[VT utils.ValueType](optional bool) any {
-	if !optional {
-		return new(VT)
-	} else {
-		return new(*VT)
+		return nil, false, fmt.Errorf("unexpected datetime format '%s': %w", format, utils.ErrDataTypeNotSupported)
 	}
 }
 
-func acceptorFromPrimitiveYDBType(typeID Ydb.Type_PrimitiveTypeId, optional bool) (any, error) {
-	switch typeID {
-	case Ydb.Type_BOOL:
-		return allocatePrimitiveAcceptor[bool](optional), nil
-	case Ydb.Type_INT8:
-		return allocatePrimitiveAcceptor[int8](optional), nil
-	case Ydb.Type_INT16:
-		return allocatePrimitiveAcceptor[int16](optional), nil
-	case Ydb.Type_INT32:
-		return allocatePrimitiveAcceptor[int32](optional), nil
-	case Ydb.Type_INT64:
-		return allocatePrimitiveAcceptor[int64](optional), nil
-	case Ydb.Type_UINT8:
-		return allocatePrimitiveAcceptor[uint8](optional), nil
-	case Ydb.Type_UINT16:
-		return allocatePrimitiveAcceptor[uint16](optional), nil
-	case Ydb.Type_UINT32:
-		return allocatePrimitiveAcceptor[uint32](optional), nil
-	case Ydb.Type_UINT64:
-		return allocatePrimitiveAcceptor[uint64](optional), nil
-	case Ydb.Type_FLOAT:
-		return allocatePrimitiveAcceptor[float32](optional), nil
-	case Ydb.Type_DOUBLE:
-		return allocatePrimitiveAcceptor[float64](optional), nil
-	case Ydb.Type_STRING:
-		// Looks like []byte would be a better choice here, but clickhouse driver prefers string
-		return allocatePrimitiveAcceptor[string](optional), nil
-	case Ydb.Type_DATE, Ydb.Type_DATETIME, Ydb.Type_TIMESTAMP:
-		return allocatePrimitiveAcceptor[time.Time](optional), nil
-	default:
-		return nil, fmt.Errorf("unknown type '%v'", typeID)
+func acceptorsFromSQLTypes(typeNames []string) ([]any, error) {
+	acceptors := make([]any, 0, len(typeNames))
+	isNullable := regexp.MustCompile(`Nullable\((?P<Internal>[\w\(\)]+)\)`)
+	isFixedString := regexp.MustCompile(`FixedString\([0-9]+\)`)
+	isDateTime := regexp.MustCompile(`DateTime(\('[\w,/]+'\))?`)
+	isDateTime64 := regexp.MustCompile(`DateTime64\(\d{1}(, '[\w,/]+')?\)`)
+
+	for _, typeName := range typeNames {
+		if matches := isNullable.FindStringSubmatch(typeName); len(matches) > 0 {
+			typeName = matches[1]
+		}
+
+		switch {
+		case typeName == "Bool":
+			acceptors = append(acceptors, new(*bool))
+		case typeName == "Int8":
+			acceptors = append(acceptors, new(*int8))
+		case typeName == "Int16":
+			acceptors = append(acceptors, new(*int16))
+		case typeName == "Int32":
+			acceptors = append(acceptors, new(*int32))
+		case typeName == "Int64":
+			acceptors = append(acceptors, new(*int64))
+		case typeName == "UInt8":
+			acceptors = append(acceptors, new(*uint8))
+		case typeName == "UInt16":
+			acceptors = append(acceptors, new(*uint16))
+		case typeName == "UInt32":
+			acceptors = append(acceptors, new(*uint32))
+		case typeName == "UInt64":
+			acceptors = append(acceptors, new(*uint64))
+		case typeName == "Float32":
+			acceptors = append(acceptors, new(*float32))
+		case typeName == "Float64":
+			acceptors = append(acceptors, new(*float64))
+		case typeName == "String", isFixedString.MatchString(typeName):
+			// Looks like []byte would be a better choice here, but clickhouse driver prefers string
+			acceptors = append(acceptors, new(*string))
+		case typeName == "Date":
+			acceptors = append(acceptors, new(*utils.Date))
+		case isDateTime64.MatchString(typeName):
+			acceptors = append(acceptors, new(*utils.Timestamp))
+		case isDateTime.MatchString(typeName):
+			acceptors = append(acceptors, new(*utils.Datetime))
+		default:
+			return nil, fmt.Errorf("unknown type '%v'", typeName)
+		}
 	}
+
+	return acceptors, nil
 }
 
 // AddRow saves a row obtained from the datasource into the buffer
@@ -199,23 +207,16 @@ func (tm typeMapper) AddRowToArrowIPCStreaming(ydbTypes []*Ydb.Type, acceptors [
 func appendValueToArrowBuilder[IN utils.ValueType, OUT utils.ValueType, AB utils.ArrowBuilder[OUT], CONV utils.ValueConverter[IN, OUT]](
 	acceptor any,
 	builder array.Builder,
-	optional bool,
 ) error {
-	var value IN
+	cast := acceptor.(**IN)
 
-	if optional {
-		cast := acceptor.(**IN)
-		if *cast == nil {
-			builder.AppendNull()
+	if *cast == nil {
+		builder.AppendNull()
 
-			return nil
-		}
-
-		value = **cast
-	} else {
-		//nolint:forcetypeassert
-		value = *acceptor.(*IN)
+		return nil
 	}
+
+	value := **cast
 
 	var converter CONV
 
@@ -247,35 +248,47 @@ func (typeMapper) appendValueToBuilder(
 
 	switch typeID {
 	case Ydb.Type_BOOL:
-		err = appendValueToArrowBuilder[bool, uint8, *array.Uint8Builder, utils.BoolConverter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[bool, uint8, *array.Uint8Builder, utils.BoolConverter](acceptor, builder)
 	case Ydb.Type_INT8:
-		err = appendValueToArrowBuilder[int8, int8, *array.Int8Builder, utils.Int8Converter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[int8, int8, *array.Int8Builder, utils.Int8Converter](acceptor, builder)
 	case Ydb.Type_INT16:
-		err = appendValueToArrowBuilder[int16, int16, *array.Int16Builder, utils.Int16Converter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[int16, int16, *array.Int16Builder, utils.Int16Converter](acceptor, builder)
 	case Ydb.Type_INT32:
-		err = appendValueToArrowBuilder[int32, int32, *array.Int32Builder, utils.Int32Converter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[int32, int32, *array.Int32Builder, utils.Int32Converter](acceptor, builder)
 	case Ydb.Type_INT64:
-		err = appendValueToArrowBuilder[int64, int64, *array.Int64Builder, utils.Int64Converter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[int64, int64, *array.Int64Builder, utils.Int64Converter](acceptor, builder)
 	case Ydb.Type_UINT8:
-		err = appendValueToArrowBuilder[uint8, uint8, *array.Uint8Builder, utils.Uint8Converter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[uint8, uint8, *array.Uint8Builder, utils.Uint8Converter](acceptor, builder)
 	case Ydb.Type_UINT16:
-		err = appendValueToArrowBuilder[uint16, uint16, *array.Uint16Builder, utils.Uint16Converter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[uint16, uint16, *array.Uint16Builder, utils.Uint16Converter](acceptor, builder)
 	case Ydb.Type_UINT32:
-		err = appendValueToArrowBuilder[uint32, uint32, *array.Uint32Builder, utils.Uint32Converter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[uint32, uint32, *array.Uint32Builder, utils.Uint32Converter](acceptor, builder)
 	case Ydb.Type_UINT64:
-		err = appendValueToArrowBuilder[uint64, uint64, *array.Uint64Builder, utils.Uint64Converter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[uint64, uint64, *array.Uint64Builder, utils.Uint64Converter](acceptor, builder)
 	case Ydb.Type_FLOAT:
-		err = appendValueToArrowBuilder[float32, float32, *array.Float32Builder, utils.Float32Converter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[float32, float32, *array.Float32Builder, utils.Float32Converter](acceptor, builder)
 	case Ydb.Type_DOUBLE:
-		err = appendValueToArrowBuilder[float64, float64, *array.Float64Builder, utils.Float64Converter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[float64, float64, *array.Float64Builder, utils.Float64Converter](acceptor, builder)
 	case Ydb.Type_STRING:
-		err = appendValueToArrowBuilder[string, []byte, *array.BinaryBuilder, utils.StringToBytesConverter](acceptor, builder, optional)
+		// depends on date/time representation format
+		switch acceptor.(type) {
+		case **string:
+			err = appendValueToArrowBuilder[string, string, *array.StringBuilder, utils.StringConverter](acceptor, builder)
+		case **utils.Date:
+			err = appendValueToArrowBuilder[utils.Date, string, *array.StringBuilder, utils.DateToStringConverter](acceptor, builder)
+		case **utils.Datetime:
+			err = appendValueToArrowBuilder[utils.Datetime, string, *array.StringBuilder, utils.DatetimeToStringConverter](acceptor, builder)
+		case **utils.Timestamp:
+			err = appendValueToArrowBuilder[utils.Timestamp, string, *array.StringBuilder, utils.TimestampToStringConverter](acceptor, builder)
+		default:
+			return fmt.Errorf("unexpected type %v with acceptor type %T: %w", typeID, acceptor, utils.ErrDataTypeNotSupported)
+		}
 	case Ydb.Type_DATE:
-		err = appendValueToArrowBuilder[time.Time, uint16, *array.Uint16Builder, utils.DateConverter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[utils.Date, uint16, *array.Uint16Builder, utils.DateConverter](acceptor, builder)
 	case Ydb.Type_DATETIME:
-		err = appendValueToArrowBuilder[time.Time, uint32, *array.Uint32Builder, utils.DatetimeConverter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[utils.Datetime, uint32, *array.Uint32Builder, utils.DatetimeConverter](acceptor, builder)
 	case Ydb.Type_TIMESTAMP:
-		err = appendValueToArrowBuilder[time.Time, uint64, *array.Uint64Builder, utils.TimestampConverter](acceptor, builder, optional)
+		err = appendValueToArrowBuilder[utils.Timestamp, uint64, *array.Uint64Builder, utils.TimestampConverter](acceptor, builder)
 	default:
 		return fmt.Errorf("unexpected type %v: %w", typeID, utils.ErrDataTypeNotSupported)
 	}
@@ -286,7 +299,8 @@ func (typeMapper) appendValueToBuilder(
 func NewTypeMapper() utils.TypeMapper {
 	return typeMapper{
 		isFixedString: regexp.MustCompile(`FixedString\([0-9]+\)`),
-		isDateTime64:  regexp.MustCompile(`DateTime64\(\d{1}\)`),
-		isNullable:    regexp.MustCompile(`Nullable\((?P<Internal>\w+)\)`),
+		isDateTime:    regexp.MustCompile(`DateTime(\('[\w,/]+'\))?`),
+		isDateTime64:  regexp.MustCompile(`DateTime64\(\d{1}(, '[\w,/]+')?\)`),
+		isNullable:    regexp.MustCompile(`Nullable\((?P<Internal>[\w\(\)]+)\)`),
 	}
 }

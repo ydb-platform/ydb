@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
@@ -62,7 +61,7 @@ func (h *handlerImpl[CONN]) DescribeTable(
 		typeName   string
 	)
 
-	sb := &schemaBuilder{typeMapper: h.typeMapper}
+	sb := &schemaBuilder{typeMapper: h.typeMapper, typeMappingSettings: request.TypeMappingSettings}
 
 	for rows.Next() {
 		if err := rows.Scan(&columnName, &typeName); err != nil {
@@ -107,9 +106,6 @@ func (h *handlerImpl[CONN]) ReadSplit(
 
 	sb.WriteString("SELECT ")
 
-	// accumulate acceptors
-	var acceptors []any
-
 	columns, err := utils.SelectWhatToYDBColumns(split.Select.What)
 	if err != nil {
 		return fmt.Errorf("convert Select.What.Items to Ydb.Columns: %w", err)
@@ -118,17 +114,6 @@ func (h *handlerImpl[CONN]) ReadSplit(
 	// for the case of empty column set select some constant for constructing a valid sql statement
 	if len(columns) == 0 {
 		sb.WriteString("0")
-
-		var acceptor any
-
-		ydbType := Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_INT32}}
-		acceptor, err = h.typeMapper.YDBTypeToAcceptor(&ydbType)
-
-		if err != nil {
-			return fmt.Errorf("map ydb column to acceptor: %w", err)
-		}
-
-		acceptors = append(acceptors, acceptor)
 	} else {
 		for i, column := range columns {
 			sb.WriteString(column.GetName())
@@ -136,15 +121,6 @@ func (h *handlerImpl[CONN]) ReadSplit(
 			if i != len(columns)-1 {
 				sb.WriteString(", ")
 			}
-
-			var acceptor any
-
-			acceptor, err = h.typeMapper.YDBTypeToAcceptor(column.GetType())
-			if err != nil {
-				return fmt.Errorf("map ydb column to acceptor: %w", err)
-			}
-
-			acceptors = append(acceptors, acceptor)
 		}
 	}
 
@@ -158,12 +134,12 @@ func (h *handlerImpl[CONN]) ReadSplit(
 	sb.WriteString(tableName)
 
 	if split.Select.Where != nil {
-		statement, err := FormatWhereStatement(split.Select.Where)
+		clause, err := FormatWhereClause(split.Select.Where)
 		if err != nil {
-			logger.Error("Failed to format WHERE statement", log.Error(err), log.String("where", split.Select.Where.String()))
+			logger.Error("Failed to format WHERE clause", log.Error(err), log.String("where", split.Select.Where.String()))
 		} else {
 			sb.WriteString(" ")
-			sb.WriteString(statement)
+			sb.WriteString(clause)
 		}
 	}
 
@@ -177,6 +153,11 @@ func (h *handlerImpl[CONN]) ReadSplit(
 	}
 
 	defer func() { utils.LogCloserError(logger, rows, "close rows") }()
+
+	acceptors, err := rows.MakeAcceptors()
+	if err != nil {
+		return fmt.Errorf("make acceptors: %w", err)
+	}
 
 	for rows.Next() {
 		if err := rows.Scan(acceptors...); err != nil {

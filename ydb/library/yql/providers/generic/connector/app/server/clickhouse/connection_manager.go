@@ -21,19 +21,43 @@ type Connection struct {
 	logger utils.QueryLogger
 }
 
+type rows struct {
+	*sql.Rows
+}
+
+func (r rows) MakeAcceptors() ([]any, error) {
+	columns, err := r.ColumnTypes()
+	if err != nil {
+		return nil, fmt.Errorf("column types: %w", err)
+	}
+
+	typeNames := make([]string, 0, len(columns))
+	for _, column := range columns {
+		typeNames = append(typeNames, column.DatabaseTypeName())
+	}
+
+	return acceptorsFromSQLTypes(typeNames)
+}
+
 func (c Connection) Query(ctx context.Context, query string, args ...any) (utils.Rows, error) {
 	c.logger.Dump(query, args...)
 
-	rows, err := c.DB.QueryContext(ctx, query, args...)
+	out, err := c.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query context: %w", err)
 	}
 
-	if err := rows.Err(); err != nil {
+	if err := out.Err(); err != nil {
+		defer func() {
+			if err := out.Close(); err != nil {
+				c.logger.Error("close rows", log.Error(err))
+			}
+		}()
+
 		return nil, fmt.Errorf("rows err: %w", err)
 	}
 
-	return rows, nil
+	return rows{Rows: out}, nil
 }
 
 var _ utils.ConnectionManager[*Connection] = (*connectionManager)(nil)

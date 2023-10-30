@@ -17,6 +17,7 @@ type Rows interface {
 	Err() error
 	Next() bool
 	Scan(dest ...any) error
+	MakeAcceptors() ([]any, error)
 }
 
 type ConnectionManager[CONN any] interface {

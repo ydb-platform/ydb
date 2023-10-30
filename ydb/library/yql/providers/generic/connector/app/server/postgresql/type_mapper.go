@@ -3,19 +3,19 @@ package postgresql
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/apache/arrow/go/v13/arrow/array"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
+	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
 var _ utils.TypeMapper = typeMapper{}
 
 type typeMapper struct{}
 
-func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string) (*Ydb.Column, error) {
+func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string, rules *api_service_protos.TTypeMappingSettings) (*Ydb.Column, error) {
 	var ydbType *Ydb.Type
 
 	// Reference table: https://wiki.yandex-team.ru/rtmapreduce/yql-streams-corner/connectors/lld-02-tipy-dannyx/
@@ -37,13 +37,27 @@ func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string) (*Ydb.Colum
 	case "character", "character varying", "text":
 		ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_UTF8}}
 	case "date":
-		ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_DATE}}
+		switch rules.GetDateTimeFormat() {
+		case api_service_protos.EDateTimeFormat_STRING_FORMAT:
+			ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_STRING}}
+		case api_service_protos.EDateTimeFormat_YQL_FORMAT:
+			ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_DATE}}
+		default:
+			return nil, fmt.Errorf("unexpected date format '%s': %w", rules.GetDateTimeFormat(), utils.ErrDataTypeNotSupported)
+		}
 	// TODO: PostgreSQL `time` data type has no direct counterparts in the YDB's type system;
 	// but it can be supported when the PG-compatible types is added to YDB:
 	// https://st.yandex-team.ru/YQ-2285
 	// case "time":
 	case "timestamp without time zone":
-		ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_TIMESTAMP}}
+		switch rules.GetDateTimeFormat() {
+		case api_service_protos.EDateTimeFormat_STRING_FORMAT:
+			ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_STRING}}
+		case api_service_protos.EDateTimeFormat_YQL_FORMAT:
+			ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_TIMESTAMP}}
+		default:
+			return nil, fmt.Errorf("unexpected timestamp format '%s': %w", rules.GetDateTimeFormat(), utils.ErrDataTypeNotSupported)
+		}
 	default:
 		return nil, fmt.Errorf("convert type '%s': %w", typeName, utils.ErrDataTypeNotSupported)
 	}
@@ -56,61 +70,6 @@ func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string) (*Ydb.Colum
 		Name: columnName,
 		Type: ydbType,
 	}, nil
-}
-
-func (tm typeMapper) YDBTypeToAcceptor(ydbType *Ydb.Type) (any, error) {
-	var (
-		acceptor any
-		err      error
-	)
-
-	switch t := ydbType.Type.(type) {
-	// Primitive types
-	case *Ydb.Type_TypeId:
-		acceptor, err = acceptorFromPrimitiveYDBType(t.TypeId)
-		if err != nil {
-			return nil, fmt.Errorf("make acceptor from primitive YDB type: %w", err)
-		}
-	case *Ydb.Type_OptionalType:
-		acceptor, err = acceptorFromPrimitiveYDBType(t.OptionalType.Item.GetTypeId())
-		if err != nil {
-			return nil, fmt.Errorf("make acceptor from optional YDB type: %w", err)
-		}
-	default:
-		return nil, fmt.Errorf(
-			"only primitive types are supported, got '%v' instead: %w",
-			ydbType,
-			utils.ErrDataTypeNotSupported)
-	}
-
-	return acceptor, nil
-}
-
-func acceptorFromPrimitiveYDBType(typeID Ydb.Type_PrimitiveTypeId) (any, error) {
-	switch typeID {
-	case Ydb.Type_BOOL:
-		return new(pgtype.Bool), nil
-	case Ydb.Type_INT16:
-		return new(pgtype.Int2), nil
-	case Ydb.Type_INT32:
-		return new(pgtype.Int4), nil
-	case Ydb.Type_INT64:
-		return new(pgtype.Int8), nil
-	case Ydb.Type_FLOAT:
-		return new(pgtype.Float4), nil
-	case Ydb.Type_DOUBLE:
-		return new(pgtype.Float8), nil
-	case Ydb.Type_STRING:
-		return new(*[]byte), nil
-	case Ydb.Type_UTF8:
-		return new(pgtype.Text), nil
-	case Ydb.Type_DATE:
-		return new(pgtype.Date), nil
-	case Ydb.Type_TIMESTAMP:
-		return new(pgtype.Timestamp), nil
-	default:
-		return nil, fmt.Errorf("make acceptor for type '%v': %w", typeID, utils.ErrDataTypeNotSupported)
-	}
 }
 
 func appendValueToArrowBuilder[IN utils.ValueType, OUT utils.ValueType, AB utils.ArrowBuilder[OUT], CONV utils.ValueConverter[IN, OUT]](
@@ -145,7 +104,7 @@ func appendValueToArrowBuilder[IN utils.ValueType, OUT utils.ValueType, AB utils
 
 // AddRow saves a row obtained from the datasource into the buffer
 func (tm typeMapper) AddRowToArrowIPCStreaming(
-	_ []*Ydb.Type, // TODO: use detailed YDB type information when acceptor type is not enough
+	ydbTypes []*Ydb.Type,
 	acceptors []any,
 	builders []array.Builder,
 ) error {
@@ -154,6 +113,21 @@ func (tm typeMapper) AddRowToArrowIPCStreaming(
 	}
 
 	for i, acceptor := range acceptors {
+		var ydbTypeID Ydb.Type_PrimitiveTypeId
+		switch t := ydbTypes[i].Type.(type) {
+		case *Ydb.Type_TypeId:
+			ydbTypeID = t.TypeId
+		case *Ydb.Type_OptionalType:
+			switch t.OptionalType.Item.Type.(type) {
+			case *Ydb.Type_TypeId:
+				ydbTypeID = t.OptionalType.Item.GetTypeId()
+			default:
+				return fmt.Errorf("unexpected type %v: %w", t.OptionalType.Item, utils.ErrDataTypeNotSupported)
+			}
+		default:
+			return fmt.Errorf("unexpected type %v: %w", t, utils.ErrDataTypeNotSupported)
+		}
+
 		var err error
 		switch t := acceptor.(type) {
 		case *pgtype.Bool:
@@ -181,9 +155,23 @@ func (tm typeMapper) AddRowToArrowIPCStreaming(
 				builders[i].(*array.BinaryBuilder).AppendNull()
 			}
 		case *pgtype.Date:
-			err = appendValueToArrowBuilder[time.Time, uint16, *array.Uint16Builder, utils.DateConverter](t.Time, builders[i], t.Valid)
+			switch ydbTypeID {
+			case Ydb.Type_STRING:
+				err = appendValueToArrowBuilder[utils.Date, string, *array.StringBuilder, utils.DateToStringConverter](utils.Date(t.Time), builders[i], t.Valid)
+			case Ydb.Type_DATE:
+				err = appendValueToArrowBuilder[utils.Date, uint16, *array.Uint16Builder, utils.DateConverter](utils.Date(t.Time), builders[i], t.Valid)
+			default:
+				return fmt.Errorf("unexpected ydb type id %d with acceptor type %T: %w", ydbTypeID, t, utils.ErrDataTypeNotSupported)
+			}
 		case *pgtype.Timestamp:
-			err = appendValueToArrowBuilder[time.Time, uint64, *array.Uint64Builder, utils.TimestampConverter](t.Time, builders[i], t.Valid)
+			switch ydbTypeID {
+			case Ydb.Type_STRING:
+				err = appendValueToArrowBuilder[utils.Timestamp, string, *array.StringBuilder, utils.TimestampToStringConverter](utils.Timestamp(t.Time), builders[i], t.Valid)
+			case Ydb.Type_TIMESTAMP:
+				err = appendValueToArrowBuilder[utils.Timestamp, uint64, *array.Uint64Builder, utils.TimestampConverter](utils.Timestamp(t.Time), builders[i], t.Valid)
+			default:
+				return fmt.Errorf("unexpected ydb type id %d with acceptor type %T: %w", ydbTypeID, t, utils.ErrDataTypeNotSupported)
+			}
 		default:
 			return fmt.Errorf("item #%d of a type '%T': %w", i, t, utils.ErrDataTypeNotSupported)
 		}
@@ -197,3 +185,28 @@ func (tm typeMapper) AddRowToArrowIPCStreaming(
 }
 
 func NewTypeMapper() utils.TypeMapper { return typeMapper{} }
+
+func acceptorFromOID(oid uint32) (any, error) {
+	switch oid {
+	case pgtype.BoolOID:
+		return new(pgtype.Bool), nil
+	case pgtype.Int2OID:
+		return new(pgtype.Int2), nil
+	case pgtype.Int4OID:
+		return new(pgtype.Int4), nil
+	case pgtype.Int8OID:
+		return new(pgtype.Int8), nil
+	case pgtype.Float4OID:
+		return new(pgtype.Float4), nil
+	case pgtype.Float8OID:
+		return new(pgtype.Float8), nil
+	case pgtype.TextOID, pgtype.BPCharOID, pgtype.VarcharOID, pgtype.ByteaOID:
+		return new(pgtype.Text), nil
+	case pgtype.DateOID:
+		return new(pgtype.Date), nil
+	case pgtype.TimestampOID:
+		return new(pgtype.Timestamp), nil
+	default:
+		return nil, fmt.Errorf("convert type OID %d: %w", oid, utils.ErrDataTypeNotSupported)
+	}
+}

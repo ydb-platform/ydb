@@ -70,7 +70,7 @@ func FormatPredicate(predicate *api_service_protos.TPredicate) (string, error) {
 	}
 }
 
-func FormatWhereStatement(where *api_service_protos.TSelect_TWhere) (string, error) {
+func FormatWhereClause(where *api_service_protos.TSelect_TWhere) (string, error) {
 	if where.FilterTyped == nil {
 		return "", utils.ErrUnimplemented
 	}

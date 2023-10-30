@@ -26,7 +26,7 @@ namespace NYql {
                 functionRegistry,
                 dbResolver,
                 genericClient,
-                gatewaysConfig);
+                gatewaysConfig->GetGeneric());
 
             TDataProviderInfo info;
 

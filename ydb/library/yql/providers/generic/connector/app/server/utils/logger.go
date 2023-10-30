@@ -91,11 +91,11 @@ func NewQueryLoggerFactory(cfg *config.TLoggerConfig) QueryLoggerFactory {
 }
 
 func (f *QueryLoggerFactory) Make(logger log.Logger) QueryLogger {
-	return QueryLogger{logger: logger, enabled: f.enableQueryLogging}
+	return QueryLogger{Logger: logger, enabled: f.enableQueryLogging}
 }
 
 type QueryLogger struct {
-	logger  log.Logger
+	log.Logger
 	enabled bool
 }
 
@@ -109,7 +109,7 @@ func (ql *QueryLogger) Dump(query string, args ...any) {
 		logFields = append(logFields, log.Any("args", args))
 	}
 
-	ql.logger.Debug("execute SQL query", logFields...)
+	ql.Debug("execute SQL query", logFields...)
 }
 
 func convertToZapLogLevel(lvl config.ELogLevel) zapcore.Level {

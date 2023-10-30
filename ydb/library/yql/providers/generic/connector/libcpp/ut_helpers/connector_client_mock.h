@@ -345,6 +345,11 @@ namespace NYql::NConnector::NTest {
                 Response();
             }
 
+            TBuilder& TypeMappingSettings(const NApi::TTypeMappingSettings& proto) {
+                *Result_->mutable_type_mapping_settings() = proto;
+                return *this;
+            }
+
         private:
             void SetExpectation() {
                 EXPECT_CALL(*Mock_, DescribeTableImpl(ProtobufRequestMatcher(*Result_)))

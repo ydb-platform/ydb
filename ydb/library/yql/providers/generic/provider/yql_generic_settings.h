@@ -15,6 +15,8 @@ namespace NYql {
         struct TDefault {
             static constexpr bool UsePredicatePushdown = false;
         };
+
+        NCommon::TConfSetting<TString, false> DateTimeFormat;
     };
 
     struct TGenericConfiguration: public TGenericSettings, public NCommon::TSettingDispatcher {

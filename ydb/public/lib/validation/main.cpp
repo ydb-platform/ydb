@@ -16,8 +16,7 @@
 #include <util/string/cast.h>
 #include <util/string/subst.h>
 
-namespace NKikimr {
-namespace NValidation {
+namespace NKikimr::NValidation {
 
 using namespace google::protobuf::compiler;
 using namespace google::protobuf;
@@ -52,7 +51,6 @@ private:
 
 }; // TPrinter
 
-
 bool IsScalarType(const FieldDescriptor* field) {
     switch (field->cpp_type()) {
         case FieldDescriptor::CPPTYPE_INT32:
@@ -67,7 +65,6 @@ bool IsScalarType(const FieldDescriptor* field) {
         default:
             return false;
     }
-    return false;
 }
 
 class TFieldGenerator: public TThrRefBase {
@@ -170,7 +167,6 @@ class TFieldGenerator: public TThrRefBase {
 
         Y_FAIL_S("Invalid value: " << annValue);
     }
-
 
     void CheckValue(TPrinter& printer, const FieldDescriptor* field, TVariables vars) const {
         switch (field->cpp_type()) {
@@ -292,7 +288,6 @@ class TFieldGenerator: public TThrRefBase {
 
     void Body(TPrinter& printer) const {
         const auto& opts = Field->options();
-
 
         if (opts.HasExtension(Ydb::required)) {
             Required(printer);
@@ -622,8 +617,7 @@ class TCodeGenerator: public CodeGenerator {
 
 }; // TCodeGenerator
 
-} // NValidation
-} // NKikimr
+}
 
 int main(int argc, char* argv[]) {
     NKikimr::NValidation::TCodeGenerator generator;

@@ -287,18 +287,10 @@ Y_UNIT_TEST_SUITE(ValidationTests) {
             oneof.set_check_ge_2("333");
             UNIT_ASSERT(Validate(oneof));
         }
-
-/*        // check oneof (3)
-        {
-            oneof.mutable_some_message();
-            UNIT_ASSERT(Validate(oneof));
-        }
-*/
     }
 
     Y_UNIT_TEST(Optional) {
         MessageOptional optional;
-
 
         {
             Validate(optional, "required but not set");
@@ -308,25 +300,29 @@ Y_UNIT_TEST_SUITE(ValidationTests) {
         // empty is correct
         UNIT_ASSERT(Validate(optional));
 
-        // check set incorrect value
+        // incorrect value
         {
             optional.set_check_value_int32(0);
             Validate(optional, "value is not");
-            optional.set_check_value_int32(1);
         }
 
-        // check set correct value
-        UNIT_ASSERT(Validate(optional));
+        // correct value
+        {
+            optional.set_check_value_int32(1);
+            UNIT_ASSERT(Validate(optional));
+        }
+
+        // incorrect length
         {
 
             optional.set_check_length("abacaba");
             Validate(optional, "length is not in");
-            optional.set_check_length("val");
         }
-        // check correct length
-        UNIT_ASSERT(Validate(optional));
 
-
+        // correct length
+        {
+            optional.set_check_length("val");
+            UNIT_ASSERT(Validate(optional));
+        }
     }
-
 }

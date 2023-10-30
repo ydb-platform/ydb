@@ -16,7 +16,7 @@ struct TSimdTraits {
     using TRegister = TBaseRegister;
     template<typename T>
     using TSimd8 = TSimd<T>;
-
+    using TSimdI8 = TSimd8<i8>;
     static constexpr int Size = RegisterSize;
 };
 
@@ -73,5 +73,30 @@ auto CreateUnpackMask(ui32 dataSize, ui32 stripeSize, bool needOffset) {
 
     return TSimdI8(indexes);
 }
+
+
+// Creates mask to advance register content for N bytes. When N is negative, move data to lower bytes.  
+template<typename TTraits> auto AdvanceBytesMask(const int N) {
+    i8 positions[TTraits::Size];
+    if (N < 0) {
+        for (int i = 0; i < TTraits::Size; i += 1) {
+            positions[i] = -N + i > (TTraits::Size - 1) ? -1 : -N + i;
+        }
+    } else {
+        for (int i = 0; i < TTraits::Size; i += 1) {
+            positions[i] = -N + i < 0 ? -1 : -N + i;
+        }
+    }
+    return TTraits::TSimdI8(positions);
+}
+
+
+// Prepare unpack mask to merge two columns in one register. col1Bytes, col2Bytes - size of data in columns. 
+template<typename TTraits>
+void PrepareMergeMasks( ui32 col1Bytes, ui32 col2Bytes, typename TTraits::TSimdI8& unpackMask1, typename TTraits::TSimdI8& unpackMask2) {
+    unpackMask1 = CreateUnpackMask<TTraits>(col1Bytes, col2Bytes, false);
+    unpackMask2 = CreateUnpackMask<TTraits>(col2Bytes, col1Bytes, true);
+}
+
 
 }

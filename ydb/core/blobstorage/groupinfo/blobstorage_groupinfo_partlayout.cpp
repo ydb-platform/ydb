@@ -44,7 +44,7 @@ namespace NKikimr {
                 // calculate mask of main parts in place
                 ui32 total = 0;
                 for (ui32 i = 0; i < totalPartCount; ++i) {
-                    total |= PerPartStatus[i];
+                    total |= GetDisksWithPart(i);
                 }
                 total &= mainMask;
 
@@ -57,7 +57,7 @@ namespace NKikimr {
                     // specific part
                     TStackVec<ui32, MaxTotalPartCount> handoffDiskByPart;
                     for (ui32 i = 0; i < totalPartCount; ++i) {
-                        const ui32 value = PerPartStatus[i] >> totalPartCount;
+                        const ui32 value = GetDisksWithPart(i) >> totalPartCount;
                         if (~total & 1 << i && value) { // if there is no such part at main disk
                             handoffDiskByPart.push_back(value);
                         }
@@ -107,7 +107,7 @@ namespace NKikimr {
         const ui32 totalPartCount = top->GType.TotalPartCount();
         ui32 mask = 0;
         for (ui32 i = 0; i < totalPartCount; ++i) {
-            mask |= PerPartStatus[i];
+            mask |= GetDisksWithPart(i);
         }
         return TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(top, mask);
     }

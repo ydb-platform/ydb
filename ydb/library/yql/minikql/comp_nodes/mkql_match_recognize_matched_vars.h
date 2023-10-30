@@ -7,7 +7,7 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 
 template<class R>
-using TMatchedVar = std::vector<R>;
+using TMatchedVar = std::vector<R, TMKQLAllocator<R>>;
 template<class R>
 void Extend(TMatchedVar<R>& var, const R& r) {
     if (var.empty()) {
@@ -23,7 +23,7 @@ void Extend(TMatchedVar<R>& var, const R& r) {
 }
 
 template<class R>
-using TMatchedVars = std::vector<TMatchedVar<R>>;
+using TMatchedVars = std::vector<TMatchedVar<R>, TMKQLAllocator<TMatchedVar<R>>>;
 
 template<class R>
 NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const R& range) {
@@ -58,7 +58,7 @@ class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue<R>> {
     class TRangeList: public TComputationValue<TRangeList> {
         class TIterator : public TComputationValue<TIterator> {
         public:
-            TIterator(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, const std::vector<R>& ranges)
+            TIterator(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, const std::vector<R, TMKQLAllocator<R>>& ranges)
                     : TComputationValue<TIterator>(memInfo)
                     , HolderFactory(holderFactory)
                     , Ranges(ranges)
@@ -74,7 +74,7 @@ class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue<R>> {
                 return true;
             }
             const THolderFactory& HolderFactory;
-            const std::vector<R>& Ranges;
+            const std::vector<R, TMKQLAllocator<R>>& Ranges;
             size_t Index;
         };
 
@@ -106,7 +106,7 @@ class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue<R>> {
         const TMatchedVar<R>& Var;
     };
 public:
-    TMatchedVarsValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, const std::vector<TMatchedVar<R>>& vars)
+    TMatchedVarsValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, const std::vector<TMatchedVar<R>, TMKQLAllocator<TMatchedVar<R>>>& vars)
         : TComputationValue<TMatchedVarsValue>(memInfo)
         , HolderFactory(holderFactory)
         , Vars(vars)
@@ -118,7 +118,7 @@ public:
     }
 private:
     const THolderFactory& HolderFactory;
-    const std::vector<TMatchedVar<R>>& Vars;
+    const std::vector<TMatchedVar<R>, TMKQLAllocator<TMatchedVar<R>>>& Vars;
 };
 
 }//namespace NKikimr::NMiniKQL::NMatchRecognize

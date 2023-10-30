@@ -97,6 +97,7 @@ struct TNfaSetup {
 Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
 
     Y_UNIT_TEST(OutputStateHasNoOutputEdges) {
+        TScopedAlloc alloc(__LOCATION__);
         const TRowPattern pattern{{TRowPatternFactor{"A", 1, 1, false, false}}};
         const auto transitionGraph = TNfaTransitionGraphBuilder::Create(pattern, {{"A", 0}});
         const auto& output = transitionGraph->Transitions.at(transitionGraph->Output);

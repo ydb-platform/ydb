@@ -17,7 +17,7 @@ namespace NKikimr::NMiniKQL {
 namespace NMatchRecognize {
 
 enum class EOutputColumnSource {PartitionKey, Measure};
-using TOutputColumnOrder = TVector<std::pair<EOutputColumnSource, size_t>>;
+using TOutputColumnOrder = std::vector<std::pair<EOutputColumnSource, size_t>, TMKQLAllocator<std::pair<EOutputColumnSource, size_t>>>;
 
 using namespace NYql::NMatchRecognize;
 
@@ -129,7 +129,7 @@ private:
     const TContainerCacheOnContext& Cache;
     TSimpleList Rows;
     TMatchedVars CurMatchedVars;
-    std::deque<TMatchedVars> Matches;
+    std::deque<TMatchedVars, TMKQLAllocator<TMatchedVars>> Matches;
     ui64 MatchNumber;
 };
 
@@ -292,7 +292,8 @@ private:
 class TStateForInterleavedPartitions
     : public TComputationValue<TStateForInterleavedPartitions>
 {
-    using TPartitionMap = std::unordered_map<TString, std::unique_ptr<TStreamingMatchRecognize>>;
+    using TPartitionMapValue = std::unique_ptr<TStreamingMatchRecognize>;
+    using TPartitionMap = std::unordered_map<TString, TPartitionMapValue, std::hash<TString>, std:: equal_to<TString>, TMKQLAllocator<std::pair<const TString, TPartitionMapValue>>>;
 public:
     TStateForInterleavedPartitions(
         TMemoryUsageInfo* memInfo,
@@ -363,7 +364,7 @@ private:
 
 private:
     TPartitionMap Partitions;
-    std::stack<TPartitionMap::iterator> HasReadyOutput;
+    std::stack<TPartitionMap::iterator, std::deque<TPartitionMap::iterator, TMKQLAllocator<TPartitionMap::iterator>>> HasReadyOutput;
     bool Terminating = false;
 
     IComputationExternalNode* InputRowArg;
@@ -449,7 +450,8 @@ private:
 };
 
 TOutputColumnOrder GetOutputColumnOrder(TRuntimeNode partitionKyeColumnsIndexes, TRuntimeNode measureColumnsIndexes) {
-    std::unordered_map<size_t, std::pair<EOutputColumnSource, size_t>> temp;
+    using tempMapValue = std::pair<EOutputColumnSource, size_t>;
+    std::unordered_map<size_t, tempMapValue, std::hash<size_t>, std::equal_to<size_t>, TMKQLAllocator<std::pair<const size_t, tempMapValue>, EMemorySubPool::Temporary>> temp;
     {
         auto list = AS_VALUE(TListLiteral, partitionKyeColumnsIndexes);
         for (ui32 i = 0; i != list->GetItemsCount(); ++i) {

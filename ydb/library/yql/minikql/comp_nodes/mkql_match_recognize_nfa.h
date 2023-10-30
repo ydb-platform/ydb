@@ -13,7 +13,7 @@ using namespace NYql::NMatchRecognize;
 
 struct TVoidTransition{};
 using TEpsilonTransition = size_t; //to
-using TEpsilonTransitions = std::vector<TEpsilonTransition>;
+using TEpsilonTransitions = std::vector<TEpsilonTransition, TMKQLAllocator<TEpsilonTransition>>;
 using TMatchedVarTransition = std::pair<ui32, size_t>; //{varIndex, to}
 using TQuantityEnterTransition = size_t; //to
 using TQuantityExitTransition = std::pair<std::pair<ui64, ui64>, std::pair<size_t, size_t>>; //{{min, max}, {foFindMore, toMatched}}
@@ -26,7 +26,7 @@ using TNfaTransition = std::variant<
 >;
 
 struct TNfaTransitionGraph {
-    std::vector<TNfaTransition> Transitions;
+    std::vector<TNfaTransition, TMKQLAllocator<TNfaTransition>> Transitions;
     size_t Input;
     size_t Output;
 
@@ -48,10 +48,10 @@ private:
         return Graph->Transitions.size() - 1;
     }
 
-    TNfaItem BuildTerms(const std::vector<TRowPatternTerm>& terms, const THashMap<TString, size_t>& varNameToIndex) {
+    TNfaItem BuildTerms(const TVector<TRowPatternTerm>& terms, const THashMap<TString, size_t>& varNameToIndex) {
         auto input = AddNode();
         auto output = AddNode();
-        std::vector<TEpsilonTransition> fromInput;
+        std::vector<TEpsilonTransition, TMKQLAllocator<TEpsilonTransition>> fromInput;
         for (const auto& t: terms) {
             auto a = BuildTerm(t, varNameToIndex);
             fromInput.push_back(a.Input);
@@ -63,7 +63,7 @@ private:
     TNfaItem BuildTerm(const TRowPatternTerm& term, const THashMap<TString, size_t>& varNameToIndex) {
         auto input = AddNode();
         auto output = AddNode();
-        std::vector<TNfaItem> automata;
+        std::vector<TNfaItem, TMKQLAllocator<TNfaItem>> automata;
         for (const auto& f: term) {
             automata.push_back(BuildFactor(f, varNameToIndex));
         }
@@ -124,13 +124,13 @@ class TNfa {
     using TRange = TSparseList::TRange;
     using TMatchedVars = TMatchedVars<TRange>;
     struct TState {
-        TState(size_t index, const TMatchedVars& vars, std::stack<ui64>&& quantifiers)
+        TState(size_t index, const TMatchedVars& vars, std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>&& quantifiers)
             : Index(index)
             , Vars(vars)
             , Quantifiers(quantifiers) {}
         const size_t Index;
         TMatchedVars Vars;
-        std::stack<ui64> Quantifiers; //get rid of this
+        std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>> Quantifiers; //get rid of this
 
         friend inline bool operator<(const TState& lhs, const TState& rhs) {
             return std::tie(lhs.Index, lhs.Quantifiers, lhs.Vars) < std::tie(rhs.Index, rhs.Quantifiers, rhs.Vars);
@@ -147,10 +147,10 @@ public:
     }
 
     void ProcessRow(TSparseList::TRange&& currentRowLock, TComputationContext& ctx) {
-        ActiveStates.emplace(TransitionGraph->Input, TMatchedVars(Defines.size()), std::stack<ui64>{});
+        ActiveStates.emplace(TransitionGraph->Input, TMatchedVars(Defines.size()), std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>{});
         MakeEpsilonTransitions();
-        std::set<TState> newStates;
-        std::set<TState> deletedStates;
+        std::set<TState, std::less<TState>, TMKQLAllocator<TState>> newStates;
+        std::set<TState, std::less<TState>, TMKQLAllocator<TState>> deletedStates;
         for (const auto& s: ActiveStates) {
             //Here we handle only transitions of TMatchedVarTransition type,
             //all other transitions are handled in MakeEpsilonTransitions
@@ -162,7 +162,7 @@ public:
                     auto vars = s.Vars; //TODO get rid of this copy
                     auto& matchedVar = vars[varIndex];
                     Extend(matchedVar, currentRowLock);
-                    newStates.emplace(matchedVarTransition->second, std::move(vars), std::stack<ui64>(s.Quantifiers));
+                    newStates.emplace(matchedVarTransition->second, std::move(vars), std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>(s.Quantifiers));
                 }
                 deletedStates.insert(s);
             }
@@ -200,7 +200,7 @@ public:
 
 private:
     //TODO (zverevgeny): Consider to change to std::vector for the sake of perf
-    using TStateSet = std::set<TState>;
+    using TStateSet = std::set<TState, std::less<TState>, TMKQLAllocator<TState>>;
     struct TTransitionVisitor {
         TTransitionVisitor(const TState& state, TStateSet& newStates, TStateSet& deletedStates)
             : State(state)
@@ -216,7 +216,7 @@ private:
         }
         void operator()(const TEpsilonTransitions& epsilonTransitions) {
             for (const auto& i: epsilonTransitions) {
-                NewStates.emplace(i, TMatchedVars(State.Vars), std::stack<ui64>(State.Quantifiers));
+                NewStates.emplace(i, TMatchedVars(State.Vars), std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>(State.Quantifiers));
             }
             DeletedStates.insert(State);
         }

@@ -8,6 +8,7 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarExtend) {
     using TRange = TSimpleList::TRange;
     using TMatchedVar = TMatchedVar<TRange>;
     using TMatchedVars = TMatchedVars<TRange>;
+    TScopedAlloc alloc(__LOCATION__);
 
     Y_UNIT_TEST(MatchedRangeSingleton) {
         TRange r{10};

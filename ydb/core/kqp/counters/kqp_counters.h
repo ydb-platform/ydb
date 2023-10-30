@@ -12,6 +12,7 @@
 #include <ydb/core/tx/tx_proxy/mon.h>
 
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 
 #include <util/system/spinlock.h>
 
@@ -246,7 +247,7 @@ private:
 
 using TKqpDbCountersPtr = TIntrusivePtr<TKqpDbCounters>;
 
-class TKqpCounters : public TThrRefBase, public TKqpCountersBase {
+class TKqpCounters : public TKqpCountersBase, public NYql::NDq::TSpillingCounters {
 private:
     struct TTxByKindCounters {
         NMonitoring::THistogramPtr TotalDuration;
@@ -377,15 +378,6 @@ public:
     NMonitoring::THistogramPtr NodeServiceProcessCancelTime;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmMaxSnapshotLatency;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNodeNumberInSnapshot;
-
-    // Spilling counters
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingWriteBlobs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingReadBlobs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingStoredBlobs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingTotalSpaceUsed;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingTooBigFileErrors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingNoSpaceErrors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingIoErrors;
 
     // Scan queries counters
     ::NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardDisconnect;

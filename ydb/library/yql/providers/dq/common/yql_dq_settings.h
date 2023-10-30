@@ -21,6 +21,11 @@ struct TDqSettings {
         Profile
     };
 
+    enum class ESpillingEngine {
+        Disable     /* "disable" */,
+        File        /* "file" */,
+    };
+
     struct TDefault {
         static constexpr ui32 MaxTasksPerStage = 20U;
         static constexpr ui32 MaxTasksPerOperation = 70U;
@@ -48,6 +53,7 @@ struct TDqSettings {
         static constexpr bool EnableChannelStats = false;
         static constexpr bool ExportStats = false;
         static constexpr ETaskRunnerStats TaskRunnerStats = ETaskRunnerStats::Basic;
+        static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::Disable;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -115,6 +121,7 @@ struct TDqSettings {
     NCommon::TConfSetting<ETaskRunnerStats, false> TaskRunnerStats;
     NCommon::TConfSetting<bool, false> _SkipRevisionCheck;
     NCommon::TConfSetting<bool, false> UseBlockReader;
+    NCommon::TConfSetting<ESpillingEngine, false> SpillingEngine;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>

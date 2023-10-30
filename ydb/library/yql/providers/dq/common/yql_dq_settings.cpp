@@ -76,6 +76,16 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, TaskRunnerStats).Parser([](const TString& v) { return FromString<ETaskRunnerStats>(v); });
     REGISTER_SETTING(*this, _SkipRevisionCheck);
     REGISTER_SETTING(*this, UseBlockReader);
+    REGISTER_SETTING(*this, SpillingEngine)
+        .Parser([](const TString& v) {
+            return FromString<TDqSettings::ESpillingEngine>(v);
+        })
+        .ValueSetter([this](const TString&, TDqSettings::ESpillingEngine value) {
+            SpillingEngine = value;
+            if (value != TDqSettings::ESpillingEngine::Disable) {
+                EnableDqReplicate = true;
+            }
+        });
 }
 
 } // namespace NYql

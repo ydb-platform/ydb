@@ -6,6 +6,7 @@ IF (NOT OS_WINDOWS)
         library/cpp/getopt
         yt/cpp/mapreduce/client
         ydb/library/yql/dq/actors/compute
+        ydb/library/yql/dq/actors/spilling
         ydb/library/yql/dq/comp_nodes
         ydb/library/yql/dq/integration/transform
         ydb/library/yql/dq/transform

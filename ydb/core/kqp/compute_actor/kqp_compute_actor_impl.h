@@ -2,7 +2,7 @@
 
 #include "kqp_compute_actor.h"
 
-#include <ydb/core/kqp/runtime/kqp_channel_storage.h>
+#include <ydb/library/yql/dq/actors/compute/dq_task_runner_exec_ctx.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 
 
@@ -12,14 +12,12 @@ namespace NKqp {
 using namespace NYql;
 using namespace NYql::NDq;
 
-class TKqpTaskRunnerExecutionContext : public IDqTaskRunnerExecutionContext {
+class TKqpTaskRunnerExecutionContext : public TDqTaskRunnerExecutionContext {
 public:
-    TKqpTaskRunnerExecutionContext(ui64 txId, bool withSpilling, IDqChannelStorage::TWakeUpCallback&& wakeUp,
-        const TActorContext& ctx)
-        : TxId(txId)
-        , WakeUp(std::move(wakeUp))
-        , Ctx(ctx)
-        , WithSpilling(withSpilling) {}
+    TKqpTaskRunnerExecutionContext(ui64 txId, bool withSpilling, IDqChannelStorage::TWakeUpCallback&& wakeUp, const TActorContext& ctx)
+        : TDqTaskRunnerExecutionContext(txId, withSpilling, std::move(wakeUp), ctx)
+    {
+    }
 
     IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc,
         const NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx, const NMiniKQL::TTypeEnvironment& typeEnv,
@@ -28,20 +26,6 @@ public:
     {
         return KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, holderFactory, std::move(outputs));
     }
-
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const override {
-        if (WithSpilling) {
-            return CreateKqpChannelStorage(TxId, channelId, WakeUp, Ctx);
-        } else {
-            return nullptr;
-        }
-    }
-
-private:
-    const ui64 TxId;
-    const IDqChannelStorage::TWakeUpCallback WakeUp;
-    const TActorContext& Ctx;
-    const bool WithSpilling;
 };
 
 } // namespace NKqp

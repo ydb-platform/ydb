@@ -724,7 +724,8 @@ void TKqpCounters::UpdateTxCounters(const TKqpTransactionInfo& txInfo,
 }
 
 TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const TActorContext* ctx)
-    : AllocCounters(counters, "kqp")
+    : NYql::NDq::TSpillingCounters(counters)
+    , AllocCounters(counters, "kqp")
 {
     Counters = counters;
     KqpGroup = GetServiceCounters(counters, "kqp");
@@ -785,15 +786,6 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
         "NodeService/ProcessCancelEventUs", NMonitoring::ExponentialHistogram(20, 2, 1));
     RmMaxSnapshotLatency = KqpGroup->GetCounter("RM/MaxSnapshotLatency", false);
     RmNodeNumberInSnapshot = KqpGroup->GetCounter("RM/NodeNumberInSnapshot", false);
-
-    /* Spilling */
-    SpillingWriteBlobs = KqpGroup->GetCounter("Spilling/WriteBlobs", true);
-    SpillingReadBlobs = KqpGroup->GetCounter("Spilling/ReadBlobs", true);
-    SpillingStoredBlobs = KqpGroup->GetCounter("Spilling/StoredBlobs", false);
-    SpillingTotalSpaceUsed = KqpGroup->GetCounter("Spilling/TotalSpaceUsed", false);
-    SpillingTooBigFileErrors = KqpGroup->GetCounter("Spilling/TooBigFileErrors", true);
-    SpillingNoSpaceErrors = KqpGroup->GetCounter("Spilling/NoSpaceErrors", true);
-    SpillingIoErrors = KqpGroup->GetCounter("Spilling/IoErrors", true);
 
     /* Scan queries */
     ScanQueryShardDisconnect = KqpGroup->GetCounter("ScanQuery/ShardDisconnect", true);

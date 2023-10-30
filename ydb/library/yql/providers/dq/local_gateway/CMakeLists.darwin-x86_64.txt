@@ -16,6 +16,7 @@ target_link_libraries(providers-dq-local_gateway PUBLIC
   yutil
   library-yql-utils
   dq-actors-compute
+  dq-actors-spilling
   providers-dq-provider
   dq-api-protos
   providers-dq-task_runner

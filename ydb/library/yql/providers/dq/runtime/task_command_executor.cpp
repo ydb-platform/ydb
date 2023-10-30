@@ -226,7 +226,7 @@ public:
         }
         _exit(127);
     }
-    
+
     NDqProto::TMeteringStatsResponse GetMeteringStats() {
         NDqProto::TMeteringStatsResponse resp;
         auto* stats = Runner->GetMeteringStats();
@@ -767,7 +767,9 @@ public:
             limits.ChannelBufferSize = DqConfiguration->ChannelBufferSize.Get().GetOrElse(TDqSettings::TDefault::ChannelBufferSize);
             limits.OutputChunkMaxSize = DqConfiguration->OutputChunkMaxSize.Get().GetOrElse(TDqSettings::TDefault::OutputChunkMaxSize);
             limits.ChunkSizeLimit = DqConfiguration->ChunkSizeLimit.Get().GetOrElse(TDqSettings::TDefault::ChunkSizeLimit);
-            Runner->Prepare(task, limits);
+
+            NDq::TDqTaskRunnerExecutionContextDefault execCtx;
+            Runner->Prepare(task, limits, execCtx);
         });
 
         result.Save(&output);

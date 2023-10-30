@@ -1529,7 +1529,7 @@ protected:
         TaskRunner = taskRunner;
     }
 
-    void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext()) {
+    void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx) {
         YQL_ENSURE(TaskRunner);
 
         auto guard = TaskRunner->BindAllocator(MemoryQuota->GetMkqlMemoryLimit());

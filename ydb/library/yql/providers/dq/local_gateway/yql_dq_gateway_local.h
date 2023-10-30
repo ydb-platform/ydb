@@ -14,6 +14,7 @@ namespace NYql {
 TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
     TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories,
+    bool withSpilling,
     NDq::IDqAsyncIoFactory::TPtr = nullptr, int threads = 16,
     IMetricsRegistryPtr metricsRegistry = {},
     const std::function<NActors::IActor*(void)>& metricsPusherFactory = {});

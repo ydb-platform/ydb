@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/yql/dq/type_ann
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/providers/common/schema/mkql
+    library/cpp/actors/util
 )
 
 SRCS(

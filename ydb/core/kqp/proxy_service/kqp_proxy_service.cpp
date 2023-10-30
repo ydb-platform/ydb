@@ -15,13 +15,14 @@
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
-#include <ydb/core/kqp/runtime/kqp_spilling_file.h>
-#include <ydb/core/kqp/runtime/kqp_spilling.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
+#include <ydb/core/mon/mon.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
@@ -211,9 +212,25 @@ public:
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
 
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
-            SpillingService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpLocalFileSpillingService(cfg, Counters));
+            SpillingService = TlsActivationContext->ExecutorThread.RegisterActor(NYql::NDq::CreateDqLocalFileSpillingService(
+                NYql::NDq::TFileSpillingServiceConfig{
+                    .Root = cfg.GetRoot(),
+                    .MaxTotalSize = cfg.GetMaxTotalSize(),
+                    .MaxFileSize = cfg.GetMaxFileSize(),
+                    .MaxFilePartSize = cfg.GetMaxFilePartSize(),
+                    .IoThreadPoolWorkersCount = cfg.GetIoThreadPool().GetWorkersCount(),
+                    .IoThreadPoolQueueSize = cfg.GetIoThreadPool().GetQueueSize(),
+                    .CleanupOnShutdown = false
+                },
+                Counters));
             TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
-                MakeKqpLocalFileSpillingServiceID(SelfId().NodeId()), SpillingService);
+                NYql::NDq::MakeDqLocalFileSpillingServiceID(SelfId().NodeId()), SpillingService);
+
+            if (NActors::TMon* mon = AppData()->Mon) {
+                NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+                mon->RegisterActorPage(actorsMonPage, "kqp_spilling_file", "KQP Local File Spilling Service", false,
+                    TlsActivationContext->ExecutorThread.ActorSystem, SpillingService);
+            }
         }
 
         // Create compile service
@@ -1580,7 +1597,7 @@ private:
 
 IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, 
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,

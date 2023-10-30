@@ -116,7 +116,8 @@ public:
 
     NYql::NDqProto::TPrepareResponse Prepare() override {
         NYql::NDqProto::TPrepareResponse ret;
-        Runner->Prepare(Task, DefaultMemoryLimits());
+        TDqTaskRunnerExecutionContextDefault ctx;
+        Runner->Prepare(Task, DefaultMemoryLimits(), ctx);
         return ret;
     }
 

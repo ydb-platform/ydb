@@ -1,23 +1,20 @@
-#include "kqp_spilling.h"
-#include "kqp_spilling_file.h"
+#include "spilling.h"
+#include "spilling_file.h"
 
-#include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/mon/mon.h>
-
+#include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/actors/core/events.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/thread/pool.h>
 
-namespace NKikimr::NKqp {
+namespace NYql::NDq {
 
 using namespace NActors;
 
@@ -26,31 +23,31 @@ namespace {
 // Read, write, and execute by owner only
 constexpr int DIR_MODE = S_IRWXU;
 
-#define LOG_D(s) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_BLOBS_STORAGE, s)
-#define LOG_I(s) LOG_INFO_S(*TlsActivationContext,  NKikimrServices::KQP_BLOBS_STORAGE, s)
-#define LOG_E(s) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_BLOBS_STORAGE, s)
-#define LOG_C(s) LOG_CRIT_S(*TlsActivationContext,  NKikimrServices::KQP_BLOBS_STORAGE, s)
+#define LOG_D(s) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
+#define LOG_I(s) LOG_INFO_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, s)
+#define LOG_E(s) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
+#define LOG_C(s) LOG_CRIT_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, s)
 
-#define A_LOG_D(s) LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_BLOBS_STORAGE, s)
-#define A_LOG_E(s) LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_BLOBS_STORAGE, s)
+#define A_LOG_D(s) LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_COMPUTE, s)
+#define A_LOG_E(s) LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_COMPUTE, s)
 
 #define REMOVE_FILES 1
 
 // Local File Storage Events
-struct TEvKqpSpillingLocalFile {
+struct TEvDqSpillingLocalFile {
     enum EEv {
-        EvOpenFile = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        EvOpenFile = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvCloseFile,
 
         LastEvent = EvCloseFile
     };
 
     struct TEvOpenFile : public TEventLocal<TEvOpenFile, EvOpenFile> {
-        ui64 TxId;
+        TTxId TxId;
         TString Description; // for viewer & logs only
         bool RemoveBlobsAfterRead;
 
-        TEvOpenFile(ui64 txId, const TString& description, bool removeBlobsAfterRead)
+        TEvOpenFile(TTxId txId, const TString& description, bool removeBlobsAfterRead)
             : TxId(txId), Description(description), RemoveBlobsAfterRead(removeBlobsAfterRead) {}
     };
 
@@ -66,101 +63,102 @@ struct TEvKqpSpillingLocalFile {
 
 // It is a simple proxy between client and spilling service with one feature --
 // it provides human-readable description for logs and viewer.
-class TKqpLocalFileSpillingActor : public TActorBootstrapped<TKqpLocalFileSpillingActor> {
+class TDqLocalFileSpillingActor : public TActorBootstrapped<TDqLocalFileSpillingActor> {
 public:
-    TKqpLocalFileSpillingActor(ui64 txId, const TString& details, const TActorId& client, bool removeBlobsAfterRead)
-        : TxId(txId)
-        , Details(details)
-        , ClientActorId(client)
-        , RemoveBlobsAfterRead(removeBlobsAfterRead) {}
+    TDqLocalFileSpillingActor(TTxId txId, const TString& details, const TActorId& client, bool removeBlobsAfterRead)
+        : TxId_(txId)
+        , Details_(details)
+        , ClientActorId_(client)
+        , RemoveBlobsAfterRead_(removeBlobsAfterRead)
+    {}
 
     void Bootstrap() {
-        ServiceActorId = MakeKqpLocalFileSpillingServiceID(SelfId().NodeId());
-        YQL_ENSURE(ServiceActorId);
+        ServiceActorId_ = MakeDqLocalFileSpillingServiceID(SelfId().NodeId());
+        YQL_ENSURE(ServiceActorId_);
 
-        LOG_D("Register LocalFileSpillingActor " << SelfId() << " at service " << ServiceActorId);
-        Send(ServiceActorId, new TEvKqpSpillingLocalFile::TEvOpenFile(TxId, Details, RemoveBlobsAfterRead));
+        LOG_D("Register LocalFileSpillingActor " << SelfId() << " at service " << ServiceActorId_);
+        Send(ServiceActorId_, new TEvDqSpillingLocalFile::TEvOpenFile(TxId_, Details_, RemoveBlobsAfterRead_));
 
-        Become(&TKqpLocalFileSpillingActor::WorkState);
+        Become(&TDqLocalFileSpillingActor::WorkState);
     }
 
-    static constexpr char ActorName[] = "KQP_LOCAL_FILE_SPILLING";
+    static constexpr char ActorName[] = "DQ_LOCAL_FILE_SPILLING";
 
 private:
     STRICT_STFUNC(WorkState,
-        hFunc(TEvKqpSpilling::TEvWrite, HandleWork)
-        hFunc(TEvKqpSpilling::TEvWriteResult, HandleWork)
-        hFunc(TEvKqpSpilling::TEvRead, HandleWork)
-        hFunc(TEvKqpSpilling::TEvReadResult, HandleWork)
-        hFunc(TEvKqpSpilling::TEvError, HandleWork)
+        hFunc(TEvDqSpilling::TEvWrite, HandleWork)
+        hFunc(TEvDqSpilling::TEvWriteResult, HandleWork)
+        hFunc(TEvDqSpilling::TEvRead, HandleWork)
+        hFunc(TEvDqSpilling::TEvReadResult, HandleWork)
+        hFunc(TEvDqSpilling::TEvError, HandleWork)
         hFunc(TEvents::TEvPoison, HandleWork)
     );
 
-    void HandleWork(TEvKqpSpilling::TEvWrite::TPtr& ev) {
+    void HandleWork(TEvDqSpilling::TEvWrite::TPtr& ev) {
         ValidateSender(ev->Sender);
 
-        Send(ServiceActorId, ev->Release().Release());
+        Send(ServiceActorId_, ev->Release().Release());
     }
 
-    void HandleWork(TEvKqpSpilling::TEvWriteResult::TPtr& ev) {
-        if (!Send(ClientActorId, ev->Release().Release())) {
+    void HandleWork(TEvDqSpilling::TEvWriteResult::TPtr& ev) {
+        if (!Send(ClientActorId_, ev->Release().Release())) {
             ClientLost();
         }
     }
 
-    void HandleWork(TEvKqpSpilling::TEvRead::TPtr& ev) {
+    void HandleWork(TEvDqSpilling::TEvRead::TPtr& ev) {
         ValidateSender(ev->Sender);
 
-        Send(ServiceActorId, ev->Release().Release());
+        Send(ServiceActorId_, ev->Release().Release());
     }
 
-    void HandleWork(TEvKqpSpilling::TEvReadResult::TPtr& ev) {
-        if (!Send(ClientActorId, ev->Release().Release())) {
+    void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {
+        if (!Send(ClientActorId_, ev->Release().Release())) {
             ClientLost();
         }
     }
 
-    void HandleWork(TEvKqpSpilling::TEvError::TPtr& ev) {
-        Send(ClientActorId, ev->Release().Release());
+    void HandleWork(TEvDqSpilling::TEvError::TPtr& ev) {
+        Send(ClientActorId_, ev->Release().Release());
     }
 
     void HandleWork(TEvents::TEvPoison::TPtr& ev) {
         ValidateSender(ev->Sender);
 
-        Send(ServiceActorId, new TEvKqpSpillingLocalFile::TEvCloseFile);
+        Send(ServiceActorId_, new TEvDqSpillingLocalFile::TEvCloseFile);
         PassAway();
     }
 
 private:
     void ValidateSender(const TActorId& sender) {
-        YQL_ENSURE(ClientActorId == sender, "" << ClientActorId << " != " << sender);
+        YQL_ENSURE(ClientActorId_ == sender, "" << ClientActorId_ << " != " << sender);
     }
 
     void ClientLost() {
-        Send(ServiceActorId, new TEvKqpSpillingLocalFile::TEvCloseFile("Client lost"));
+        Send(ServiceActorId_, new TEvDqSpillingLocalFile::TEvCloseFile("Client lost"));
         PassAway();
     }
 
 private:
-    const ui64 TxId;
-    const TString Details;
-    const TActorId ClientActorId;
-    const bool RemoveBlobsAfterRead;
-    TActorId ServiceActorId;
+    const TTxId TxId_;
+    const TString Details_;
+    const TActorId ClientActorId_;
+    const bool RemoveBlobsAfterRead_;
+    TActorId ServiceActorId_;
 };
 
-class TKqpLocalFileSpillingService : public TActorBootstrapped<TKqpLocalFileSpillingService> {
+class TDqLocalFileSpillingService : public TActorBootstrapped<TDqLocalFileSpillingService> {
 private:
     struct TEvPrivate {
         enum EEv {
-            EvCloseFileResponse = TEvKqpSpillingLocalFile::EEv::LastEvent + 1,
+            EvCloseFileResponse = TEvDqSpillingLocalFile::EEv::LastEvent + 1,
             EvWriteFileResponse,
             EvReadFileResponse,
 
             LastEvent
         };
 
-        static_assert(EEv::LastEvent - EventSpaceBegin(TKikimrEvents::ES_PRIVATE) < 16);
+        static_assert(EEv::LastEvent - EventSpaceBegin(TEvents::ES_PRIVATE) < 16);
 
         struct TEvCloseFileResponse : public TEventLocal<TEvCloseFileResponse, EvCloseFileResponse> {
             TActorId Client;
@@ -192,58 +190,54 @@ private:
     using TFilesIt = __yhashtable_iterator<std::pair<const TActorId, TFileDesc>>;
 
 public:
-    TKqpLocalFileSpillingService(const NKikimrConfig::TTableServiceConfig::TSpillingServiceConfig::TLocalFileConfig& config,
-        TIntrusivePtr<TKqpCounters> counters)
-        : Config(config)
-        , Counters(counters)
+    TDqLocalFileSpillingService(const TFileSpillingServiceConfig& config,
+        TIntrusivePtr<TSpillingCounters> counters)
+        : Config_(config)
+        , Counters_(counters)
     {
-        IoThreadPool = CreateThreadPool(Config.GetIoThreadPool().GetWorkersCount(),
-            Config.GetIoThreadPool().GetQueueSize(), IThreadPool::TParams().SetThreadNamePrefix("KqpSpilling"));
+        IoThreadPool_ = CreateThreadPool(Config_.IoThreadPoolWorkersCount,
+            Config_.IoThreadPoolQueueSize, IThreadPool::TParams().SetThreadNamePrefix("DqSpilling"));
     }
 
     void Bootstrap() {
-        Root = Config.GetRoot();
-        Root /= (TStringBuilder() << "node_" << SelfId().NodeId());
+        Root_ = Config_.Root;
+        Root_ /= (TStringBuilder() << "node_" << SelfId().NodeId());
 
-        LOG_I("Init KQP local file spilling service at " << Root << ", actor: " << SelfId());
+        LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
 
         try {
-            if (Root.IsSymlink()) {
-                throw TIoException() << Root << " is a symlink, can not start Spilling Service";
+            if (Root_.IsSymlink()) {
+                throw TIoException() << Root_ << " is a symlink, can not start Spilling Service";
             }
-            Root.ForceDelete();
-            Root.MkDirs(DIR_MODE);
+            Root_.ForceDelete();
+            Root_.MkDirs(DIR_MODE);
         } catch (...) {
             LOG_E(CurrentExceptionMessage());
-            Become(&TKqpLocalFileSpillingService::BrokenState);
+            Become(&TDqLocalFileSpillingService::BrokenState);
             return;
         }
 
-        NActors::TMon* mon = AppData()->Mon;
-        if (mon) {
-            NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(actorsMonPage, "kqp_spilling_file", "KQP Local File Spilling Service", false,
-                TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
-        }
-
-        Become(&TKqpLocalFileSpillingService::WorkState);
+        Become(&TDqLocalFileSpillingService::WorkState);
     }
 
-    static constexpr char ActorName[] = "KQP_LOCAL_FILE_SPILLING_SERVICE";
+    static constexpr char ActorName[] = "DQ_LOCAL_FILE_SPILLING_SERVICE";
 
 protected:
     void PassAway() override {
-        IoThreadPool->Stop();
+        IoThreadPool_->Stop();
         IActor::PassAway();
+        if (Config_.CleanupOnShutdown) {
+            Root_.ForceDelete();
+        }
     }
 
 private:
     STATEFN(BrokenState) {
         switch (ev->GetTypeRewrite()) {
-            case TEvKqpSpillingLocalFile::TEvOpenFile::EventType:
-            case TEvKqpSpillingLocalFile::TEvCloseFile::EventType:
-            case TEvKqpSpilling::TEvWrite::EventType:
-            case TEvKqpSpilling::TEvRead::EventType: {
+            case TEvDqSpillingLocalFile::TEvOpenFile::EventType:
+            case TEvDqSpillingLocalFile::TEvCloseFile::EventType:
+            case TEvDqSpilling::TEvWrite::EventType:
+            case TEvDqSpilling::TEvRead::EventType: {
                 HandleBroken(ev->Sender);
                 break;
             }
@@ -256,7 +250,7 @@ private:
 
     void HandleBroken(const TActorId& from) {
         LOG_E("Service is broken, send error to client " << from);
-        Send(from, new TEvKqpSpilling::TEvError("Service not started"));
+        Send(from, new TEvDqSpilling::TEvError("Service not started"));
     }
 
     void HandleBroken(NMon::TEvHttpInfo::TPtr& ev) {
@@ -265,43 +259,43 @@ private:
 
 private:
     STRICT_STFUNC(WorkState,
-        hFunc(TEvKqpSpillingLocalFile::TEvOpenFile, HandleWork)
-        hFunc(TEvKqpSpillingLocalFile::TEvCloseFile, HandleWork)
+        hFunc(TEvDqSpillingLocalFile::TEvOpenFile, HandleWork)
+        hFunc(TEvDqSpillingLocalFile::TEvCloseFile, HandleWork)
         hFunc(TEvPrivate::TEvCloseFileResponse, HandleWork)
-        hFunc(TEvKqpSpilling::TEvWrite, HandleWork)
+        hFunc(TEvDqSpilling::TEvWrite, HandleWork)
         hFunc(TEvPrivate::TEvWriteFileResponse, HandleWork)
-        hFunc(TEvKqpSpilling::TEvRead, HandleWork)
+        hFunc(TEvDqSpilling::TEvRead, HandleWork)
         hFunc(TEvPrivate::TEvReadFileResponse, HandleWork)
         hFunc(NMon::TEvHttpInfo, HandleWork)
         cFunc(TEvents::TEvPoison::EventType, PassAway)
     );
 
-    void HandleWork(TEvKqpSpillingLocalFile::TEvOpenFile::TPtr& ev) {
+    void HandleWork(TEvDqSpillingLocalFile::TEvOpenFile::TPtr& ev) {
         auto& msg = *ev->Get();
         LOG_D("[OpenFile] TxId: " << msg.TxId << ", desc: " << msg.Description << ", from: " << ev->Sender
             << ", removeBlobsAfterRead: " << msg.RemoveBlobsAfterRead);
 
-        auto it = Files.find(ev->Sender);
-        if (it != Files.end()) {
+        auto it = Files_.find(ev->Sender);
+        if (it != Files_.end()) {
             LOG_E("[OpenFile] Can not open file: already exists. TxId: " << msg.TxId << ", desc: " << msg.Description);
 
-            Send(ev->Sender, new TEvKqpSpilling::TEvError("File already exists"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File already exists"));
             return;
         }
 
-        auto& fd = Files[ev->Sender];
+        auto& fd = Files_[ev->Sender];
         fd.TxId = msg.TxId;
         fd.Description = std::move(msg.Description);
         fd.RemoveBlobsAfterRead = msg.RemoveBlobsAfterRead;
         fd.OpenAt = TInstant::Now();
     }
 
-    void HandleWork(TEvKqpSpillingLocalFile::TEvCloseFile::TPtr& ev) {
+    void HandleWork(TEvDqSpillingLocalFile::TEvCloseFile::TPtr& ev) {
         auto& msg = *ev->Get();
         LOG_D("[CloseFile] from: " << ev->Sender << ", error: " << msg.Error);
 
-        auto it = Files.find(ev->Sender);
-        if (it == Files.end()) {
+        auto it = Files_.find(ev->Sender);
+        if (it == Files_.end()) {
             LOG_E("[CloseFile] Can not close file: not found. From: " << ev->Sender << ", error: " << msg.Error);
             return;
         }
@@ -342,8 +336,8 @@ private:
         auto& msg = *ev->Get();
         LOG_D("[CloseFileResponse] from: " << msg.Client);
 
-        auto it = Files.find(msg.Client);
-        if (it == Files.end()) {
+        auto it = Files_.find(msg.Client);
+        if (it == Files_.end()) {
             LOG_E("[CloseFileResponse] Can not find file from: " << msg.Client);
             return;
         }
@@ -353,22 +347,22 @@ private:
             blobs += fp.Blobs.size();
         }
 
-        Counters->SpillingStoredBlobs->Sub(blobs);
-        Counters->SpillingTotalSpaceUsed->Sub(it->second.TotalSize);
+        Counters_->SpillingStoredBlobs->Sub(blobs);
+        Counters_->SpillingTotalSpaceUsed->Sub(it->second.TotalSize);
 
         MoveFileToClosed(it);
     }
 
-    void HandleWork(TEvKqpSpilling::TEvWrite::TPtr& ev) {
+    void HandleWork(TEvDqSpilling::TEvWrite::TPtr& ev) {
         auto& msg = *ev->Get();
         LOG_D("[Write] from: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
 
-        auto it = Files.find(ev->Sender);
-        if (it == Files.end()) {
+        auto it = Files_.find(ev->Sender);
+        if (it == Files_.end()) {
             LOG_E("[Write] File not found. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
 
-            Send(ev->Sender, new TEvKqpSpilling::TEvError("File not found"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"));
             return;
         }
 
@@ -378,37 +372,37 @@ private:
             LOG_E("[Write] File already closed. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
 
-            Send(ev->Sender, new TEvKqpSpilling::TEvError("File already closed"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File already closed"));
             return;
         }
 
-        if (fd.TotalSize + msg.Blob.size() > Config.GetMaxFileSize()) {
+        if (Config_.MaxFileSize && fd.TotalSize + msg.Blob.size() > Config_.MaxFileSize) {
             LOG_E("[Write] File size limit exceeded. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
 
-            Send(ev->Sender, new TEvKqpSpilling::TEvError("File size limit exceeded"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File size limit exceeded"));
 
-            Counters->SpillingTooBigFileErrors->Inc();
+            Counters_->SpillingTooBigFileErrors->Inc();
             return;
         }
 
-        if (TotalSize + msg.Blob.size() > Config.GetMaxTotalSize()) {
+        if (Config_.MaxTotalSize && TotalSize_ + msg.Blob.size() > Config_.MaxTotalSize) {
             LOG_E("[Write] Total size limit exceeded. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.size());
 
-            Send(ev->Sender, new TEvKqpSpilling::TEvError("Total size limit exceeded"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("Total size limit exceeded"));
 
-            Counters->SpillingNoSpaceErrors->Inc();
+            Counters_->SpillingNoSpaceErrors->Inc();
             return;
         }
 
         fd.TotalSize += msg.Blob.size();
-        TotalSize += msg.Blob.size();
+        TotalSize_ += msg.Blob.size();
 
         TFileDesc::TFilePart* fp = fd.PartsList.empty() ? nullptr : &fd.PartsList.back();
 
         bool newFile = false;
-        if (!fp || (fd.RemoveBlobsAfterRead && (fp->Size + msg.Blob.size() > Config.GetMaxFilePartSize()))) {
+        if (!fp || (fd.RemoveBlobsAfterRead && (Config_.MaxFilePartSize && fp->Size + msg.Blob.size() > Config_.MaxFilePartSize))) {
             if (!fd.PartsList.empty()) {
                 fd.PartsList.back().Last = false;
             }
@@ -418,7 +412,7 @@ private:
             fd.Parts.emplace(msg.BlobId, fp);
 
             auto fname = TStringBuilder() << fd.TxId << "_" << fd.Description << "_" << fd.NextPartListIndex++;
-            fp->FileName = (Root / fname).GetPath();
+            fp->FileName = (Root_ / fname).GetPath();
 
             LOG_D("[Write] create new FilePart " << fp->FileName);
             newFile = true;
@@ -448,12 +442,12 @@ private:
         auto& msg = *ev->Get();
         LOG_D("[WriteFileResponse] from: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
-        auto it = Files.find(msg.Client);
-        if (it == Files.end()) {
+        auto it = Files_.find(msg.Client);
+        if (it == Files_.end()) {
             LOG_E("[WriteFileResponse] Can not write file: not found. "
                 << "From: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
-            Send(ev->Sender, new TEvKqpSpilling::TEvError("Internal error"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"));
             return;
         }
 
@@ -472,8 +466,8 @@ private:
 
             fd.TotalWriteBytes += blobDesc.Size;
 
-            Counters->SpillingStoredBlobs->Inc();
-            Counters->SpillingTotalSpaceUsed->Add(blobDesc.Size);
+            Counters_->SpillingStoredBlobs->Inc();
+            Counters_->SpillingTotalSpaceUsed->Add(blobDesc.Size);
 
             if (msg.NewFileHandle) {
                 fp->FileHandle.Swap(msg.NewFileHandle);
@@ -484,32 +478,32 @@ private:
                 fd.Error = "File part not found";
             }
 
-            Counters->SpillingIoErrors->Inc();
+            Counters_->SpillingIoErrors->Inc();
         }
 
         if (fd.Error) {
-            Send(msg.Client, new TEvKqpSpilling::TEvError(*fd.Error));
+            Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error));
 
             fd.Ops.clear();
             CloseFile(it, fd.Error);
             return;
         }
 
-        Counters->SpillingWriteBlobs->Inc();
+        Counters_->SpillingWriteBlobs->Inc();
 
-        Send(msg.Client, new TEvKqpSpilling::TEvWriteResult(msg.BlobId));
+        Send(msg.Client, new TEvDqSpilling::TEvWriteResult(msg.BlobId));
         RunNextOp(fd);
     }
 
-    void HandleWork(TEvKqpSpilling::TEvRead::TPtr& ev) {
+    void HandleWork(TEvDqSpilling::TEvRead::TPtr& ev) {
         auto& msg = *ev->Get();
         LOG_D("[Read] from: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-        auto it = Files.find(ev->Sender);
-        if (it == Files.end()) {
+        auto it = Files_.find(ev->Sender);
+        if (it == Files_.end()) {
             LOG_E("[Read] Can not read file: not found. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvKqpSpilling::TEvError("File not found"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"));
             return;
         }
 
@@ -518,7 +512,7 @@ private:
         if (fd.CloseAt) {
             LOG_E("[Read] Can not read file: closed. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvKqpSpilling::TEvError("Closed"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("Closed"));
             return;
         }
 
@@ -526,7 +520,7 @@ private:
         if (partIt == fd.Parts.end()) {
             LOG_E("[Read] Can not read file: part not found. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvKqpSpilling::TEvError("File part not found"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File part not found"));
 
             fd.Ops.clear();
             TMaybe<TString> err = "Part not found";
@@ -540,7 +534,7 @@ private:
         if (blobIt == fp->Blobs.end()) {
             LOG_E("[Read] Can not read file: blob not found in the part. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvKqpSpilling::TEvError("Blob not found in the file part"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("Blob not found in the file part"));
 
             fd.Ops.clear();
             TMaybe<TString> err = "Blob not found in the file part";
@@ -581,12 +575,12 @@ private:
         LOG_D("[ReadFileResponse] from: " << msg.Client << ", blobId: " << msg.BlobId << ", removed: " << msg.Removed
             << ", error: " << msg.Error);
 
-        auto it = Files.find(msg.Client);
-        if (it == Files.end()) {
+        auto it = Files_.find(msg.Client);
+        if (it == Files_.end()) {
             LOG_E("[ReadFileResponse] Can not read file: not found. "
                 << "From: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
-            Send(ev->Sender, new TEvKqpSpilling::TEvError("Internal error"));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"));
             return;
         }
 
@@ -606,10 +600,10 @@ private:
 
             if (msg.Removed) {
                 fd.TotalSize -= fp->Size;
-                TotalSize -= fp->Size;
+                TotalSize_ -= fp->Size;
 
-                Counters->SpillingTotalSpaceUsed->Sub(fp->Size);
-                Counters->SpillingStoredBlobs->Sub(fp->Blobs.size());
+                Counters_->SpillingTotalSpaceUsed->Sub(fp->Size);
+                Counters_->SpillingStoredBlobs->Sub(fp->Blobs.size());
 
                 fd.Parts.erase(msg.BlobId);
                 fd.PartsList.remove_if([fp](const auto& x) { return &x == fp; });
@@ -621,40 +615,40 @@ private:
         }
 
         if (fd.Error) {
-            Send(msg.Client, new TEvKqpSpilling::TEvError(*fd.Error));
+            Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error));
 
             fd.Ops.clear();
             CloseFile(it, fd.Error);
             return;
         }
 
-        Counters->SpillingReadBlobs->Inc();
+        Counters_->SpillingReadBlobs->Inc();
 
-        Send(msg.Client, new TEvKqpSpilling::TEvReadResult(msg.BlobId, std::move(msg.Blob)));
+        Send(msg.Client, new TEvDqSpilling::TEvReadResult(msg.BlobId, std::move(msg.Blob)));
         RunNextOp(fd);
     }
 
     void HandleWork(NMon::TEvHttpInfo::TPtr& ev) {
         TStringStream s;
 
-        TMap<ui64, TVector<const TFileDesc*>> byTx;
-        for (const auto& fd : Files) {
+        TMap<TTxId, TVector<const TFileDesc*>> byTx;
+        for (const auto& fd : Files_) {
             byTx[fd.second.TxId].push_back(&fd.second);
         }
 
         HTML(s) {
             TAG(TH2) { s << "Configuration"; }
             PRE() {
-                s << "  - Root: " << Config.GetRoot() << Endl;
-                s << "  - MaxTotalSize: " << Config.GetMaxTotalSize() << Endl;
-                s << "  - MaxFileSize: " << Config.GetMaxFileSize() << Endl;
-                s << "  - MaxFilePartSize: " << Config.GetMaxFilePartSize() << Endl;
-                s << "  - IO thread pool, workers: " << Config.GetIoThreadPool().GetWorkersCount()
-                    << ", queue: " << Config.GetIoThreadPool().GetQueueSize() << Endl;
+                s << "  - Root: " << Config_.Root << Endl;
+                s << "  - MaxTotalSize: " << Config_.MaxTotalSize << Endl;
+                s << "  - MaxFileSize: " << Config_.MaxFileSize << Endl;
+                s << "  - MaxFilePartSize: " << Config_.MaxFilePartSize << Endl;
+                s << "  - IO thread pool, workers: " << Config_.IoThreadPoolWorkersCount
+                    << ", queue: " << Config_.IoThreadPoolQueueSize << Endl;
             }
 
             TAG(TH2) { s << "Active files"; }
-            PRE() { s << "Used space: " << TotalSize << Endl; }
+            PRE() { s << "Used space: " << TotalSize_ << Endl; }
 
             for (const auto& tx : byTx) {
                 TAG(TH2) { s << "Transaction " << tx.first; }
@@ -692,7 +686,7 @@ private:
 
             TAG(TH2) { s << "Last closed files"; }
             UL() {
-                for (auto it = ClosedFiles.rbegin(); it != ClosedFiles.rend(); ++it) {
+                for (auto it = ClosedFiles_.rbegin(); it != ClosedFiles_.rend(); ++it) {
                     auto& fd = *it;
                     LI() { s << "Transaction: " << fd.TxId << ", " << fd.Description; }
                     PRE() {
@@ -720,7 +714,7 @@ private:
         } else {
             fd.HasActiveOp = true;
             // TODO: retry if fails
-            IoThreadPool->SafeAddAndOwn(std::move(op));
+            IoThreadPool_->SafeAddAndOwn(std::move(op));
         }
     }
 
@@ -736,12 +730,12 @@ private:
     }
 
     void MoveFileToClosed(TFilesIt it) {
-        TotalSize -= it->second.TotalSize;
-        ClosedFiles.emplace_back(TClosedFileDesc(std::move(it->second)));
-        while (ClosedFiles.size() > 100) {
-            ClosedFiles.pop_front();
+        TotalSize_ -= it->second.TotalSize;
+        ClosedFiles_.emplace_back(TClosedFileDesc(std::move(it->second)));
+        while (ClosedFiles_.size() > 100) {
+            ClosedFiles_.pop_front();
         }
-        Files.erase(it);
+        Files_.erase(it);
     }
 
 private:
@@ -870,12 +864,8 @@ private:
     };
 
 private:
-    const NKikimrConfig::TTableServiceConfig::TSpillingServiceConfig::TLocalFileConfig Config;
-    TFsPath Root;
-    TIntrusivePtr<TKqpCounters> Counters;
-
     struct TFileDesc {
-        ui64 TxId = 0;
+        TTxId TxId;
         TString Description;
         bool RemoveBlobsAfterRead = false;
         TInstant OpenAt;
@@ -919,7 +909,7 @@ private:
     };
 
     struct TClosedFileDesc {
-        ui64 TxId;
+        TTxId TxId;
         TString Description;
         bool RemoveBlobsAfterRead;
         TInstant OpenAt;
@@ -940,28 +930,32 @@ private:
             , WaitTime(fd.TotalWaitTime)
             , WriteBytes(fd.TotalWriteBytes)
             , ReadBytes(fd.TotalReadBytes)
-            , Error(std::move(fd.Error)) {}
+            , Error(std::move(fd.Error))
+        {}
     };
 
-    THolder<IThreadPool> IoThreadPool;
-    THashMap<TActorId, TFileDesc> Files;
-    TList<const TClosedFileDesc> ClosedFiles;
-    ui64 TotalSize = 0;
+private:
+    const TFileSpillingServiceConfig Config_;
+    TFsPath Root_;
+    TIntrusivePtr<TSpillingCounters> Counters_;
+
+    THolder<IThreadPool> IoThreadPool_;
+    THashMap<TActorId, TFileDesc> Files_;
+    TList<const TClosedFileDesc> ClosedFiles_;
+    ui64 TotalSize_ = 0;
 };
 
 } // anonymous namespace
 
-IActor* CreateKqpLocalFileSpillingActor(ui64 txId, const TString& details, const TActorId& client,
+IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const TActorId& client,
     bool removeBlobsAfterRead)
 {
-    return new TKqpLocalFileSpillingActor(txId, details, client, removeBlobsAfterRead);
+    return new TDqLocalFileSpillingActor(txId, details, client, removeBlobsAfterRead);
 }
 
-IActor* CreateKqpLocalFileSpillingService(
-    const NKikimrConfig::TTableServiceConfig::TSpillingServiceConfig::TLocalFileConfig& config,
-    TIntrusivePtr<TKqpCounters> counters)
+IActor* CreateDqLocalFileSpillingService(const TFileSpillingServiceConfig& config, TIntrusivePtr<TSpillingCounters> counters)
 {
-    return new TKqpLocalFileSpillingService(config, counters);
+    return new TDqLocalFileSpillingService(config, counters);
 }
 
-} // namespace NKikimr::NKqp
+} // namespace NYql::NDq

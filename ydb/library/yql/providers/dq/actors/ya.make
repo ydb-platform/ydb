@@ -35,6 +35,7 @@ PEERDIR(
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks
+    ydb/library/yql/dq/actors/compute
     ydb/library/yql/utils/failure_injector
     ydb/library/yql/providers/common/metrics
     ydb/library/yql/providers/dq/actors/events

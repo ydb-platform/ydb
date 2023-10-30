@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/library/yql/utils
     ydb/library/yql/dq/actors/compute
+    ydb/library/yql/dq/actors/spilling
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/task_runner

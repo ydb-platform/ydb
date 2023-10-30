@@ -171,15 +171,20 @@ public:
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const = 0;
 };
 
-class TDqTaskRunnerExecutionContext : public IDqTaskRunnerExecutionContext {
+class TDqTaskRunnerExecutionContextBase : public IDqTaskRunnerExecutionContext {
 public:
     IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc,
         const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         TVector<IDqOutput::TPtr>&& outputs) const override;
+};
 
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const override;
+class TDqTaskRunnerExecutionContextDefault : public TDqTaskRunnerExecutionContextBase {
+public:
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/) const override {
+        return {};
+    };
 };
 
 struct TDqTaskRunnerSettings {
@@ -376,7 +381,7 @@ public:
     virtual ui64 GetTaskId() const = 0;
 
     virtual void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext()) = 0;
+        const IDqTaskRunnerExecutionContext& execCtx) = 0;
     virtual ERunStatus Run() = 0;
 
     virtual bool HasEffects() const = 0;

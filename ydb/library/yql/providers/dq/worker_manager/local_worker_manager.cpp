@@ -302,7 +302,8 @@ private:
                         Options.RuntimeData,
                         traceId,
                         Options.TaskRunnerActorFactory,
-                        Options.AsyncIoFactory));
+                        Options.AsyncIoFactory,
+                        Options.UseSpilling));
                 }
                 allocationInfo.WorkerActors.emplace_back(RegisterChild(
                     actor.Release(), createComputeActor ? NYql::NDq::TEvDq::TEvAbortExecution::Unavailable("Aborted by LWM").Release() : nullptr

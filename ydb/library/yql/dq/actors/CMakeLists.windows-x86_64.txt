@@ -8,6 +8,7 @@
 
 add_subdirectory(compute)
 add_subdirectory(protos)
+add_subdirectory(spilling)
 add_subdirectory(task_runner)
 get_built_tool_path(
   TOOL_grpc_cpp_bin

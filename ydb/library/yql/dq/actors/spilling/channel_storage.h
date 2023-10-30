@@ -4,9 +4,9 @@
 #include <ydb/library/yql/dq/runtime/dq_channel_storage.h>
 #include <library/cpp/actors/core/actor.h>
 
-namespace NKikimr::NKqp {
+namespace NYql::NDq {
 
-NYql::NDq::IDqChannelStorage::TPtr CreateKqpChannelStorage(ui64 txId, ui64 channelId,
+NYql::NDq::IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId,
     NYql::NDq::IDqChannelStorage::TWakeUpCallback wakeUpCb, const NActors::TActorContext& ctx);
 
-} // namespace NKikimr::NKqp
+} // namespace NYql::NDq

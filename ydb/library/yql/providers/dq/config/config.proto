@@ -66,6 +66,18 @@ message TDqConfig {
         repeated TAttr Setting = 1;
     }
 
+    message TSpillingSettings {
+        optional string Root = 1 [default = "./spilling"];
+
+        optional uint64 MaxTotalSize = 2;
+        optional uint64 MaxFileSize = 3;
+        optional uint64 MaxFilePartSize = 4;
+
+        optional uint32 IoThreadPoolWorkersCount = 5 [default = 2];
+        optional uint32 IoThreadPoolQueueSize = 6 [default = 1000];
+        optional bool CleanupOnShutdown = 7;
+    }
+
     message TYtBackend {
         optional string ClusterName = 1 [default = "hume"];
         optional string User = 2;      // default -- current user name
@@ -103,6 +115,7 @@ message TDqConfig {
         optional TSolomon Solomon = 30;
         optional bool CanUseComputeActor = 32 [default = false];
         optional bool EnforceJobUtc = 33;
+        optional TSpillingSettings SpillingSettings = 38;
     }
 
     repeated TYtBackend YtBackends = 5;

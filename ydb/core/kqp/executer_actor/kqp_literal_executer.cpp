@@ -66,7 +66,7 @@ TDqTaskRunnerMemoryLimits CreateTaskRunnerMemoryLimits() {
     return memoryLimits;
 }
 
-TDqTaskRunnerExecutionContext CreateTaskRunnerExecutionContext() {
+TDqTaskRunnerExecutionContextDefault CreateTaskRunnerExecutionContext() {
     return {};
 }
 

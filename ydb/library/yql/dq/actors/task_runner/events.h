@@ -158,7 +158,7 @@ struct TEvTaskRunnerCreate
     TEvTaskRunnerCreate(
         const NDqProto::TDqTask& task,
         const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const std::shared_ptr<IDqTaskRunnerExecutionContext>& execCtx = std::shared_ptr<IDqTaskRunnerExecutionContext>(new TDqTaskRunnerExecutionContext()))
+        const std::shared_ptr<IDqTaskRunnerExecutionContext>& execCtx)
         : Task(task)
         , MemoryLimits(memoryLimits)
         , ExecCtx(execCtx)

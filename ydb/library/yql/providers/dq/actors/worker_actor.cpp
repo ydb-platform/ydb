@@ -1,8 +1,8 @@
 #include "worker_actor.h"
 
 #include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/yql/dq/actors/compute/dq_task_runner_exec_ctx.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
-
 #include <ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.h>
 #include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
 
@@ -94,13 +94,15 @@ public:
         const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
         const IDqAsyncIoFactory::TPtr& asyncIoFactory,
         TWorkerRuntimeData* runtimeData,
-        const TString& traceId)
+        const TString& traceId,
+        bool useSpilling)
         : TRichActor<TDqWorker>(&TDqWorker::Handler)
         , AsyncIoFactory(asyncIoFactory)
         , TaskRunnerActorFactory(taskRunnerActorFactory)
         , RuntimeData(runtimeData)
         , TraceId(traceId)
         , MemoryQuotaManager(new TDummyMemoryQuotaManager)
+        , UseSpilling(useSpilling)
     {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         YQL_CLOG(DEBUG, ProviderDq) << "TDqWorker created ";
@@ -258,7 +260,12 @@ private:
         TDqTaskRunnerMemoryLimits limits; // used for local mode only
         limits.ChannelBufferSize = 20_MB;
         limits.OutputChunkMaxSize = 2_MB;
-        Send(TaskRunnerActor, new TEvTaskRunnerCreate(std::move(ev->Get()->Record.GetTask()), limits));
+
+        auto wakeup = [this]{ ResumeExecution(); };
+        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(
+            TraceId, UseSpilling, std::move(wakeup), TlsActivationContext->AsActorContext());
+
+        Send(TaskRunnerActor, new TEvTaskRunnerCreate(std::move(ev->Get()->Record.GetTask()), limits, execCtx));
     }
 
     void OnTaskRunnerCreated(TEvTaskRunnerCreateFinished::TPtr& ev, const TActorContext& ) {
@@ -789,13 +796,15 @@ private:
     TVector<Yql::DqsProto::TWorkerInfo> AllWorkers;
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
+    const bool UseSpilling;
 };
 
 NActors::IActor* CreateWorkerActor(
     TWorkerRuntimeData* runtimeData,
     const TString& traceId,
     const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
-    const IDqAsyncIoFactory::TPtr& asyncIoFactory)
+    const IDqAsyncIoFactory::TPtr& asyncIoFactory,
+    bool useSpilling)
 {
     Y_ABORT_UNLESS(taskRunnerActorFactory);
     return new TLogWrapReceive(
@@ -803,7 +812,8 @@ NActors::IActor* CreateWorkerActor(
             taskRunnerActorFactory,
             asyncIoFactory,
             runtimeData,
-            traceId), traceId);
+            traceId,
+            useSpilling), traceId);
 }
 
 } // namespace NYql::NDqs

@@ -1,16 +1,17 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_event_ids.h>
-#include <ydb/core/protos/config.pb.h>
+#include <ydb/library/yql/dq/actors/dq_events_ids.h>
 
 #include <library/cpp/actors/util/rope.h>
+#include <library/cpp/actors/core/event_local.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/buffer.h>
 
-namespace NKikimr::NKqp {
+namespace NYql::NDq {
 
-struct TEvKqpSpilling {
-    struct TEvWrite : public TEventLocal<TEvWrite, TKqpSpillingEvents::EvWrite> {
+struct TEvDqSpilling {
+    struct TEvWrite : public NActors::TEventLocal<TEvWrite, TDqSpillingEvents::EvWrite> {
         ui64 BlobId;
         TRope Blob;
         TMaybe<TDuration> Timeout;
@@ -19,14 +20,14 @@ struct TEvKqpSpilling {
             : BlobId(blobId), Blob(std::move(blob)), Timeout(timeout) {}
     };
 
-    struct TEvWriteResult : public TEventLocal<TEvWriteResult, TKqpSpillingEvents::EvWriteResult> {
+    struct TEvWriteResult : public NActors::TEventLocal<TEvWriteResult, TDqSpillingEvents::EvWriteResult> {
         ui64 BlobId;
 
         TEvWriteResult(ui64 blobId)
             : BlobId(blobId) {}
     };
 
-    struct TEvRead : public TEventLocal<TEvRead, TKqpSpillingEvents::EvRead> {
+    struct TEvRead : public NActors::TEventLocal<TEvRead, TDqSpillingEvents::EvRead> {
         ui64 BlobId;
         bool RemoveBlob;
         TMaybe<TDuration> Timeout;
@@ -35,7 +36,7 @@ struct TEvKqpSpilling {
             : BlobId(blobId), RemoveBlob(removeBlob), Timeout(timeout) {}
     };
 
-    struct TEvReadResult : public TEventLocal<TEvReadResult, TKqpSpillingEvents::EvReadResult> {
+    struct TEvReadResult : public NActors::TEventLocal<TEvReadResult, TDqSpillingEvents::EvReadResult> {
         ui64 BlobId;
         TBuffer Blob;
 
@@ -43,7 +44,7 @@ struct TEvKqpSpilling {
             : BlobId(blobId), Blob(std::move(blob)) {}
     };
 
-    struct TEvError : public TEventLocal<TEvError, TKqpSpillingEvents::EvError> {
+    struct TEvError : public NActors::TEventLocal<TEvError, TDqSpillingEvents::EvError> {
         TString Message;
 
         TEvError(const TString& message)
@@ -51,4 +52,4 @@ struct TEvKqpSpilling {
     };
 };
 
-} // namespace NKikimr::NKqp
+} // namespace NYql::NDq

@@ -24,11 +24,13 @@ target_link_libraries(dq-actors-compute PUBLIC
   yql-dq-proto
   yql-dq-runtime
   yql-dq-tasks
+  dq-actors-spilling
   minikql-comp_nodes-llvm
   yql-public-issue
   core-quoter-public
 )
 target_sources(dq-actors-compute PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/dq_task_runner_exec_ctx.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/dq_async_compute_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/dq_compute_actor_channels.cpp

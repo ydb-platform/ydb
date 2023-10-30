@@ -33,6 +33,7 @@ target_link_libraries(providers-dq-actors PUBLIC
   yql-dq-proto
   yql-dq-runtime
   yql-dq-tasks
+  dq-actors-compute
   yql-utils-failure_injector
   providers-common-metrics
   dq-actors-events

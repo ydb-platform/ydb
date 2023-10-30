@@ -143,7 +143,8 @@ public:
 
         {
             auto guard = runner->BindAllocator(State->Settings->MemoryLimit.Get().GetOrElse(0));
-            runner->Prepare(runnerSettings, limits);
+            NDq::TDqTaskRunnerExecutionContextDefault execCtx;
+            runner->Prepare(runnerSettings, limits, execCtx);
         }
 
         TVector<NDq::TDqSerializedBatch> rows;
@@ -245,7 +246,12 @@ private:
         } else {
             mode = NDq::EChannelMode::CHANNEL_WIDE_BLOCK;
         }
-        pipeline->Add(NDq::CreateDqBuildPhyStagesTransformer(false, *pipeline->GetTypeAnnotationContext(), mode), "BuildPhy");
+        pipeline->Add(
+            NDq::CreateDqBuildPhyStagesTransformer(
+                State_->Settings->SpillingEngine.Get().GetOrElse(TDqSettings::TDefault::SpillingEngine) != TDqSettings::ESpillingEngine::Disable,
+                *pipeline->GetTypeAnnotationContext(), mode
+            ),
+            "BuildPhy");
         pipeline->Add(NDqs::CreateDqsRewritePhyCallablesTransformer(*pipeline->GetTypeAnnotationContext()), "RewritePhyCallables");
     }
 

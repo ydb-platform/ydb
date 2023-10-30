@@ -20,6 +20,7 @@ target_link_libraries(worker_node PUBLIC
   library-cpp-getopt
   cpp-mapreduce-client
   dq-actors-compute
+  dq-actors-spilling
   yql-dq-comp_nodes
   dq-integration-transform
   yql-dq-transform

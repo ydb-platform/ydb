@@ -1,0 +1,20 @@
+UNITTEST_FOR(ydb/library/yql/dq/actors/spilling)
+
+FORK_SUBTESTS()
+
+SIZE(MEDIUM)
+TIMEOUT(180)
+
+SRCS(
+    spilling_file_ut.cpp
+)
+
+YQL_LAST_ABI_VERSION()
+
+PEERDIR(
+    library/cpp/testing/unittest
+    library/cpp/actors/testlib
+    ydb/library/services
+)
+
+END()

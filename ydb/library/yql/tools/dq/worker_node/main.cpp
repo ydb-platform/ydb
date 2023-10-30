@@ -13,6 +13,7 @@
 #include <library/cpp/digest/md5/md5.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 
 #include <ydb/library/yql/providers/dq/service/interconnect_helpers.h>
 #include <ydb/library/yql/providers/dq/runtime/file_cache.h>
@@ -60,6 +61,7 @@
 #include <util/system/env.h>
 #include <util/system/getpid.h>
 #include <util/system/fs.h>
+#include <util/folder/dirut.h>
 
 constexpr ui32 THREAD_PER_NODE = 8;
 
@@ -403,10 +405,23 @@ int main(int argc, char** argv) {
                 })
             : NTaskRunnerActor::CreateTaskRunnerActorFactory(lwmOptions.Factory, lwmOptions.TaskRunnerInvokerFactory);
         lwmOptions.ComputeActorOwnsCounters = true;
+        lwmOptions.UseSpilling = true;
         auto resman = NDqs::CreateLocalWorkerManager(lwmOptions);
 
         auto workerManagerActorId = actorSystem->Register(resman);
         actorSystem->RegisterLocalService(MakeWorkerManagerActorID(nodeId), workerManagerActorId);
+
+        auto spillingActor = actorSystem->Register(
+            NDq::CreateDqLocalFileSpillingService(
+                NDq::TFileSpillingServiceConfig{
+                    .Root = "./spilling",
+                    .CleanupOnShutdown = true
+                },
+                MakeIntrusive<NDq::TSpillingCounters>(dqSensors)
+            )
+        );
+
+        actorSystem->RegisterLocalService(NDq::MakeDqLocalFileSpillingServiceID(nodeId), spillingActor);
 
         auto endFuture = ShouldContinue.GetFuture();
 

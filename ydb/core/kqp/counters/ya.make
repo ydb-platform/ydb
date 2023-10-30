@@ -10,6 +10,8 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/core/sys_view/service
+    ydb/library/yql/dq/actors/spilling
+    ydb/library/yql/minikql
 )
 
 END()

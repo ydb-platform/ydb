@@ -21,6 +21,7 @@
 #include <ydb/core/ydb_convert/table_profiles.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
@@ -1477,7 +1478,9 @@ public:
                     } else if (f.HasValue()) {
                         TGenericResult result;
                         result.SetStatus(f.GetValue().GetStatus());
-                        result.AddIssue(NYql::TIssue(f.GetValue().GetErrorMessage()));
+                        auto issue = NYql::TIssue{f.GetValue().GetErrorMessage()};
+                        issue.SetCode(f.GetValue().GetStatus(), NYql::TSeverityIds::S_ERROR);
+                        result.AddIssue(issue);
                         return NThreading::MakeFuture<TGenericResult>(result);
                     } else {
                         TGenericResult result;

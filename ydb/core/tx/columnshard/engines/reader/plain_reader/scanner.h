@@ -36,7 +36,6 @@ public:
 class TScanHead {
 private:
     std::shared_ptr<TSpecialReadContext> Context;
-    THashMap<ui32, std::shared_ptr<IDataSource>> SourceByIdx;
     std::map<NIndexedReader::TSortableBatchPosition, TDataSourceEndpoint> BorderPoints;
     std::map<ui32, std::shared_ptr<IDataSource>> CurrentSegments;
     std::optional<NIndexedReader::TSortableBatchPosition> CurrentStart;
@@ -76,11 +75,6 @@ public:
     }
 
     void OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 intervalIdx, TPlainReadData& reader);
-    std::shared_ptr<IDataSource> GetSourceVerified(const ui32 idx) const {
-        auto it = SourceByIdx.find(idx);
-        Y_ABORT_UNLESS(it != SourceByIdx.end());
-        return it->second;
-    }
 
     TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
 

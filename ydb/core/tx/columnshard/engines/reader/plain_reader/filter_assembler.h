@@ -13,10 +13,11 @@ namespace NKikimr::NOlap::NPlainReader {
         using TBase = NColumnShard::IDataTasksProcessor::ITask;
         TPortionInfo::TPreparedBatchData BatchConstructor;
         std::shared_ptr<arrow::RecordBatch> FilteredBatch;
-        const ui32 SourceIdx;
+        const std::shared_ptr<IDataSource> Source;
         TReadMetadata::TConstPtr ReadMetadata;
         std::shared_ptr<NArrow::TColumnFilter> AppliedFilter;
         std::shared_ptr<NArrow::TColumnFilter> EarlyFilter;
+        const TSnapshot RecordsMaxSnapshot;
         ui32 OriginalCount = 0;
         bool AllowEarlyFilter = false;
         std::set<ui32> FilterColumnIds;
@@ -32,15 +33,17 @@ namespace NKikimr::NOlap::NPlainReader {
         }
 
         TAssembleFilter(const NActors::TActorId& scanActorId, TPortionInfo::TPreparedBatchData&& batchConstructor, NOlap::TReadMetadata::TConstPtr readMetadata,
-            const ui32 sourceIdx, const std::set<ui32>& filterColumnIds, const bool useFilter, NColumnShard::TCounterGuard&& taskGuard)
+            const std::shared_ptr<IDataSource>& source, const std::set<ui32>& filterColumnIds, const bool useFilter, NColumnShard::TCounterGuard&& taskGuard, const TSnapshot& recordsMaxSnapshot)
             : TBase(scanActorId)
             , BatchConstructor(batchConstructor)
-            , SourceIdx(sourceIdx)
+            , Source(source)
             , ReadMetadata(readMetadata)
+            , RecordsMaxSnapshot(recordsMaxSnapshot)
             , FilterColumnIds(filterColumnIds)
             , UseFilter(useFilter)
             , TaskGuard(std::move(taskGuard))
         {
+            Y_UNUSED(RecordsMaxSnapshot);
             TBase::SetPriority(TBase::EPriority::Normal);
         }
     };

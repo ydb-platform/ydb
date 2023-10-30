@@ -21,17 +21,17 @@ bool TAssembleBatch::DoExecute() {
     return true;
 }
 
-bool TAssembleFFBatch::DoApply(IDataReader& owner) const {
-    owner.GetMeAs<TPlainReadData>().GetSourceByIdxVerified(SourceIdx).InitFetchStageData(Result);
+bool TAssembleFFBatch::DoApply(IDataReader& /*owner*/) const {
+    Source->InitFetchStageData(Result);
     return true;
 }
 
 TAssembleBatch::TAssembleBatch(const NActors::TActorId& scanActorId, TPortionInfo::TPreparedBatchData&& batchConstructor,
-    const ui32 sourceIdx, const std::shared_ptr<NArrow::TColumnFilter>& filter, NColumnShard::TCounterGuard&& taskGuard)
+    const std::shared_ptr<IDataSource>& source, const std::shared_ptr<NArrow::TColumnFilter>& filter, NColumnShard::TCounterGuard&& taskGuard)
     : TBase(scanActorId)
     , BatchConstructor(batchConstructor)
     , Filter(filter)
-    , SourceIdx(sourceIdx)
+    , Source(source)
     , TaskGuard(std::move(taskGuard))
 {
     TBase::SetPriority(TBase::EPriority::High);

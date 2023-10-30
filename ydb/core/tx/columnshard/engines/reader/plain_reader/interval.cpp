@@ -5,77 +5,56 @@
 
 namespace NKikimr::NOlap::NPlainReader {
 
-bool TFetchingInterval::IsExclusiveInterval() const {
-    return TBase::IsExclusiveInterval(Sources.size());
-}
-
-class TEmptyMergeTask: public NColumnShard::IDataTasksProcessor::ITask, public TMergingContext {
+class TMergeTask: public NColumnShard::IDataTasksProcessor::ITask {
 private:
     using TBase = NColumnShard::IDataTasksProcessor::ITask;
-protected:
-    virtual bool DoApply(NOlap::IDataReader& indexedDataRead) const override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoApply")("interval_idx", IntervalIdx);
-        auto& reader = static_cast<TPlainReadData&>(indexedDataRead);
-        reader.MutableScanner().OnIntervalResult(nullptr, IntervalIdx, reader);
-        return true;
-    }
-    virtual bool DoExecute() override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExecute")("interval_idx", IntervalIdx);
-        return true;
-    }
-public:
-    virtual TString GetTaskClassIdentifier() const override {
-        return "CS::MERGE_RESULT::EMPTY";
-    }
-
-    TEmptyMergeTask(const TMergingContext& context, const TActorId& scanActorId)
-        : TBase(scanActorId)
-        , TMergingContext(context)
-    {
-
-    }
-
-};
-
-class TMergeTask: public NColumnShard::IDataTasksProcessor::ITask, public TMergingContext {
-private:
-    using TBase = NColumnShard::IDataTasksProcessor::ITask;
-    std::shared_ptr<NIndexedReader::TMergePartialStream> Merger;
     std::shared_ptr<arrow::RecordBatch> ResultBatch;
     const NColumnShard::TCounterGuard Guard;
-    const ui32 OriginalSourcesCount;
     std::shared_ptr<TSpecialReadContext> Context;
+    std::map<ui32, std::shared_ptr<IDataSource>> Sources;
+    std::shared_ptr<TMergingContext> MergingContext;
+    const ui32 IntervalIdx;
 protected:
     virtual bool DoApply(NOlap::IDataReader& indexedDataRead) const override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoApply")("interval_idx", IntervalIdx);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoApply")("interval_idx", MergingContext->GetIntervalIdx());
         auto& reader = static_cast<TPlainReadData&>(indexedDataRead);
-        if (Merger->GetSourcesCount() == 1 && ResultBatch) {
-            auto batch = NArrow::ExtractColumnsValidate(ResultBatch, reader.GetSpecialReadContext()->GetResultFieldNames());
-            AFL_VERIFY(batch);
-            reader.MutableScanner().OnIntervalResult(batch, IntervalIdx, reader);
-        } else {
-            reader.MutableScanner().OnIntervalResult(ResultBatch, IntervalIdx, reader);
-        }
+        reader.MutableScanner().OnIntervalResult(ResultBatch, IntervalIdx, reader);
         return true;
     }
     virtual bool DoExecute() override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExecute")("interval_idx", IntervalIdx);
-        Merger->SkipToLowerBound(Start, IncludeStart);
-        if (Merger->GetSourcesCount() == 1) {
-            ResultBatch = Merger->SingleSourceDrain(Finish, IncludeFinish);
+        std::shared_ptr<NIndexedReader::TMergePartialStream> merger = Context->BuildMerger();
+        for (auto&& [_, i] : Sources) {
+            if (auto rb = i->GetBatch()) {
+                merger->AddSource(rb, i->GetFilterStageData().GetNotAppliedEarlyFilter());
+            }
+        }
+        AFL_VERIFY(merger->GetSourcesCount() <= Sources.size());
+        const ui32 originalSourcesCount = Sources.size();
+        Sources.clear();
+
+        if (merger->GetSourcesCount() == 0) {
+            ResultBatch = nullptr;
+            return true;
+        }
+
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExecute")("interval_idx", MergingContext->GetIntervalIdx());
+        merger->SkipToLowerBound(MergingContext->GetStart(), MergingContext->GetIncludeStart());
+        if (merger->GetSourcesCount() == 1) {
+            ResultBatch = merger->SingleSourceDrain(MergingContext->GetFinish(), MergingContext->GetIncludeFinish());
             if (ResultBatch) {
-                if (IsExclusiveInterval(1)) {
+                if (MergingContext->IsExclusiveInterval(1)) {
                     Context->GetCommonContext()->GetCounters().OnNoScanInterval(ResultBatch->num_rows());
                 } else {
                     Context->GetCommonContext()->GetCounters().OnLogScanInterval(ResultBatch->num_rows());
                 }
+                Y_ABORT_UNLESS(ResultBatch->schema()->Equals(Context->GetResultSchema()));
             }
-            if (IncludeFinish && OriginalSourcesCount == 1) {
-                Y_ABORT_UNLESS(Merger->IsEmpty());
+            if (MergingContext->GetIncludeFinish() && originalSourcesCount == 1) {
+                Y_ABORT_UNLESS(merger->IsEmpty());
             }
         } else {
             auto rbBuilder = std::make_shared<NIndexedReader::TRecordBatchBuilder>(Context->GetResultFields());
-            Merger->DrainCurrentTo(*rbBuilder, Finish, IncludeFinish);
+            merger->DrainCurrentTo(*rbBuilder, MergingContext->GetFinish(), MergingContext->GetIncludeFinish());
             Context->GetCommonContext()->GetCounters().OnLinearScanInterval(rbBuilder->GetRecordsCount());
             ResultBatch = rbBuilder->Finalize();
         }
@@ -86,14 +65,13 @@ public:
         return "CS::MERGE_RESULT";
     }
 
-    TMergeTask(const std::shared_ptr<NIndexedReader::TMergePartialStream>& merger,
-        const TMergingContext& context, const std::shared_ptr<TSpecialReadContext>& readContext, const ui32 sourcesCount)
+    TMergeTask(std::shared_ptr<TMergingContext>&& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext, std::map<ui32, std::shared_ptr<IDataSource>>&& sources)
         : TBase(readContext->GetCommonContext()->GetScanActorId())
-        , TMergingContext(context)
-        , Merger(merger)
         , Guard(readContext->GetCommonContext()->GetCounters().GetMergeTasksGuard())
-        , OriginalSourcesCount(sourcesCount)
         , Context(readContext)
+        , Sources(std::move(sources))
+        , MergingContext(std::move(mergingContext))
+        , IntervalIdx(MergingContext->GetIntervalIdx())
     {
     }
 };
@@ -105,23 +83,11 @@ void TFetchingInterval::ConstructResult() {
     } else {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "start_construct_result")("interval_idx", IntervalIdx);
     }
-    AFL_VERIFY(!ResultConstructionInProgress)("interval_idx", IntervalIdx);
-    ResultConstructionInProgress = true;
-    auto merger = Context->BuildMerger();
-    for (auto&& [_, i] : Sources) {
-        if (auto rb = i->GetBatch()) {
-            merger->AddSource(rb, i->GetFilterStageData().GetNotAppliedEarlyFilter());
-        }
+    if (AtomicCas(&ResultConstructionInProgress, 1, 0)) {
+        auto task = std::make_shared<TMergeTask>(std::move(MergingContext), Context, std::move(Sources));
+        task->SetPriority(NConveyor::ITask::EPriority::High);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     }
-    AFL_VERIFY(merger->GetSourcesCount() <= Sources.size());
-    std::shared_ptr<NConveyor::ITask> task;
-    if (merger->GetSourcesCount() == 0) {
-        task = std::make_shared<TEmptyMergeTask>(*this, Context->GetCommonContext()->GetScanActorId());
-    } else {
-        task = std::make_shared<TMergeTask>(merger, *this, Context, Sources.size());
-    }
-    task->SetPriority(NConveyor::ITask::EPriority::High);
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
 }
 
 void TFetchingInterval::OnInitResourcesGuard(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
@@ -145,11 +111,12 @@ void TFetchingInterval::OnSourceFilterStageReady(const ui32 /*sourceIdx*/) {
 TFetchingInterval::TFetchingInterval(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
     const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
     const bool includeFinish, const bool includeStart)
-    : TBase(start, finish, intervalIdx, includeFinish, includeStart)
-    , TTaskBase(0, context->GetMemoryForSources(sources, TBase::IsExclusiveInterval(sources.size())), "", context->GetCommonContext()->GetResourcesTaskContext())
+    : TTaskBase(0, context->GetMemoryForSources(sources, TMergingContext::IsExclusiveInterval(sources.size(), includeStart, includeFinish)), "", context->GetCommonContext()->GetResourcesTaskContext())
+    , MergingContext(std::make_shared<TMergingContext>(start, finish, intervalIdx, includeFinish, includeStart))
     , Context(context)
     , TaskGuard(Context->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
     , Sources(sources)
+    , IntervalIdx(intervalIdx)
 {
     Y_ABORT_UNLESS(Sources.size());
     for (auto&& [_, i] : Sources) {
@@ -159,10 +126,10 @@ TFetchingInterval::TFetchingInterval(const NIndexedReader::TSortableBatchPositio
 
 void TFetchingInterval::DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("interval_idx", IntervalIdx)("event", "resources_allocated")
-        ("resources", guard->DebugString())("start", IncludeStart)("finish", IncludeFinish)("sources", Sources.size());
+        ("resources", guard->DebugString())("start", MergingContext->GetIncludeStart())("finish", MergingContext->GetIncludeFinish())("sources", Sources.size());
     OnInitResourcesGuard(guard);
     for (auto&& [_, i] : Sources) {
-        i->InitFetchingPlan(Context->GetColumnsFetchingPlan(IsExclusiveInterval()));
+        i->InitFetchingPlan(Context->GetColumnsFetchingPlan(MergingContext->IsExclusiveInterval(Sources.size())), i);
     }
 }
 

@@ -51,9 +51,9 @@ bool TAssembleFilter::DoExecute() {
     return true;
 }
 
-bool TAssembleFilter::DoApply(IDataReader& owner) const {
+bool TAssembleFilter::DoApply(IDataReader& /*owner*/) const {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
-    owner.GetMeAs<TPlainReadData>().GetSourceByIdxVerified(SourceIdx).InitFilterStageData(AppliedFilter, EarlyFilter, FilteredBatch);
+    Source->InitFilterStageData(AppliedFilter, EarlyFilter, FilteredBatch, Source);
     return true;
 }
 

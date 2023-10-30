@@ -48,10 +48,6 @@ public:
         return SpecialReadContext;
     }
 
-    IDataSource& GetSourceByIdxVerified(const ui32 sourceIdx) {
-        return *Scanner->GetSourceVerified(sourceIdx);
-    }
-
     const TScanHead& GetScanner() const {
         return *Scanner;
     }

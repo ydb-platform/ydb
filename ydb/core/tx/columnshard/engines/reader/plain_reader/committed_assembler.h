@@ -13,7 +13,7 @@ private:
     using TBase = NColumnShard::IDataTasksProcessor::ITask;
     TString BlobData;
     TReadMetadata::TConstPtr ReadMetadata;
-    const ui32 SourceIdx;
+    const std::shared_ptr<IDataSource> Source;
     ui64 SchemaVersion;
     TSnapshot DataSnapshot;
 
@@ -28,7 +28,7 @@ public:
         return "PlainReader::TCommittedAssembler";
     }
 
-    TCommittedAssembler(const NActors::TActorId& scanActorId, const TString& blobData, const TReadMetadata::TConstPtr& readMetadata, const ui32 sourceIdx,
+    TCommittedAssembler(const NActors::TActorId& scanActorId, const TString& blobData, const TReadMetadata::TConstPtr& readMetadata, const std::shared_ptr<IDataSource>& source,
         const TCommittedBlob& cBlob, NColumnShard::TCounterGuard&& taskGuard);
 };
 }

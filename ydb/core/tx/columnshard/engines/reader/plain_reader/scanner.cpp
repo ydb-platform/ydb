@@ -8,11 +8,6 @@ namespace NKikimr::NOlap::NPlainReader {
 void TScanHead::OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& newBatch, const ui32 intervalIdx, TPlainReadData& reader) {
     auto itInterval = FetchingIntervals.find(intervalIdx);
     AFL_VERIFY(itInterval != FetchingIntervals.end());
-    for (auto&& [sourceIdx, source] : itInterval->second->GetSources()) {
-        if (source->OnIntervalFinished(intervalIdx)) {
-            SourceByIdx.erase(sourceIdx);
-        }
-    }
     if (!Context->GetCommonContext()->GetReadMetadata()->IsSorted()) {
         reader.OnIntervalResult(newBatch, itInterval->second->GetResourcesGuard());
         AFL_VERIFY(FetchingIntervals.erase(intervalIdx));
@@ -49,7 +44,6 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
         auto source = sources.front();
         BorderPoints[source->GetStart()].AddStart(source);
         BorderPoints[source->GetFinish()].AddFinish(source);
-        SourceByIdx.emplace(source->GetSourceIdx(), source);
         sources.pop_front();
     }
 

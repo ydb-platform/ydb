@@ -13,27 +13,26 @@ bool TCommittedAssembler::DoExecute() {
     return true;
 }
 
-bool TCommittedAssembler::DoApply(IDataReader& owner) const {
-    auto& source = owner.GetMeAs<TPlainReadData>().GetSourceByIdxVerified(SourceIdx);
-    if (source.GetFetchingPlan().GetFilterStage()->GetSchema()) {
-        source.InitFilterStageData(nullptr, EarlyFilter, NArrow::ExtractColumns(ResultBatch, source.GetFetchingPlan().GetFilterStage()->GetSchema(), true));
+bool TCommittedAssembler::DoApply(IDataReader& /*owner*/) const {
+    if (Source->GetFetchingPlan().GetFilterStage()->GetSchema()) {
+        Source->InitFilterStageData(nullptr, EarlyFilter, NArrow::ExtractColumns(ResultBatch, Source->GetFetchingPlan().GetFilterStage()->GetSchema(), true), Source);
     } else {
-        source.InitFilterStageData(nullptr, EarlyFilter, nullptr);
+        Source->InitFilterStageData(nullptr, EarlyFilter, nullptr, Source);
     }
-    if (source.GetFetchingPlan().GetFetchingStage()->GetSchema()) {
-        source.InitFetchStageData(NArrow::ExtractColumns(ResultBatch, source.GetFetchingPlan().GetFetchingStage()->GetSchema(), true));
+    if (Source->GetFetchingPlan().GetFetchingStage()->GetSchema()) {
+        Source->InitFetchStageData(NArrow::ExtractColumns(ResultBatch, Source->GetFetchingPlan().GetFetchingStage()->GetSchema(), true));
     } else {
-        source.InitFetchStageData(nullptr);
+        Source->InitFetchStageData(nullptr);
     }
     return true;
 }
 
-TCommittedAssembler::TCommittedAssembler(const NActors::TActorId& scanActorId, const TString& blobData, const TReadMetadata::TConstPtr& readMetadata, const ui32 sourceIdx,
+TCommittedAssembler::TCommittedAssembler(const NActors::TActorId& scanActorId, const TString& blobData, const TReadMetadata::TConstPtr& readMetadata, const std::shared_ptr<IDataSource>& source,
     const TCommittedBlob& cBlob, NColumnShard::TCounterGuard&& taskGuard)
     : TBase(scanActorId)
     , BlobData(blobData)
     , ReadMetadata(readMetadata)
-    , SourceIdx(sourceIdx)
+    , Source(source)
     , SchemaVersion(cBlob.GetSchemaVersion())
     , DataSnapshot(cBlob.GetSnapshot())
     , TaskGuard(std::move(taskGuard))

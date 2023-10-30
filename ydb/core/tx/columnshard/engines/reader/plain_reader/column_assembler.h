@@ -14,8 +14,8 @@ private:
     TPortionInfo::TPreparedBatchData BatchConstructor;
     std::shared_ptr<NArrow::TColumnFilter> Filter;
 protected:
+    std::shared_ptr<IDataSource> Source;
     std::shared_ptr<arrow::RecordBatch> Result;
-    const ui32 SourceIdx;
     const NColumnShard::TCounterGuard TaskGuard;
     virtual bool DoExecute() override;
 public:
@@ -24,7 +24,7 @@ public:
     }
 
     TAssembleBatch(const NActors::TActorId& scanActorId, TPortionInfo::TPreparedBatchData&& batchConstructor,
-        const ui32 sourceIdx, const std::shared_ptr<NArrow::TColumnFilter>& filter, NColumnShard::TCounterGuard&& taskGuard);
+        const std::shared_ptr<IDataSource>& source, const std::shared_ptr<NArrow::TColumnFilter>& filter, NColumnShard::TCounterGuard&& taskGuard);
 };
 
 class TAssembleFFBatch: public TAssembleBatch {

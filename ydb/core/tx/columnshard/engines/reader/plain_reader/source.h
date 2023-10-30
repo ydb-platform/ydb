@@ -39,16 +39,12 @@ protected:
 
     TAtomic FilterStageFlag = 0;
 
-    virtual void DoStartFilterStage() = 0;
-    virtual void DoStartFetchStage() = 0;
+    virtual void DoStartFilterStage(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
+    virtual void DoStartFetchStage(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
     virtual void DoAbort() = 0;
 public:
     void IncIntervalsCount() {
         ++IntervalsCount;
-    }
-
-    bool IsFinished() const {
-        return Intervals.empty();
     }
 
     virtual ui64 GetRawBytes(const std::set<ui32>& columnIds) const = 0;
@@ -99,9 +95,10 @@ public:
         return *FilterStageData;
     }
 
-    void InitFetchingPlan(const TFetchingPlan& fetchingPlan);
+    void InitFetchingPlan(const TFetchingPlan& fetchingPlan, const std::shared_ptr<IDataSource>& sourcePtr);
 
-    void InitFilterStageData(const std::shared_ptr<NArrow::TColumnFilter>& appliedFilter, const std::shared_ptr<NArrow::TColumnFilter>& earlyFilter, const std::shared_ptr<arrow::RecordBatch>& batch);
+    void InitFilterStageData(const std::shared_ptr<NArrow::TColumnFilter>& appliedFilter, const std::shared_ptr<NArrow::TColumnFilter>& earlyFilter, const std::shared_ptr<arrow::RecordBatch>& batch
+        , const std::shared_ptr<IDataSource>& sourcePtr);
     void InitFetchStageData(const std::shared_ptr<arrow::RecordBatch>& batch);
 
     void RegisterInterval(TFetchingInterval* interval);
@@ -132,8 +129,8 @@ private:
         const std::shared_ptr<IBlobsReadingAction>& readingAction, THashMap<TBlobRange, ui32>& nullBlocks,
         const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
-    virtual void DoStartFilterStage() override;
-    virtual void DoStartFetchStage() override;
+    virtual void DoStartFilterStage(const std::shared_ptr<IDataSource>& sourcePtr) override;
+    virtual void DoStartFetchStage(const std::shared_ptr<IDataSource>& sourcePtr) override;
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
@@ -170,17 +167,17 @@ private:
     bool ReadStarted = false;
     bool ResultReady = false;
 
-    void DoFetch();
+    void DoFetch(const std::shared_ptr<IDataSource>& sourcePtr);
     virtual void DoAbort() override {
 
     }
 
-    virtual void DoStartFilterStage() override {
-        DoFetch();
+    virtual void DoStartFilterStage(const std::shared_ptr<IDataSource>& sourcePtr) override {
+        DoFetch(sourcePtr);
     }
 
-    virtual void DoStartFetchStage() override {
-        DoFetch();
+    virtual void DoStartFetchStage(const std::shared_ptr<IDataSource>& sourcePtr) override {
+        DoFetch(sourcePtr);
     }
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;

@@ -32,12 +32,12 @@ TPortionInfo::TPreparedBatchData TAssembleColumnsTaskConstructor::BuildBatchAsse
 
 void TEFTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     NConveyor::TScanServiceOperator::SendTaskToExecute(std::make_shared<TAssembleFilter>(Context->GetCommonContext()->GetScanActorId(), BuildBatchAssembler(),
-        Context->GetReadMetadata(), SourceIdx, ColumnIds, UseEarlyFilter, Context->GetCommonContext()->GetCounters().GetAssembleTasksGuard()));
+        Context->GetReadMetadata(), Source, ColumnIds, UseEarlyFilter, Context->GetCommonContext()->GetCounters().GetAssembleTasksGuard(), PortionInfo->RecordSnapshotMax()));
 }
 
 void TFFColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     NConveyor::TScanServiceOperator::SendTaskToExecute(std::make_shared<TAssembleFFBatch>(Context->GetCommonContext()->GetScanActorId(), BuildBatchAssembler(),
-        SourceIdx, AppliedFilter, Context->GetCommonContext()->GetCounters().GetAssembleTasksGuard()));
+        Source, AppliedFilter, Context->GetCommonContext()->GetCounters().GetAssembleTasksGuard()));
 }
 
 void TCommittedColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
@@ -45,7 +45,7 @@ void TCommittedColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NReso
     Y_ABORT_UNLESS(NullBlocks.size() == 0);
     Y_ABORT_UNLESS(blobs.size() == 1);
     NConveyor::TScanServiceOperator::SendTaskToExecute(std::make_shared<TCommittedAssembler>(Context->GetCommonContext()->GetScanActorId(), blobs.begin()->second,
-        Context->GetReadMetadata(), SourceIdx, CommittedBlob, Context->GetCommonContext()->GetCounters().GetAssembleTasksGuard()));
+        Context->GetReadMetadata(), Source, CommittedBlob, Context->GetCommonContext()->GetCounters().GetAssembleTasksGuard()));
 }
 
 bool IFetchTaskConstructor::DoOnError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {

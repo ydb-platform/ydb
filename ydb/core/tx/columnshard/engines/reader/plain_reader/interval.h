@@ -9,14 +9,18 @@ class TScanHead;
 
 class TMergingContext {
 protected:
-    NIndexedReader::TSortableBatchPosition Start;
-    NIndexedReader::TSortableBatchPosition Finish;
-    const bool IncludeFinish = true;
-    const bool IncludeStart = false;
-    ui32 IntervalIdx = 0;
+    YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Start);
+    YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Finish);
+    YDB_READONLY(bool, IncludeFinish, true);
+    YDB_READONLY(bool, IncludeStart, false);
+    YDB_READONLY(ui32, IntervalIdx, 0);
 public:
     bool IsExclusiveInterval(const ui32 sourcesCount) const {
-        return IncludeFinish && IncludeStart && sourcesCount == 1;
+        return IsExclusiveInterval(sourcesCount, IncludeStart, IncludeFinish);
+    }
+
+    static bool IsExclusiveInterval(const ui32 sourcesCount, const bool includeStart, const bool includeFinish) {
+        return includeFinish && includeStart && sourcesCount == 1;
     }
 
     TMergingContext(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
@@ -29,27 +33,39 @@ public:
 
     }
 
-    ui32 GetIntervalIdx() const {
-        return IntervalIdx;
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("start", Start.DebugJson());
+        result.InsertValue("idx", IntervalIdx);
+        result.InsertValue("finish", Finish.DebugJson());
+        result.InsertValue("include_finish", IncludeFinish);
+        return result;
     }
+
 };
 
-class TFetchingInterval: public TMergingContext, public TNonCopyable, public NResourceBroker::NSubscribe::ITask {
+class TFetchingInterval: public TNonCopyable, public NResourceBroker::NSubscribe::ITask {
 private:
     using TTaskBase = NResourceBroker::NSubscribe::ITask;
-    using TBase = TMergingContext;
-    bool ResultConstructionInProgress = false;
+    std::shared_ptr<TMergingContext> MergingContext;
+    TAtomic ResultConstructionInProgress = 0;
     std::shared_ptr<TSpecialReadContext> Context;
     NColumnShard::TCounterGuard TaskGuard;
     std::map<ui32, std::shared_ptr<IDataSource>> Sources;
-
-    bool IsExclusiveInterval() const;
     void ConstructResult();
 
     IDataSource& GetSourceVerified(const ui32 idx) {
         auto it = Sources.find(idx);
         Y_ABORT_UNLESS(it != Sources.end());
         return *it->second;
+    }
+
+    std::shared_ptr<IDataSource> ExtractSourceVerified(const ui32 idx) {
+        auto it = Sources.find(idx);
+        Y_ABORT_UNLESS(it != Sources.end());
+        auto result = it->second;
+        Sources.erase(it);
+        return result;
     }
 
     bool IsSourcesReady() {
@@ -61,10 +77,15 @@ private:
         return true;
     }
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+    const ui32 IntervalIdx;
 protected:
     virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) override;
 
 public:
+    ui32 GetIntervalIdx() const {
+        return IntervalIdx;
+    }
+
     const std::map<ui32, std::shared_ptr<IDataSource>>& GetSources() const {
         return Sources;
     }
@@ -81,14 +102,11 @@ public:
 
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
-        result.InsertValue("start", Start.DebugJson());
-        result.InsertValue("idx", IntervalIdx);
-        result.InsertValue("finish", Finish.DebugJson());
+        result.InsertValue("merging_context", MergingContext ? MergingContext->DebugJson() : "");
         auto& jsonSources = result.InsertValue("sources", NJson::JSON_ARRAY);
         for (auto&& [_, i] : Sources) {
             jsonSources.AppendValue(i->DebugJson());
         }
-        result.InsertValue("include_finish", IncludeFinish);
         return result;
     }
 

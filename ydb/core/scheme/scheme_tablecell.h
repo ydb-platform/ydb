@@ -96,7 +96,7 @@ public:
     template<typename T, typename = TStdLayout<T>>
     T AsValue() const noexcept
     {
-        Y_ABORT_UNLESS(sizeof(T) == Size(), "AsValue<T>() type size %" PRIu64 " doesn't match TCell size %" PRIu32, sizeof(T), Size());
+        Y_ABORT_UNLESS(sizeof(T) == Size(), "AsValue<T>() type size %" PRISZT " doesn't match TCell size %" PRIu32, sizeof(T), Size());
 
         return ReadUnaligned<T>(Data());
     }
@@ -104,7 +104,7 @@ public:
     template <typename T, typename = TStdLayout<T>>
     bool ToValue(T& value, TString& err) const noexcept {
         if (sizeof(T) != Size()) {
-            err = Sprintf("ToValue<T>() type size %" PRIu64 " doesn't match TCell size %" PRIu32, sizeof(T), Size());
+            err = Sprintf("ToValue<T>() type size %" PRISZT " doesn't match TCell size %" PRIu32, sizeof(T), Size());
             return false;
         }
 

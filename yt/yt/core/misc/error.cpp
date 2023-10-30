@@ -606,14 +606,14 @@ TError TError::Sanitize() const
 
 const TString InnerErrorsTruncatedKey("inner_errors_truncated");
 
-TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit) const &
+TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<TStringBuf>& attributeWhitelist) const &
 {
     if (!Impl_) {
         return TError();
     }
 
-    auto truncateInnerError = [=] (const TError& innerError) {
-        return innerError.Truncate(maxInnerErrorCount, stringLimit);
+    auto truncateInnerError = [=, &attributeWhitelist] (const TError& innerError) {
+        return innerError.Truncate(maxInnerErrorCount, stringLimit, attributeWhitelist);
     };
 
     auto truncateString = [stringLimit] (TString string) {
@@ -623,10 +623,12 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit) const &
         return string;
     };
 
-    auto truncateAttributes = [stringLimit] (const IAttributeDictionary& attributes) {
+    auto truncateAttributes = [stringLimit, &attributeWhitelist] (const IAttributeDictionary& attributes) {
         auto truncatedAttributes = CreateEphemeralAttributes();
         for (const auto& key : attributes.ListKeys()) {
-            if (const auto& value = attributes.FindYson(key); std::ssize(value.AsStringBuf()) > stringLimit) {
+            const auto& value = attributes.FindYson(key);
+
+            if (std::ssize(value.AsStringBuf()) > stringLimit && !attributeWhitelist.contains(key)) {
                 truncatedAttributes->SetYson(
                     key,
                     BuildYsonStringFluently()
@@ -663,14 +665,14 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit) const &
     return TError(std::move(result));
 }
 
-TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit) &&
+TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<TStringBuf>& attributeWhitelist) &&
 {
     if (!Impl_) {
         return TError();
     }
 
-    auto truncateInnerError = [=] (TError& innerError) {
-        innerError = std::move(innerError).Truncate(maxInnerErrorCount, stringLimit);
+    auto truncateInnerError = [=, &attributeWhitelist] (TError& innerError) {
+        innerError = std::move(innerError).Truncate(maxInnerErrorCount, stringLimit, attributeWhitelist);
     };
 
     auto truncateString = [stringLimit] (TString* string) {
@@ -679,9 +681,9 @@ TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit) &&
         }
     };
 
-    auto truncateAttributes = [stringLimit] (IAttributeDictionary* attributes) {
+    auto truncateAttributes = [stringLimit, &attributeWhitelist] (IAttributeDictionary* attributes) {
         for (const auto& key : attributes->ListKeys()) {
-            if (std::ssize(attributes->FindYson(key).AsStringBuf()) > stringLimit) {
+            if (std::ssize(attributes->FindYson(key).AsStringBuf()) > stringLimit && !attributeWhitelist.contains(key)) {
                 attributes->SetYson(
                     key,
                     BuildYsonStringFluently()

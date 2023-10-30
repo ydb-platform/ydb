@@ -147,6 +147,84 @@ TEST(TErrorTest, TruncateLargeRValue)
     EXPECT_EQ("Fourth inn...<message truncated>", truncatedError.InnerErrors()[2].GetMessage());
 }
 
+TEST(TErrorTest, TruncateWhitelist)
+{
+    auto error = TError("Some error");
+    error.MutableAttributes()->Set("attr1", "Some long long attr");
+    error.MutableAttributes()->Set("attr2", "Some long long attr");
+
+    THashSet<TStringBuf> myWhitelist = {"attr2"};
+
+    auto truncatedError = error.Truncate(2, 10, myWhitelist);
+
+    EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
+    EXPECT_EQ(error.GetMessage(), truncatedError.GetMessage());
+
+    EXPECT_EQ("...<attribute truncated>...", truncatedError.Attributes().Get<TString>("attr1"));
+    EXPECT_EQ("Some long long attr", truncatedError.Attributes().Get<TString>("attr2"));
+}
+
+TEST(TErrorTest, TruncateWhitelistRValue)
+{
+    auto error = TError("Some error");
+    error.MutableAttributes()->Set("attr1", "Some long long attr");
+    error.MutableAttributes()->Set("attr2", "Some long long attr");
+
+    THashSet<TStringBuf> myWhitelist = {"attr2"};
+
+    auto errorCopy = error;
+    auto truncatedError = std::move(errorCopy).Truncate(2, 10, myWhitelist);
+    EXPECT_TRUE(errorCopy.IsOK());
+
+    EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
+    EXPECT_EQ(error.GetMessage(), truncatedError.GetMessage());
+
+    EXPECT_EQ("...<attribute truncated>...", truncatedError.Attributes().Get<TString>("attr1"));
+    EXPECT_EQ("Some long long attr", truncatedError.Attributes().Get<TString>("attr2"));
+}
+
+TEST(TErrorTest, TruncateWhitelistInnerErrors)
+{
+    auto innerError = TError("Inner error");
+    innerError.MutableAttributes()->Set("attr1", "Some long long attr");
+    innerError.MutableAttributes()->Set("attr2", "Some long long attr");
+
+    auto error = TError("Error") << innerError;
+
+    THashSet<TStringBuf> myWhitelist = {"attr2"};
+
+    auto truncatedError = error.Truncate(2, 20, myWhitelist);
+    EXPECT_EQ(truncatedError.InnerErrors().size(), 1u);
+
+    auto truncatedInnerError = truncatedError.InnerErrors()[0];
+    EXPECT_EQ(truncatedInnerError.GetCode(), innerError.GetCode());
+    EXPECT_EQ(truncatedInnerError.GetMessage(), innerError.GetMessage());
+    EXPECT_EQ("...<attribute truncated>...", truncatedInnerError.Attributes().Get<TString>("attr1"));
+    EXPECT_EQ("Some long long attr", truncatedInnerError.Attributes().Get<TString>("attr2"));
+}
+
+TEST(TErrorTest, TruncateWhitelistInnerErrorsRValue)
+{
+    auto innerError = TError("Inner error");
+    innerError.MutableAttributes()->Set("attr1", "Some long long attr");
+    innerError.MutableAttributes()->Set("attr2", "Some long long attr");
+
+    auto error = TError("Error") << innerError;
+
+    THashSet<TStringBuf> myWhitelist = {"attr2"};
+
+    auto errorCopy = error;
+    auto truncatedError = std::move(errorCopy).Truncate(2, 20, myWhitelist);
+    EXPECT_TRUE(errorCopy.IsOK());
+    EXPECT_EQ(truncatedError.InnerErrors().size(), 1u);
+
+    auto truncatedInnerError = truncatedError.InnerErrors()[0];
+    EXPECT_EQ(truncatedInnerError.GetCode(), innerError.GetCode());
+    EXPECT_EQ(truncatedInnerError.GetMessage(), innerError.GetMessage());
+    EXPECT_EQ("...<attribute truncated>...", truncatedInnerError.Attributes().Get<TString>("attr1"));
+    EXPECT_EQ("Some long long attr", truncatedInnerError.Attributes().Get<TString>("attr2"));
+}
+
 TEST(TErrorTest, YTExceptionToError)
 {
     try {

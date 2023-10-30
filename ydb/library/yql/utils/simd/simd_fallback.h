@@ -193,7 +193,7 @@ struct TBase8Numeric: TBase8<T> {
             ui64 mask = 15;
             if (!((1ULL << (j + 7)) & other.Value)) {
                 ui64 index = (other.Value >> j) & mask;
-                dst.Value |= (this->Value & (mask_byte << (index * 8)));
+                dst.Value |= ((this->Value & (mask_byte << (index * 8))) >> index * 8) << i * 8;
             }
         }
         return dst;
@@ -354,6 +354,24 @@ struct TSimd8<ui8>: TBase8Numeric<ui8> {
     }
     inline bool AnyBitsSetAnywhere(TSimd8<ui8> bits) const {
         return !BitsNotSetAnywhere(bits);
+    }
+
+    template<int N>
+    inline TSimd8<ui8> Shr() const {
+        return (this->Value >> N) & ui8(0xFFu >> N);
+    }
+    template<int N>
+    inline TSimd8<ui8> Shl() const {
+        return (this->Value << N) & ui8(0xFFu << N);
+    }
+
+    template<int N>
+    inline int GetBit() const {
+        int result = 0;
+        for (size_t i = 0; i < 8; i += 1) {
+            result |= ((this->Value >> (i * 8 + N)) & 1) << i;
+        }
+        return result;
     }
 };
 

@@ -1260,11 +1260,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(SysTabletsNode)
     {
-        TTestEnvOpts opt(6);
-        opt.VDisks = 0;
-
-        TCmsTestEnv env(opt);
-
+        TCmsTestEnv env(TTestEnvOpts(6 /* nodes */, 0 /* vdisks */));
         env.EnableSysNodeChecking();
 
         env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
@@ -1279,6 +1275,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         TFakeNodeWhiteboardService::Info[env.GetNodeId(2)].Connected = false;
         env.RestartCms();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
 
         env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));

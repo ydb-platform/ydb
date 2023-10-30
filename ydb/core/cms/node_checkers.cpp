@@ -154,14 +154,17 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
             << ", down nodes: " << DownNodesCount);
 
     switch (nodeState) {
+        case NODE_STATE_UP:
+            break;
         case NODE_STATE_UNSPECIFIED:
         case NODE_STATE_LOCKED:
         case NODE_STATE_RESTART:
             reason = TStringBuilder() << "Cannot lock node '" << nodeId << "'"
                 << ": node state: '" << nodeState << "'";
             return false;
-        default:
-            break;
+        case NODE_STATE_DOWN:
+            // Allow to maintain down/unavailable node
+            return true;
     }
 
     const auto tabletNodes = NodeToState.size();

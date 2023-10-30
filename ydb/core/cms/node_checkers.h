@@ -132,7 +132,7 @@ public:
  */
 class TSysTabletsNodesCounter : public TNodesCounterBase {
 private:
-    NKikimrConfig::TBootstrap::ETabletType TabletType;
+    const NKikimrConfig::TBootstrap::ETabletType TabletType;
 
 public:
     explicit TSysTabletsNodesCounter(NKikimrConfig::TBootstrap::ETabletType tabletType)

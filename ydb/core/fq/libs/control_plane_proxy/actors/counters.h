@@ -170,6 +170,7 @@ enum ERequestTypeCommon {
     RTC_DELETE_CONNECTION_IN_YDB,
     RTC_DELETE_BINDING_IN_YDB,
     RTC_CREATE_COMPUTE_DATABASE,
+    RTC_LIST_CPS_ENTITY,
     RTC_MAX,
 };
 
@@ -226,6 +227,7 @@ class TCounters : public virtual TThrRefBase {
         {MakeIntrusive<TRequestCommonCounters>("DeleteConnectionInYDB")},
         {MakeIntrusive<TRequestCommonCounters>("DeleteBindingInYDB")},
         {MakeIntrusive<TRequestCommonCounters>("CreateComputeDatabase")},
+        {MakeIntrusive<TRequestCommonCounters>("ListCPSEntities")},
     });
 
     TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};

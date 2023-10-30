@@ -569,6 +569,57 @@ private:
         return issues;
     }
 
+    template<class TProxyRequest, class TProxyResponse, class TProbe>
+    void ValidationFailedHandler(typename TProxyRequest::TPtr ev,
+                                 const NYql::TIssues& issues,
+                                 TRequestCounters& requestCounters,
+                                 const TInstant& startTime,
+                                 const TProbe& probe,
+                                 const TString& requestName) {
+        CPS_LOG_E(requestName << ", validation failed: " << ev->Get()->Scope << " "
+                              << ev->Get()->User << " "
+                              << NKikimr::MaskTicket(ev->Get()->Token) << " "
+                              << ev->Get()->Request.DebugString()
+                              << " error: " << issues.ToString());
+        Send(ev->Sender, new TProxyResponse(issues, ev->Get()->SubjectType), 0, ev->Cookie);
+        requestCounters.IncError();
+        TDuration delta = TInstant::Now() - startTime;
+        requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
+        probe(delta, false, false);
+    }
+
+    template<class TProxyRequest, class TProxyResponse, class TProbe>
+    bool ValidateNameUniquenessConstraint(typename TProxyRequest::TPtr& ev,
+                                          TRequestCounters& requestCounters,
+                                          const TInstant& startTime,
+                                          const TProbe& probe,
+                                          const TString& requestName) {
+        bool entityWithSameNameExists = ev->Get()->EntityWithSameNameType.Defined();
+        if (entityWithSameNameExists) {
+            TString errorMessage;
+            switch (*ev->Get()->EntityWithSameNameType) {
+                case TEvControlPlaneProxy::EEntityType::Connection:
+                    errorMessage =
+                        "Connection with the same name already exists. Please choose another name";
+                    break;
+
+                case TEvControlPlaneProxy::EEntityType::Binding:
+                    errorMessage =
+                        "Binding with the same name already exists. Please choose another name";
+                    break;
+            }
+
+            ValidationFailedHandler<TProxyRequest, TProxyResponse>(
+                std::move(ev),
+                NYql::TIssues{NYql::TIssue{errorMessage}},
+                requestCounters,
+                startTime,
+                probe,
+                requestName);
+        }
+        return !entityWithSameNameExists;
+    }
+
     void Handle(TEvControlPlaneProxy::TEvCreateQueryRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
         FederatedQuery::CreateQueryRequest request = ev->Get()->Request;
@@ -1340,7 +1391,33 @@ private:
 
         static const TPermissions availablePermissions {
             TPermissions::TPermission::MANAGE_PUBLIC
+            | TPermissions::TPermission::VIEW_PUBLIC
         };
+
+        if (isYDBOperationEnabled) {
+            if (!ev->Get()->ConnectionsWithSameNameWereListed) {
+                Register(MakeListConnectionIdsActor(ControlPlaneProxyActorId(),
+                                                    ev,
+                                                    Counters,
+                                                    Config.RequestTimeout,
+                                                    availablePermissions));
+                return;
+            }
+            if (!ev->Get()->BindingWithSameNameWereListed) {
+                Register(MakeListBindingIdsActor(ControlPlaneProxyActorId(),
+                                                 ev,
+                                                 Counters,
+                                                 Config.RequestTimeout,
+                                                 availablePermissions));
+                return;
+            }
+            if (!ValidateNameUniquenessConstraint<
+                    TEvControlPlaneProxy::TEvCreateConnectionRequest,
+                    TEvControlPlaneProxy::TEvCreateConnectionResponse>(
+                    ev, requestCounters, startTime, probe, "TEvCreateConnectionRequest")) {
+                return;
+            }
+        }
 
         if (isYDBOperationEnabled) {
             if (!ev->Get()->YDBClient) {
@@ -1928,13 +2005,37 @@ private:
         static const TPermissions availablePermissions {
             TPermissions::TPermission::VIEW_PUBLIC
             | TPermissions::TPermission::MANAGE_PUBLIC
-            | TPermissions::TPermission::MANAGE_PRIVATE
         };
 
-        if (Config.ComputeConfig.IsYDBSchemaOperationsEnabled(
-                ev->Get()->Scope,
-                ev->Get()->Request.content().setting().binding_case()) &&
-            !ydbOperationWasPerformed) {
+        bool isYDBOperationEnabled = Config.ComputeConfig.IsYDBSchemaOperationsEnabled(
+            ev->Get()->Scope,
+            ev->Get()->Request.content().setting().binding_case());
+
+        if (isYDBOperationEnabled) {
+            if (!ev->Get()->ConnectionsWithSameNameWereListed) {
+                Register(MakeListConnectionIdsActor(ControlPlaneProxyActorId(),
+                                                    ev,
+                                                    Counters,
+                                                    Config.RequestTimeout,
+                                                    availablePermissions));
+                return;
+            }
+            if (!ev->Get()->BindingWithSameNameWereListed) {
+                Register(MakeListBindingIdsActor(ControlPlaneProxyActorId(),
+                                                 ev,
+                                                 Counters,
+                                                 Config.RequestTimeout,
+                                                 availablePermissions));
+                return;
+            }
+            if (!ValidateNameUniquenessConstraint<TEvControlPlaneProxy::TEvCreateBindingRequest,
+                                                  TEvControlPlaneProxy::TEvCreateBindingResponse>(
+                    ev, requestCounters, startTime, probe, "TEvCreateBindingRequest")) {
+                return;
+            }
+        }
+
+        if (isYDBOperationEnabled && !ydbOperationWasPerformed) {
             if (!ev->Get()->ConnectionContent) {
                 auto permissions = ExtractPermissions(ev, availablePermissions);
                 Register(MakeDiscoverYDBConnectionContentActor(ControlPlaneProxyActorId(),

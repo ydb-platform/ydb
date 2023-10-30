@@ -300,6 +300,8 @@ struct TEvControlPlaneProxy {
                                        EventType>::TBaseControlPlaneRequest;
     };
 
+    enum class EEntityType : ui8 { Connection, Binding };
+
     template<>
     struct TControlPlaneRequest<FederatedQuery::CreateConnectionRequest,
                                 EvCreateConnectionRequest> :
@@ -311,6 +313,9 @@ struct TEvControlPlaneProxy {
             FederatedQuery::CreateConnectionRequest,
             EvCreateConnectionRequest>::TBaseControlPlaneRequest;
 
+        TMaybe<EEntityType> EntityWithSameNameType;
+        bool ConnectionsWithSameNameWereListed = false;
+        bool BindingWithSameNameWereListed     = false;
     };
 
     template<>
@@ -356,6 +361,9 @@ struct TEvControlPlaneProxy {
             EvCreateBindingRequest>::TBaseControlPlaneRequest;
 
         TMaybe<FederatedQuery::ConnectionContent> ConnectionContent;
+        TMaybe<EEntityType> EntityWithSameNameType;
+        bool ConnectionsWithSameNameWereListed = false;
+        bool BindingWithSameNameWereListed     = false;
     };
 
     template<>

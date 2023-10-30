@@ -250,17 +250,6 @@ TMaybe<TString> DropSecretObjectQuery(const TString& name) {
         "secret_name3"_a = EncloseAndEscapeString(name, '`'));
 }
 
-TString MakeDeleteExternalDataSourceQuery(
-    const FederatedQuery::ConnectionContent& connectionContent,
-    const TSigner::TPtr&) {
-    using namespace fmt::literals;
-    return fmt::format(
-        R"(
-                DROP EXTERNAL DATA SOURCE {external_source};
-           )",
-        "external_source"_a = EncloseAndEscapeString(connectionContent.name(), '`'));
-}
-
 TString MakeDeleteExternalDataTableQuery(const TString& tableName) {
     using namespace fmt::literals;
     return fmt::format("DROP EXTERNAL TABLE {external_table};",

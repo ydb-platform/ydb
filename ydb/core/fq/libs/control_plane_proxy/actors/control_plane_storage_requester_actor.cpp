@@ -10,7 +10,6 @@
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 namespace NFq {
 namespace NPrivate {
@@ -51,8 +50,6 @@ public:
     using TResultHandler =
         std::function<void(const TEventRequestPtr& request,
                            const typename TCPSEventResponse::TProto& response)>;
-    using TIssuesHandler = std::function<void(const TEventRequestPtr& request,
-                                              const typename NYql::TIssues& issues)>;
 
     TControlPlaneStorageRequesterActor(
         const TActorId& proxyActorId,
@@ -431,6 +428,145 @@ NActors::IActor* MakeDescribeListedBindingActor(
         cpsRequestFactory,
         errorMessageFactoryMethod,
         entityNameExtractorFactoryMethod);
+}
+
+template<class TProxyRequest, class TProxyResponse, class TCPSRequest, class TCPSResponse>
+NActors::IActor* MakeListEntityIdsActorTemplate(
+    const TActorId proxyActorId,
+    const typename TProxyRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions,
+    std::function<void(const typename TProxyRequest::TPtr& request,
+                       const typename TCPSResponse::TProto& response)>
+        entityNameExtractorFactoryMethod,
+    const TString& errorMessage) {
+    auto cpsEventRequestPostProcessor = [](TCPSRequest& eventRequest) {
+        eventRequest.IsExactNameMatch = true;
+    };
+
+    auto cpsRequestFactory = [](const typename TProxyRequest::TPtr& event) {
+        typename TCPSRequest::TProto result;
+        auto newName = event->Get()->Request.content().name();
+        result.set_limit(1);
+        result.mutable_filter()->set_name(newName);
+        return result;
+    };
+
+    auto errorMessageFactoryMethod = [errorMessage](const NYql::TIssues& issues) -> TString {
+        Y_UNUSED(issues);
+        return errorMessage;
+    };
+
+    return new TControlPlaneStorageRequesterActor<TProxyRequest, TProxyResponse, TCPSRequest, TCPSResponse>(
+        proxyActorId,
+        request,
+        requestTimeout,
+        counters.GetCommonCounters(RTC_LIST_CPS_ENTITY),
+        permissions,
+        cpsRequestFactory,
+        errorMessageFactoryMethod,
+        std::move(entityNameExtractorFactoryMethod),
+        cpsEventRequestPostProcessor);
+}
+
+template<class TProxyRequest>
+void HandleListConnectionsResult(const typename TProxyRequest::TPtr& event,
+                                 const FederatedQuery::ListConnectionsResult& result) {
+    if (result.connection_size() != 0) {
+        event->Get()->EntityWithSameNameType =
+            TEvControlPlaneProxy::EEntityType::Connection;
+    }
+    event->Get()->ConnectionsWithSameNameWereListed = true;
+}
+
+template<class TProxyRequest>
+void HandleListBindingsResult(const typename TProxyRequest::TPtr& event,
+                              const FederatedQuery::ListBindingsResult& result) {
+    if (result.binding_size() != 0) {
+        event->Get()->EntityWithSameNameType = TEvControlPlaneProxy::EEntityType::Binding;
+    }
+    event->Get()->BindingWithSameNameWereListed = true;
+}
+
+NActors::IActor* MakeListBindingIdsActor(
+    const TActorId proxyActorId,
+    const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions) {
+    return MakeListEntityIdsActorTemplate<TEvControlPlaneProxy::TEvCreateConnectionRequest,
+                                          TEvControlPlaneProxy::TEvCreateConnectionResponse,
+                                          TEvControlPlaneStorage::TEvListBindingsRequest,
+                                          TEvControlPlaneStorage::TEvListBindingsResponse>(
+        proxyActorId,
+        request,
+        counters,
+        requestTimeout,
+        permissions,
+        std::function(
+            HandleListBindingsResult<TEvControlPlaneProxy::TEvCreateConnectionRequest>),
+        "Couldn't list bindings");
+}
+
+NActors::IActor* MakeListConnectionIdsActor(
+    const TActorId proxyActorId,
+    const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions) {
+    return MakeListEntityIdsActorTemplate<TEvControlPlaneProxy::TEvCreateConnectionRequest,
+                                          TEvControlPlaneProxy::TEvCreateConnectionResponse,
+                                          TEvControlPlaneStorage::TEvListConnectionsRequest,
+                                          TEvControlPlaneStorage::TEvListConnectionsResponse>(
+        proxyActorId,
+        request,
+        counters,
+        requestTimeout,
+        permissions,
+        std::function(
+            HandleListConnectionsResult<TEvControlPlaneProxy::TEvCreateConnectionRequest>),
+        "Couldn't list connections");
+}
+
+NActors::IActor* MakeListBindingIdsActor(
+    const TActorId proxyActorId,
+    const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions) {
+    return MakeListEntityIdsActorTemplate<TEvControlPlaneProxy::TEvCreateBindingRequest,
+                                          TEvControlPlaneProxy::TEvCreateBindingResponse,
+                                          TEvControlPlaneStorage::TEvListBindingsRequest,
+                                          TEvControlPlaneStorage::TEvListBindingsResponse>(
+        proxyActorId,
+        request,
+        counters,
+        requestTimeout,
+        permissions,
+        std::function(
+            HandleListBindingsResult<TEvControlPlaneProxy::TEvCreateBindingRequest>),
+        "Couldn't list bindings");
+}
+
+NActors::IActor* MakeListConnectionIdsActor(
+    const TActorId proxyActorId,
+    const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions) {
+    return MakeListEntityIdsActorTemplate<TEvControlPlaneProxy::TEvCreateBindingRequest,
+                                          TEvControlPlaneProxy::TEvCreateBindingResponse,
+                                          TEvControlPlaneStorage::TEvListConnectionsRequest,
+                                          TEvControlPlaneStorage::TEvListConnectionsResponse>(
+        proxyActorId,
+        request,
+        counters,
+        requestTimeout,
+        permissions,
+        std::function(
+            HandleListConnectionsResult<TEvControlPlaneProxy::TEvCreateBindingRequest>),
+        "Couldn't list connections");
 }
 
 } // namespace NPrivate

@@ -65,8 +65,6 @@ protected:
     virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) override;
 
 public:
-    ~TFetchingInterval();
-
     const std::map<ui32, std::shared_ptr<IDataSource>>& GetSources() const {
         return Sources;
     }

@@ -42,6 +42,7 @@ void IDataSource::InitFilterStageData(const std::shared_ptr<NArrow::TColumnFilte
 
 void IDataSource::InitFetchingPlan(const TFetchingPlan& fetchingPlan) {
     if (AtomicCas(&FilterStageFlag, 1, 0)) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", fetchingPlan.DebugString());
         Y_ABORT_UNLESS(!FetchingPlan);
         FetchingPlan = fetchingPlan;
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
@@ -64,6 +65,8 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,
     const std::shared_ptr<IBlobsReadingAction>& readingAction, THashMap<TBlobRange, ui32>& nullBlocks,
     const std::shared_ptr<NArrow::TColumnFilter>& filter) {
     const NArrow::TColumnFilter& cFilter = filter ? *filter : NArrow::TColumnFilter::BuildAllowFilter();
+    ui32 fetchedChunks = 0;
+    ui32 nullChunks = 0;
     for (auto&& i : columnIds) {
         auto columnChunks = Portion->GetColumnChunksPointers(i);
         if (columnChunks.empty()) {
@@ -75,19 +78,23 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,
             Y_ABORT_UNLESS(!itFinished);
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetNumRowsVerified())) {
                 readingAction->AddRange(c->BlobRange);
+                ++fetchedChunks;
             } else {
                 nullBlocks.emplace(c->BlobRange, c->GetMeta().GetNumRowsVerified());
+                ++nullChunks;
             }
             itFinished = !itFilter.Next(c->GetMeta().GetNumRowsVerified());
         }
         AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->NumRows(i));
     }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunks_stats")("fetch", fetchedChunks)("null", nullChunks)("reading_action", readingAction->GetStorageId())("columns", columnIds.size());
 }
 
 void TPortionDataSource::DoStartFilterStage() {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoFetchEF");
     Y_ABORT_UNLESS(FetchingPlan->GetFilterStage()->GetSize());
     auto& columnIds = FetchingPlan->GetFilterStage()->GetColumnIds();
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "StartFilterStage")("fetching_info", FetchingPlan->DebugString());
 
     auto readAction = Portion->GetBlobsStorage()->StartReadingAction("CS::READ::FILTER");
     readAction->SetIsBackgroundProcess(false);

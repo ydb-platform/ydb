@@ -48,8 +48,6 @@ public:
         return SpecialReadContext;
     }
 
-    TFetchingPlan GetColumnsFetchingPlan(const bool exclusiveSource) const;
-
     IDataSource& GetSourceByIdxVerified(const ui32 sourceIdx) {
         return *Scanner->GetSourceVerified(sourceIdx);
     }

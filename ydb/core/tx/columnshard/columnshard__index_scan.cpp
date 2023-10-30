@@ -48,6 +48,7 @@ void TColumnShardScanIterator::FillReadyResults() {
     }
 
     if (limitLeft == 0) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "abort_scan")("limit", Context->GetReadMetadata()->Limit)("ready", ItemsRead);
         IndexedData->Abort();
     }
 }

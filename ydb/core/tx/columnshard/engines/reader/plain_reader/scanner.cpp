@@ -9,7 +9,7 @@ void TScanHead::OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& newB
     auto itInterval = FetchingIntervals.find(intervalIdx);
     AFL_VERIFY(itInterval != FetchingIntervals.end());
     for (auto&& [sourceIdx, source] : itInterval->second->GetSources()) {
-        if (source->IsFinished()) {
+        if (source->OnIntervalFinished(intervalIdx)) {
             SourceByIdx.erase(sourceIdx);
         }
     }
@@ -75,7 +75,6 @@ bool TScanHead::BuildNextInterval() {
         for (auto&& i : firstBorderPointInfo.GetStartSources()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("add_source", i->GetSourceIdx());
             AFL_VERIFY(CurrentSegments.emplace(i->GetSourceIdx(), i).second)("idx", i->GetSourceIdx());
-            SourceByIdx.emplace(i->GetSourceIdx(), i);
         }
 
         if (firstBorderPointInfo.GetStartSources().size() && firstBorderPointInfo.GetFinishSources().size()) {

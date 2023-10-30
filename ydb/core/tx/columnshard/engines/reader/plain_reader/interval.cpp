@@ -64,7 +64,7 @@ protected:
         if (Merger->GetSourcesCount() == 1) {
             ResultBatch = Merger->SingleSourceDrain(Finish, IncludeFinish);
             if (ResultBatch) {
-                if (IsExclusiveInterval(Merger->GetSourcesCount())) {
+                if (IsExclusiveInterval(1)) {
                     Context->GetCommonContext()->GetCounters().OnNoScanInterval(ResultBatch->num_rows());
                 } else {
                     Context->GetCommonContext()->GetCounters().OnLogScanInterval(ResultBatch->num_rows());
@@ -157,14 +157,9 @@ TFetchingInterval::TFetchingInterval(const NIndexedReader::TSortableBatchPositio
     }
 }
 
-TFetchingInterval::~TFetchingInterval() {
-    for (auto&& [_, s] : Sources) {
-        s->OnIntervalFinished(IntervalIdx);
-    }
-}
-
 void TFetchingInterval::DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("interval_idx", IntervalIdx)("event", "resources_allocated")("resources", guard->DebugString());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("interval_idx", IntervalIdx)("event", "resources_allocated")
+        ("resources", guard->DebugString())("start", IncludeStart)("finish", IncludeFinish)("sources", Sources.size());
     OnInitResourcesGuard(guard);
     for (auto&& [_, i] : Sources) {
         i->InitFetchingPlan(Context->GetColumnsFetchingPlan(IsExclusiveInterval()));

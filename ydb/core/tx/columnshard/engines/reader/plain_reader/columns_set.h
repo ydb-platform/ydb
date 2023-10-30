@@ -79,7 +79,8 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "{filter=" << (FilterStage ? FilterStage->DebugString() : "NO") << ";fetching=" << (FetchingStage ? FetchingStage->DebugString() : "NO") << "}";
+        return TStringBuilder() << "{filter=" << (FilterStage ? FilterStage->DebugString() : "NO") << ";fetching=" <<
+            (FetchingStage ? FetchingStage->DebugString() : "NO") << ";use_filter=" << CanUseEarlyFilterImmediatelyFlag << "}";
     }
 
     bool CanUseEarlyFilterImmediately() const {

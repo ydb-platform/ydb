@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     cms_grpc_client_actor.cpp
     compute_database_control_plane_service.cpp
+    compute_databases_cache.cpp
     ydbcp_grpc_client_actor.cpp
 )
 

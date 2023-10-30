@@ -26,11 +26,10 @@ namespace {
 
 struct TEvPrivate {
     enum EEv {
-        // requests
         EvCreateDatabaseRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-
-        // replies
         EvCreateDatabaseResponse,
+        EvListDatabasesRequest,
+        EvListDatabasesResponse,
 
         EvEnd
     };
@@ -39,6 +38,8 @@ struct TEvPrivate {
 
     struct TEvCreateDatabaseRequest : NCloud::TEvGrpcProtoRequest<TEvCreateDatabaseRequest, EvCreateDatabaseRequest, Ydb::Cms::CreateDatabaseRequest> {};
     struct TEvCreateDatabaseResponse : NCloud::TEvGrpcProtoResponse<TEvCreateDatabaseResponse, EvCreateDatabaseResponse, Ydb::Cms::CreateDatabaseResponse> {};
+    struct TEvListDatabasesRequest : NCloud::TEvGrpcProtoRequest<TEvListDatabasesRequest, EvListDatabasesRequest, Ydb::Cms::ListDatabasesRequest> {};
+    struct TEvListDatabasesResponse : NCloud::TEvGrpcProtoResponse<TEvListDatabasesResponse, EvListDatabasesResponse, Ydb::Cms::ListDatabasesResponse> {};
 };
 
 }
@@ -52,6 +53,12 @@ public:
         using TResponseEventType = TEvPrivate::TEvCreateDatabaseResponse;
     };
 
+    struct TListDatabasesGrpcRequest : TGrpcRequest {
+        static constexpr auto Request = &Ydb::Cms::V1::CmsService::Stub::AsyncListDatabases;
+        using TRequestEventType = TEvPrivate::TEvListDatabasesRequest;
+        using TResponseEventType = TEvPrivate::TEvListDatabasesResponse;
+    };
+
     TCmsGrpcServiceActor(const NCloud::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider)
         : TBase(&TCmsGrpcServiceActor::StateFunc)
         , TGrpcServiceClient(settings)
@@ -62,6 +69,8 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvYdbCompute::TEvCreateDatabaseRequest, Handle);
         hFunc(TEvPrivate::TEvCreateDatabaseResponse, Handle);
+        hFunc(TEvYdbCompute::TEvListDatabasesRequest, Handle);
+        hFunc(TEvPrivate::TEvListDatabasesResponse, Handle);
     )
 
     void Handle(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev) {
@@ -79,11 +88,17 @@ public:
         const auto& status = ev->Get()->Status;
         auto it = Requests.find(ev->Cookie);
         if (it == Requests.end()) {
-            LOG_E("Request doesn't exist. Need to fix this bug urgently");
+            LOG_E("Request doesn't exist (CreateDatabaseResponse). Need to fix this bug urgently");
             return;
         }
-        auto request = it->second;
+        auto requestVariant = it->second;
         Requests.erase(it);
+        const auto* requestPtr = std::get_if<TEvYdbCompute::TEvCreateDatabaseRequest::TPtr>(&requestVariant);
+        if (!requestPtr) {
+            LOG_E("Request differs from the CreateDatabaseRequest type. Need to fix this bug urgently");
+            return;
+        }
+        auto request = *requestPtr;
 
         auto forwardResponse = std::make_unique<TEvYdbCompute::TEvCreateDatabaseResponse>();
         if (!status.Ok() && status.GRpcStatusCode != grpc::StatusCode::ALREADY_EXISTS) {
@@ -102,9 +117,50 @@ public:
         Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
     }
 
+    void Handle(TEvYdbCompute::TEvListDatabasesRequest::TPtr& ev) {
+        auto forwardRequest = std::make_unique<TEvPrivate::TEvListDatabasesRequest>();
+        forwardRequest->Token = CredentialsProvider->GetAuthInfo();
+        TEvPrivate::TEvListDatabasesRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvListDatabasesRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
+        MakeCall<TListDatabasesGrpcRequest>(std::move(forwardEvent));
+        Requests[Cookie++] = ev;
+    }
+
+    void Handle(TEvPrivate::TEvListDatabasesResponse::TPtr& ev) {
+        const auto& status = ev->Get()->Status;
+        Ydb::Cms::ListDatabasesResult response;
+        ev->Get()->Response.operation().result().UnpackTo(&response);
+
+        auto it = Requests.find(ev->Cookie);
+        if (it == Requests.end()) {
+            LOG_E("Request doesn't exist (ListDatabasesResponse). Need to fix this bug urgently");
+            return;
+        }
+        auto requestVariant = it->second;
+        Requests.erase(it);
+        const auto* requestPtr = std::get_if<TEvYdbCompute::TEvListDatabasesRequest::TPtr>(&requestVariant);
+        if (!requestPtr) {
+            LOG_E("Request differs from the ListDatabasesRequest type. Need to fix this bug urgently");
+            return;
+        }
+        auto request = *requestPtr;
+
+        auto forwardResponse = std::make_unique<TEvYdbCompute::TEvListDatabasesResponse>();
+        if (!status.Ok()) {
+            forwardResponse->Issues.AddIssue("GrpcCode: " + ToString(status.GRpcStatusCode));
+            forwardResponse->Issues.AddIssue("Message: " + status.Msg);
+            forwardResponse->Issues.AddIssue("Details: " + status.Details);
+            Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
+            return;
+        }
+
+        forwardResponse->Paths.insert(response.paths().begin(), response.paths().end());
+
+        Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
+    }
+
 private:
     NCloud::TGrpcClientSettings Settings;
-    TMap<uint64_t, TEvYdbCompute::TEvCreateDatabaseRequest::TPtr> Requests;
+    TMap<uint64_t, std::variant<TEvYdbCompute::TEvCreateDatabaseRequest::TPtr, TEvYdbCompute::TEvListDatabasesRequest::TPtr>> Requests;
     NYdb::TCredentialsProviderPtr CredentialsProvider;
     int64_t Cookie = 0;
 };

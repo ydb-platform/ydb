@@ -22,10 +22,17 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvYdbCompute::TEvCreateDatabaseRequest, Handle);
+        hFunc(TEvYdbCompute::TEvListDatabasesRequest, Handle);
     )
 
     void Handle(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev) {
         auto forwardResponse = std::make_unique<TEvYdbCompute::TEvCreateDatabaseResponse>();
+        forwardResponse->Issues.AddIssue("Ydbcp grpc client hasn't supported yet");
+        Send(ev->Sender, forwardResponse.release(), 0, ev->Cookie);
+    }
+
+    void Handle(TEvYdbCompute::TEvListDatabasesRequest::TPtr& ev) {
+        auto forwardResponse = std::make_unique<TEvYdbCompute::TEvListDatabasesResponse>();
         forwardResponse->Issues.AddIssue("Ydbcp grpc client hasn't supported yet");
         Send(ev->Sender, forwardResponse.release(), 0, ev->Cookie);
     }

@@ -36,6 +36,7 @@ namespace NNames {
     DECLARE_TYPED_TYPE_NAME(Interval);
 
     DECLARE_TYPED_TYPE_NAME(DyNumber);
+    DECLARE_TYPED_TYPE_NAME(Uuid);
 }
 
 void WriteEscapedValue(IOutputStream &out, const char *data, size_t size) {

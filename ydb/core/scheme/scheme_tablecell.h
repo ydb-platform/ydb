@@ -229,6 +229,18 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
         return sza == szb ? 0 : ((sza < szb) != type.IsDescending() ? -1 : 1);
     }
 
+    case NKikimr::NScheme::NTypeIds::Uuid:
+    {
+        Y_DEBUG_ABORT_UNLESS(a.Size() == 16);
+        Y_DEBUG_ABORT_UNLESS(b.Size() == 16);
+        const char* pa = (const char*)a.Data();
+        const char* pb = (const char*)b.Data();
+        int cmp = memcmp(pa, pb, 16);
+        if (cmp != 0)
+            return type.IsDescending() ? (cmp > 0 ? -1 : +1) : cmp; // N.B. cannot multiply, may overflow
+        return 0;
+    }
+
     case NKikimr::NScheme::NTypeIds::Decimal:
     {
         Y_DEBUG_ABORT_UNLESS(a.Size() == sizeof(std::pair<ui64, i64>));
@@ -331,6 +343,7 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
     case NYql::NProto::TypeIds::Decimal:
     case NYql::NProto::TypeIds::JsonDocument:
     case NYql::NProto::TypeIds::DyNumber:
+    case NYql::NProto::TypeIds::Uuid:
         return ComputeHash(TStringBuf{cell.Data(), cell.Size()});
 
     default:

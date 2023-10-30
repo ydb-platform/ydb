@@ -1084,6 +1084,10 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
         // DyNumber value was verified at parsing time
         break;
 
+    case NScheme::NTypeIds::Uuid:
+        // Uuid value was verified at parsing time
+        break;
+
     case NScheme::NTypeIds::Pg:
         // no pg validation here
         break;
@@ -1171,11 +1175,12 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
             c = TCell(v.data(), v.size());
             break;
         }
-    case NScheme::NTypeIds::Decimal : {
-        std::pair<ui64,ui64>& decimalVal = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
-        decimalVal.first = val.low_128();
-        decimalVal.second = val.high_128();
-        c = TCell((const char*)&decimalVal, sizeof(decimalVal));
+    case NScheme::NTypeIds::Decimal :
+    case NScheme::NTypeIds::Uuid : {
+        std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
+        valInPool.first = val.low_128();
+        valInPool.second = val.high_128();
+        c = TCell((const char*)&valInPool, sizeof(valInPool));
         break;
     }
     case NScheme::NTypeIds::Pg : {

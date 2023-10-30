@@ -45,6 +45,12 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
         })
         assert receive_message_bytes_read > 0
 
+        message_recide_duration_buckets = self._get_counter(sqs_counters, {
+            'queue': self.queue_name,
+            'sensor': 'MessageReside_Duration',
+        })['hist']['buckets']
+        assert any(map(lambda x: x > 0, message_recide_duration_buckets))
+
         delete_message_count = self._get_counter_value(sqs_counters, {
             'queue': self.queue_name,
             'sensor': 'DeleteMessage_Count',
@@ -109,3 +115,20 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
         })
         working_duration_buckets = working_durations['hist']['buckets']
         assert any(map(lambda x: x > 0, working_duration_buckets))
+
+    def test_receive_message_immediate_duration_counter(self):
+        queue_url = self._create_queue_and_assert(self.queue_name, False, True)
+
+        # ReceiveMessageImmediate_Duration doesn't happen on every receive_message, so we need to read enough messages
+        for i in range(100):
+            message_payload = "foobar" + str(i)
+            self._sqs_api.send_message(queue_url, message_payload)
+            self._read_while_not_empty(queue_url, 1)
+
+        sqs_counters = self._get_sqs_counters()
+
+        receive_message_immediate_duration_buckets = self._get_counter(sqs_counters, {
+            'queue': 'total',
+            'sensor': 'ReceiveMessageImmediate_Duration',
+        })['hist']['buckets']
+        assert any(map(lambda x: x > 0, receive_message_immediate_duration_buckets))

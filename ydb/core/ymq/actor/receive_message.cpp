@@ -142,9 +142,15 @@ private:
     }
 
     void DoFinish() override {
-        if (auto* detailedCounters = QueueCounters_ ? QueueCounters_->GetDetailedCounters() : nullptr; !Retried_ && detailedCounters) {
+        if (!Retried_) {
             const TDuration duration = GetRequestDuration();
-            COLLECT_HISTOGRAM_COUNTER(detailedCounters, ReceiveMessageImmediate_Duration, duration.MilliSeconds());
+            this->Send(
+                QueueLeader_,
+                new TSqsEvents::TEvLocalCounterChanged(
+                    TSqsEvents::TEvLocalCounterChanged::ECounterType::ReceiveMessageImmediateDuration,
+                    duration.MilliSeconds()
+                )
+            );
         }
     }
 
@@ -166,9 +172,20 @@ private:
         } else if (ev->Get()->OverLimit) {
             MakeError(Response_.MutableReceiveMessage(), NErrors::OVER_LIMIT);
         } else {
-            if (ev->Get()->Messages.empty() && MaybeScheduleWait()) {
-                return;
+            if (ev->Get()->Messages.empty()) {
+                if (MaybeScheduleWait()) {
+                    return;
+                } else {
+                    this->Send(
+                        QueueLeader_,
+                        new TSqsEvents::TEvLocalCounterChanged(
+                            TSqsEvents::TEvLocalCounterChanged:: ECounterType::ReceiveMessageEmptyCount,
+                            1
+                        )
+                    );
+                }
             }
+
             for (auto& message : ev->Get()->Messages) {
                 auto* item = Response_.MutableReceiveMessage()->AddMessages();
                 item->SetApproximateFirstReceiveTimestamp(message.FirstReceiveTimestamp.MilliSeconds());
@@ -201,14 +218,6 @@ private:
                     item->SetMessageGroupId(message.MessageGroupId);
                     item->SetSequenceNumber(message.SequenceNumber);
                 }
-
-                // counters
-                const TDuration messageResideDuration = TActivationContext::Now() - message.SentTimestamp;
-                COLLECT_HISTOGRAM_COUNTER(QueueCounters_, MessageReside_Duration, messageResideDuration.MilliSeconds());
-                COLLECT_HISTOGRAM_COUNTER(QueueCounters_, reside_duration_milliseconds, messageResideDuration.MilliSeconds());
-            }
-            if (ev->Get()->Messages.empty()) {
-                INC_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_EmptyCount, empty_receive_attempts_count_per_second);
             }
         }
         SendReplyAndDie();

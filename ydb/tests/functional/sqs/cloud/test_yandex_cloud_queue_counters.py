@@ -97,6 +97,12 @@ class TestYmqQueueCounters(get_test_with_sqs_tenant_installation(KikimrSqsTestBa
         })
         assert receive_message_count == 1
 
+        recide_duration_buckets = self._get_counter(ymq_counters, {
+            'queue': queue_resource_id,
+            'name': 'queue.messages.reside_duration_milliseconds',
+        })['hist']['buckets']
+        assert any(map(lambda x: x > 0, recide_duration_buckets))
+
         receive_message_bytes_read = self._get_counter_value(ymq_counters, {
             'queue': queue_resource_id,
             'name': 'queue.messages.received_bytes_per_second',

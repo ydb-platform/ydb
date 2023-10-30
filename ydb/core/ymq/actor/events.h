@@ -137,6 +137,7 @@ struct TSqsEvents {
         EvLeaderStarted,
 
         EvActionCounterChanged,
+        EvLocalCounterChanged,
 
         EvEnd,
     };
@@ -401,6 +402,21 @@ struct TSqsEvents {
 
     struct TEvActionCounterChanged: public NActors::TEventPB<TEvActionCounterChanged, NKikimrClient::TSqsActionCounterChanged, EvActionCounterChanged> {
         using TEventPB::TEventPB;
+    };
+
+    struct TEvLocalCounterChanged: public NActors::TEventLocal<TEvLocalCounterChanged, EvLocalCounterChanged> {
+        enum class ECounterType{
+            ReceiveMessageImmediateDuration,
+            ReceiveMessageEmptyCount,
+        };
+
+        ECounterType CounterType;
+        ui32 Value;
+        TEvLocalCounterChanged(ECounterType counterType, ui32 value)
+            : CounterType(counterType)
+            , Value(value)
+        {
+        }
     };
 
     // Request that is sent from proxy to sqs service actor on other (leader) node

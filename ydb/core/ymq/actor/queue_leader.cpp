@@ -127,6 +127,7 @@ STATEFN(TQueueLeader::StateInit) {
         cFunc(TEvPoisonPill::EventType, PassAway); // from service
         hFunc(TSqsEvents::TEvGetConfiguration, HandleGetConfigurationWhileIniting); // from action actors
         hFunc(TSqsEvents::TEvActionCounterChanged, HandleActionCounterChanged);
+        hFunc(TSqsEvents::TEvLocalCounterChanged, HandleLocalCounterChanged);
         hFunc(TSqsEvents::TEvExecute, HandleExecuteWhileIniting); // from action actors
         hFunc(TSqsEvents::TEvClearQueueAttributesCache, HandleClearQueueAttributesCache); // from set queue attributes
         hFunc(TSqsEvents::TEvPurgeQueue, HandlePurgeQueue); // from purge queue actor
@@ -154,6 +155,7 @@ STATEFN(TQueueLeader::StateWorking) {
         cFunc(TEvPoisonPill::EventType, PassAway); // from service
         hFunc(TSqsEvents::TEvGetConfiguration, HandleGetConfigurationWhileWorking); // from action actors
         hFunc(TSqsEvents::TEvActionCounterChanged, HandleActionCounterChanged);
+        hFunc(TSqsEvents::TEvLocalCounterChanged, HandleLocalCounterChanged);
         hFunc(TSqsEvents::TEvExecute, HandleExecuteWhileWorking); // from action actors
         hFunc(TSqsEvents::TEvClearQueueAttributesCache, HandleClearQueueAttributesCache); // from set queue attributes
         hFunc(TSqsEvents::TEvPurgeQueue, HandlePurgeQueue); // from purge queue actor
@@ -381,6 +383,19 @@ void TQueueLeader::HandleActionCounterChanged(TSqsEvents::TEvActionCounterChange
         auto workingDuration = ev->Get()->Record.GetWorkingDurationMs();
         LOG_SQS_DEBUG("Request " << action << " working duration: " << workingDuration << "ms");
         COLLECT_HISTOGRAM_COUNTER_COUPLE(actionCountersCouple, WorkingDuration, workingDuration);
+    }
+}
+
+void TQueueLeader::HandleLocalCounterChanged(TSqsEvents::TEvLocalCounterChanged::TPtr& ev) {
+    switch (ev->Get()->CounterType) {
+        case TSqsEvents::TEvLocalCounterChanged::ECounterType::ReceiveMessageImmediateDuration:
+            if (auto* detailedCounters = Counters_ ? Counters_->GetDetailedCounters() : nullptr) {
+                COLLECT_HISTOGRAM_COUNTER(detailedCounters, ReceiveMessageImmediate_Duration, ev->Get()->Value);
+            }
+            break;
+        case TSqsEvents::TEvLocalCounterChanged::ECounterType::ReceiveMessageEmptyCount:
+            INC_COUNTER_COUPLE(Counters_, ReceiveMessage_EmptyCount, empty_receive_attempts_count_per_second);
+            break;
     }
 }
 
@@ -1175,6 +1190,10 @@ void TQueueLeader::Reply(TReceiveMessageBatchRequestProcessing& reqInfo) {
             receiveCount += message.ReceiveCount;
             messageCount++;
             bytesRead += message.Data.size();
+
+            const TDuration messageResideDuration = TActivationContext::Now() - message.SentTimestamp;
+            COLLECT_HISTOGRAM_COUNTER(Counters_, MessageReside_Duration, messageResideDuration.MilliSeconds());
+            COLLECT_HISTOGRAM_COUNTER(Counters_, reside_duration_milliseconds, messageResideDuration.MilliSeconds());
         }
 
         if (messageCount > 0) {

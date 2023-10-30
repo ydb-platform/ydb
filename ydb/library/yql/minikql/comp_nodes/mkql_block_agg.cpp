@@ -495,7 +495,7 @@ public:
             if (s.MakeOutput()) {
                 for (size_t i = 0; i < AggsParams_.size(); ++i) {
                     if (const auto out = output[i]) {
-                        *out = s.Pull(i);
+                        *out = s.Get(i);
                     }
                 }
                 return EFetchResult::One;
@@ -521,9 +521,9 @@ public:
 
         const auto atTop = &ctx.Func->getEntryBlock().back();
 
-        const auto pullFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Pull));
-        const auto pullType = FunctionType::get(valueType, {statePtrType, indexType}, false);
-        const auto pullPtr = CastInst::Create(Instruction::IntToPtr, pullFunc, PointerType::getUnqual(pullType), "pull", atTop);
+        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Get));
+        const auto getType = FunctionType::get(valueType, {statePtrType, indexType}, false);
+        const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", atTop);
 
         const auto stateOnStack = new AllocaInst(statePtrType, 0U, "state_on_stack", atTop);
         new StoreInst(ConstantPointerNull::get(statePtrType), stateOnStack, atTop);
@@ -607,9 +607,9 @@ public:
 
         ICodegeneratorInlineWideNode::TGettersList getters(AggsParams_.size());
         for (size_t idx = 0U; idx < getters.size(); ++idx) {
-            getters[idx] = [idx, pullType, pullPtr, indexType, statePtrType, stateOnStack](const TCodegenContext& ctx, BasicBlock*& block) {
+            getters[idx] = [idx, getType, getPtr, indexType, statePtrType, stateOnStack](const TCodegenContext& ctx, BasicBlock*& block) {
                 const auto stateArg = new LoadInst(statePtrType, stateOnStack, "state", block);
-                return CallInst::Create(pullType, pullPtr, {stateArg, ConstantInt::get(indexType, idx)}, "pull", block);
+                return CallInst::Create(getType, getPtr, {stateArg, ConstantInt::get(indexType, idx)}, "get", block);
             };
         }
         return {result, std::move(getters)};
@@ -696,8 +696,8 @@ private:
             return true;
         }
 
-        NUdf::TUnboxedValuePod Pull(size_t index) {
-            return Values_[index].Release();
+        NUdf::TUnboxedValuePod Get(size_t index) const {
+            return Values_[index];
         }
     };
 #ifndef MKQL_DISABLE_CODEGEN

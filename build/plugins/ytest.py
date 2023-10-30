@@ -539,7 +539,7 @@ def onadd_ytest(unit, *args):
         'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
         #  'TEST-PRESERVE-ENV': 'da',
-        'TEST-DATA': serialize_list(test_data),
+        'TEST-DATA': serialize_list(sorted(test_data)),
         'TEST-TIMEOUT': test_timeout,
         'FORK-MODE': fork_mode,
         'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',

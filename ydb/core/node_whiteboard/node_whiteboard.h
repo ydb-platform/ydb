@@ -58,6 +58,7 @@ struct TEvWhiteboard{
         EvPDiskStateDelete,
         EvVDiskStateGenerationChange,
         EvVDiskDropDonors,
+        EvClockSkewUpdate,
         EvEnd
     };
 
@@ -416,6 +417,15 @@ struct TEvWhiteboard{
     struct TEvSystemStateRequest : public TEventPB<TEvSystemStateRequest, NKikimrWhiteboard::TEvSystemStateRequest, EvSystemStateRequest> {};
 
     struct TEvSystemStateResponse : public TEventPB<TEvSystemStateResponse, NKikimrWhiteboard::TEvSystemStateResponse, EvSystemStateResponse> {};
+
+    struct TEvClockSkewUpdate : TEventPB<TEvClockSkewUpdate, NKikimrWhiteboard::TNodeClockSkew, EvClockSkewUpdate> {
+        TEvClockSkewUpdate() = default;
+
+        TEvClockSkewUpdate(const ui32 peerNodeId, i64 clockSkewUs) {
+            Record.SetPeerNodeId(peerNodeId);
+            Record.SetClockSkewUs(clockSkewUs);
+        }
+    };
 
     struct TEvNodeStateUpdate : TEventPB<TEvNodeStateUpdate, NKikimrWhiteboard::TNodeStateInfo, EvNodeStateUpdate> {
         TEvNodeStateUpdate() = default;

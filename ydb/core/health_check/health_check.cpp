@@ -139,6 +139,7 @@ public:
         TabletState,
         SystemTabletState,
         OverloadState,
+        SyncState,
     };
 
     struct TTenantInfo {
@@ -1858,7 +1859,7 @@ public:
             TString vDiskId = GetVSlotId(vSlotIdProto);
             Ydb::Monitoring::StorageVDiskStatus& vDiskStatus = *storageGroupStatus.add_vdisks();
             FillVDiskStatus(vDiskId, vDiskStatus, {&context, "VDISK"});
-            onlyGoodDisks &= vDiskStatus.overall() != Ydb::Monitoring::StatusFlag::RED 
+            onlyGoodDisks &= vDiskStatus.overall() != Ydb::Monitoring::StatusFlag::RED
                 && vDiskStatus.overall() != Ydb::Monitoring::StatusFlag::GREY;
         }
 
@@ -2050,6 +2051,42 @@ public:
         }
     }
 
+    const TDuration MAX_CLOCKSKEW_RED_ISSUE_TIME = TDuration::MicroSeconds(25000);
+    const TDuration MAX_CLOCKSKEW_YELLOW_ISSUE_TIME = TDuration::MicroSeconds(5000);
+
+    void FillNodesSyncStatus(TOverallStateContext& context) {
+        long maxClockSkewUs = 0;
+        TNodeId maxClockSkewPeerId = 0;
+        TNodeId maxClockSkewNodeId = 0;
+        for (auto& [nodeId, nodeSystemState] : MergedNodeSystemState) {
+            if (abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
+                maxClockSkewUs = abs(nodeSystemState->GetMaxClockSkewWithPeerUs());
+                maxClockSkewPeerId = nodeSystemState->GetMaxClockSkewPeerId();
+                maxClockSkewNodeId = nodeId;
+            }
+        }
+        if (!maxClockSkewNodeId) {
+            return;
+        }
+
+        TSelfCheckResult syncContext;
+        syncContext.Type = "NODES_SYNC";
+        FillNodeInfo(maxClockSkewNodeId, syncContext.Location.mutable_node());
+        FillNodeInfo(maxClockSkewPeerId, syncContext.Location.mutable_peer());
+
+        TDuration maxClockSkewTime = TDuration::MicroSeconds(maxClockSkewUs);
+        if (maxClockSkewTime > MAX_CLOCKSKEW_RED_ISSUE_TIME) {
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "The nodes have a time discrepancy of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+        } else if (maxClockSkewTime > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time discrepancy of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+        } else {
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+        }
+
+        context.UpdateMaxStatus(syncContext.GetOverallStatus());
+        context.AddIssues(syncContext.IssueRecords);
+    }
+
     void FillResult(TOverallStateContext context) {
         if (IsSpecificDatabaseFilter()) {
             FillDatabaseResult(context, FilterDatabase, DatabaseState[FilterDatabase]);
@@ -2058,6 +2095,7 @@ public:
                 FillDatabaseResult(context, path, state);
             }
         }
+        FillNodesSyncStatus(context);
         if (DatabaseState.empty()) {
             Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
             TSelfCheckResult tabletContext;
@@ -2112,9 +2150,9 @@ public:
 
     void TruncateIssuesIfBeyondLimit(Ydb::Monitoring::SelfCheckResult& result, ui64 byteLimit) {
         auto truncateStatusPriority = {
-            Ydb::Monitoring::StatusFlag::BLUE, 
-            Ydb::Monitoring::StatusFlag::YELLOW, 
-            Ydb::Monitoring::StatusFlag::ORANGE, 
+            Ydb::Monitoring::StatusFlag::BLUE,
+            Ydb::Monitoring::StatusFlag::YELLOW,
+            Ydb::Monitoring::StatusFlag::ORANGE,
             Ydb::Monitoring::StatusFlag::RED
         };
         for (Ydb::Monitoring::StatusFlag::Status truncateStatus: truncateStatusPriority) {
@@ -2162,7 +2200,7 @@ public:
             id << Ydb::Monitoring::StatusFlag_Status_Name(issue->status());
             id << '-' << TSelfCheckResult::crc16(issue->message());
             issue->set_id(id.Str());
-        } 
+        }
 
         for (TActorId pipe : PipeClients) {
             NTabletPipe::CloseClient(SelfId(), pipe);

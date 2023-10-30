@@ -740,14 +740,15 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 icCommon->InitWhiteboard = [whiteboardId](ui16 port, TActorSystem *actorSystem) {
                     actorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint("ic", Sprintf(":%d", port)));
                 };
-                icCommon->UpdateWhiteboard = [whiteboardId](const TString& peer, bool connected, bool green, bool yellow,
-                        bool orange, bool red, TActorSystem *actorSystem) {
-                    actorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvNodeStateUpdate(
-                        peer, connected,
-                        green ? NKikimrWhiteboard::EFlag::Green :
-                        yellow ? NKikimrWhiteboard::EFlag::Yellow :
-                        orange ? NKikimrWhiteboard::EFlag::Orange :
-                        red ? NKikimrWhiteboard::EFlag::Red : NKikimrWhiteboard::EFlag()));
+                icCommon->UpdateWhiteboard = [whiteboardId](const TWhiteboardSessionStatus& data) {
+                    data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvNodeStateUpdate(
+                        data.Peer, data.Connected,
+                        data.Green ? NKikimrWhiteboard::EFlag::Green :
+                        data.Yellow ? NKikimrWhiteboard::EFlag::Yellow :
+                        data.Orange ? NKikimrWhiteboard::EFlag::Orange :
+                        data.Red ? NKikimrWhiteboard::EFlag::Red : NKikimrWhiteboard::EFlag()));
+                    data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
+                        data.PeerId, data.ClockSkew));
                 };
             }
 

@@ -994,13 +994,15 @@ namespace NActors {
                 } while (false);
             }
 
-            callback(Proxy->Metrics->GetHumanFriendlyPeerHostName(),
+            callback({TlsActivationContext->ExecutorThread.ActorSystem,
+                     Proxy->PeerNodeId,
+                     Proxy->Metrics->GetHumanFriendlyPeerHostName(),
                      connected,
                      flagState == EFlag::GREEN,
                      flagState == EFlag::YELLOW,
                      flagState == EFlag::ORANGE,
                      flagState == EFlag::RED,
-                     TlsActivationContext->ExecutorThread.ActorSystem);
+                     ReceiveContext->ClockSkew_us.load()});
         }
 
         if (connected) {

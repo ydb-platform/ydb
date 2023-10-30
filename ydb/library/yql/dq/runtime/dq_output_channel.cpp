@@ -217,7 +217,7 @@ public:
         DLOG("Took " << data.RowCount() << " rows");
 
         if (PopStats.CollectBasic()) {
-            PopStats.Bytes += data.Payload.size();
+            PopStats.Bytes += data.Size();
             PopStats.Rows += data.RowCount();
             PopStats.Chunks++;
             if (!IsFull() || FirstStoredId == NextStoredId) {
@@ -299,7 +299,7 @@ public:
         data.Proto.SetRows(rows.RowCount());
         data.SetPayload(FinishPackAndCheckSize());
         if (PopStats.CollectBasic()) {
-            PopStats.Bytes += data.Payload.size();
+            PopStats.Bytes += data.Size();
             PopStats.Rows += data.RowCount();
             PopStats.Chunks++;
             if (!IsFull() || FirstStoredId == NextStoredId) {

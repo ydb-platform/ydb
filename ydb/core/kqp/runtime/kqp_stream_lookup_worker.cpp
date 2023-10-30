@@ -444,27 +444,29 @@ public:
 
             UnprocessedRows.pop_front();
 
-            std::vector<std::pair<ui64, TOwnedTableRange>> partitions;
-            if (joinKey.size() < KeyColumns.size()) {
-                // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
-                std::vector<TCell> fromCells(KeyColumns.size());
-                fromCells.insert(fromCells.begin(), joinKey.begin(), joinKey.end());
-                bool fromInclusive = true;
-                bool toInclusive = false;
+            if (!joinKey.data()->IsNull()) {  // don't use nulls as lookup keys, because null != null
+                std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
+                if (joinKey.size() < KeyColumns.size()) {
+                    // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
+                    std::vector <TCell> fromCells(KeyColumns.size());
+                    fromCells.insert(fromCells.begin(), joinKey.begin(), joinKey.end());
+                    bool fromInclusive = true;
+                    bool toInclusive = false;
 
-                partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(),
-                    TOwnedTableRange(fromCells, fromInclusive, joinKey, toInclusive)
-                );
-            } else {
-                // full pk, build point
-                partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), TOwnedTableRange(joinKey));
-            }
-
-            for (auto [shardId, range] : partitions) {
-                if (range.Point) {
-                    pointsPerShard[shardId].push_back(std::move(range));
+                    partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(),
+                        TOwnedTableRange(fromCells, fromInclusive, joinKey, toInclusive)
+                    );
                 } else {
-                    rangesPerShard[shardId].push_back(std::move(range));
+                    // full pk, build point
+                    partitions = GetRangePartitioning(partitioning, GetKeyColumnTypes(), TOwnedTableRange(joinKey));
+                }
+
+                for (auto[shardId, range] : partitions) {
+                    if (range.Point) {
+                        pointsPerShard[shardId].push_back(std::move(range));
+                    } else {
+                        rangesPerShard[shardId].push_back(std::move(range));
+                    }
                 }
             }
 
@@ -519,7 +521,8 @@ public:
         return UnprocessedRows.empty()
             && UnprocessedKeys.empty()
             && PendingKeysByReadId.empty()
-            && ReadResults.empty();
+            && ReadResults.empty()
+            && PendingLeftRowsByKey.empty();
     }
 
     void ResetRowsProcessing(ui64 readId, ui32 firstUnprocessedQuery, TMaybe<TOwnedCellVec> lastProcessedKey) final {

@@ -16,6 +16,7 @@ message TGatewaysConfig {
     NYql.TS3GatewayConfig S3 = 5;
     NYql.TSolomonGatewayConfig Solomon = 6;
     NYql.THttpGatewayConfig HttpGateway = 7;
-    NYql.TGenericConnectorConfig Connector = 8;
+    NYql.TGenericConnectorConfig Connector = 8 [deprecated=true];
     NYql.TYqlCoreConfig YqlCore = 9;
+    NYql.TGenericGatewayConfig Generic = 10;
 }

@@ -102,8 +102,7 @@ namespace {
         }
     }
 
-    SIMPLE_UDF_OPTIONS(TGetSubnet, char*(TAutoMapString, TOptionalByte),
-                       builder.OptionalArgs(1)) {
+    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TGetSubnet, char*(TAutoMapString, TOptionalByte), 1) {
         const auto ref = args[0].AsStringRef();
         ui8 subnetSize = args[1].GetOrDefault<ui8>(0);
 

@@ -58,7 +58,7 @@ SIMPLE_UDF(TEcho, char*(TOptional<char*>)) {
     }
 }
 
-SIMPLE_UDF_OPTIONS(TEchoWithPrefix, char*(char*,TOptional<char*>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TEchoWithPrefix, char*(char*,TOptional<char*>), 1) {
     if (!args[1])
         return TUnboxedValuePod(args[0]);
     return valueBuilder->ConcatStrings(args[1], args[0]);
@@ -103,7 +103,7 @@ extern const char d[] = "D";
 using TNamedC = TNamedArg<ui32, c>;
 using TNamedD = TNamedArg<ui32, d>;
 
-SIMPLE_UDF_OPTIONS(TNamedArgs, char*(ui32, TOptional<ui32>, TNamedC, TNamedD), builder.OptionalArgs(3);) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TNamedArgs, char*(ui32, TOptional<ui32>, TNamedC, TNamedD), 3) {
     TString res;
     res += "A=" + ToString(args[0].Get<ui32>());
     res += " B=" + (args[1] ? ToString(args[1].Get<ui32>()) : "none");

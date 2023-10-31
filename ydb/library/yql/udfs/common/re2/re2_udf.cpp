@@ -335,14 +335,14 @@ namespace {
         }
     };
 
-    SIMPLE_UDF_OPTIONS(TPatternFromLike, char*(char*, TOptional<char*>), builder.OptionalArgs(1)) {
+    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TPatternFromLike, char*(char*, TOptional<char*>), 1) {
         const std::string_view input(args[0].AsStringRef());
         const bool hasEscape = bool(args[1]);
         char escape = 0;
         if (hasEscape) {
             const std::string_view escapeRef(args[1].AsStringRef());
             if (escapeRef.size() != 1U) {
-                UdfTerminate((TStringBuilder() << Pos_ << " Escape should be single character").data());
+                UdfTerminate((TStringBuilder() << GetPos() << " Escape should be single character").data());
             }
             escape = escapeRef.front();
         }

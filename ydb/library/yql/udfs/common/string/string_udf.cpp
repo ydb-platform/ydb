@@ -263,8 +263,7 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_STRICT_UDF_OPTIONS(TFind, i64(TAutoMap<char*>, char*, TOptional<ui64>),
-                       builder.OptionalArgs(1)) {
+    SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TFind, i64(TAutoMap<char*>, char*, TOptional<ui64>), 1) {
         Y_UNUSED(valueBuilder);
         const TString haystack(args[0].AsStringRef());
         const TString needle(args[1].AsStringRef());
@@ -272,8 +271,7 @@ namespace {
         return TUnboxedValuePod(haystack.find(needle, pos));
     }
 
-    SIMPLE_STRICT_UDF_OPTIONS(TReverseFind, i64(TAutoMap<char*>, char*, TOptional<ui64>),
-                              builder.OptionalArgs(1)) {
+    SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TReverseFind, i64(TAutoMap<char*>, char*, TOptional<ui64>), 1) {
         Y_UNUSED(valueBuilder);
         const TString haystack(args[0].AsStringRef());
         const TString needle(args[1].AsStringRef());
@@ -281,8 +279,7 @@ namespace {
         return TUnboxedValuePod(haystack.rfind(needle, pos));
     }
 
-    SIMPLE_STRICT_UDF_OPTIONS(TSubstring, char*(TAutoMap<char*>, TOptional<ui64>, TOptional<ui64>),
-                              builder.OptionalArgs(1)) {
+    SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TSubstring, char*(TAutoMap<char*>, TOptional<ui64>, TOptional<ui64>), 1) {
         const TString input(args[0].AsStringRef());
         const ui64 from = args[1].GetOrDefault<ui64>(0);
         const ui64 count = args[2].GetOrDefault<ui64>(TString::npos);
@@ -325,14 +322,14 @@ namespace {
     using TLimitArg = TNamedArg<ui64, limitName>;
 
 
-    SIMPLE_STRICT_UDF_OPTIONS(TSplitToList, TListType<char*>(
+    SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TSplitToList, TListType<char*>(
                             TOptional<char*>,
                             char*,
                             TDelimeterStringArg,
                             TSkipEmptyArg,
                             TLimitArg
                        ),
-                       builder.OptionalArgs(3)) {
+                       3) {
         TTmpVector result;
         if (args[0]) {
             const std::string_view input(args[0].AsStringRef());
@@ -398,7 +395,7 @@ namespace {
 
     static constexpr ui64 padLim = 1000000;
 
-    SIMPLE_UDF_OPTIONS(TRightPad, char*(TAutoMap<char*>, ui64, TOptional<char*>), builder.OptionalArgs(1)) {
+    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TRightPad, char*(TAutoMap<char*>, ui64, TOptional<char*>), 1) {
         TStringStream result;
         const TStringBuf input(args[0].AsStringRef());
         char paddingSymbol = ' ';
@@ -416,7 +413,7 @@ namespace {
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
-    SIMPLE_UDF_OPTIONS(TLeftPad, char*(TAutoMap<char*>, ui64, TOptional<char*>), builder.OptionalArgs(1)) {
+    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TLeftPad, char*(TAutoMap<char*>, ui64, TOptional<char*>), 1) {
         TStringStream result;
         const TStringBuf input(args[0].AsStringRef());
         char paddingSymbol = ' ';

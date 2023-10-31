@@ -14,12 +14,12 @@ namespace {
     typedef TBoxedResource<TDigest, DigestResourceName> TDigestResource;
     typedef TRefCountedPtr<TDigestResource> TDigestResourcePtr;
 
-    SIMPLE_UDF_OPTIONS(TTDigest_Create, TResource<DigestResourceName>(double, TOptional<double>, TOptional<double>), builder.OptionalArgs(2)) {
+    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TTDigest_Create, TResource<DigestResourceName>(double, TOptional<double>, TOptional<double>), 2) {
         Y_UNUSED(valueBuilder);
         const double delta = args[1].GetOrDefault<double>(0.01);
         const double K = args[2].GetOrDefault<double>(25.0);
         if (delta == 0 || K / delta < 1) {
-            UdfTerminate((TStringBuilder() << Pos_ << " Invalid combination of delta/K values").data());
+            UdfTerminate((TStringBuilder() << GetPos() << " Invalid combination of delta/K values").data());
         }
 
         return TUnboxedValuePod(new TDigestResource(delta, K, args[0].Get<double>()));

@@ -250,6 +250,7 @@ public:
         NDq::TDqTaskRunnerSettings settings;
         settings.TerminateOnError = TerminateOnError;
         settings.StatsMode = NDqProto::DQ_STATS_MODE_BASIC;
+        settings.UseCacheForLLVM = true;
 
         Yql::DqsProto::TTaskMeta taskMeta;
         task.GetMeta().UnpackTo(&taskMeta);

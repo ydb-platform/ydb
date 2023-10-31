@@ -29,7 +29,7 @@ def extract_macro_calls2(unit, macro_value_name):
 
     calls = []
     for call_encoded_args in unit.get(macro_value_name).strip().split():
-        call_args = json.loads(base64.b64decode(call_encoded_args), encoding='utf-8')
+        call_args = json.loads(base64.b64decode(call_encoded_args))
         calls.append(call_args)
 
     return calls

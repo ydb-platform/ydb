@@ -26,7 +26,7 @@ public:
     virtual NThreading::TFuture<TListEndpointsResult> GetEndpoints(std::shared_ptr<TDbDriverState> dbState) = 0;
     virtual void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) = 0;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    virtual void DeleteChannels(const std::vector<TStringType>& endpoints) = 0;
+    virtual void DeleteChannels(const std::vector<std::string>& endpoints) = 0;
 #endif
     virtual TBalancingSettings GetBalancingSettings() const = 0;
     virtual bool StartStatCollecting(::NMonitoring::IMetricRegistry* sensorsRegistry) = 0;

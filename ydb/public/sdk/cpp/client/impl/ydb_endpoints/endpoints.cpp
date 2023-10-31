@@ -10,6 +10,8 @@
 
 namespace NYdb {
 
+using std::string;
+
 class TEndpointElectorSafe::TObjRegistry : public IObjRegistryHandle {
 public:
     TObjRegistry(const ui64& nodeId)
@@ -70,8 +72,8 @@ static i32 GetBestK(const std::vector<TEndpointRecord>& records) {
     return pos - 1;
 }
 
-std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpointRecord>&& records) {
-    std::unordered_set<TStringType> index;
+std::vector<string> TEndpointElectorSafe::SetNewState(std::vector<TEndpointRecord>&& records) {
+    std::unordered_set<string> index;
     std::vector<TEndpointRecord> uniqRec;
 
     for (auto&& record : records) {
@@ -84,7 +86,7 @@ std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
 
     auto bestK = GetBestK(uniqRec);
 
-    std::vector<TStringType> removed;
+    std::vector<string> removed;
     std::vector<std::shared_ptr<TObjRegistry>> notifyRemoved;
 
     {
@@ -159,7 +161,7 @@ TEndpointRecord TEndpointElectorSafe::GetEndpoint(const TEndpointKey& preferredE
 }
 
 // TODO: Suboptimal, but should not be used often
-void TEndpointElectorSafe::PessimizeEndpoint(const TStringType& endpoint) {
+void TEndpointElectorSafe::PessimizeEndpoint(const string& endpoint) {
     std::unique_lock guard(Mutex_);
     for (auto& r : Records_) {
         if (r.Endpoint == endpoint && r.Priority != Max<i32>()) {

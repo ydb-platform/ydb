@@ -31,7 +31,7 @@ public:
     ~TKqpSessionCommon();
 
     const TStringType& GetId() const;
-    const TStringType& GetEndpoint() const;
+    const std::string& GetEndpoint() const;
     const TEndpointKey& GetEndpointKey() const;
     void MarkBroken();
     void MarkAsClosing();

@@ -2,6 +2,10 @@
 #include "endpoint_pool.h"
 
 namespace NYdb {
+
+using std::string;
+using std::vector;
+
 TEndpointPool::TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client)
     : Provider_(provider)
     , LastUpdateTime_(TInstant::Zero().MicroSeconds())
@@ -38,9 +42,9 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
     }
     auto handler = [this](const TAsyncListEndpointsResult& future) {
         TListEndpointsResult result = future.GetValue();
-        std::vector<TStringType> removed;
+        vector<string> removed;
         if (result.DiscoveryStatus.Status == EStatus::SUCCESS) {
-            std::vector<TEndpointRecord> records;
+            vector<TEndpointRecord> records;
             // Is used to convert float to integer load factor
             // same integer values will be selected randomly.
             const float multiplicator = 10.0;
@@ -131,7 +135,7 @@ TDuration TEndpointPool::TimeSinceLastUpdate() const {
     return TDuration::MicroSeconds(now - LastUpdateTime_.load());
 }
 
-void TEndpointPool::BanEndpoint(const TStringType& endpoint) {
+void TEndpointPool::BanEndpoint(const string& endpoint) {
     Elector_.PessimizeEndpoint(endpoint);
 }
 
@@ -170,7 +174,7 @@ constexpr i32 TEndpointPool::GetLocalityShift() {
     return LoadMax * Multiplicator;
 }
 
-TStringType TEndpointPool::GetPreferredLocation(const TStringType& selfLocation) {
+string TEndpointPool::GetPreferredLocation(const string& selfLocation) {
     switch (BalancingSettings_.Policy) {
         case EBalancingPolicy::UseAllNodes:
             return {};

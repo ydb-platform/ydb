@@ -67,6 +67,10 @@ namespace NKikimr {
                 PassAway();
             }
 
+            void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr&/* ev*/) {
+                //  do nothing, Model has neither monitoring counters nor Topology
+            }
+
             STATEFN(StateFunc) {
                 switch (const ui32 type = ev->GetTypeRewrite()) {
                     hFunc(TEvBlobStorage::TEvPut, Handle);
@@ -78,6 +82,7 @@ namespace NKikimr {
                     hFunc(TEvBlobStorage::TEvStatus, Handle);
 
                     hFunc(TEvents::TEvPoisonPill, HandlePoison);
+                    hFunc(TEvBlobStorage::TEvConfigureProxy, Handle);
 
                     default:
                         Y_ABORT("unexpected event 0x%08" PRIx32, type);

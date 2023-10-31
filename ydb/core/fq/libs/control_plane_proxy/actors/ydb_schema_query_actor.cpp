@@ -42,6 +42,14 @@ using TScheduleErrorRecoverySQLGeneration =
 using TShouldSkipStepOnError =
     std::function<bool(const TStatus& issues)>;
 
+inline TScheduleErrorRecoverySQLGeneration NoRecoverySQLGeneration() {
+    return TScheduleErrorRecoverySQLGeneration{};
+}
+
+inline TShouldSkipStepOnError NoSkipOnError() {
+    return TShouldSkipStepOnError{};
+}
+
 struct TSchemaQueryTask {
     TString SQL;
     TMaybe<TString> RollbackSQL;
@@ -536,8 +544,7 @@ NActors::IActor* MakeCreateConnectionActor(
         if (createSecretStatement) {
             statements.push_back(
                 TSchemaQueryTask{.SQL         = *createSecretStatement,
-                                 .RollbackSQL = withoutRollback ? TMaybe<TString>{} : DropSecretObjectQuery(connectionContent.name()),
-                                 .ShouldSkipStepOnError = withoutRollback ? IsPathExistsIssue : TShouldSkipStepOnError{}});
+                                 .ShouldSkipStepOnError = withoutRollback ? IsPathExistsIssue : NoSkipOnError()});
         }
 
         TScheduleErrorRecoverySQLGeneration alreadyExistRecoveryActorFactoryMethod =
@@ -559,9 +566,12 @@ NActors::IActor* MakeCreateConnectionActor(
             };
         statements.push_back(
             TSchemaQueryTask{.SQL = TString{MakeCreateExternalDataSourceQuery(
-                                connectionContent, objectStorageEndpoint, signer)},
-                            .ScheduleErrorRecoverySQLGeneration = withoutRollback ? TScheduleErrorRecoverySQLGeneration{} : alreadyExistRecoveryActorFactoryMethod,
-                            .ShouldSkipStepOnError = withoutRollback ? IsPathExistsIssue : TShouldSkipStepOnError{}});
+                                 connectionContent, objectStorageEndpoint, signer)},
+                             .ScheduleErrorRecoverySQLGeneration =
+                                 withoutRollback ? NoRecoverySQLGeneration()
+                                                 : alreadyExistRecoveryActorFactoryMethod,
+                             .ShouldSkipStepOnError =
+                                 withoutRollback ? IsPathExistsIssue : NoSkipOnError()});
         return statements;
     };
 
@@ -776,7 +786,7 @@ NActors::IActor* MakeCreateBindingActor(
                             permissions,
                             requestTimeout,
                             counters.GetCommonCounters(
-                                RTC_CREATE_CONNECTION_IN_YDB))); // change counter
+                                RTC_CREATE_BINDING_IN_YDB))); // change counter
                     return true;
                 }
                 return false;
@@ -784,8 +794,10 @@ NActors::IActor* MakeCreateBindingActor(
         statements.push_back(TSchemaQueryTask{
             .SQL = TString{MakeCreateExternalDataTableQuery(bindingContent,
                                                             externalSourceName)},
-            .ScheduleErrorRecoverySQLGeneration = withoutRollback ? TScheduleErrorRecoverySQLGeneration{} :alreadyExistRecoveryActorFactoryMethod,
-            .ShouldSkipStepOnError = withoutRollback ? IsPathExistsIssue : TShouldSkipStepOnError{}});
+            .ScheduleErrorRecoverySQLGeneration =
+                withoutRollback ? NoRecoverySQLGeneration()
+                                : alreadyExistRecoveryActorFactoryMethod,
+            .ShouldSkipStepOnError = withoutRollback ? IsPathExistsIssue : NoSkipOnError()});
         return statements;
     };
 

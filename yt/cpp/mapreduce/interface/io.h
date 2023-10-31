@@ -113,7 +113,13 @@ class IFileReader
 class IFileWriter
     : public TThrRefBase
     , public IOutputStream
-{ };
+{
+public:
+    virtual size_t GetBufferMemoryUsage() const
+    {
+        return 0;
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

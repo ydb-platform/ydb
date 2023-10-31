@@ -139,10 +139,62 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
         for (auto& child : input.ChildrenList()) {
             newChildren.emplace_back(ctx.ChangeChild(*node, 0, std::move(child)));
         }
-        return ctx.ChangeChildren(input, std::move(newChildren));
+        return ctx.NewCallable(input.Pos(), input.IsCallable("Extend") ? "BlockExtend" : "BlockOrderedExtend", std::move(newChildren));
     }
 
     return node;
+}
+
+TExprNode::TPtr ExpandBlockExtend(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_UNUSED(types);
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+
+    TExprNodeList newChildren;
+    newChildren.reserve(node->ChildrenSize());
+    bool seenScalars = false;
+    for (auto& child : node->ChildrenList()) {
+        const auto& items = child->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+        const ui32 width = items.size();
+        YQL_ENSURE(width > 0);
+        if (AllOf(items.begin(), items.end() - 1, [](const auto& item) { return item->IsBlock(); })) {
+            newChildren.push_back(child);
+            continue;
+        }
+
+        seenScalars = true;
+
+        TExprNodeList args;
+        TExprNodeList bodyItems;
+
+        args.reserve(width);
+        bodyItems.reserve(width);
+        auto lastColumn = ctx.NewArgument(child->Pos(), "height");
+        for (ui32 i = 0; i < width; ++i) {
+            auto arg = (i + 1 == width) ? lastColumn : ctx.NewArgument(child->Pos(), "arg");
+            args.push_back(arg);
+
+            if (i + 1 == width || items[i]->IsBlock()) {
+                bodyItems.push_back(arg);
+            } else {
+                YQL_ENSURE(items[i]->IsScalar());
+                bodyItems.push_back(ctx.NewCallable(child->Pos(), "ReplicateScalar", { arg, lastColumn}));
+            }
+        }
+
+        newChildren.push_back(ctx.Builder(child->Pos())
+            .Callable("WideMap")
+                .Add(0, child)
+                .Add(1, ctx.NewLambda(child->Pos(), ctx.NewArguments(child->Pos(), std::move(args)), std::move(bodyItems)))
+            .Seal()
+            .Build()
+        );
+    }
+
+    const TStringBuf newName = node->IsCallable("BlockOrdredExtend") ? "OrdredExtend" : "Extend";
+    if (!seenScalars) {
+        return ctx.RenameNode(*node, newName);
+    }
+    return ctx.NewCallable(node->Pos(), newName, std::move(newChildren));
 }
 
 TExprNode::TPtr SplitEquiJoinToPairsRecursive(const TExprNode& node, const TExprNode& joinTree, TExprContext& ctx,
@@ -3772,12 +3824,18 @@ TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx
 
     if (const auto& input = node->Head(); input.IsCallable({"Extend", "OrderedExtend"})) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
+        bool isWideBlockFlow = AllOf(node->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems(),
+            [](const auto& itemType) { return itemType->IsBlockOrScalar(); });
+        TString newName = ToString(input.Content());
+        if (isWideBlockFlow) {
+            newName = "Block" + newName;
+        }
         TExprNodeList newChildren;
         newChildren.reserve(input.ChildrenSize());
         for (const auto& child : input.ChildrenList()) {
             newChildren.emplace_back(ctx.ChangeChildren(*node, { child, ctx.DeepCopyLambda(node->Tail())}));
         }
-        return ctx.ChangeChildren(input, std::move(newChildren));
+        return ctx.NewCallable(input.Pos(), newName, std::move(newChildren));
     }
 
 /* TODO
@@ -7522,6 +7580,11 @@ struct TPeepHoleRules {
         {"WideSort", &OptimizeTopOrSortBlocks},
     };
 
+    const TExtPeepHoleOptimizerMap BlockStageExtFinalRules = {
+        {"BlockExtend", &ExpandBlockExtend},
+        {"BlockOrderedExtend", &ExpandBlockExtend},
+    };
+
     static const TPeepHoleRules& Instance() {
         return *Singleton<TPeepHoleRules>();
     }
@@ -7611,6 +7674,21 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
             }
         ),
         "PeepHoleBlock",
+        issueCode);
+
+    pipeline.Add(
+        CreateFunctorTransformer(
+            [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
+                if (types.UseBlocks) {
+                    const auto& extStageRules = TPeepHoleRules::Instance().BlockStageExtFinalRules;
+                    return PeepHoleBlockStage(input, output, ctx, types, extStageRules);
+                } else {
+                    output = input;
+                    return IGraphTransformer::TStatus::Ok;
+                }
+            }
+        ),
+        "PeepHoleFinalBlock",
         issueCode);
 
     if (peepholeSettings.FinalConfig) {

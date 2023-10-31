@@ -1077,7 +1077,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     if (runConfig.AppConfig.HasSharedCacheConfig()) {
-        AppData->SharedCacheConfig = runConfig.AppConfig.GetSharedCacheConfig();
+        AppData->SharedCacheConfigPtr = std::make_unique<NKikimrSharedCache::TSharedCacheConfig>();
+        AppData->SharedCacheConfigPtr->CopyFrom(runConfig.AppConfig.GetSharedCacheConfig());
     }
 
     if (runConfig.AppConfig.HasAwsCompatibilityConfig()) {

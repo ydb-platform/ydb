@@ -321,6 +321,10 @@ IDqIntegration* TDataProviderBase::GetDqIntegration() {
     return nullptr;
 }
 
+IDqOptimization* TDataProviderBase::GetDqOptimization() {
+    return nullptr;
+}
+
 TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto root = node;
     auto status = OptimizeExpr(root, root, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {

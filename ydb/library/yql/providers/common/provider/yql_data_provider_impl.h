@@ -88,6 +88,7 @@ public:
     ITrackableNodeProcessor& GetTrackableNodeProcessor() override;
     IGraphTransformer& GetPlanInfoTransformer() override;
     IDqIntegration* GetDqIntegration() override;
+    IDqOptimization* GetDqOptimization() override;
 
 protected:
     THolder<IGraphTransformer> DefConstraintTransformer_;

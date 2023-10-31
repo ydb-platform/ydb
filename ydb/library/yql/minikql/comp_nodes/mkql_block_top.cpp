@@ -175,10 +175,6 @@ public:
 
         block = read;
 
-        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
-        const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
-        SafeUnRefUnboxed(values, ctx, block);
-
         const auto getres = GetNodeValues(Flow_, ctx, block);
 
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
@@ -189,6 +185,8 @@ public:
 
         block = good;
 
+        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
+        const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
         Value* array = UndefValue::get(arrayType);
         for (auto idx = 0U; idx < getres.second.size(); ++idx) {
             const auto value = getres.second[idx](ctx, block);
@@ -352,6 +350,7 @@ private:
                 }
 
                 OutputLength_ += blockLen;
+                Values.assign(Values.size(), NUdf::TUnboxedValuePod());
                 return;
             }
 
@@ -381,6 +380,8 @@ private:
             if (BuilderLength_ + Count_ > BuilderMaxLength_) {
                 CompressBuilders(false);
             }
+
+            Values.assign(Values.size(), NUdf::TUnboxedValuePod());
         }
 
         ui64 GetStorageLength() const {

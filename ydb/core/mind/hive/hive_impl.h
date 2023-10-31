@@ -754,16 +754,12 @@ public:
     TResourceNormalizedValues GetMinNodeUsageToBalance() const {
         // MinNodeUsageToBalance is needed so that small fluctuations in metrics do not cause scatter
         // when cluster load is low. Counter does not fluctuate, so it does not need it.
-        // However, we still do not want a difference of 1 in Counter to be able to cause scatter.
         double minUsageToBalance = CurrentConfig.GetMinNodeUsageToBalance();
         TResourceNormalizedValues minValuesToBalance;
         std::get<NMetrics::EResource::CPU>(minValuesToBalance) = minUsageToBalance;
         std::get<NMetrics::EResource::Memory>(minValuesToBalance) = minUsageToBalance;
         std::get<NMetrics::EResource::Network>(minValuesToBalance) = minUsageToBalance;
-        auto counterScatterThreshold = std::get<NMetrics::EResource::Counter>(GetMinScatterToBalance());
-        if (counterScatterThreshold != 0 && CurrentConfig.GetMaxResourceCounter() != 0) {
-            std::get<NMetrics::EResource::Counter>(minValuesToBalance) = 1.0 / (counterScatterThreshold * CurrentConfig.GetMaxResourceCounter());
-        }
+        std::get<NMetrics::EResource::Counter>(minValuesToBalance) = 0;
         return minValuesToBalance;
     }
 

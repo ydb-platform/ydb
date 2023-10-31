@@ -2134,7 +2134,14 @@ THive::THiveStats THive::GetStats() const {
     auto minValuesToBalance = GetMinNodeUsageToBalance();
     maxValues = piecewise_max(maxValues, minValuesToBalance);
     minValues = piecewise_max(minValues, minValuesToBalance);
-    stats.ScatterByResource = safe_div(maxValues - minValues, maxValues);
+    auto discrepancy = maxValues - minValues;
+    auto& counterDiscrepancy = std::get<NMetrics::EResource::Counter>(discrepancy);
+    if (counterDiscrepancy * CurrentConfig.GetMaxResourceCounter() <= 1.5) {
+        // We should ignore counter discrepancy of one - it cannot be fixed by balancer
+        // Value 1.5 is used to avoid rounding errors
+        counterDiscrepancy = 0;
+    }
+    stats.ScatterByResource = safe_div(discrepancy, maxValues);
     stats.Scatter = max(stats.ScatterByResource);
 
     return stats;

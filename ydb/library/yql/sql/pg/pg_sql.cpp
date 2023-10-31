@@ -1885,23 +1885,20 @@ public:
             );
 
             TString mode = (value->missing_ok) ? "drop_if_exists" : "drop";
-            for (const auto& name : names) {
-                Statements.push_back(L(
-                    A("let"),
+            Statements.push_back(L(
+                A("let"),
+                A("world"),
+                L(
+                    A("Write!"),
                     A("world"),
-                    L(
-                        A("Write!"),
-                        A("world"),
-                        sink,
-                        key,
-                        L(A("Void")),
-                        QL(
-                            QL(QA("mode"), QA(mode))
-                        )
+                    sink,
+                    key,
+                    L(A("Void")),
+                    QL(
+                        QL(QA("mode"), QA(mode))
                     )
-                ));
-
-            }
+                )
+            ));
         }
 
         return Statements.back();

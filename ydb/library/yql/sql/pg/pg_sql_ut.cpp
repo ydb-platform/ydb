@@ -345,6 +345,21 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
 
+    Y_UNIT_TEST(DropTableStmtMultiple) {
+        auto res = PgSqlToYql("DROP TABLE FakeTable1, FakeTable2");
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"FakeTable1"))) (Void) '('('mode 'drop))))
+                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"FakeTable2"))) (Void) '('('mode 'drop))))
+                (let world (CommitAll! world))
+                (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
     Y_UNIT_TEST(UpdateStmt) {
         auto res = PgSqlToYql("UPDATE plato.Input SET kind = 'test' where kind = 'testtest'");
         Cerr << res.Root->ToString();

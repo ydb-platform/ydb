@@ -1402,6 +1402,45 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
+    Y_UNIT_TEST(DropTablePgMultiple) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE FirstTable (
+                    key int4 PRIMARY KEY,
+                    val int4
+                );
+                )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE SecondTable (
+                    key int4 PRIMARY KEY,
+                    val int4
+                );
+                )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                DROP TABLE FirstTable, SecondTable;
+                )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(CreateTableSerialColumns) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableNotNullDataColumns(true));
         auto client = kikimr.GetTableClient();

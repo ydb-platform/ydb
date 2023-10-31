@@ -30,7 +30,7 @@ class TDriveEstimator {
     TAtomic Counter = 0;
     TMutex Mtx;
     TCondVar CondVar;
-    static constexpr ui32 Repeats = 128;
+    static constexpr ui32 Repeats = 32;
     static constexpr ui32 BufferSize = 128 << 20;
     static constexpr ui32 SectorSize = 4096;
     static constexpr ui32 SeekBufferSize = 4096;

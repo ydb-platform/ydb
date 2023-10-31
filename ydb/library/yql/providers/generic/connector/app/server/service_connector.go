@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 
@@ -231,16 +232,16 @@ func (s *serviceConnector) start() error {
 
 func makeGRPCOptions(logger log.Logger, cfg *config.TServerConfig) ([]grpc.ServerOption, error) {
 	var (
-		opts []grpc.ServerOption
-		tls  *config.TServerTLSConfig
+		opts      []grpc.ServerOption
+		tlsConfig *config.TServerTLSConfig
 	)
 
 	// TODO: drop deprecated fields after YQ-2057
 	switch {
 	case cfg.GetConnectorServer().GetTls() != nil:
-		tls = cfg.GetConnectorServer().GetTls()
+		tlsConfig = cfg.GetConnectorServer().GetTls()
 	case cfg.GetTls() != nil:
-		tls = cfg.GetTls()
+		tlsConfig = cfg.GetTls()
 	default:
 		logger.Warn("server will use insecure connections")
 
@@ -249,12 +250,15 @@ func makeGRPCOptions(logger log.Logger, cfg *config.TServerConfig) ([]grpc.Serve
 
 	logger.Info("server will use TLS connections")
 
-	logger.Debug("reading key pair", log.String("cert", tls.Cert), log.String("key", tls.Key))
+	logger.Debug("reading key pair", log.String("cert", tlsConfig.Cert), log.String("key", tlsConfig.Key))
 
-	creds, err := credentials.NewServerTLSFromFile(tls.Cert, tls.Key)
+	cert, err := tls.LoadX509KeyPair(tlsConfig.Cert, tlsConfig.Key)
 	if err != nil {
-		return nil, fmt.Errorf("new server TLS from file: %w", err)
+		return nil, fmt.Errorf("LoadX509KeyPair: %w", err)
 	}
+
+	// for security reasons we do not allow TLS < 1.2, see YQ-1877
+	creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
 
 	opts = append(opts, grpc.Creds(creds))
 

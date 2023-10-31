@@ -1154,6 +1154,8 @@ class TestSessionNotFound(Base):
             )
         )
 
+
+class TestSessionNotFoundOperations(Base):
     def test_session_pool(self):
         pool = ydb.table.SessionPool(self.driver, size=10)
         with pool.checkout() as session:

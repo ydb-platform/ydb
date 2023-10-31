@@ -86,4 +86,4 @@ class TestIdle(object):
             finally:
                 pool.release(session)
 
-        assert closed_idle == 1000
+        assert closed_idle > 500

@@ -1297,7 +1297,7 @@ public:
         std::sort(computeNodeIds->begin(), computeNodeIds->end());
         computeNodeIds->erase(std::unique(computeNodeIds->begin(), computeNodeIds->end()), computeNodeIds->end());
         if (computeNodeIds->empty()) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no compute nodes");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no compute nodes", ETags::ComputeState);
         } else {
             Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets({&context, "SYSTEM_TABLET"});
             if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {

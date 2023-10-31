@@ -168,6 +168,16 @@ public:
 static_assert(sizeof(TCell) == 12, "TCell must be 12 bytes");
 using TCellsRef = TConstArrayRef<const TCell>;
 
+inline int CompareCellsAsByteString(const TCell& a, const TCell& b, bool isDescending) {
+    const char* pa = (const char*)a.Data();
+    const char* pb = (const char*)b.Data();
+    size_t sza = a.Size();
+    size_t szb = b.Size();
+    int cmp = memcmp(pa, pb, sza < szb ? sza : szb);
+    if (cmp != 0)
+        return isDescending ? (cmp > 0 ? -1 : +1) : cmp; // N.B. cannot multiply, may overflow
+    return sza == szb ? 0 : ((sza < szb) != isDescending ? -1 : 1);
+}
 
 // NULL is considered equal to another NULL and less than non-NULL
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
@@ -219,26 +229,14 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
     case NKikimr::NScheme::NTypeIds::JsonDocument:
     case NKikimr::NScheme::NTypeIds::DyNumber:
     {
-        const char* pa = (const char*)a.Data();
-        const char* pb = (const char*)b.Data();
-        size_t sza = a.Size();
-        size_t szb = b.Size();
-        int cmp = memcmp(pa, pb, sza < szb ? sza : szb);
-        if (cmp != 0)
-            return type.IsDescending() ? (cmp > 0 ? -1 : +1) : cmp; // N.B. cannot multiply, may overflow
-        return sza == szb ? 0 : ((sza < szb) != type.IsDescending() ? -1 : 1);
+        return CompareCellsAsByteString(a, b, type.IsDescending());
     }
 
     case NKikimr::NScheme::NTypeIds::Uuid:
     {
         Y_DEBUG_ABORT_UNLESS(a.Size() == 16);
         Y_DEBUG_ABORT_UNLESS(b.Size() == 16);
-        const char* pa = (const char*)a.Data();
-        const char* pb = (const char*)b.Data();
-        int cmp = memcmp(pa, pb, 16);
-        if (cmp != 0)
-            return type.IsDescending() ? (cmp > 0 ? -1 : +1) : cmp; // N.B. cannot multiply, may overflow
-        return 0;
+        return CompareCellsAsByteString(a, b, type.IsDescending());
     }
 
     case NKikimr::NScheme::NTypeIds::Decimal:

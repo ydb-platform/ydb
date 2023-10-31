@@ -1,4 +1,5 @@
 {
+  ".":"ydb/github_toplevel",
   ".github/actions/build/action.yml":"ydb/github_toplevel/.github/actions/build/action.yml",
   ".github/actions/build_ya/action.yml":"ydb/github_toplevel/.github/actions/build_ya/action.yml",
   ".github/actions/prepare_vm/action.yaml":"ydb/github_toplevel/.github/actions/prepare_vm/action.yaml",

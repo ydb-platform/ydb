@@ -3,6 +3,7 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <ydb/core/raw_socket/sock_config.h>
+#include <ydb/core/pgproxy/protos/pgproxy.pb.h>
 #include "pg_proxy_types.h"
 
 namespace NPG {
@@ -12,6 +13,7 @@ using namespace NKikimr::NRawSocket;
 struct TEvPGEvents {
     enum EEv {
         EvConnectionOpened = EventSpaceBegin(NActors::TEvents::ES_PGWIRE),
+        EvFinishHandshake,
         EvConnectionClosed,
         EvAuth,
         EvAuthResponse,
@@ -27,6 +29,7 @@ struct TEvPGEvents {
         EvExecuteResponse,
         EvClose,
         EvCloseResponse,
+        EvCancelRequest,
         EvEnd
     };
 
@@ -56,6 +59,13 @@ struct TEvPGEvents {
             : Message(std::move(message))
             , Address(address)
         {}
+    };
+
+    struct TEvFinishHandshake : NActors::TEventLocal<TEvFinishHandshake, EvFinishHandshake> {
+        TPGInitial::TPGBackendData BackendData;
+        std::vector<std::pair<char, TString>> ErrorFields;
+
+        TEvFinishHandshake() = default;
     };
 
     struct TEvConnectionClosed : NActors::TEventLocal<TEvConnectionClosed, EvConnectionClosed> {
@@ -243,6 +253,16 @@ struct TEvPGEvents {
 
         std::unique_ptr<TEvCloseResponse> Reply() {
             return std::make_unique<TEvCloseResponse>(std::move(Message));
+        }
+    };
+
+    struct TEvCancelRequest : NActors::TEventPB<TEvCancelRequest, NKikimrPgProxy::TEvCancelRequest, EvCancelRequest> {
+
+        TEvCancelRequest() = default;
+
+        TEvCancelRequest(int32_t pid, int32_t key) {
+            Record.SetProcessId(pid);
+            Record.SetSecretKey(key);
         }
     };
 };

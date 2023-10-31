@@ -2,7 +2,7 @@
 
 namespace NLocalPgWire {
 
-inline NActors::TActorId CreateLocalPgWireProxyId() { return NActors::TActorId(0, "localpgwire"); }
+inline NActors::TActorId CreateLocalPgWireProxyId(uint32_t nodeId = 0) { return NActors::TActorId(nodeId, "localpgwire"); }
 NActors::IActor* CreateLocalPgWireProxy();
 
 }

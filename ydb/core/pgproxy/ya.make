@@ -19,6 +19,7 @@ PEERDIR(
     library/cpp/actors/protos
     library/cpp/string_utils/base64
     ydb/core/base
+    ydb/core/pgproxy/protos
     ydb/core/protos
     ydb/core/raw_socket
 )

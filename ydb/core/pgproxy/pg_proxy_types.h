@@ -58,6 +58,13 @@ struct TPGInitial : TPGMessageType<'i'> { // it's not true, because we don't rec
     TString Dump() const;
     std::unordered_map<TString, TString> GetClientParams() const;
     uint32_t GetProtocol() const;
+
+    struct TPGBackendData {
+        uint32_t Pid;
+        uint32_t Key;
+    };
+
+    TPGBackendData GetBackendData() const;
 };
 
 struct TPGAuth : TPGMessageType<'R'> {
@@ -116,6 +123,10 @@ struct TPGParameterStatus : TPGMessageType<'S'> {
             return {};
         }
     }
+};
+
+struct TPGBackendKeyData : TPGMessageType<'K'> {
+    TString Dump() const;
 };
 
 struct TPGSync : TPGMessageType<'S'> {

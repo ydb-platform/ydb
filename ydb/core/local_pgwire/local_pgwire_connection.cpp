@@ -22,21 +22,61 @@ namespace NLocalPgWire {
 using namespace NActors;
 using namespace NKikimr;
 
-class TPgYdbConnection : public TActor<TPgYdbConnection> {
-    using TBase = TActor<TPgYdbConnection>;
+class TPgYdbConnection : public TActorBootstrapped<TPgYdbConnection> {
+    using TBase = TActorBootstrapped<TPgYdbConnection>;
 
     std::unordered_map<TString, TString> ConnectionParams;
+    NPG::TEvPGEvents::TEvConnectionOpened::TPtr ConnectionEvent;
     std::unordered_map<TString, TParsedStatement> ParsedStatements;
     std::unordered_map<TString, TPortal> Portals;
     TConnectionState Connection;
     std::deque<TAutoPtr<IEventHandle>> Events;
     ui32 Inflight = 0;
+    std::unordered_set<TActorId> CurrentRunningQueries;
 
 public:
-    TPgYdbConnection(std::unordered_map<TString, TString> params)
-        : TActor<TPgYdbConnection>(&TPgYdbConnection::StateSchedule)
-        , ConnectionParams(std::move(params))
+    TPgYdbConnection(std::unordered_map<TString, TString> params, NPG::TEvPGEvents::TEvConnectionOpened::TPtr&& event, const TConnectionState& connection)
+        : ConnectionParams(std::move(params))
+        , ConnectionEvent(std::move(event))
+        , Connection(connection)
     {}
+
+    void Bootstrap() {
+        TString database;
+        if (ConnectionParams.count("database")) {
+            database = ConnectionParams["database"];
+        }
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+        NKikimrKqp::TCreateSessionRequest& request = *ev->Record.MutableRequest();
+        request.SetDatabase(database);
+        BLOG_D("Sent CreateSessionRequest to kqpProxy " << ev->Record.ShortDebugString());
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
+        TBase::Become(&TPgYdbConnection::StateCreateSession);
+    }
+
+    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
+        const auto& record(ev->Get()->Record);
+        BLOG_D("Received TEvCreateSessionResponse " << record.ShortDebugString());
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            BLOG_D("Session id is " << record.GetResponse().GetSessionId());
+            Connection.SessionId = record.GetResponse().GetSessionId();
+
+            auto response = MakeHolder<NPG::TEvPGEvents::TEvFinishHandshake>();
+            response->BackendData.Pid = SelfId().NodeId();
+            response->BackendData.Key = Connection.ConnectionNum;
+            Send(ConnectionEvent->Sender, response.Release(), 0, ev->Cookie);
+            TBase::Become(&TPgYdbConnection::StateSchedule);
+            ConnectionEvent.Destroy(); // don't need it anymore
+        } else {
+            BLOG_W("Failed to create session: " << record.ShortDebugString());
+            auto response = MakeHolder<NPG::TEvPGEvents::TEvFinishHandshake>();
+            // TODO: report actuall error
+            response->ErrorFields.push_back({'E', "ERROR"});
+            response->ErrorFields.push_back({'M', record.GetError()});
+            Send(ConnectionEvent->Sender, response.Release(), 0, ev->Cookie);
+            return PassAway();
+        }
+    }
 
     void ProcessEventsQueue() {
         while (!Events.empty() && Inflight == 0) {
@@ -58,6 +98,7 @@ public:
         ++Inflight;
         TActorId actorId = RegisterWithSameMailbox(CreatePgwireKqpProxyQuery(SelfId(), ConnectionParams, Connection, std::move(ev)));
         BLOG_D("Created pgwireKqpProxyQuery: " << actorId);
+        CurrentRunningQueries.insert(actorId);
     }
 
     void Handle(NPG::TEvPGEvents::TEvQuery::TPtr& ev) {
@@ -85,7 +126,7 @@ public:
         ++Inflight;
         TActorId actorId = RegisterWithSameMailbox(CreatePgwireKqpProxyParse(SelfId(), ConnectionParams, Connection, std::move(ev)));
         BLOG_D("Created pgwireKqpProxyParse: " << actorId);
-        return;
+        CurrentRunningQueries.insert(actorId);
     }
 
     void Handle(NPG::TEvPGEvents::TEvBind::TPtr& ev) {
@@ -183,6 +224,7 @@ public:
         ++Inflight;
         TActorId actorId = RegisterWithSameMailbox(CreatePgwireKqpProxyExecute(SelfId(), ConnectionParams, Connection, std::move(ev), it->second));
         BLOG_D("Created pgwireKqpProxyExecute: " << actorId);
+        CurrentRunningQueries.insert(actorId);
     }
 
     void Handle(TEvEvents::TEvUpdateStatement::TPtr& ev) {
@@ -216,23 +258,39 @@ public:
             BLOG_D("Session id is " << connection.SessionId);
             Connection.SessionId = connection.SessionId;
         }
+        CurrentRunningQueries.erase(ev->Sender);
         ProcessEventsQueue();
+    }
+
+    void Handle(NPG::TEvPGEvents::TEvCancelRequest::TPtr&) {
+        BLOG_D("Received TEvCancelRequest");
+        for (const TActorId& actor : CurrentRunningQueries) {
+            Send(actor, new TEvEvents::TEvCancelRequest());
+        }
     }
 
     void PassAway() override {
         if (Connection.SessionId) {
-            BLOG_D("Closing session " << Connection.SessionId);
             auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
             ev->Record.MutableRequest()->SetSessionId(Connection.SessionId);
+            BLOG_D("Closing session " << Connection.SessionId << ", sent event to kqpProxy " << ev->Record.ShortDebugString());
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
         }
         TBase::PassAway();
+    }
+
+    STATEFN(StateCreateSession) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+        }
     }
 
     STATEFN(StateSchedule) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvEvents::TEvProxyCompleted, Handle);
             hFunc(TEvEvents::TEvUpdateStatement, Handle);
+            hFunc(NPG::TEvPGEvents::TEvCancelRequest, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
             default: {
                 if (Inflight == 0) {
@@ -259,8 +317,8 @@ public:
 };
 
 
-NActors::IActor* CreateConnection(std::unordered_map<TString, TString> params) {
-    return new TPgYdbConnection(std::move(params));
+NActors::IActor* CreateConnection(std::unordered_map<TString, TString> params, NPG::TEvPGEvents::TEvConnectionOpened::TPtr&& event, const TConnectionState& connection) {
+    return new TPgYdbConnection(std::move(params), std::move(event), connection);
 }
 
 }

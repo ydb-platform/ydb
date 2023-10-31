@@ -241,7 +241,7 @@ protected:
     void ReplyWithResponseAndPassAway() {
         Response_->TransactionStatus = Connection_.Transaction.Status;
         TBase::Send(Owner_, new TEvEvents::TEvProxyCompleted(Connection_));
-        BLOG_D("Finally replying to " << EventRequest_->Sender);
+        BLOG_D("Finally replying to " << EventRequest_->Sender << " cookie " << EventRequest_->Cookie);
         TBase::Send(EventRequest_->Sender, Response_.release(), 0, EventRequest_->Cookie);
         TBase::PassAway();
     }
@@ -297,7 +297,20 @@ protected:
         return ReplyWithResponseAndPassAway();
     }
 
+    void Handle(TEvEvents::TEvCancelRequest::TPtr&) {
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvCancelQueryRequest>();
+        if (Connection_.SessionId) {
+            ev->Record.MutableRequest()->SetSessionId(Connection_.SessionId);
+        }
+        BLOG_D("Sent CancelQueryRequest to kqpProxy " << ev->Record.ShortDebugString());
+        TBase::Send(NKqp::MakeKqpProxyID(TBase::SelfId().NodeId()), ev.Release());
 
+        Response_->ErrorFields.push_back({'S', "ERROR"});
+        Response_->ErrorFields.push_back({'V', "ERROR"});
+        Response_->ErrorFields.push_back({'C', "57014"});
+        Response_->ErrorFields.push_back({'M', "Cancelling statement due to user request"});
+        return ReplyWithResponseAndPassAway();
+    }
 };
 
 class TPgwireKqpProxyQuery : public TPgwireKqpProxy<TPgwireKqpProxyQuery, TEvEvents::TEvSingleQuery> {
@@ -330,6 +343,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqp::TEvQueryResponse, TBase::Handle);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, TBase::Handle);
+            hFunc(TEvEvents::TEvCancelRequest, Handle);
         }
     }
 };
@@ -416,6 +430,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+            hFunc(TEvEvents::TEvCancelRequest, TBase::Handle);
         }
     }
 };
@@ -460,6 +475,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqp::TEvQueryResponse, TBase::Handle);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, TBase::Handle);
+            hFunc(TEvEvents::TEvCancelRequest, Handle);
         }
     }
 };

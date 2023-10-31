@@ -141,14 +141,10 @@ public:
     const std::vector<TError>& InnerErrors() const;
     std::vector<TError>* MutableInnerErrors();
 
-    // TODO(gritukan): This method is used only outside of YT. Remove it.
-    TError Sanitize() const;
-
     TError Truncate(
         int maxInnerErrorCount = 2,
         i64 stringLimit = 16_KB,
         const THashSet<TStringBuf>& attributeWhitelist = {}) const &;
-
     TError Truncate(
         int maxInnerErrorCount = 2,
         i64 stringLimit = 16_KB,

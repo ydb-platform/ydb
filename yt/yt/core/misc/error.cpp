@@ -585,25 +585,6 @@ std::vector<TError>* TError::MutableInnerErrors()
     return Impl_->MutableInnerErrors();
 }
 
-TError TError::Sanitize() const
-{
-    if (!Impl_) {
-        return {};
-    }
-
-    auto result = std::make_unique<TImpl>();
-    result->SetCode(GetCode());
-    result->SetMessage(GetMessage());
-    if (Impl_->HasAttributes()) {
-        result->SetAttributes(Impl_->Attributes().Clone());
-    }
-    for (const auto& innerError : Impl_->InnerErrors()) {
-        result->MutableInnerErrors()->push_back(innerError.Sanitize());
-    }
-
-    return TError(std::move(result));
-}
-
 const TString InnerErrorsTruncatedKey("inner_errors_truncated");
 
 TError TError::Truncate(int maxInnerErrorCount, i64 stringLimit, const THashSet<TStringBuf>& attributeWhitelist) const &

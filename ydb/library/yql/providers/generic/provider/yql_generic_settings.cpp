@@ -37,8 +37,8 @@ namespace NYql {
         const auto& databaseId = clusterConfig.GetDatabaseId();
         const auto& endpoint = clusterConfig.GetEndpoint();
 
-        YQL_CLOG(DEBUG, ProviderGeneric)
-            << "add cluster"
+        YQL_CLOG(INFO, ProviderGeneric)
+            << "generic provider add cluster"
             << ": name = " << clusterName
             << ", database id = " << databaseId
             << ", endpoint = " << endpoint;
@@ -79,7 +79,10 @@ namespace NYql {
     TString TGenericConfiguration::MakeStructuredToken(const TGenericClusterConfig& cluster, const TCredentials::TPtr& credentials) const {
         TStructuredTokenBuilder b;
 
-        const auto iamToken = credentials->FindCredentialContent("default_" + cluster.name(), "default_generic", cluster.GetToken());
+        const auto iamToken = credentials->FindCredentialContent(
+            "default_" + cluster.name(),
+            "default_generic",
+            cluster.GetToken() ? cluster.GetToken() : GetEnv("YQL_TOKEN"));
         if (iamToken) {
             return b.SetIAMToken(iamToken).ToJson();
         }

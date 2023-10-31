@@ -396,6 +396,13 @@ void TQueueLeader::HandleLocalCounterChanged(TSqsEvents::TEvLocalCounterChanged:
         case TSqsEvents::TEvLocalCounterChanged::ECounterType::ReceiveMessageEmptyCount:
             INC_COUNTER_COUPLE(Counters_, ReceiveMessage_EmptyCount, empty_receive_attempts_count_per_second);
             break;
+        case TSqsEvents::TEvLocalCounterChanged::ECounterType::MessagesPurged:
+            ADD_COUNTER_COUPLE(Counters_, MessagesPurged, purged_count_per_second, ev->Get()->Value);
+            break;
+        case TSqsEvents::TEvLocalCounterChanged::ECounterType::ClientMessageProcessingDuration:
+            COLLECT_HISTOGRAM_COUNTER(Counters_, ClientMessageProcessing_Duration, ev->Get()->Value);
+            COLLECT_HISTOGRAM_COUNTER(Counters_, client_processing_duration_milliseconds, ev->Get()->Value);
+            break;
     }
 }
 

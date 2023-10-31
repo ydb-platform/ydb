@@ -57,6 +57,12 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
         })
         assert delete_message_count == 1
 
+        client_message_processing_duration_buckets = self._get_counter(sqs_counters, {
+            'queue': self.queue_name,
+            'sensor': 'ClientMessageProcessing_Duration',
+        })['hist']['buckets']
+        assert any(map(lambda x: x > 0, client_message_processing_duration_buckets))
+
     def test_counters_when_sending_duplicates(self):
         fifo_queue_name = self.queue_name + ".fifo"
         queue_url = self._create_queue_and_assert(queue_name=fifo_queue_name, is_fifo=True, use_http=True)
@@ -132,3 +138,19 @@ class TestSqsGettingCounters(KikimrSqsTestBase):
             'sensor': 'ReceiveMessageImmediate_Duration',
         })['hist']['buckets']
         assert any(map(lambda x: x > 0, receive_message_immediate_duration_buckets))
+
+    def test_purge_queue_counters(self):
+        queue_url = self._create_queue_and_assert(self.queue_name, False, True)
+        self._sqs_api.send_message(queue_url, "foo")
+        self._sqs_api.purge_queue(queue_url)
+
+        self._sqs_api.send_message(queue_url, "bar")
+        self._sqs_api.purge_queue(queue_url)
+
+        sqs_counters = self._get_sqs_counters()
+
+        purged_derivative = self._get_counter_value(sqs_counters, {
+            'queue': self.queue_name,
+            'sensor': 'MessagesPurged',
+        })
+        assert purged_derivative == 1

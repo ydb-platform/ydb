@@ -408,6 +408,8 @@ struct TSqsEvents {
         enum class ECounterType{
             ReceiveMessageImmediateDuration,
             ReceiveMessageEmptyCount,
+            MessagesPurged,
+            ClientMessageProcessingDuration,
         };
 
         ECounterType CounterType;

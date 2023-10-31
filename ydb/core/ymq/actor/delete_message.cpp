@@ -84,8 +84,13 @@ private:
 
             // Calc metrics
             const TDuration processingDuration = TActivationContext::Now() - lockTimestamp;
-            COLLECT_HISTOGRAM_COUNTER(QueueCounters_, ClientMessageProcessing_Duration, processingDuration.MilliSeconds());
-            COLLECT_HISTOGRAM_COUNTER(QueueCounters_, client_processing_duration_milliseconds, processingDuration.MilliSeconds());
+            this->Send(
+                QueueLeader_,
+                new TSqsEvents::TEvLocalCounterChanged(
+                    TSqsEvents::TEvLocalCounterChanged::ECounterType::ClientMessageProcessingDuration,
+                    processingDuration.MilliSeconds()
+                )
+            );
         } catch (...) {
             RLOG_SQS_WARN("Failed to process receipt handle " << entry.GetReceiptHandle() << ": " << CurrentExceptionMessage());
             MakeError(resp, NErrors::RECEIPT_HANDLE_IS_INVALID);

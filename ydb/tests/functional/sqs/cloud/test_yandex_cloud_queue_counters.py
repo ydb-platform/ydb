@@ -109,6 +109,12 @@ class TestYmqQueueCounters(get_test_with_sqs_tenant_installation(KikimrSqsTestBa
         })
         assert receive_message_bytes_read > 0
 
+        client_message_processing_duration_buckets = self._get_counter(ymq_counters, {
+            'queue': queue_resource_id,
+            'name': 'queue.messages.client_processing_duration_milliseconds',
+        })['hist']['buckets']
+        assert any(map(lambda x: x > 0, client_message_processing_duration_buckets))
+
     def test_counters_when_sending_duplicates(self):
         self._sqs_api = self._create_api_for_user(self._username, raise_on_error=True, force_private=True, iam_token=self.iam_token, folder_id=self.folder_id)
 
@@ -175,3 +181,23 @@ class TestYmqQueueCounters(get_test_with_sqs_tenant_installation(KikimrSqsTestBa
         })
         duration_buckets = durations['hist']['buckets']
         assert any(map(lambda x: x > 0, duration_buckets))
+
+    def test_purge_queue_counters(self):
+
+        self._sqs_api = self._create_api_for_user(self._username, raise_on_error=True, force_private=True, iam_token=self.iam_token, folder_id=self.folder_id)
+
+        queue_url = self._sqs_api.create_queue(self.queue_name)
+        queue_resource_id = self._get_queue_resource_id(queue_url, self.queue_name)
+
+        self._sqs_api.send_message(queue_url, "foo")
+        self._sqs_api.purge_queue(queue_url)
+
+        self._sqs_api.send_message(queue_url, "bar")
+        self._sqs_api.purge_queue(queue_url)
+
+        ymq_counters = self._get_ymq_counters(cloud=self.cloud_id, folder=self.folder_id)
+        purged_derivative = self._get_counter_value(ymq_counters, {
+            'queue': queue_resource_id,
+            'name': 'queue.messages.purged_count_per_second',
+        })
+        assert purged_derivative == 1

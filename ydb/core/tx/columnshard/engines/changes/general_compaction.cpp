@@ -83,16 +83,16 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     }
     Y_ABORT_UNLESS(batchResults.size());
 
-    TSerializationStats stats;
+    std::shared_ptr<TSerializationStats> stats = std::make_shared<TSerializationStats>();
     for (auto&& i : SwitchedPortions) {
-        stats.Merge(i.GetSerializationStat(*resultSchema));
+        stats->Merge(i.GetSerializationStat(*resultSchema));
     }
 
     std::vector<std::map<std::string, std::vector<TColumnPortionResult>>> chunkGroups;
     chunkGroups.resize(batchResults.size());
     for (auto&& f : resultSchema->GetSchema()->fields()) {
         const ui32 columnId = resultSchema->GetColumnId(f->name());
-        auto columnInfo = stats.GetColumnInfo(columnId);
+        auto columnInfo = stats->GetColumnInfo(columnId);
         Y_ABORT_UNLESS(columnInfo);
 
         std::vector<TPortionColumnCursor> cursors;
@@ -164,7 +164,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         }
 
         std::vector<TGeneralSerializedSlice> batchSlices;
-        std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultSchema, SaverContext, std::move(stats)));
+        std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultSchema, SaverContext, stats));
 
         for (ui32 i = 0; i < columnChunks.begin()->second.size(); ++i) {
             std::map<ui32, std::vector<IPortionColumnChunk::TPtr>> portionColumns;

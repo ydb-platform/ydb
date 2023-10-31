@@ -53,14 +53,14 @@ class TDefaultSchemaDetails: public ISchemaDetailInfo {
 private:
     ISnapshotSchema::TPtr Schema;
     const TSaverContext Context;
-    TSerializationStats Stats;
+    std::shared_ptr<TSerializationStats> Stats;
 public:
-    TDefaultSchemaDetails(ISnapshotSchema::TPtr schema, const TSaverContext& context, TSerializationStats&& stats)
+    TDefaultSchemaDetails(ISnapshotSchema::TPtr schema, const TSaverContext& context, const std::shared_ptr<TSerializationStats>& stats)
         : Schema(schema)
         , Context(context)
-        , Stats(std::move(stats))
+        , Stats(stats)
     {
-
+        AFL_VERIFY(Stats);
     }
     virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
         return Schema->GetFieldByColumnId(columnId);
@@ -73,10 +73,10 @@ public:
     }
 
     virtual std::optional<TColumnSerializationStat> GetColumnSerializationStats(const ui32 columnId) const override {
-        return Stats.GetColumnInfo(columnId);
+        return Stats->GetColumnInfo(columnId);
     }
     virtual std::optional<TBatchSerializationStat> GetBatchSerializationStats(const std::shared_ptr<arrow::RecordBatch>& rb) const override {
-        return Stats.GetStatsForRecordBatch(rb);
+        return Stats->GetStatsForRecordBatch(rb);
     }
     virtual ui32 GetColumnId(const std::string& fieldName) const override {
         return Schema->GetColumnId(fieldName);

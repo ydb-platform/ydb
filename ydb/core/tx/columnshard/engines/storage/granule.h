@@ -203,14 +203,14 @@ public:
         }
     }
 
-    NOlap::TSerializationStats BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
-        NOlap::TSerializationStats result;
+    std::shared_ptr<NOlap::TSerializationStats> BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
+        auto result = std::make_shared<NOlap::TSerializationStats>();
         for (auto&& i : GetAdditiveSummary().GetCompacted().GetColumnStats()) {
             auto field = schema->GetFieldByColumnId(i.first);
             AFL_VERIFY(field)("column_id", i.first)("schema", schema->DebugString());
             NOlap::TColumnSerializationStat columnInfo(i.first, field->name());
             columnInfo.Merge(i.second);
-            result.AddStat(columnInfo);
+            result->AddStat(columnInfo);
         }
         return result;
     }

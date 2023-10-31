@@ -107,11 +107,11 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(cons
     auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
     std::vector<TPortionInfoWithBlobs> out;
 
-    NOlap::TSerializationStats stats;
+    std::shared_ptr<NOlap::TSerializationStats> stats = std::make_shared<NOlap::TSerializationStats>();
     if (granuleMeta) {
         stats = granuleMeta->BuildSerializationStats(resultSchema);
     }
-    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, SaverContext, std::move(stats));
+    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, SaverContext, stats);
     TRBSplitLimiter limiter(context.Counters.SplitterCounters, schema, batch, SplitSettings);
 
     std::vector<std::vector<IPortionColumnChunk::TPtr>> chunkByBlobs;

@@ -981,9 +981,7 @@ public:
         TNetworkAddress localIP{address, 0};
 
         const auto& localAddresses = GetLocalAddresses();
-        auto&& it = std::find(localAddresses.begin(), localAddresses.end(), localIP);
-        auto jt = localAddresses.end();
-        return it != jt;
+        return std::find(localAddresses.begin(), localAddresses.end(), localIP) != localAddresses.end();
     }
 
     void PurgeCache()

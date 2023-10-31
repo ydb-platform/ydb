@@ -550,9 +550,6 @@ private:
 
 class TDqInputChannel: public IDqInputChannel {
 public:
-    TDqInputChannelStats PushStats;
-    TDqInputStats PopStats;
-
     TDqInputChannel(const IInputChannel::TPtr& channel, ui64 taskId, ui64 channelId, ui32 srcStageId, IPipeTaskRunner* taskRunner)
         : Delegate(channel)
         , TaskId(taskId)
@@ -667,13 +664,13 @@ private:
     IPipeTaskRunner* TaskRunner;
     IInputStream& Input;
     IOutputStream& Output;
+
+    TDqInputChannelStats PushStats;
+    TDqInputStats PopStats;
 };
 
 class TDqSource: public IStringSource {
 public:
-    TDqAsyncInputBufferStats PushStats;
-    TDqInputStats PopStats;
-
     TDqSource(ui64 taskId, ui64 inputIndex, IPipeTaskRunner* taskRunner)
         : TaskId(taskId)
         , TaskRunner(taskRunner)
@@ -846,6 +843,8 @@ private:
     IInputStream& Input;
     IOutputStream& Output;
     mutable NKikimr::NMiniKQL::TType* InputType = nullptr;
+    TDqAsyncInputBufferStats PushStats;
+    TDqInputStats PopStats;
 };
 
 /*______________________________________________________________________________________________*/
@@ -904,9 +903,6 @@ private:
 
 class TDqOutputChannel: public IDqOutputChannel {
 public:
-    TDqOutputStats PushStats;
-    TDqOutputChannelStats PopStats;
-
     TDqOutputChannel(const IOutputChannel::TPtr& channel, ui64 taskId, ui64 channelId, ui32 dstStageId, IPipeTaskRunner* taskRunner)
         : Delegate(channel)
         , TaskId(taskId)
@@ -1072,13 +1068,12 @@ private:
     IPipeTaskRunner* TaskRunner;
     IInputStream& Input;
     IOutputStream& Output;
+    TDqOutputStats PushStats;
+    TDqOutputChannelStats PopStats;
 };
 
 class TDqSink : public IStringSink {
 public:
-    TDqOutputStats PushStats;
-    TDqAsyncOutputBufferStats PopStats;
-
     TDqSink(ui64 taskId, ui64 outputIndex, IPipeTaskRunner* taskRunner)
         : TaskId(taskId)
         , TaskRunner(taskRunner)
@@ -1260,6 +1255,9 @@ private:
     IOutputStream& Output;
 
     mutable NKikimr::NMiniKQL::TType* OutputType = nullptr;
+
+    TDqOutputStats PushStats;
+    TDqAsyncOutputBufferStats PopStats;
 };
 
 /*______________________________________________________________________________________________*/

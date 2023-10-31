@@ -54,6 +54,7 @@ PEERDIR(
     ydb/core/tx/columnshard/blobs_action
     ydb/core/tx/columnshard/resource_subscriber
     ydb/core/tx/columnshard/normalizer/granule
+    ydb/core/tx/columnshard/normalizer/portion
     ydb/core/tx/tiering
     ydb/core/tx/conveyor/usage
     ydb/core/tx/long_tx_service/public

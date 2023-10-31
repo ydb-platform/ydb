@@ -8,10 +8,10 @@
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
 
+
 namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
-
 
 class TTxInit : public TTransactionBase<TColumnShard> {
 public:
@@ -59,6 +59,8 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
     ready = ready & Schema::Precharge<Schema::LongTxWrites>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::BlobsToKeep>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::BlobsToDelete>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::IndexCounters>(db, txc.DB.GetScheme());
 
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastSchemaSeqNoGeneration, Self->LastSchemaSeqNo.Generation);
@@ -135,7 +137,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             return false;
         }
         if (!tManagerLocal.LoadIndex(dbTable)) {
-            ACFL_ERROR("step", "TTablesManager::Load_Fails");
+            ACFL_ERROR("step", "TTablesManager::LoadIndex_Fails");
             return false;
         }
         Self->TablesManager = std::move(tManagerLocal);
@@ -146,7 +148,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         ACFL_INFO("step", "TTablesManager::Load_Finish");
     }
 
-    { // Load long tx writes
+    {
         auto rowset = db.Table<Schema::LongTxWrites>().Select();
         if (!rowset.IsReady()) {
             return false;
@@ -207,6 +209,7 @@ void TTxInit::Complete(const TActorContext& ctx) {
 }
 
 class TTxUpdateSchema : public TTransactionBase<TColumnShard> {
+    std::vector<NOlap::INormalizerTask::TPtr> NormalizerTasks;
 public:
     TTxUpdateSchema(TColumnShard* self)
         : TBase(self)
@@ -215,35 +218,19 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_UPDATE_SCHEMA; }
-
-private:
-    bool WaitNormalization = false;
 };
 
 bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
     ACFL_INFO("step", "TTxUpdateSchema.Execute_Start");
 
-    for (auto&& normalizer : Self->Normalizers) {
-        if (!normalizer->NormalizationRequired()) {
-            ACFL_INFO("step", "TTxUpdateSchema.Execute")("skip_normalizer", normalizer->GetName());
-            continue;
-        }
-
-        ACFL_INFO("step", "TTxUpdateSchema.Execute")("start_normalizer", normalizer->GetName());
-        NOlap::TNormalizationContext nCtx(Self->InsertTaskSubscription);
-        auto status = normalizer->NormalizeData(nCtx, txc);
-
-        if (status == NOlap::ENormalizerResult::Failed) {
-            ACFL_INFO("step", "TTxUpdateSchema.Execute")("fail_normalizer", normalizer->GetName());
-            return false;
-        } else if (status == NOlap::ENormalizerResult::Wait) {
-            ACFL_INFO("step", "TTxUpdateSchema.Execute")("start_normalizer", normalizer->GetName());
-            WaitNormalization = true;
-        } else if (status == NOlap::ENormalizerResult::Skip) {
-            ACFL_INFO("step", "TTxUpdateSchema.Execute")("pass_normalizer", normalizer->GetName());
+    if (!Self->NormalizerController.IsNormalizationFinished()) {
+        auto normalizer = Self->NormalizerController.GetNormalizer();
+        auto result = normalizer->Init(Self->NormalizerController, txc);
+        if (result.IsSuccess()) {
+            NormalizerTasks = result.DetachResult();
         } else {
-            ACFL_INFO("step", "TTxUpdateSchema.Execute")("finish_normalizer", normalizer->GetName());
+            Self->NormalizerController.GetCounters().OnNormalizerFails();
         }
     }
     ACFL_INFO("step", "TTxUpdateSchema.Execute_Finish");
@@ -251,8 +238,53 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxUpdateSchema::Complete(const TActorContext& ctx) {
-    ACFL_INFO("step", "TTxUpdateSchema.Complete");
-    if (!WaitNormalization) {
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxUpdateSchema.Complete");
+    if (NormalizerTasks.empty()) {
+        Self->Execute(new TTxInit(Self), ctx);
+        return;
+    }
+
+    NOlap::TNormalizationContext nCtx;
+    nCtx.SetColumnshardActor(Self->SelfId());
+    nCtx.SetResourceSubscribeActor(Self->ResourceSubscribeActor);
+
+    for (auto&& task : NormalizerTasks) {
+        Self->NormalizerController.GetCounters().OnNormalizerStart();
+        task->Start(Self->NormalizerController, nCtx);
+    }
+}
+
+class TTxApplyNormalizer : public TTransactionBase<TColumnShard> {
+public:
+    TTxApplyNormalizer(TColumnShard* self, NOlap::INormalizerChanges::TPtr changes)
+        : TBase(self)
+        , Changes(changes)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_UPDATE_SCHEMA; }
+
+private:
+    NOlap::INormalizerChanges::TPtr Changes;
+};
+
+bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&) {
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute");
+    Self->NormalizerController.GetNormalizer()->OnResultReady();
+    return Changes->Apply(txc, Self->NormalizerController);
+}
+
+void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Complete");
+
+    if (Self->NormalizerController.GetNormalizer()->WaitResult()) {
+        return;
+    }
+
+    if (Self->NormalizerController.SwitchNormalizer()) {
+        Self->Execute(new TTxUpdateSchema(Self), ctx);
+    } else {
         Self->Execute(new TTxInit(Self), ctx);
     }
 }
@@ -310,12 +342,16 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxInitSchema::Complete(const TActorContext& ctx) {
-    LOG_S_DEBUG("TxInitSchema.Complete at tablet " << Self->TabletID());
+    LOG_S_DEBUG("TxInitSchema.Complete at tablet " << Self->TabletID();)
     Self->Execute(new TTxUpdateSchema(Self), ctx);
 }
 
 ITransaction* TColumnShard::CreateTxInitSchema() {
     return new TTxInitSchema(this);
+}
+
+void TColumnShard::Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxApplyNormalizer(this, ev->Get()->GetChanges()), ctx);
 }
 
 bool TColumnShard::LoadTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody) {

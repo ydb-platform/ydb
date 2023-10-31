@@ -28,21 +28,20 @@ void TColumnShard::BecomeBroken(const TActorContext& ctx) {
 }
 
 void TColumnShard::SwitchToWork(const TActorContext& ctx) {
-    const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
+    {
+        const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
 
-    ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
+        for (auto&& i : TablesManager.GetTables()) {
+            ActivateTiering(i.first, i.second.GetTieringUsage());
+        }
 
-    for (auto&& i : TablesManager.GetTables()) {
-        ActivateTiering(i.first, i.second.GetTieringUsage());
+        Become(&TThis::StateWork);
+        SignalTabletActive(ctx);
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SignalTabletActive");
+        TryRegisterMediatorTimeCast();
+        EnqueueProgressTx(ctx);
     }
-
-    Become(&TThis::StateWork);
-    SignalTabletActive(ctx);
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SignalTabletActive");
-    TryRegisterMediatorTimeCast();
-    // Trigger progress: planned or outdated tx
-    EnqueueProgressTx(ctx);
     EnqueueBackgroundActivities();
     ctx.Schedule(ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
 }
@@ -69,6 +68,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Limits.RegisterControls(icb);
     CompactionLimits.RegisterControls(icb);
     Settings.RegisterControls(icb);
+    ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     Execute(CreateTxInitSchema(), ctx);
 }
 

@@ -6,35 +6,67 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 
+#include <ydb/library/conclusion/result.h>
+
 namespace NKikimr::NOlap {
 
-    class TNormalizationContext {
-        YDB_READONLY_DEF(TActorId, ResourceSubscribeActor);
-        YDB_READONLY_DEF(TActorId, ColumnshardActor);
+    class TNormalizerCounters: public NColumnShard::TCommonCountersOwner {
+        using TBase = NColumnShard::TCommonCountersOwner;
 
-        const NOlap::NResourceBroker::NSubscribe::TTaskContext& InsertTaskSubscription;
-        std::shared_ptr<IStoragesManager> StoragesManager;
-
+        NMonitoring::TDynamicCounters::TCounterPtr ObjectsCount;
+        NMonitoring::TDynamicCounters::TCounterPtr StartedCount;
+        NMonitoring::TDynamicCounters::TCounterPtr FinishedCount;
+        NMonitoring::TDynamicCounters::TCounterPtr FailedCount;
     public:
-        TNormalizationContext(const NOlap::NResourceBroker::NSubscribe::TTaskContext& its)
-            : InsertTaskSubscription(its)
-        {}
+        TNormalizerCounters(const TString& normalizerName)
+            : TBase("Normalizer")
+        {
+            DeepSubGroup("normalizer", normalizerName);
 
-        IStoragesManager& GetStoragesManager() {
-            AFL_VERIFY(!!StoragesManager);
-            return *StoragesManager;
+            ObjectsCount = TBase::GetDeriviative("Objects/Count");
+            StartedCount = TBase::GetDeriviative("Started");
+            FinishedCount = TBase::GetDeriviative("Finished");
+            FailedCount = TBase::GetDeriviative("Failed");
         }
 
-        const NOlap::NResourceBroker::NSubscribe::TTaskContext& GetInsertTaskSubscription() const {
-            return InsertTaskSubscription;
+        void CountObjects(const ui64 objectsCount) const {
+            ObjectsCount->Add(objectsCount);
+        }
+
+        void OnNormalizerStart() const {
+            StartedCount->Add(1);
+        }
+
+        void OnNormalizerFinish() const {
+            FinishedCount->Add(1);
+        }
+
+        void OnNormalizerFails() const {
+            FailedCount->Add(1);
         }
     };
 
-    enum class ENormalizerResult {
-        Ok,
-        Wait,
-        Failed,
-        Skip
+    class TNormalizationContext {
+        YDB_ACCESSOR_DEF(TActorId, ResourceSubscribeActor);
+        YDB_ACCESSOR_DEF(TActorId, ColumnshardActor);
+    };
+
+    class TNormalizationController;
+
+    class INormalizerTask {
+    public:
+        using TPtr = std::shared_ptr<INormalizerTask>;
+        virtual ~INormalizerTask() {}
+
+        virtual void Start(const TNormalizationController& controller, const TNormalizationContext& nCtx) = 0;
+    };
+
+    class INormalizerChanges {
+    public:
+        using TPtr = std::shared_ptr<INormalizerChanges>;
+        virtual ~INormalizerChanges() {}
+
+        virtual bool Apply(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normalizationContext) const = 0;
     };
 
     class INormalizerComponent {
@@ -43,13 +75,39 @@ namespace NKikimr::NOlap {
 
         virtual ~INormalizerComponent() {}
 
-        virtual bool NormalizationRequired() const {
-            return false;
-        }
-
         virtual const TString& GetName() const = 0;
-
-        virtual ENormalizerResult NormalizeData(TNormalizationContext& nCtx, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+        virtual bool WaitResult() const = 0;
+        virtual void OnResultReady() {}
+        virtual TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
     };
 
+    class TNormalizationController {
+        std::shared_ptr<IStoragesManager> StoragesManager;
+        NOlap::NResourceBroker::NSubscribe::TTaskContext TaskSubscription;
+
+        std::vector<NOlap::INormalizerComponent::TPtr> Normalizers;
+        ui64 CurrentNormalizerIndex = 0;
+        std::vector<TNormalizerCounters> Counters;
+
+    public:
+        TNormalizationController(std::shared_ptr<IStoragesManager> storagesManager, const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& counters)
+            : StoragesManager(storagesManager)
+            , TaskSubscription("CS:NORMALIZER", counters) {}
+
+        const NOlap::NResourceBroker::NSubscribe::TTaskContext& GetTaskSubscription() const {
+            return TaskSubscription;
+        }
+
+        void RegisterNormalizer(INormalizerComponent::TPtr normalizer);
+
+        std::shared_ptr<IStoragesManager> GetStoragesManager() const {
+            AFL_VERIFY(!!StoragesManager);
+            return StoragesManager;
+        }
+
+        const INormalizerComponent::TPtr& GetNormalizer() const;
+        bool IsNormalizationFinished() const;
+        bool SwitchNormalizer();
+        const TNormalizerCounters& GetCounters() const;
+    };
 }

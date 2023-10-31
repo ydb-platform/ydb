@@ -116,6 +116,8 @@ class TColumnShard
     friend class TTxRunGC;
     friend class TTxProcessGCResult;
     friend class TTxReadBlobRanges;
+    friend class TTxApplyNormalizer;
+
     friend class NOlap::TCleanupColumnEngineChanges;
     friend class NOlap::TTTLColumnEngineChanges;
     friend class NOlap::TChangesWithAppend;
@@ -160,6 +162,7 @@ class TColumnShard
     void Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
+    void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
     ITransaction* CreateTxInitSchema();
 
@@ -411,8 +414,6 @@ private:
     const TIndexationCounters IndexationCounters = TIndexationCounters("Indexation");
     const TIndexationCounters EvictionCounters = TIndexationCounters("Eviction");
 
-    std::vector<NOlap::INormalizerComponent::TPtr> Normalizers;
-
     const TCSCounters CSCounters;
     TWritesMonitor WritesMonitor;
 
@@ -429,6 +430,7 @@ private:
     TSettings Settings;
     TLimits Limits;
     TCompactionLimits CompactionLimits;
+    NOlap::TNormalizationController NormalizerController;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();

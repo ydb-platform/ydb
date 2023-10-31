@@ -25,8 +25,9 @@
 #include "resource_subscriber/counters.h"
 #include "blobs_reader/actor.h"
 
+
 #include <ydb/core/tx/columnshard/normalizer/granule/normalizer.h>
-// #include <ydb/core/tx/columnshard/normalizer/portion/normalizer.h>
+#include <ydb/core/tx/columnshard/normalizer/portion/normalizer.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -170,6 +171,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , ReadCounters("Read")
     , ScanCounters("Scan")
     , WritesMonitor(*this)
+    , NormalizerController(StoragesManager, SubscribeCounters)
 {
     TabletCountersPtr.reset(new TProtobufTabletCounters<
         ESimpleCounters_descriptor,
@@ -179,9 +181,8 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     >());
     TabletCounters = TabletCountersPtr.get();
 
-    Normalizers.emplace_back(std::make_shared<NOlap::TGranulesNormalizer>());
-    // Normalizers.emplace_back(std::make_shared<NOlap::TPortionsNormalizer>(Info()));
-
+    NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TGranulesNormalizer>());
+    NormalizerController.RegisterNormalizer(std::make_shared<NOlap::TChunksNormalizer>(Info()));
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -948,6 +949,7 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
     const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvTieringModified, Handle);
+        HFunc(TEvPrivate::TEvNormalizerResult, Handle);
         default:
             return NTabletFlatExecutor::TTabletExecutedFlat::Enqueue(ev);
     }

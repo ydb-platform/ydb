@@ -6,6 +6,7 @@
 
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/ev_write/write_data.h>
 #include <ydb/core/formats/arrow/special_keys.h>
@@ -30,6 +31,7 @@ struct TEvPrivate {
         EvGarbageCollectionFinished,
         EvTieringModified,
         EvStartResourceUsageTask,
+        EvNormalizerResult,
         EvEnd
     };
 
@@ -43,6 +45,19 @@ struct TEvPrivate {
         TEvWriteDraft(std::shared_ptr<IWriteController> controller)
             : WriteController(controller) {
 
+        }
+    };
+
+    class TEvNormalizerResult: public TEventLocal<TEvNormalizerResult, EvNormalizerResult> {
+        NOlap::INormalizerChanges::TPtr Changes;
+    public:
+        TEvNormalizerResult(NOlap::INormalizerChanges::TPtr changes)
+            : Changes(changes)
+        {}
+
+        NOlap::INormalizerChanges::TPtr GetChanges() const {
+            Y_ABORT_UNLESS(!!Changes);
+            return Changes;
         }
     };
 

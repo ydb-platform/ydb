@@ -378,7 +378,7 @@ public:
         switch (ev->Get()->Record.GetResponseCase()) {
             case NKikimrViewer::TEvViewerResponse::kTabletResponse:
                 BLOG_TRACE("Received TEvViewerResponse from " << nodeId << " with "
-                    << TWhiteboardInfo<NKikimrWhiteboard::TEvTabletStateResponse>::GetElementsCount(ev->Get()->Record.GetTabletResponse()) 
+                    << TWhiteboardInfo<NKikimrWhiteboard::TEvTabletStateResponse>::GetElementsCount(ev->Get()->Record.GetTabletResponse())
                     << " tablets");
                 TenantMergedTabletInfo[tenantId] = std::move(ev->Get()->Record);
                 RequestDone();
@@ -418,10 +418,10 @@ public:
             BLOG_TRACE("Undelivered for node " << cookie.GetNodeId() << " event " << ev->Get()->SourceType);
             auto tenantId = NodeIdsToTenant[cookie.GetNodeId()];
             switch (cookie.GetRequestCase()) {
-                case NKikimrViewer::TEvViewerRequest::kTabletRequest: 
+                case NKikimrViewer::TEvViewerRequest::kTabletRequest:
                     SendViewerTabletRequest(tenantId);
                     break;
-                case NKikimrViewer::TEvViewerRequest::kSystemRequest: 
+                case NKikimrViewer::TEvViewerRequest::kSystemRequest:
                     SendViewerSystemRequest(tenantId);
                     break;
                 case NKikimrViewer::TEvViewerRequest::kQueryRequest:
@@ -608,10 +608,19 @@ public:
                                 }
                             }
                         }
+                        uint64 storageAllocatedLimit = storageAllocatedSize + storageAvailableSize;
                         tenant.SetStorageAllocatedSize(storageAllocatedSize);
-                        tenant.SetStorageAllocatedLimit(storageAllocatedSize + storageAvailableSize);
+                        tenant.SetStorageAllocatedLimit(storageAllocatedLimit);
                         tenant.SetStorageMinAvailableSize(storageMinAvailableSize);
                         tenant.SetStorageGroups(storageGroups);
+                        auto& ssdUsage = *tenant.AddStorageUsage();
+                        ssdUsage.SetType(NKikimrViewer::TStorageUsage::SSD);
+                        if (storageAllocatedLimit > 0) {
+                            ssdUsage.SetUsage((float)storageAllocatedSize / storageAllocatedLimit);
+                        }
+                        // TODO(andrew-rykov)
+                        auto& hddUsage = *tenant.AddStorageUsage();
+                        hddUsage.SetType(NKikimrViewer::TStorageUsage::HDD);
                     }
                 }
 
@@ -711,7 +720,7 @@ public:
                 tenant.SetOverall(it->second);
             }
         }
-        std::sort(Result.MutableTenantInfo()->begin(), Result.MutableTenantInfo()->end(), 
+        std::sort(Result.MutableTenantInfo()->begin(), Result.MutableTenantInfo()->end(),
             [](const NKikimrViewer::TTenant& a, const NKikimrViewer::TTenant& b) {
                 return a.name() < b.name();
             });

@@ -333,6 +333,17 @@ enum ETenantType {
     Serverless = 4;
 }
 
+
+message TStorageUsage {
+    enum EType {
+        None = 0;
+        HDD = 1;
+        SSD = 2;
+    }
+    EType Type = 1;
+    float Usage = 2;
+}
+
 message TTenant {
     string Name = 1;
     string Id = 2;
@@ -361,6 +372,7 @@ message TTenant {
     uint64 StorageGroups = 40;
     uint64 StorageAllocatedLimit = 41;
     Ydb.Cms.DatabaseQuotas DatabaseQuotas = 42;
+    repeated TStorageUsage StorageUsage = 43;
 }
 
 message TTenants {

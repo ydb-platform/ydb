@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.78.1)
+VERSION(6.88.1)
 
 LICENSE(MPL-2.0)
 
@@ -30,7 +30,6 @@ PY_SRCS(
     hypothesis/database.py
     hypothesis/entry_points.py
     hypothesis/errors.py
-    hypothesis/executors.py
     hypothesis/extra/__init__.py
     hypothesis/extra/_array_helpers.py
     hypothesis/extra/_patching.py

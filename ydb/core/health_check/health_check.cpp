@@ -1360,7 +1360,7 @@ public:
 
         auto itPDisk = BSConfigPDisks.find(pDiskId);
         if (itPDisk == BSConfigPDisks.end()) { // this report, in theory, can't happen because there was pdisk mention in bsc vslot info. this pdisk info have to exists in bsc too
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide expected pdisk information");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide expected pdisk information", ETags::PDiskState);
             storagePDiskStatus.set_overall(context.GetOverallStatus());
             return;
         }
@@ -1368,7 +1368,7 @@ public:
         ui32 nodeId = itPDisk->second->nodeid();
         auto itNode = BSConfigNodes.find(nodeId);
         if (itNode == BSConfigNodes.end()) { // this report, in theory, can't happen because there was node mention in bsc pdisk info. this node info have to exists in bsc too
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide expected node information");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide expected node information", ETags::PDiskState);
             storagePDiskStatus.set_overall(context.GetOverallStatus());
             return;
         }
@@ -1432,7 +1432,7 @@ public:
                 case NKikimrBlobStorage::TPDiskState::Reserved14:
                 case NKikimrBlobStorage::TPDiskState::Reserved15:
                 case NKikimrBlobStorage::TPDiskState::Reserved16:
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown PDisk state");
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown PDisk state", ETags::PDiskState);
                     break;
             }
 
@@ -1519,14 +1519,9 @@ public:
         storageVDiskStatus.set_id(vSlotId);
 
         if (itVSlot == BSConfigVSlots.end()) { // this report, in theory, can't happen because there was slot mention in bsc group info. this slot info have to exists in bsc too
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide information");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide information", ETags::VDiskState);
             storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;
-        }
-
-        if (itVSlot->second->vslotid().has_pdiskid()) {
-            TString pDiskId = GetPDiskId(*itVSlot->second);
-            FillPDiskStatus(pDiskId, *storageVDiskStatus.mutable_pdisk(), {&context, "PDISK"});
         }
 
         auto& vslot = *itVSlot->second;
@@ -1534,9 +1529,14 @@ public:
         const auto *descriptor = NKikimrBlobStorage::EVDiskStatus_descriptor();
         auto status = descriptor->FindValueByName(vslot.status());
         if (!status) { // this case is not expected because becouse bsc assignes status according EVDiskStatus enum
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide known status");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide known status", ETags::VDiskState);
             storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;
+        }
+
+        if (itVSlot->second->vslotid().has_pdiskid()) {
+            TString pDiskId = GetPDiskId(*itVSlot->second);
+            FillPDiskStatus(pDiskId, *storageVDiskStatus.mutable_pdisk(), {&context, "PDISK"});
         }
 
         switch (status->number()) {
@@ -1848,7 +1848,7 @@ public:
 
         auto itGroup = BSConfigGroups.find(groupId);
         if (itGroup == BSConfigGroups.end()) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide information");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide information", ETags::GroupState);
             storageGroupStatus.set_overall(context.GetOverallStatus());
             return;
         }

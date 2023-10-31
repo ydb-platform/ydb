@@ -1792,7 +1792,7 @@ struct TToPgExec {
 
                     tmp.resize(len);
                     NUdf::ZeroMemoryContext(tmp.data() + sizeof(void*));
-                    memcpy(tmp.data() + sizeof(void*) + VARHDRSZ, item.AsStringRef().Data(), len - VARHDRSZ);
+                    memcpy(tmp.data() + sizeof(void*) + VARHDRSZ, item.AsStringRef().Data(), len - VARHDRSZ - sizeof(void*));
                     UpdateCleanVarSize((text*)(tmp.data() + sizeof(void*)), item.AsStringRef().Size());
                 }
 

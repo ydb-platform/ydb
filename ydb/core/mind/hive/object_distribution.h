@@ -57,6 +57,9 @@ struct TObjectDistribution {
     }
 
     void UpdateCount(const TNodeInfo& node, i64 diff) {
+        if (!node.MatchesFilter(NodeFilter) || !node.IsAllowedToRunTablet()) {
+            return;
+        }
         auto [it, newNode] = Distribution.insert({node.Id, 0});
         i64& value = it->second;
         i64 numNodes = Distribution.size();
@@ -157,12 +160,8 @@ struct TObjectDistributions {
         } else if (imbalanceBefore > 1e-7 && imbalanceAfter <= 1e-7) {
             --ImbalancedObjects;
         }
-        if (!dist.Distribution.empty()) {
-            auto sortedIt = SortedDistributions.insert(std::move(handle));
-            distIt->second = sortedIt;
-        } else {
-            Distributions.erase(distIt);
-        }
+        auto sortedIt = SortedDistributions.insert(std::move(handle));
+        distIt->second = sortedIt;
         return true;
     }
 
@@ -176,9 +175,6 @@ struct TObjectDistributions {
 
     void UpdateCountForTablet(const TLeaderTabletInfo& tablet, const TNodeInfo& node, i64 diff) {
         if (!Enabled) {
-            return;
-        }
-        if (!node.IsAllowedToRunTablet(tablet) && diff <= 0) {
             return;
         }
         auto object = tablet.ObjectId;

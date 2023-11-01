@@ -257,8 +257,8 @@ void Init(
         lwmOptions.MkqlProgramHardMemoryLimit = protoConfig.GetResourceManager().GetMkqlTaskHardMemoryLimit();
         lwmOptions.MkqlMinAllocSize = mkqlAllocSize;
         lwmOptions.TaskRunnerActorFactory = NYql::NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory(
-            [=](const NYql::NDq::TDqTaskSettings& task, const NYql::NDq::TLogFunc&) {
-                return lwmOptions.Factory->Get(task);
+            [=](const NYql::NDq::TDqTaskSettings& task, NYql::NDqProto::EDqStatsMode statsMode, const NYql::NDq::TLogFunc&) {
+                return lwmOptions.Factory->Get(task, statsMode);
             });
         if (protoConfig.GetRateLimiter().GetDataPlaneEnabled()) {
             lwmOptions.QuoterServiceActorId = NFq::YqQuoterServiceActorId();

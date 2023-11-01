@@ -89,7 +89,7 @@ public:
 
         Send(TaskRunnerActorId,
             new NTaskRunnerActor::TEvTaskRunnerCreate(
-                Task.GetSerializedTask(), limits, execCtx));
+                Task.GetSerializedTask(), limits, RuntimeSettings.StatsMode, execCtx));
 
         CA_LOG_D("Use CPU quota: " << UseCpuQuota() << ". Rate limiter resource: { \"" << Task.GetRateLimiter() << "\", \"" << Task.GetRateLimiterResource() << "\" }");
     }

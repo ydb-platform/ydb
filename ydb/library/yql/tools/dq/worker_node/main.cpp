@@ -399,9 +399,9 @@ int main(int argc, char** argv) {
             ? TTaskRunnerInvokerFactory::TPtr(new NDqs::TTaskRunnerInvokerFactory())
             : TTaskRunnerInvokerFactory::TPtr(new TConcurrentInvokerFactory(2*capacity));
         lwmOptions.TaskRunnerActorFactory = disablePipe
-            ? NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory([=](const NDq::TDqTaskSettings& task, const NDq::TLogFunc& )
+            ? NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory([=](const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
                 {
-                    return lwmOptions.Factory->Get(task);
+                    return lwmOptions.Factory->Get(task, statsMode);
                 })
             : NTaskRunnerActor::CreateTaskRunnerActorFactory(lwmOptions.Factory, lwmOptions.TaskRunnerInvokerFactory);
         lwmOptions.ComputeActorOwnsCounters = true;

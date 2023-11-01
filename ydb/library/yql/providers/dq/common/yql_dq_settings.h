@@ -18,6 +18,7 @@ struct TDqSettings {
     enum class ETaskRunnerStats {
         Disable,
         Basic,
+        Full,
         Profile
     };
 

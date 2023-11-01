@@ -242,14 +242,14 @@ public:
     { }
 
     ITaskRunner::TPtr GetOld(const TDqTaskSettings& task, const TString& traceId) override {
-        return new TLocalTaskRunner(task, Get(task, traceId));
+        return new TLocalTaskRunner(task, Get(task, NDqProto::DQ_STATS_MODE_BASIC, traceId));
     }
 
-    TIntrusivePtr<NDq::IDqTaskRunner> Get(const TDqTaskSettings& task, const TString& traceId) override {
+    TIntrusivePtr<NDq::IDqTaskRunner> Get(const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TString& traceId) override {
         Y_UNUSED(traceId);
         NDq::TDqTaskRunnerSettings settings;
         settings.TerminateOnError = TerminateOnError;
-        settings.StatsMode = NDqProto::DQ_STATS_MODE_BASIC;
+        settings.StatsMode = statsMode;
         settings.UseCacheForLLVM = true;
 
         Yql::DqsProto::TTaskMeta taskMeta;

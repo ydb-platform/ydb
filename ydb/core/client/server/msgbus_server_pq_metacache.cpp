@@ -270,13 +270,6 @@ private:
         }
     }
 
-    void HandleQueryResponse(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
-        LOG_ERROR_S(ctx, NKikimrServices::PQ_METACACHE, "failed to list topics: " << record);
-
-        Reset(ctx);
-    }
-
     void HandleCheckVersionResult(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
 
         const auto& record = ev->Get()->Record.GetRef();
@@ -747,7 +740,6 @@ public:
           HFunc(NActors::TEvents::TEvWakeup, HandleWakeup)
           HFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, HandleClustersUpdate)
           HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleQueryResponse);
-          HFunc(NKqp::TEvKqp::TEvProcessResponse, HandleQueryResponse);
           HFunc(TEvPqNewMetaCache::TEvGetVersionRequest, HandleGetVersion)
           HFunc(TEvPqNewMetaCache::TEvDescribeTopicsRequest, HandleDescribeTopics)
           HFunc(TEvPqNewMetaCache::TEvDescribeAllTopicsRequest, HandleDescribeAllTopics)

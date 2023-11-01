@@ -97,12 +97,6 @@ void TSearchEventsProcessor::HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse:
     }
 }
 
-void TSearchEventsProcessor::HandleProcessResponse(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-    const auto& record = ev->Get()->Record;
-    LOG_ERROR_S(ctx, NKikimrServices::SQS, "YC Search events processor: failed to list ymq events: " << record);
-    HandleFailure(ctx);
-}
-
 void TSearchEventsProcessor::HandleFailure(const TActorContext& ctx) {
     StopSession(ctx);
     switch (State) {

@@ -126,16 +126,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         TActorId kqpProxy = MakeKqpProxyID(ctx.SelfID.NodeId());
         ctx.Send(kqpProxy, this->Request.Release());
-
         this->Become(&TKqpRequestHandler::AwaitState);
-    }
-
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& kqpResponse = ev->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, ctx.SelfID
-            << "Received process error for kqp query: " << kqpResponse.GetError());
-
-        TBase::HandleError(kqpResponse.GetError(), ctx);
     }
 
     using TBase::Handle;
@@ -143,7 +134,6 @@ public:
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(TResponse, HandleResponse);
 
         default:
@@ -219,14 +209,6 @@ public:
         Executions.push_back(std::move(*ev->Get()->Record.MutableProfile()));
     }
 
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& kqpResponse = ev->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received process error for scan query: " << kqpResponse.GetError());
-
-        TBase::HandleError(kqpResponse.GetError(), ctx);
-    }
-
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
@@ -251,7 +233,6 @@ public:
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
@@ -292,14 +273,6 @@ public:
         ctx.Send(kqpProxy, this->Request.Release());
 
         this->Become(&TKqpStreamRequestHandler::AwaitState);
-    }
-
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& kqpResponse = ev->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, ctx.SelfID
-            << "Received process error for kqp data query: " << kqpResponse.GetError());
-
-        TBase::HandleError(kqpResponse.GetError(), ctx);
     }
 
     using TBase::Promise;
@@ -355,7 +328,6 @@ public:
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(TResponse, HandleResponse);
             HFunc(NKqp::TEvKqp::TEvDataQueryStreamPartAck, Handle);
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
@@ -414,14 +386,6 @@ public:
         Executions.push_back(std::move(*ev->Get()->Record.MutableProfile()));
     }
 
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& kqpResponse = ev->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received process error for scan query: " << kqpResponse.GetError());
-
-        TBase::HandleError(kqpResponse.GetError(), ctx);
-    }
-
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
@@ -447,7 +411,6 @@ public:
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);

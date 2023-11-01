@@ -210,7 +210,6 @@ private:
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
                 HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
                 HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-                HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
                 default:
                     UnexpectedEvent(__func__, ev);
             }
@@ -369,17 +368,6 @@ private:
             TString out;
             Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
             Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
-        }
-
-        ReplyFinishStream(record.GetYdbStatus(), issues);
-    }
-
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext&) {
-        auto& record = ev->Get()->Record;
-
-        NYql::TIssues issues;
-        if (record.HasError()) {
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, record.GetError()));
         }
 
         ReplyFinishStream(record.GetYdbStatus(), issues);

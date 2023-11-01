@@ -110,8 +110,8 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
             runtime->Send(new IEventHandle(kqpProxy, sender, ev.Release()));
             TAutoPtr<IEventHandle> handle;
-            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvProcessResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
         };
 
         SendBadRequestToSession("ydb://session/1?id=ZjY5NWRlM2EtYWMyYjA5YWEtNzQ0MTVlYTMtM2Q4ZDgzOWQ=&node_id=1234&node_id=12345");
@@ -152,9 +152,9 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
         runtime->Send(new IEventHandle(kqpProxy, sender, ev.Release()));
         TAutoPtr<IEventHandle> handle;
-        auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvProcessResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetError(), "<main>: Error: SomeUniqTextForUt\n");
+        auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetResponse().GetQueryIssues().at(0).message(), "<main>: Error: SomeUniqTextForUt\n");
     }
 
     Y_UNIT_TEST(LoadedMetadataAfterCompilationTimeout) {
@@ -289,11 +289,8 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             runtime->Send(new IEventHandle(kqpProxy1, sender, ev.Release()));
 
             TAutoPtr<IEventHandle> handle;
-            auto reply = runtime->GrabEdgeEventsRethrow<TEvKqp::TEvQueryResponse, TEvKqp::TEvProcessResponse>(handle);
-
-            TEvKqp::TEvQueryResponse* queryResponse = std::get<TEvKqp::TEvQueryResponse*>(reply);
-            Y_ABORT_UNLESS(queryResponse);
-            UNIT_ASSERT_VALUES_EQUAL(queryResponse->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         }
     }
 
@@ -366,18 +363,14 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
                 runtime->Send(new IEventHandle(kqpProxy1, sender, ev.Release()));
 
                 TAutoPtr<IEventHandle> handle;
-                auto reply = runtime->GrabEdgeEventsRethrow<TEvKqp::TEvQueryResponse, TEvKqp::TEvProcessResponse>(handle);
+                auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(handle);
+                auto status = reply->Record.GetRef().GetYdbStatus();
+                UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::TIMEOUT);
 
-                TEvKqp::TEvQueryResponse* queryResponse = std::get<TEvKqp::TEvQueryResponse*>(reply);
-                if (queryResponse) {
+                if (status == Ydb::StatusIds::SUCCESS) {
                     ++SuccessStories;
-                    UNIT_ASSERT_VALUES_EQUAL(queryResponse->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-                }
-
-                TEvKqp::TEvProcessResponse* processResponse = std::get<TEvKqp::TEvProcessResponse*>(reply);
-                if (processResponse) {
+                } else if (status == Ydb::StatusIds::TIMEOUT) {
                     ++NegativeStories;
-                    UNIT_ASSERT_VALUES_EQUAL(processResponse->Record.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
                 }
             }
 
@@ -389,18 +382,13 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
                 runtime->Send(new IEventHandle(kqpProxy1, sender, ev.Release()));
 
                 TAutoPtr<IEventHandle> handle;
-                auto reply = runtime->GrabEdgeEventsRethrow<TEvKqp::TEvPingSessionResponse, TEvKqp::TEvProcessResponse>(handle);
-
-                TEvKqp::TEvPingSessionResponse* pingResponse = std::get<TEvKqp::TEvPingSessionResponse*>(reply);
-                if (pingResponse) {
+                auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvPingSessionResponse>(handle);
+                auto status = reply->Record.GetStatus();
+                UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::TIMEOUT);
+                if (status == Ydb::StatusIds::SUCCESS) {
                     ++SuccessStories;
-                    UNIT_ASSERT_VALUES_EQUAL(pingResponse->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
-                }
-
-                TEvKqp::TEvProcessResponse* processResponse = std::get<TEvKqp::TEvProcessResponse*>(reply);
-                if (processResponse) {
+                } else if (status == Ydb::StatusIds::TIMEOUT) {
                     ++NegativeStories;
-                    UNIT_ASSERT_VALUES_EQUAL(processResponse->Record.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
                 }
             }
         }

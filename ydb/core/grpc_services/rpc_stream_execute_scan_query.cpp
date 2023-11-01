@@ -187,7 +187,6 @@ private:
             HFunc(TEvents::TEvWakeup, Handle);
             HFunc(TRpcServices::TEvGrpcNextReply, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
@@ -319,16 +318,6 @@ private:
             }
         }
         ReplyFinishStream(record.GetYdbStatus(), issues);
-    }
-
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext&) {
-        const auto& kqpResponse = ev->Get()->Record;
-        NYql::TIssues issues;
-        if (kqpResponse.HasError()) {
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, kqpResponse.GetError()));
-        }
-
-        ReplyFinishStream(kqpResponse.GetYdbStatus(), issues);
     }
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {

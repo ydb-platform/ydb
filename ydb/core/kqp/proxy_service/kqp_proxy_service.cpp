@@ -23,6 +23,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
@@ -1238,7 +1239,7 @@ public:
             hFunc(TEvKqp::TEvScriptRequest, Handle);
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);
             hFunc(TEvKqp::TEvQueryResponse, ForwardEvent);
-            hFunc(TEvKqp::TEvProcessResponse, ForwardEvent);
+            hFunc(TEvKqp::TEvProcessResponse, Handle);
             hFunc(TEvKqp::TEvCreateSessionRequest, Handle);
             hFunc(TEvKqp::TEvPingSessionRequest, Handle);
             hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
@@ -1289,10 +1290,38 @@ private:
         Counters->ReportResponseStatus(dbCounters, event.ByteSize(), event.GetStatus());
     }
 
+
+    void Handle(TEvKqp::TEvProcessResponse::TPtr&ev) {
+        ReplyProcessError(ev->Get()->Record.GetYdbStatus(), ev->Get()->Record.GetError(), ev->Cookie);
+    }
+
     bool ReplyProcessError(Ydb::StatusIds::StatusCode ydbStatus, const TString& message, ui64 requestId)
     {
-        auto response = TEvKqp::TEvProcessResponse::Error(ydbStatus, message);
-        return Send(SelfId(), response.Release(), 0, requestId);
+        auto issue = NKikimr::MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
+        NYql::TIssues issues;
+        issues.AddIssue(issue);
+        const auto request = PendingRequests.FindPtr(requestId);
+        if (!request) {
+            return true;
+        }
+
+        if (request->EventType == TKqpEvents::EvPingSessionRequest) {
+            auto response = std::make_unique<TEvKqp::TEvPingSessionResponse>();
+            response->Record.SetStatus(ydbStatus);
+            NYql::IssuesToMessage(issues, response->Record.MutableIssues());
+            return Send(SelfId(), response.release(), 0, requestId);
+        } else if (request->EventType == TKqpEvents::EvCreateSessionRequest) {
+            auto response = std::make_unique<TEvKqp::TEvCreateSessionResponse>();
+            response->Record.SetYdbStatus(ydbStatus);
+            response->Record.SetError(message);
+            return Send(SelfId(), response.release(), 0, requestId);
+        }
+
+        auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
+        response->Record.GetRef().SetYdbStatus(ydbStatus);
+
+        NYql::IssuesToMessage(issues, response->Record.GetRef().MutableResponse()->MutableQueryIssues());
+        return Send(SelfId(), response.release(), 0, requestId);
     }
 
     bool CheckRequestDeadline(const TKqpRequestInfo& requestInfo, const TInstant deadline, TProcessResult<TKqpSessionInfo*>& result)

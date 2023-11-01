@@ -94,7 +94,6 @@ public:
 protected:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             default: TBase::StateFuncBase(ev);
         }
     }
@@ -145,26 +144,6 @@ protected:
         this->Request_->RaiseIssues(issues);
         this->Request_->ReplyWithYdbStatus(response.GetStatus());
         this->Die(ctx);
-    }
-
-    void OnProcessError(const NKikimrKqp::TEvProcessResponse& kqpResponse, const TActorContext& ctx) {
-        if (kqpResponse.HasError()) {
-            NYql::TIssues issues;
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, kqpResponse.GetError()));
-            return this->Reply(kqpResponse.GetYdbStatus(), issues, ctx);
-        } else {
-            return this->Reply(kqpResponse.GetYdbStatus(), ctx);
-        }
-    }
-
-private:
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& record = ev->Get()->Record;
-        NYql::TIssues issues;
-        if (record.HasError()) {
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, record.GetError()));
-        }
-        return this->Reply(record.GetYdbStatus(), issues, ctx);
     }
 
 private:

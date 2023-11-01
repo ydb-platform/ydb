@@ -166,10 +166,6 @@ namespace NKikimr::NSQS {
             }
         }
     }
-    
-    void TCleanupQueueDataActor::HandleProcessResponse(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-        HandleError(ev->Get()->Record.DebugString(), ctx);
-    }
 
     void TCleanupQueueDataActor::HandleError(const TString& error, const TActorContext& ctx) {
         MonitoringCounters->CleanupRemovedQueuesErrors->Inc();

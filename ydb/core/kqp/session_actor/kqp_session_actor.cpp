@@ -238,19 +238,6 @@ public:
         Cleanup();
     }
 
-    void ForwardResponse(TEvKqp::TEvProcessResponse::TPtr& ev) {
-        QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
-        auto& record = QueryResponse->Record.GetRef();
-        record.SetYdbStatus(ev->Get()->Record.GetYdbStatus());
-
-        if (ev->Get()->Record.HasError()) {
-            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ev->Get()->Record.GetError());
-            IssueToMessage(issue, record.MutableResponse()->AddQueryIssues());
-        }
-
-        Cleanup();
-    }
-
     void ReplyTransactionNotFound(const TString& txId) {
         std::vector<TIssue> issues{YqlIssue(TPosition(), TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND,
             TStringBuilder() << "Transaction not found: " << txId)};
@@ -1543,12 +1530,15 @@ public:
     void ReplyProcessError(const TActorId& sender, ui64 proxyRequestId, Ydb::StatusIds::StatusCode ydbStatus,
             const TString& message)
     {
-        LOG_W("Reply process error, msg: " << message << " proxyRequestId: " << proxyRequestId);
-
-        auto response = TEvKqp::TEvProcessResponse::Error(ydbStatus, message);
-
-        AddTrailingInfo(response->Record);
-        Send(sender, response.Release(), 0, proxyRequestId);
+        LOG_W("Reply query error, msg: " << message << " proxyRequestId: " << proxyRequestId);
+        auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
+        response->Record.GetRef().SetYdbStatus(ydbStatus);
+        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
+        NYql::TIssues issues;
+        issues.AddIssue(issue);
+        NYql::IssuesToMessage(issues, response->Record.GetRef().MutableResponse()->MutableQueryIssues());
+        AddTrailingInfo(response->Record.GetRef());
+        Send(sender, response.release(), 0, proxyRequestId);
     }
 
     void ReplyBusy(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -2001,7 +1991,6 @@ public:
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);
-                hFunc(TEvKqp::TEvProcessResponse, ForwardResponse);
             default:
                 UnexpectedEvent("ExecuteState", ev);
             }

@@ -11,6 +11,7 @@
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 
@@ -864,11 +865,14 @@ private:
         Ydb::StatusIds::StatusCode ydbStatus, const TString& message)
     {
         LOG_W(message);
-
-        auto response = TEvKqp::TEvProcessResponse::Error(ydbStatus, message);
-
-        AddTrailingInfo(response->Record);
-        return Send(sender, response.Release(), 0, proxyRequestId);
+        auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
+        response->Record.GetRef().SetYdbStatus(ydbStatus);
+        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
+        NYql::TIssues issues;
+        issues.AddIssue(issue);
+        NYql::IssuesToMessage(issues, response->Record.GetRef().MutableResponse()->MutableQueryIssues());
+        AddTrailingInfo(response->Record.GetRef());
+        return Send(sender, response.release(), 0, proxyRequestId);
     }
 
     bool CheckRequest(const TString& eventSessionId, const TActorId& sender, ui64 proxyRequestId, const TActorContext&)

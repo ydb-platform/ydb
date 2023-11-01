@@ -61,14 +61,12 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPQClustersUpdater::TEvUpdateClusters, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate, Handle);
         }
     }
 
     void Handle(TEvPQClustersUpdater::TEvUpdateClusters::TPtr &ev, const TActorContext &ctx);
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx);
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr &ev, const TActorContext &ctx);
     void Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext& ctx);
 
 };

@@ -775,15 +775,6 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMet
     return ev;
 }
 
-
-void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr &ev, const TActorContext &ctx) {
-    auto& record = ev->Get()->Record;
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session cookie: " << Cookie << " sessionId: " << OwnerCookie << " sourceID "
-            << SourceId << " escaped " << EncodedSourceId.EscapedSourceId << " discover partition error - " << record);
-    CloseSession("Internal error on discovering partition", NPersQueue::NErrorCode::ERROR, ctx);
-}
-
-
 void TWriteSessionActor::ProceedPartition(const ui32 partition, const TActorContext& ctx) {
     Partition = partition;
     auto it = PartitionToTablet.find(Partition);

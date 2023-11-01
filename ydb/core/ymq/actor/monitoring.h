@@ -28,7 +28,6 @@ public:
 
     STRICT_STFUNC(StateFunc,
         HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleQueryResponse);
-        HFunc(NKqp::TEvKqp::TEvProcessResponse, HandleProcessResponse);
         IgnoreFunc(NKqp::TEvKqp::TEvCloseSessionResponse);
     )
 
@@ -37,9 +36,6 @@ public:
     void HandleError(const TString& error, const TActorContext& ctx);
 
     void HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
-    void HandleProcessResponse(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx);
-
-
 
 private:
     TIntrusivePtr<TMonitoringCounters> Counters;

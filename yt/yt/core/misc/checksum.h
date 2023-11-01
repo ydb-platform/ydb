@@ -7,6 +7,8 @@
 #include <util/stream/input.h>
 #include <util/stream/output.h>
 
+#include <yt/yt/core/concurrency/async_stream.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -49,6 +51,24 @@ protected:
 private:
     IOutputStream* const Output_;
     TChecksum Checksum_ = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TChecksumAsyncOutput
+    : public NConcurrency::IAsyncOutputStream
+{
+public:
+    explicit TChecksumAsyncOutput(NConcurrency::IAsyncOutputStreamPtr underlyingStream);
+
+    TFuture<void> Close() override;
+
+    TFuture<void> Write(const TSharedRef& block) override;
+
+    DEFINE_BYVAL_RW_PROPERTY(TChecksum, Checksum);
+
+private:
+    NConcurrency::IAsyncOutputStreamPtr UnderlyingStream_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

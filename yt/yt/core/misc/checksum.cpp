@@ -9,6 +9,8 @@
 
 namespace NYT {
 
+using namespace NConcurrency;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifdef YT_USE_SSE42
@@ -772,6 +774,25 @@ void TChecksumOutput::DoFlush()
 void TChecksumOutput::DoFinish()
 {
     Output_->Finish();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TChecksumAsyncOutput::TChecksumAsyncOutput(IAsyncOutputStreamPtr underlyingStream)
+    : UnderlyingStream_(underlyingStream)
+{ }
+
+TFuture<void> TChecksumAsyncOutput::Close()
+{
+    return UnderlyingStream_->Close();
+}
+
+TFuture<void> TChecksumAsyncOutput::Write(const TSharedRef& block)
+{
+    return UnderlyingStream_->Write(block)
+        .Apply(BIND([&, this, this_ = MakeWeak(this)] {
+            Checksum_ = NYT::GetChecksum(block, Checksum_);
+        }));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

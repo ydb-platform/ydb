@@ -45,10 +45,10 @@ NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatc
     return result;
 }
 
-NArrow::TColumnFilter FilterPortion(const std::shared_ptr<arrow::RecordBatch>& portion, const TReadMetadata& readMetadata) {
+NArrow::TColumnFilter FilterPortion(const std::shared_ptr<arrow::RecordBatch>& portion, const TReadMetadata& readMetadata, const bool useSnapshotFilter) {
     Y_ABORT_UNLESS(portion);
     NArrow::TColumnFilter result = readMetadata.GetPKRangesFilter().BuildFilter(portion);
-    if (readMetadata.GetSnapshot().GetPlanStep()) {
+    if (readMetadata.GetSnapshot().GetPlanStep() && useSnapshotFilter) {
         auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();
         result = result.And(MakeSnapshotFilter(portion, snapSchema, readMetadata.GetSnapshot()));
     }

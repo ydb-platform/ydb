@@ -9,7 +9,7 @@
 
 namespace NKikimr::NOlap::NPlainReader {
 
-TPortionInfo::TPreparedBatchData TAssembleColumnsTaskConstructor::BuildBatchAssembler() {
+THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> TAssembleColumnsTaskConstructor::BuildBatchAssembler() {
     auto blobs = ExtractBlobsData();
     THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> blobsDataAssemble;
     for (auto&& i : blobs) {
@@ -18,34 +18,29 @@ TPortionInfo::TPreparedBatchData TAssembleColumnsTaskConstructor::BuildBatchAsse
     for (auto&& i : NullBlocks) {
         AFL_VERIFY(blobsDataAssemble.emplace(i.first, i.second).second);
     }
-    auto blobSchema = Context->GetReadMetadata()->GetLoadSchema(PortionInfo->GetMinSnapshot());
-    auto readSchema = Context->GetReadMetadata()->GetLoadSchema(Context->GetReadMetadata()->GetSnapshot());
-    ISnapshotSchema::TPtr resultSchema;
-    if (ColumnIds.size()) {
-        resultSchema = std::make_shared<TFilteredSnapshotSchema>(readSchema, ColumnIds);
-    } else {
-        resultSchema = readSchema;
-    }
-
-    return PortionInfo->PrepareForAssemble(*blobSchema, *resultSchema, blobsDataAssemble);
+    return blobsDataAssemble;
 }
 
 void TEFTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
-    NConveyor::TScanServiceOperator::SendTaskToExecute(std::make_shared<TAssembleFilter>(Context->GetCommonContext()->GetScanActorId(), BuildBatchAssembler(),
-        Context->GetReadMetadata(), Source, ColumnIds, UseEarlyFilter, Context->GetCommonContext()->GetCounters().GetAssembleTasksGuard(), PortionInfo->RecordSnapshotMax()));
+    auto task = std::make_shared<TAssembleFilter>(Context, PortionInfo, Source, ColumnIds, UseEarlyFilter, BuildBatchAssembler());
+    task->SetPriority(NConveyor::ITask::EPriority::Normal);
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
 }
 
 void TFFColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
-    NConveyor::TScanServiceOperator::SendTaskToExecute(std::make_shared<TAssembleFFBatch>(Context->GetCommonContext()->GetScanActorId(), BuildBatchAssembler(),
-        Source, AppliedFilter, Context->GetCommonContext()->GetCounters().GetAssembleTasksGuard()));
+    auto task = std::make_shared<TAssembleFFBatch>(Context, PortionInfo, Source, ColumnIds, BuildBatchAssembler(), AppliedFilter);
+    task->SetPriority(NConveyor::ITask::EPriority::High);
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
 }
 
 void TCommittedColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     auto blobs = ExtractBlobsData();
     Y_ABORT_UNLESS(NullBlocks.size() == 0);
     Y_ABORT_UNLESS(blobs.size() == 1);
-    NConveyor::TScanServiceOperator::SendTaskToExecute(std::make_shared<TCommittedAssembler>(Context->GetCommonContext()->GetScanActorId(), blobs.begin()->second,
-        Context->GetReadMetadata(), Source, CommittedBlob, Context->GetCommonContext()->GetCounters().GetAssembleTasksGuard()));
+    auto task = std::make_shared<TCommittedAssembler>(Context->GetCommonContext()->GetScanActorId(), blobs.begin()->second,
+        Context->GetReadMetadata(), Source, CommittedBlob, Context->GetCommonContext()->GetCounters().GetAssembleTasksGuard());
+    task->SetPriority(NConveyor::ITask::EPriority::High);
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
 }
 
 bool IFetchTaskConstructor::DoOnError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {

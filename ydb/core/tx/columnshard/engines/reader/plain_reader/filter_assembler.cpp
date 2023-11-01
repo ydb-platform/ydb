@@ -12,11 +12,29 @@ bool TAssembleFilter::DoExecute() {
 
     TPortionInfo::TPreparedBatchData::TAssembleOptions options;
     options.IncludedColumnIds = FilterColumnIds;
-    auto batch = BatchConstructor.Assemble(options);
+    if (RecordsMaxSnapshot < ReadMetadata->GetSnapshot() && UseFilter) {
+        for (auto&& i : TIndexInfo::GetSpecialColumnIds()) {
+            options.IncludedColumnIds->erase(i);
+        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_special_columns");
+    }
+
+    auto batchConstructor = BuildBatchConstructor(FilterColumnIds);
+
+    auto batch = batchConstructor.Assemble(options);
     Y_ABORT_UNLESS(batch);
     Y_ABORT_UNLESS(batch->num_rows());
+    if (RecordsMaxSnapshot < ReadMetadata->GetSnapshot() && UseFilter) {
+        for (auto&& f : TIndexInfo::ArrowSchemaSnapshot()->fields()) {
+            auto c = NArrow::TStatusValidator::GetValid(arrow::MakeArrayOfNull(f->type(), batch->num_rows()));
+            batch = NArrow::TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), f, c));
+        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "restore_fake_special_columns");
+    }
+
     OriginalCount = batch->num_rows();
-    AppliedFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::FilterPortion(batch, *ReadMetadata));
+    AppliedFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::FilterPortion(batch, *ReadMetadata, ReadMetadata->GetSnapshot() <= RecordsMaxSnapshot));
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "first_filter_using");
     if (!AppliedFilter->Apply(batch)) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount)("columns_count", FilterColumnIds.size());
         return true;
@@ -34,17 +52,17 @@ bool TAssembleFilter::DoExecute() {
         }
     }
 
-    if ((size_t)batch->schema()->num_fields() < BatchConstructor.GetColumnsCount()) {
+    if ((size_t)batch->schema()->num_fields() < batchConstructor.GetColumnsCount()) {
         TPortionInfo::TPreparedBatchData::TAssembleOptions options;
         options.ExcludedColumnIds = FilterColumnIds;
-        auto addBatch = BatchConstructor.Assemble(options);
+        auto addBatch = batchConstructor.Assemble(options);
         Y_ABORT_UNLESS(addBatch);
         Y_ABORT_UNLESS(AppliedFilter->Apply(addBatch));
-        Y_ABORT_UNLESS(NArrow::MergeBatchColumns({ batch, addBatch }, batch, BatchConstructor.GetSchemaColumnNames(), true));
+        Y_ABORT_UNLESS(NArrow::MergeBatchColumns({ batch, addBatch }, batch, batchConstructor.GetSchemaColumnNames(), true));
     }
-    AFL_VERIFY(AppliedFilter->Size() == OriginalCount)("original", OriginalCount)("af_count", AppliedFilter->Size());
+    AFL_VERIFY(AppliedFilter->IsTotalAllowFilter() || AppliedFilter->Size() == OriginalCount)("original", OriginalCount)("af_count", AppliedFilter->Size());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "not_skip_data")
-        ("original_count", OriginalCount)("filtered_count", batch->num_rows())("columns_count", BatchConstructor.GetColumnsCount())("allow_early", AllowEarlyFilter)
+        ("original_count", OriginalCount)("filtered_count", batch->num_rows())("columns_count", batchConstructor.GetColumnsCount())("use_filter", UseFilter)
         ("filter_columns", FilterColumnIds.size())("af_count", AppliedFilter->Size())("ef_count", earlyFilter ? earlyFilter->Size() : 0);
 
     FilteredBatch = batch;

@@ -51,7 +51,7 @@ private:
 protected:
     std::set<ui32> ColumnIds;
     std::shared_ptr<TPortionInfo> PortionInfo;
-    TPortionInfo::TPreparedBatchData BuildBatchAssembler();
+    THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> BuildBatchAssembler();
 public:
     TAssembleColumnsTaskConstructor(const std::shared_ptr<TSpecialReadContext>& context, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks,
         const std::set<ui32>& columnIds, const TPortionDataSource& portion, const std::shared_ptr<IDataSource>& sourcePtr, const TString& taskCustomer)

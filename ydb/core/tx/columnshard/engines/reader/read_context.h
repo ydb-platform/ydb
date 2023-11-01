@@ -34,6 +34,7 @@ private:
     NResourceBroker::NSubscribe::TTaskContext ResourcesTaskContext;
     const TActorId ScanActorId;
     const TActorId ResourceSubscribeActorId;
+    const TActorId ReadCoordinatorActorId;
 public:
     bool IsReverse() const {
         return ReadMetadata->IsDescSorted();
@@ -41,6 +42,10 @@ public:
 
     const TActorId& GetResourceSubscribeActorId() const {
         return ResourceSubscribeActorId;
+    }
+
+    const TActorId& GetReadCoordinatorActorId() const {
+        return ReadCoordinatorActorId;
     }
 
     const TActorId& GetScanActorId() const {
@@ -60,7 +65,7 @@ public:
     }
 
     TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager, const NColumnShard::TConcreteScanCounters& counters, const bool isInternalRead, const TReadMetadataBase::TConstPtr& readMetadata,
-        const TActorId& scanActorId, const TActorId& resourceSubscribeActorId)
+        const TActorId& scanActorId, const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId)
         : StoragesManager(storagesManager)
         , Counters(counters)
         , IsInternalRead(isInternalRead)
@@ -68,6 +73,7 @@ public:
         , ResourcesTaskContext("CS::SCAN_READ", counters.ResourcesSubscriberCounters)
         , ScanActorId(scanActorId)
         , ResourceSubscribeActorId(resourceSubscribeActorId)
+        , ReadCoordinatorActorId(readCoordinatorActorId)
     {
         Y_ABORT_UNLESS(ReadMetadata);
     }

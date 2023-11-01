@@ -219,7 +219,7 @@ std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() c
     return (*res)->column(0);
 }
 
-std::shared_ptr<arrow::RecordBatch> TPortionInfo::TPreparedBatchData::Assemble(const TAssembleOptions& options) const {
+std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(const TAssembleOptions& options) const {
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : Columns) {
@@ -230,7 +230,11 @@ std::shared_ptr<arrow::RecordBatch> TPortionInfo::TPreparedBatchData::Assemble(c
         fields.emplace_back(i.GetField());
     }
 
-    auto table = arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns);
+    return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns);
+}
+
+std::shared_ptr<arrow::RecordBatch> TPortionInfo::TPreparedBatchData::Assemble(const TAssembleOptions& options) const {
+    auto table = AssembleTable(options);
     auto res = table->CombineChunks();
     Y_ABORT_UNLESS(res.ok());
     return NArrow::ToBatch(*res);

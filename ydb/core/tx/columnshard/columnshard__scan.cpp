@@ -1,5 +1,8 @@
 #include "engines/reader/read_context.h"
 #include "blobs_reader/events.h"
+#include "blobs_reader/read_coordinator.h"
+#include "blobs_reader/actor.h"
+#include "resource_subscriber/actor.h"
 
 #include <ydb/core/tx/columnshard/columnshard__scan.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
@@ -20,8 +23,6 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/services/metadata/request/common.h>
 #include <util/generic/noncopyable.h>
-#include "blobs_reader/actor.h"
-#include "resource_subscriber/actor.h"
 
 namespace NKikimr::NColumnShard {
 
@@ -60,6 +61,7 @@ class TColumnShardScan : public TActorBootstrapped<TColumnShardScan>, NArrow::IR
 private:
     std::shared_ptr<NOlap::TActorBasedMemoryAccesor> MemoryAccessor;
     TActorId ResourceSubscribeActorId;
+    TActorId ReadCoordinatorActorId;
     const std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
 public:
     static constexpr auto ActorActivityType() {
@@ -68,7 +70,8 @@ public:
 
 public:
     virtual void PassAway() override {
-        Send(ResourceSubscribeActorId , new TEvents::TEvPoisonPill);
+        Send(ResourceSubscribeActorId, new TEvents::TEvPoisonPill);
+        Send(ReadCoordinatorActorId, new TEvents::TEvPoisonPill);
         IActor::PassAway();
     }
 
@@ -107,9 +110,10 @@ public:
         Y_ABORT_UNLESS(!ScanIterator);
         MemoryAccessor = std::make_shared<NOlap::TActorBasedMemoryAccesor>(SelfId(), "CSScan/Result");
         ResourceSubscribeActorId = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletId, SelfId()));
+        ReadCoordinatorActorId = ctx.Register(new NOlap::NBlobOperations::NRead::TReadCoordinatorActor(TabletId, SelfId()));
 
         std::shared_ptr<NOlap::TReadContext> context = std::make_shared<NOlap::TReadContext>(StoragesManager, ScanCountersPool, false,
-            ReadMetadataRanges[ReadMetadataIndex], SelfId(), ResourceSubscribeActorId);
+            ReadMetadataRanges[ReadMetadataIndex], SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
@@ -365,7 +369,7 @@ private:
             return Finish();
         }
 
-        auto context = std::make_shared<NOlap::TReadContext>(StoragesManager, ScanCountersPool, false, ReadMetadataRanges[ReadMetadataIndex], SelfId(), ResourceSubscribeActorId);
+        auto context = std::make_shared<NOlap::TReadContext>(StoragesManager, ScanCountersPool, false, ReadMetadataRanges[ReadMetadataIndex], SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
         // Used in TArrowToYdbConverter
         ResultYqlSchema.clear();
@@ -1070,7 +1074,8 @@ std::vector<NKikimr::NOlap::TPartialReadResult> TPartialReadResult::SplitResults
 
     std::vector<TPartialReadResult> result;
     for (auto&& i : resultBatches) {
-        i.FillResult(result, mergePartsToMax);
+        Y_UNUSED(mergePartsToMax);
+        i.FillResult(result, true);
     }
     return result;
 }

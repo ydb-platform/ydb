@@ -498,6 +498,7 @@ public:
         }
 
         std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = {}) const;
+        std::shared_ptr<arrow::Table> AssembleTable(const TAssembleOptions& options = {}) const;
     };
 
     template <class TExternalBlobInfo>
@@ -514,16 +515,24 @@ public:
         TMap<size_t, TMap<ui32, TBlobRange>> columnChunks; // position in schema -> ordered chunks
         TMap<size_t, size_t> positionsMap;
 
-        for (auto& rec : Records) {
-            auto resulPos = resultSchema.GetFieldIndex(rec.ColumnId);
-            if (resulPos < 0) {
-                continue;
+        {
+            int resulPos = -1;
+            int dataSchemaPos = -1;
+            std::optional<ui32> predColumnId;
+            for (auto& rec : Records) {
+                if (!predColumnId || rec.ColumnId != *predColumnId) {
+                    resulPos = resultSchema.GetFieldIndex(rec.ColumnId);
+                    dataSchemaPos = dataSchema.GetFieldIndex(rec.ColumnId);
+                }
+                predColumnId = rec.ColumnId;
+                if (resulPos < 0) {
+                    continue;
+                }
+                Y_ASSERT(dataSchemaPos >= 0);
+                positionsMap[resulPos] = dataSchemaPos;
+                AFL_VERIFY(columnChunks[resulPos].emplace(rec.Chunk, rec.BlobRange).second)("record", rec.DebugString());
+                //            AFL_VERIFY(rowsCount == NumRows(rec.ColumnId))("error", "Inconsistent rows")("portion", DebugString())("record", rec.DebugString())("column_records", NumRows(rec.ColumnId));
             }
-            auto pos = dataSchema.GetFieldIndex(rec.ColumnId);
-            Y_ASSERT(pos >= 0);
-            positionsMap[resulPos] = pos;
-            AFL_VERIFY(columnChunks[resulPos].emplace(rec.Chunk, rec.BlobRange).second)("record", rec.DebugString());
-//            AFL_VERIFY(rowsCount == NumRows(rec.ColumnId))("error", "Inconsistent rows")("portion", DebugString())("record", rec.DebugString())("column_records", NumRows(rec.ColumnId));
         }
 
         // Make chunked arrays for columns

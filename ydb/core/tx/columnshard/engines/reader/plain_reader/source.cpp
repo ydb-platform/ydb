@@ -5,6 +5,7 @@
 #include "plain_read_data.h"
 #include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
+#include <ydb/core/tx/columnshard/blobs_reader/events.h>
 
 namespace NKikimr::NOlap::NPlainReader {
 
@@ -93,6 +94,7 @@ void TPortionDataSource::DoStartFilterStage(const std::shared_ptr<IDataSource>& 
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
     auto constructor = std::make_shared<TEFTaskConstructor>(GetContext(), actions, std::move(nullBlocks), columnIds, *this, sourcePtr, FetchingPlan->CanUseEarlyFilterImmediately(), "ReaderFilter");
+//    NActors::TActivationContext::AsActorContext().Send(GetContext()->GetCommonContext()->GetReadCoordinatorActorId(), new NOlap::NBlobOperations::NRead::TEvStartReadTask(constructor));
     NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
 }
 

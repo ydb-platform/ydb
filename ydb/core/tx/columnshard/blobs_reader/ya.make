@@ -4,6 +4,7 @@ SRCS(
     actor.cpp
     task.cpp
     events.cpp
+    read_coordinator.cpp
 )
 
 PEERDIR(

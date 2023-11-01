@@ -729,6 +729,19 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckWalleCheckTask("task-2", TStatus::ALLOW, env.GetNodeId(1));
     }
 
+    Y_UNIT_TEST(WalleRebootDownNode)
+    {
+        TCmsTestEnv env(8);
+
+        // alllow
+        env.CheckWalleCreateTask("task-1", "reboot", false, TStatus::ALLOW, env.GetNodeId(0));
+        // disallow (up)
+        env.CheckWalleCreateTask("task-2", "reboot", false, TStatus::DISALLOW_TEMP, env.GetNodeId(1));
+        // allow (down)
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+        env.CheckWalleCheckTask("task-2", TStatus::ALLOW, env.GetNodeId(1));
+    }
+
     Y_UNIT_TEST(Notifications)
     {
         TCmsTestEnv env(8);

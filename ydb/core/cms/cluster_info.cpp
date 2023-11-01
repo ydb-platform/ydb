@@ -646,6 +646,7 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action)
     switch (action.GetType()) {
     case TAction::RESTART_SERVICES:
     case TAction::SHUTDOWN_HOST:
+    case TAction::REBOOT_HOST:
         if (auto nodes = NodePtrs(action.GetHost(), MakeServices(action))) {
             for (const auto node : nodes) {
                 for (auto &nodeGroup: node->NodeGroups)
@@ -696,6 +697,7 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
     switch (action.GetType()) {
     case TAction::RESTART_SERVICES:
     case TAction::SHUTDOWN_HOST:
+    case TAction::REBOOT_HOST:
         if (auto nodes = NodePtrs(action.GetHost(), MakeServices(action))) {
             for (const auto node : nodes) {
                 res.insert(node);
@@ -750,6 +752,7 @@ ui64 TClusterInfo::AddLocks(const TPermissionInfo &permission, const TActorConte
         if (item->State == DOWN
             && (permission.Action.GetType() == TAction::RESTART_SERVICES
                 || permission.Action.GetType() == TAction::SHUTDOWN_HOST
+                || permission.Action.GetType() == TAction::REBOOT_HOST
                 || permission.Action.GetType() == TAction::REPLACE_DEVICES)) {
             item->State = RESTART;
             lock = true;;
@@ -1001,6 +1004,7 @@ void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action,
     switch (action.GetType()) {
     case NKikimrCms::TAction::RESTART_SERVICES:
     case NKikimrCms::TAction::SHUTDOWN_HOST:
+    case NKikimrCms::TAction::REBOOT_HOST:
         if (auto nodes = clusterState->NodePtrs(action.GetHost(), MakeServices(action))) {
             for (const auto node : nodes) {
                 for (auto &nodeGroup: node->NodeGroups)

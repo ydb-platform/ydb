@@ -116,6 +116,7 @@ public:
 private:
     void Die(const TActorContext& ctx) override {
         ctx.Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvNotifyActorDied);
+        ctx.Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
         TActorBootstrapped::Die(ctx);
     }
 

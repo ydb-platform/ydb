@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.3.54)
+VERSION(1.3.55)
 
-ORIGINAL_SOURCE(https://github.com/aws/s2n-tls/archive/v1.3.54.tar.gz)
+ORIGINAL_SOURCE(https://github.com/aws/s2n-tls/archive/v1.3.55.tar.gz)
 
 PEERDIR(
     contrib/libs/openssl

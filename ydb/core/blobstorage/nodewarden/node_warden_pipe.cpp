@@ -55,6 +55,7 @@ void TNodeWarden::OnPipeError() {
             VDisksWithUnreportedMetrics.PushBack(&vdisk);
         }
     }
+    PDiskRestartRequests.clear();
     EstablishPipe();
 }
 

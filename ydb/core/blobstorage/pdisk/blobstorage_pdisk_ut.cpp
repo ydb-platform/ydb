@@ -506,8 +506,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
-        testCtx.Send(new TEvBlobStorage::TEvRestartPDisk(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, nullptr));
-        const auto evInitRes = testCtx.Recv<TEvBlobStorage::TEvRestartPDiskResult>();
+        testCtx.Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, true, nullptr));
+        const auto evInitRes = testCtx.Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
         vdisk.InitFull();
         vdisk.SendEvLogSync();
     }
@@ -528,7 +528,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             testCtx.Send(new NPDisk::TEvLog(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 0,
                         logData, TLsnSeg(lsn, lsn), nullptr));
             if (i == 100) {
-                testCtx.Send(new TEvBlobStorage::TEvRestartPDisk(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, nullptr));
+                testCtx.Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, true, nullptr));
             }
             ++lsn;
         }
@@ -541,7 +541,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 Ctest << "TEvLogResult status is error" << Endl;
             }
         }
-        testCtx.Recv<TEvBlobStorage::TEvRestartPDiskResult>();
+        testCtx.Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
     }
 
     Y_UNIT_TEST(CommitDeleteChunks) {
@@ -922,8 +922,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         vdisk.SendEvLogSync();
         TCompatibilityInfoTest::Reset(&newInfo);
 
-        testCtx.Send(new TEvBlobStorage::TEvRestartPDisk(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, nullptr));
-        testCtx.Recv<TEvBlobStorage::TEvRestartPDiskResult>();
+        testCtx.Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, true, nullptr));
+        testCtx.Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
         testCtx.Send(new NPDisk::TEvYardInit(vdisk.OwnerRound.fetch_add(1), vdisk.VDiskID, testCtx.TestCtx.PDiskGuid));
         const auto evInitRes = testCtx.Recv<NPDisk::TEvYardInitResult>();
         if (isCompatible) {
@@ -1019,8 +1019,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         while (writeLog() == NKikimrProto::OK) {}
         UNIT_ASSERT_VALUES_EQUAL(writeLog(), NKikimrProto::OUT_OF_SPACE);
 
-        testCtx.Send(new TEvBlobStorage::TEvRestartPDisk(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, nullptr));
-        testCtx.Recv<TEvBlobStorage::TEvRestartPDiskResult>();
+        testCtx.Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, true, nullptr));
+        const auto evInitRes = testCtx.Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
 
         vdisk.InitFull();
         vdisk.SendEvLogSync();

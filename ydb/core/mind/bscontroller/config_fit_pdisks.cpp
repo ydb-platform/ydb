@@ -343,7 +343,7 @@ namespace NKikimr {
                             disk.PDiskCategory.GetRaw(), guid, disk.SharedWithOs, disk.ReadCentric,
                             /* nextVslotId */ 1000, disk.PDiskConfig, disk.BoxId, DefaultMaxSlots,
                             NKikimrBlobStorage::EDriveStatus::ACTIVE, /* statusTimestamp */ TInstant::Zero(),
-                            NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE,
+                            NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE, NBsController::TPDiskMood::Normal,
                             disk.Serial, disk.LastSeenSerial, disk.LastSeenPath, staticSlotUsage);
 
                     // Set PDiskId and Guid in DrivesSerials

@@ -123,6 +123,13 @@
         }                                                                       \
     } while (0) /**/
 
+#define LOG_LOG_S_THROTTLE(throttler, actorCtxOrSystem, priority, component, stream) \
+    do {                                                                             \
+        if ((throttler).Kick()) {                                                    \
+            LOG_LOG_S(actorCtxOrSystem, priority, component, stream);                \
+        }                                                                            \
+    } while (0) /**/
+
 #define TRACE_EVENT(component)                                                                                                         \
     const auto& currentTracer = component;                                                                                             \
     if (ev->HasEvent()) {                                                                                                              \

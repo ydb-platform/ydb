@@ -147,6 +147,23 @@ TEST(TErrorTest, TruncateLargeRValue)
     EXPECT_EQ("Fourth inn...<message truncated>", truncatedError.InnerErrors()[2].GetMessage());
 }
 
+TEST(TErrorTest, TruncateConsistentOverloads)
+{
+    auto error = TError("Some long long error")
+        << TError("First inner error")
+        << TError("Second inner error")
+        << TError("Third inner error")
+        << TError("Fourth inner error");
+    error.MutableAttributes()->Set("my_attr", "Some long long attr");
+
+    auto errorCopy = error;
+    auto truncatedRValueError = std::move(errorCopy).Truncate(/*maxInnerErrorCount*/ 3, /*stringLimit*/ 10);
+
+    auto trunactedLValueError = error.Truncate(/*maxInnerErrorCount*/ 3, /*stringLimit*/ 10);
+
+    EXPECT_EQ(truncatedRValueError, trunactedLValueError);
+}
+
 TEST(TErrorTest, TruncateWhitelist)
 {
     auto error = TError("Some error");

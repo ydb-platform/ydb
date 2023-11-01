@@ -19,11 +19,13 @@ TJsonCallbacksBuildingNodesImpl::TJsonCallbacksBuildingNodesImpl(
     NYson::EYsonType ysonType,
     const TUtf8Transcoder& utf8Transcoder,
     i64 memoryLimit,
+    int nestingLevelLimit,
     NJson::EJsonAttributesMode attributesMode)
     : Consumer_(consumer)
     , YsonType_(ysonType)
     , Utf8Transcoder_(utf8Transcoder)
     , MemoryLimit_(memoryLimit)
+    , NestingLevelLimit_(nestingLevelLimit)
     , AttributesMode_(attributesMode)
     , TreeBuilder_(CreateBuilderFromFactory(GetEphemeralNodeFactory()))
 {
@@ -140,14 +142,17 @@ void TJsonCallbacksBuildingNodesImpl::OnItemFinished()
         if (YsonType_ == EYsonType::ListFragment) {
             Consumer_->OnListItem();
         }
-        ConsumeNode(TreeBuilder_->EndTree());
+        ConsumeNode(TreeBuilder_->EndTree(), Stack_.size());
         TreeBuilder_->BeginTree();
         ConsumedMemory_ = 0;
     }
 }
 
-void TJsonCallbacksBuildingNodesImpl::ConsumeNode(INodePtr node)
+void TJsonCallbacksBuildingNodesImpl::ConsumeNode(INodePtr node, int nestingLevel)
 {
+    if (NestingLevelLimit_ > 0 && nestingLevel > NestingLevelLimit_) {
+        THROW_ERROR_EXCEPTION("JSON nesting level limit exceeded") << NYT::TErrorAttribute("NestingLevelLimit", NestingLevelLimit_);
+    }
     switch (node->GetType()) {
         case ENodeType::Int64:
             Consumer_->OnInt64Scalar(node->AsInt64()->GetValue());
@@ -168,10 +173,10 @@ void TJsonCallbacksBuildingNodesImpl::ConsumeNode(INodePtr node)
             Consumer_->OnStringScalar(node->AsString()->GetValue());
             break;
         case ENodeType::Map:
-            ConsumeNode(node->AsMap());
+            ConsumeNode(node->AsMap(), nestingLevel + 1);
             break;
         case ENodeType::List:
-            ConsumeNode(node->AsList());
+            ConsumeNode(node->AsList(), nestingLevel + 1);
             break;
         default:
             YT_ABORT();
@@ -179,7 +184,7 @@ void TJsonCallbacksBuildingNodesImpl::ConsumeNode(INodePtr node)
     };
 }
 
-void TJsonCallbacksBuildingNodesImpl::ConsumeMapFragment(IMapNodePtr map)
+void TJsonCallbacksBuildingNodesImpl::ConsumeMapFragment(IMapNodePtr map, int nestingLevel)
 {
     for (const auto& [key, value] : map->GetChildren()) {
         auto adjustedKey = TStringBuf(key);
@@ -194,11 +199,11 @@ void TJsonCallbacksBuildingNodesImpl::ConsumeMapFragment(IMapNodePtr map)
             adjustedKey = adjustedKey.substr(1);
         }
         Consumer_->OnKeyedItem(adjustedKey);
-        ConsumeNode(value);
+        ConsumeNode(value, nestingLevel);
     }
 }
 
-void TJsonCallbacksBuildingNodesImpl::ConsumeNode(IMapNodePtr map)
+void TJsonCallbacksBuildingNodesImpl::ConsumeNode(IMapNodePtr map, int nestingLevel)
 {
     auto node = map->FindChild("$value");
     if (node) {
@@ -208,7 +213,7 @@ void TJsonCallbacksBuildingNodesImpl::ConsumeNode(IMapNodePtr map)
                 THROW_ERROR_EXCEPTION("Value of \"$attributes\" must be a map");
             }
             Consumer_->OnBeginAttributes();
-            ConsumeMapFragment(attributes->AsMap());
+            ConsumeMapFragment(attributes->AsMap(), nestingLevel);
             Consumer_->OnEndAttributes();
         }
 
@@ -235,7 +240,7 @@ void TJsonCallbacksBuildingNodesImpl::ConsumeNode(IMapNodePtr map)
             }
 
             if (node->GetType() == expectedType) {
-                ConsumeNode(node);
+                ConsumeNode(node, nestingLevel);
             } else if (node->GetType() == ENodeType::String) {
                 auto nodeAsString = node->AsString()->GetValue();
                 switch (expectedType) {
@@ -290,24 +295,24 @@ void TJsonCallbacksBuildingNodesImpl::ConsumeNode(IMapNodePtr map)
                     << TErrorAttribute("actual_type", node->GetType());
             }
         } else {
-            ConsumeNode(node);
+            ConsumeNode(node, nestingLevel);
         }
     } else {
         if (map->FindChild("$attributes")) {
             THROW_ERROR_EXCEPTION("Found key \"$attributes\" without key \"$value\"");
         }
         Consumer_->OnBeginMap();
-        ConsumeMapFragment(map);
+        ConsumeMapFragment(map, nestingLevel);
         Consumer_->OnEndMap();
     }
 }
 
-void TJsonCallbacksBuildingNodesImpl::ConsumeNode(IListNodePtr list)
+void TJsonCallbacksBuildingNodesImpl::ConsumeNode(IListNodePtr list, int nestingLevel)
 {
     Consumer_->OnBeginList();
     for (int i = 0; i < list->GetChildCount(); ++i) {
         Consumer_->OnListItem();
-        ConsumeNode(list->GetChildOrThrow(i));
+        ConsumeNode(list->GetChildOrThrow(i), nestingLevel);
     }
     Consumer_->OnEndList();
 }

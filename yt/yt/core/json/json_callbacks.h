@@ -51,6 +51,7 @@ public:
         NYson::EYsonType ysonType,
         const TUtf8Transcoder& utf8Transcoder,
         i64 memoryLimit,
+        int nestingLevelLimit,
         NJson::EJsonAttributesMode attributesMode);
 
     void OnStringScalar(TStringBuf value) override;
@@ -71,16 +72,17 @@ private:
     void OnItemStarted();
     void OnItemFinished();
 
-    void ConsumeNode(NYTree::INodePtr node);
-    void ConsumeNode(NYTree::IMapNodePtr map);
-    void ConsumeNode(NYTree::IListNodePtr list);
-    void ConsumeMapFragment(NYTree::IMapNodePtr map);
+    void ConsumeNode(NYTree::INodePtr node, int nestingLevel);
+    void ConsumeNode(NYTree::IMapNodePtr map, int nestingLevel);
+    void ConsumeNode(NYTree::IListNodePtr list, int nestingLevel);
+    void ConsumeMapFragment(NYTree::IMapNodePtr map, int nestingLevel);
 
     NYson::IYsonConsumer* Consumer_;
     NYson::EYsonType YsonType_;
     TUtf8Transcoder Utf8Transcoder_;
     i64 ConsumedMemory_ = 0;
     const i64 MemoryLimit_;
+    const int NestingLevelLimit_;
     const NJson::EJsonAttributesMode AttributesMode_;
 
     TCompactVector<EJsonCallbacksNodeType, 4> Stack_;

@@ -15,6 +15,7 @@ PEERDIR(
     library/cpp/testing/unittest
     library/cpp/actors/testlib
     ydb/library/services
+    ydb/library/yql/sql/pg_dummy
 )
 
 END()

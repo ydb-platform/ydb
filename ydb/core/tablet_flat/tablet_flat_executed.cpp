@@ -77,9 +77,13 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvFAuxUpdate::TPtr &ev) {
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvNewFollowerAttached::TPtr &ev) {
-    Y_UNUSED(ev);
     if (Executor())
-        Executor()->FollowerAttached();
+        Executor()->FollowerAttached(ev->Get()->TotalFollowers);
+}
+
+void TTabletExecutedFlat::Handle(TEvTablet::TEvFollowerDetached::TPtr &ev) {
+    if (Executor())
+        Executor()->FollowerDetached(ev->Get()->TotalFollowers);
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvFollowerSyncComplete::TPtr &ev) {
@@ -264,6 +268,7 @@ bool TTabletExecutedFlat::HandleDefaultEvents(TAutoPtr<IEventHandle>& ev, const 
         hFunc(TEvTablet::TEvFAuxUpdate, Handle);
         hFunc(TEvTablet::TEvFollowerGcApplied, Handle);
         hFunc(TEvTablet::TEvNewFollowerAttached, Handle);
+        hFunc(TEvTablet::TEvFollowerDetached, Handle);
         hFunc(TEvTablet::TEvFollowerSyncComplete, Handle);
         HFuncCtx(TEvTablet::TEvTabletStop, HandleTabletStop, ctx);
         HFuncCtx(TEvTablet::TEvTabletDead, HandleTabletDead, ctx);
@@ -291,6 +296,7 @@ void TTabletExecutedFlat::StateInitImpl(TAutoPtr<IEventHandle>& ev, const TActor
         hFunc(TEvTablet::TEvFAuxUpdate, Handle);
         hFunc(TEvTablet::TEvFollowerGcApplied, Handle);
         hFunc(TEvTablet::TEvNewFollowerAttached, Handle);
+        hFunc(TEvTablet::TEvFollowerDetached, Handle);
         hFunc(TEvTablet::TEvFollowerSyncComplete, Handle);
         HFuncCtx(TEvTablet::TEvTabletStop, HandleTabletStop, ctx);
         HFuncCtx(TEvTablet::TEvTabletDead, HandleTabletDead, ctx);

@@ -562,6 +562,10 @@ TTablet::EraseFollowerInfo(TMap<TActorId, TLeaderInfo>::iterator followerIt) {
 
     auto retIt = LeaderInfo.erase(followerIt);
 
+    if (UserTablet) {
+        Send(UserTablet, new TEvTablet::TEvFollowerDetached(LeaderInfo.size()));
+    }
+
     TryPumpWaitingForGc();
     TryFinishFollowerSync();
 

@@ -754,9 +754,12 @@ bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext&
     }
 
     // Make sure we don't leave followers without any repeatable read version
-    TRowVersion maxRepeatableRead = FollowerReadEdge;
-    if (maxRepeatableRead && !FollowerReadEdgeRepeatable) {
-        maxRepeatableRead = maxRepeatableRead.Prev();
+    TRowVersion maxRepeatableRead = TRowVersion::Max();
+    if (Self->HasFollowers()) {
+        maxRepeatableRead = FollowerReadEdge;
+        if (maxRepeatableRead && !FollowerReadEdgeRepeatable) {
+            maxRepeatableRead = maxRepeatableRead.Prev();
+        }
     }
 
     removed |= AdvanceWatermark(txc.DB, Min(proposed, leastPlanned, leastAcquired, maxWriteVersion, maxRepeatableRead));

@@ -54,6 +54,7 @@ struct TEvTablet {
         EvUpdateConfig,
         EvDropLease,
         EvReady,
+        EvFollowerDetached, // from leader to user tablet when a follower is removed
 
         EvCommit = EvBoot + 512,
         EvAux,
@@ -266,6 +267,14 @@ struct TEvTablet {
         const ui32 TotalFollowers;
 
         TEvNewFollowerAttached(ui32 totalFollowers)
+            : TotalFollowers(totalFollowers)
+        {}
+    };
+
+    struct TEvFollowerDetached : public TEventLocal<TEvFollowerDetached, EvFollowerDetached> {
+        const ui32 TotalFollowers;
+
+        TEvFollowerDetached(ui32 totalFollowers)
             : TotalFollowers(totalFollowers)
         {}
     };

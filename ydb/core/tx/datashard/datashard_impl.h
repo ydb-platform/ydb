@@ -1702,6 +1702,7 @@ public:
     bool ReassignChannelsEnabled() const override;
     void OnYellowChannelsChanged() override;
     void OnRejectProbabilityRelaxed() override;
+    void OnFollowersCountChanged() override;
     ui64 GetMemoryUsage() const override;
 
     bool HasPipeServer(const TActorId& pipeServerId);
@@ -1894,6 +1895,9 @@ public:
     // Promotes current follower read edge
     bool PromoteFollowerReadEdge(TTransactionContext& txc);
     bool PromoteFollowerReadEdge();
+
+    // Returns true when this shard has potential followers
+    bool HasFollowers() const;
 
     // Returns a suitable row version for performing a transaction
     TRowVersion GetMvccTxVersion(EMvccTxMode mode, TOperation* op = nullptr) const;

@@ -36,11 +36,13 @@ public:
             , RowLimit(rowLimit + 1)
             , Latest(0)
             , Terminating(false)
+            , MonotonicCounter(0)
             , Ctx(ctx)
         {}
 
     private:
-        using TEntry = std::pair<TTimestamp, NUdf::TUnboxedValue>;
+        using THeapKey = std::pair<TTimestamp, ui64>;
+        using TEntry = std::pair<THeapKey, NUdf::TUnboxedValue>;
         static constexpr auto Greater = [](const TEntry& lhs, const TEntry& rhs) {
             return lhs.first > rhs.first;
         };
@@ -68,7 +70,8 @@ public:
             if (Heap.empty()) {
                 return NUdf::TUnboxedValue{};
             }
-            TTimestamp oldest = Heap.top().first;
+            THeapKey oldestKey = Heap.top().first;
+            TTimestamp oldest = oldestKey.first;
             if (oldest < Latest + Delay || Heap.size() == RowLimit || Terminating) {
                 auto result = std::move(Heap.top().second);
                 Heap.pop();
@@ -84,7 +87,7 @@ public:
                 Latest = t;
             }
             if (Latest + Delay < t && t < Latest + Ahead) {
-                Heap.emplace(t, std::move(row));
+                Heap.emplace(THeapKey(t, ++MonotonicCounter), std::move(row));
             } else {
                 return row;
             }
@@ -105,8 +108,9 @@ public:
                 ClearState();
                 for (auto i = 0U; i < heapSize; ++i) {
                     TTimestamp t = ReadUi64(in);
+                    MonotonicCounter = ReadUi64(in);
                     NUdf::TUnboxedValue row = ReadUnboxedValue(in, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx);
-                    Heap.emplace(t, std::move(row));
+                    Heap.emplace(THeapKey(t, MonotonicCounter), std::move(row));
                 }
                 Latest = ReadUi64(in);
                 Terminating = ReadBool(in);
@@ -121,7 +125,9 @@ public:
             WriteUi32(out, Heap.size());
 
             for (const TEntry& entry : Heap) {
-                WriteUi64(out, entry.first);
+                THeapKey key = entry.first;
+                WriteUi64(out, key.first);
+                WriteUi64(out, key.second);
                 WriteUnboxedValue(out, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), entry.second);
             }
             WriteUi64(out, Latest);
@@ -144,6 +150,7 @@ public:
         const ui32 RowLimit;
         TTimestamp Latest;
         bool Terminating; //not applicable for streams, but useful for debug and testing
+        ui64 MonotonicCounter;
         TComputationContext& Ctx;
     };
 

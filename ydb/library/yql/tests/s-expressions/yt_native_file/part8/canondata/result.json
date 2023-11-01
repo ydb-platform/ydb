@@ -4662,6 +4662,27 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/995452/f98a01db24bf1dc14fb54bf2bf3c8e5fca8967c6/resource.tar.gz#test.test_TimeOrderRecover-happy_path-Results_/results.txt"
         }
     ],
+    "test.test[TimeOrderRecover-ordering-Debug]": [
+        {
+            "checksum": "dd979fe0ec7bb6cdf1ce205cafdfd521",
+            "size": 1052,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942100/3416defdd21f52f2fd0e0428318d22400ab77887/resource.tar.gz#test.test_TimeOrderRecover-ordering-Debug_/opt.yql"
+        }
+    ],
+    "test.test[TimeOrderRecover-ordering-Plan]": [
+        {
+            "checksum": "f67bc0645fae0844adcd0a4839183932",
+            "size": 2177,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1900335/304a2080ef213199ea3cc747f04c6cdadad8c6ba/resource.tar.gz#test.test_TimeOrderRecover-ordering-Plan_/plan.txt"
+        }
+    ],
+    "test.test[TimeOrderRecover-ordering-Results]": [
+        {
+            "checksum": "714788c5fd05a14f765c99a804f434dc",
+            "size": 3194,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942671/1db4d4843d1839221ea8ae53e65e00062ca57f97/resource.tar.gz#test.test_TimeOrderRecover-ordering-Results_/results.txt"
+        }
+    ],
     "test.test[Udf-AutoMapManyNamed-Debug]": [
         {
             "checksum": "7ebb3a85fba24cde1eb2feee9c7196bd",

@@ -525,6 +525,27 @@ private:
     }
 
 private:
+    struct ProcessParameters {
+        ProcessParameters(TSourceIdWriter& sourceIdWriter,
+                          THeartbeatEmitter& heartbeatEmitter)
+                : SourceIdWriter(sourceIdWriter)
+                , HeartbeatEmitter(heartbeatEmitter) {
+            }
+
+        TSourceIdWriter& SourceIdWriter;
+        THeartbeatEmitter& HeartbeatEmitter;
+
+        ui64 CurOffset;
+        bool OldPartsCleared;
+        bool HeadCleared;
+    };
+
+    bool ProcessRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters);
+    bool ProcessRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters);
+    bool ProcessRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
+    bool ProcessRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+
+private:
     ui64 TabletID;
     ui32 Partition;
     NKikimrPQ::TPQTabletConfig Config;

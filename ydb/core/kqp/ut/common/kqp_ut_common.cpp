@@ -739,6 +739,30 @@ TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it, bool th
     return out.Str();
 }
 
+static void FillPlan(const NYdb::NTable::TScanQueryPart& streamPart, TCollectedStreamResult& res) {
+    if (streamPart.HasQueryStats() ) {
+        res.QueryStats = NYdb::TProtoAccessor::GetProto(streamPart.GetQueryStats());
+
+        auto plan = res.QueryStats->query_plan();
+        if (!plan.empty()) {
+            res.PlanJson = plan;
+        }
+    }
+}
+
+static void FillPlan(const NYdb::NScripting::TYqlResultPart& streamPart, TCollectedStreamResult& res) {
+    if (streamPart.HasQueryStats() ) {
+        res.QueryStats = NYdb::TProtoAccessor::GetProto(streamPart.GetQueryStats());
+
+        auto plan = res.QueryStats->query_plan();
+        if (!plan.empty()) {
+            res.PlanJson = plan;
+        }
+    }
+}
+
+static void FillPlan(const NYdb::NQuery::TExecuteQueryPart& /*streamPart*/, TCollectedStreamResult& /*res*/) {}
+
 template<typename TIterator>
 TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
     TCollectedStreamResult res;
@@ -770,6 +794,17 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
             }
         }
 
+        if constexpr (std::is_same_v<TIterator, NYdb::NQuery::TExecuteQueryIterator>) {
+            UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.GetStats(),
+                "Unexpected empty query service  response.");
+
+            if (streamPart.HasResultSet()) {
+                auto resultSet = streamPart.ExtractResultSet();
+                PrintResultSet(resultSet, resultSetWriter);
+                res.RowsCount += resultSet.RowsCount();
+            }
+        }
+
         if constexpr (std::is_same_v<TIterator, NYdb::NScripting::TYqlResultPartIterator>) {
             if (streamPart.HasPartialResult()) {
                 const auto& partialResult = streamPart.GetPartialResult();
@@ -780,15 +815,9 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
         }
 
         if constexpr (std::is_same_v<TIterator, NYdb::NTable::TScanQueryPartIterator>
-                || std::is_same_v<TIterator, NYdb::NScripting::TYqlResultPartIterator>) {
-            if (streamPart.HasQueryStats() ) {
-                res.QueryStats = NYdb::TProtoAccessor::GetProto(streamPart.GetQueryStats());
-
-                auto plan = res.QueryStats->query_plan();
-                if (!plan.empty()) {
-                    res.PlanJson = plan;
-                }
-            }
+                || std::is_same_v<TIterator, NYdb::NScripting::TYqlResultPartIterator>
+                || std::is_same_v<TIterator, NYdb::NQuery::TExecuteQueryIterator>) {
+            FillPlan(streamPart, res);
         } else {
             if (streamPart.HasPlan()) {
                 res.PlanJson = streamPart.ExtractPlan();
@@ -809,6 +838,7 @@ TCollectedStreamResult CollectStreamResult(TIterator& it) {
 
 template TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator& it);
 template TCollectedStreamResult CollectStreamResult(NYdb::NScripting::TYqlResultPartIterator& it);
+template TCollectedStreamResult CollectStreamResult(NYdb::NQuery::TExecuteQueryIterator& it);
 
 TString ReadTableToYson(NYdb::NTable::TSession session, const TString& table) {
     TReadTableSettings settings;

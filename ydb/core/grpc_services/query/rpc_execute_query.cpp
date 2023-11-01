@@ -356,6 +356,10 @@ private:
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
         NYql::IssuesFromMessage(issueMessage, issues);
 
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            Request_->SetRuHeader(record.GetConsumedRu());
+        }
+
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS && NeedReportStats(*Request_->GetProtoRequest())) {
             Ydb::Query::ExecuteQueryResponsePart response;
             response.set_status(Ydb::StatusIds::SUCCESS);

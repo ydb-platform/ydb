@@ -25,6 +25,7 @@ target_link_libraries(ydb-library-yql-dq-actors-spilling-ut PUBLIC
   cpp-actors-testlib
   ydb-library-services
   yql-sql-pg_dummy
+  udf-service-exception_policy
 )
 target_link_options(ydb-library-yql-dq-actors-spilling-ut PRIVATE
   -ldl

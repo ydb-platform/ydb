@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/actors/testlib
     ydb/library/services
     ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/public/udf/service/exception_policy
 )
 
 END()

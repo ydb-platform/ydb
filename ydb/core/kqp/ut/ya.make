@@ -1,6 +1,7 @@
 RECURSE_FOR_TESTS(
     arrow
     cost
+    data
     effects
     federated_query
     indexes

@@ -181,6 +181,7 @@ public:
         NScheme::TTypeInfo Type;
         TString TypeMod;
         TString Name;
+        bool NotNull;
     };
 
     struct TColumnWrite {
@@ -270,6 +271,7 @@ TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<
         c.Type = tableColumn.Type;
         c.TypeMod = tableColumn.TypeMod;
         c.Name = column.GetName();
+        c.NotNull = tableColumn.NotNull;
 
         columns.emplace_back(std::move(c));
     }

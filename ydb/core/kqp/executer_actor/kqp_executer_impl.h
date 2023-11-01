@@ -935,6 +935,7 @@ protected:
                 protoColumn->SetId(column.Id);
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
                 protoColumn->SetType(columnType.TypeId);
+                protoColumn->SetNotNull(column.NotNull);
                 if (columnType.TypeInfo) {
                     *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
                 }

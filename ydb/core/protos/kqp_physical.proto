@@ -69,6 +69,7 @@ message TKqpPhyColumn {
         string DefaultFromSequence = 4;
         NKikimrMiniKQL.TResult DefaultFromLiteral = 5;
     }
+    bool NotNull = 6;
 }
 
 enum EKqpPhyTableKind {

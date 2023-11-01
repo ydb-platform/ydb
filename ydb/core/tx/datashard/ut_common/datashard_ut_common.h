@@ -1,7 +1,7 @@
 #pragma once
 
-#include "datashard.h"
-#include "datashard_impl.h"
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
 
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>

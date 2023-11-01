@@ -53,6 +53,7 @@ public:
                 column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId(),
                     NPg::TypeDescFromPgTypeName(phyColumn.GetPgTypeName()));
             }
+            column.NotNull = phyColumn.GetNotNull();
 
             Columns.emplace(phyColumn.GetId().GetName(), std::move(column));
             if (!phyColumn.GetDefaultFromSequence().empty()) {
@@ -85,6 +86,7 @@ public:
             TKqpTableKeys::TColumn column;
             column.Id = systemColumn->ColumnId;
             column.Type = NScheme::TTypeInfo(systemColumn->TypeId);
+            column.NotNull = false;
             Columns.emplace(columnName, std::move(column));
         }
 

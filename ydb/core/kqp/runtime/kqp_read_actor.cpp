@@ -920,6 +920,19 @@ public:
         return TStringBuilder() << "first request = " << token.GetFirstUnprocessedQuery() << " lastkey = " << lastKey;
     }
 
+    void ReportNullValue(const THolder<TEventHandle<TEvDataShard::TEvReadResult>>& result, size_t columnIndex) {
+        CA_LOG_D(TStringBuilder() << "validation failed, "
+            << " seqno = " << result->Get()->Record.GetSeqNo()
+            << " finished = " << result->Get()->Record.GetFinished());
+        NYql::TIssue issue;
+        issue.SetCode(NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, NYql::TSeverityIds::S_FATAL);
+        issue.SetMessage(TStringBuilder()
+            << "Read from column index " << columnIndex << ": got NULL from NOT NULL column");
+        NYql::TIssues issues;
+        issues.AddIssue(std::move(issue));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::INTERNAL_ERROR));
+    }
+
     void HandleRead(TEvDataShard::TEvReadResult::TPtr ev) {
         const auto& record = ev->Get()->Record;
         auto id = record.GetReadId();
@@ -1008,6 +1021,7 @@ public:
             << " seqno = " << ev->Get()->Record.GetSeqNo()
             << " finished = " << ev->Get()->Record.GetFinished());
         CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(ev->Get()) << " continuation token " << DebugPrintContionuationToken(record.GetContinuationToken()));
+
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())});
         NotifyCA();
     }
@@ -1106,6 +1120,20 @@ public:
                     stats.AddStatistics(
                         NMiniKQL::WriteColumnValuesFromArrow(editAccessors, *result->Get()->GetArrowBatch(), columnIndex, resultColumnIndex, column.TypeInfo)
                     );
+                    if (column.NotNull) {
+                        std::shared_ptr<arrow::Array> columnSharedPtr = result->Get()->GetArrowBatch()->column(columnIndex);       
+                        bool gotNullValue = false;
+                        for (ui64 rowIndex = 0; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
+                            if (columnSharedPtr->IsNull(rowIndex)) {
+                                gotNullValue = true;
+                                break;
+                            }
+                        }
+                        if (gotNullValue) {
+                            ReportNullValue(result, columnIndex);
+                            return stats;
+                        }
+                    }
                     columnIndex += 1;
                 }
             }
@@ -1164,6 +1192,10 @@ public:
                 if (column.IsSystem) {
                     NMiniKQL::FillSystemColumn(rowItems[resultColumnIndex], shardId, column.Tag, column.TypeInfo);
                 } else {
+                    if (column.NotNull && row[columnIndex].IsNull()) {
+                        ReportNullValue(result, columnIndex);
+                        return stats;
+                    }
                     rowItems[resultColumnIndex] = NMiniKQL::GetCellValue(row[columnIndex], column.TypeInfo);
                     columnIndex += 1;
                 }
@@ -1390,6 +1422,7 @@ private:
             column.Tag = srcColumn.GetId();
             column.TypeInfo = MakeTypeInfo(srcColumn);
             column.IsSystem = IsSystemColumn(column.Tag);
+            column.NotNull = srcColumn.GetNotNull();
             ResultColumns.push_back(column);
         }
     }
@@ -1399,6 +1432,7 @@ private:
         bool IsSystem = false;
         ui32 Tag = 0;
         NScheme::TTypeInfo TypeInfo;
+        bool NotNull;
     };
 
     const NKikimrTxDataShard::TKqpReadRangesSourceSettings* Settings;

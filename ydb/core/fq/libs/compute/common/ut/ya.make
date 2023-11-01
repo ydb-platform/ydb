@@ -8,6 +8,7 @@ ENDIF()
 
 SRCS(
     config_ut.cpp
+    utils_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

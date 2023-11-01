@@ -23,22 +23,49 @@ struct TTotalStatistics {
 TString FormatDurationMs(ui64 durationMs) {
     TStringBuilder builder;
 
-    auto seconds = durationMs / 1'000;
-    if (seconds >= 60) {
-        builder << (seconds / 60) << "m " << (seconds % 60) << "s";
+    if (durationMs && durationMs < 100) {
+        builder << durationMs << "ms";
     } else {
-        auto hundredths = (durationMs % 1'000) / 10;
-        builder << seconds << ".";
-        if (hundredths < 10) {
-            builder << '0';
+        auto seconds = durationMs / 1'000;
+        if (seconds >= 60) {
+            auto minutes = seconds / 60;
+            if (minutes >= 60) {
+                auto hours = minutes / 60;
+                builder << hours << 'h';
+                if (hours < 24) {
+                    auto minutes60 = minutes % 60;
+                    builder << ' ';
+                    if (minutes60 < 10) {
+                        builder << '0';
+                    }
+                    builder << minutes60 << 'm';
+                }
+            } else {
+                auto seconds60 = seconds % 60;
+                builder << minutes << "m ";
+                if (seconds60 < 10) {
+                    builder << '0';
+                }
+                builder << seconds60 << 's';
+            }
+        } else {
+            auto hundredths = (durationMs % 1'000) / 10;
+            builder << seconds << '.';
+            if (hundredths < 10) {
+                builder << '0';
+            }
+            builder << hundredths << 's';
         }
-        builder << hundredths << "s";
     }
 
     return builder;
 }
 
 TString FormatDurationUs(ui64 durationUs) {
+    if (durationUs && durationUs < 1000) {
+        return TStringBuilder() << durationUs << "us";
+    }
+
     return FormatDurationMs(durationUs / 1000);
 }
 

@@ -5,8 +5,8 @@
 Для этого нужно:
 
 1. Сделать дамп данных через [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) со следующими параметрами:
-    * `--inserts` — для добавления данных через команду [INSERT](statements.md#insert), вместо использования протокола [COPY](https://www.postgresql.org/docs/current/sql-copy.html).
-    * `--column-inserts` — для добавления данных через команду [INSERT](statements.md#insert) с именами колонок.
+    * `--inserts` — для добавления данных через команду [INSERT](./statements/insert_into.md), вместо использования протокола [COPY](https://www.postgresql.org/docs/current/sql-copy.html).
+    * `--column-inserts` — для добавления данных через команду [INSERT](./statements/insert_into.md) с именами колонок.
     * `--rows-per-insert=1000` — для вставки данных пачками и ускорения процесса.
     * `--encoding=utf_8` — YDB поддерживает строковые данные только в [UTF-8](https://ru.wikipedia.org/wiki/UTF-8).
 2. Привести дамп к виду, который поддерживается YDB командой `ydb tools pg-convert` [YDB CLI](../reference/ydb-cli/index.md).
@@ -18,7 +18,7 @@
 
 `ydb tools pg-convert` выполняет следующие преобразования:
 
-* Перенос создания первичного ключа в тело команды [CREATE TABLE](statements.md#create).
+* Перенос создания первичного ключа в тело команды [CREATE TABLE](./statements/create_table.md).
 * Вырезание схемы `public` из имен таблиц.
 * Удаление секции `WITH (...)` в `CREATE TABLE`
 * Комментирование неподдерживаемых конструкций (опционально):

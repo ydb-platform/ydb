@@ -118,7 +118,7 @@ public:
             TResponseCb<TResponse>&& userCb,
             TGRpcConnectionsImpl* connections,
             std::shared_ptr<IQueueClientContext> context,
-            const TStringType& endpoint)
+            const std::string& endpoint)
         : TGenericCbHolder<TResponseCb<TResponse>>(std::move(userCb), connections, std::move(context))
         , GRpcStatus_(std::move(status))
         , Endpoint_(endpoint)
@@ -139,7 +139,7 @@ public:
 
 private:
     NGrpc::TGrpcStatus GRpcStatus_;
-    TStringType Endpoint_;
+    std::string Endpoint_;
 };
 
 template<typename TResponse>
@@ -154,7 +154,7 @@ public:
             TResponseCb<TResponse>&& userCb,
             TGRpcConnectionsImpl* connections,
             std::shared_ptr<IQueueClientContext> context,
-            const TStringType& endpoint,
+            const std::string& endpoint,
             std::multimap<TStringType, TStringType>&& metadata)
         : TGenericCbHolder<TResponseCb<TResponse>>(std::move(userCb), connections, std::move(context))
         , Response_(std::move(response))
@@ -170,7 +170,7 @@ public:
 private:
     TResponse Response_;
     NGrpc::TGrpcStatus GRpcStatus_;
-    const TStringType Endpoint_;
+    const std::string Endpoint_;
     std::multimap<TStringType, TStringType> Metadata_;
 };
 

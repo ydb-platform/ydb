@@ -28,7 +28,7 @@ struct TPlainStatus {
         , Issues(std::move(issues))
     { }
 
-    TPlainStatus(EStatus status, NYql::TIssues&& issues, const TStringType& endpoint,
+    TPlainStatus(EStatus status, NYql::TIssues&& issues, const std::string& endpoint,
         std::multimap<TStringType, TStringType>&& metadata)
         : Status(status)
         , Issues(std::move(issues))
@@ -45,7 +45,7 @@ struct TPlainStatus {
     }
 
     TPlainStatus(
-        const NGrpc::TGrpcStatus& grpcStatus, const TStringType& endpoint = TStringType(),
+        const NGrpc::TGrpcStatus& grpcStatus, const std::string& endpoint = std::string(),
         std::multimap<TStringType, TStringType>&& metadata = {});
 
     template<class T>

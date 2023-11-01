@@ -593,7 +593,7 @@ TVector<TExprBase> BuildUpdateTableWithIndex(const TKiUpdateTable& update, const
         return x.second->Type == TIndexDescription::EType::GlobalSyncUnique;
     };
 
-    bool hasUniqIndex = std::find_if(indexes.begin(), indexes.end(), is_uniq) != indexes.end();
+    const bool hasUniqIndex = std::find_if(indexes.begin(), indexes.end(), is_uniq) != indexes.end();
 
     // For uniq index rewrite UPDATE in to UPDATE ON
     if (hasUniqIndex) {

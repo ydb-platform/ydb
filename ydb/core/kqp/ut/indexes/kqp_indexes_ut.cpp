@@ -2138,6 +2138,251 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
+    Y_UNIT_TEST(UniqAndNoUniqSecondaryIndex) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto tableBuilder = db.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::String)
+                .AddNullableColumn("Value1", EPrimitiveType::String)
+                .AddNullableColumn("Value2", EPrimitiveType::String);
+            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.AddUniqueSecondaryIndex("Index1Uniq", {"Value1"});
+            tableBuilder.AddSecondaryIndex("Index2NotUniq", "Value2");
+            auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Value1, Value2) VALUES
+                ("Primary1", "Val1", "Val2");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                    query1,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+       }
+
+       {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Value1, Value2) VALUES
+                    ("Primary2", "Val1", "blabla");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                    query1,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query1(Q_(R"(
+                INSERT INTO `/Root/TestTable` (Key, Value1, Value2) VALUES
+                    ("Primary3", "Val1", "blabla");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                    query1,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query1(Q_(R"(
+                REPLACE INTO `/Root/TestTable` (Key, Value1, Value2) VALUES
+                    ("Primary3", "Val1", "blabla");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                    query1,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        {
+
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index1Uniq/indexImplTable");
+                const TString expected = R"([[["Val1"];["Primary1"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index2NotUniq/indexImplTable");
+                const TString expected = R"([[["Val2"];["Primary1"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable");
+                const TString expected = R"([[["Primary1"];["Val1"];["Val2"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+        }
+
+        {
+            const TString query1(Q_(R"(
+                UPDATE `/Root/TestTable` SET Value2 = "Val2_1" WHERE Key = "Primary1";
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                    query1,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index1Uniq/indexImplTable");
+                const TString expected = R"([[["Val1"];["Primary1"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index2NotUniq/indexImplTable");
+                const TString expected = R"([[["Val2_1"];["Primary1"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable");
+                const TString expected = R"([[["Primary1"];["Val1"];["Val2_1"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(UniqAndNoUniqSecondaryIndexWithCover) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto tableBuilder = db.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::String)
+                .AddNullableColumn("Value1", EPrimitiveType::String)
+                .AddNullableColumn("Value2", EPrimitiveType::String);
+            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            tableBuilder.AddUniqueSecondaryIndex("Index1Uniq", {"Value1"}, {"Value2"});
+            tableBuilder.AddSecondaryIndex("Index2NotUniq", {"Value2"}, {"Value1"});
+            auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Value1, Value2) VALUES
+                ("Primary1", "Val1", "Val2");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                    query1,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+       }
+
+       {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Value1, Value2) VALUES
+                    ("Primary2", "Val1", "blabla");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                    query1,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query1(Q_(R"(
+                INSERT INTO `/Root/TestTable` (Key, Value1, Value2) VALUES
+                    ("Primary3", "Val1", "blabla");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                    query1,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query1(Q_(R"(
+                REPLACE INTO `/Root/TestTable` (Key, Value1, Value2) VALUES
+                    ("Primary3", "Val1", "blabla");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                    query1,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        {
+
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index1Uniq/indexImplTable");
+                const TString expected = R"([[["Val1"];["Primary1"];["Val2"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index2NotUniq/indexImplTable");
+                const TString expected = R"([[["Val2"];["Primary1"];["Val1"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable");
+                const TString expected = R"([[["Primary1"];["Val1"];["Val2"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+        }
+
+        {
+            const TString query1(Q_(R"(
+                UPDATE `/Root/TestTable` SET Value2 = "Val2_1" WHERE Key = "Primary1";
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                    query1,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index1Uniq/indexImplTable");
+                const TString expected = R"([[["Val1"];["Primary1"];["Val2_1"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index2NotUniq/indexImplTable");
+                const TString expected = R"([[["Val2_1"];["Primary1"];["Val1"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable");
+                const TString expected = R"([[["Primary1"];["Val1"];["Val2_1"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+        }
+    }
+
+
     Y_UNIT_TEST(MultipleSecondaryIndexWithSameComulns) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -3644,6 +3889,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 query1,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
             .ExtractValueSync();
+
             UNIT_ASSERT(result.IsSuccess());
         }
 

@@ -301,14 +301,30 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
         .Done();
 }
 
-TMaybe<TCondenseInputResult> CheckUniqueConstraint(const TExprBase& inputRows, const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx)
+TMaybe<TCondenseInputResult> CheckUniqueConstraint(const TExprBase& inputRows, const THashSet<TStringBuf> inputColumns,
+    const TKikimrTableDescription& table, const TSecondaryIndexes& indexes, TPositionHandle pos, TExprContext& ctx)
 {
     auto condenseResult = CondenseInput(inputRows, ctx);
     if (!condenseResult) {
         return {};
     }
 
-    auto helper = CreateUpsertUniqBuildHelper(table, pos, ctx);
+    // Check uniq constraint for indexes which will be updated by input data.
+    // but skip main table pk columns - handle case where we have a complex index is a tuple contains pk
+    const auto& mainPk = table.Metadata->KeyColumnNames;
+    THashSet<TString> usedIndexes;
+    for (const auto& [_, indexDesc] : indexes) {
+        for (const auto& indexKeyCol : indexDesc->KeyColumns) {
+            if (inputColumns.contains(indexKeyCol) &&
+                (std::find(mainPk.begin(), mainPk.end(), indexKeyCol) == mainPk.end()))
+            {
+                usedIndexes.insert(indexDesc->Name);
+                break;
+            }
+        }
+    }
+
+    auto helper = CreateUpsertUniqBuildHelper(table, usedIndexes, pos, ctx);
     if (helper->GetChecksNum() == 0) {
         return condenseResult;
     }
@@ -411,7 +427,15 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
     const auto& pk = table.Metadata->KeyColumnNames;
 
-    auto checkedInput = CheckUniqueConstraint(inputRows, table, pos, ctx);
+    THashSet<TStringBuf> inputColumnsSet;
+    for (const auto& column : inputColumns) {
+        inputColumnsSet.emplace(column.Value());
+    }
+
+    auto filter =  (mode == TKqpPhyUpsertIndexMode::UpdateOn) ? &inputColumnsSet : nullptr;
+    const auto indexes = BuildSecondaryIndexVector(table, pos, ctx, filter);
+
+    auto checkedInput = CheckUniqueConstraint(inputRows, inputColumnsSet, table, indexes, pos, ctx);
     if (!checkedInput) {
         return {};
     }
@@ -420,14 +444,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
     auto inputRowsAndKeys = PrecomputeRowsAndKeys(condenseInputResult, table, pos, ctx);
 
-    THashSet<TStringBuf> inputColumnsSet;
-    for (const auto& column : inputColumns) {
-        inputColumnsSet.emplace(column.Value());
-    }
-
-    auto filter =  (mode == TKqpPhyUpsertIndexMode::UpdateOn) ? &inputColumnsSet : nullptr;
-    const auto indexes = BuildSecondaryIndexVector(table, pos, ctx, filter);
-    // For UPSERT check that indexes is not empty for UPSERT
+    // For UPSERT check that indexes is not empty
     YQL_ENSURE(mode == TKqpPhyUpsertIndexMode::UpdateOn || indexes);
 
     THashSet<TString> indexDataColumns = CreateDataColumnSetToRead(indexes, inputColumnsSet);

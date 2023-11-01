@@ -28,7 +28,7 @@ public:
 protected:
     // table - metadata of table
     // skipPkCheck - false for insert mode, generate check on PK to issue an arror on PK conflict
-    TUniqBuildHelper(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
+    TUniqBuildHelper(const NYql::TKikimrTableDescription& table, const THashSet<TString>* usedIndexes, NYql::TPositionHandle pos,
         NYql::TExprContext& ctx, bool skipPkCheck);
     size_t CalcComputeKeysStageOutputNum() const;
 
@@ -63,8 +63,8 @@ private:
     static TUniqCheckNodes MakeUniqCheckNodes(const NYql::NNodes::TCoLambda& selector,
         const NYql::NNodes::TExprBase& rowsListArg, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
     static TVector<TUniqCheckNodes> Prepare(const NYql::NNodes::TCoArgument& rowsListArg,
-        const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos, NYql::TExprContext& ctx,
-        bool skipPkCheck);
+        const NYql::TKikimrTableDescription& table, const THashSet<TString>* usedIndexes, NYql::TPositionHandle pos,
+        NYql::TExprContext& ctx, bool skipPkCheck);
 
     virtual NYql::NNodes::TDqCnUnionAll CreateLookupStageWithConnection(const NYql::NNodes::TDqStage& computeKeysStage,
         size_t stageOut, const NYql::TKikimrTableMetadata& mainTableMeta, TUniqCheckNodes::TIndexId indexId,
@@ -78,9 +78,9 @@ private:
     const TChecks Checks;
 };
 
-TUniqBuildHelper::TPtr CreateInsertUniqBuildHelper(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
-        NYql::TExprContext& ctx);
+TUniqBuildHelper::TPtr CreateInsertUniqBuildHelper(const NYql::TKikimrTableDescription& table,
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
-TUniqBuildHelper::TPtr CreateUpsertUniqBuildHelper(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
-        NYql::TExprContext& ctx);
+TUniqBuildHelper::TPtr CreateUpsertUniqBuildHelper(const NYql::TKikimrTableDescription& table,
+    const THashSet<TString>& usedIndexes, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 }

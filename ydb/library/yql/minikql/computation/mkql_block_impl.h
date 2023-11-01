@@ -103,6 +103,8 @@ struct TBlockState : public TComputationValue<TBlockState> {
 
     TBlockState(TMemoryUsageInfo* memInfo, size_t width);
 
+    void ClearValues();
+
     void FillArrays();
 
     ui64 Slice();

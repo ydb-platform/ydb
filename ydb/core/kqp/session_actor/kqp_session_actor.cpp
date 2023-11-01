@@ -213,7 +213,7 @@ public:
         }
         auto selfId = SelfId();
         auto as = TActivationContext::ActorSystem();
-        ev->Get()->SetClientLostAction(selfId, as);  
+        ev->Get()->SetClientLostAction(selfId, as);
         QueryState = std::make_shared<TKqpQueryState>(
             ev, QueryId, Settings.Database, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
             Settings.TableService, Settings.QueryService, std::move(id), SessionId);
@@ -1044,7 +1044,7 @@ public:
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
-        
+
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService.GetAggregationConfig(), Settings.TableService.GetExecuterRetriesConfig(),
@@ -1585,7 +1585,7 @@ public:
             }
             LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
         }
-        
+
         Counters->ReportResponseStatus(Settings.DbCounters, record.ByteSize(), record.GetYdbStatus());
         for (auto& issue : record.GetResponse().GetQueryIssues()) {
             Counters->ReportIssues(Settings.DbCounters, CachedIssueCounters, issue);

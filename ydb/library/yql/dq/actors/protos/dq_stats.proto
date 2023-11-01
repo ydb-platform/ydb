@@ -9,7 +9,7 @@ import "google/protobuf/any.proto";
 enum EDqStatsMode {
     DQ_STATS_MODE_UNSPECIFIED = 0;
     DQ_STATS_MODE_NONE    = 10; // no statistics is expected, it will be ignored anyway
-    DQ_STATS_MODE_BASIC   = 20; // per graph statistics 
+    DQ_STATS_MODE_BASIC   = 20; // per graph statistics
     DQ_STATS_MODE_FULL    = 25; // per stage/connection statistics
     DQ_STATS_MODE_PROFILE = 30; // per task statistics
 }
@@ -19,7 +19,7 @@ enum EDqStatsMode {
 message TDqAsyncBufferStats {
     // Data
     uint64 Bytes  = 1; // physical bytes
-    uint64 Rows   = 2; // logical rows (if applicable)   
+    uint64 Rows   = 2; // logical rows (if applicable)
     uint64 Chunks = 3; // chunk is group of sent/received bytes in single batch
     uint64 Splits = 4; // logical partitioning (if applicable)
     // Time
@@ -35,7 +35,7 @@ message TDqAsyncInputBufferStats {
     uint64 InputIndex = 1;
     string IngressName = 9;
 
-    TDqAsyncBufferStats Ingress = 10; 
+    TDqAsyncBufferStats Ingress = 10;
     TDqAsyncBufferStats Push = 11;
     TDqAsyncBufferStats Pop = 12;
 

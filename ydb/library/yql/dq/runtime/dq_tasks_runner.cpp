@@ -229,7 +229,7 @@ public:
         , LogFunc(logFunc)
         , AllocatedHolder(std::make_optional<TAllocatedHolder>())
     {
-        if (Settings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
+        if (CollectBasic()) {
             Stats = std::make_unique<TDqTaskRunnerStats>();
             Stats->StartTs = TInstant::Now();
             if (Y_UNLIKELY(CollectFull())) {
@@ -265,6 +265,10 @@ public:
 
     bool CollectFull() const {
         return Settings.StatsMode >= NDqProto::DQ_STATS_MODE_FULL;
+    }
+
+    bool CollectBasic() const {
+        return Settings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC;
     }
 
     const TDqMeteringStats* GetMeteringStats() const override {
@@ -722,17 +726,14 @@ public:
         }
 
         if (runStatus == ERunStatus::Finished) {
-            if (Stats) {
-                Stats->FinishTs = TInstant::Now();
-            }
-            if (Y_UNLIKELY(CollectFull())) {
+            if (CollectBasic()) {
                 StopWaiting(Stats->FinishTs);
             }
 
             return ERunStatus::Finished;
         }
 
-        if (Y_UNLIKELY(CollectFull())) {
+        if (CollectBasic()) {
             auto now = TInstant::Now();
             StartWaiting(now);
             if (runStatus == ERunStatus::PendingOutput) {
@@ -877,7 +878,7 @@ private:
             if (Stats) {
                 auto duration = TInstant::Now() - startComputeTime;
                 Stats->ComputeCpuTime += duration;
-                if (Y_UNLIKELY(CollectFull())) {
+                if (CollectBasic()) {
                     RunComputeTime = duration;
                 }
             }
@@ -899,7 +900,7 @@ private:
             wideBuffer.resize(AllocatedHolder->OutputWideType->GetElementsCount());
         }
         while (!AllocatedHolder->Output->IsFull()) {
-            if (Y_UNLIKELY(CollectFull())) {
+            if (CollectBasic()) {
                 auto now = TInstant::Now();
                 StopWaitingOutput(now);
                 StopWaiting(now);
@@ -1002,26 +1003,26 @@ private:
     std::optional<TInstant> StartWaitTime;
 
     void StartWaitingOutput(TInstant now) {
-        if (Y_UNLIKELY(CollectFull()) && !StartWaitOutputTime) {
+        if (CollectBasic() && !StartWaitOutputTime) {
             StartWaitOutputTime = now;
         }
     }
 
     void StopWaitingOutput(TInstant now) {
-        if (Y_UNLIKELY(CollectFull()) && StartWaitOutputTime) {
+        if (CollectBasic() && StartWaitOutputTime) {
             Stats->WaitOutputTime += (now - *StartWaitOutputTime);
             StartWaitOutputTime.reset();
         }
     }
 
     void StartWaiting(TInstant now) {
-        if (Y_UNLIKELY(CollectFull()) && !StartWaitTime) {
+        if (CollectBasic() && !StartWaitTime) {
             StartWaitTime = now;
         }
     }
 
     void StopWaiting(TInstant now) {
-        if (Y_UNLIKELY(CollectFull()) && StartWaitTime) {
+        if (CollectBasic() && StartWaitTime) {
             Stats->WaitTime += (now - *StartWaitTime);
             StartWaitTime.reset();
         }

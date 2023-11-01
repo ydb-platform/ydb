@@ -1295,6 +1295,8 @@ message TTableServiceConfig {
         optional uint32 AggregationComputeThreads = 37;
 
         optional uint32 CSScanThreadsPerNode = 38;
+
+        optional uint64 CollectLongTasksStatsTimeoutMs = 22 [default = 10000]; // 10 sec
     }
 
     message TExecuterRetriesConfig {

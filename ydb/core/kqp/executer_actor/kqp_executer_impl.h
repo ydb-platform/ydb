@@ -283,7 +283,11 @@ protected:
 
             case NYql::NDqProto::COMPUTE_STATE_FINISHED: {
                 if (Stats) {
-                    Stats->AddComputeActorStats(computeActor.NodeId(), std::move(*state.MutableStats()));
+                    Stats->AddComputeActorStats(
+                        computeActor.NodeId(),
+                        std::move(*state.MutableStats()),
+                        TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
+                    );
                 }
                 ExtraData[computeActor].Swap(state.MutableExtraData());
 

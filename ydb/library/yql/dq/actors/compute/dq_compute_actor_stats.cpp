@@ -37,23 +37,23 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
     protoTask->SetFinishTimeMs(taskStats.FinishTs.MilliSeconds()); // to be reviewed
     protoTask->SetStartTimeMs(taskStats.StartTs.MilliSeconds());   // to be reviewed
 
+    if (NActors::TlsActivationContext && NActors::TlsActivationContext->ActorSystem()) {
+        protoTask->SetNodeId(NActors::TlsActivationContext->ActorSystem()->NodeId);
+    }
+    protoTask->SetHostName(HostName());
+    protoTask->SetComputeCpuTimeUs(taskStats.ComputeCpuTime.MicroSeconds());
+    protoTask->SetBuildCpuTimeUs(taskStats.BuildCpuTime.MicroSeconds());
+
+    protoTask->SetWaitTimeUs(taskStats.WaitTime.MicroSeconds());             // to be reviewed
+    protoTask->SetWaitOutputTimeUs(taskStats.WaitOutputTime.MicroSeconds()); // to be reviewed
+
+    // All run statuses metrics
+    protoTask->SetPendingInputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingInput].MicroSeconds());   // to be reviewed
+    protoTask->SetPendingOutputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingOutput].MicroSeconds()); // to be reviewed
+    protoTask->SetFinishTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::Finished].MicroSeconds());             // to be reviewed
+    static_assert(TRunStatusTimeMetrics::StatusesCount == 3); // Add all statuses here
+
     if (StatsLevelCollectProfile(level)) {
-        if (NActors::TlsActivationContext && NActors::TlsActivationContext->ActorSystem()) {
-            protoTask->SetNodeId(NActors::TlsActivationContext->ActorSystem()->NodeId);
-        }
-        protoTask->SetHostName(HostName());
-        protoTask->SetComputeCpuTimeUs(taskStats.ComputeCpuTime.MicroSeconds());
-        protoTask->SetBuildCpuTimeUs(taskStats.BuildCpuTime.MicroSeconds());
-
-        protoTask->SetWaitTimeUs(taskStats.WaitTime.MicroSeconds());             // to be reviewed
-        protoTask->SetWaitOutputTimeUs(taskStats.WaitOutputTime.MicroSeconds()); // to be reviewed
-
-        // All run statuses metrics
-        protoTask->SetPendingInputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingInput].MicroSeconds());   // to be reviewed
-        protoTask->SetPendingOutputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingOutput].MicroSeconds()); // to be reviewed
-        protoTask->SetFinishTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::Finished].MicroSeconds());             // to be reviewed
-        static_assert(TRunStatusTimeMetrics::StatusesCount == 3); // Add all statuses here
-
         if (taskStats.ComputeCpuTimeByRun) {
             auto snapshot = taskStats.ComputeCpuTimeByRun->Snapshot();
             for (ui32 i = 0; i < snapshot->Count(); i++) {

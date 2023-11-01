@@ -303,10 +303,17 @@ public:
             Stats->FinishTs = TInstant::Now();
             Stats->Finish();
 
-            if (CollectFullStats(Request.StatsMode)) {
+            if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
                 const auto& tx = Request.Transactions[0].Body;
                 auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
                 response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
+            }
+
+            if (Stats->CollectStatsByLongTasks) {
+                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
+                if (!txPlansWithStats.empty()) {
+                    LOG_N("Full stats: " << txPlansWithStats);
+                }
             }
         }
 

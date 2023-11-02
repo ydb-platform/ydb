@@ -2685,6 +2685,34 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1924537/2a4ead87e83a857ebf5401c24109391652de8b31/resource.tar.gz#test.test_lineage-member_over_if_struct-default.txt-Results_/Output.txt"
         }
     ],
+    "test.test[lineage-scalar_context--Debug]": [
+        {
+            "checksum": "1f33253e8cc55a399df0119e967f3aa5",
+            "size": 2753,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942525/e0184724944958b962ec71cc92bb7a92ce861a41/resource.tar.gz#test.test_lineage-scalar_context--Debug_/opt.yql"
+        }
+    ],
+    "test.test[lineage-scalar_context--Lineage]": [
+        {
+            "checksum": "d1b96f432d15d0bb3dcb9ea58354ea90",
+            "size": 949,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942525/e0184724944958b962ec71cc92bb7a92ce861a41/resource.tar.gz#test.test_lineage-scalar_context--Lineage_/results.txt"
+        }
+    ],
+    "test.test[lineage-scalar_context--Plan]": [
+        {
+            "checksum": "3383376d8e38fbff86ccddfa0a0ba6ba",
+            "size": 9273,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942525/e0184724944958b962ec71cc92bb7a92ce861a41/resource.tar.gz#test.test_lineage-scalar_context--Plan_/plan.txt"
+        }
+    ],
+    "test.test[lineage-scalar_context--Results]": [
+        {
+            "checksum": "0989df101314824c0ec8758b50b95a3a",
+            "size": 68,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942525/e0184724944958b962ec71cc92bb7a92ce861a41/resource.tar.gz#test.test_lineage-scalar_context--Results_/Output.txt"
+        }
+    ],
     "test.test[lineage-select_all_filter-default.txt-Debug]": [
         {
             "checksum": "d7e816843d8c6f43de576bbeb3777f28",

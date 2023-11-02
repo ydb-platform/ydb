@@ -2944,6 +2944,34 @@
             "uri": "file://test.test_limit-yql-7900_empty_sorted_without_keys-default.txt-Results_/extracted"
         }
     ],
+    "test.test[lineage-flatten_list_nested_lambda--Debug]": [
+        {
+            "checksum": "d41deb721eb35c5089265cd05401fd99",
+            "size": 2578,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1899731/b9ffa3e1e9b029d040e77c2fd6806f9a389fa390/resource.tar.gz#test.test_lineage-flatten_list_nested_lambda--Debug_/opt.yql"
+        }
+    ],
+    "test.test[lineage-flatten_list_nested_lambda--Lineage]": [
+        {
+            "checksum": "660a1143bfed1911a820ba30deb475c9",
+            "size": 1105,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1899731/b9ffa3e1e9b029d040e77c2fd6806f9a389fa390/resource.tar.gz#test.test_lineage-flatten_list_nested_lambda--Lineage_/results.txt"
+        }
+    ],
+    "test.test[lineage-flatten_list_nested_lambda--Plan]": [
+        {
+            "checksum": "1080864afa750ef1cddfc6d7dcf1a6e2",
+            "size": 7909,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1899731/b9ffa3e1e9b029d040e77c2fd6806f9a389fa390/resource.tar.gz#test.test_lineage-flatten_list_nested_lambda--Plan_/plan.txt"
+        }
+    ],
+    "test.test[lineage-flatten_list_nested_lambda--Results]": [
+        {
+            "checksum": "220efc57454256af4c4245089a287360",
+            "size": 46,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1899731/b9ffa3e1e9b029d040e77c2fd6806f9a389fa390/resource.tar.gz#test.test_lineage-flatten_list_nested_lambda--Results_/Output.txt"
+        }
+    ],
     "test.test[lineage-join_as_struct-default.txt-Debug]": [
         {
             "checksum": "cf048d27b609e481953a30657b23238b",

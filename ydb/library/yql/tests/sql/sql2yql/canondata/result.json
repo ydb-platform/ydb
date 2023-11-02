@@ -9358,6 +9358,13 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1871182/6b10ad6d9884e5faf3a77187ffb9b38b59b46458/resource.tar.gz#test_sql2yql.test_limit-zero_limit_/sql.yql"
         }
     ],
+    "test_sql2yql.test[lineage-flatten_list_nested_lambda]": [
+        {
+            "checksum": "9296a571442542612d459d9370b315ea",
+            "size": 2309,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942525/a993aa64342179485e7d0b4fa6f4591ea53fb919/resource.tar.gz#test_sql2yql.test_lineage-flatten_list_nested_lambda_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[lineage-group_by_asstruct_key]": [
         {
             "checksum": "6fc73dcd0b3de4c4faff9b573bd85932",
@@ -9384,6 +9391,13 @@
             "checksum": "2f0f3448db1f9062df67f6a582e29edd",
             "size": 2872,
             "uri": "https://storage.yandex-team.ru/get-devtools/1689644/39ce6d9afd6582130ac864f33dffbf252ff73f8a/resource.tar.gz#test_sql2yql.test_lineage-member_over_if_struct_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[lineage-scalar_context]": [
+        {
+            "checksum": "d30139e2ac069a234955b9b89fe80997",
+            "size": 2143,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942525/a993aa64342179485e7d0b4fa6f4591ea53fb919/resource.tar.gz#test_sql2yql.test_lineage-scalar_context_/sql.yql"
         }
     ],
     "test_sql2yql.test[lineage-select_all]": [
@@ -26298,6 +26312,13 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1599023/4bd7e6892a9762eec433e60bda88f20cddadc74c/resource.tar.gz#test_sql_format.test_limit-zero_limit_/formatted.sql"
         }
     ],
+    "test_sql_format.test[lineage-flatten_list_nested_lambda]": [
+        {
+            "checksum": "9adea7a2cbabdcebee735b70bf82cf1a",
+            "size": 244,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942525/a993aa64342179485e7d0b4fa6f4591ea53fb919/resource.tar.gz#test_sql_format.test_lineage-flatten_list_nested_lambda_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[lineage-group_by_asstruct_key]": [
         {
             "checksum": "d79218939fa11f06b02114f036c1c131",
@@ -26324,6 +26345,13 @@
             "checksum": "57ae3da61e63a972d3932b31795134e1",
             "size": 334,
             "uri": "https://storage.yandex-team.ru/get-devtools/1689644/39ce6d9afd6582130ac864f33dffbf252ff73f8a/resource.tar.gz#test_sql_format.test_lineage-member_over_if_struct_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[lineage-scalar_context]": [
+        {
+            "checksum": "c6aabb51cda14e6e3623ea46f422cc97",
+            "size": 169,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942525/a993aa64342179485e7d0b4fa6f4591ea53fb919/resource.tar.gz#test_sql_format.test_lineage-scalar_context_/formatted.sql"
         }
     ],
     "test_sql_format.test[lineage-select_all]": [

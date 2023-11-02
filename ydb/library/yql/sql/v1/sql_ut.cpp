@@ -2432,6 +2432,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(AutoSampleWorksWithSubquery) {
         UNIT_ASSERT(SqlToYql("select * from (select * from plato.Input) sample 0.2").IsOk());
     }
+
+    Y_UNIT_TEST(CreateTableTrailingComma) {
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32, PRIMARY KEY (Key),);").IsOk());
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32,);").IsOk());
+    }
 }
 
 Y_UNIT_TEST_SUITE(ExternalFunction) {

@@ -602,7 +602,7 @@ object_features: object_feature | LPAREN object_feature (COMMA object_feature)* 
 
 object_type_ref: an_id_or_type;
 
-create_table_stmt: CREATE (TABLE | TABLESTORE | EXTERNAL TABLE) simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* RPAREN
+create_table_stmt: CREATE (TABLE | TABLESTORE | EXTERNAL TABLE) simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* COMMA? RPAREN
     table_inherits?
     table_partition_by?
     with_table_settings?

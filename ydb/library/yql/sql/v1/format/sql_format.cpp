@@ -651,14 +651,13 @@ private:
             NewLine();
             Visit(b.GetRule_create_table_entry2());
         }
+        if (msg.HasBlock7()) {
+            Visit(msg.GetBlock7());
+        }
 
         PopCurrentIndent();
         NewLine();
-        Visit(msg.GetToken7());
-        if (msg.HasBlock8()) {
-            NewLine();
-            Visit(msg.GetBlock8());
-        }
+        Visit(msg.GetToken8());
         if (msg.HasBlock9()) {
             NewLine();
             Visit(msg.GetBlock9());
@@ -670,6 +669,10 @@ private:
         if (msg.HasBlock11()) {
             NewLine();
             Visit(msg.GetBlock11());
+        }
+        if (msg.HasBlock12()) {
+            NewLine();
+            Visit(msg.GetBlock12());
         }
     }
 

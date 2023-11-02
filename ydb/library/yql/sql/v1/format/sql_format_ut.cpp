@@ -1329,4 +1329,15 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
     TSetup setup;
     setup.Run(cases);
 }
+
+    Y_UNIT_TEST(CreateTableTrailingComma) {
+        TCases cases = {
+            {"CREATE TABLE tableName (Key Uint32, PRIMARY KEY (Key),);",
+             "CREATE TABLE tableName (\n\tKey Uint32,\n\tPRIMARY KEY (Key),\n);\n\n"},
+            {"CREATE TABLE tableName (Key Uint32,);",
+             "CREATE TABLE tableName (\n\tKey Uint32,\n);\n\n"},
+        };
+        TSetup setup;
+        setup.Run(cases);
+    }
 }

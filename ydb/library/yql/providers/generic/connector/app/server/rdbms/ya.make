@@ -4,6 +4,8 @@ SRCS(
     doc.go
     handler.go
     handler_factory.go
+    interface.go
+    mock.go
     predicate_builder.go
     schema_builder.go
 )

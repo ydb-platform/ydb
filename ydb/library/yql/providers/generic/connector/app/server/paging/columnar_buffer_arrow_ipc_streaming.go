@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow/go/v13/arrow/ipc"
 	"github.com/apache/arrow/go/v13/arrow/memory"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
+	"github.com/ydb-platform/ydb/library/go/core/log"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
@@ -19,6 +20,7 @@ type columnarBufferArrowIPCStreaming struct {
 	readLimiter    ReadLimiter
 	schema         *arrow.Schema
 	typeMapper     utils.TypeMapper
+	logger         log.Logger
 	ydbTypes       []*Ydb.Type
 }
 

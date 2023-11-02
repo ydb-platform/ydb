@@ -12,6 +12,7 @@ import (
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/streaming"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
@@ -141,41 +142,21 @@ func (s *serviceConnector) doListSplitsResponse(
 	return nil
 }
 
-func (s *serviceConnector) ReadSplits(request *api_service_protos.TReadSplitsRequest, stream api_service.Connector_ReadSplitsServer) error {
+func (s *serviceConnector) ReadSplits(
+	request *api_service_protos.TReadSplitsRequest,
+	stream api_service.Connector_ReadSplitsServer) error {
 	logger := utils.AnnotateLogger(s.logger, "ReadSplits", request.DataSourceInstance)
 	logger.Info("request handling started", log.Int("total_splits", len(request.Splits)))
 
-	if err := ValidateReadSplitsRequest(logger, request); err != nil {
+	totalBytes, err := s.doReadSplits(logger, request, stream)
+	if err != nil {
 		logger.Error("request handling failed", log.Error(err))
 
 		response := &api_service_protos.TReadSplitsResponse{Error: utils.NewAPIErrorFromStdError(err)}
 
 		if err := stream.Send(response); err != nil {
-			logger.Error("send channel failed", log.Error(err))
-
-			return err
+			return fmt.Errorf("stream send: %w", err)
 		}
-	}
-
-	logger = log.With(logger, log.String("data source kind", request.DataSourceInstance.GetKind().String()))
-
-	var totalBytes uint64
-
-	for _, split := range request.Splits {
-		bytesInSplit, err := s.readSplit(logger, stream, request, split)
-		if err != nil {
-			logger.Error("request handling failed", log.Error(err))
-
-			response := &api_service_protos.TReadSplitsResponse{Error: utils.NewAPIErrorFromStdError(err)}
-
-			if err := stream.Send(response); err != nil {
-				logger.Error("send channel failed", log.Error(err))
-
-				return err
-			}
-		}
-
-		totalBytes += bytesInSplit
 	}
 
 	logger.Info("request handling finished", log.UInt64("total_bytes", totalBytes))
@@ -183,27 +164,58 @@ func (s *serviceConnector) ReadSplits(request *api_service_protos.TReadSplitsReq
 	return nil
 }
 
+func (s *serviceConnector) doReadSplits(
+	logger log.Logger,
+	request *api_service_protos.TReadSplitsRequest,
+	stream api_service.Connector_ReadSplitsServer,
+) (uint64, error) {
+	if err := ValidateReadSplitsRequest(logger, request); err != nil {
+		return 0, fmt.Errorf("validate read splits request: %w", err)
+	}
+
+	var totalBytes uint64
+
+	handler, err := s.handlerFactory.Make(logger, request.DataSourceInstance.Kind)
+	if err != nil {
+		return 0, fmt.Errorf("make handler: %w", err)
+	}
+
+	for i, split := range request.Splits {
+		columnarBufferFactory, err := paging.NewColumnarBufferFactory(
+			logger, s.memoryAllocator, s.readLimiterFactory, request.Format, split.Select.What, handler.TypeMapper())
+		if err != nil {
+			return 0, fmt.Errorf("new columnar buffer factory: %w", err)
+		}
+
+		pagingWriterFactory := paging.NewWriterFactory(columnarBufferFactory)
+
+		bytesInSplit, err := s.readSplit(logger, stream, request, split, pagingWriterFactory, handler)
+		if err != nil {
+			return 0, fmt.Errorf("read split %d: %w", i, err)
+		}
+
+		totalBytes += bytesInSplit
+	}
+
+	return totalBytes, nil
+}
+
 func (s *serviceConnector) readSplit(
 	logger log.Logger,
 	stream api_service.Connector_ReadSplitsServer,
 	request *api_service_protos.TReadSplitsRequest,
 	split *api_service_protos.TSplit,
+	pagingWriterFactory paging.WriterFactory,
+	handler rdbms.Handler,
 ) (uint64, error) {
 	logger.Debug("split reading started")
 
-	handler, err := s.handlerFactory.Make(logger, request.DataSourceInstance.Kind)
-	if err != nil {
-		return 0, fmt.Errorf("get handler: %w", err)
-	}
-
-	columnarBufferFactory := paging.NewColumnarBufferFactory(logger, s.memoryAllocator, s.readLimiterFactory, request.Format, split.Select.What, handler.TypeMapper())
-
-	streamer, err := NewStreamer(
+	streamer, err := streaming.NewStreamer(
 		logger,
 		stream,
 		request,
 		split,
-		columnarBufferFactory,
+		pagingWriterFactory,
 		handler,
 	)
 	if err != nil {

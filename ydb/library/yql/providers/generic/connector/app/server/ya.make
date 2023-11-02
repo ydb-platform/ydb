@@ -7,7 +7,6 @@ SRCS(
     launcher.go
     service_connector.go
     service_pprof.go
-    streamer.go
     validate.go
 )
 
@@ -18,5 +17,6 @@ RECURSE(
     paging
     postgresql
     rdbms
+    streaming
     utils
 )

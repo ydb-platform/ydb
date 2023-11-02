@@ -8,10 +8,12 @@ import (
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-type Writer struct {
+var _ Writer = (*writerImpl)(nil)
+
+type writerImpl struct {
 	buffer        ColumnarBuffer                  // accumulates data from rows
-	bufferQueue   chan<- ColumnarBuffer           // outgoing buffer queue
-	bufferFactory *ColumnarBufferFactory          // creates new buffer
+	bufferQueue   chan ColumnarBuffer             // outgoing buffer queue
+	bufferFactory ColumnarBufferFactory           // creates new buffer
 	pagination    *api_service_protos.TPagination // settings
 	rowsReceived  uint64                          // simple stats
 	logger        log.Logger                      // annotated logger
@@ -19,7 +21,7 @@ type Writer struct {
 	ctx           context.Context                 // client context
 }
 
-func (pw *Writer) AddRow(acceptors []any) error {
+func (pw *writerImpl) AddRow(acceptors []any) error {
 	if !pw.operational {
 		return fmt.Errorf("paging writer is not operational")
 	}
@@ -28,23 +30,23 @@ func (pw *Writer) AddRow(acceptors []any) error {
 		return fmt.Errorf("acceptors to row set: %w", err)
 	}
 
+	pw.rowsReceived++
+
 	if pw.isEnough() {
-		if err := pw.flush(); err != nil {
+		if err := pw.flush(true); err != nil {
 			return fmt.Errorf("flush: %w", err)
 		}
 	}
 
-	pw.rowsReceived++
-
 	return nil
 }
 
-func (pw *Writer) isEnough() bool {
+func (pw *writerImpl) isEnough() bool {
 	// TODO: implement pagination logic, check limits provided by client
 	return pw.rowsReceived%10000 == 0
 }
 
-func (pw *Writer) flush() error {
+func (pw *writerImpl) flush(makeNewBuffer bool) error {
 	select {
 	case pw.bufferQueue <- pw.buffer:
 	case <-pw.ctx.Done():
@@ -53,16 +55,18 @@ func (pw *Writer) flush() error {
 
 	var err error
 
-	pw.buffer, err = pw.bufferFactory.MakeBuffer()
-	if err != nil {
-		return fmt.Errorf("make buffer: %w", err)
+	if makeNewBuffer {
+		pw.buffer, err = pw.bufferFactory.MakeBuffer()
+		if err != nil {
+			return fmt.Errorf("make buffer: %w", err)
+		}
 	}
 
 	return nil
 }
 
-func (pw *Writer) Finish() error {
-	if err := pw.flush(); err != nil {
+func (pw *writerImpl) Finish() error {
+	if err := pw.flush(false); err != nil {
 		return fmt.Errorf("flush: %w", err)
 	}
 
@@ -74,29 +78,6 @@ func (pw *Writer) Finish() error {
 	return nil
 }
 
-func NewWriter(
-	ctx context.Context,
-	logger log.Logger,
-	bufferFactory *ColumnarBufferFactory,
-	bufferQueue chan<- ColumnarBuffer,
-	pagination *api_service_protos.TPagination,
-) (*Writer, error) {
-	if pagination != nil {
-		return nil, fmt.Errorf("pagination settings are not supported yet")
-	}
-
-	buffer, err := bufferFactory.MakeBuffer()
-	if err != nil {
-		return nil, fmt.Errorf("wrap buffer: %w", err)
-	}
-
-	return &Writer{
-		bufferFactory: bufferFactory,
-		bufferQueue:   bufferQueue,
-		buffer:        buffer,
-		logger:        logger,
-		pagination:    pagination,
-		operational:   true,
-		ctx:           ctx,
-	}, nil
+func (pw *writerImpl) BufferQueue() <-chan ColumnarBuffer {
+	return pw.bufferQueue
 }

@@ -12,24 +12,6 @@ import (
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-type Handler interface {
-	DescribeTable(
-		ctx context.Context,
-		logger log.Logger,
-		request *api_service_protos.TDescribeTableRequest,
-	) (*api_service_protos.TDescribeTableResponse, error)
-
-	ReadSplit(
-		ctx context.Context,
-		logger log.Logger,
-		dataSourceInstance *api_common.TDataSourceInstance,
-		split *api_service_protos.TSplit,
-		pagingWriter *paging.Writer,
-	) error
-
-	TypeMapper() utils.TypeMapper
-}
-
 type handlerImpl[CONN utils.Connection] struct {
 	typeMapper        utils.TypeMapper
 	queryBuilder      utils.QueryExecutor[CONN]
@@ -90,7 +72,7 @@ func (h *handlerImpl[CONN]) ReadSplit(
 	logger log.Logger,
 	dataSourceInstance *api_common.TDataSourceInstance,
 	split *api_service_protos.TSplit,
-	pagingWriter *paging.Writer,
+	pagingWriter paging.Writer,
 ) error {
 	conn, err := h.connectionManager.Make(ctx, logger, dataSourceInstance)
 	if err != nil {

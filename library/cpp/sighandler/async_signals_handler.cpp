@@ -188,22 +188,33 @@ namespace {
     // It such situation we have 2 options:
     //  - wait for auxiliary thread to die - which will cause dead lock
     //  - destruct variable, ignoring thread - which will cause data corruption.
-    TAsyncSignalsHandler* SIGNALS_HANDLER = nullptr;
+    std::atomic<TAsyncSignalsHandler*> SIGNALS_HANDLER = nullptr;
 }
 
 void SetAsyncSignalHandler(int signum, THolder<TEventHandler> handler) {
     static TAdaptiveLock lock;
 
-    if (Y_UNLIKELY(SIGNALS_HANDLER == nullptr)) {
+    // Must be in HB with Handler's constructor.
+    auto* currentHandler = SIGNALS_HANDLER.load(std::memory_order::acquire);
+
+    if (Y_UNLIKELY(currentHandler == nullptr)) {
         TGuard dnd(lock);
 
-        if (SIGNALS_HANDLER == nullptr) {
+        // If we read non-null here it means that we have a concurrent thread
+        // unlocking the lock establishing strongly HB with us.
+        // next line is sequenced before lock call thus relaxed is enough here.
+        currentHandler = SIGNALS_HANDLER.load(std::memory_order::relaxed);
+
+        if (currentHandler == nullptr) {
             // NEVERS GETS DESTROYED
-            SIGNALS_HANDLER = new TAsyncSignalsHandler();
+            currentHandler = new TAsyncSignalsHandler();
+
+            // Ensure HB with constructor for future readers.
+            SIGNALS_HANDLER.store(currentHandler, std::memory_order::release);
         }
     }
 
-    SIGNALS_HANDLER->Install(signum, std::move(handler));
+    currentHandler->Install(signum, std::move(handler));
 }
 
 #else //_win_

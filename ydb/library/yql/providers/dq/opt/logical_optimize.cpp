@@ -70,6 +70,7 @@ public:
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend));
         AddHandler(0, &TDqQuery::Match, HNDL(MergeQueriesWithSinks));
         AddHandler(0, &TCoSqlIn::Match, HNDL(SqlInDropCompact));
+        AddHandler(0, &TDqReplicate::Match, HNDL(ReplicateFieldSubset));
         AddHandler(0, &TDqReadWrapBase::Match, HNDL(DqReadWrapByProvider));
 #undef HNDL
     }
@@ -328,6 +329,10 @@ protected:
 
     TMaybeNode<TExprBase> SqlInDropCompact(TExprBase node, TExprContext& ctx) const {
         return DqSqlInDropCompact(node, ctx);
+    }
+
+    TMaybeNode<TExprBase> ReplicateFieldSubset(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+        return DqReplicateFieldSubset(node, ctx, *getParents());
     }
 
     TMaybeNode<TExprBase> DqReadWrapByProvider(TExprBase node, TExprContext& ctx) const {

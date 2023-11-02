@@ -2312,9 +2312,9 @@
     ],
     "test.test[join-full_equal_null-off-Debug]": [
         {
-            "checksum": "7ab81f2bc00e5958133a660a450485e1",
-            "size": 3388,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1936842/7ee2486a6845b4b7ffec39a73b004e1c45c04aba/resource.tar.gz#test.test_join-full_equal_null-off-Debug_/opt.yql_patched"
+            "checksum": "c98eaf97af575ef937a5be5b25640844",
+            "size": 3231,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942415/49e9dc52f542ff08646205c7ec8c8ad04eda4793/resource.tar.gz#test.test_join-full_equal_null-off-Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-full_equal_null-off-Plan]": [
@@ -3309,9 +3309,9 @@
     ],
     "test.test[json-json_exists/example--Debug]": [
         {
-            "checksum": "b81b8b184a1b50428ed22bf96cd6f005",
-            "size": 5729,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1817427/0c40572784ba0c378f9763d962c3c5e8b7787ec6/resource.tar.gz#test.test_json-json_exists_example--Debug_/opt.yql_patched"
+            "checksum": "5950740d32b828303a857b248d45dd3e",
+            "size": 5499,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942415/49e9dc52f542ff08646205c7ec8c8ad04eda4793/resource.tar.gz#test.test_json-json_exists_example--Debug_/opt.yql_patched"
         }
     ],
     "test.test[json-json_exists/example--Plan]": [
@@ -3737,9 +3737,9 @@
     ],
     "test.test[optimizers-yql-8953_logical_fuse_with_table_props--Debug]": [
         {
-            "checksum": "a5f5d1790f1978d84635f80d1cc24ea8",
-            "size": 3785,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1817427/0c40572784ba0c378f9763d962c3c5e8b7787ec6/resource.tar.gz#test.test_optimizers-yql-8953_logical_fuse_with_table_props--Debug_/opt.yql_patched"
+            "checksum": "5445b911c7649b8f88679bef1975e1e0",
+            "size": 3816,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942415/49e9dc52f542ff08646205c7ec8c8ad04eda4793/resource.tar.gz#test.test_optimizers-yql-8953_logical_fuse_with_table_props--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-yql-8953_logical_fuse_with_table_props--Plan]": [
@@ -5136,9 +5136,9 @@
     ],
     "test.test[select-discard-default.txt-Debug]": [
         {
-            "checksum": "46b12286178939bba90d0c72cc3ee683",
-            "size": 9118,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1936842/7ee2486a6845b4b7ffec39a73b004e1c45c04aba/resource.tar.gz#test.test_select-discard-default.txt-Debug_/opt.yql_patched"
+            "checksum": "ad127c4a4ea1f36e28cba6882c958e60",
+            "size": 8979,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942415/49e9dc52f542ff08646205c7ec8c8ad04eda4793/resource.tar.gz#test.test_select-discard-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[select-discard-default.txt-Plan]": [

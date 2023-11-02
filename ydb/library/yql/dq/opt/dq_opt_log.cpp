@@ -271,6 +271,82 @@ NNodes::TExprBase DqSqlInDropCompact(NNodes::TExprBase node, TExprContext& ctx) 
     return node;
 }
 
+NNodes::TExprBase DqReplicateFieldSubset(NNodes::TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap) {
+    auto maybeReplicate = node.Maybe<TDqReplicate>();
+    if (!maybeReplicate) {
+        return node;
+    }
+    auto replicate = maybeReplicate.Cast();
+
+    auto structType = GetSeqItemType(*replicate.Input().Ref().GetTypeAnn()).Cast<TStructExprType>();
+
+    TSet<TStringBuf> usedFields;
+    for (auto expr: replicate.FreeArgs()) {
+        auto lambda = expr.Cast<TCoLambda>();
+        auto it = parentsMap.find(lambda.Args().Arg(0).Raw());
+        // Argument is unused
+        if (it == parentsMap.cend()) {
+            continue;
+        }
+
+        for (auto parent: it->second) {
+            if (auto maybeFlatMap = TMaybeNode<TCoFlatMapBase>(parent)) {
+                auto flatMap = maybeFlatMap.Cast();
+                TSet<TStringBuf> lambdaSubset;
+                if (!HaveFieldsSubset(flatMap.Lambda().Body().Ptr(), flatMap.Lambda().Args().Arg(0).Ref(), lambdaSubset, parentsMap)) {
+                    return node;
+                }
+                usedFields.insert(lambdaSubset.cbegin(), lambdaSubset.cend());
+            }
+            else if (auto maybeExtractMembers = TMaybeNode<TCoExtractMembers>(parent)) {
+                auto extractMembers = maybeExtractMembers.Cast();
+                for (auto member: extractMembers.Members()) {
+                    usedFields.insert(member.Value());
+                }
+            }
+            else if (!TCoDependsOn::Match(parent)) {
+                return node;
+            }
+
+            if (usedFields.size() == structType->GetSize()) {
+                return node;
+            }
+        }
+
+        if (usedFields.size() == structType->GetSize()) {
+            return node;
+        }
+    }
+
+    if (usedFields.size() < structType->GetSize()) {
+        return TExprBase(ctx.Builder(replicate.Pos())
+            .Callable(TDqReplicate::CallableName())
+                .Callable(0, TCoExtractMembers::CallableName())
+                    .Add(0, replicate.Input().Ptr())
+                    .List(1)
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            ui32 i = 0;
+                            for (auto column : usedFields) {
+                                parent.Atom(i++, column);
+                            }
+                            return parent;
+                        })
+                    .Seal()
+                .Seal()
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    ui32 i = 1;
+                    for (auto expr: replicate.FreeArgs()) {
+                        parent.Add(i++, ctx.DeepCopyLambda(expr.Ref()));
+                    }
+                    return parent;
+                })
+            .Seal()
+            .Build());
+    }
+
+    return node;
+}
+
 IGraphTransformer::TStatus DqWrapRead(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TDqSettings& config) {
     TOptimizeExprSettings settings{&typesCtx};
     auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) {

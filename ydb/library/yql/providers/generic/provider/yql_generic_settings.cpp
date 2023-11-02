@@ -7,6 +7,8 @@
 
 namespace NYql {
 
+    const TString TGenericSettings::TDefault::DateTimeFormat = "string";
+
     TGenericConfiguration::TGenericConfiguration() {
         REGISTER_SETTING(*this, UsePredicatePushdown);
         REGISTER_SETTING(*this, DateTimeFormat);

@@ -21,16 +21,18 @@ namespace NYql {
     namespace {
 
         struct TPushdownSettings: public NPushdown::TSettings {
-            TPushdownSettings() {
+            TPushdownSettings()
+                : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
+            {
                 using EFlag = NPushdown::TSettings::EFeatureFlag;
-                Enable(EFlag::LikeOperator | EFlag::JsonQueryOperators | EFlag::JsonExistsOperator);
+                Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions);
             }
         };
 
         class TGenericPhysicalOptProposalTransformer: public TOptimizeTransformerBase {
         public:
             TGenericPhysicalOptProposalTransformer(TGenericState::TPtr state)
-                : TOptimizeTransformerBase(state->Types, NLog::EComponent::ProviderYdb, {})
+                : TOptimizeTransformerBase(state->Types, NLog::EComponent::ProviderGeneric, {})
                 , State_(state)
             {
 #define HNDL(name) "PhysicalOptimizer-" #name, Hndl(&TGenericPhysicalOptProposalTransformer::name)
@@ -102,13 +104,6 @@ namespace NYql {
                 return node;
             }
 
-            static NPushdown::TPredicateNode BuildEmptyPredicate(TExprContext& ctx, TPositionHandle pos) {
-                auto emptyPredicate = Build<TCoBool>(ctx, pos).Literal().Build("true").Done();
-                NPushdown::TPredicateNode p;
-                p.ExprNode = emptyPredicate;
-                return p;
-            }
-
             static NPushdown::TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree,
                                                                      TExprContext& ctx, TPositionHandle pos)
             {
@@ -117,7 +112,7 @@ namespace NYql {
                 }
 
                 if (predicateTree.Op != NPushdown::EBoolOp::And) {
-                    return BuildEmptyPredicate(ctx, pos);
+                    return NPushdown::TPredicateNode(); // Not valid, => return the same node from optimizer
                 }
 
                 std::vector<NPushdown::TPredicateNode> pushable;
@@ -137,7 +132,7 @@ namespace NYql {
                 YQL_CLOG(TRACE, ProviderGeneric) << "Push filter. Initial filter lambda: " << NCommon::ExprToPrettyString(ctx, lambda.Ref());
 
                 auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
-                if (!maybeOptionalIf.IsValid()) {
+                if (!maybeOptionalIf.IsValid()) { // Nothing to push
                     return {};
                 }
 

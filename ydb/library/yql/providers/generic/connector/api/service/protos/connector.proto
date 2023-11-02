@@ -320,11 +320,35 @@ message TContinuation {
 // Can be a column, a constant or a result of, for example,
 // some arithmetical operation
 message TExpression {
+    message TArithmeticalExpression {
+        // An operation code.
+        enum EOperation {
+            EXPRESSION_OPERATION_UNSPECIFIED = 0;
+            MUL = 1; // left_value * right_value
+            ADD = 2; // left_value + right_value
+            SUB = 3; // left_value - right_value
+            BIT_AND = 4; // left_value & right_value
+            BIT_OR = 5; // left_value | right_value
+            BIT_XOR = 6; // left_value ^ right_value
+            // TODO: support `/` and `%`
+        }
+        EOperation operation = 1;
+        TExpression left_value = 2;
+        TExpression right_value = 3;
+    }
+
+    message TNull {
+    }
+
     oneof payload {
         // A scalar value
         Ydb.TypedValue typed_value = 1;
         // A name of another column to compare with
         string column = 2;
+
+        TArithmeticalExpression arithmetical_expression = 3;
+
+        TNull null = 4;
     }
 }
 
@@ -369,11 +393,17 @@ message TPredicate {
         TExpression value = 1;
     }
 
+    // Expression wich has bool type
+    // For example, bool column
+    message TBoolExpression {
+        TExpression value = 1;
+    }
+
     // A subset of comparators corresponding to the binary logical operators
     message TComparison {
         // An operation code.
         enum EOperation {
-            OPERATION_UNSPECIFIED = 0;
+            COMPARISON_OPERATION_UNSPECIFIED = 0;
             L = 1;  // "$column < value"
             LE = 2; // "$column <= value"
             EQ = 3; // "$column = value"
@@ -396,6 +426,7 @@ message TPredicate {
         TIsNull is_null = 6;
         TIsNotNull is_not_null = 7;
         TComparison comparison = 8;
+        TBoolExpression bool_expression = 9;
     }
 }
 

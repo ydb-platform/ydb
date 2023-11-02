@@ -61,10 +61,8 @@ bool IsSupportedPredicate(const TCoCompare& predicate, const TSettings& settings
     return false;
 }
 
-bool IsSupportedDataType(const TCoDataCtor& node) {
-    if (node.Maybe<TCoUtf8>() ||
-        node.Maybe<TCoString>() ||
-        node.Maybe<TCoBool>() ||
+bool IsSupportedDataType(const TCoDataCtor& node, const TSettings& settings) {
+    if (node.Maybe<TCoBool>() ||
         node.Maybe<TCoFloat>() ||
         node.Maybe<TCoDouble>() ||
         node.Maybe<TCoInt8>() ||
@@ -79,10 +77,20 @@ bool IsSupportedDataType(const TCoDataCtor& node) {
         return true;
     }
 
+    if (settings.IsEnabled(TSettings::EFeatureFlag::StringTypes)) {
+        if (node.Maybe<TCoUtf8>() || node.Maybe<TCoString>()) {
+            return true;
+        }
+    }
+
     return false;
 }
 
-bool IsSupportedCast(const TCoSafeCast& cast) {
+bool IsSupportedCast(const TCoSafeCast& cast, const TSettings& settings) {
+    if (!settings.IsEnabled(TSettings::EFeatureFlag::CastExpression)) {
+        return false;
+    }
+
     auto maybeDataType = cast.Type().Maybe<TCoDataType>();
     if (!maybeDataType) {
         if (const auto maybeOptionalType = cast.Type().Maybe<TCoOptionalType>()) {
@@ -100,8 +108,42 @@ bool IsSupportedCast(const TCoSafeCast& cast) {
     return false;
 }
 
+bool IsStringType(NYql::NUdf::TDataTypeId t) {
+    return t == NYql::NProto::String
+        || t == NYql::NProto::Utf8
+        || t == NYql::NProto::Yson
+        || t == NYql::NProto::Json
+        || t == NYql::NProto::JsonDocument;
+}
+
+bool IsDateTimeType(NYql::NUdf::TDataTypeId t) {
+    return t == NYql::NProto::Date
+        || t == NYql::NProto::Datetime
+        || t == NYql::NProto::Timestamp
+        || t == NYql::NProto::Interval
+        || t == NYql::NProto::TzDate
+        || t == NYql::NProto::TzDatetime
+        || t == NYql::NProto::TzTimestamp
+        || t == NYql::NProto::Date32
+        || t == NYql::NProto::Datetime64
+        || t == NYql::NProto::Timestamp64
+        || t == NYql::NProto::Interval64;
+}
+
+bool IsUuidType(NYql::NUdf::TDataTypeId t) {
+    return t == NYql::NProto::Uuid;
+}
+
+bool IsDecimalType(NYql::NUdf::TDataTypeId t) {
+    return t == NYql::NProto::Decimal;
+}
+
+bool IsDyNumberType(NYql::NUdf::TDataTypeId t) {
+    return t == NYql::NProto::DyNumber;
+}
+
 bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bool equality,
-    const TTypeAnnotationNode* inputType)
+    const TTypeAnnotationNode* inputType, const TSettings& settings)
 {
     const TExprNode::TPtr leftPtr = leftNode.Ptr();
     const TExprNode::TPtr rightPtr = rightNode.Ptr();
@@ -129,7 +171,7 @@ bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bo
         return CanCompare<false>(left, right);
     };
 
-    auto canCompare = [&defaultCompare](const TTypeAnnotationNode* left, const TTypeAnnotationNode* right) {
+    auto canCompare = [&defaultCompare, &settings](const TTypeAnnotationNode* left, const TTypeAnnotationNode* right) {
         if (left->GetKind() != ETypeAnnotationKind::Data ||
             right->GetKind() != ETypeAnnotationKind::Data)
         {
@@ -138,6 +180,26 @@ bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bo
 
         auto leftTypeId = GetDataTypeInfo(left->Cast<TDataExprType>()->GetSlot()).TypeId;
         auto rightTypeId = GetDataTypeInfo(right->Cast<TDataExprType>()->GetSlot()).TypeId;
+
+        if (!settings.IsEnabled(TSettings::EFeatureFlag::StringTypes) && (IsStringType(leftTypeId) || IsStringType(rightTypeId))) {
+            return ECompareOptions::Uncomparable;
+        }
+
+        if (!settings.IsEnabled(TSettings::EFeatureFlag::DateTimeTypes) && (IsDateTimeType(leftTypeId) || IsDateTimeType(rightTypeId))) {
+            return ECompareOptions::Uncomparable;
+        }
+
+        if (!settings.IsEnabled(TSettings::EFeatureFlag::UuidType) && (IsUuidType(leftTypeId) || IsUuidType(rightTypeId))) {
+            return ECompareOptions::Uncomparable;
+        }
+
+        if (!settings.IsEnabled(TSettings::EFeatureFlag::DecimalType) && (IsDecimalType(leftTypeId) || IsDecimalType(rightTypeId))) {
+            return ECompareOptions::Uncomparable;
+        }
+
+        if (!settings.IsEnabled(TSettings::EFeatureFlag::DyNumberType) && (IsDyNumberType(leftTypeId) || IsDyNumberType(rightTypeId))) {
+            return ECompareOptions::Uncomparable;
+        }
 
         if (leftTypeId == rightTypeId) {
             return ECompareOptions::Comparable;
@@ -213,7 +275,7 @@ bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bo
     auto rightType = getDataType(rightPtr);
 
     if (canCompare(leftType, rightType) == ECompareOptions::Uncomparable) {
-        YQL_CLOG(DEBUG, ProviderKqp) << "OLAP Pushdown: "
+        YQL_CVLOG(NLog::ELevel::DEBUG, settings.GetLogComponent()) << "Pushdown: "
             << "Uncompatible types in compare of nodes: "
             << leftPtr->Content() << " of type " << FormatType(leftType)
             << " and "
@@ -239,19 +301,31 @@ std::vector<TExprBase> GetComparisonNodes(const TExprBase& node) {
     return res;
 }
 
-bool CheckComparisonNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TSettings& settings) {
+bool IsMemberColumn(const TCoMember& member, const TExprNode* lambdaArg) {
+    return member.Struct().Raw() == lambdaArg;
+}
+
+bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
+    if (auto member = node.Maybe<TCoMember>()) {
+        return IsMemberColumn(member.Cast(), lambdaArg);
+    }
+    return false;
+}
+
+bool IsSupportedArithmeticalExpression(const TExprBase& node, const TSettings& settings) {
+    if (!settings.IsEnabled(TSettings::EFeatureFlag::ArithmeticalExpressions)) {
+        return false;
+    }
+    return node.Maybe<TCoMul>() || node.Maybe<TCoPlus>() || node.Maybe<TCoMinus>();
+}
+
+bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TSettings& settings) {
     if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
-        if (!IsSupportedCast(maybeSafeCast.Cast())) {
-            return false;
-        }
+        return IsSupportedCast(maybeSafeCast.Cast(), settings);
     } else if (auto maybeData = node.Maybe<TCoDataCtor>()) {
-        if (!IsSupportedDataType(maybeData.Cast())) {
-            return false;
-        }
+        return IsSupportedDataType(maybeData.Cast(), settings);
     } else if (auto maybeMember = node.Maybe<TCoMember>()) {
-        if (maybeMember.Cast().Struct().Raw() != lambdaArg) {
-            return false;
-        }
+        return IsMemberColumn(maybeMember.Cast(), lambdaArg);
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::JsonQueryOperators) && node.Maybe<TCoJsonQueryBase>()) {
         if (!node.Maybe<TCoJsonValue>()) {
             return false;
@@ -261,11 +335,17 @@ bool CheckComparisonNodeForPushdown(const TExprBase& node, const TExprNode* lamb
             // Currently we support only simple columns in pushdown
             return false;
         }
-    } else if (!node.Maybe<TCoNull>() && !node.Maybe<TCoParameter>()) {
-        return false;
+        return true;
+    } else if (node.Maybe<TCoNull>()) {
+        return true;
+    } else if (settings.IsEnabled(TSettings::EFeatureFlag::ParameterExpression) && node.Maybe<TCoParameter>()) {
+        return true;
+    } else if (IsSupportedArithmeticalExpression(node, settings)) {
+        TCoBinaryArithmetic op = node.Cast<TCoBinaryArithmetic>();
+        return CheckExpressionNodeForPushdown(op.Left(), lambdaArg, settings) && CheckExpressionNodeForPushdown(op.Right(), lambdaArg, settings);
     }
 
-    return true;
+    return false;
 }
 
 bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& input, const TSettings& settings) {
@@ -297,10 +377,10 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
     YQL_ENSURE(leftList.size() == rightList.size(), "Different sizes of lists in comparison!");
 
     for (size_t i = 0; i < leftList.size(); ++i) {
-        if (!CheckComparisonNodeForPushdown(leftList[i], lambdaArg, settings) || !CheckComparisonNodeForPushdown(rightList[i], lambdaArg, settings)) {
+        if (!CheckExpressionNodeForPushdown(leftList[i], lambdaArg, settings) || !CheckExpressionNodeForPushdown(rightList[i], lambdaArg, settings)) {
             return false;
         }
-        if (!IsComparableTypes(leftList[i], rightList[i], equality, inputType)) {
+        if (!IsComparableTypes(leftList[i], rightList[i], equality, inputType, settings)) {
             return false;
         }
         if (IsLikeOperator(compare) && settings.IsEnabled(TSettings::EFeatureFlag::LikeOperatorOnlyForUtf8) && !IsSupportedLikeForUtf8(leftList[i], rightList[i])) {
@@ -345,7 +425,7 @@ bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg, 
     YQL_ENSURE(leftList.size() == rightList.size(), "Different sizes of lists in comparison!");
 
     for (size_t i = 0; i < leftList.size(); ++i) {
-        if (!CheckComparisonNodeForPushdown(leftList[i], lambdaArg, settings) || !CheckComparisonNodeForPushdown(rightList[i], lambdaArg, settings)) {
+        if (!CheckExpressionNodeForPushdown(leftList[i], lambdaArg, settings) || !CheckExpressionNodeForPushdown(rightList[i], lambdaArg, settings)) {
             return false;
         }
     }
@@ -374,7 +454,7 @@ bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists, const TExprNode* lam
         // Currently we support only simple columns in pushdown
         return false;
     }
-    if (maybeMember.Cast().Struct().Raw() != lambdaArg) {
+    if (!IsMemberColumn(maybeMember.Cast(), lambdaArg)) {
         return false;
     }
     return true;
@@ -399,18 +479,11 @@ bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg
 }
 
 bool ExistsCanBePushed(const TCoExists& exists, const TExprNode* lambdaArg) {
-    auto maybeMember = exists.Optional().Maybe<TCoMember>();
-    if (!maybeMember.IsValid()) {
-        return false;
-    }
-    if (maybeMember.Cast().Struct().Raw() != lambdaArg) {
-        return false;
-    }
-    return true;
+    return IsMemberColumn(exists.Optional(), lambdaArg);
 }
 
 void CollectPredicatesForBinaryBoolOperators(const TExprBase& opNode, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
-    if (!opNode.Maybe<TCoAnd>() && !opNode.Maybe<TCoOr>() && !opNode.Maybe<TCoOr>()) {
+    if (!opNode.Maybe<TCoAnd>() && !opNode.Maybe<TCoOr>() && !opNode.Maybe<TCoXor>()) {
         return;
     }
     predicateTree.Children.reserve(opNode.Ptr()->ChildrenSize());
@@ -421,6 +494,10 @@ void CollectPredicatesForBinaryBoolOperators(const TExprBase& opNode, TPredicate
         predicateTree.Children.emplace_back(child);
         predicateTree.CanBePushed &= child.CanBePushed;
     }
+}
+
+void CollectExpressionPredicate(TPredicateNode& predicateTree, const TCoMember& member, const TExprNode* lambdaArg) {
+    predicateTree.CanBePushed = IsMemberColumn(member, lambdaArg);
 }
 
 } // anonymous namespace end
@@ -448,12 +525,14 @@ void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree
     } else if (predicate.Maybe<TCoOr>()) {
         predicateTree.Op = EBoolOp::Or;
         CollectPredicatesForBinaryBoolOperators(predicate.Cast<TCoOr>(), predicateTree, lambdaArg, lambdaBody, settings);
-    } else if (predicate.Maybe<TCoXor>()) {
+    } else if (settings.IsEnabled(TSettings::EFeatureFlag::LogicalXorOperator) && predicate.Maybe<TCoXor>()) {
         predicateTree.Op = EBoolOp::Xor;
         CollectPredicatesForBinaryBoolOperators(predicate.Cast<TCoXor>(), predicateTree, lambdaArg, lambdaBody, settings);
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::JsonExistsOperator) && predicate.Maybe<TCoJsonExists>()) {
         auto jsonExists = predicate.Cast<TCoJsonExists>();
         predicateTree.CanBePushed = JsonExistsCanBePushed(jsonExists, lambdaArg);
+    } else if (settings.IsEnabled(TSettings::EFeatureFlag::ExpressionAsPredicate) && predicate.Maybe<TCoMember>()) {
+        CollectExpressionPredicate(predicateTree, predicate.Cast<TCoMember>(), lambdaArg);
     } else {
         predicateTree.CanBePushed = false;
     }

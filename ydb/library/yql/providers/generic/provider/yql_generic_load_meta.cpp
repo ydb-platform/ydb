@@ -291,7 +291,7 @@ namespace NYql {
         }
 
         void FillTypeMappingSettings(NConnector::NApi::TDescribeTableRequest& request) {
-            const auto dateTimeFormat = *State_->Configuration->DateTimeFormat.Get();
+            const TString dateTimeFormat = State_->Configuration->DateTimeFormat.Get().GetOrElse(TGenericSettings::TDefault::DateTimeFormat);
             if (dateTimeFormat == "string") {
                 request.mutable_type_mapping_settings()->set_date_time_format(NConnector::NApi::STRING_FORMAT);
             } else if (dateTimeFormat == "YQL") {

@@ -105,6 +105,10 @@ namespace NKikimr::NOlap {
             return StoragesManager;
         }
 
+        TString DebugString() const {
+            return TStringBuilder() << "normalizers_count=" << Normalizers.size() << ";current_normalizer=" << CurrentNormalizerIndex;
+        }
+
         const INormalizerComponent::TPtr& GetNormalizer() const;
         bool IsNormalizationFinished() const;
         bool SwitchNormalizer();

@@ -171,7 +171,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             currentIndexInfo = &VersionedIndex.GetSchema(portion.GetMinSnapshot())->GetIndexInfo();
             lastSnapshot = portion.GetMinSnapshot();
         }
-        Y_ABORT_UNLESS(portion.ValidSnapshotInfo());
+        AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
         // Locate granule and append the record.
         TColumnRecord rec(loadContext, *currentIndexInfo);
         GetGranulePtrVerified(portion.GetPathId())->AddColumnRecord(*currentIndexInfo, portion, rec, loadContext.GetPortionMeta());

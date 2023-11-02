@@ -222,15 +222,20 @@ public:
 
 bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
-    ACFL_INFO("step", "TTxUpdateSchema.Execute_Start");
+    ACFL_INFO("step", "TTxUpdateSchema.Execute_Start")("details", Self->NormalizerController.DebugString());
 
-    if (!Self->NormalizerController.IsNormalizationFinished()) {
+    while (!Self->NormalizerController.IsNormalizationFinished()) {
         auto normalizer = Self->NormalizerController.GetNormalizer();
         auto result = normalizer->Init(Self->NormalizerController, txc);
         if (result.IsSuccess()) {
             NormalizerTasks = result.DetachResult();
+            if (!NormalizerTasks.empty()) {
+                break;
+            }
+            Self->NormalizerController.SwitchNormalizer();
         } else {
             Self->NormalizerController.GetCounters().OnNormalizerFails();
+            return false;
         }
     }
     ACFL_INFO("step", "TTxUpdateSchema.Execute_Finish");
@@ -270,7 +275,7 @@ private:
 };
 
 bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&) {
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute");
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute")("details", Self->NormalizerController.DebugString());;
     Self->NormalizerController.GetNormalizer()->OnResultReady();
     return Changes->Apply(txc, Self->NormalizerController);
 }

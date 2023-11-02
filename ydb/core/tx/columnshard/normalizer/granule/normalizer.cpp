@@ -55,7 +55,7 @@ public:
             }
 
             while (!rowset.EndOfSet()) {
-                if (!rowset.HaveValue<Schema::IndexColumns::PathId>()) {
+                if (!rowset.HaveValue<Schema::IndexColumns::PathId>() || rowset.GetValue<Schema::IndexColumns::PathId>() == 0) {
                     TChunkData key;
                     key.PlanStep = rowset.GetValue<Schema::IndexColumns::PlanStep>();
                     key.TxId = rowset.GetValue<Schema::IndexColumns::TxId>();
@@ -73,12 +73,10 @@ public:
                 }
             }
         }
-        ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << Chunks.size() << " portions found");
-
+        ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << Chunks.size() << " chunks found");
         if (Chunks.empty()) {
             return true;
         }
-
         controller.GetCounters().CountObjects(Chunks.size());
         {
             auto rowset = db.Table<Schema::IndexGranules>().Select();

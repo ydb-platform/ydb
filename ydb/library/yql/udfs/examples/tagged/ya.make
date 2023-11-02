@@ -1,4 +1,4 @@
-YQL_UDF(tagged_udf)
+YQL_UDF_YDB(tagged_udf)
 YQL_ABI_VERSION(2 21 0)
 
 SRCS(

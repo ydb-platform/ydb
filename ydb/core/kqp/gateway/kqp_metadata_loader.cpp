@@ -463,18 +463,19 @@ NThreading::TFuture<TDescribeSecretsResponse> LoadExternalDataSourceSecretValues
 } // anonymous namespace
 
 
-TVector<TString> TKqpTableMetadataLoader::GetCollectedSchemeData() {
-    TVector<TString> result(std::move(CollectedSchemeData));
-    CollectedSchemeData = TVector<TString>();
+TVector<NKikimrKqp::TKqpTableMetadataProto> TKqpTableMetadataLoader::GetCollectedSchemeData() {
+    TVector<NKikimrKqp::TKqpTableMetadataProto> result(std::move(CollectedSchemeData));
+    CollectedSchemeData = TVector<NKikimrKqp::TKqpTableMetadataProto>();
     return result;
 }
 
 
 void TKqpTableMetadataLoader::OnLoadedTableMetadata(TTableMetadataResult& loadTableMetadataResult) {
     if (!NeedCollectSchemeData) return;
-    TString data = loadTableMetadataResult.Metadata->SerializeToString();
+    NKikimrKqp::TKqpTableMetadataProto proto;
+    loadTableMetadataResult.Metadata->ToMessage(&proto);
     with_lock(Lock) {
-        CollectedSchemeData.emplace_back(data);
+        CollectedSchemeData.emplace_back(std::move(proto));
     }
 }
 

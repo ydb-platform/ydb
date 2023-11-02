@@ -30,7 +30,7 @@ public:
         const TString& cluster, const TString& table, const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
 
-    TVector<TString> GetCollectedSchemeData();
+    TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData();
 
     ~TKqpTableMetadataLoader() = default;
 
@@ -56,7 +56,7 @@ private:
 
     void OnLoadedTableMetadata(NYql::IKikimrGateway::TTableMetadataResult& loadTableMetadataResult);
 
-    TVector<TString> CollectedSchemeData;
+    TVector<NKikimrKqp::TKqpTableMetadataProto> CollectedSchemeData;
     TMutex Lock;
     bool NeedCollectSchemeData;
     TActorSystem* ActorSystem;

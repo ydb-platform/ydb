@@ -1746,7 +1746,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 SELECT * FROM `/Root/TestTable` VIEW Index as t ORDER BY t.Index2 DESC;
             )"));
 
-           {
+            {
                 auto settings = TExplainDataQuerySettings();
                 settings.WithCollectFullDiagnostics(true);
             
@@ -1771,12 +1771,27 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_C(value.Has("query_text"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Diagnostics");
+                UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Diagnostics: table_metadata type should be an array");
                 UNIT_ASSERT_C(value.Has("created_at"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_plan"), "Incorrect Diagnostics");
                 UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Diagnostics");
+            }
+
+            {
+                auto settings = TExplainDataQuerySettings();
+            
+                auto result = session.ExplainDataQuery(
+                    query, settings)
+                    .ExtractValueSync();
+
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
+
+                UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
+
+                UNIT_ASSERT_C(result.GetDiagnostics().empty(), "Query result diagnostics is not empty");
             }
         }
     }

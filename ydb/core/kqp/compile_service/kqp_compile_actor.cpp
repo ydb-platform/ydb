@@ -15,6 +15,7 @@
 #include <library/cpp/actors/wilson/wilson_span.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/digest/md5/md5.h>
 
@@ -66,7 +67,7 @@ public:
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpDbCountersPtr dbCounters, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState)
+        NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState, bool collectFullDiagnostics)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -82,6 +83,7 @@ public:
         , UserRequestContext(userRequestContext)
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
         , TempTablesState(std::move(tempTablesState))
+        , CollectFullDiagnostics(collectFullDiagnostics)
     {
         Config->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, kqpSettings->Settings, false);
 
@@ -234,9 +236,11 @@ private:
 
     void AddMessageToReplayLog(const TString& queryPlan) {
         NJson::TJsonValue replayMessage(NJson::JSON_MAP);
+
         NJson::TJsonValue tablesMeta(NJson::JSON_ARRAY);
-        for(auto data: Gateway->GetCollectedSchemeData()) {
-            tablesMeta.AppendValue(Base64Encode(std::move(data)));
+        auto collectedSchemeData = Gateway->GetCollectedSchemeData();
+        for (auto proto: collectedSchemeData) {
+            tablesMeta.AppendValue(Base64Encode(proto.SerializeAsString()));
         }
 
         replayMessage.InsertValue("query_id", Uid);
@@ -249,13 +253,28 @@ private:
             }
         }
         replayMessage.InsertValue("query_parameter_types", std::move(queryParameterTypes));
-        replayMessage.InsertValue("table_metadata", TString(NJson::WriteJson(tablesMeta, false)));
         replayMessage.InsertValue("created_at", ToString(TlsActivationContext->ActorSystem()->Timestamp().Seconds()));
         replayMessage.InsertValue("query_syntax", ToString(Config->_KqpYqlSyntaxVersion.Get().GetRef()));
         replayMessage.InsertValue("query_database", QueryId.Database);
         replayMessage.InsertValue("query_cluster", QueryId.Cluster);
         replayMessage.InsertValue("query_plan", queryPlan);
         replayMessage.InsertValue("query_type", ToString(QueryId.Settings.QueryType));
+
+        if (CollectFullDiagnostics) {
+            NJson::TJsonValue tablesMetaUserView(NJson::JSON_ARRAY);
+            for (auto proto: collectedSchemeData) {
+                tablesMetaUserView.AppendValue(NProtobufJson::Proto2Json(proto));
+            }
+
+            replayMessage.InsertValue("table_metadata", tablesMetaUserView);
+            replayMessage.InsertValue("table_meta_serialization_type", EMetaSerializationType::Json);
+
+            ReplayMessageUserView = NJson::WriteJson(replayMessage, /*formatOutput*/ false);
+        }
+
+        replayMessage.InsertValue("table_metadata", TString(NJson::WriteJson(tablesMeta, false)));
+        replayMessage.InsertValue("table_meta_serialization_type", EMetaSerializationType::EncodedProto);
+
         TString message(NJson::WriteJson(replayMessage, /*formatOutput*/ false));
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR, "[" << SelfId() << "]: "
             << "Built the replay message " << message);
@@ -274,7 +293,9 @@ private:
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult);
 
         responseEv->ReplayMessage = std::move(ReplayMessage);
+        responseEv->ReplayMessageUserView = std::move(ReplayMessageUserView);
         ReplayMessage = std::nullopt;
+        ReplayMessageUserView = std::nullopt;
         auto& stats = responseEv->Stats;
         stats.SetFromCache(false);
         stats.SetDurationUs((TInstant::Now() - StartTime).MicroSeconds());
@@ -401,12 +422,14 @@ private:
     TIntrusivePtr<IKqpHost> KqpHost;
     TIntrusivePtr<IKqpHost::IAsyncQueryResult> AsyncCompileResult;
     std::shared_ptr<TKqpCompileResult> KqpCompileResult;
-    std::optional<TString> ReplayMessage;
+    std::optional<TString> ReplayMessage;  // here metadata is encoded protobuf - for logs
+    std::optional<TString> ReplayMessageUserView;  // here metadata is part of json - full readable json for diagnostics
 
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     NWilson::TSpan CompileActorSpan;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
+    bool CollectFullDiagnostics;
 };
 
 void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConfig& serviceConfig) {
@@ -442,13 +465,13 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     TKqpDbCountersPtr dbCounters, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState)
+    NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState, bool collectFullDiagnostics)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig, metadataProviderConfig,
                                 moduleResolverState, counters,
                                 uid, query, userToken, dbCounters,
                                 federatedQuerySetup, userRequestContext,
-                                std::move(traceId), std::move(tempTablesState));
+                                std::move(traceId), std::move(tempTablesState), collectFullDiagnostics);
 }
 
 } // namespace NKqp

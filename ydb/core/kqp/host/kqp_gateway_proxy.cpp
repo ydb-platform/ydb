@@ -837,7 +837,7 @@ public:
         FORWARD_ENSURE_NO_PREPARE(DropExternalTable, cluster, settings);
     }
 
-    TVector<TString> GetCollectedSchemeData() override {
+    TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
         return Gateway->GetCollectedSchemeData();
     }
 

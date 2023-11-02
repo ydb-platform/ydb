@@ -92,6 +92,7 @@ struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::Ev
     TKqpCompileResult::TConstPtr CompileResult;
     NKqpProto::TKqpStatsCompile Stats;
     std::optional<TString> ReplayMessage;
+    std::optional<TString> ReplayMessageUserView;
 
     NLWTrace::TOrbit Orbit;
 };

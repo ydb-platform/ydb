@@ -669,6 +669,106 @@
                 }
             }
         },
+        "clang14-windows": {
+            "name": "clang14",
+            "params": {
+                "c_compiler": "$(CLANG)/bin/clang-cl",
+                "cxx_compiler": "$(CLANG)/bin/clang-cl",
+                "cxx_std": "c++20",
+                "llvm-symbolizer": "$(CLANG)/bin/llvm-symbolizer",
+                "match_root": "CLANG",
+                "type": "msvc",
+                "use_bundle": true,
+                "use_clang": true,
+                "version": "2019",
+                "werror_mode": "all",
+                "wine": "yes"
+            },
+            "platforms": [
+                {
+                    "default": false,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "x86_64",
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "i686",
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "target": {
+                        "arch": "x86_64",
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "target": {
+                        "arch": "i686",
+                        "os": "WIN"
+                    }
+                }
+            ],
+            "tools": {
+                "c++": {
+                    "bottle": "clang14",
+                    "executable": "c++"
+                },
+                "c++filt": {
+                    "bottle": "clang14",
+                    "executable": "c++filt"
+                },
+                "cc": {
+                    "bottle": "clang14",
+                    "executable": "cc"
+                },
+                "gcov": {
+                    "bottle": "clang14",
+                    "executable": "llvm-gcov"
+                },
+                "llvm-cov": {
+                    "bottle": "clang14",
+                    "executable": "llvm-cov"
+                },
+                "llvm-profdata": {
+                    "bottle": "clang14",
+                    "executable": "llvm-profdata"
+                },
+                "llvm-symbolizer": {
+                    "bottle": "clang14",
+                    "executable": "llvm-symbolizer"
+                },
+                "nm": {
+                    "bottle": "clang14",
+                    "executable": "llvm-nm"
+                },
+                "objcopy": {
+                    "bottle": "clang14",
+                    "executable": "llvm-objcopy"
+                },
+                "strip": {
+                    "bottle": "clang14",
+                    "executable": "llvm-strip"
+                }
+            }
+        },
         "gdb": {
             "env": {
                 "TERMINFO": [

@@ -4,15 +4,19 @@ import shutil
 
 import process_command_files as pcf
 
-CLANG_RT_VERSION = 14
+# List is a temporary thing to ensure that nothing breaks before and after switching to newer clang
+# Remove after DTCC-1902
+CLANG_RT_VERSIONS = [14, 16]
 
 def copy_clang_rt_profile(cmd, build_root, arch) -> None:
     profile_rt_lib = None
     resource_dir = None
 
     for arg in cmd:
-        if arg.startswith(f'contrib/libs/clang{CLANG_RT_VERSION}-rt/lib/profile/libclang_rt.profile'):
-            profile_rt_lib = arg
+        for version in CLANG_RT_VERSIONS:
+            if arg.startswith(f'contrib/libs/clang{version}-rt/lib/profile/libclang_rt.profile'):
+                profile_rt_lib = arg
+                break
         if arg.startswith('-resource-dir='):
             resource_dir = arg[len('-resource-dir='):]
 

@@ -1,0 +1,32 @@
+{
+    "_yql_view_system_udf"="SELECT String::Strip(key) as k, subkey as s, value as v FROM self";
+    "_yql_syntax_version_system_udf"=1;
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

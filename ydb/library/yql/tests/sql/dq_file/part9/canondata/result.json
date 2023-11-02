@@ -5286,6 +5286,28 @@
         }
     ],
     "test.test[view-all_from_view--Results]": [],
+    "test.test[view-file_inner_library--Analyze]": [
+        {
+            "checksum": "212be881133a20b5b73ef1250dbeda51",
+            "size": 960,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942100/d0c70441f77c59d324dc5d88b00985f8d51475a9/resource.tar.gz#test.test_view-file_inner_library--Analyze_/plan.txt"
+        }
+    ],
+    "test.test[view-file_inner_library--Debug]": [
+        {
+            "checksum": "00eea88e4f7e62409a6f728ffe5cb0a0",
+            "size": 484,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942100/d0c70441f77c59d324dc5d88b00985f8d51475a9/resource.tar.gz#test.test_view-file_inner_library--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[view-file_inner_library--Plan]": [
+        {
+            "checksum": "212be881133a20b5b73ef1250dbeda51",
+            "size": 960,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942100/d0c70441f77c59d324dc5d88b00985f8d51475a9/resource.tar.gz#test.test_view-file_inner_library--Plan_/plan.txt"
+        }
+    ],
+    "test.test[view-file_inner_library--Results]": [],
     "test.test[view-secure_eval_dyn--Results]": [
         {
             "uri": "file://test.test_view-secure_eval_dyn--Results_/extracted"

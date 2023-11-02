@@ -5405,6 +5405,13 @@
         }
     ],
     "test.test[union_all-union_all_with_top_level_limits_ansi-default.txt-Results]": [],
+    "test.test[view-file_inner_udf--Analyze]": [
+        {
+            "checksum": "1e0bc616fa564e7c0c72a2af6e583b93",
+            "size": 5517,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1775059/4ce689cacc1b04e7b955e62a2269c8180fca36bb/resource.tar.gz#test.test_view-file_inner_udf--Analyze_/plan.txt"
+        }
+    ],
     "test.test[view-trivial_view--Analyze]": [
         {
             "checksum": "6eee21387ac9a19187d0bfda16852d86",

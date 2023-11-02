@@ -5007,6 +5007,27 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1937150/b466c661905bdae484e68f0651bb2615aefc377c/resource.tar.gz#test.test_union_all-union_all_with_top_level_limits_ansi-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[view-file_inner_udf--Debug]": [
+        {
+            "checksum": "7a233b8d9bef9c818a8e0d656e59638a",
+            "size": 3593,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942100/6297aecbc0694806217b8a52e6fb0cd700717ad7/resource.tar.gz#test.test_view-file_inner_udf--Debug_/opt.yql"
+        }
+    ],
+    "test.test[view-file_inner_udf--Plan]": [
+        {
+            "checksum": "ee9cde74803031c782857be7ba3085d1",
+            "size": 5216,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937424/b85ac811084823d85a64484cfff23bd15899ef59/resource.tar.gz#test.test_view-file_inner_udf--Plan_/plan.txt"
+        }
+    ],
+    "test.test[view-file_inner_udf--Results]": [
+        {
+            "checksum": "94513895bbfce10e96014c7759a9b1d0",
+            "size": 2175,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937424/b85ac811084823d85a64484cfff23bd15899ef59/resource.tar.gz#test.test_view-file_inner_udf--Results_/results.txt"
+        }
+    ],
     "test.test[view-trivial_view--Debug]": [
         {
             "checksum": "83e025e2244eb4fed6beb3a7b8d33ad2",

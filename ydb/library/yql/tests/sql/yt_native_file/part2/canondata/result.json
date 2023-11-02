@@ -5294,6 +5294,13 @@
             "uri": "file://test.test_view-file_outer--Results_/extracted"
         }
     ],
+    "test.test[view-file_outer_library--Debug]": [],
+    "test.test[view-file_outer_library--Plan]": [],
+    "test.test[view-file_outer_library--Results]": [
+        {
+            "uri": "file://test.test_view-file_outer_library--Results_/extracted"
+        }
+    ],
     "test.test[weak_field-yql-7888_mapfieldsubset--Debug]": [
         {
             "checksum": "f9fd1a3080a43c21f74630204b263469",

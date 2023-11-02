@@ -1429,6 +1429,21 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 return {};
             }
 
+            if (Ctx.Settings.FileAliasPrefix) {
+                if (values.size() == 1) {
+                    values.emplace_back(TDeferredAtom(Ctx.Pos(), ""));
+                }
+
+                TString prefix;
+                if (!values[1].GetLiteral(prefix, Ctx)) {
+                    Error() << "Expected literal UDF module prefix in views";
+                    Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                    return {};
+                }
+
+                values[1] = TDeferredAtom(Ctx.Pos(), Ctx.Settings.FileAliasPrefix + prefix);
+            }
+
             Ctx.IncrementMonCounter("sql_pragma", "udf");
             success = true;
             return BuildPragma(Ctx.Pos(), TString(ConfigProviderName), "ImportUdfs", values, false);

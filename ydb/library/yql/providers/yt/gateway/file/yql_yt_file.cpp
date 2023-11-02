@@ -82,12 +82,20 @@ namespace NFile {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TIntrusivePtr<IFunctionRegistry> MakeFunctionRegistry(
-    const IFunctionRegistry& functionRegistry, const TUserDataTable& files) {
+    const IFunctionRegistry& functionRegistry, const TUserDataTable& files,
+    const TFileStoragePtr& fileStorage, TVector<TFileLinkPtr>& externalFiles) {
     auto cloned = functionRegistry.Clone();
     for (auto& d : files) {
         if (d.first.IsFile() && d.second.Usage.Test(EUserDataBlockUsage::Udf)) {
-            YQL_ENSURE(d.second.Type == EUserDataType::PATH);
-            cloned->LoadUdfs(d.second.Data, {}, 0, d.second.CustomUdfPrefix);
+            if (d.second.Type == EUserDataType::PATH) {
+                cloned->LoadUdfs(d.second.Data, {}, 0, d.second.CustomUdfPrefix);
+            } else if (fileStorage && d.second.Type == EUserDataType::URL) {
+                auto externalFile = fileStorage->PutUrl(d.second.Data, "");
+                externalFiles.push_back(externalFile);
+                cloned->LoadUdfs(externalFile->GetPath().GetPath(), {}, 0, d.second.CustomUdfPrefix);
+            } else {
+                MKQL_ENSURE(false, "Unsupported block type");
+            }
         }
     }
     return cloned;
@@ -468,8 +476,9 @@ public:
                         Services_->GetFunctionRegistry()->SupportsSizedAllocators());
                     alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                     auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
+                    TVector<TFileLinkPtr> externalFiles;
                     TFileYtLambdaBuilder builder(alloc, *session,
-                        MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks()), secureParamsProvider.get());
+                        MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *Services_->GetFunctionRegistry());
 
                     TVector<TRuntimeNode> strings;
@@ -786,8 +795,9 @@ public:
                 Services_->GetFunctionRegistry()->SupportsSizedAllocators());
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
+            TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
-                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks()), secureParamsProvider.get());
+                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
             auto nodeFactory = GetYtFileFullFactory(Services_);
             for (auto& node: nodes) {
                 auto data = builder.BuildLambda(*MkqlCompiler_, node, ctx);
@@ -827,8 +837,9 @@ public:
             TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
                 Services_->GetFunctionRegistry()->SupportsSizedAllocators());
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
+            TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
-                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), {}), nullptr);
+                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), {}, Services_->GetFileStorage(), externalFiles), nullptr);
 
             TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), builder.GetFunctionRegistry());
             TMkqlBuildContext ctx(*MkqlCompiler_, pgmBuilder, exprCtx);
@@ -1165,8 +1176,9 @@ private:
             Services_->GetFunctionRegistry()->SupportsSizedAllocators());
         alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
         auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
+        TVector<TFileLinkPtr> externalFiles;
         TFileYtLambdaBuilder builder(alloc, session,
-            MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks()), secureParamsProvider.get());
+            MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
         auto data = builder.BuildLambda(*MkqlCompiler_, input.Ptr(), exprCtx);
         auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
         data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1243,8 +1255,9 @@ private:
                 Services_->GetFunctionRegistry()->SupportsSizedAllocators());
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
+            TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, session,
-                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks()), secureParamsProvider.get());
+                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
             auto data = builder.BuildLambda(*MkqlCompiler_, node, exprCtx);
             auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
             data = builder.TransformAndOptimizeProgram(data, transform);

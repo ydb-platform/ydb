@@ -113,6 +113,15 @@ public:
         return Fallback_->LoadRichMetadata(imports);
     }
 
+    bool ContainsModule(const TStringBuf& moduleName) const override {
+        TString moduleNameStr = TString(moduleName);
+        if (UdfIndex_->ContainsModule(moduleNameStr)) {
+            return true;
+        }
+
+        return Fallback_->ContainsModule(moduleName);
+    }
+
 private:
     bool LoadFunctionMetadata(TFunction& function, TExprContext& ctx, TFunction*& fallbackFunction, TImport*& additionalImport) const {
         TStringBuf moduleName, funcName;

@@ -2,4 +2,4 @@
 /* syntax version 1 */
 pragma yt.ViewIsolation = 'true';
 USE plato;
-SELECT k, s, v FROM Input VIEW secure_eval;
+SELECT k, s, v FROM Input VIEW file_inner_library;

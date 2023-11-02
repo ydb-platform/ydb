@@ -4893,6 +4893,27 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1942415/213c597958ef31f8fd947ef18d05ecd9e11ff9e0/resource.tar.gz#test.test_view-all_from_view--Results_/results.txt"
         }
     ],
+    "test.test[view-file_inner_library--Debug]": [
+        {
+            "checksum": "26b3469f8cbc6b7b1c54807777c91bc0",
+            "size": 402,
+            "uri": "https://storage.yandex-team.ru/get-devtools/937458/c26ebfef92da5b72edbe456e4ce10e4d77cef322/resource.tar.gz#test.test_view-file_inner_library--Debug_/opt.yql"
+        }
+    ],
+    "test.test[view-file_inner_library--Plan]": [
+        {
+            "checksum": "212be881133a20b5b73ef1250dbeda51",
+            "size": 960,
+            "uri": "https://storage.yandex-team.ru/get-devtools/937458/c26ebfef92da5b72edbe456e4ce10e4d77cef322/resource.tar.gz#test.test_view-file_inner_library--Plan_/plan.txt"
+        }
+    ],
+    "test.test[view-file_inner_library--Results]": [
+        {
+            "checksum": "92c66901bc19a741c6a514fff67c7f74",
+            "size": 1233,
+            "uri": "https://storage.yandex-team.ru/get-devtools/937458/c26ebfef92da5b72edbe456e4ce10e4d77cef322/resource.tar.gz#test.test_view-file_inner_library--Results_/results.txt"
+        }
+    ],
     "test.test[view-secure_eval_dyn--Debug]": [],
     "test.test[view-secure_eval_dyn--Plan]": [],
     "test.test[view-secure_eval_dyn--Results]": [

@@ -47,7 +47,7 @@ struct TYtTableDescription: public TYtTableDescriptionBase {
     bool Fill(
         const TString& cluster, const TString& table, TExprContext& ctx,
         IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool allowViewIsolation);
+        bool allowViewIsolation, IUdfResolver::TPtr udfResolver);
     void ToYson(NYson::TYsonWriter& writer, const TString& cluster, const TString& table, const TString& view) const;
     bool Validate(TPosition pos, TStringBuf cluster, TStringBuf tableName, bool withQB,
         const THashMap<std::pair<TString, TString>, TString>& anonymousLabels, TExprContext& ctx) const;
@@ -55,7 +55,7 @@ struct TYtTableDescription: public TYtTableDescriptionBase {
     bool FillViews(
         const TString& cluster, const TString& table, TExprContext& ctx,
         IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool allowViewIsolation);
+        bool allowViewIsolation, IUdfResolver::TPtr udfResolver);
 };
 
 // Anonymous tables are kept by labels

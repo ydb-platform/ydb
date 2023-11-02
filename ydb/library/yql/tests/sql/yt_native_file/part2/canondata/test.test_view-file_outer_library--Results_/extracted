@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Table metadata loading
+
+    <tmp_path>/program.sql:<main>: Error: Table Input
+    
+        <tmp_path>/program.sql:<main>:1:22: Error: Module  'mylib_module0''view_bb686f68-4245bd5f-2318fa8e-22eb9250/mylib' does not exist
+        	/* postgres can not */
+	                     ^
+        <tmp_path>/program.sql:<main>: Error: Can't load sql view "IMPORT mylib SYMBOLS $x;select $x as k, 2 as s, 3 as v", table: plato.Input, view: file_outer_library

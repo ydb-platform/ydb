@@ -39,10 +39,12 @@ target_link_libraries(ydb-core-base PUBLIC
   api-protos-out
   library-yql-minikql
   cpp-deprecated-atomic
+  library-cpp-dwarf_backtrace
 )
 target_sources(ydb-core-base PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/base/actor_activity_names.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/appdata.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/backtrace.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/board_lookup.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/board_publish.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/board_replica.cpp

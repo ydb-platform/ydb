@@ -4,6 +4,8 @@ SRCS(
     actor_activity_names.cpp
     appdata.h
     appdata.cpp
+    backtrace.h
+    backtrace.cpp
     board_lookup.cpp
     board_publish.cpp
     board_replica.cpp
@@ -98,6 +100,12 @@ PEERDIR(
     ydb/library/yql/minikql
     library/cpp/deprecated/atomic
 )
+
+IF (NOT OS_WINDOWS)
+PEERDIR(
+    library/cpp/dwarf_backtrace
+)
+ENDIF()
 
 END()
 

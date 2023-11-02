@@ -1,5 +1,6 @@
 #include "kqp_ut_common.h"
 
+#include <ydb/core/base/backtrace.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
@@ -87,7 +88,7 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
 }
 
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
-    // EnableKikimrBacktraceFormat(); // Very slow, enable only when required locally
+    EnableYDBBacktraceFormat();
 
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();

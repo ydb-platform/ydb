@@ -20,6 +20,9 @@
 // compatibility info
 #include <ydb/core/driver_lib/version/version.h>
 
+// backtrace formatting
+#include <ydb/core/base/backtrace.h>
+
 #ifndef _win_
 #include <sys/mman.h>
 #endif
@@ -71,6 +74,8 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 #endif
         using namespace NLastGetopt;
         using TDriverModeParser = TCliCommands<EDriverMode>;
+
+        EnableYDBBacktraceFormat();
 
         NKikimrConfig::TAppConfig appConfig;
         TCommandConfig cmdConf;

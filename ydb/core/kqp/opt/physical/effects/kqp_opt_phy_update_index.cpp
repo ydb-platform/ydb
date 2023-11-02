@@ -16,7 +16,7 @@ TExprBase KqpBuildUpdateIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, update.Table().Path());
 
     auto effects = KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode::UpdateOn, update.Input(), update.Columns(),
-        table, update.Pos(), ctx);
+        table, update.Settings(), update.Pos(), ctx);
 
     if (!effects) {
         return node;

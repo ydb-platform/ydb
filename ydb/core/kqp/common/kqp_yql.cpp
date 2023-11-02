@@ -267,21 +267,28 @@ void TKqpReadTableSettings::AddSkipNullKey(const TString& key) {
     SkipNullKeys.emplace_back(key);
 }
 
-TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TKqpUpsertRows& node) {
+TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList& settingsList) {
     TKqpUpsertRowsSettings settings;
 
-    for (const auto& tuple : node.Settings()) {
+    for (const auto& tuple : settingsList) {
         TStringBuf name = tuple.Name().Value();
-
+        
         if (name == TKqpUpsertRowsSettings::InplaceSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.Inplace = true;
+        } else if (name == TKqpUpsertRowsSettings::IsUpdateSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.IsUpdate = true; 
         } else {
             YQL_ENSURE(false, "Unknown KqpUpsertRows setting name '" << name << "'");
         }
     }
 
     return settings;
+}
+
+TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const NNodes::TKqpUpsertRows& node) {
+    return TKqpUpsertRowsSettings::Parse(node.Settings());
 }
 
 NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
@@ -292,6 +299,12 @@ NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ct
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build(InplaceSettingName)
+                .Done());
+    }
+    if (IsUpdate) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(IsUpdateSettingName)
                 .Done());
     }
 

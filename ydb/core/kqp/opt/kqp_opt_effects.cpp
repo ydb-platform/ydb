@@ -249,6 +249,10 @@ TDqPhyPrecompute BuildPrecomputeStage(TExprBase expr, TExprContext& ctx) {
 bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TCoArgument& inputArg, TMaybeNode<TExprBase>& stageInput, TMaybeNode<TExprBase>& effect)
 {
+    TKqpUpsertRowsSettings settings;
+    if (node.Settings()) {
+        settings = TKqpUpsertRowsSettings::Parse(node.Settings().Cast());
+    }
     if (IsDqPureExpr(node.Input())) {
         stageInput = BuildPrecomputeStage(node.Input(), ctx);
 
@@ -258,7 +262,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 .List(inputArg)
                 .Build()
             .Columns(node.Columns())
-            .Settings().Build()
+            .Settings(settings.BuildNode(ctx, node.Pos()))
             .Done();
         return true;
     }
@@ -281,7 +285,6 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 .Build()
             .Done();
 
-        TKqpUpsertRowsSettings settings;
         settings.SetInplace();
 
         effect = Build<TKqpUpsertRows>(ctx, node.Pos())
@@ -303,7 +306,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 .List(inputArg)
                 .Build()
             .Columns(node.Columns())
-            .Settings().Build()
+            .Settings(settings.BuildNode(ctx, node.Pos()))
             .Done();
     }
 

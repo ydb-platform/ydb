@@ -215,6 +215,14 @@ TExprNode::TPtr GetPgNotNullColumns(
     return pgNotNullColumns.Done().Ptr();
 }
 
+TExprNode::TPtr IsUpdateSetting(TExprContext& ctx, const TPositionHandle& pos) {
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add()
+            .Name().Build("IsUpdate")
+        .Build()
+    .Done().Ptr();
+}
+
 TExprBase BuildKqlSequencer(TExprBase& input, const TKikimrTableDescription& table,
     const TCoAtomList& outputCols, const TCoAtomList& autoIncrement,
     TPositionHandle pos, TExprContext& ctx)
@@ -371,6 +379,7 @@ TExprBase BuildUpdateOnTable(const TKiWriteTable& write, const TCoAtomList& inpu
         .Done();
 }
 
+
 TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomList& inputColumns,
     const TKikimrTableDescription& tableData, TExprContext& ctx)
 {
@@ -381,6 +390,7 @@ TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomL
             .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
         .Build()
         .Columns(inputColumns)
+        .Settings(IsUpdateSetting(ctx, write.Pos()))
         .Done();
 }
 
@@ -564,6 +574,7 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
         .Columns()
             .Add(updateColumnsList)
             .Build()
+        .Settings(IsUpdateSetting(ctx, update.Pos()))
         .Done();
 }
 
@@ -606,6 +617,7 @@ TVector<TExprBase> BuildUpdateTableWithIndex(const TKiUpdateTable& update, const
             .Columns<TCoAtomList>()
                 .Add(updateColumnsList)
                 .Build()
+            .Settings(IsUpdateSetting(ctx, update.Pos()))
             .Done();
 
         effects.emplace_back(effect);
@@ -623,6 +635,7 @@ TVector<TExprBase> BuildUpdateTableWithIndex(const TKiUpdateTable& update, const
         .Columns()
             .Add(updateColumnsList)
             .Build()
+        .Settings(IsUpdateSetting(ctx, update.Pos()))
         .Done();
 
     effects.push_back(tableUpsert);
@@ -688,6 +701,7 @@ TVector<TExprBase> BuildUpdateTableWithIndex(const TKiUpdateTable& update, const
                 .Columns()
                     .Add(indexColumnsList)
                     .Build()
+                .Settings().Build()
                 .Done();
 
             effects.push_back(indexUpsert);

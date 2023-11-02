@@ -245,12 +245,18 @@
         {
             "Name": "TKqlUpsertRows",
             "Base": "TKqlUpsertRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqlUpsertRows"}
+            "Match": {"Type": "Callable", "Name": "KqlUpsertRows"},
+            "Children": [
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+            ]
         },
         {
             "Name": "TKqlUpsertRowsIndex",
             "Base": "TKqlUpsertRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqlUpsertRowsIndex"}
+            "Match": {"Type": "Callable", "Name": "KqlUpsertRowsIndex"},
+            "Children": [
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+            ]
         },
         {
             "Name": "TKqpUpsertRows",
@@ -296,7 +302,10 @@
         {
             "Name": "TKqlUpdateRowsIndex",
             "Base": "TKqlUpdateRowsBase",
-            "Match": {"Type": "Callable", "Name": "TKqlUpdateRowsIndex"}
+            "Match": {"Type": "Callable", "Name": "TKqlUpdateRowsIndex"},
+            "Children": [
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+            ]
         },
         {
             "Name": "TKqlInsertRows",

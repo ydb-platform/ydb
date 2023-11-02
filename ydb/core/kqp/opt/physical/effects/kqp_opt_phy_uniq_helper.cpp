@@ -41,7 +41,7 @@ class TInsertUniqBuildHelper : public TUniqBuildHelper {
 public:
     TInsertUniqBuildHelper(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
         NYql::TExprContext& ctx)
-    : TUniqBuildHelper(table, nullptr, pos, ctx, false)
+    : TUniqBuildHelper(table, nullptr, nullptr, pos, ctx, false)
     {}
 
 private:
@@ -119,9 +119,9 @@ private:
 
 class TUpsertUniqBuildHelper : public TUniqBuildHelper {
 public:
-    TUpsertUniqBuildHelper(const NYql::TKikimrTableDescription& table, const THashSet<TString>& usedIndexes,
+    TUpsertUniqBuildHelper(const NYql::TKikimrTableDescription& table, const THashSet<TStringBuf>* inputColumns, const THashSet<TString>& usedIndexes,
         NYql::TPositionHandle pos, NYql::TExprContext& ctx)
-    : TUniqBuildHelper(table, &usedIndexes, pos, ctx, true)
+    : TUniqBuildHelper(table, inputColumns, &usedIndexes, pos, ctx, true)
     , PkDict(MakeUniqCheckDict(MakeTableKeySelector(table.Metadata, pos, ctx), RowsListArg, pos, ctx))
     {}
 
@@ -243,8 +243,8 @@ private:
 }
 
 TVector<TUniqBuildHelper::TUniqCheckNodes> TUniqBuildHelper::Prepare(const TCoArgument& rowsListArg,
-    const TKikimrTableDescription& table, const THashSet<TString>* usedIndexes,
-    TPositionHandle pos, TExprContext& ctx, bool skipPkCheck)
+    const TKikimrTableDescription& table, const THashSet<TStringBuf>* inputColumns,
+    const THashSet<TString>* usedIndexes, TPositionHandle pos, TExprContext& ctx, bool skipPkCheck)
 {
     TVector<TUniqCheckNodes> checks;
 
@@ -265,8 +265,15 @@ TVector<TUniqBuildHelper::TUniqCheckNodes> TUniqBuildHelper::Prepare(const TCoAr
         TVector<TCoAtom> skipNullColumns;
         skipNullColumns.reserve(table.Metadata->Indexes[i].KeyColumns.size());
         for (const auto& column : table.Metadata->Indexes[i].KeyColumns) {
-            TCoAtom atom(ctx.NewAtom(pos, column));
-            skipNullColumns.emplace_back(atom);
+            if (!inputColumns || inputColumns->contains(column)) {
+                TCoAtom atom(ctx.NewAtom(pos, column));
+                skipNullColumns.emplace_back(atom);
+            }
+        }
+
+        //no columns to skip -> no index columns to check -> skip check
+        if (skipNullColumns.empty()) {
+            continue;
         }
 
         auto skipNull = Build<TCoSkipNullMembers>(ctx, pos)
@@ -285,11 +292,11 @@ TVector<TUniqBuildHelper::TUniqCheckNodes> TUniqBuildHelper::Prepare(const TCoAr
     return checks;
 }
 
-TUniqBuildHelper::TUniqBuildHelper(const TKikimrTableDescription& table, const THashSet<TString>* usedIndexes,
+TUniqBuildHelper::TUniqBuildHelper(const TKikimrTableDescription& table, const THashSet<TStringBuf>* inputColumns, const THashSet<TString>* usedIndexes,
     TPositionHandle pos, TExprContext& ctx, bool skipPkCheck)
     : RowsListArg(ctx.NewArgument(pos, "rows_list"))
     , False(MakeBool(pos, false, ctx))
-    , Checks(Prepare(RowsListArg, table, usedIndexes, pos, ctx, skipPkCheck))
+    , Checks(Prepare(RowsListArg, table, inputColumns, usedIndexes, pos, ctx, skipPkCheck))
 {}
 
 TUniqBuildHelper::TUniqCheckNodes TUniqBuildHelper::MakeUniqCheckNodes(const TCoLambda& selector,
@@ -509,13 +516,14 @@ namespace NKikimr::NKqp::NOpt {
 TUniqBuildHelper::TPtr CreateInsertUniqBuildHelper(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
         NYql::TExprContext& ctx)
 {
-    return std::make_unique<TInsertUniqBuildHelper>(table,  pos, ctx);
+    return std::make_unique<TInsertUniqBuildHelper>(table, pos, ctx);
 }
 
 TUniqBuildHelper::TPtr CreateUpsertUniqBuildHelper(const NYql::TKikimrTableDescription& table,
+    const THashSet<TStringBuf>* inputColumns,
     const THashSet<TString>& usedIndexes, NYql::TPositionHandle pos, NYql::TExprContext& ctx)
 {
-    return std::make_unique<TUpsertUniqBuildHelper>(table, usedIndexes, pos, ctx);
+    return std::make_unique<TUpsertUniqBuildHelper>(table, inputColumns, usedIndexes, pos, ctx);
 }
 
 }

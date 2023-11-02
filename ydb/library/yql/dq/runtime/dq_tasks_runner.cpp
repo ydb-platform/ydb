@@ -727,6 +727,7 @@ public:
 
         if (runStatus == ERunStatus::Finished) {
             if (CollectBasic()) {
+                Stats->FinishTs = TInstant::Now();
                 StopWaiting(Stats->FinishTs);
             }
 

@@ -176,7 +176,6 @@
   - __locale:                                              contrib/libs/cxxsupp/libcxx/include/__locale
   - __mbstate_t.h:                                         contrib/libs/cxxsupp/libcxx/include/__mbstate_t.h
   - __mutex_base:                                          contrib/libs/cxxsupp/libcxx/include/__mutex_base
-  - __string:                                              contrib/libs/cxxsupp/libcxx/include/__string
   - __threading_support:                                   contrib/libs/cxxsupp/libcxx/include/__threading_support
   - __tuple:                                               contrib/libs/cxxsupp/libcxx/include/__tuple
   - __undef_macros:                                        contrib/libs/cxxsupp/libcxx/include/__undef_macros
@@ -223,6 +222,7 @@
   - __algorithm/is_sorted.h:                               contrib/libs/cxxsupp/libcxx/include/__algorithm/is_sorted.h
   - __algorithm/is_sorted_until.h:                         contrib/libs/cxxsupp/libcxx/include/__algorithm/is_sorted_until.h
   - __algorithm/iter_swap.h:                               contrib/libs/cxxsupp/libcxx/include/__algorithm/iter_swap.h
+  - __algorithm/iterator_operations.h:                     contrib/libs/cxxsupp/libcxx/include/__algorithm/iterator_operations.h
   - __algorithm/lexicographical_compare.h:                 contrib/libs/cxxsupp/libcxx/include/__algorithm/lexicographical_compare.h
   - __algorithm/lower_bound.h:                             contrib/libs/cxxsupp/libcxx/include/__algorithm/lower_bound.h
   - __algorithm/make_heap.h:                               contrib/libs/cxxsupp/libcxx/include/__algorithm/make_heap.h
@@ -248,8 +248,10 @@
   - __algorithm/pop_heap.h:                                contrib/libs/cxxsupp/libcxx/include/__algorithm/pop_heap.h
   - __algorithm/prev_permutation.h:                        contrib/libs/cxxsupp/libcxx/include/__algorithm/prev_permutation.h
   - __algorithm/push_heap.h:                               contrib/libs/cxxsupp/libcxx/include/__algorithm/push_heap.h
+  - __algorithm/ranges_adjacent_find.h:                    contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_adjacent_find.h
   - __algorithm/ranges_all_of.h:                           contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_all_of.h
   - __algorithm/ranges_any_of.h:                           contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_any_of.h
+  - __algorithm/ranges_binary_search.h:                    contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_binary_search.h
   - __algorithm/ranges_copy.h:                             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_copy.h
   - __algorithm/ranges_copy_backward.h:                    contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_copy_backward.h
   - __algorithm/ranges_copy_if.h:                          contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_copy_if.h
@@ -260,6 +262,7 @@
   - __algorithm/ranges_fill.h:                             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_fill.h
   - __algorithm/ranges_fill_n.h:                           contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_fill_n.h
   - __algorithm/ranges_find.h:                             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find.h
+  - __algorithm/ranges_find_first_of.h:                    contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find_first_of.h
   - __algorithm/ranges_find_if.h:                          contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find_if.h
   - __algorithm/ranges_find_if_not.h:                      contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find_if_not.h
   - __algorithm/ranges_for_each.h:                         contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_for_each.h
@@ -267,6 +270,7 @@
   - __algorithm/ranges_is_partitioned.h:                   contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_is_partitioned.h
   - __algorithm/ranges_is_sorted.h:                        contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_is_sorted.h
   - __algorithm/ranges_is_sorted_until.h:                  contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_is_sorted_until.h
+  - __algorithm/ranges_lower_bound.h:                      contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_lower_bound.h
   - __algorithm/ranges_max.h:                              contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_max.h
   - __algorithm/ranges_max_element.h:                      contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_max_element.h
   - __algorithm/ranges_min.h:                              contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_min.h
@@ -275,9 +279,12 @@
   - __algorithm/ranges_minmax_element.h:                   contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_minmax_element.h
   - __algorithm/ranges_mismatch.h:                         contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_mismatch.h
   - __algorithm/ranges_none_of.h:                          contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_none_of.h
+  - __algorithm/ranges_replace.h:                          contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_replace.h
+  - __algorithm/ranges_replace_if.h:                       contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_replace_if.h
   - __algorithm/ranges_reverse.h:                          contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_reverse.h
   - __algorithm/ranges_swap_ranges.h:                      contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_swap_ranges.h
   - __algorithm/ranges_transform.h:                        contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_transform.h
+  - __algorithm/ranges_upper_bound.h:                      contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_upper_bound.h
   - __algorithm/remove.h:                                  contrib/libs/cxxsupp/libcxx/include/__algorithm/remove.h
   - __algorithm/remove_copy.h:                             contrib/libs/cxxsupp/libcxx/include/__algorithm/remove_copy.h
   - __algorithm/remove_copy_if.h:                          contrib/libs/cxxsupp/libcxx/include/__algorithm/remove_copy_if.h
@@ -313,6 +320,8 @@
   - __algorithm/upper_bound.h:                             contrib/libs/cxxsupp/libcxx/include/__algorithm/upper_bound.h
   - __bit/bit_cast.h:                                      contrib/libs/cxxsupp/libcxx/include/__bit/bit_cast.h
   - __bit/byteswap.h:                                      contrib/libs/cxxsupp/libcxx/include/__bit/byteswap.h
+  - __charconv/tables.h:                                   contrib/libs/cxxsupp/libcxx/include/__charconv/tables.h
+  - __charconv/to_chars_base_10.h:                         contrib/libs/cxxsupp/libcxx/include/__charconv/to_chars_base_10.h
   - __chrono/calendar.h:                                   contrib/libs/cxxsupp/libcxx/include/__chrono/calendar.h
   - __chrono/convert_to_timespec.h:                        contrib/libs/cxxsupp/libcxx/include/__chrono/convert_to_timespec.h
   - __chrono/day.h:                                        contrib/libs/cxxsupp/libcxx/include/__chrono/day.h
@@ -468,6 +477,8 @@
   - __ranges/enable_borrowed_range.h:                      contrib/libs/cxxsupp/libcxx/include/__ranges/enable_borrowed_range.h
   - __ranges/enable_view.h:                                contrib/libs/cxxsupp/libcxx/include/__ranges/enable_view.h
   - __ranges/size.h:                                       contrib/libs/cxxsupp/libcxx/include/__ranges/size.h
+  - __string/char_traits.h:                                contrib/libs/cxxsupp/libcxx/include/__string/char_traits.h
+  - __string/extern_template_lists.h:                      contrib/libs/cxxsupp/libcxx/include/__string/extern_template_lists.h
   - __support/android/locale_bionic.h:                     contrib/libs/cxxsupp/libcxx/include/__support/android/locale_bionic.h
   - __support/fuchsia/xlocale.h:                           contrib/libs/cxxsupp/libcxx/include/__support/fuchsia/xlocale.h
   - __support/ibm/locale_mgmt_zos.h:                       contrib/libs/cxxsupp/libcxx/include/__support/ibm/locale_mgmt_zos.h
@@ -490,14 +501,21 @@
   - __type_traits/add_pointer.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/add_pointer.h
   - __type_traits/add_rvalue_reference.h:                  contrib/libs/cxxsupp/libcxx/include/__type_traits/add_rvalue_reference.h
   - __type_traits/add_volatile.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/add_volatile.h
+  - __type_traits/alignment_of.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/alignment_of.h
+  - __type_traits/apply_cv.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/apply_cv.h
   - __type_traits/conditional.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/conditional.h
+  - __type_traits/conjunction.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/conjunction.h
   - __type_traits/decay.h:                                 contrib/libs/cxxsupp/libcxx/include/__type_traits/decay.h
+  - __type_traits/disjunction.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/disjunction.h
   - __type_traits/enable_if.h:                             contrib/libs/cxxsupp/libcxx/include/__type_traits/enable_if.h
+  - __type_traits/has_unique_object_representation.h:      contrib/libs/cxxsupp/libcxx/include/__type_traits/has_unique_object_representation.h
+  - __type_traits/has_virtual_destructor.h:                contrib/libs/cxxsupp/libcxx/include/__type_traits/has_virtual_destructor.h
   - __type_traits/extent.h:                                contrib/libs/cxxsupp/libcxx/include/__type_traits/extent.h
   - __type_traits/integral_constant.h:                     contrib/libs/cxxsupp/libcxx/include/__type_traits/integral_constant.h
   - __type_traits/is_abstract.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_abstract.h
   - __type_traits/is_aggregate.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/is_aggregate.h
   - __type_traits/is_arithmetic.h:                         contrib/libs/cxxsupp/libcxx/include/__type_traits/is_arithmetic.h
+  - __type_traits/is_assignable.h:                         contrib/libs/cxxsupp/libcxx/include/__type_traits/is_assignable.h
   - __type_traits/is_array.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_array.h
   - __type_traits/is_base_of.h:                            contrib/libs/cxxsupp/libcxx/include/__type_traits/is_base_of.h
   - __type_traits/is_bounded_array.h:                      contrib/libs/cxxsupp/libcxx/include/__type_traits/is_bounded_array.h
@@ -505,7 +523,14 @@
   - __type_traits/is_class.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_class.h
   - __type_traits/is_compound.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_compound.h
   - __type_traits/is_const.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_const.h
+  - __type_traits/is_constant_evaluated.h:                 contrib/libs/cxxsupp/libcxx/include/__type_traits/is_constant_evaluated.h
+  - __type_traits/is_constructible.h:                      contrib/libs/cxxsupp/libcxx/include/__type_traits/is_constructible.h
   - __type_traits/is_convertible.h:                        contrib/libs/cxxsupp/libcxx/include/__type_traits/is_convertible.h
+  - __type_traits/is_copy_assignable.h:                    contrib/libs/cxxsupp/libcxx/include/__type_traits/is_copy_assignable.h
+  - __type_traits/is_copy_constructible.h:                 contrib/libs/cxxsupp/libcxx/include/__type_traits/is_copy_constructible.h
+  - __type_traits/is_core_convertible.h:                   contrib/libs/cxxsupp/libcxx/include/__type_traits/is_core_convertible.h
+  - __type_traits/is_default_constructible.h:              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_default_constructible.h
+  - __type_traits/is_destructible.h:                       contrib/libs/cxxsupp/libcxx/include/__type_traits/is_destructible.h
   - __type_traits/is_empty.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_empty.h
   - __type_traits/is_enum.h:                               contrib/libs/cxxsupp/libcxx/include/__type_traits/is_enum.h
   - __type_traits/is_final.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_final.h
@@ -513,23 +538,49 @@
   - __type_traits/is_function.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_function.h
   - __type_traits/is_fundamental.h:                        contrib/libs/cxxsupp/libcxx/include/__type_traits/is_fundamental.h
   - __type_traits/is_integral.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_integral.h
+  - __type_traits/is_literal_type.h:                       contrib/libs/cxxsupp/libcxx/include/__type_traits/is_literal_type.h
   - __type_traits/is_member_function_pointer.h:            contrib/libs/cxxsupp/libcxx/include/__type_traits/is_member_function_pointer.h
   - __type_traits/is_member_object_pointer.h:              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_member_object_pointer.h
   - __type_traits/is_member_pointer.h:                     contrib/libs/cxxsupp/libcxx/include/__type_traits/is_member_pointer.h
+  - __type_traits/is_move_assignable.h:                    contrib/libs/cxxsupp/libcxx/include/__type_traits/is_move_assignable.h
+  - __type_traits/is_move_constructible.h:                 contrib/libs/cxxsupp/libcxx/include/__type_traits/is_move_constructible.h
+  - __type_traits/is_nothrow_assignable.h:                 contrib/libs/cxxsupp/libcxx/include/__type_traits/is_nothrow_assignable.h
+  - __type_traits/is_nothrow_constructible.h:              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_nothrow_constructible.h
+  - __type_traits/is_nothrow_copy_assignable.h:            contrib/libs/cxxsupp/libcxx/include/__type_traits/is_nothrow_copy_assignable.h
+  - __type_traits/is_nothrow_copy_constructible.h:         contrib/libs/cxxsupp/libcxx/include/__type_traits/is_nothrow_copy_constructible.h
+  - __type_traits/is_nothrow_default_constructible.h:      contrib/libs/cxxsupp/libcxx/include/__type_traits/is_nothrow_default_constructible.h
+  - __type_traits/is_nothrow_destructible.h:               contrib/libs/cxxsupp/libcxx/include/__type_traits/is_nothrow_destructible.h
+  - __type_traits/is_nothrow_move_assignable.h:            contrib/libs/cxxsupp/libcxx/include/__type_traits/is_nothrow_move_assignable.h
+  - __type_traits/is_nothrow_move_constructible.h:         contrib/libs/cxxsupp/libcxx/include/__type_traits/is_nothrow_move_constructible.h
   - __type_traits/is_null_pointer.h:                       contrib/libs/cxxsupp/libcxx/include/__type_traits/is_null_pointer.h
   - __type_traits/is_object.h:                             contrib/libs/cxxsupp/libcxx/include/__type_traits/is_object.h
+  - __type_traits/is_pod.h:                                contrib/libs/cxxsupp/libcxx/include/__type_traits/is_pod.h
   - __type_traits/is_pointer.h:                            contrib/libs/cxxsupp/libcxx/include/__type_traits/is_pointer.h
   - __type_traits/is_reference.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/is_reference.h
+  - __type_traits/is_polymorphic.h:                        contrib/libs/cxxsupp/libcxx/include/__type_traits/is_polymorphic.h
   - __type_traits/is_reference_wrapper.h:                  contrib/libs/cxxsupp/libcxx/include/__type_traits/is_reference_wrapper.h
   - __type_traits/is_referenceable.h:                      contrib/libs/cxxsupp/libcxx/include/__type_traits/is_referenceable.h
   - __type_traits/is_same.h:                               contrib/libs/cxxsupp/libcxx/include/__type_traits/is_same.h
   - __type_traits/is_scalar.h:                             contrib/libs/cxxsupp/libcxx/include/__type_traits/is_scalar.h
+  - __type_traits/is_scoped_enum.h:                        contrib/libs/cxxsupp/libcxx/include/__type_traits/is_scoped_enum.h
   - __type_traits/is_signed.h:                             contrib/libs/cxxsupp/libcxx/include/__type_traits/is_signed.h
   - __type_traits/is_unbounded_array.h:                    contrib/libs/cxxsupp/libcxx/include/__type_traits/is_unbounded_array.h
+  - __type_traits/is_standard_layout.h:                    contrib/libs/cxxsupp/libcxx/include/__type_traits/is_standard_layout.h
+  - __type_traits/is_trivial.h:                            contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivial.h
+  - __type_traits/is_trivially_assignable.h:               contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_assignable.h
+  - __type_traits/is_trivially_constructible.h:            contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_constructible.h
+  - __type_traits/is_trivially_copy_assignable.h:          contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_copy_assignable.h
+  - __type_traits/is_trivially_copy_constructible.h:       contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_copy_constructible.h
+  - __type_traits/is_trivially_copyable.h:                 contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_copyable.h
+  - __type_traits/is_trivially_default_constructible.h:    contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_default_constructible.h
+  - __type_traits/is_trivially_destructible.h:             contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_destructible.h
+  - __type_traits/is_trivially_move_assignable.h:          contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_move_assignable.h
+  - __type_traits/is_trivially_move_constructible.h:       contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_move_constructible.h
   - __type_traits/is_union.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_union.h
   - __type_traits/is_unsigned.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_unsigned.h
   - __type_traits/is_void.h:                               contrib/libs/cxxsupp/libcxx/include/__type_traits/is_void.h
   - __type_traits/is_volatile.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_volatile.h
+  - __type_traits/negation.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/negation.h
   - __type_traits/rank.h:                                  contrib/libs/cxxsupp/libcxx/include/__type_traits/rank.h
   - __type_traits/remove_all_extents.h:                    contrib/libs/cxxsupp/libcxx/include/__type_traits/remove_all_extents.h
   - __type_traits/remove_const.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/remove_const.h
@@ -539,6 +590,8 @@
   - __type_traits/remove_reference.h:                      contrib/libs/cxxsupp/libcxx/include/__type_traits/remove_reference.h
   - __type_traits/remove_volatile.h:                       contrib/libs/cxxsupp/libcxx/include/__type_traits/remove_volatile.h
   - __type_traits/type_identity.h:                         contrib/libs/cxxsupp/libcxx/include/__type_traits/type_identity.h
+  - __type_traits/underlying_type.h:                       contrib/libs/cxxsupp/libcxx/include/__type_traits/underlying_type.h
+  - __type_traits/void_t.h:                                contrib/libs/cxxsupp/libcxx/include/__type_traits/void_t.h
   - __utility/as_const.h:                                  contrib/libs/cxxsupp/libcxx/include/__utility/as_const.h
   - __utility/auto_cast.h:                                 contrib/libs/cxxsupp/libcxx/include/__utility/auto_cast.h
   - __utility/cmp.h:                                       contrib/libs/cxxsupp/libcxx/include/__utility/cmp.h
@@ -557,3 +610,4 @@
   - __utility/transaction.h:                               contrib/libs/cxxsupp/libcxx/include/__utility/transaction.h
   - __utility/unreachable.h:                               contrib/libs/cxxsupp/libcxx/include/__utility/unreachable.h
   - __variant/monostate.h:                                 contrib/libs/cxxsupp/libcxx/include/__variant/monostate.h
+

@@ -360,6 +360,15 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
 
+    Y_UNIT_TEST(DropTableUnknownClusterStmt) {
+        auto res = PgSqlToYql("drop table if exists public.t");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
+
+        auto issue = *(res.Issues.begin());
+        UNIT_ASSERT_C(issue.GetMessage().find("Unknown cluster: public") != TString::npos, res.Issues.ToString());
+    }
+
     Y_UNIT_TEST(UpdateStmt) {
         auto res = PgSqlToYql("UPDATE plato.Input SET kind = 'test' where kind = 'testtest'");
         Cerr << res.Root->ToString();

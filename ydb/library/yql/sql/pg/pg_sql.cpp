@@ -1886,6 +1886,9 @@ public:
                 /* isSink */ true,
                 /* isScheme */ true
             );
+            if (sink == nullptr) {
+                return nullptr;
+            }
 
             TString mode = (value->missing_ok) ? "drop_if_exists" : "drop";
             Statements.push_back(L(

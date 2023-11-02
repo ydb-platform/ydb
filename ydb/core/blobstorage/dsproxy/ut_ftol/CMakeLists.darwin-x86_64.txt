@@ -35,7 +35,7 @@ set_property(
   ydb-core-blobstorage-dsproxy-ut_ftol
   PROPERTY
   SPLIT_FACTOR
-  20
+  24
 )
 set_property(
   TARGET

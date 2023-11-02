@@ -332,6 +332,8 @@ TCopyCommand::TCopyCommand()
         .Optional();
     RegisterParameter("pessimistic_quota_check", Options.PessimisticQuotaCheck)
         .Optional();
+    RegisterParameter("enable_cross_cell_copying", Options.EnableCrossCellCopying)
+        .Optional();
 }
 
 void TCopyCommand::DoExecute(ICommandContextPtr context)
@@ -369,6 +371,8 @@ TMoveCommand::TMoveCommand()
     RegisterParameter("preserve_owner", Options.PreserveOwner)
         .Optional();
     RegisterParameter("pessimistic_quota_check", Options.PessimisticQuotaCheck)
+        .Optional();
+    RegisterParameter("enable_cross_cell_copying", Options.EnableCrossCellCopying)
         .Optional();
 }
 

@@ -1446,6 +1446,7 @@ message TReqCopyNode
     optional bool ignore_existing = 8 [default = false];
     optional bool lock_existing = 13 [default = false];
     optional bool pessimistic_quota_check = 9 [default = true];
+    optional bool enable_cross_cell_copying = 15 [default = true];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -1473,6 +1474,7 @@ message TReqMoveNode
     optional bool preserve_expiration_timeout = 12 [default = false];
     optional bool preserve_owner = 11 [default = false];
     optional bool pessimistic_quota_check = 7 [default = true];
+    optional bool enable_cross_cell_copying = 13 [default = true];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;

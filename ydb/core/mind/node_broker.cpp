@@ -839,7 +839,11 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 << ": response# " << response.ToString(*AppData()->TypeRegistry));
 
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok && response.DomainInfo) {
-                ScopeId = {response.DomainInfo->DomainKey.OwnerId, response.DomainInfo->DomainKey.LocalPathId};
+                if (response.DomainInfo->IsServerless()) {
+                    ScopeId = {response.DomainInfo->ResourcesDomainKey.OwnerId, response.DomainInfo->ResourcesDomainKey.LocalPathId};
+                } else {
+                    ScopeId = {response.DomainInfo->DomainKey.OwnerId, response.DomainInfo->DomainKey.LocalPathId};
+                }
             } else {
                 LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, "Cannot resolve scope id"
                     << ": request# " << Ev->Get()->Record.ShortDebugString()

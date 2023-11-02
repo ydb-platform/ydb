@@ -314,6 +314,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     Y_UNIT_TEST(CreateDropRecreate) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(

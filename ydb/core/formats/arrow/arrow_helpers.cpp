@@ -139,24 +139,37 @@ std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::
     return arrow::RecordBatch::Make(schema, 0, columns);
 }
 
+namespace {
+    template <class TStringType>
+    std::shared_ptr<arrow::RecordBatch> ExtractColumnsImpl(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+                                                    const std::vector<TStringType>& columnNames) {
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        fields.reserve(columnNames.size());
+        std::vector<std::shared_ptr<arrow::Array>> columns;
+        columns.reserve(columnNames.size());
+
+        auto srcSchema = srcBatch->schema();
+        for (auto& name : columnNames) {
+            int pos = srcSchema->GetFieldIndex(name);
+            if (pos < 0) {
+                return {};
+            }
+            fields.push_back(srcSchema->field(pos));
+            columns.push_back(srcBatch->column(pos));
+        }
+
+        return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), srcBatch->num_rows(), std::move(columns));
+    }
+}
+
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                                    const std::vector<TString>& columnNames) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(columnNames.size());
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(columnNames.size());
+    return ExtractColumnsImpl(srcBatch, columnNames);
+}
 
-    auto srcSchema = srcBatch->schema();
-    for (auto& name : columnNames) {
-        int pos = srcSchema->GetFieldIndex(name);
-        if (pos < 0) {
-            return {};
-        }
-        fields.push_back(srcSchema->field(pos));
-        columns.push_back(srcBatch->column(pos));
-    }
-
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), srcBatch->num_rows(), std::move(columns));
+std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+                                                   const std::vector<std::string>& columnNames) {
+    return ExtractColumnsImpl(srcBatch, columnNames);
 }
 
 std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr<arrow::RecordBatch>& srcBatch,

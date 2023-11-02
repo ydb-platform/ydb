@@ -34,7 +34,6 @@ void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const std:
 
 void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TString& tierName) {
     const auto& indexInfo = snapshotSchema.GetIndexInfo();
-    Meta = {};
     Meta.FirstPkColumn = indexInfo.GetPKFirstColumnId();
     Meta.FillBatchInfo(primaryKeys, snapshotKeys, indexInfo);
     Meta.SetTierName(tierName);

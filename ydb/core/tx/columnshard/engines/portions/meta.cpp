@@ -43,6 +43,7 @@ bool TPortionMeta::DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortio
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "incorrect portion meta")("meta", portionMeta.DebugString());
         return false;
     }
+    Y_ABORT_UNLESS(Produced != TPortionMeta::EProduced::UNSPECIFIED);
 
     if (portionMeta.HasPrimaryKeyBorders()) {
         ReplaceKeyEdges = std::make_shared<NArrow::TFirstLastSpecialKeys>(portionMeta.GetPrimaryKeyBorders(), indexInfo.GetReplaceKey());

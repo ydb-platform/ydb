@@ -2,6 +2,8 @@ LIBRARY()
 
 SRCS(
     normalizer.cpp
+    min_max.cpp
+    chunks.cpp
 )
 
 PEERDIR(

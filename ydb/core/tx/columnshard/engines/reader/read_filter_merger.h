@@ -332,6 +332,10 @@ public:
         return SortHeap.Size();
     }
 
+    TString DebugString() const {
+        return TStringBuilder() << "sort_heap=" << SortHeap.DebugJson();
+    }
+
     void PutControlPoint(std::shared_ptr<TSortableBatchPosition> point);
 
     void RemoveControlPoint();

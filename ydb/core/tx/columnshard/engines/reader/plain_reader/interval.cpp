@@ -50,7 +50,7 @@ protected:
                 Y_ABORT_UNLESS(ResultBatch->schema()->Equals(Context->GetResultSchema()));
             }
             if (MergingContext->GetIncludeFinish() && originalSourcesCount == 1) {
-                Y_ABORT_UNLESS(merger->IsEmpty());
+                AFL_VERIFY(merger->IsEmpty())("merging_context_finish", MergingContext->GetFinish().DebugJson().GetStringRobust())("merger", merger->DebugString());
             }
         } else {
             auto rbBuilder = std::make_shared<NIndexedReader::TRecordBatchBuilder>(Context->GetResultFields());

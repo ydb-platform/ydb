@@ -1327,6 +1327,12 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue->MutableLimit()->SetMemory(CSScanMemoryLimit);
 
     queue = config.AddQueues();
+    queue->SetName("queue_cs_normalizer");
+    queue->SetWeight(100);
+    queue->MutableLimit()->SetCpu(3);
+    queue->MutableLimit()->SetMemory(CSScanMemoryLimit);
+
+    queue = config.AddQueues();
     queue->SetName("queue_transaction");
     queue->SetWeight(100);
     queue->MutableLimit()->SetCpu(4);
@@ -1420,6 +1426,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task = config.AddTasks();
     task->SetName("CS::SCAN_READ");
     task->SetQueueName("queue_cs_scan_read");
+    task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
+
+    task = config.AddTasks();
+    task->SetName("CS::NORMALIZER");
+    task->SetQueueName("queue_cs_normalizer");
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
 
     task = config.AddTasks();

@@ -18,4 +18,6 @@ target_link_libraries(columnshard-normalizer-portion PUBLIC
 )
 target_sources(columnshard-normalizer-portion PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/normalizer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/min_max.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/chunks.cpp
 )

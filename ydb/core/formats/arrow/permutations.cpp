@@ -121,6 +121,7 @@ std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui64
 }
 
 std::shared_ptr<arrow::RecordBatch> CopyRecords(const std::shared_ptr<arrow::RecordBatch>& source, const std::vector<ui64>& indexes) {
+    Y_ABORT_UNLESS(!!source);
     auto schema = source->schema();
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& i : source->columns()) {

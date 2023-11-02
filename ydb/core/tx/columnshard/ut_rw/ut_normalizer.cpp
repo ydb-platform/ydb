@@ -150,6 +150,61 @@ public:
     }
 };
 
+class TMinMaxCleaner : public NYDBTest::ILocalDBModifier {
+public:
+    virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+        using namespace NColumnShard;
+        NIceDb::TNiceDb db(txc.DB);
+
+        std::vector<TPortionRecord> portion2Key;
+        std::optional<ui64> pathId;
+        {
+            auto rowset = db.Table<Schema::IndexColumns>().Select();
+            UNIT_ASSERT(rowset.IsReady());
+
+            while (!rowset.EndOfSet()) {
+                TPortionRecord key;
+                key.Index = rowset.GetValue<Schema::IndexColumns::Index>();
+                key.Granule = rowset.GetValue<Schema::IndexColumns::Granule>();
+                key.ColumnIdx = rowset.GetValue<Schema::IndexColumns::ColumnIdx>();
+                key.PlanStep = rowset.GetValue<Schema::IndexColumns::PlanStep>();
+                key.TxId = rowset.GetValue<Schema::IndexColumns::TxId>();
+                key.Portion = rowset.GetValue<Schema::IndexColumns::Portion>();
+                key.Chunk = rowset.GetValue<Schema::IndexColumns::Chunk>();
+
+                key.XPlanStep = rowset.GetValue<Schema::IndexColumns::XPlanStep>();
+                key.XTxId = rowset.GetValue<Schema::IndexColumns::XTxId>();
+                key.Blob = rowset.GetValue<Schema::IndexColumns::Blob>();
+                key.Metadata = rowset.GetValue<Schema::IndexColumns::Metadata>();
+                key.Offset = rowset.GetValue<Schema::IndexColumns::Offset>();
+                key.Size = rowset.GetValue<Schema::IndexColumns::Size>();
+
+                pathId = rowset.GetValue<Schema::IndexColumns::PathId>();
+
+                portion2Key.emplace_back(std::move(key));
+
+                UNIT_ASSERT(rowset.Next());
+            }
+        }
+
+        UNIT_ASSERT(pathId.has_value());
+
+        for (auto&& key: portion2Key) {
+            NKikimrTxColumnShard::TIndexColumnMeta metaProto;
+            UNIT_ASSERT(metaProto.ParseFromArray(key.Metadata.data(), key.Metadata.size()));
+            if (metaProto.HasPortionMeta()) {
+                metaProto.MutablePortionMeta()->ClearRecordSnapshotMax();
+                metaProto.MutablePortionMeta()->ClearRecordSnapshotMin();
+            }
+
+            db.Table<Schema::IndexColumns>().Key(key.Index, key.Granule, key.ColumnIdx,
+            key.PlanStep, key.TxId, key.Portion, key.Chunk).Update(
+                NIceDb::TUpdate<Schema::IndexColumns::Metadata>(metaProto.SerializeAsString())
+            );
+        }
+    }
+};
+
 template <class TLocalDBModifier>
 class TPrepareLocalDBController: public NKikimr::NYDBTest::NColumnShard::TController {
 private:
@@ -172,17 +227,19 @@ Y_UNIT_TEST_SUITE(Normalizers) {
 
         const ui64 tableId = 1;
         const std::vector<std::pair<TString, TTypeInfo>> schema = {
-                                                                    {"key", TTypeInfo(NTypeIds::Uint64) },
+                                                                    {"key1", TTypeInfo(NTypeIds::Uint64) },
+                                                                    {"key2", TTypeInfo(NTypeIds::Uint64) },
                                                                     {"field", TTypeInfo(NTypeIds::Utf8) }
                                                                 };
-        PrepareTablet(runtime, tableId, schema);
+        PrepareTablet(runtime, tableId, schema, 2);
         const ui64 txId = 111;
 
-        NConstruction::IArrayBuilder::TPtr keyColumn = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+        NConstruction::IArrayBuilder::TPtr key1Column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key1");
+        NConstruction::IArrayBuilder::TPtr key2Column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key2");
         NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
             "field", NConstruction::TStringPoolFiller(8, 100));
 
-        auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
+        auto batch = NConstruction::TRecordBatchConstructor({ key1Column, key2Column, column }).BuildBatch(2048);
         TString blobData = NArrow::SerializeBatchNoCompression(batch);
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId);
@@ -218,6 +275,10 @@ Y_UNIT_TEST_SUITE(Normalizers) {
 
     Y_UNIT_TEST(ColumnChunkNormalizer) {
         TestNormalizerImpl<TColumnChunksCleaner>();
+    }
+
+    Y_UNIT_TEST(MinMaxNormalizer) {
+        TestNormalizerImpl<TMinMaxCleaner>();
     }
 }
 

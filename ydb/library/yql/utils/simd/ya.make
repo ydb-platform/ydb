@@ -1,19 +1,10 @@
-EXECTEST()
+LIBRARY()
 
-RUN(
-    stream_store
-)
-
-DEPENDS(
-    ydb/library/yql/utils/simd/exec/stream_store
-)
+PEERDIR(library/cpp/digest/crc32c)
 
 END()
 
-RECURSE(
-    exec
-)
-
 RECURSE_FOR_TESTS(
     ut
+    exec
 )

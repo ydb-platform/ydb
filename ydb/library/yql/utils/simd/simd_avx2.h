@@ -77,11 +77,27 @@ struct TBase8: TBase<TSimd8<T>> {
 
     template<int N>
     inline TSimd8<T> Blend16(const TSimd8<T> other) {
-        return _mm256_blend_epi16(this->Value, other->Value, N);
+        return _mm256_blend_epi16(this->Value, other.Value, N);
     }
 
     inline TSimd8<T> BlendVar(const TSimd8<T> other, const TSimd8<T> mask) {
-        return _mm256_blendv_epi8(this->Value, other->Value, mask);
+        return _mm256_blendv_epi8(this->Value, other.Value, mask.Value);
+    }
+
+    static inline ui32 CRC32u8(ui32 crc, ui8 data) {
+        return _mm_crc32_u8(crc, data);
+    }
+
+    static inline ui32 CRC32u16(ui32 crc, ui16 data) {
+        return _mm_crc32_u16(crc, data);
+    }
+
+    static inline ui32 CRC32u32(ui32 crc, ui32 data) {
+        return _mm_crc32_u32(crc, data);
+    }
+
+    static inline ui64 CRC32u64(ui64 crc, ui64 data) {
+        return _mm_crc32_u64(crc, data);
     }
 
     friend inline Mask operator==(const TSimd8<T> lhs, const TSimd8<T> rhs) {
@@ -113,8 +129,16 @@ struct TSimd8<bool>: TBase8<bool> {
         return _mm256_set1_epi8(ui8(-(!!value)));
     }
 
+    inline int ToBitMask() const {
+        return _mm256_movemask_epi8(this->Value);
+    }
+
     inline bool Any() const {
         return !_mm256_testz_si256(this->Value, this->Value);
+    }
+
+    inline bool All() const {
+        return this->ToBitMask() == i32(0xFFFFFFFF);
     }
 
     inline TSimd8<bool> operator~() const {
@@ -148,8 +172,8 @@ struct TBase8Numeric: TBase8<T> {
         return _mm256_load_si256(reinterpret_cast<const __m256i *>(values));
     }
 
-    inline void LoadStream(T dst[16]) const {
-        return _mm256_stream_load_si256(reinterpret_cast<__m256i *>(dst), this->Value);
+    static inline TSimd8<T> LoadStream(T dst[32]) {
+        return _mm256_stream_load_si256(reinterpret_cast<__m256i *>(dst));
     }
 
     inline void Store(T dst[32]) const {
@@ -160,7 +184,7 @@ struct TBase8Numeric: TBase8<T> {
         return _mm256_store_si256(reinterpret_cast<__m256i *>(dst), this->Value);
     }
 
-    inline void StoreStream(T dst[16]) const {
+    inline void StoreStream(T dst[32]) const {
         return _mm256_stream_si256(reinterpret_cast<__m256i *>(dst), this->Value);
     }
 
@@ -170,7 +194,9 @@ struct TBase8Numeric: TBase8<T> {
         TSimd8<T> mask1(0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
                         0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70);
         TSimd8<T> perm = _mm256_permute4x64_epi64(this->Value, 0x4E);
-        return Shuffle128(other + mask0) | perm.Shuffle128(other + mask1);
+        TSimd8<T> tmp = Shuffle128(other + mask0) | perm.Shuffle128(other + mask1);
+        TSimd8<T> mask = _mm256_cmpgt_epi8(other.Value, _mm256_set1_epi8(-1));
+        return tmp & mask;
     }
 
     inline TSimd8<T> Shuffle128(const TSimd8<T> other) const {
@@ -193,7 +219,7 @@ struct TBase8Numeric: TBase8<T> {
     void Log(IOutputStream& out, TString delimeter = " ", TString end = "\n") {
         const size_t n = sizeof(this->Value) / sizeof(TOut);
         TOut buf[n];
-        this->Store((i8*) buf);
+        this->Store((T*) buf);
         if (n == sizeof(this->Value)) {
             for (size_t i = 0; i < n; i += 1) {
                 out << int(buf[i]);

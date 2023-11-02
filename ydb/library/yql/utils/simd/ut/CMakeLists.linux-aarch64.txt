@@ -16,6 +16,7 @@ target_link_libraries(ydb-library-yql-utils-simd-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-testing-unittest_main
+  yql-utils-simd
 )
 target_link_options(ydb-library-yql-utils-simd-ut PRIVATE
   -ldl

@@ -77,11 +77,27 @@ struct TBase8: TBase<TSimd8<T>> {
 
     template<int N>
     inline TSimd8<T> Blend16(const TSimd8<T> other) {
-        return _mm_blend_epi16(this->Value, other->Value, N);
+        return _mm_blend_epi16(this->Value, other.Value, N);
     }
 
     inline TSimd8<T> BlendVar(const TSimd8<T> other, const TSimd8<T> mask) {
-        return _mm_blendv_epi8(this->Value, other->Value, mask);
+        return _mm_blendv_epi8(this->Value, other.Value, mask.Value);
+    }
+
+    static inline ui32 CRC32u8(ui32 crc, ui8 data) {
+        return _mm_crc32_u8(crc, data);
+    }
+
+    static inline ui32 CRC32u16(ui32 crc, ui16 data) {
+        return _mm_crc32_u16(crc, data);
+    }
+
+    static inline ui32 CRC32u32(ui32 crc, ui32 data) {
+        return _mm_crc32_u32(crc, data);
+    }
+
+    static inline ui64 CRC32u64(ui64 crc, ui64 data) {
+        return _mm_crc32_u64(crc, data);
     }
 
     friend inline Mask operator==(const TSimd8<T> lhs, const TSimd8<T> rhs) {
@@ -113,8 +129,16 @@ struct TSimd8<bool>: TBase8<bool> {
         return _mm_set1_epi8(ui8(-(!!value)));
     }
 
+    inline int ToBitMask() const {
+        return _mm_movemask_epi8(this->Value);
+    }
+
     inline bool Any() const {
         return !_mm_testz_si128(this->Value, this->Value);
+    }
+
+    inline bool All() const {
+        return this->ToBitMask() == i32(0xFFFF);
     }
 
     inline TSimd8<bool> operator~() const {
@@ -148,9 +172,8 @@ struct TBase8Numeric: TBase8<T> {
         return _mm_load_si128(reinterpret_cast<const __m128i *>(values));
     }
 
-
-    inline void LoadStream(T dst[16]) const {
-        return _mm_stream_load_si128(reinterpret_cast<__m128i *>(dst), this->Value);
+    static inline TSimd8<T> LoadStream(T dst[16]) {
+        return _mm_stream_load_si128(reinterpret_cast<__m128i *>(dst));
     }
 
     inline void Store(T dst[16]) const {
@@ -189,7 +212,7 @@ struct TBase8Numeric: TBase8<T> {
     void Log(IOutputStream& out, TString delimeter = " ", TString end = "\n") {
         const size_t n = sizeof(this->Value) / sizeof(TOut);
         TOut buf[n];
-        Store((i8*) buf);
+        Store((T*) buf);
         if (n == sizeof(this->Value)) {
             for (size_t i = 0; i < n; i += 1) {
                 out << int(buf[i]);

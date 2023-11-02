@@ -14,6 +14,8 @@
 #include <ydb/library/yql/core/cbo/cbo_optimizer.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
 
+#include <util/generic/bitmap.h>
+
 namespace NYql::NDqs {
 
 using namespace NYql;
@@ -60,6 +62,10 @@ public:
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqReadWrap));
         AddHandler(0, &TCoCountBase::Match, HNDL(TakeOrSkipOverDqReadWrap));
         AddHandler(0, &TCoExtendBase::Match, HNDL(ExtendOverDqReadWrap));
+        AddHandler(0, &TCoNarrowMap::Match, HNDL(DqReadWideWrapFieldSubset));
+        AddHandler(0, &TCoNarrowFlatMap::Match, HNDL(DqReadWideWrapFieldSubset));
+        AddHandler(0, &TCoNarrowMultiMap::Match, HNDL(DqReadWideWrapFieldSubset));
+        AddHandler(0, &TCoWideMap::Match, HNDL(DqReadWideWrapFieldSubset));
         AddHandler(0, &TCoAggregateBase::Match, HNDL(RewriteAggregate));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
         AddHandler(0, &TCoEquiJoin::Match, HNDL(OptimizeEquiJoinWithCosts));
@@ -236,6 +242,74 @@ protected:
         } else {
             return TExprBase(newChildren.front());
         }
+    }
+
+    TMaybeNode<TExprBase> DqReadWideWrapFieldSubset(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        auto map = node.Cast<TCoMapBase>();
+
+        if (const auto maybeRead = map.Input().Maybe<TDqReadWideWrap>().Input()) {
+            const TParentsMap* parentsMap = getParents();
+            auto parentsIt = parentsMap->find(map.Input().Raw());
+            YQL_ENSURE(parentsIt != parentsMap->cend());
+            if (parentsIt->second.size() > 1) {
+                return node;
+            }
+
+            TDynBitMap unusedArgs;
+            for (ui32 i = 0; i < map.Lambda().Args().Size(); ++i) {
+                if (map.Lambda().Args().Arg(i).Ref().Unique()) {
+                    unusedArgs.Set(i);
+                }
+            }
+            if (unusedArgs.Empty()) {
+                return node;
+            }
+
+            auto providerRead = maybeRead.Cast();
+            if (auto dqOpt = GetDqOptCallback(providerRead)) {
+
+                auto structType = GetSeqItemType(*providerRead.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]).Cast<TStructExprType>();
+                TExprNode::TListType newMembers;
+                for (ui32 i = 0; i < map.Lambda().Args().Size(); ++i) {
+                    if (!unusedArgs.Get(i)) {
+                        newMembers.push_back(ctx.NewAtom(providerRead.Pos(), structType->GetItems().at(i)->GetName()));
+                    }
+                }
+
+                auto updatedRead = dqOpt->ApplyExtractMembers(providerRead.Ptr(), ctx.NewList(providerRead.Pos(), std::move(newMembers)), ctx);
+                if (!updatedRead) {
+                    return {};
+                }
+                if (updatedRead == providerRead.Ptr()) {
+                    return node;
+                }
+
+                TExprNode::TListType newArgs;
+                TNodeOnNodeOwnedMap replaces;
+                for (ui32 i = 0; i < map.Lambda().Args().Size(); ++i) {
+                    if (!unusedArgs.Get(i)) {
+                        auto newArg = ctx.NewArgument(map.Lambda().Args().Arg(i).Pos(), map.Lambda().Args().Arg(i).Name());
+                        newArgs.push_back(newArg);
+                        replaces.emplace(map.Lambda().Args().Arg(i).Raw(), std::move(newArg));
+                    }
+                }
+
+                auto newLambda = ctx.NewLambda(
+                    map.Lambda().Pos(),
+                    ctx.NewArguments(map.Lambda().Args().Pos(), std::move(newArgs)),
+                    ctx.ReplaceNodes(GetLambdaBody(map.Lambda().Ref()), replaces));
+
+                return Build<TCoMapBase>(ctx, map.Pos())
+                    .CallableName(map.CallableName())
+                    .Input<TDqReadWideWrap>()
+                        .InitFrom(map.Input().Cast<TDqReadWideWrap>())
+                        .Input(updatedRead)
+                    .Build()
+                    .Lambda(newLambda)
+                    .Done();
+            }
+        }
+        return node;
     }
 
     TMaybeNode<TExprBase> FlatMapOverExtend(TExprBase node, TExprContext& ctx) {

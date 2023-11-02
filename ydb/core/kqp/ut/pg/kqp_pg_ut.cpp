@@ -1611,6 +1611,48 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
+    Y_UNIT_TEST(DropIndex) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+        const auto txCtrl = NYdb::NQuery::TTxControl::NoTx();
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE test2(
+                    id int8,
+                    fk int8,
+                    value char,
+                    primary key(id)
+                );
+                CREATE INDEX "test2_fk_idx" ON test2 (fk);
+                CREATE INDEX "test2_fk.idx_cover" ON test2 (fk) INCLUDE(value);
+                )");
+
+            auto result = session.ExecuteQuery(query, txCtrl).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                DROP INDEX "test2_fk_idx";
+                )");
+
+            auto result = session.ExecuteQuery(query, txCtrl).ExtractValueSync();
+            // TODO: KIKIMR-19695
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+        // TODO: test with <schema>.<name>: "DROP INDEX test2_fk.idx_cover;"
+    }
+
     Y_UNIT_TEST(CreateUniqPgColumn) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();

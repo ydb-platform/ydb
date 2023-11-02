@@ -1834,6 +1834,29 @@ public:
             }, "Executing DROP GROUP");
         }
 
+        if (auto maybePgDropObject = TMaybeNode<TPgDropObject>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+            auto pgDrop = maybePgDropObject.Cast();
+
+            auto cluster = TString(pgDrop.DataSink().Cluster());
+            const auto type = TString(pgDrop.TypeId().Value());
+            const auto objectName = TString(pgDrop.ObjectId().Value());
+
+            if (type == "pgIndex") {
+                // TODO: KIKIMR-19695
+                ctx.AddError(TIssue(ctx.GetPosition(pgDrop.Pos()),
+                                    TStringBuilder() << "DROP INDEX for Postgres indexes is not implemented yet"));
+                return SyncError();
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(pgDrop.TypeId().Pos()),
+                                    TStringBuilder() << "Unknown PgDrop operation: " << type));
+                return SyncError();
+            }
+        }
+
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
             << "(Kikimr DataSink) Failed to execute node: " << input->Content()));
         return SyncError();

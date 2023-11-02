@@ -60,6 +60,7 @@ private:
     virtual TStatus HandleDataQueryBlocks(NNodes::TKiDataQueryBlocks node, TExprContext& ctx) = 0;
     virtual TStatus HandleDataQueryBlock(NNodes::TKiDataQueryBlock node, TExprContext& ctx) = 0;
     virtual TStatus HandleEffects(NNodes::TKiEffects node, TExprContext& ctx) = 0;
+    virtual TStatus HandlePgDropObject(NNodes::TPgDropObject node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleModifyPermissions(NNodes::TKiModifyPermissions node, TExprContext& ctx) = 0;
 };
@@ -73,7 +74,8 @@ public:
         Role,
         Object,
         Topic,
-        Permission
+        Permission,
+        PGObject
     };
 
     struct TViewDescription {
@@ -135,6 +137,19 @@ public:
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Permission);
         return Target;
+    }
+
+    const TString& GetPGObjectId() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::PGObject);
+        return Target;
+    }
+
+    const TString& GetPGObjectType() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(ObjectType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::PGObject);
+        return *ObjectType;
     }
 
     bool Extract(const TExprNode& key);

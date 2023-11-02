@@ -166,6 +166,23 @@ const IndexElem* IndexElement(const Node* node) {
 #define AT_LOCATION_EX(node, field) \
     TLocationGuard guard(this, node->field);
 
+std::tuple<TStringBuf, TStringBuf> getSchemaAndObjectName(const List* nameList)   {
+    switch (ListLength(nameList)) {
+        case 2: {
+            const auto clusterName = StrVal(ListNodeNth(nameList, 0));
+            const auto tableName = StrVal(ListNodeNth(nameList, 1));
+            return {clusterName, tableName};
+        }
+        case 1: {
+            const auto tableName = StrVal(ListNodeNth(nameList, 0));
+            return {"", tableName};
+        }
+        default: {
+            return {"", ""};
+        }
+    }
+}
+
 class TConverter : public IPGParseEvents {
     friend class TLocationGuard;
 
@@ -1815,6 +1832,9 @@ public:
             case OBJECT_TABLE: {
                 return ParseDropTableStmt(value, nameListNodes);
             }
+            case OBJECT_INDEX: {
+                return ParseDropIndexStmt(value, nameListNodes);
+            }
             default: {
                 AddError("Not supported object type for DROP");
                 return nullptr;
@@ -1858,24 +1878,7 @@ public:
         }
 
         for (const auto& nameList : names) {
-            const auto getSchemaAndTableName = [] (const List* nameList) -> std::tuple<TStringBuf, TStringBuf> {
-                switch (ListLength(nameList)) {
-                    case 2: {
-                        const auto clusterName = StrVal(ListNodeNth(nameList, 0));
-                        const auto tableName = StrVal(ListNodeNth(nameList, 1));
-                        return {clusterName, tableName};
-                    }
-                    case 1: {
-                        const auto tableName = StrVal(ListNodeNth(nameList, 0));
-                        return {"", tableName};
-                    }
-                    default: {
-                        return {"", ""};
-                    }
-                }
-            };
-
-            const auto [clusterName, tableName] = getSchemaAndTableName(nameList);
+            const auto [clusterName, tableName] = getSchemaAndObjectName(nameList);
             const auto [sink, key] = ParseQualifiedRelationName(
                 /* catalogName */ "",
                 clusterName,
@@ -1896,6 +1899,47 @@ public:
                     L(A("Void")),
                     QL(
                         QL(QA("mode"), QA(mode))
+                    )
+                )
+            ));
+        }
+
+        return Statements.back();
+    }
+
+    TAstNode* ParseDropIndexStmt(const DropStmt* value, const TVector<const List*>& names) {
+        if (value->behavior == DROP_CASCADE) {
+            AddError("CASCADE is not implemented");
+            return nullptr;
+        }
+
+        if (names.size() != 1) {
+            AddError("DROP INDEX requires exactly one index");
+            return nullptr;
+        }
+
+        for (const auto& nameList : names) {
+            const auto [clusterName, indexName] = getSchemaAndObjectName(nameList);
+            const auto [sink, key] = ParseQualifiedPgObjectName(
+                /* catalogName */ "",
+                clusterName,
+                indexName,
+                "pgIndex"
+            );
+
+            TString missingOk = (value->missing_ok) ? "true" : "false";
+            Statements.push_back(L(
+                A("let"),
+                A("world"),
+                L(
+                    A("Write!"),
+                    A("world"),
+                    sink,
+                    key,
+                    L(A("Void")),
+                    QL(
+                        QL(QA("mode"), QA("dropIndex")),
+                        QL(QA("ifExists"), QA(missingOk))
                     )
                 )
             ));
@@ -2336,6 +2380,33 @@ public:
       const auto sinkOrSource = BuildClusterSinkOrSourceExpression(isSink, cluster);
       const auto key = BuildTableKeyExpression(relname, isScheme);
       return {sinkOrSource, key};
+    }
+
+
+    TAstNode* BuildPgObjectExpression(const TStringBuf objectName, const TStringBuf objectType) {
+        return L(A("Key"), QL(QA("pgObject"),
+                              L(A("String"), QA(objectName)),
+                              L(A("String"), QA(objectType))
+                              ));
+    }
+
+    TReadWriteKeyExprs ParseQualifiedPgObjectName(const TStringBuf catalogname,
+                                               const TStringBuf schemaname,
+                                               const TStringBuf objectName,
+                                               const TStringBuf pgObjectType) {
+        if (!catalogname.Empty()) {
+            AddError("catalogname is not supported");
+            return {};
+        }
+        if (objectName.Empty()) {
+            AddError("objectName should be specified");
+            return {};
+        }
+
+        const auto cluster = !schemaname.Empty() ? schemaname : Settings.DefaultCluster;
+        const auto sinkOrSource = BuildClusterSinkOrSourceExpression(true, cluster);
+        const auto key = BuildPgObjectExpression(objectName, pgObjectType);
+        return {sinkOrSource, key};
     }
 
     TReadWriteKeyExprs ParseWriteRangeVar(const RangeVar *value,

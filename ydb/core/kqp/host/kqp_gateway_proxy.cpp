@@ -575,7 +575,7 @@ public:
                 errResult.AddIssue(NYql::TIssue(error));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
                 tablePromise.SetValue(errResult);
-                return tablePromise.GetFuture();      
+                return tablePromise.GetFuture();
             }
             TGenericResult result;
             result.SetSuccess();
@@ -631,7 +631,7 @@ public:
         CHECK_PREPARED_DDL(AlterTable);
 
         auto tablePromise = NewPromise<TGenericResult>();
-    
+
         if (!IsPrepare()) {
             SessionCtx->Query().PrepareOnly = false;
             if (SessionCtx->Query().PreparingQuery) {
@@ -711,7 +711,7 @@ public:
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
             auto& phyTx = *phyQuery.AddTransactions();
             phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-            
+
 
             phyTx.MutableSchemeOperation()->MutableDropTable()->Swap(&schemeTx);
             phyTx.MutableSchemeOperation()->MutableDropTable()->SetSuccessOnNotExist(settings.SuccessOnNotExist);

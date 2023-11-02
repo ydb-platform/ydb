@@ -215,6 +215,10 @@ private:
             {
                 return TStatus::Ok;
             }
+            case TKikimrKey::Type::PGObject:
+            {
+                return TStatus::Ok;
+            }
         }
 
         return TStatus::Error;
@@ -1564,6 +1568,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             }
         }
 
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandlePgDropObject(TPgDropObject node, TExprContext& /*ctx*/) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

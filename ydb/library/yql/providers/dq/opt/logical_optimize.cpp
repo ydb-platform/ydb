@@ -71,7 +71,8 @@ public:
         AddHandler(0, &TDqQuery::Match, HNDL(MergeQueriesWithSinks));
         AddHandler(0, &TCoSqlIn::Match, HNDL(SqlInDropCompact));
         AddHandler(0, &TDqReplicate::Match, HNDL(ReplicateFieldSubset));
-        AddHandler(0, &TDqReadWrapBase::Match, HNDL(DqReadWrapByProvider));
+
+        AddHandler(1, &TDqReadWrapBase::Match, HNDL(DqReadWrapByProvider));
 #undef HNDL
     }
 
@@ -85,9 +86,10 @@ protected:
         return node;
     }
 
-    TMaybeNode<TExprBase> UnorderedOverDqReadWrap(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+    TMaybeNode<TExprBase> UnorderedOverDqReadWrap(TExprBase node, TExprContext& ctx, const TGetParents& /*getParents*/) const {
         const auto unordered = node.Cast<TCoUnorderedBase>();
         if (const auto maybeRead = unordered.Input().Maybe<TDqReadWrapBase>().Input()) {
+            /*
             if (Config->EnableDqReplicate.Get().GetOrElse(TDqSettings::TDefault::EnableDqReplicate)) {
                 const TParentsMap* parentsMap = getParents();
                 auto parentsIt = parentsMap->find(unordered.Input().Raw());
@@ -96,6 +98,7 @@ protected:
                     return node;
                 }
             }
+            */
             auto providerRead = maybeRead.Cast();
             if (auto dqOpt = GetDqOptCallback(providerRead)) {
                 auto updatedRead = dqOpt->ApplyUnordered(providerRead.Ptr(), ctx);
@@ -111,9 +114,10 @@ protected:
         return node;
     }
 
-    TMaybeNode<TExprBase> ExtractMembersOverDqReadWrap(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+    TMaybeNode<TExprBase> ExtractMembersOverDqReadWrap(TExprBase node, TExprContext& ctx, const TGetParents& /*getParents*/) {
         auto extract = node.Cast<TCoExtractMembers>();
         if (const auto maybeRead = extract.Input().Maybe<TDqReadWrap>().Input()) {
+            /*
             if (Config->EnableDqReplicate.Get().GetOrElse(TDqSettings::TDefault::EnableDqReplicate)) {
                 const TParentsMap* parentsMap = getParents();
                 auto parentsIt = parentsMap->find(extract.Input().Raw());
@@ -122,7 +126,7 @@ protected:
                     return node;
                 }
             }
-
+            */
             auto providerRead = maybeRead.Cast();
             if (auto dqOpt = GetDqOptCallback(providerRead)) {
                 auto updatedRead = dqOpt->ApplyExtractMembers(providerRead.Ptr(), extract.Members().Ptr(), ctx);
@@ -212,9 +216,10 @@ protected:
                 if (outReaders.empty()) {
                     return {};
                 }
-                if (inReaders != outReaders) {
-                    YQL_ENSURE(outReaders.size() <= inReaders.size());
+                if (inReaders == outReaders) {
+                    return node;
                 }
+                YQL_ENSURE(outReaders.size() <= inReaders.size());
                 size_t i = 0;
                 for (; i < outReaders.size(); ++i) {
                     newChildren[list[i].first] = ctx.ChangeChild(*newChildren[list[i].first], TDqReadWrapBase::idx_Input, std::move(outReaders[i]));

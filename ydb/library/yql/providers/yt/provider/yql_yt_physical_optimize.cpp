@@ -83,7 +83,6 @@ public:
         } else {
             AddHandler(0, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(ExtractKeyRangeLegacy));
         }
-        AddHandler(0, &TCoExtendBase::Match, HNDL(ExtendDqReadWraps));
         AddHandler(0, &TCoExtendBase::Match, HNDL(Extend));
         AddHandler(0, &TCoAssumeSorted::Match, HNDL(AssumeSorted));
         AddHandler(0, &TYtMapReduce::Match, HNDL(AddTrivialMapperForNativeYtTypes));
@@ -104,7 +103,6 @@ public:
         AddHandler(1, &TYtOutputOpBase::Match, HNDL(TableContentWithSettings));
         AddHandler(1, &TYtOutputOpBase::Match, HNDL(NonOptimalTableContent));
         AddHandler(1, &TCoRight::Match, HNDL(ReadWithSettings));
-        AddHandler(1, &TDqReadWrapBase::Match, HNDL(DqReadWrapWithSettings));
         AddHandler(1, &TYtTransientOpBase::Match, HNDL(PushDownKeyExtract));
         AddHandler(1, &TYtTransientOpBase::Match, HNDL(TransientOpWithSettings));
         AddHandler(1, &TYtSort::Match, HNDL(TopSort));
@@ -3456,77 +3454,6 @@ private:
         return KeepColumnOrder(res.Ptr(), node.Ref(), ctx, *State_->Types);
     }
 
-    TMaybeNode<TExprBase> ExtendDqReadWraps(TExprBase node, TExprContext& ctx) const {
-        auto extend = node.Cast<TCoExtendBase>();
-
-        // TODO: group TYtReadTable by token/settings:
-        // (Merge (DqReadWrap YtReadTable_group1) (DqReadWrap YtReadTable_group1) (DqReadWrap OtherReads))
-
-        TExprNode::TPtr dqReadWrapNode;
-        TExprNode::TPtr dataSource;
-        TVector<TExprBase> worlds;
-        TVector<TYtPath> paths;
-        TString prevToken;
-        TExprNode::TPtr settings;
-
-        for (auto child: extend) {
-            auto maybeDqReadWrap = child.Maybe<TDqReadWrap>();
-            if (maybeDqReadWrap && !maybeDqReadWrap.Cast().Flags().Size()) {
-                auto dqReadWrap = maybeDqReadWrap.Cast();
-                auto maybeYtReadTable = dqReadWrap.Input().Maybe<TYtReadTable>();
-                auto token = dqReadWrap.Token();
-                TStringBuf tokenStr = token.IsValid() ? token.Name().Cast().Value() : TStringBuf();
-                if (prevToken && prevToken != tokenStr) {
-                    return node;
-                }
-                dqReadWrapNode = dqReadWrap.Ptr();
-                if (maybeYtReadTable) {
-                    auto ytReadTable = maybeYtReadTable.Cast();
-
-                    if (ytReadTable.Input().Size() != 1) {
-                        return node;
-                    }
-
-                    auto section = ytReadTable.Input().Item(0);
-                    if (settings && settings != section.Settings().Ptr()) {
-                        return node;
-                    }
-                    if (dataSource && dataSource != ytReadTable.DataSource().Ptr()) {
-                        return node;
-                    }
-                    dataSource = ytReadTable.DataSource().Ptr();
-                    settings = section.Settings().Ptr();
-                    paths.insert(paths.end(), section.Paths().begin(), section.Paths().end());
-                    worlds.push_back(ytReadTable.World());
-                } else {
-                    return node;
-                }
-                prevToken = tokenStr;
-            } else {
-                return node;
-            }
-        }
-
-        auto newWorld = Build<TCoSync>(ctx, node.Pos()).Add(worlds).Done();
-
-        TYtReadTable read = Build<TYtReadTable>(ctx, node.Pos())
-            .World(newWorld)
-            .DataSource(dataSource)
-            .Input()
-                .Add()
-                    .Paths().Add(paths).Build()
-                    .Settings(settings)
-                .Build()
-            .Build()
-            .Done();
-
-        return Build<TDqReadWrap>(ctx, node.Pos())
-            .Input(read)
-            .Flags().Build()
-            .Token(TExprBase(dqReadWrapNode).Cast<TDqReadWrap>().Token())
-            .Done();
-    }
-
     TMaybeNode<TExprBase> Extend(TExprBase node, TExprContext& ctx) const {
         auto extend = node.Cast<TCoExtendBase>();
 
@@ -5965,30 +5892,6 @@ private:
                 return Build<TCoRight>(ctx, node.Pos())
                     .Input(ret)
                     .Done();
-            }
-            return {};
-        }
-        return node;
-    }
-
-    TMaybeNode<TExprBase> DqReadWrapWithSettings(TExprBase node, TExprContext& ctx) const {
-        auto maybeRead = node.Cast<TDqReadWrapBase>().Input().Maybe<TYtReadTable>();
-        if (!maybeRead) {
-            return node;
-        }
-
-        TYtDSource dataSource = GetDataSource(maybeRead.Cast(), ctx);
-        if (!State_->Configuration->_EnableYtPartitioning.Get(dataSource.Cluster().StringValue()).GetOrElse(false)) {
-            return node;
-        }
-
-        auto read = maybeRead.Cast().Ptr();
-        TSyncMap syncList;
-        auto ret = OptimizeReadWithSettings(read, false, false, syncList, State_, ctx);
-        if (ret != read) {
-            if (ret) {
-                YQL_ENSURE(syncList.empty());
-                return TExprBase(ctx.ChangeChild(node.Ref(), TDqReadWrapBase::idx_Input, std::move(ret)));
             }
             return {};
         }

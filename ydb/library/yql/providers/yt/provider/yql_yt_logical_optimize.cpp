@@ -6,7 +6,6 @@
 #include <ydb/library/yql/providers/yt/opt/yql_yt_join.h>
 #include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
@@ -65,16 +64,13 @@ public:
         AddHandler(1, &TCoAggregateBase::Match, HNDL(Aggregate));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(ExtractMembers));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(ExtractMembersOverContent));
-        AddHandler(1, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
         AddHandler(1, &TCoRight::Match, HNDL(PushdownReadColumns));
         AddHandler(1, &TYtTransientOpBase::Match, HNDL(PushdownOpColumns));
         AddHandler(1, &TCoCountBase::Match, HNDL(TakeOrSkip));
-        AddHandler(1, &TCoCountBase::Match, HNDL(TakeOrSkipOverDqWrap));
         AddHandler(1, &TCoEquiJoin::Match, HNDL(SelfInnerJoinWithSameKeys));
         AddHandler(1, &TCoExtendBase::Match, HNDL(ExtendOverSameMap));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend));
         AddHandler(1, &TCoTake::Match, HNDL(TakeOverExtend));
-        AddHandler(1, &TCoExtendBase::Match, HNDL(ExtendOverDqWrap));
 
         AddHandler(2, &TCoEquiJoin::Match, HNDL(ConvertToCommonTypeForForcedMergeJoin));
         AddHandler(2, &TCoShuffleByKeys::Match, HNDL(ShuffleByKeys));
@@ -1331,29 +1327,6 @@ protected:
             .Done();
     }
 
-    TMaybeNode<TExprBase> ExtractMembersOverDqWrap(TExprBase node, TExprContext& ctx) {
-        auto extract = node.Cast<TCoExtractMembers>();
-
-        if (auto maybeYtRead = extract.Input().Maybe<TDqReadWrapBase>().Input().Maybe<TYtReadTable>()) {
-            auto ytRead = maybeYtRead.Cast();
-
-            TVector<TYtSection> sections;
-            for (auto section: ytRead.Input()) {
-                sections.push_back(UpdateInputFields(section, extract.Members(), ctx));
-            }
-            auto updatedRead = Build<TYtReadTable>(ctx, ytRead.Pos())
-                .InitFrom(ytRead)
-                .Input()
-                    .Add(sections)
-                .Build()
-                .Done().Ptr();
-
-            return TExprBase(ctx.ChangeChild(extract.Input().Ref(), TDqReadWrapBase::idx_Input, std::move(updatedRead)));
-        }
-
-        return node;
-    }
-
     TMaybeNode<TExprBase> TakeOrSkip(TExprBase node, TExprContext& ctx) const {
         auto countBase = node.Cast<TCoCountBase>();
         auto input = countBase.Input();
@@ -1382,59 +1355,6 @@ protected:
             .Done();
 
         return ctx.ChangeChild(countBase.Input().Ref(), TYtTableContent::idx_Input, ConvertContentInputToRead(input, settings, ctx).Ptr());
-    }
-
-    TMaybeNode<TExprBase> TakeOrSkipOverDqWrap(TExprBase node, TExprContext& ctx) {
-        auto countBase = node.Cast<TCoCountBase>();
-
-        if (auto maybeYtRead = countBase.Input().Maybe<TDqReadWrapBase>().Input().Maybe<TYtReadTable>()) {
-            auto ytRead = maybeYtRead.Cast();
-            if (ytRead.Input().Size() != 1) {
-                return node;
-            }
-
-            TYtDSource dataSource = GetDataSource(ytRead, ctx);
-            TString cluster = dataSource.Cluster().StringValue();
-
-            if (!State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false)) {
-                return node;
-            }
-
-            // TODO: support via precomputes
-            if (!TCoIntegralCtor::Match(countBase.Count().Raw())) {
-                return node;
-            }
-
-            TSyncMap syncList;
-            if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, true, false)) {
-                return node;
-            }
-
-            TYtSection section = ytRead.Input().Item(0);
-            if (NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Sample)) {
-                return node;
-            }
-            if (AnyOf(section.Paths(), [](const auto& path) { TYtPathInfo pathInfo(path); return (pathInfo.Table->Meta && pathInfo.Table->Meta->IsDynamic) || pathInfo.Ranges; })) {
-                return node;
-            }
-
-            EYtSettingType settingType = node.Maybe<TCoSkip>() ? EYtSettingType::Skip : EYtSettingType::Take;
-
-            auto updatedRead = Build<TYtReadTable>(ctx, ytRead.Pos())
-                .InitFrom(ytRead)
-                .Input()
-                        .Add()
-                            .InitFrom(section)
-                            .Settings(NYql::AddSetting(section.Settings().Ref(), settingType, countBase.Count().Ptr(), ctx))
-                        .Build()
-                .Build()
-                .Done().Ptr();
-
-            return TExprBase(ctx.ChangeChild(countBase.Input().Ref(), TDqReadWrapBase::idx_Input, std::move(updatedRead)));
-
-        }
-
-        return node;
     }
 
     TMaybeNode<TExprBase> BypassCopy(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
@@ -1711,69 +1631,6 @@ protected:
             .Input(ctx.NewCallable(node.Pos(), take.Input().Ref().Content(), std::move(extendChildren)))
             .Count(take.Count())
             .Done();
-    }
-
-    TMaybeNode<TExprBase> ExtendOverDqWrap(TExprBase node, TExprContext& ctx) const {
-        auto extend = node.Cast<TCoExtendBase>();
-        const TExprNode* flags = nullptr;
-        const TExprNode* token = nullptr;
-        TString cluster;
-        const TExprNode* world = nullptr;
-        bool first = true;
-        TVector<TYtPath> paths;
-        TExprNode::TListType nonDQ;
-        TMaybe<TExprBase> anyDQ;
-        for (auto child: extend) {
-            if (!TDqReadWrapBase::Match(child.Raw())) {
-                nonDQ.push_back(child.Ptr());
-                continue;
-            }
-            auto dqReadWrap = child.Cast<TDqReadWrapBase>();
-            if (!dqReadWrap.Input().Maybe<TYtReadTable>()) {
-                nonDQ.push_back(child.Ptr());
-                continue;
-            }
-            auto ytRead = dqReadWrap.Input().Cast<TYtReadTable>();
-            if (ytRead.Input().Size() != 1 || ytRead.Input().Item(0).Settings().Size() != 0) {
-                nonDQ.push_back(child.Ptr());
-                continue;
-            }
-
-            if (first) {
-                flags = dqReadWrap.Flags().Raw();
-                token = dqReadWrap.Token().Raw();
-                cluster = ytRead.DataSource().Cluster().StringValue();
-                world = ytRead.World().Raw();
-                first = false;
-            } else if (flags != dqReadWrap.Flags().Raw() || token != dqReadWrap.Token().Raw() || cluster != ytRead.DataSource().Cluster().Value() || world != ytRead.World().Raw()) {
-                nonDQ.push_back(child.Ptr());
-                continue;
-            }
-            anyDQ = child;
-            paths.insert(paths.end(), ytRead.Input().Item(0).Paths().begin(), ytRead.Input().Item(0).Paths().end());
-        }
-        if (!anyDQ || extend.Ref().ChildrenSize() - nonDQ.size() < 2 || (nonDQ.size() && node.Maybe<TCoOrderedExtend>())) {
-            return node;
-        }
-        auto dqReadWrap = *anyDQ;
-        auto newRead = Build<TYtReadTable>(ctx, extend.Pos())
-            .InitFrom(dqReadWrap.Cast<TDqReadWrapBase>().Input().Cast<TYtReadTable>())
-            .Input()
-                .Add()
-                    .Paths()
-                        .Add(paths)
-                    .Build()
-                    .Settings()
-                    .Build()
-                .Build()
-            .Build()
-            .Done().Ptr();
-        if (!nonDQ.empty()) {
-            nonDQ.push_back(ctx.ChangeChild(dqReadWrap.Ref(), TDqReadWrapBase::idx_Input, std::move(newRead)));
-            return TExprBase(ctx.ChangeChildren(extend.Ref(), std::move(nonDQ)));
-        }
-
-        return TExprBase(ctx.ChangeChild(dqReadWrap.Ref(), TDqReadWrapBase::idx_Input, std::move(newRead)));
     }
 
     TMaybeNode<TExprBase> DirectRowInFlatMap(TExprBase node, TExprContext& ctx) const {
@@ -2610,21 +2467,6 @@ protected:
                     .Build()
                     .Done();
             }
-        } else if (const auto maybeYtRead = unordered.Input().Maybe<TDqReadWrapBase>().Input().Maybe<TYtReadTable>()) {
-            const auto ytRead = maybeYtRead.Cast();
-            TExprNode::TListType sections(ytRead.Input().Size());
-            for (auto i = 0U; i < sections.size(); ++i) {
-                sections[i] = MakeUnorderedSection<true>(ytRead.Input().Item(i), ctx).Ptr();
-            }
-
-            auto updatedRead = Build<TYtReadTable>(ctx, ytRead.Pos())
-                .InitFrom(ytRead)
-                .Input()
-                    .Add(std::move(sections))
-                .Build()
-                .Done().Ptr();
-
-            return TExprBase(ctx.ChangeChild(unordered.Input().Ref(), TDqReadWrapBase::idx_Input, std::move(updatedRead)));
         }
 
         return node;

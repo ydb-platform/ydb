@@ -37,6 +37,7 @@ SRCS(
     yql_yt_table_desc.cpp
     yql_yt_table.cpp
     yql_yt_dq_integration.cpp
+    yql_yt_dq_optimize.cpp
     yql_yt_dq_hybrid.cpp
     yql_yt_wide_flow.cpp
 )

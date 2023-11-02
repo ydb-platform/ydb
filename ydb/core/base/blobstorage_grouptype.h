@@ -144,6 +144,8 @@ struct TBlobStorageGroupType : public TErasureType {
 
     ui64 PartSize(const TLogoBlobID &id) const;
     ui64 MaxPartSize(const TLogoBlobID &id) const;
+
+    bool PartFits(ui32 partId, ui32 idxInSubgroup) const;
 };
 
 }

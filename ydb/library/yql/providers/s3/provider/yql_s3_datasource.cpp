@@ -33,6 +33,9 @@ public:
         State_->Configuration->AddValidCluster(name);
         auto& settings = State_->Configuration->Clusters[name];
         settings.Url = properties.Value("location", "");
+        if (!settings.Url.EndsWith("/")) {
+            settings.Url += "/";
+        }
         auto signReference = properties.Value("serviceAccountIdSignatureReference", "");
         if (signReference) {
             State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), signReference, properties.Value("serviceAccountIdSignature", ""));

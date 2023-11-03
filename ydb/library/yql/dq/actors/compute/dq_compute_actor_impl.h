@@ -625,7 +625,8 @@ protected:
 
     void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssues issues) {
         CA_LOG_E(InternalErrorLogString(statusCode, issues));
-
+        TaskRunner->GetAllocatorPtr()->InvalidateMemInfo();
+        TaskRunner->GetAllocatorPtr()->DisableStrictAllocationCheck();
         std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
         State = NDqProto::COMPUTE_STATE_FAILURE;
         ReportStateAndMaybeDie(statusCode, issues);

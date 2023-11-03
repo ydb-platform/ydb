@@ -7,29 +7,25 @@
 
 
 
-add_executable(stream_store)
-target_link_libraries(stream_store PUBLIC
-  contrib-libs-linux-headers
+add_executable(pack_tuple)
+target_compile_options(pack_tuple PRIVATE
+  -mavx2
+)
+target_link_libraries(pack_tuple PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
   yql-utils-simd
 )
-target_link_options(stream_store PRIVATE
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
+target_link_options(pack_tuple PRIVATE
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
-target_sources(stream_store PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/stream_store/main.cpp
+target_sources(pack_tuple PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/pack_tuple/main.cpp
 )
-target_allocator(stream_store
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
+target_allocator(pack_tuple
+  system_allocator
 )
-vcs_info(stream_store)
+vcs_info(pack_tuple)

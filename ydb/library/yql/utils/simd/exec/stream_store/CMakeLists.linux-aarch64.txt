@@ -12,6 +12,7 @@ target_link_libraries(stream_store PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  yql-utils-simd
 )
 target_link_options(stream_store PRIVATE
   -ldl

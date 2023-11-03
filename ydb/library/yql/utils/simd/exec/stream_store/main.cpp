@@ -1,4 +1,3 @@
-
 #include <util/generic/ptr.h>
 #include <util/system/cpu_id.h>
 #include <util/system/types.h>
@@ -9,7 +8,7 @@ struct TPerfomancer {
     TPerfomancer() = default;
 
     struct TWrapWorker {
-        virtual int StreamLoad(bool log) = 0;
+        virtual int StoreStream(bool log) = 0;
         virtual ~TWrapWorker() = default;
     };
 
@@ -29,7 +28,7 @@ struct TPerfomancer {
             }
         }
 
-        int StreamLoad(bool log = true) override {
+        int StoreStream(bool log = true) override {
             const size_t batch = 32 / TTraits::Size;
             const size_t batch_size = TTraits::Size / 8;
             size_t log_batch_size = 0;
@@ -41,8 +40,15 @@ struct TPerfomancer {
                 log_batch_size = 2;
             }
 
-            size_t size = (32LL << 21);
-            i64* buf __attribute__((aligned(32))) = new i64[size];
+            const size_t size = (32LL << 21);
+            const size_t arrSize = size / 8;
+
+            i64* buf __attribute__((aligned(32))) = new i64[arrSize];
+
+            for (size_t i = 0; i < arrSize; i += 1) {
+                buf[i] = 0;
+            }
+
 
             i64 tmp[4];
             for (size_t i = 0; i < 4; i += 1) {
@@ -56,21 +62,18 @@ struct TPerfomancer {
             std::chrono::steady_clock::time_point begin01 =
                     std::chrono::steady_clock::now();
 
-            const size_t size_loop = size / 8;
-
-            for (size_t i = 0; i < size_loop; i += 4) {
+            for (size_t i = 0; i < arrSize; i += 4) {
                 for (size_t j = 0; j < batch; j += 1) {
                     tmpSimd[j].StoreStream((i8*)(buf + i + j * batch_size));
                 }
             }
-
 
             std::chrono::steady_clock::time_point end01 =
                 std::chrono::steady_clock::now();
 
             bool is_ok = true;
 
-            for (size_t i = 0; i < size_loop; i += 1) {
+            for (size_t i = 0; i < arrSize; i += 1) {
                 if (buf[i] != i % 4) {
                     is_ok = false;
                 }
@@ -94,6 +97,14 @@ struct TPerfomancer {
             return is_ok;
         }
 
+        ui8* ShuffleMask(ui32 v[8]) {
+            ui8* det = new ui8[32];
+            for (size_t i = 0; i < 32; i += 1) {
+                det[i] = v[i / 4] + i % 4;
+            }
+            return det;
+        }
+
         ~TWorker() = default;
     };
 
@@ -106,5 +117,8 @@ struct TPerfomancer {
 int main() {
     TPerfomancer tp;
     auto worker = NSimd::SelectSimdTraits(tp);
-    return !worker->StreamLoad(false);
+
+    bool fine = true;
+    fine &= worker->StoreStream(true);
+    return !fine;
 }

@@ -12,6 +12,7 @@ target_link_libraries(stream_store PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
+  yql-utils-simd
 )
 target_sources(stream_store PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/stream_store/main.cpp

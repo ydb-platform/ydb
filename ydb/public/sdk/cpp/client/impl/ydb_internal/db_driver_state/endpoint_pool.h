@@ -22,7 +22,7 @@ using TAsyncListEndpointsResult = NThreading::TFuture<TListEndpointsResult>;
 using TListEndpointsResultProvider = std::function<TAsyncListEndpointsResult()>;
 
 struct TEndpointUpdateResult {
-    std::vector<TStringType> Removed;
+    std::vector<std::string> Removed;
     TPlainStatus DiscoveryStatus;
 };
 
@@ -33,7 +33,7 @@ public:
     std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync();
     TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred = false) const;
     TDuration TimeSinceLastUpdate() const;
-    void BanEndpoint(const TStringType& endpoint);
+    void BanEndpoint(const std::string& endpoint);
     int GetPessimizationRatio();
     bool LinkObjToEndpoint(const TEndpointKey& endpoint, TEndpointObj* obj, const void* tag);
     void ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
@@ -45,7 +45,7 @@ public:
     static constexpr i32 GetLocalityShift();
 
 private:
-    TStringType GetPreferredLocation(const TStringType& selfLocation);
+    std::string GetPreferredLocation(const std::string& selfLocation);
 
 private:
     TListEndpointsResultProvider Provider_;

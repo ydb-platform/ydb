@@ -4,6 +4,8 @@
 
 namespace NYdb {
 
+using std::string;
+
 ui64 GetNodeIdFromSession(const TStringType& sessionId) {
     if (sessionId.empty()) {
         return 0;
@@ -45,7 +47,7 @@ const TStringType& TKqpSessionCommon::GetId() const {
     return SessionId_;
 }
 
-const TStringType& TKqpSessionCommon::GetEndpoint() const {
+const string& TKqpSessionCommon::GetEndpoint() const {
     return EndpointKey_.GetEndpoint();
 }
 

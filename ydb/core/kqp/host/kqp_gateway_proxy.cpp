@@ -257,6 +257,22 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         }
     }
 
+    if (metadata->TableSettings.StoreExternalBlobs) {
+        auto& storageSettings = *proto.mutable_storage_settings();
+        TString value = to_lower(metadata->TableSettings.StoreExternalBlobs.GetRef());
+        if (value == "enabled") {
+            storageSettings.set_store_external_blobs(Ydb::FeatureFlag::ENABLED);
+        } else if (value == "disabled") {
+            storageSettings.set_store_external_blobs(Ydb::FeatureFlag::DISABLED);
+        } else {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unknown feature flag '"
+                << metadata->TableSettings.StoreExternalBlobs.GetRef()
+                << "' for store external blobs";
+            return false;
+        }
+    }
+
     proto.set_temporary(metadata->Temporary);
 
     return true;

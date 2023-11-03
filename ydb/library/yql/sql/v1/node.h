@@ -967,6 +967,7 @@ namespace NSQLTranslationV1 {
         NYql::TResetableSetting<TNodePtr, void> Tiering;
         TMaybe<TIdentifier> StoreType;
         TNodePtr PartitionByHashFunction;
+        TMaybe<TIdentifier> StoreExternalBlobs;
 
         TNodePtr DataSourcePath;
         TNodePtr Location;
@@ -976,7 +977,7 @@ namespace NSQLTranslationV1 {
             return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad
                 || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter
                 || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction
-                || DataSourcePath || Location || ExternalSourceParameters;
+                || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters;
         }
     };
 

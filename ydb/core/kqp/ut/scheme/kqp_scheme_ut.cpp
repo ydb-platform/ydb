@@ -1973,6 +1973,30 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateTableWithStoreExternalBlobs) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnablePublicApiExternalBlobs(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithStoreExternalBlobs";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                STORE_EXTERNAL_BLOBS = ENABLED
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto describeResult = session.DescribeTable(tableName).GetValueSync();
+        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT(describeResult.GetTableDescription().GetStorageSettings().GetStoreExternalBlobs().GetOrElse(false));
+    }
+
     Y_UNIT_TEST(CreateAndAlterTableComplex) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

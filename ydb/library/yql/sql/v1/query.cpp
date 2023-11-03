@@ -1003,6 +1003,10 @@ public:
                     YQL_ENSURE(false, "Can't reset TIERING");
                 }
             }
+            if (Params.TableSettings.StoreExternalBlobs) {
+                const auto& ref = Params.TableSettings.StoreExternalBlobs.GetRef();
+                settings = L(settings, Q(Y(Q("storeExternalBlobs"), BuildQuotedAtom(ref.Pos, ref.Name))));
+            }
             if (Params.TableSettings.StoreType) {
                 const auto& ref = Params.TableSettings.StoreType.GetRef();
                 settings = L(settings, Q(Y(Q("storeType"), BuildQuotedAtom(ref.Pos, ref.Name))));
@@ -1196,6 +1200,10 @@ public:
                 } else {
                     settings = L(settings, Q(Y(Q("resetTiering"), Q(Y()))));
                 }
+            }
+            if (Params.TableSettings.StoreExternalBlobs) {
+                const auto& ref = Params.TableSettings.StoreExternalBlobs.GetRef();
+                settings = L(settings, Q(Y(Q("storeExternalBlobs"), BuildQuotedAtom(ref.Pos, ref.Name))));
             }
             actions = L(actions, Q(Y(Q("setTableSettings"), Q(settings))));
         }

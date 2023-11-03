@@ -1870,6 +1870,27 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(StoreExternalBlobsParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
+                WITH ( STORE_EXTERNAL_BLOBS = ENABLED );)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("storeExternalBlobs"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ENABLED"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(DefaultValueColumn2) {
         auto res = SqlToYql(R"( use plato;
             $lambda = () -> {

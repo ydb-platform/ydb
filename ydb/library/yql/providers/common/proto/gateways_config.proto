@@ -456,12 +456,12 @@ message TPostgresqlClusterConfig {
     optional string Cluster = 2;
     optional string PGtoken = 3;
     optional string TargetServerType = 4;
-    optional uint64 MaxResultBufferSize = 5 [default = 1000000];
+    optional uint64 MaxResultBufferSize = 5 [default = 1000000]; // Zero value disables adaptiveFetch
 }
 
 message TPostgresqlGatewayConfig {
     repeated TPostgresqlClusterConfig ClusterMapping = 1;
-    optional uint64 MaxResultBufferSize = 2 [default = 1000000];
+    optional uint64 MaxResultBufferSize = 2 [default = 1000000]; // Zero value disables adaptiveFetch by default
 }
 
 /////////////////////////////// Mysql /////////////////////////////

@@ -43,9 +43,31 @@ TTimerGuard<TTimer>::TTimerGuard(TTimer* timer)
 }
 
 template <class TTimer>
+TTimerGuard<TTimer>::TTimerGuard(TTimerGuard&& other) noexcept
+    : Timer_(std::exchange(other.Timer_, nullptr))
+{ }
+
+template <class TTimer>
+TTimerGuard<TTimer>& TTimerGuard<TTimer>::operator = (TTimerGuard&& other) noexcept
+{
+    TryStopTimer();
+
+    Timer_ = std::exchange(other.Timer_);
+    return *this;
+}
+
+template <class TTimer>
 TTimerGuard<TTimer>::~TTimerGuard()
 {
-    Timer_->Stop();
+    TryStopTimer();
+}
+
+template <class TTimer>
+void TTimerGuard<TTimer>::TryStopTimer() noexcept
+{
+    if (Timer_) {
+        Timer_->Stop();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

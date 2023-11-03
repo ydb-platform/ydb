@@ -7,6 +7,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -34,6 +35,8 @@ public:
     bool Insert(const TKqpCompileResult::TConstPtr& compileResult) {
         Y_ENSURE(compileResult->Query);
         auto& query = *compileResult->Query;
+
+        YQL_ENSURE(compileResult->PreparedQuery);
 
         auto queryIt = QueryIndex.emplace(query, compileResult->Uid);
         Y_ENSURE(queryIt.second);
@@ -675,6 +678,11 @@ private:
                     if (QueryCache.Insert(compileResult)) {
                         Counters->CompileQueryCacheEvicted->Inc();
                     }
+                    if (compileResult->Query && compileResult->Query->Settings.IsPrepareQuery) {
+                        if (InsertPreparingQuery(compileResult, compileRequest.KeepInCache)) {
+                            Counters->CompileQueryCacheEvicted->Inc();
+                        };
+                    }
                 }
 
                 if (ev->Get()->ReplayMessage) {
@@ -741,6 +749,31 @@ private:
     }
 
 private:
+    bool InsertPreparingQuery(const TKqpCompileResult::TConstPtr& compileResult, bool keepInCache) {
+        YQL_ENSURE(compileResult->Query);
+        auto query = *compileResult->Query;
+
+        YQL_ENSURE(compileResult->PreparedQuery);
+        YQL_ENSURE(!query.QueryParameterTypes);
+        if (compileResult->PreparedQuery->GetParameters().empty()) {
+            return false;
+        }
+        auto queryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
+        for (const auto& param : compileResult->PreparedQuery->GetParameters()) {
+            Ydb::Type paramType;
+            ConvertMiniKQLTypeToYdbType(param.GetType(), paramType);
+            queryParameterTypes->insert({param.GetName(), paramType});
+        }
+        query.QueryParameterTypes = queryParameterTypes;
+        if (QueryCache.FindByQuery(query, keepInCache)) {
+            return false;
+        }
+        auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), std::move(query), compileResult->Status, compileResult->Issues, compileResult->MaxReadType);
+        newCompileResult->AllowCache = compileResult->AllowCache;
+        newCompileResult->PreparedQuery = compileResult->PreparedQuery;
+        return QueryCache.Insert(newCompileResult);
+    }
+
     void ProcessQueue(const TActorContext& ctx) {
         auto maxActiveRequests = TableServiceConfig.GetCompileMaxActiveRequests();
 

@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/kqp/common/simple
     ydb/core/kqp/federated_query
     ydb/core/kqp/host
+    ydb/core/ydb_convert
 )
 
 YQL_LAST_ABI_VERSION()

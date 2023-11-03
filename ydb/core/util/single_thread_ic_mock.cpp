@@ -177,7 +177,7 @@ public:
         if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
             TActor::PassAway();
         } else {
-            TActivationContext::Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+            TActivationContext::Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
         }
     }
 

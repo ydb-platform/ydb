@@ -551,7 +551,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
             || event->GetTypeRewrite() == TEvConfigsDispatcher::EvGetConfigRequest) {
             auto fakeId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(event->Recipient.NodeId());
             if (event->Recipient != fakeId)
-                event = IEventHandle::Forward(event, fakeId);
+                event = IEventHandle::Forward(std::move(event), fakeId);
         }
 
         return TTestActorRuntime::EEventAction::PROCESS;

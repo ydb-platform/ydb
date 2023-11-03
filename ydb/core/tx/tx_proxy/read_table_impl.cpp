@@ -1601,7 +1601,7 @@ private:
                 TXLOG_T("Ignore propose result from ShardId# " << shardId << " TxId# " << msg->GetTxId()
                         << " in State# " << state.State << " ReadTxId# " << state.ReadTxId);
                 // Pretend we don't exist if sender tracks delivery
-                ctx.Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+                ctx.Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
                 return;
         }
 
@@ -1994,7 +1994,7 @@ private:
         if (state.State != EShardState::ReadTableStreaming || state.ReadTxId != record.GetTxId()) {
             // Ignore outdated messages and pretend we don't exist
             TXLOG_T("Ignoring outdated TEvStreamQuotaRequest from ShardId# " << shardId);
-            ctx.Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+            ctx.Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
             return;
         }
 
@@ -2045,7 +2045,7 @@ private:
         if (state.State != EShardState::ReadTableStreaming || state.ReadTxId != record.GetTxId()) {
             // Ignore outdated messages and pretend we don't exist
             TXLOG_T("Ignoring outdated TEvStreamQuotaRelease from ShardId# " << shardId);
-            ctx.Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+            ctx.Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
             return;
         }
 
@@ -2711,7 +2711,7 @@ private:
             HFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleZombieDie);
             default:
                 // For all other events we play dead as if we didn't exist
-                Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+                Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
                 break;
         }
     }

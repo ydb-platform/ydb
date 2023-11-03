@@ -52,7 +52,7 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::ForwardToBlobRecoveryActor(TAutoPtr<IEventHandle> ev) {
-        Send(IEventHandle::Forward(ev, BlobRecoveryActorId));
+        Send(IEventHandle::Forward(std::move(ev), BlobRecoveryActorId));
     }
 
     void TScrubCoroImpl::Run() {

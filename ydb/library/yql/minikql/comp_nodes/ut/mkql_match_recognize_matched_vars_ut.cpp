@@ -8,9 +8,9 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarExtend) {
     using TRange = TSimpleList::TRange;
     using TMatchedVar = TMatchedVar<TRange>;
     using TMatchedVars = TMatchedVars<TRange>;
-    TScopedAlloc alloc(__LOCATION__);
 
     Y_UNIT_TEST(MatchedRangeSingleton) {
+        TScopedAlloc alloc(__LOCATION__);
         TRange r{10};
         UNIT_ASSERT_VALUES_EQUAL(10, r.From());
         UNIT_ASSERT_VALUES_EQUAL(10, r.To());
@@ -20,6 +20,7 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarExtend) {
     }
 
     Y_UNIT_TEST(MatchedRange) {
+        TScopedAlloc alloc(__LOCATION__);
         TRange r{10, 20};
         UNIT_ASSERT_VALUES_EQUAL(10, r.From());
         UNIT_ASSERT_VALUES_EQUAL(20, r.To());
@@ -29,6 +30,7 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarExtend) {
     }
 
     Y_UNIT_TEST(MatchedVarEmpty) {
+        TScopedAlloc alloc(__LOCATION__);
         TMatchedVar v{};
         Extend(v, TRange{10});
         UNIT_ASSERT_VALUES_EQUAL(1, v.size());
@@ -37,6 +39,7 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarExtend) {
     }
 
     Y_UNIT_TEST(MatchedVarExtendSingletonContiguous) {
+        TScopedAlloc alloc(__LOCATION__);
         TMatchedVar v{TRange{10}};
         Extend(v, TRange{11});
         UNIT_ASSERT_VALUES_EQUAL(1, v.size());
@@ -45,6 +48,7 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarExtend) {
     }
 
     Y_UNIT_TEST(MatchedVarExtendSingletonWithGap) {
+        TScopedAlloc alloc(__LOCATION__);
         TMatchedVar v{TRange{10}};
         Extend(v, TRange{20});
         UNIT_ASSERT_VALUES_EQUAL(2, v.size());
@@ -55,6 +59,7 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarExtend) {
     }
 
     Y_UNIT_TEST(MatchedVarExtendContiguous) {
+        TScopedAlloc alloc(__LOCATION__);
         TMatchedVar v{TRange{10, 20}, TRange{30, 40}};
         Extend(v, TRange{41});
         UNIT_ASSERT_VALUES_EQUAL(2, v.size());
@@ -65,6 +70,7 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarExtend) {
     }
 
     Y_UNIT_TEST(MatchedVarExtendWithGap) {
+        TScopedAlloc alloc(__LOCATION__);
         TMatchedVar v{TRange{10, 20}, TRange{30, 40}};
         Extend(v, TRange{50});
         UNIT_ASSERT_VALUES_EQUAL(3, v.size());

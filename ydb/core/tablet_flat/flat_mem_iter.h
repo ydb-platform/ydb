@@ -23,7 +23,7 @@ namespace NTable {
                 TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults,
                 const TRemap* remap,
                 IPages *env,
-                NMem::TTreeIterator iterator)
+                NMem::TTreeIterator&& iterator)
             : MemTable(memTable)
             , KeyCellDefaults(std::move(keyDefaults))
             , Remap(remap)

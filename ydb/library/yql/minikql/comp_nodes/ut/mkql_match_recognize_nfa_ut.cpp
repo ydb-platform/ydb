@@ -40,7 +40,7 @@ struct TNfaSetup {
         return graph;
     }
 
-    TNfa InitNfa(const TRowPattern& pattern) {
+    static THashMap<TString, size_t> BuildVarLookup(const TRowPattern& pattern) {
         const auto& vars = GetPatternVars(pattern);
         std::vector<TString> varVec{vars.cbegin(), vars.cend()};
         //Simulate implicit name ordering in YQL structs
@@ -49,7 +49,11 @@ struct TNfaSetup {
         for(size_t i = 0; i != vars.size(); ++i) {
             varNameLookup[varVec[i]] = i;
         }
-        const auto& transitionGraph = TNfaTransitionGraphBuilder::Create(pattern, varNameLookup);
+        return varNameLookup;
+    }
+
+    TNfa InitNfa(const TRowPattern& pattern) {
+        const auto& transitionGraph = TNfaTransitionGraphBuilder::Create(pattern, BuildVarLookup(pattern));
         TComputationNodePtrVector defines;
         defines.reserve(Defines.size());
         for (auto& d: Defines) {
@@ -92,6 +96,30 @@ struct TNfaSetup {
     TNfa Nfa;
 };
 
+static TVector<size_t> CountNonEpsilonInputs(const TNfaTransitionGraph& graph) {
+    TVector<size_t> nonEpsIns(graph.Transitions.size());
+    for (size_t node = 0; node != graph.Transitions.size(); node++) {
+        if (!std::holds_alternative<TEpsilonTransitions>(graph.Transitions[node])) {
+            std::visit(TNfaTransitionDestinationVisitor([&](size_t toNode){
+                nonEpsIns[toNode]++;
+                return 0;
+            }), graph.Transitions[node]);
+        }
+    }
+    return nonEpsIns;
+}
+
+static TVector<size_t> CountNonEpsilonOutputs(const TNfaTransitionGraph& graph) {
+    TVector<size_t> nonEpsOuts(graph.Transitions.size());
+    nonEpsOuts.resize(graph.Transitions.size());
+    for (size_t node = 0; node < graph.Transitions.size(); node++) {
+        if (!std::holds_alternative<TEpsilonTransitions>(graph.Transitions[node])) {
+            nonEpsOuts[node]++;
+        }
+    }
+    return nonEpsOuts;
+}
+
 } //namespace
 
 Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
@@ -103,6 +131,45 @@ Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
         const auto& output = transitionGraph->Transitions.at(transitionGraph->Output);
         UNIT_ASSERT(std::get_if<TVoidTransition>(&output));
     }
+    Y_UNIT_TEST(EpsilonChainsEliminated) {
+        TScopedAlloc alloc(__LOCATION__);
+        const TRowPattern pattern{
+            {
+                TRowPatternFactor{"A", 1, 1, false, false},
+                TRowPatternFactor{"B", 1, 100, false, false},
+                TRowPatternFactor{
+                    TRowPattern{
+                        {TRowPatternFactor{"C", 1, 1, false, false}},
+                        {TRowPatternFactor{"D", 1, 1, false, false}}
+                    },
+                    1, 1, false, false
+                }
+            },
+            {
+                TRowPatternFactor{
+                    TRowPattern{{
+                                    TRowPatternFactor{"E", 1, 1, false, false},
+                                    TRowPatternFactor{"F", 1, 100, false, false},
+                                }},
+                    2, 100, false, false
+                },
+                TRowPatternFactor{"G", 1, 1, false, false}
+            }
+        };
+        const auto graph = TNfaTransitionGraphBuilder::Create(pattern, TNfaSetup::BuildVarLookup(pattern));
+        auto nonEpsIns = CountNonEpsilonInputs(*graph);
+        auto nonEpsOuts = CountNonEpsilonOutputs(*graph);
+        for(size_t node = 0; node < nonEpsIns.size(); node++) {
+            if (node == graph->Input) {
+                continue;
+            }
+            if (node == graph->Output) {
+                continue;
+            }
+            UNIT_ASSERT_GT(nonEpsIns[node] + nonEpsOuts[node], 0);
+        }
+    }
+
 
     //Tests for NFA-based engine for MATCH_RECOGNIZE
     //In the full implementation pattern variables are calculated as lambda predicates on input partition

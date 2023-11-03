@@ -11,7 +11,8 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 using namespace NYql::NMatchRecognize;
 
-struct TVoidTransition{};
+struct TVoidTransition {
+};
 using TEpsilonTransition = size_t; //to
 using TEpsilonTransitions = std::vector<TEpsilonTransition, TMKQLAllocator<TEpsilonTransition>>;
 using TMatchedVarTransition = std::pair<ui32, size_t>; //{varIndex, to}
@@ -25,12 +26,120 @@ using TNfaTransition = std::variant<
     TQuantityExitTransition
 >;
 
+struct TNfaTransitionDestinationVisitor {
+    std::function<size_t(size_t)> callback;
+
+    template<typename Callback>
+    explicit TNfaTransitionDestinationVisitor(Callback callback)
+        : callback(std::move(callback)) {}
+
+    TNfaTransition operator()(TVoidTransition tr) const {
+        return tr;
+    }
+
+    TNfaTransition operator()(TMatchedVarTransition tr) const {
+        tr.second = callback(tr.second);
+        return tr;
+    }
+
+    TNfaTransition operator()(TEpsilonTransitions tr) const {
+        for (size_t& toNode: tr) {
+            toNode = callback(toNode);
+        }
+        return tr;
+    }
+
+    TNfaTransition operator()(TQuantityEnterTransition tr) const {
+        return callback(tr);
+    }
+
+    TNfaTransition operator()(TQuantityExitTransition tr) const {
+        tr.second.first = callback(tr.second.first);
+        tr.second.second = callback(tr.second.second);
+        return tr;
+    }
+};
+
 struct TNfaTransitionGraph {
     std::vector<TNfaTransition, TMKQLAllocator<TNfaTransition>> Transitions;
     size_t Input;
     size_t Output;
 
     using TPtr = std::shared_ptr<TNfaTransitionGraph>;
+};
+
+class TNfaTransitionGraphOptimizer {
+public:
+    TNfaTransitionGraphOptimizer(TNfaTransitionGraph::TPtr graph)
+        : Graph(graph) {}
+
+    void DoOptimizations() {
+        EliminateEpsilonChains();
+        CollectGarbage();
+    }
+private:
+    void EliminateEpsilonChains() {
+        for (size_t node = 0; node != Graph->Transitions.size(); node++) {
+            if (auto* ts = std::get_if<TEpsilonTransitions>(&Graph->Transitions[node])) {
+                // new vector of eps transitions,
+                // contains refs to all nodes which are reachable from oldNode via eps transitions
+                TEpsilonTransitions optimizedTs;
+                auto dfsStack = *ts;
+                while (!dfsStack.empty()) {
+                    auto curNode = dfsStack.back();
+                    dfsStack.pop_back();
+                    if (auto* curTs = std::get_if<TEpsilonTransitions>(&Graph->Transitions[curNode])) {
+                        std::copy(curTs->begin(), curTs->end(), std::back_inserter(dfsStack));
+                    } else {
+                        optimizedTs.push_back(curNode);
+                    }
+                }
+                *ts = optimizedTs;
+            }
+        }
+    }
+    void CollectGarbage() {
+        auto oldInput = Graph->Input;
+        auto oldOutput = Graph->Output;
+        decltype(Graph->Transitions) oldTransitions;
+        Graph->Transitions.swap(oldTransitions);
+        // Scan for reachable nodes and map old node ids to new node ids
+        std::vector<std::optional<size_t>> mapping(oldTransitions.size(), std::nullopt);
+        std::vector<size_t> dfsStack = {oldInput};
+        mapping[oldInput] = 0;
+        Graph->Transitions.emplace_back();
+        while (!dfsStack.empty()) {
+            auto oldNode = dfsStack.back();
+            dfsStack.pop_back();
+            std::visit(TNfaTransitionDestinationVisitor([&](size_t oldToNode) {
+                if (!mapping[oldToNode]) {
+                    mapping[oldToNode] = Graph->Transitions.size();
+                    Graph->Transitions.emplace_back();
+                    dfsStack.push_back(oldToNode);
+                }
+                return 0;
+            }), oldTransitions[oldNode]);
+        }
+        // Rebuild transition vector
+        for (size_t oldNode = 0; oldNode != oldTransitions.size(); oldNode++) {
+            if (!mapping[oldNode]) {
+                continue;
+            }
+            auto node = mapping[oldNode].value();
+            if (oldNode == oldInput) {
+                Graph->Input = node;
+            }
+            if (oldNode == oldOutput) {
+                Graph->Output = node;
+            }
+            Graph->Transitions[node] = oldTransitions[oldNode];
+            Graph->Transitions[node] = std::visit(TNfaTransitionDestinationVisitor([&](size_t oldToNode) {
+                return mapping[oldToNode].value();
+            }), Graph->Transitions[node]);
+        }
+    }
+
+    TNfaTransitionGraph::TPtr Graph;
 };
 
 class TNfaTransitionGraphBuilder {
@@ -44,7 +153,7 @@ private:
         : Graph(graph) {}
 
     size_t AddNode() {
-        Graph->Transitions.resize(Graph->Transitions.size() + 1);
+        Graph->Transitions.emplace_back();
         return Graph->Transitions.size() - 1;
     }
 
@@ -114,6 +223,8 @@ public:
         auto item = builder.BuildTerms(pattern, varNameToIndex);
         result->Input = item.Input;
         result->Output = item.Output;
+        TNfaTransitionGraphOptimizer optimizer(result);
+        optimizer.DoOptimizations();
         return result;
     }
 private:
@@ -205,8 +316,7 @@ private:
         TTransitionVisitor(const TState& state, TStateSet& newStates, TStateSet& deletedStates)
             : State(state)
             , NewStates(newStates)
-            , DeletedStates(deletedStates)
-        {}
+            , DeletedStates(deletedStates) {}
         void operator()(const TVoidTransition&) {
             //Do nothing for void
         }
@@ -266,6 +376,7 @@ private:
 
         } while (MakeEpsilonTransitionsImpl());
     }
+
     TNfaTransitionGraph::TPtr TransitionGraph;
     IComputationExternalNode* const MatchedRangesArg;
     const TComputationNodePtrVector Defines;

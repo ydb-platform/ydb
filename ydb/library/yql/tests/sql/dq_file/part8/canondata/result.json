@@ -5334,9 +5334,9 @@
     ],
     "test.test[table_range-range_tables_with_view--Debug]": [
         {
-            "checksum": "b5d2e6b69eccefc1ad5c598069141456",
-            "size": 2496,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1689644/90acca9b171ecce398f65b70b237cc25e6006718/resource.tar.gz#test.test_table_range-range_tables_with_view--Debug_/opt.yql_patched"
+            "checksum": "d9e72401f0c137289f34ff8f52b9442f",
+            "size": 2414,
+            "uri": "https://storage.yandex-team.ru/get-devtools/937458/8523712e0459f98c9293467a123cd52ecffe5dc0/resource.tar.gz#test.test_table_range-range_tables_with_view--Debug_/opt.yql_patched"
         }
     ],
     "test.test[table_range-range_tables_with_view--Plan]": [
@@ -5591,9 +5591,9 @@
     ],
     "test.test[view-view_with_lambda--Debug]": [
         {
-            "checksum": "8acf3fb52e876eb38692b8b62aff0b09",
-            "size": 1843,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1942173/4d0058e024fc0472a561e1e5fbadce0ca3ce8a5c/resource.tar.gz#test.test_view-view_with_lambda--Debug_/opt.yql_patched"
+            "checksum": "4adfef649f4ade33299f59e74b49f409",
+            "size": 1747,
+            "uri": "https://storage.yandex-team.ru/get-devtools/937458/8523712e0459f98c9293467a123cd52ecffe5dc0/resource.tar.gz#test.test_view-view_with_lambda--Debug_/opt.yql_patched"
         }
     ],
     "test.test[view-view_with_lambda--Plan]": [
@@ -5613,9 +5613,9 @@
     ],
     "test.test[view-view_with_lambda_process--Debug]": [
         {
-            "checksum": "109748b68cd33938a077558447395ddf",
-            "size": 1851,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1942173/4d0058e024fc0472a561e1e5fbadce0ca3ce8a5c/resource.tar.gz#test.test_view-view_with_lambda_process--Debug_/opt.yql_patched"
+            "checksum": "9b5b96bd4dee49a1ba8f1263093d6cd2",
+            "size": 1755,
+            "uri": "https://storage.yandex-team.ru/get-devtools/937458/8523712e0459f98c9293467a123cd52ecffe5dc0/resource.tar.gz#test.test_view-view_with_lambda_process--Debug_/opt.yql_patched"
         }
     ],
     "test.test[view-view_with_lambda_process--Plan]": [

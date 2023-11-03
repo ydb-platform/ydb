@@ -1104,7 +1104,7 @@ private:
             YQL_ENSURE(type.AsString() == YqlTypeView);
             info.SqlView = TIFStream(path).ReadAll();
             auto attrVer = type.Attributes()["syntax_version"];
-            info.SqlViewSyntaxVersion = attrVer.IsUndefined() ? 0 : attrVer.AsInt64();
+            info.SqlViewSyntaxVersion = attrVer.IsUndefined() ? 1 : attrVer.AsInt64();
             info.CanWrite = false;
             return;
         }

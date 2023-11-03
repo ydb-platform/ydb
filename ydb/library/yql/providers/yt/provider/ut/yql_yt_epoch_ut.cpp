@@ -30,7 +30,6 @@ Y_UNIT_TEST_SUITE(TYqlEpoch) {
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
         settings.ClusterMapping["plato"] = YtProviderName;
-        settings.SyntaxVersion = 1;
 
         TAstParseResult astRes = NSQLTranslationV1::SqlToYql(program, settings);
         UNIT_ASSERT(astRes.IsOk());

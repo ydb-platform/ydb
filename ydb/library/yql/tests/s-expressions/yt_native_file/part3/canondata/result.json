@@ -6276,9 +6276,9 @@
     ],
     "test.test[View-ViewWithUdf-Debug]": [
         {
-            "checksum": "e276f07109dba879641074b628b5eb89",
-            "size": 1881,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1781765/4f0ef436ec1be9dda123740db35b1a4609db9c95/resource.tar.gz#test.test_View-ViewWithUdf-Debug_/opt.yql"
+            "checksum": "024fa2caed577a6de2dbff142e726583",
+            "size": 1799,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1889210/af6b257e045b66846534af239d05a080793f27b1/resource.tar.gz#test.test_View-ViewWithUdf-Debug_/opt.yql"
         },
         {
             "checksum": "074cd0dff8afc51cf615d16fab91b7be",

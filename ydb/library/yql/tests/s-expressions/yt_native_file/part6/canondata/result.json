@@ -4967,9 +4967,9 @@
     ],
     "test.test[View-NoReadScheme-Debug]": [
         {
-            "checksum": "af53cbd6d0248a91ddcedff1e558f141",
-            "size": 1105,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1903885/121399e6d1b461df1e94ed7185ed770bf9b83a77/resource.tar.gz#test.test_View-NoReadScheme-Debug_/opt.yql"
+            "checksum": "30fc707c782c7c3d389f383caac43f14",
+            "size": 998,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1903885/185f1c5732d03cc2ab59f51707f728345112bfac/resource.tar.gz#test.test_View-NoReadScheme-Debug_/opt.yql"
         }
     ],
     "test.test[View-NoReadScheme-Plan]": [

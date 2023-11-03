@@ -4949,9 +4949,9 @@
     ],
     "test.test[View-RawView-Debug]": [
         {
-            "checksum": "0afe4d8f34671719d2a3d47603dbf77c",
-            "size": 2756,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1781765/e2cb9617ccaa0c71da15cce571de1be051dc3c4f/resource.tar.gz#test.test_View-RawView-Debug_/opt.yql"
+            "checksum": "17846417f9557f83b3845c3009f2a999",
+            "size": 2615,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1903885/ff5bb64ac9151b87c1701752115704096449354a/resource.tar.gz#test.test_View-RawView-Debug_/opt.yql"
         },
         {
             "checksum": "9f8a305a418b97d74dd33b5d696f0d6b",

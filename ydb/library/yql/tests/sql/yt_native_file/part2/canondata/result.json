@@ -1222,9 +1222,9 @@
     ],
     "test.test[count-count_all_view_concat--Debug]": [
         {
-            "checksum": "dc22848cd58222e5cd67c56cdeb9bacf",
-            "size": 1114,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1889210/f5705694df4bf9cab559b028e1977ca85507e097/resource.tar.gz#test.test_count-count_all_view_concat--Debug_/opt.yql"
+            "checksum": "7347084e07877165951d29368e6b0067",
+            "size": 1034,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1871182/420211cde204e0a246eccd057de4bee88e7630b8/resource.tar.gz#test.test_count-count_all_view_concat--Debug_/opt.yql"
         }
     ],
     "test.test[count-count_all_view_concat--Plan]": [

@@ -45,7 +45,7 @@ inline bool HasExclusiveModifyIntents(TYtTableIntents intents) {
 
 struct TYtViewDescription {
     TString Sql;
-    ui16 SyntaxVersion = 0;
+    ui16 SyntaxVersion = 1;
     TExprNode::TPtr CompiledSql; // contains Read! to self/self_raw tables
     const TTypeAnnotationNode* RowType = nullptr; // Filled only if scheme requested
 

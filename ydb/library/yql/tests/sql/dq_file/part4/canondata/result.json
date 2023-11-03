@@ -1227,9 +1227,9 @@
     ],
     "test.test[count-count_distinct_from_view_concat--Debug]": [
         {
-            "checksum": "d95a1140768140b550080c91539cf544",
-            "size": 3685,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1936842/7ee2486a6845b4b7ffec39a73b004e1c45c04aba/resource.tar.gz#test.test_count-count_distinct_from_view_concat--Debug_/opt.yql_patched"
+            "checksum": "fc61ccc9031643c798bdd456b8b0cb2b",
+            "size": 3603,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937367/ecb7ad35e0a826ff36e05fe9d100292761d34750/resource.tar.gz#test.test_count-count_distinct_from_view_concat--Debug_/opt.yql_patched"
         }
     ],
     "test.test[count-count_distinct_from_view_concat--Plan]": [
@@ -3259,9 +3259,9 @@
     ],
     "test.test[join-trivial_view--Debug]": [
         {
-            "checksum": "5d66aae904901e28c2d9726a4fa8e09d",
-            "size": 2768,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1775059/8eed37259d411fc80649c1b2311ad3abfd9ee15e/resource.tar.gz#test.test_join-trivial_view--Debug_/opt.yql_patched"
+            "checksum": "d019cd5a4361fc45290137bd476b2193",
+            "size": 2735,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937367/ecb7ad35e0a826ff36e05fe9d100292761d34750/resource.tar.gz#test.test_join-trivial_view--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-trivial_view--Plan]": [
@@ -3281,9 +3281,9 @@
     ],
     "test.test[join-trivial_view-off-Debug]": [
         {
-            "checksum": "1f91f0876d82bc8e26124bc5226d6c4c",
-            "size": 2719,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1900335/a5a16b7313d07b162a608c1abeab1e68e6175117/resource.tar.gz#test.test_join-trivial_view-off-Debug_/opt.yql_patched"
+            "checksum": "2a625e240a793babb4dcf8170f04e292",
+            "size": 2686,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937367/ecb7ad35e0a826ff36e05fe9d100292761d34750/resource.tar.gz#test.test_join-trivial_view-off-Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-trivial_view-off-Plan]": [

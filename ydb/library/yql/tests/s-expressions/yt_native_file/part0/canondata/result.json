@@ -3724,9 +3724,9 @@
     ],
     "test.test[View-Key1AfterUdfRawData-Debug]": [
         {
-            "checksum": "176fe135cbeecbdadd5f38b46fde21c0",
-            "size": 1879,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1925821/0d51d83bf90117a4cde6a75c3e73687c6b2c8865/resource.tar.gz#test.test_View-Key1AfterUdfRawData-Debug_/opt.yql"
+            "checksum": "cc036aacebbf96e5ea7cc4ac5ffcb142",
+            "size": 1738,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1871182/d078c82640022cbf34d8c06adab69004c9a9bdf7/resource.tar.gz#test.test_View-Key1AfterUdfRawData-Debug_/opt.yql"
         },
         {
             "checksum": "35f15081539ad9e2a2bcb482c187f1d9",
@@ -3755,9 +3755,9 @@
     ],
     "test.test[View-Key1Data-Debug]": [
         {
-            "checksum": "924ad14422eb11581ee7b596fa94df96",
-            "size": 1821,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1925821/0d51d83bf90117a4cde6a75c3e73687c6b2c8865/resource.tar.gz#test.test_View-Key1Data-Debug_/opt.yql"
+            "checksum": "4e01a818638271e692ccd3101e1e7ab2",
+            "size": 1714,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1871182/d078c82640022cbf34d8c06adab69004c9a9bdf7/resource.tar.gz#test.test_View-Key1Data-Debug_/opt.yql"
         },
         {
             "checksum": "35f15081539ad9e2a2bcb482c187f1d9",

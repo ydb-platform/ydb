@@ -1,6 +1,5 @@
 {
     "_yql_view_file_outer_library"="IMPORT mylib SYMBOLS $x;select $x as k, 2 as s, 3 as v";
-    "_yql_syntax_version_file_outer_library"=1;
     "_yql_row_spec" = {
         "Type" = [
             "StructType";

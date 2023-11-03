@@ -2366,13 +2366,13 @@ private:
                 result.Data[idx.first].Stat = statInfo;
 
                 auto type = GetType(attrs);
-                ui16 viewSyntaxVersion = 0;
+                ui16 viewSyntaxVersion = 1;
                 if (type == "document") {
                     if (attrs.HasKey(YqlTypeAttribute)) {
                         auto typeAttr = attrs[YqlTypeAttribute];
                         type = typeAttr.AsString();
                         auto verAttr = typeAttr.Attributes()["syntax_version"];
-                        viewSyntaxVersion = verAttr.IsUndefined() ? 0 : verAttr.AsInt64();
+                        viewSyntaxVersion = verAttr.IsUndefined() ? 1 : verAttr.AsInt64();
                     }
                 }
 

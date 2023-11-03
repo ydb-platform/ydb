@@ -5302,9 +5302,9 @@
     ],
     "test.test[view-file_inner--Debug]": [
         {
-            "checksum": "62667771fc9f6b4e85c2b2c0234bb544",
-            "size": 2292,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1936842/2efa1889a5b9a34d1d175cc9294c735a49bae32b/resource.tar.gz#test.test_view-file_inner--Debug_/opt.yql_patched"
+            "checksum": "14052337221a348b18012d06c0551234",
+            "size": 2173,
+            "uri": "https://storage.yandex-team.ru/get-devtools/937458/199dd3481847aec4ecbe346a9205546cc9ef5fc4/resource.tar.gz#test.test_view-file_inner--Debug_/opt.yql_patched"
         }
     ],
     "test.test[view-file_inner--Plan]": [

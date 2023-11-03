@@ -390,10 +390,9 @@ bool TYtTableDescriptionBase::FillViews(const TString& provider, const TString& 
 
         if (!viewDesc.CompiledSql) {
             TString viewSql;
-            ui16 syntaxVersion = 0;
+            ui16 syntaxVersion = 1;
             if (view.first == "raw") {
                 viewSql = RAW_VIEW_SQL;
-                syntaxVersion = 1;
             } else {
                 auto sql = metaAttrs.FindPtr(YqlViewPrefixAttribute + view.first);
                 if (!sql) {

@@ -4545,9 +4545,9 @@
     ],
     "test.test[View-Key1Scheme-Debug]": [
         {
-            "checksum": "4f55d584bb03682dc28edd7c9f8189aa",
-            "size": 1081,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1880306/19b64c0a571507011d44e9f43feb56df873c11bc/resource.tar.gz#test.test_View-Key1Scheme-Debug_/opt.yql"
+            "checksum": "40ebe75ba830088b14803709dc9e970a",
+            "size": 974,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1880306/c2b5d73d28fc4f26e658bf9360d86189d62f206f/resource.tar.gz#test.test_View-Key1Scheme-Debug_/opt.yql"
         }
     ],
     "test.test[View-Key1Scheme-Plan]": [

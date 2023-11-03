@@ -20,14 +20,9 @@ import collections
 
 import ymake
 
-
-MDS_URI_PREFIX = 'https://storage.yandex-team.ru/get-devtools/'
-MDS_SCHEME = 'mds'
 CANON_DATA_DIR_NAME = 'canondata'
 CANON_OUTPUT_STORAGE = 'canondata_storage'
 CANON_RESULT_FILE_NAME = 'result.json'
-CANON_MDS_RESOURCE_REGEX = re.compile(re.escape(MDS_URI_PREFIX) + r'(.*?)($|#)')
-CANON_SBR_RESOURCE_REGEX = re.compile(r'(sbr:/?/?(\d+))')
 
 BLOCK_SEPARATOR = '============================================================='
 SPLIT_FACTOR_MAX_VALUE = 1000
@@ -1199,12 +1194,17 @@ def _load_canonical_file(filename, unit_path):
 
 
 def _get_resource_from_uri(uri):
-    m = CANON_MDS_RESOURCE_REGEX.match(uri)
+    m = consts.CANON_MDS_RESOURCE_REGEX.match(uri)
     if m:
-        res_id = m.group(1)
-        return "{}:{}".format(MDS_SCHEME, res_id)
+        key = m.group(1)
+        return "{}:{}".format(consts.MDS_SCHEME, key)
 
-    m = CANON_SBR_RESOURCE_REGEX.match(uri)
+    m = consts.CANON_BACKEND_RESOURCE_REGEX.match(uri)
+    if m:
+        key = m.group(1)
+        return "{}:{}".format(consts.MDS_SCHEME, key)
+
+    m = consts.CANON_SBR_RESOURCE_REGEX.match(uri)
     if m:
         # There might be conflict between resources, because all resources in sandbox have 'resource.tar.gz' name
         # That's why we use notation with '=' to specify specific path for resource

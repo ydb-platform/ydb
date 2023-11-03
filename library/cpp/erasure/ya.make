@@ -21,13 +21,7 @@ PEERDIR(
 )
 
 IF (NOT OPENSOURCE)
-    SRCS(
-        jerasure.cpp
-        reed_solomon_jerasure.cpp
-        lrc_jerasure.cpp
-    )
-
-    PEERDIR(contrib/libs/jerasure)
+    INCLUDE(ya_non_opensource.inc)
 ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(public.h)

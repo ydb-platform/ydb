@@ -9,17 +9,18 @@
 
 add_library(libs-hyperscan-runtime_avx2)
 target_compile_options(libs-hyperscan-runtime_avx2 PRIVATE
-  /D__SSE4_1__=1
+  -msse4.1
   -DHAVE_SSE41
-  /D__SSE4_2__=1
+  -msse4.2
   -DHAVE_SSE42
-  /D__POPCNT__=1
+  -mpopcnt
   -DHAVE_POPCOUNT_INSTR
-  /arch:AVX
-  /DAVX_ENABLED=1
+  -mavx
   -DHAVE_AVX
-  /arch:AVX2
-  /DAVX2_ENABLED=1
+  -mavx2
+  -mfma
+  -mbmi
+  -mbmi2
   -DHAVE_AVX2
   -DCrc32c_ComputeBuf=avx2_Crc32c_ComputeBuf
   -DblockInitSufPQ=avx2_blockInitSufPQ

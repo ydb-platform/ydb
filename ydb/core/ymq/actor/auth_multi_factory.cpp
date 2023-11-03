@@ -99,6 +99,7 @@ public:
         , CloudId_(data.CloudID)
         , ResourceId_(data.ResourceID)
         , Counters_(*data.Counters)
+        , UserSidCallback_(std::move(data.UserSidCallback))
     {
         Y_ABORT_UNLESS(RequestId_);
     }
@@ -308,7 +309,7 @@ public:
         }
 
         UserSID_ = result.Token->GetUserSID();
-        LOG_SQS_INFO("Request [" << RequestId_ << "] " << " on queue from subject: " << UserSID_);
+        UserSidCallback_(UserSID_);
         OnFinishedRequest();
     }
 
@@ -558,6 +559,8 @@ private:
     TDuration FolderServiceRequestRetryPeriod_ = CLOUD_AUTH_RETRY_PERIOD;
 
     NKikimrClient::TSqsResponse Response_;
+
+    std::function<void(TString)> UserSidCallback_;
 };
 
 void TMultiAuthFactory::Initialize(

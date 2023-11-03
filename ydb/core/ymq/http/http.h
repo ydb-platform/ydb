@@ -133,6 +133,8 @@ private:
 
     bool IsPrivateRequest_ = false; // Has "/private" path prefix
     TInstant StartTime_ = TInstant::Now();
+
+    TString UserSid_;
 };
 
 class TAsyncHttpServer

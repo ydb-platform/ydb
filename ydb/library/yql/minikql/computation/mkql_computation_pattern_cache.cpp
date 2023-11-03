@@ -186,10 +186,10 @@ private:
         }
     }
 
-    const size_t MaxPatternsSize = 0;
-    const size_t MaxPatternsSizeBytes = 0;
-    const size_t MaxCompiledPatternsSize = 0;
-    const size_t MaxCompiledPatternsSizeBytes = 0;
+    const size_t MaxPatternsSize;
+    const size_t MaxPatternsSizeBytes;
+    const size_t MaxCompiledPatternsSize;
+    const size_t MaxCompiledPatternsSizeBytes;
 
     size_t CurrentPatternsSizeBytes = 0;
     size_t CurrentCompiledPatternsSize = 0;
@@ -200,7 +200,7 @@ private:
     TIntrusiveList<TPatternCacheHolder, TCompiledPatternLRUListTag> LRUCompiledPatternList;
 };
 
-TComputationPatternLRUCache::TComputationPatternLRUCache(TComputationPatternLRUCache::Config configuration, NMonitoring::TDynamicCounterPtr counters)
+TComputationPatternLRUCache::TComputationPatternLRUCache(const TComputationPatternLRUCache::Config& configuration, NMonitoring::TDynamicCounterPtr counters)
     : Cache(std::make_unique<TLRUPatternCacheImpl>(CacheMaxElementsSize, configuration.MaxSizeBytes, CacheMaxElementsSize, configuration.MaxCompiledSizeBytes))
     , Configuration(configuration)
     , Hits(counters->GetCounter("PatternCache/Hits", true))

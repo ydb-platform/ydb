@@ -91,8 +91,9 @@ public:
     };
 
     struct Config {
-        Config(size_t maxSizeBytes)
+        Config(size_t maxSizeBytes, size_t maxCompiledSizeBytes)
             : MaxSizeBytes(maxSizeBytes)
+            , MaxCompiledSizeBytes(maxCompiledSizeBytes)
         {}
 
         Config(size_t maxSizeBytes, size_t maxCompiledSizeBytes, size_t patternAccessTimesBeforeTryToCompile)
@@ -101,9 +102,9 @@ public:
             , PatternAccessTimesBeforeTryToCompile(patternAccessTimesBeforeTryToCompile)
         {}
 
-        size_t MaxSizeBytes = 0;
-        size_t MaxCompiledSizeBytes = 0;
-        std::optional<size_t> PatternAccessTimesBeforeTryToCompile;
+        const size_t MaxSizeBytes;
+        const size_t MaxCompiledSizeBytes;
+        const std::optional<size_t> PatternAccessTimesBeforeTryToCompile;
 
         bool operator==(const Config & rhs) {
             return std::tie(MaxSizeBytes, MaxCompiledSizeBytes, PatternAccessTimesBeforeTryToCompile) ==
@@ -115,7 +116,7 @@ public:
         }
     };
 
-    TComputationPatternLRUCache(Config configuration, NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
+    TComputationPatternLRUCache(const Config& configuration, NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
 
     ~TComputationPatternLRUCache();
 

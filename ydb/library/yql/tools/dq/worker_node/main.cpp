@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
         NYql::CreateYdbDqTaskTransformFactory()
     });
 
-    auto patternCache = std::make_shared<NKikimr::NMiniKQL::TComputationPatternLRUCache>(200_MB);
+    auto patternCache = std::make_shared<NKikimr::NMiniKQL::TComputationPatternLRUCache>(NKikimr::NMiniKQL::TComputationPatternLRUCache::Config(200_MB, 200_MB));
 
     if (argc > 1 && !strcmp(argv[1], "tasks_runner_proxy")) {
         NYql::NBacktrace::RegisterKikimrFatalActions();

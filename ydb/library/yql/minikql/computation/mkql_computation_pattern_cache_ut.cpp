@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
         TTimer t("total: ");
         const ui32 cacheSizeInBytes = 104857600; // 100 MiB
         const ui32 inFlight = 7;
-        TComputationPatternLRUCache cache(cacheSizeInBytes);
+        TComputationPatternLRUCache cache({cacheSizeInBytes, cacheSizeInBytes});
 
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
         auto entry = std::make_shared<TPatternCacheEntry>();
@@ -572,7 +572,7 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
     Y_UNIT_TEST(Smoke) {
         const ui32 cacheSize = 10'000'000;
         const ui32 cacheItems = 10;
-        TComputationPatternLRUCache cache(cacheSize);
+        TComputationPatternLRUCache cache({cacheSize, cacheSize});
 
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
 

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.31.66)
+VERSION(1.31.67)
 
 LICENSE(Apache-2.0)
 
@@ -790,10 +790,6 @@ RESOURCE_FILES(
     botocore/data/gamelift/2015-10-01/examples-1.json
     botocore/data/gamelift/2015-10-01/paginators-1.json
     botocore/data/gamelift/2015-10-01/service-2.json
-    botocore/data/gamesparks/2021-08-17/endpoint-rule-set-1.json.gz
-    botocore/data/gamesparks/2021-08-17/examples-1.json
-    botocore/data/gamesparks/2021-08-17/paginators-1.json
-    botocore/data/gamesparks/2021-08-17/service-2.json
     botocore/data/glacier/2012-06-01/endpoint-rule-set-1.json.gz
     botocore/data/glacier/2012-06-01/examples-1.json
     botocore/data/glacier/2012-06-01/paginators-1.json

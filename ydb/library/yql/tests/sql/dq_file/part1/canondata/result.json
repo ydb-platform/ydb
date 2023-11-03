@@ -1645,6 +1645,28 @@
         }
     ],
     "test.test[expr-int_literals_negative-default.txt-Results]": [],
+    "test.test[expr-lambda_as_optional_callable-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1924537/bbed9dde10799cefbbe7c225758f9c4faa83e6e8/resource.tar.gz#test.test_expr-lambda_as_optional_callable-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[expr-lambda_as_optional_callable-default.txt-Debug]": [
+        {
+            "checksum": "fb5e8e4ad091e267cd55ac4c215c441e",
+            "size": 626,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1924537/bbed9dde10799cefbbe7c225758f9c4faa83e6e8/resource.tar.gz#test.test_expr-lambda_as_optional_callable-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[expr-lambda_as_optional_callable-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1924537/bbed9dde10799cefbbe7c225758f9c4faa83e6e8/resource.tar.gz#test.test_expr-lambda_as_optional_callable-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[expr-lambda_as_optional_callable-default.txt-Results]": [],
     "test.test[expr-list_comp-default.txt-Analyze]": [
         {
             "checksum": "01775e7c945a56ebf0edc2d478f4f68d",

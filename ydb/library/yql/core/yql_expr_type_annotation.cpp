@@ -4047,15 +4047,26 @@ IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnota
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
     TExprContext& ctx, TConvertFlags flags) {
     if (node->Type() == TExprNode::Lambda) {
-        if (expectedType.GetKind() == ETypeAnnotationKind::Callable) {
-            auto callableType = expectedType.Cast<TCallableExprType>();
+        auto currentType = &expectedType;
+        ui32 optLevel = 0;
+        while (currentType->GetKind() == ETypeAnnotationKind::Optional) {
+            currentType = RemoveOptionalType(currentType);
+            ++optLevel;
+        }
+
+        if (currentType->GetKind() == ETypeAnnotationKind::Callable) {
+            auto callableType = currentType->Cast<TCallableExprType>();
             auto lambdaArgsCount = node->Head().ChildrenSize();
             if (lambdaArgsCount != callableType->GetArgumentsSize()) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            auto typeNode = ExpandType(node->Pos(), expectedType, ctx);
+            auto typeNode = ExpandType(node->Pos(), *currentType, ctx);
             node = ctx.NewCallable(node->Pos(), "Callable", { typeNode, node });
+            for (ui32 i = 0; i < optLevel; ++i) {
+                node = ctx.NewCallable(node->Pos(), "Just", { node });
+            }
+
             return IGraphTransformer::TStatus::Repeat;
         }
 

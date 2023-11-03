@@ -5193,6 +5193,13 @@
             "uri": "https://storage.yandex-team.ru/get-devtools/1936997/00f46808be87e2ae2d4ac3ac45675b659c5ace45/resource.tar.gz#test_sql2yql.test_expr-iterable_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-lambda_as_optional_callable]": [
+        {
+            "checksum": "46aad5173c0a7f606f23b6d03cfed86c",
+            "size": 2026,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1936842/5deec1202f467cec0bbdd3c79aa0551b9c23710b/resource.tar.gz#test_sql2yql.test_expr-lambda_as_optional_callable_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-lds_empty_cast]": [
         {
             "checksum": "6e70223493882613d8644a0c89340d2d",
@@ -22173,6 +22180,13 @@
             "checksum": "4898965dabd2c94fcd1137163df44c36",
             "size": 621,
             "uri": "https://storage.yandex-team.ru/get-devtools/1925821/aeddf2bb85ad22d5cb1dd10f889edcbbe03627bd/resource.tar.gz#test_sql_format.test_expr-iterable_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-lambda_as_optional_callable]": [
+        {
+            "checksum": "ec87334044f958f8a55e2796ab9a5fba",
+            "size": 296,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1936842/5deec1202f467cec0bbdd3c79aa0551b9c23710b/resource.tar.gz#test_sql_format.test_expr-lambda_as_optional_callable_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-lds_empty_cast]": [

@@ -98,7 +98,7 @@ public:
         std::vector<TBridgeQueryFile> filesData;
         filesData.reserve(files.size());
         for (const auto& file : files) {
-            filesData.push_back(TBridgeQueryFile {
+            filesData.push_back(TBridgeQueryFile{
                 .Name = file.Name.data(),
                 .NameLength = file.Name.size(),
                 .Content = file.Content.data(),

@@ -67,7 +67,8 @@ struct TBridgeQueryResult
     ssize_t YsonErrorLength = 0;
 };
 
-enum EQueryFileContentType {
+enum EQueryFileContentType
+{
     RawInlineData,
     Url,
 };

@@ -190,7 +190,7 @@ public:
 struct TDqTaskRunnerSettings {
     NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
     bool TerminateOnError = false;
-    bool UseCacheForLLVM = false;
+    bool UseCacheForLLVM = true;
     TString OptLLVM = "";
     THashMap<TString, TString> SecureParams;
     THashMap<TString, TString> TaskParams;

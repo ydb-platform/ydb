@@ -4,10 +4,10 @@ inputs:
   build_target:
     required: false
     description: "build target"
-  sanitizer:
-    required: false
-    description: "sanitizer type (address, memory, thread, undefined, leak)"
-
+  build_preset:
+    required: true
+    default: "relwithdebinfo"
+    description: "relwithdebinfo, release-asan, release-tsan"
   bazel_remote_uri:
     required: false
     description: "bazel-remote endpoint"
@@ -43,10 +43,6 @@ runs:
           extra_params+=(--target="${{ inputs.build_target }}")
         fi
         
-        if [ ! -z "${{ inputs.sanitizer }}" ] && [ "${{ inputs.sanitizer }}" != "none" ]; then
-          extra_params+=(--sanitize="${{ inputs.sanitizer }}")
-        fi
-        
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           extra_params+=(--bazel-remote-store)
           extra_params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
@@ -57,8 +53,28 @@ runs:
           extra_params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
           extra_params+=(--bazel-remote-put --dist-cache-evict-bins --add-result .o)
         fi
-
-        ./ya make --build relwithdebinfo --force-build-depends -D'BUILD_LANGUAGES=CPP PY3' -T --stat  \
+        
+        case "${{ inputs.build_preset }}" in
+          relwithdebinfo)
+            build_type=relwithdebinfo
+            ;;
+          release-asan)
+            build_type=release
+            extra_params+=(--sanitize="address")
+            extra_params+=(-DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY)
+            ;;
+          release-tsan)
+            build_type=release
+            extra_params+=(--sanitize="thread")
+            extra_params+=(-DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY)
+            ;;
+          *)
+            echo "Invalid preset: ${{ inputs.build_preset }}"
+            exit 1
+            ;;
+        esac
+        
+        ./ya make --build "${build_type}" --force-build-depends -D'BUILD_LANGUAGES=CPP PY3' -T --stat  \
           --log-file "$TMP_DIR/ya_log.txt" --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
           --dump-graph --dump-graph-to-file "$TMP_DIR/ya_graph.json" \
           --cache-size 512G --link-threads "${{ inputs.link_threads }}" \

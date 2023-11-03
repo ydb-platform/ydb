@@ -7,10 +7,8 @@ on:
         type: string
         default: "ydb/"
         description: "limit build and test to specific target"
-      sanitizer:
+      build_preset:
         type: string
-        default: "none"
-        description: "sanitizer type"
       runner_kind:
         type: string
         required: true
@@ -27,19 +25,37 @@ on:
         type: boolean
         default: true
         description: "run tests"
-      log_suffix:
+      test_threads:
         type: string
-        required: true
-        description: "suffix for current build. uses as testmo source and s3 subfolder"
-
+        default: 28
+        description: "Test threads count"
+      link_threads:
+        type: string
+        default: 8
+        description: "link threads count"
+      test_size:
+        type: string
+        default: "small,medium,large"
+      test_type:
+        type: string
+        default: "unittest,py3test,py2test,pytest"
+      folder_prefix:
+        type: string
+        default: "ya-"
 
 jobs:
   main:
-    name: Build and test
+    name: Build and test ${{ inputs.build_preset }}
     runs-on: [ self-hosted, "${{ inputs.runner_kind }}", "${{ inputs.runner_label }}" ]
     steps:
+    - name: Checkout PR
+      uses: actions/checkout@v3
+      if: github.event.pull_request.head.sha != ''
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
     - name: Checkout
       uses: actions/checkout@v3
+      if: github.event.pull_request.head.sha == ''
 
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
@@ -48,26 +64,31 @@ jobs:
         s3_endpoint: ${{ vars.AWS_ENDPOINT }}
         s3_key_id: ${{ secrets.AWS_KEY_ID }}
         s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
-        log_suffix: ${{ inputs.log_suffix }}
+        folder_prefix: ya-
+        build_preset: ${{ inputs.build_preset }}
 
     - name: Build
       uses: ./.github/actions/build_ya
       if: inputs.run_build
       with:
         build_target: ${{ inputs.build_target }}
-        sanitizer: ${{ inputs.sanitizer }}
+        build_preset: ${{ inputs.build_preset }}
         bazel_remote_uri: ${{ vars.REMOTE_CACHE_URL_YA || '' }}
         bazel_remote_username: ${{ secrets.REMOTE_CACHE_USERNAME }}
         bazel_remote_password: ${{ secrets.REMOTE_CACHE_PASSWORD }}
+        link_threads: ${{ inputs.link_threads }}
 
     - name: Run tests
       uses: ./.github/actions/test_ya
       if: inputs.run_tests
       with:
         build_target: ${{ inputs.build_target }}
-        sanitizer: ${{ inputs.sanitizer }}
-        log_suffix: ${{ inputs.log_suffix }}
+        build_preset: ${{ inputs.build_preset }}
+        test_size: ${{ inputs.test_size }}
+        test_type: ${{ inputs.test_type }}
         testman_token: ${{ secrets.TESTMO_TOKEN }}
         testman_url: ${{ vars.TESTMO_URL }}
         testman_project_id: ${{ vars.TESTMO_PROJECT_ID }}
         bazel_remote_uri: ${{ vars.REMOTE_CACHE_URL_YA || '' }}
+        link_threads: ${{ inputs.link_threads }}
+        test_threads: ${{ inputs.test_threads }}

@@ -11,17 +11,38 @@ on:
         type: string
         default: "ydb/"
         description: "limit build and test to specific target"
-      sanitizer:
+      build_preset:
         type: choice
-        default: "none"
-        description: "sanitizer type"
+        default: "relwithdebinfo"
+        description: "Build preset"
         options:
-          - none
-          - address
-          - memory
-          - thread
-          - undefined
-          - leak
+          - relwithdebinfo
+          - release-asan
+          - release-tsan
+      test_size:
+        type: choice
+        default: "small,medium,large"
+        description: "test size to run"
+        options:
+          - small
+          - small,medium
+          - small,medium,large
+      test_type:
+        type: choice
+        default: "unittest,py3test,py2test,pytest"
+        description: "type of tests to run"
+        options:
+          - unittest
+          - py3test,py2test,pytest
+          - unittest,py3test,py2test,pytest
+      test_threads:
+        type: string
+        default: "28"
+        description: "Test threads count"
+      link_threads:
+        type: string
+        default: "8"
+        description: "link threads count"
       run_build:
         type: boolean
         default: true
@@ -38,15 +59,28 @@ on:
       build_target:
         type: string
         default: "ydb/"
-      sanitizer:
+      build_preset:
         type: string
-        default: "none"
+      test_size:
+        type: string
+        default: "small,medium,large"
+      test_type:
+        type: string
+        default: "unittest,py3test,py2test,pytest"
       run_build:
         type: boolean
         default: true
       run_tests:
         type: boolean
         default: true
+      test_threads:
+        type: string
+        default: 28
+        description: "Test threads count"
+      link_threads:
+        type: string
+        default: 8
+        description: "link threads count"
 
 jobs:
   provide-runner:
@@ -99,10 +133,13 @@ jobs:
       runner_kind: self-hosted
       runner_label: ${{ needs.provide-runner.outputs.label }}
       build_target: ${{ inputs.build_target }}
-      sanitizer: ${{ inputs.sanitizer }}
+      build_preset: ${{ inputs.build_preset }}
       run_build: ${{ inputs.run_build }}
       run_tests: ${{ inputs.run_tests }}
-      log_suffix: ya-x86-64${{ inputs.sanitizer != 'none' && format('-{0}', inputs.sanitizer) || '' }}
+      test_size: ${{ inputs.test_size }}
+      test_type: ${{ inputs.test_type }}
+      link_threads: ${{ inputs.link_threads }}
+      test_threads: ${{ inputs.test_threads }}
     secrets: inherit
 
   release-runner:

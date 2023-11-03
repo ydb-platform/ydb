@@ -1,9 +1,0 @@
-items:
-- name: Обзор
-  href: concepts.md
-- name: Развертывание в Yandex Managed Service for Kubernetes
-  href: yc_managed_kubernetes.md
-- name: Развертывание в AWS Elastic Kubernetes Service
-  href: aws_eks.md
-- name: Эксплуатация
-  href: operate.md

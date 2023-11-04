@@ -530,7 +530,8 @@ std::unique_ptr<IFlushableYsonConsumer> CreateYsonWriter(
     EYsonFormat format,
     EYsonType type,
     bool enableRaw,
-    int indent)
+    int indent,
+    bool passThroughUtf8Characters)
 {
     if (format == EYsonFormat::Binary) {
         return std::make_unique<TBufferedBinaryYsonWriter>(
@@ -543,7 +544,8 @@ std::unique_ptr<IFlushableYsonConsumer> CreateYsonWriter(
             format,
             type,
             enableRaw,
-            indent);
+            indent,
+            passThroughUtf8Characters);
     }
 }
 

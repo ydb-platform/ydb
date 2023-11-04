@@ -155,7 +155,8 @@ std::unique_ptr<IFlushableYsonConsumer> CreateYsonWriter(
     EYsonFormat format,
     EYsonType type,
     bool enableRaw,
-    int indent = TYsonWriter::DefaultIndent);
+    int indent = TYsonWriter::DefaultIndent,
+    bool passThroughUtf8Characters = false);
 
 ////////////////////////////////////////////////////////////////////////////////
 

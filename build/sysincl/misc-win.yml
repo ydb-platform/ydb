@@ -56,6 +56,23 @@
   - utime.h:       ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32_msvc/utime.h
   - dl.h
 
+- source_filter: "^contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src"
+  includes:
+  - arpa/inet.h:   contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32/arpa/inet.h
+  - dirent.h:      contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32_msvc/dirent.h
+  - grp.h:         contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32/grp.h
+  - netdb.h:       contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32/netdb.h
+  - netinet/in.h:  contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32/netinet/in.h
+  - pwd.h:         contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32/pwd.h
+  - sys/file.h:    contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32_msvc/sys/file.h
+  - sys/param.h:   contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32_msvc/sys/param.h
+  - sys/socket.h:  contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32/sys/socket.h
+  - sys/time.h:    contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32_msvc/sys/time.h
+  - sys/wait.h:    contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32/sys/wait.h
+  - unistd.h:      contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32_msvc/unistd.h
+  - utime.h:       contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32_msvc/utime.h
+  - dl.h
+
 - source_filter: "^contrib/libs/libx264"
   includes:
   - inttypes.h:    contrib/libs/libx264/extras/inttypes.h

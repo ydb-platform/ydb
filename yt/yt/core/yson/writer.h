@@ -28,7 +28,8 @@ public:
         EYsonFormat format = EYsonFormat::Binary,
         EYsonType type = EYsonType::Node,
         bool enableRaw = false,
-        int indent = DefaultIndent);
+        int indent = DefaultIndent,
+        bool passThroughUtf8Characters = false);
 
     // IYsonConsumer overrides.
     void OnStringScalar(TStringBuf value) override;
@@ -62,6 +63,7 @@ protected:
     const EYsonType Type_;
     const bool EnableRaw_;
     const int IndentSize_;
+    const bool PassThroughUtf8Characters_;
 
     int Depth_ = 0;
     bool EmptyCollection_ = true;

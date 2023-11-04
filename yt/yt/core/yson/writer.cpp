@@ -4,6 +4,8 @@
 
 #include <library/cpp/yt/coding/varint.h>
 
+#include <util/charset/utf8.h>
+
 #include <util/stream/buffer.h>
 #include <util/system/unaligned_mem.h>
 
@@ -110,6 +112,26 @@ void EscapeC(const char* str, size_t len, IOutputStream& output) {
     }
 }
 
+void WriteUtf8String(const char* str, size_t len, IOutputStream& output)
+{
+    char buffer[ESCAPE_C_BUFFER_SIZE];
+    const auto* ustr = reinterpret_cast<const unsigned char*>(str);
+    for (size_t i = 0; i < len;) {
+        size_t runeLen;
+        YT_VERIFY(RECODE_OK == GetUTF8CharLen(runeLen, ustr + i, ustr + len));
+        if (runeLen > 1) {
+            output.Write(ustr + i, runeLen);
+            i += runeLen;
+        } else {
+            YT_ASSERT(1 == runeLen);
+            // `EscapeC` must be called for case of non-ascii characters like `\t` and `\n`.
+            runeLen = EscapeC(ustr[i], (i + 1 < len ? ustr[i + 1] : 0), buffer);
+            output.Write(buffer, runeLen);
+            ++i;
+        }
+    }
+}
+
 size_t FloatToStringWithNanInf(double value, char* buf, size_t size)
 {
     if (std::isfinite(value)) {
@@ -143,12 +165,14 @@ TYsonWriter::TYsonWriter(
     EYsonFormat format,
     EYsonType type,
     bool enableRaw,
-    int indent)
+    int indent,
+    bool passThroughUtf8Characters)
     : Stream_(stream)
     , Format_(format)
     , Type_(type)
     , EnableRaw_(enableRaw)
     , IndentSize_(indent)
+    , PassThroughUtf8Characters_(passThroughUtf8Characters)
 {
     YT_ASSERT(Stream_);
 }
@@ -208,7 +232,11 @@ void TYsonWriter::WriteStringScalar(TStringBuf value)
         Stream_->Write(value.begin(), value.length());
     } else {
         Stream_->Write('"');
-        EscapeC(value.data(), value.length(), *Stream_);
+        if (PassThroughUtf8Characters_ && IsUtf(value)) {
+            WriteUtf8String(value.data(), value.length(), *Stream_);
+        } else {
+            EscapeC(value.data(), value.length(), *Stream_);
+        }
         Stream_->Write('"');
     }
 }

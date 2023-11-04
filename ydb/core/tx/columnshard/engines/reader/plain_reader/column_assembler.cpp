@@ -13,12 +13,12 @@ bool TAssembleBatch::DoExecute() {
     Y_ABORT_UNLESS(batchConstructor.GetColumnsCount());
 
     TPortionInfo::TPreparedBatchData::TAssembleOptions options;
-    auto addBatch = batchConstructor.Assemble(options);
+    auto addBatch = batchConstructor.AssembleTable(options);
     Y_ABORT_UNLESS(addBatch);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)
         ("columns_count", addBatch->num_columns())("num_rows", addBatch->num_rows());
     Filter->Apply(addBatch);
-    Result = addBatch;
+    Result = NArrow::ToBatch(addBatch, true);
 
     return true;
 }

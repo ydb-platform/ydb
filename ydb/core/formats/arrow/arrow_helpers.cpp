@@ -281,8 +281,16 @@ std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared
     return table ? ToBatch(table) : nullptr;
 }
 
-std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& table) {
-    Y_ABORT_UNLESS(table);
+std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& tableExt, const bool combine) {
+    Y_ABORT_UNLESS(tableExt);
+    std::shared_ptr<arrow::Table> table;
+    if (combine) {
+        auto res = tableExt->CombineChunks();
+        Y_ABORT_UNLESS(res.ok());
+        table = *res;
+    } else {
+        table = tableExt;
+    }
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(table->num_columns());
     for (auto& col : table->columns()) {
@@ -755,8 +763,9 @@ bool ReserveData(arrow::ArrayBuilder& builder, const size_t size) {
     return result.ok();
 }
 
-bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result,
-    const std::vector<std::string>& columnsOrder, const bool orderFieldsAreNecessary) {
+template <class TData, class TColumn, class TBuilder>
+bool MergeBatchColumnsImpl(const std::vector<std::shared_ptr<TData>>& batches, std::shared_ptr<TData>& result,
+    const std::vector<std::string>& columnsOrder, const bool orderFieldsAreNecessary, const TBuilder& builder) {
     if (batches.empty()) {
         result = nullptr;
         return true;
@@ -766,7 +775,7 @@ bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& b
         return true;
     }
     std::vector<std::shared_ptr<arrow::Field>> fields;
-    std::vector<std::shared_ptr<arrow::Array>> columns;
+    std::vector<std::shared_ptr<TColumn>> columns;
     std::map<std::string, ui32> fieldNames;
     for (auto&& i : batches) {
         Y_ABORT_UNLESS(i);
@@ -785,11 +794,9 @@ bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& b
     }
 
     Y_ABORT_UNLESS(fields.size() == columns.size());
-    if (columnsOrder.empty()) {
-        result = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), batches.front()->num_rows(), columns);
-    } else {
+    if (columnsOrder.size()) {
         std::vector<std::shared_ptr<arrow::Field>> fieldsOrdered;
-        std::vector<std::shared_ptr<arrow::Array>> columnsOrdered;
+        std::vector<std::shared_ptr<TColumn>> columnsOrdered;
         for (auto&& i : columnsOrder) {
             auto it = fieldNames.find(i);
             if (orderFieldsAreNecessary) {
@@ -803,8 +810,24 @@ bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& b
         std::swap(fieldsOrdered, fields);
         std::swap(columnsOrdered, columns);
     }
-    result = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), batches.front()->num_rows(), columns);
+    result = builder(std::make_shared<arrow::Schema>(fields), batches.front()->num_rows(), std::move(columns));
     return true;
+}
+
+bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::Table>>& batches, std::shared_ptr<arrow::Table>& result, const std::vector<std::string>& columnsOrder, const bool orderFieldsAreNecessary) {
+    const auto builder = [](const std::shared_ptr<arrow::Schema>& schema, const ui32 recordsCount, std::vector<std::shared_ptr<arrow::ChunkedArray>>&& columns) {
+        return arrow::Table::Make(schema, columns, recordsCount);
+    };
+
+    return MergeBatchColumnsImpl<arrow::Table, arrow::ChunkedArray>(batches, result, columnsOrder, orderFieldsAreNecessary, builder);
+}
+
+bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result, const std::vector<std::string>& columnsOrder, const bool orderFieldsAreNecessary) {
+    const auto builder = [](const std::shared_ptr<arrow::Schema>& schema, const ui32 recordsCount, std::vector<std::shared_ptr<arrow::Array>>&& columns) {
+        return arrow::RecordBatch::Make(schema, recordsCount, columns);
+    };
+
+    return MergeBatchColumnsImpl<arrow::RecordBatch, arrow::Array>(batches, result, columnsOrder, orderFieldsAreNecessary, builder);
 }
 
 std::partial_ordering ColumnsCompare(const std::vector<std::shared_ptr<arrow::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow::Array>>& y, const ui32 yRow) {

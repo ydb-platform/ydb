@@ -45,7 +45,8 @@ struct TDatumBatch {
     arrow::Status AddColumn(const std::string& name, arrow::Datum&& column);
     arrow::Result<arrow::Datum> GetColumnByName(const std::string& name) const;
     std::shared_ptr<arrow::RecordBatch> ToRecordBatch() const;
-    static std::shared_ptr<TDatumBatch> FromRecordBatch(std::shared_ptr<arrow::RecordBatch>& batch);
+    static std::shared_ptr<TDatumBatch> FromRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
+    static std::shared_ptr<TDatumBatch> FromTable(const std::shared_ptr<arrow::Table>& batch);
 };
 
 template <class TAssignObject>
@@ -299,7 +300,11 @@ struct TProgram {
 
     std::set<std::string> GetEarlyFilterColumns() const;
     NArrow::TColumnFilter MakeEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                      arrow::compute::ExecContext* ctx) const;
+        arrow::compute::ExecContext* ctx) const;
+    NArrow::TColumnFilter MakeEarlyFilter(const std::shared_ptr<arrow::Table>& batch,
+        arrow::compute::ExecContext* ctx) const;
+
+    NArrow::TColumnFilter MakeEarlyFilter(const std::shared_ptr<TProgramStep::TDatumBatch>& batch, arrow::compute::ExecContext* ctx) const;
 };
 
 inline arrow::Status ApplyProgram(

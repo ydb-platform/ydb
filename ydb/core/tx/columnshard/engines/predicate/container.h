@@ -63,7 +63,7 @@ public:
 
     static std::optional<TPredicateContainer> BuildPredicateTo(std::shared_ptr<NOlap::TPredicate> object, const TIndexInfo* indexInfo);
 
-    NKikimr::NArrow::TColumnFilter BuildFilter(const std::shared_ptr<arrow::RecordBatch>& data) const {
+    NKikimr::NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const {
         if (!Object) {
             return NArrow::TColumnFilter::BuildAllowFilter();
         }

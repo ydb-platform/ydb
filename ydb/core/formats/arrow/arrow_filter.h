@@ -127,8 +127,8 @@ public:
             return;
         }
         bool currentValue = getter[0];
-        ui32 sameValueCount = 0;
-        for (ui32 i = 0; i < count; ++i) {
+        ui32 sameValueCount = 1;
+        for (ui32 i = 1; i < count; ++i) {
             if (getter[i] != currentValue) {
                 Add(currentValue, sameValueCount);
                 sameValueCount = 0;
@@ -148,8 +148,10 @@ public:
     std::shared_ptr<arrow::BooleanArray> BuildArrowFilter(const ui32 expectedSize) const;
 
     bool IsTotalAllowFilter() const;
-
     bool IsTotalDenyFilter() const;
+    bool IsEmpty() const {
+        return Filter.empty();
+    }
 
     static TColumnFilter BuildStopFilter() {
         return TColumnFilter(false);
@@ -163,9 +165,9 @@ public:
     TColumnFilter Or(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
 
     // It makes a filter using composite predicate
-    static TColumnFilter MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border,
-        ECompareType compareType);
+    static TColumnFilter MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border, ECompareType compareType);
 
+    bool Apply(std::shared_ptr<arrow::Table>& batch);
     bool Apply(std::shared_ptr<arrow::RecordBatch>& batch);
 
     // Combines filters by 'and' operator (extFilter count is true positions count in self, thought extFitler patch exactly that positions)

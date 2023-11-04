@@ -195,8 +195,7 @@ std::shared_ptr<arrow::BooleanArray> TColumnFilter::BuildArrowFilter(const ui32 
     auto res = builder.Reserve(expectedSize);
     Y_VERIFY_OK(builder.AppendValues(BuildSimpleFilter(expectedSize)));
     std::shared_ptr<arrow::BooleanArray> out;
-    res = builder.Finish(&out);
-    Y_VERIFY_OK(res);
+    TStatusValidator::Validate(builder.Finish(&out));
     return out;
 }
 
@@ -301,23 +300,40 @@ NKikimr::NArrow::TColumnFilter TColumnFilter::MakePredicateFilter(const arrow::D
     return NArrow::TColumnFilter(std::move(bits));
 }
 
-bool TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch) {
+template <arrow::Datum::Kind kindExpected, class TData>
+bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch) {
     if (!batch || !batch->num_rows()) {
         return false;
     }
-    Y_VERIFY_S(Filter.empty() || Count == (size_t)batch->num_rows(), Count << " != " << batch->num_rows());
-    if (IsTotalDenyFilter()) {
+    AFL_VERIFY(filter.IsEmpty() || filter.Size() == (size_t)batch->num_rows())("filter_size", filter.Size())("batch_size", batch->num_rows());
+    if (filter.IsTotalDenyFilter()) {
         batch = batch->Slice(0, 0);
         return false;
     }
-    if (IsTotalAllowFilter()) {
+    if (filter.IsTotalAllowFilter()) {
         return true;
     }
-    auto res = arrow::compute::Filter(batch, BuildArrowFilter(batch->num_rows()));
+    auto res = arrow::compute::Filter(batch, filter.BuildArrowFilter(batch->num_rows()));
     Y_VERIFY_S(res.ok(), res.status().message());
-    Y_ABORT_UNLESS((*res).kind() == arrow::Datum::RECORD_BATCH);
-    batch = (*res).record_batch();
-    return batch->num_rows();
+    Y_ABORT_UNLESS((*res).kind() == kindExpected);
+    if constexpr (kindExpected == arrow::Datum::TABLE) {
+        batch = (*res).table();
+        return batch->num_rows();
+    }
+    if constexpr (kindExpected == arrow::Datum::RECORD_BATCH) {
+        batch = (*res).record_batch();
+        return batch->num_rows();
+    }
+    AFL_VERIFY(false);
+    return false;
+}
+
+bool TColumnFilter::Apply(std::shared_ptr<arrow::Table>& batch) {
+    return ApplyImpl<arrow::Datum::TABLE>(*this, batch);
+}
+
+bool TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch) {
+    return ApplyImpl<arrow::Datum::RECORD_BATCH>(*this, batch);
 }
 
 const std::vector<bool>& TColumnFilter::BuildSimpleFilter(const ui32 expectedSize) const {

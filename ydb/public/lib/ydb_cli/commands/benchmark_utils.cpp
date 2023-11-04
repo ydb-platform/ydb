@@ -242,7 +242,7 @@ public:
 
 TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client) {
     TStreamExecScanQuerySettings settings;
-    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+    settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
     auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
     ThrowOnError(it);
 
@@ -260,7 +260,7 @@ TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client
 
 TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client) {
     NQuery::TExecuteQuerySettings settings;
-    settings.StatsMode(NQuery::EStatsMode::Full);
+    settings.StatsMode(NQuery::EStatsMode::Basic);
     auto it = client.StreamExecuteQuery(
         query,
         NYdb::NQuery::TTxControl::BeginTx().CommitTx(),

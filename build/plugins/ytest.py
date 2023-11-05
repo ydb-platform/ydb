@@ -226,7 +226,7 @@ def validate_test(unit, kw):
         requirements_list = []
         for req_name, req_value in six.iteritems(requirements):
             requirements_list.append(req_name + ":" + req_value)
-        valid_kw['REQUIREMENTS'] = serialize_list(requirements_list)
+        valid_kw['REQUIREMENTS'] = serialize_list(sorted(requirements_list))
 
     # Mark test with ya:external tag if it requests any secret from external storages
     # It's not stable and nonreproducible by definition

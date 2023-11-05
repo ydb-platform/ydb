@@ -686,7 +686,7 @@
             },
             "platforms": [
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -696,7 +696,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -706,7 +706,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "WIN"
                     },
@@ -716,7 +716,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "WIN"
                     },

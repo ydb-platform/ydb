@@ -1646,9 +1646,6 @@ public:
         return nullptr;
     }
 
-    void UpdateStats() override {
-    }
-
     const TDqMeteringStats* GetMeteringStats() const override {
         try {
             NDqProto::TCommandHeader header;

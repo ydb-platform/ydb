@@ -84,7 +84,12 @@ public:
     }
 
     ~TTaskControllerImpl() override {
-        SetTaskCountMetric(0);
+        // we want to clear TaskCount instantly to use with real-time monitoring
+        // all other counters will be kept for some time to upload to Monitoring
+        // and removed together
+        auto aggrStats = AggregateQueryStatsByStage(TaskStat, Stages, CollectFull());
+        aggrStats.SetCounter(TaskStat.GetCounterName("TaskRunner", {{"Stage", "Total"}}, "TaskCount"), 0);
+        ExportStats(aggrStats, 0);
     }
 
 public:
@@ -291,6 +296,9 @@ private:
                     } else if (name == "InputRows") {
                         if (labels.count(SinkLabel)) publicCounterName = "query.sink_output_records";
                         isDeriv = true;
+                    } else if (name == "TaskCount") {
+                        publicCounterName = "query.running_tasks";
+                        isDeriv = true;
                     } else if (name == "MultiHop_LateThrownEventsCount") {
                         publicCounterName = "query.late_events";
                         isDeriv = true;
@@ -369,13 +377,11 @@ private:
         ADD_COUNTER(OutputBytes)
         // ADD_COUNTER(StartTimeMs)
 
+        ADD_COUNTER(WaitInputTimeUs)
+        ADD_COUNTER(WaitOutputTimeUs)
+
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
-        // ADD_COUNTER(WaitTimeUs)
-        // ADD_COUNTER(WaitOutputTimeUs)
-        // ADD_COUNTER(PendingInputTimeUs)
-        // ADD_COUNTER(PendingOutputTimeUs)
-        // ADD_COUNTER(FinishTimeUs)
 
         for (const auto& ingress : s.GetIngress()) {
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Ingress" + ingress.GetName() + "Bytes"), ingress.GetBytes());
@@ -460,18 +466,6 @@ private:
         }
     }
 
-    void SetTaskCountMetric(ui64 count) {
-        if (!ServiceCounters.Counters) {
-            return;
-        }
-        *ServiceCounters.Counters->GetCounter("TaskCount") = count;
-
-        if (!ServiceCounters.PublicCounters) {
-            return;
-        }
-        *ServiceCounters.PublicCounters->GetNamedCounter("name", "query.running_tasks") = count;
-    }
-
 public:
     void OnReadyState(TEvReadyState::TPtr& ev) {
 
@@ -486,8 +480,6 @@ public:
         const auto& actorIds = ev->Get()->Record.GetActorId();
         Y_ABORT_UNLESS(tasks.size() == actorIds.size());
 
-        SetTaskCountMetric(tasks.size());
-
         for (int i = 0; i < static_cast<int>(tasks.size()); ++i) {
             auto actorId = ActorIdFromProto(actorIds[i]);
             const auto& task = Tasks.emplace_back(NDq::TDqTaskSettings(&tasks[i]), actorId).first;
@@ -497,6 +489,13 @@ public:
             task.GetMeta().UnpackTo(&taskMeta);
             Stages.emplace(task.GetId(), taskMeta.GetStageId());
         }
+
+        for (const auto& [taskId, stageId] : Stages) {
+            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", 
+                {{"Task", ToString(taskId)}, {"Stage", ToString(stageId)}}, "CpuTimeUs"), 0);
+        }
+
+        ExportStats(AggregateQueryStatsByStage(TaskStat, Stages, CollectFull()), 0);
 
         YQL_CLOG(DEBUG, ProviderDq) << "Ready State: " << SelfId();
 

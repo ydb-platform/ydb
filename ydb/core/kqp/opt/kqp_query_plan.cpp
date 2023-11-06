@@ -1975,9 +1975,8 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
         SetNonZero(node, "ComputeTimeUs", taskStats.GetComputeCpuTimeUs());
 
-        SetNonZero(node, "WaitTimeUs", taskStats.GetWaitTimeUs());                   // need to be reviewed
-        SetNonZero(node, "PendingInputTimeUs", taskStats.GetPendingInputTimeUs());   // need to be reviewed
-        SetNonZero(node, "PendingOutputTimeUs", taskStats.GetPendingOutputTimeUs()); // need to be reviewed
+        SetNonZero(node, "WaitInputTimeUs", taskStats.GetWaitInputTimeUs());
+        SetNonZero(node, "WaitOutputTimeUs", taskStats.GetWaitOutputTimeUs());
 
         NKqpProto::TKqpTaskExtraStats taskExtraStats;
         if (taskStats.GetExtra().UnpackTo(&taskExtraStats)) {

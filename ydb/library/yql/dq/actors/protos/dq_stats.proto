@@ -205,11 +205,12 @@ message TDqTaskStats {
     uint64 StartTimeMs = 158;
     uint64 FinishTimeMs = 5;     // task finish time, timestamp in millis
     uint64 FirstRowTimeMs = 4;   // first row time, timestamp in millis
-    uint64 WaitTimeUs = 104;       // total wait (input + output) wall time
+    reserved 104;
+    uint64 WaitInputTimeUs = 111;  // wait input wall time  (any input: channels, source, ...)
     uint64 WaitOutputTimeUs = 105; // wait output wall time (any output: channels, sinks, ...)
-    uint64 PendingInputTimeUs = 107; // time waiting input data
-    uint64 PendingOutputTimeUs = 108; // time waiting output data
-    uint64 FinishTimeUs = 109; // time in finished state // ComputeCpuTimeUs + PendingInputTimeUs + PendingOutputTimeUs + FinishTimeUs == 100% (or == const in aggregated graphs for several stages/tasks)
+    reserved 107;
+    reserved 108;
+    reserved 109;
 }
 
 message TDqComputeActorStats {

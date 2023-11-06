@@ -625,8 +625,10 @@ protected:
 
     void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssues issues) {
         CA_LOG_E(InternalErrorLogString(statusCode, issues));
-        TaskRunner->GetAllocatorPtr()->InvalidateMemInfo();
-        TaskRunner->GetAllocatorPtr()->DisableStrictAllocationCheck();
+        if (TaskRunner) {
+            TaskRunner->GetAllocatorPtr()->InvalidateMemInfo();
+            TaskRunner->GetAllocatorPtr()->DisableStrictAllocationCheck();
+        }
         std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
         State = NDqProto::COMPUTE_STATE_FAILURE;
         ReportStateAndMaybeDie(statusCode, issues);
@@ -1940,11 +1942,7 @@ private:
     }
 
     virtual const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() {
-        if (!TaskRunner) {
-            return nullptr;
-        }
-        TaskRunner->UpdateStats();
-        return TaskRunner->GetStats();
+        return TaskRunner ? TaskRunner->GetStats() : nullptr;
     }
 
     virtual const IDqAsyncOutputBuffer* GetSink(ui64, const TAsyncOutputInfoBase& sinkInfo) const {

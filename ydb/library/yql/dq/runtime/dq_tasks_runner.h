@@ -30,40 +30,6 @@ enum class ERunStatus : ui32 {
     PendingOutput
 };
 
-class TRunStatusTimeMetrics {
-public:
-    void UpdateStatusTime(TDuration computeCpuTime = TDuration::Zero()) {
-        auto now = TInstant::Now();
-        StatusTime[ui32(CurrentStatus)] += now - StatusStartTime - computeCpuTime;
-        StatusStartTime = now;
-    }
-
-    void SetCurrentStatus(ERunStatus status, TDuration computeCpuTime) {
-        Y_ABORT_UNLESS(ui32(status) < StatusesCount);
-        UpdateStatusTime(computeCpuTime);
-        CurrentStatus = status;
-    }
-
-    TDuration operator[](ERunStatus status) const {
-        const ui32 index = ui32(status);
-        Y_ABORT_UNLESS(index < StatusesCount);
-        return StatusTime[index];
-    }
-
-    void Load(ERunStatus status, TDuration d) {
-        const ui32 index = ui32(status);
-        Y_ABORT_UNLESS(index < StatusesCount);
-        StatusTime[index] = d;
-    }
-
-    static constexpr ui32 StatusesCount = 3;
-
-private:
-    TInstant StatusStartTime = TInstant::Now();
-    ERunStatus CurrentStatus = ERunStatus::PendingInput;
-    TDuration StatusTime[StatusesCount];
-};
-
 struct TMkqlStat {
     NKikimr::NMiniKQL::TStatKey Key;
     i64 Value = 0;
@@ -76,12 +42,10 @@ struct TTaskRunnerStatsBase {
     TInstant StartTs;
 
     TDuration ComputeCpuTime;
-    TRunStatusTimeMetrics RunStatusTimeMetrics; // ComputeCpuTime + RunStatusTimeMetrics == 100% time
-
-    // profile stats
-    TDuration WaitTime; // wall time of waiting for input, scans & output
+    TDuration WaitInputTime;
     TDuration WaitOutputTime;
 
+    // profile stats
     NMonitoring::IHistogramCollectorPtr ComputeCpuTimeByRun; // in millis
 
     THashMap<ui32, THashMap<ui64, IDqInputChannel::TPtr>> InputChannels;   // SrcStageId => {ChannelId => Channel}
@@ -408,7 +372,6 @@ public:
     virtual const THashMap<TString, TString>& GetTaskParams() const = 0;
     virtual const TVector<TString>& GetReadRanges() const = 0;
 
-    virtual void UpdateStats() = 0;
     virtual const TDqTaskRunnerStats* GetStats() const = 0;
     virtual const TDqMeteringStats* GetMeteringStats() const = 0;
 
@@ -432,7 +395,7 @@ inline void Out<NYql::NDq::TTaskRunnerStatsBase>(IOutputStream& os, TTypeTraits<
        << "\tStartTs: " << stats.StartTs << Endl
        << "\tFinishTs: " << stats.FinishTs << Endl
        << "\tComputeCpuTime: " << stats.ComputeCpuTime << Endl
-       << "\tWaitTime: " << stats.WaitTime << Endl
+       << "\tWaitInputTime: " << stats.WaitInputTime << Endl
        << "\tWaitOutputTime: " << stats.WaitOutputTime << Endl
        << "\tsize of InputChannels: " << stats.InputChannels.size() << Endl
        << "\tsize of Sources: " << stats.Sources.size() << Endl

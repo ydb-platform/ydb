@@ -709,10 +709,11 @@ public:
 
         RunComputeTime = TDuration::Zero();
 
-        auto runStatus = FetchAndDispatch();
-        if (Stats) {
-            Stats->RunStatusTimeMetrics.SetCurrentStatus(runStatus, RunComputeTime);
+        if (Y_LIKELY(CollectBasic())) {
+            StopWaiting();
         }
+
+        auto runStatus = FetchAndDispatch();
 
         if (Y_UNLIKELY(CollectFull())) {
             Stats->ComputeCpuTimeByRun->Collect(RunComputeTime.MilliSeconds());
@@ -725,24 +726,21 @@ public:
             }
         }
 
-        if (runStatus == ERunStatus::Finished) {
-            if (CollectBasic()) {
-                Stats->FinishTs = TInstant::Now();
-                StopWaiting(Stats->FinishTs);
-            }
-
-            return ERunStatus::Finished;
-        }
-
-        if (CollectBasic()) {
-            auto now = TInstant::Now();
-            StartWaiting(now);
-            if (runStatus == ERunStatus::PendingOutput) {
-                StartWaitingOutput(now);
+        if (Y_LIKELY(CollectBasic())) {
+            switch (runStatus) {
+                case ERunStatus::Finished:
+                    Stats->FinishTs = TInstant::Now();
+                    break;
+                case ERunStatus::PendingInput:
+                    StartWaitingInput();
+                    break;
+                case ERunStatus::PendingOutput:
+                    StartWaitingOutput();
+                    break;
             }
         }
 
-        return runStatus; // PendingInput or PendingOutput
+        return runStatus;
     }
 
     bool HasEffects() const final {
@@ -833,12 +831,6 @@ public:
         return Context.RandomProvider;
     }
 
-    void UpdateStats() override {
-        if (Stats) {
-            Stats->RunStatusTimeMetrics.UpdateStatusTime();
-        }
-    }
-
     const TDqTaskRunnerStats* GetStats() const override {
         return Stats.get();
     }
@@ -901,12 +893,6 @@ private:
             wideBuffer.resize(AllocatedHolder->OutputWideType->GetElementsCount());
         }
         while (!AllocatedHolder->Output->IsFull()) {
-            if (CollectBasic()) {
-                auto now = TInstant::Now();
-                StopWaitingOutput(now);
-                StopWaiting(now);
-            }
-
             NUdf::TUnboxedValue value;
             NUdf::EFetchStatus fetchStatus;
             if (isWide) {
@@ -1000,32 +986,29 @@ private:
 
 private:
     // statistics support
+    std::optional<TInstant> StartWaitInputTime;
     std::optional<TInstant> StartWaitOutputTime;
-    std::optional<TInstant> StartWaitTime;
 
-    void StartWaitingOutput(TInstant now) {
-        if (CollectBasic() && !StartWaitOutputTime) {
-            StartWaitOutputTime = now;
+    void StartWaitingInput() {
+        if (!StartWaitInputTime) {
+            StartWaitInputTime = TInstant::Now();
         }
     }
 
-    void StopWaitingOutput(TInstant now) {
-        if (CollectBasic() && StartWaitOutputTime) {
-            Stats->WaitOutputTime += (now - *StartWaitOutputTime);
+    void StartWaitingOutput() {
+        if (!StartWaitOutputTime) {
+            StartWaitOutputTime = TInstant::Now();
+        }
+    }
+
+    void StopWaiting() {
+        if (StartWaitInputTime) {
+            Stats->WaitInputTime += (TInstant::Now() - *StartWaitInputTime);
+            StartWaitInputTime.reset();
+        }
+        if (StartWaitOutputTime) {
+            Stats->WaitOutputTime += (TInstant::Now() - *StartWaitOutputTime);
             StartWaitOutputTime.reset();
-        }
-    }
-
-    void StartWaiting(TInstant now) {
-        if (CollectBasic() && !StartWaitTime) {
-            StartWaitTime = now;
-        }
-    }
-
-    void StopWaiting(TInstant now) {
-        if (CollectBasic() && StartWaitTime) {
-            Stats->WaitTime += (now - *StartWaitTime);
-            StartWaitTime.reset();
         }
     }
 };

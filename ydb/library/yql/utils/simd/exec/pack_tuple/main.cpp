@@ -170,6 +170,6 @@ int main() {
     auto worker = tp.Create<NSimd::TSimdAVX2Traits>();
 
     bool fine = true;
-    fine &= worker->PackTuple(true);
+    fine &= worker->PackTuple(false);
     return !fine;
 }

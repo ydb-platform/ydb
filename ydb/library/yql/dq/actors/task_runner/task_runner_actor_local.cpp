@@ -83,7 +83,6 @@ public:
 
 private:
     void OnStatisticsRequest(TEvStatistics::TPtr& ev) {
-        TaskRunner->UpdateStats();
 
         THashMap<ui32, const IDqAsyncOutputBuffer*> sinks;
         for (const auto sinkId : ev->Get()->SinkIds) {
@@ -220,7 +219,6 @@ private:
         {
             auto st = MakeHolder<TEvStatistics>(std::move(ev->Get()->SinkIds), std::move(ev->Get()->InputTransformIds));
 
-            TaskRunner->UpdateStats();
             THashMap<ui32, const IDqAsyncOutputBuffer*> sinks;
             for (const auto sinkId : st->SinkIds) {
                 sinks[sinkId] = TaskRunner->GetSink(sinkId).Get();

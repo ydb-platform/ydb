@@ -807,7 +807,7 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
 
         {
             auto data = genData();
-            auto predicate = [](ui64 a) {
+            static auto predicate = [](ui64 a) {
                 return a % 128 == 0;
             };
             Y_DO_NOT_OPTIMIZE_AWAY(predicate);

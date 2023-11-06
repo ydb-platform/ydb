@@ -384,7 +384,6 @@ private:
             if (!NPgTypeAnn::RewriteValuesColumnNames(node, table, ctx, Types)) {
                 return TStatus::Error;
             }
-            rowType = table->SchemeNode;
             return TStatus::Repeat;
         }
 

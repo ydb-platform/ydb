@@ -251,7 +251,7 @@ Check how {{ ydb-short-name }} works:
  2. Start a new pod with [{{ ydb-short-name }} CLI]((../reference/ydb-cli/index.md)):
 
     ```bash
-    kubectl run -it --image=cr.yandex/yc/ydb:21.4.30 --rm ydb-cli bash
+    kubectl run -it --image=cr.yandex/crptqonuodf51kdj7a7d/ydb:22.4.44 --rm ydb-cli bash
     ```
 
  3. Query the {{ ydb-short-name }} database:

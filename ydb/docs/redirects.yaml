@@ -22,7 +22,7 @@ common:
   - from: /deploy/orchestrated/aws_eks.md
     to: /getting_started/kubernetes.md
   - from: /deploy/orchestrated/operate.md
-    to: /getting_started/aws_eks.md
+    to: /getting_started/kubernetes.md
 
 ru:
   - from: /concepts/column-table.md

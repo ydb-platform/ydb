@@ -61,6 +61,7 @@ on:
         default: "ydb/"
       build_preset:
         type: string
+        default: "relwithdebinfo"
       test_size:
         type: string
         default: "small,medium,large"

@@ -55,8 +55,10 @@ on:
     inputs:
       build_target:
         type: string
+        default: "ydb/"
       build_preset:
         type: string
+        default: "relwithdebinfo"
       test_size:
         type: string
         default: "small,medium,large"
@@ -71,11 +73,11 @@ on:
         default: true
       test_threads:
         type: string
-        default: "28"
+        default: 28
         description: "Test threads count"
       link_threads:
         type: string
-        default: "8"
+        default: 8
         description: "link threads count"
       runner_label:
         type: string

@@ -1318,6 +1318,7 @@ struct TCatalog {
             "pg_ls_dir",
             // transactions
             "pg_last_committed_xact",
+            "pg_current_wal_lsn"
         })
     {
         TString typeData;

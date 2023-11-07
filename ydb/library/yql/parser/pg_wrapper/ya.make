@@ -124,6 +124,16 @@ ELSEIF (OS_WINDOWS)
     )
 ENDIF()
 
+# Service files must be listed as dependencies to be included in export
+FILES(
+    copy_src.py
+    copy_src.sh
+    generate_kernels.py
+    generate_patch.sh
+    vars.txt
+    verify.sh
+)
+
 END()
 
 RECURSE(

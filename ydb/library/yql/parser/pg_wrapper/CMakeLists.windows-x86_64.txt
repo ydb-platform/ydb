@@ -975,3 +975,27 @@ target_sources(yql-parser-pg_wrapper PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/win32setlocale.c
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/win32stat.c
 )
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/copy_src.py
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/copy_src.py
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/copy_src.sh
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/copy_src.sh
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/generate_kernels.py
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/generate_kernels.py
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/generate_patch.sh
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/generate_patch.sh
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/vars.txt
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/vars.txt
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/verify.sh
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/verify.sh
+)

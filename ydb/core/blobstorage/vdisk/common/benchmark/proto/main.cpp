@@ -1,6 +1,3 @@
-#include "library/cpp/actors/core/event_pb.h"
-#include "library/cpp/testing/unittest/registar.h"
-#include "util/system/compiler.h"
 #include <cstring>
 
 #include <library/cpp/actors/core/event.h>
@@ -91,46 +88,45 @@ const char* storeString256 =
 ;
 
 template <std::derived_from<NActors::IEventBase> Event>
-void SerDeLoopIteration(const char* payload, char* buffer, size_t buffer_len, size_t iterations) {
-    Event ev;
-    ev.StorePayload(TRope(payload));
-    NActors::TCoroutineChunkSerializer serializer;
+void SerDeLoopIteration(Event& ev, size_t iterations) {
     for (size_t i = 0; i < iterations; ++i) {
-        serializer.SetSerializingEvent(&ev);
-        while (!serializer.IsComplete()) {
-            auto chunk = serializer.FeedBuf(buffer, buffer_len);
-            for (auto v : chunk) {
-                Y_UNUSED(v);
-            }
-        }
+        NActors::TAllocChunkSerializer serializer;
+        ev.SerializeToArcadiaStream(&serializer);
+        auto data = serializer.Release(ev.CreateSerializationInfo());
+        NKikimr::TEvBlobStorage::TEvVPut::Load(data.Get());
     }
 }
 
 } // namespace
 
 Y_CPU_BENCHMARK(Put_32, info) {
-    char buffer[512];
-    SerDeLoopIteration<NKikimr::TEvBlobStorage::TEvVPut>(storeString32, buffer, sizeof(buffer), info.Iterations());
+    NKikimr::TEvBlobStorage::TEvVPut ev;
+    ev.StorePayload(TRope(storeString32));
+    SerDeLoopIteration(ev, info.Iterations());
 }
 
 Y_CPU_BENCHMARK(Put_64, info) {
-    char buffer[512];
-    SerDeLoopIteration<NKikimr::TEvBlobStorage::TEvVPut>(storeString64, buffer, sizeof(buffer), info.Iterations());
+    NKikimr::TEvBlobStorage::TEvVPut ev;
+    ev.StorePayload(TRope(storeString64));
+    SerDeLoopIteration(ev, info.Iterations());
 }
 
 Y_CPU_BENCHMARK(Put_128, info) {
-    char buffer[512];
-    SerDeLoopIteration<NKikimr::TEvBlobStorage::TEvVPut>(storeString128, buffer, sizeof(buffer), info.Iterations());
+    NKikimr::TEvBlobStorage::TEvVPut ev;
+    ev.StorePayload(TRope(storeString128));
+    SerDeLoopIteration(ev, info.Iterations());
 }
 
 Y_CPU_BENCHMARK(Put_256, info) {
-    char buffer[512];
-    SerDeLoopIteration<NKikimr::TEvBlobStorage::TEvVPut>(storeString256, buffer, sizeof(buffer), info.Iterations());
+    NKikimr::TEvBlobStorage::TEvVPut ev;
+    ev.StorePayload(TRope(storeString256));
+    SerDeLoopIteration(ev, info.Iterations());
 }
 
-// Y_CPU_BENCHMARK(Get_32, info) {
-//     SerDeLoopIteration<NKikimr::TEvBlobStorage::TEvVGet>(storeString32, info.Iterations());
-// }
+Y_CPU_BENCHMARK(Get, info) {
+    NKikimr::TEvBlobStorage::TEvVGet ev;
+    SerDeLoopIteration(ev, info.Iterations());
+}
 
 // Y_CPU_BENCHMARK(Get_64, info) {
 //     SerDeLoopIteration<NKikimr::TEvBlobStorage::TEvVGet>(storeString64, info.Iterations());

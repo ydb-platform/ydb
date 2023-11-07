@@ -43,6 +43,7 @@ target_link_libraries(providers-yt-provider PUBLIC
   core-url_lister-interface
   yql-dq-integration
   yql-dq-opt
+  yql-dq-type_ann
   library-yql-minikql
   providers-common-codec
   providers-common-config

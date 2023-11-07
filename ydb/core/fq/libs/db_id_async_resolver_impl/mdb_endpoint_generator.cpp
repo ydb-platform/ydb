@@ -8,9 +8,8 @@ namespace NFq {
 
     using TEndpoint = NYql::IMdbEndpointGenerator::TEndpoint;
 
-    // Currently we're going to use only HTTP protocol for ClickHouse
-    constexpr ui32 CLICKHOUSE_SECURE_PORT = 8443;
-    constexpr ui32 CLICKHOUSE_INSECURE_PORT = 8123;
+    constexpr ui32 CLICKHOUSE_SECURE_PORT = 9440;
+    constexpr ui32 CLICKHOUSE_INSECURE_PORT = 9000;
 
     // Managed PostgreSQL provides the only port both for secure and insecure connections
     constexpr ui32 POSTGRESQL_PORT = 6432;

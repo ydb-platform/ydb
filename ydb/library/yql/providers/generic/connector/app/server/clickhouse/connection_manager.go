@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -76,8 +75,14 @@ func (c *connectionManager) Make(
 		return nil, fmt.Errorf("currently only basic auth is supported")
 	}
 
-	if dsi.Protocol != api_common.EProtocol_HTTP {
-		// FIXME: fix NATIVE protocol in https://st.yandex-team.ru/YQ-2286
+	var protocol clickhouse.Protocol
+
+	switch dsi.Protocol {
+	case api_common.EProtocol_NATIVE:
+		protocol = clickhouse.Native
+	case api_common.EProtocol_HTTP:
+		protocol = clickhouse.HTTP
+	default:
 		return nil, fmt.Errorf("can not run ClickHouse connection with protocol '%v'", dsi.Protocol)
 	}
 
@@ -88,11 +93,6 @@ func (c *connectionManager) Make(
 			Username: dsi.Credentials.GetBasic().Username,
 			Password: dsi.Credentials.GetBasic().Password,
 		},
-		DialContext: func(ctx context.Context, addr string) (net.Conn, error) {
-			var d net.Dialer
-
-			return d.DialContext(ctx, "tcp", addr)
-		},
 		Debug: true,
 		Debugf: func(format string, v ...any) {
 			logger.Debugf(format, v...)
@@ -100,7 +100,7 @@ func (c *connectionManager) Make(
 		Compression: &clickhouse.Compression{
 			Method: clickhouse.CompressionLZ4,
 		},
-		Protocol: clickhouse.HTTP,
+		Protocol: protocol,
 	}
 
 	if dsi.UseTls {
@@ -109,26 +109,20 @@ func (c *connectionManager) Make(
 		}
 	}
 
-	// FIXME: uncomment after YQ-2286
-	// conn, err := clickhouse.Open(opts)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("open connection: %w", err)
-	// }
-
 	conn := clickhouse.OpenDB(opts)
-
 	if err := conn.Ping(); err != nil {
 		return nil, fmt.Errorf("conn ping: %w", err)
 	}
 
 	const (
-		maxIdleConns = 5
-		maxOpenConns = 10
+		maxIdleConns    = 5
+		maxOpenConns    = 10
+		connMaxLifetime = time.Hour
 	)
 
 	conn.SetMaxIdleConns(maxIdleConns)
 	conn.SetMaxOpenConns(maxOpenConns)
-	conn.SetConnMaxLifetime(time.Hour)
+	conn.SetConnMaxLifetime(connMaxLifetime)
 
 	queryLogger := c.QueryLoggerFactory.Make(logger)
 

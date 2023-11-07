@@ -184,7 +184,7 @@ TString MakeCreateExternalDataSourceQuery(
                     SOURCE_TYPE="ClickHouse",
                     MDB_CLUSTER_ID={mdb_cluster_id},
                     DATABASE_NAME={database_name},
-                    PROTOCOL="HTTP",
+                    PROTOCOL="NATIVE",
                     USE_TLS="true"
                 )",
                 "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_id(), '"'),

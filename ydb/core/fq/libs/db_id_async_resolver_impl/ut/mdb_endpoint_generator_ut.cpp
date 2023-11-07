@@ -9,11 +9,11 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1c-p5waby2y5y1kb5ue.db.yandex.net", true),
-            TEndpoint("rc1c-p5waby2y5y1kb5ue.db.yandex.net", 8443));
+            TEndpoint("rc1c-p5waby2y5y1kb5ue.db.yandex.net", 9440));
 
         UNIT_ASSERT_VALUES_EQUAL(
             transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "ya.ru", false),
-            TEndpoint("ya.db.yandex.net", 8123));
+            TEndpoint("ya.db.yandex.net", 9000));
     }
 
     Y_UNIT_TEST(Generic_NoTransformHost) {
@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", true),
-            TEndpoint("rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", 8443));
+            TEndpoint("rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", 9440));
 
         UNIT_ASSERT_VALUES_EQUAL(
             transformer->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net", false),
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", false),
-            TEndpoint("rc1a-d6dv17lv47v5mcop.db.yandex.net", 8123));
+            TEndpoint("rc1a-d6dv17lv47v5mcop.db.yandex.net", 9000));
 
         UNIT_ASSERT_VALUES_EQUAL(
             transformer->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net", true),

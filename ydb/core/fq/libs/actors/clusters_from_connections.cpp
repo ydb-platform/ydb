@@ -115,7 +115,7 @@ void FillGenericClusterConfigBase(
     // In YQv2 protocol can be configured via `CREATE EXTERNAL DATA SOURCE` params.
     switch (dataSourceKind) {
         case NYql::NConnector::NApi::CLICKHOUSE:
-            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::HTTP);
+            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
             break;
         case NYql::NConnector::NApi::POSTGRESQL:
             clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);

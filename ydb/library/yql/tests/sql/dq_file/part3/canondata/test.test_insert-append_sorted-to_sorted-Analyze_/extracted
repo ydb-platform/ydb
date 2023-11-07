@@ -1,13 +1,5 @@
 <tmp_path>/program.sql:<main>: Warning: Type annotation
 
-    <tmp_path>/program.sql:<main>:12:19: Warning: At function: YtPublish!
-    	insert into plato.Output4
-	                  ^
-        <tmp_path>/program.sql:<main>:12:19: Warning: Sort order of written data differs from the order of "Output4" table content. Result table content will be unordered
-        	insert into plato.Output4
-	                  ^
-<tmp_path>/program.sql:<main>: Warning: Type annotation
-
     <tmp_path>/program.sql:<main>:3:19: Warning: At function: YtPublish!
     	insert into plato.Output1
 	                  ^
@@ -21,6 +13,14 @@
 	                  ^
         <tmp_path>/program.sql:<main>:9:19: Warning: Sort order of written data differs from the order of "Output3" table content. Result table content will be ordered by key(asc),subkey(asc)
         	insert into plato.Output3
+	                  ^
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:12:19: Warning: At function: YtPublish!
+    	insert into plato.Output4
+	                  ^
+        <tmp_path>/program.sql:<main>:12:19: Warning: Sort order of written data differs from the order of "Output4" table content. Result table content will be unordered
+        	insert into plato.Output4
 	                  ^
 <tmp_path>/program.sql:<main>: Warning: Type annotation
 

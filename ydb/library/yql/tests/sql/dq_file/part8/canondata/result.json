@@ -778,23 +778,23 @@
     "test.test[aggregate-listbuiltin_constness-default.txt-Results]": [],
     "test.test[aggregate-native_desc_group_compact_by--Analyze]": [
         {
-            "checksum": "f8d6e36fcb9d042860e7a47bf8d8eb18",
-            "size": 20546,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1931696/82ea795a06df7c3a825b7d991893b35cf6220bf5/resource.tar.gz#test.test_aggregate-native_desc_group_compact_by--Analyze_/plan.txt"
+            "checksum": "9dcd82f7054a465703a47419f7e1d81e",
+            "size": 16285,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_aggregate-native_desc_group_compact_by--Analyze_/plan.txt"
         }
     ],
     "test.test[aggregate-native_desc_group_compact_by--Debug]": [
         {
-            "checksum": "e57dc1821763bfa207801da1c66c6af7",
-            "size": 6492,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1931696/82ea795a06df7c3a825b7d991893b35cf6220bf5/resource.tar.gz#test.test_aggregate-native_desc_group_compact_by--Debug_/opt.yql_patched"
+            "checksum": "a7a130a207b4a32aca971b8b070ed24c",
+            "size": 5851,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_aggregate-native_desc_group_compact_by--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-native_desc_group_compact_by--Plan]": [
         {
-            "checksum": "f8d6e36fcb9d042860e7a47bf8d8eb18",
-            "size": 20546,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1871102/fc5ed8103fd812712bf2a97977898a961a27156e/resource.tar.gz#test.test_aggregate-native_desc_group_compact_by--Plan_/plan.txt"
+            "checksum": "9dcd82f7054a465703a47419f7e1d81e",
+            "size": 16285,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_aggregate-native_desc_group_compact_by--Plan_/plan.txt"
         }
     ],
     "test.test[aggregate-native_desc_group_compact_by--Results]": [],
@@ -1250,23 +1250,23 @@
     "test.test[column_order-align_publish--Results]": [],
     "test.test[column_order-select_action-default.txt-Analyze]": [
         {
-            "checksum": "33a4c777e38f71a0e1fdb91020b5d5ae",
-            "size": 5700,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1931696/82ea795a06df7c3a825b7d991893b35cf6220bf5/resource.tar.gz#test.test_column_order-select_action-default.txt-Analyze_/plan.txt"
+            "checksum": "7bdb680ee15c3ab6bb16391e1dc53025",
+            "size": 5801,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_column_order-select_action-default.txt-Analyze_/plan.txt"
         }
     ],
     "test.test[column_order-select_action-default.txt-Debug]": [
         {
-            "checksum": "24fe6e9952493b8215d4645de1485ec0",
-            "size": 2148,
-            "uri": "https://storage.yandex-team.ru/get-devtools/937458/372c21dc6b7f4fa4447e1f25ce0343a62838ba0c/resource.tar.gz#test.test_column_order-select_action-default.txt-Debug_/opt.yql_patched"
+            "checksum": "fbcca03dac0a5a558e57033582472c3e",
+            "size": 2140,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_column_order-select_action-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[column_order-select_action-default.txt-Plan]": [
         {
-            "checksum": "33a4c777e38f71a0e1fdb91020b5d5ae",
-            "size": 5700,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1946324/c7905148ccc6742256ee4a209186276ffdcd07ac/resource.tar.gz#test.test_column_order-select_action-default.txt-Plan_/plan.txt"
+            "checksum": "7bdb680ee15c3ab6bb16391e1dc53025",
+            "size": 5801,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_column_order-select_action-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[column_order-select_action-default.txt-Results]": [],
@@ -1316,23 +1316,23 @@
     "test.test[column_order-union_all_positional-default.txt-Results]": [],
     "test.test[count-boolean_count--Analyze]": [
         {
-            "checksum": "987f6fd9dbccb615369b73347a8f0247",
-            "size": 12483,
-            "uri": "https://storage.yandex-team.ru/get-devtools/212715/05112758aa31c86216a47b30fa10eee1e52db258/resource.tar.gz#test.test_count-boolean_count--Analyze_/plan.txt"
+            "checksum": "9f5f36781292213e872f80269aae57ac",
+            "size": 10977,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_count-boolean_count--Analyze_/plan.txt"
         }
     ],
     "test.test[count-boolean_count--Debug]": [
         {
-            "checksum": "4501a0da2aa16232375aef42a65f4de9",
-            "size": 5392,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1689644/90acca9b171ecce398f65b70b237cc25e6006718/resource.tar.gz#test.test_count-boolean_count--Debug_/opt.yql_patched"
+            "checksum": "0681bfbb2175286c069f98270ebbb9d2",
+            "size": 5185,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_count-boolean_count--Debug_/opt.yql_patched"
         }
     ],
     "test.test[count-boolean_count--Plan]": [
         {
-            "checksum": "987f6fd9dbccb615369b73347a8f0247",
-            "size": 12483,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/21da85bae1b4363f9d35ac14bdb3122767615cb5/resource.tar.gz#test.test_count-boolean_count--Plan_/plan.txt"
+            "checksum": "9f5f36781292213e872f80269aae57ac",
+            "size": 10977,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_count-boolean_count--Plan_/plan.txt"
         }
     ],
     "test.test[count-boolean_count--Results]": [],
@@ -1558,23 +1558,23 @@
     "test.test[distinct-distinct_one_count-default.txt-Results]": [],
     "test.test[dq-precompute_tree-default.txt-Analyze]": [
         {
-            "checksum": "0a4efc1045288b43061b6fc77c691f2c",
-            "size": 10469,
-            "uri": "https://storage.yandex-team.ru/get-devtools/212715/05112758aa31c86216a47b30fa10eee1e52db258/resource.tar.gz#test.test_dq-precompute_tree-default.txt-Analyze_/plan.txt"
+            "checksum": "10c791b0a231afc47723f28358c1e6fe",
+            "size": 8216,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_dq-precompute_tree-default.txt-Analyze_/plan.txt"
         }
     ],
     "test.test[dq-precompute_tree-default.txt-Debug]": [
         {
-            "checksum": "a25f2370caee266bdc19308e749e722d",
-            "size": 4672,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1689644/90acca9b171ecce398f65b70b237cc25e6006718/resource.tar.gz#test.test_dq-precompute_tree-default.txt-Debug_/opt.yql_patched"
+            "checksum": "3eeb1741b7e0c53b2fdd6a1039df4ae3",
+            "size": 4189,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_dq-precompute_tree-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[dq-precompute_tree-default.txt-Plan]": [
         {
-            "checksum": "0a4efc1045288b43061b6fc77c691f2c",
-            "size": 10469,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/21da85bae1b4363f9d35ac14bdb3122767615cb5/resource.tar.gz#test.test_dq-precompute_tree-default.txt-Plan_/plan.txt"
+            "checksum": "10c791b0a231afc47723f28358c1e6fe",
+            "size": 8216,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_dq-precompute_tree-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[dq-precompute_tree-default.txt-Results]": [
@@ -2126,23 +2126,23 @@
     "test.test[hor_join-group_yamr--Results]": [],
     "test.test[hor_join-out_table_record-default.txt-Analyze]": [
         {
-            "checksum": "7fcf6b08b81356af98b8b191b98cacb7",
-            "size": 5005,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1931696/82ea795a06df7c3a825b7d991893b35cf6220bf5/resource.tar.gz#test.test_hor_join-out_table_record-default.txt-Analyze_/plan.txt"
+            "checksum": "4c3e60b81eebec9cef6181a11c3b5b95",
+            "size": 5047,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_hor_join-out_table_record-default.txt-Analyze_/plan.txt"
         }
     ],
     "test.test[hor_join-out_table_record-default.txt-Debug]": [
         {
-            "checksum": "ed71444910f8a2fda9548002bf7c0573",
-            "size": 2367,
-            "uri": "https://storage.yandex-team.ru/get-devtools/937458/372c21dc6b7f4fa4447e1f25ce0343a62838ba0c/resource.tar.gz#test.test_hor_join-out_table_record-default.txt-Debug_/opt.yql_patched"
+            "checksum": "570972ad484fb27f8c167027b3585cef",
+            "size": 2362,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_hor_join-out_table_record-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[hor_join-out_table_record-default.txt-Plan]": [
         {
-            "checksum": "7fcf6b08b81356af98b8b191b98cacb7",
-            "size": 5005,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1925842/341fc37dc897d9710faf3e494b064e93d76d8c61/resource.tar.gz#test.test_hor_join-out_table_record-default.txt-Plan_/plan.txt"
+            "checksum": "4c3e60b81eebec9cef6181a11c3b5b95",
+            "size": 5047,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_hor_join-out_table_record-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[hor_join-out_table_record-default.txt-Results]": [],
@@ -2214,9 +2214,9 @@
     "test.test[in-in_ansi_variant-default.txt-Results]": [],
     "test.test[in-in_tablesource_to_equijoin--Analyze]": [
         {
-            "checksum": "21a9fa3eda1e1e233b8501c34bfc3cd9",
-            "size": 16154,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1931696/82ea795a06df7c3a825b7d991893b35cf6220bf5/resource.tar.gz#test.test_in-in_tablesource_to_equijoin--Analyze_/plan.txt"
+            "checksum": "122e09f7490277f15fc02411789ee411",
+            "size": 13946,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_in-in_tablesource_to_equijoin--Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_in-in_tablesource_to_equijoin--Analyze_/extracted"
@@ -2224,16 +2224,16 @@
     ],
     "test.test[in-in_tablesource_to_equijoin--Debug]": [
         {
-            "checksum": "43a7392d21bdd7e575e7390dbfd58d63",
-            "size": 9814,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1931696/82ea795a06df7c3a825b7d991893b35cf6220bf5/resource.tar.gz#test.test_in-in_tablesource_to_equijoin--Debug_/opt.yql_patched"
+            "checksum": "fec3f36eba5ddccad0ba50639f5f9e6a",
+            "size": 9266,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_in-in_tablesource_to_equijoin--Debug_/opt.yql_patched"
         }
     ],
     "test.test[in-in_tablesource_to_equijoin--Plan]": [
         {
-            "checksum": "21a9fa3eda1e1e233b8501c34bfc3cd9",
-            "size": 16154,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1871102/fc5ed8103fd812712bf2a97977898a961a27156e/resource.tar.gz#test.test_in-in_tablesource_to_equijoin--Plan_/plan.txt"
+            "checksum": "122e09f7490277f15fc02411789ee411",
+            "size": 13946,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_in-in_tablesource_to_equijoin--Plan_/plan.txt"
         }
     ],
     "test.test[in-in_tablesource_to_equijoin--Results]": [
@@ -2297,9 +2297,9 @@
     "test.test[insert-append_missing_null-default.txt-Results]": [],
     "test.test[insert-append_sorted-to_sorted_desc-Analyze]": [
         {
-            "checksum": "64faf0a49ff2cfbf31260d11a3d6576d",
-            "size": 28911,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1925821/1d295f9b4197e0ee9040dbe96e131629e0b40339/resource.tar.gz#test.test_insert-append_sorted-to_sorted_desc-Analyze_/plan.txt"
+            "checksum": "481189ba3963a777eab018b6ea6afba2",
+            "size": 27928,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_insert-append_sorted-to_sorted_desc-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_insert-append_sorted-to_sorted_desc-Analyze_/extracted"
@@ -2307,16 +2307,16 @@
     ],
     "test.test[insert-append_sorted-to_sorted_desc-Debug]": [
         {
-            "checksum": "a3889d77a1c1253c093accf24c187a18",
-            "size": 10291,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1814674/29b24dbed7babe52d7bbbfea56ba89396baa0be1/resource.tar.gz#test.test_insert-append_sorted-to_sorted_desc-Debug_/opt.yql_patched"
+            "checksum": "ae2265cf351074c604ebb22de06dd5eb",
+            "size": 10173,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_insert-append_sorted-to_sorted_desc-Debug_/opt.yql_patched"
         }
     ],
     "test.test[insert-append_sorted-to_sorted_desc-Plan]": [
         {
-            "checksum": "5f12d8abd7a8bdc4b7c0492f85159aa3",
-            "size": 29906,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1925821/1d295f9b4197e0ee9040dbe96e131629e0b40339/resource.tar.gz#test.test_insert-append_sorted-to_sorted_desc-Plan_/plan.txt"
+            "checksum": "0c5ae12e6695f611d8f97bf9ec437b93",
+            "size": 28923,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_insert-append_sorted-to_sorted_desc-Plan_/plan.txt"
         }
     ],
     "test.test[insert-append_sorted-to_sorted_desc-Results]": [
@@ -2547,23 +2547,23 @@
     "test.test[join-filter_joined--Results]": [],
     "test.test[join-force_merge_join-default.txt-Analyze]": [
         {
-            "checksum": "d39ee9ce589f92d6aac3e1dab37d1176",
-            "size": 4576,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1925842/e6cc1f75003cede9224c8240aca5f346d23c70ae/resource.tar.gz#test.test_join-force_merge_join-default.txt-Analyze_/plan.txt"
+            "checksum": "856c057856b84da1e92ddf3386ac85f3",
+            "size": 4648,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-force_merge_join-default.txt-Analyze_/plan.txt"
         }
     ],
     "test.test[join-force_merge_join-default.txt-Debug]": [
         {
-            "checksum": "756607f7f19eb23f9928e35ce371cc5a",
-            "size": 2445,
-            "uri": "https://storage.yandex-team.ru/get-devtools/937458/372c21dc6b7f4fa4447e1f25ce0343a62838ba0c/resource.tar.gz#test.test_join-force_merge_join-default.txt-Debug_/opt.yql_patched"
+            "checksum": "77b31f1dbc1b8419ab5e5d5cffb8add1",
+            "size": 2409,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-force_merge_join-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-force_merge_join-default.txt-Plan]": [
         {
-            "checksum": "d39ee9ce589f92d6aac3e1dab37d1176",
-            "size": 4576,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/3eab34a9fea728b5b784b7fa17d16314345525ea/resource.tar.gz#test.test_join-force_merge_join-default.txt-Plan_/plan.txt"
+            "checksum": "856c057856b84da1e92ddf3386ac85f3",
+            "size": 4648,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-force_merge_join-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[join-force_merge_join-default.txt-Results]": [],
@@ -2597,23 +2597,23 @@
     ],
     "test.test[join-join_comp_common_table-off-Analyze]": [
         {
-            "checksum": "83e587141b28f59119dd5bb47a90fd17",
-            "size": 30674,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1931696/82ea795a06df7c3a825b7d991893b35cf6220bf5/resource.tar.gz#test.test_join-join_comp_common_table-off-Analyze_/plan.txt"
+            "checksum": "1b69f9ed5d4ee7b2f861f94e05f87f74",
+            "size": 30716,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-join_comp_common_table-off-Analyze_/plan.txt"
         }
     ],
     "test.test[join-join_comp_common_table-off-Debug]": [
         {
-            "checksum": "ab00f176904f7e21bc39215b2aeb1ccb",
-            "size": 8287,
-            "uri": "https://storage.yandex-team.ru/get-devtools/937458/372c21dc6b7f4fa4447e1f25ce0343a62838ba0c/resource.tar.gz#test.test_join-join_comp_common_table-off-Debug_/opt.yql_patched"
+            "checksum": "b2372350128eb0e4e3932fde99bd0846",
+            "size": 8228,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-join_comp_common_table-off-Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-join_comp_common_table-off-Plan]": [
         {
-            "checksum": "83e587141b28f59119dd5bb47a90fd17",
-            "size": 30674,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1871102/fc5ed8103fd812712bf2a97977898a961a27156e/resource.tar.gz#test.test_join-join_comp_common_table-off-Plan_/plan.txt"
+            "checksum": "1b69f9ed5d4ee7b2f861f94e05f87f74",
+            "size": 30716,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-join_comp_common_table-off-Plan_/plan.txt"
         }
     ],
     "test.test[join-join_comp_common_table-off-Results]": [
@@ -3002,23 +3002,23 @@
     "test.test[join-mergejoin_sorts_output_for_sort_left--Results]": [],
     "test.test[join-nested_semi_join--Analyze]": [
         {
-            "checksum": "0db1b79872ee1542b6a9f55fbd0e8207",
-            "size": 8421,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937150/c49758d527ec85011ab8f1e29da739cbd14731c8/resource.tar.gz#test.test_join-nested_semi_join--Analyze_/plan.txt"
+            "checksum": "03cdf3c35ad4f73b183454d77ca69a20",
+            "size": 5517,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-nested_semi_join--Analyze_/plan.txt"
         }
     ],
     "test.test[join-nested_semi_join--Debug]": [
         {
-            "checksum": "aa2282949f898adddce78acd1a4ffc1e",
-            "size": 2806,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1917492/38396ffc75979034965f5365aa27fa1c534e80f8/resource.tar.gz#test.test_join-nested_semi_join--Debug_/opt.yql_patched"
+            "checksum": "f4ab822f732fbb8e068e2892f2468afd",
+            "size": 2470,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-nested_semi_join--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-nested_semi_join--Plan]": [
         {
-            "checksum": "0db1b79872ee1542b6a9f55fbd0e8207",
-            "size": 8421,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937150/c49758d527ec85011ab8f1e29da739cbd14731c8/resource.tar.gz#test.test_join-nested_semi_join--Plan_/plan.txt"
+            "checksum": "03cdf3c35ad4f73b183454d77ca69a20",
+            "size": 5517,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-nested_semi_join--Plan_/plan.txt"
         }
     ],
     "test.test[join-nested_semi_join--Results]": [],
@@ -3168,45 +3168,45 @@
     "test.test[join-premap_merge_inner--Results]": [],
     "test.test[join-premap_no_premap--Analyze]": [
         {
-            "checksum": "0ad0845c89def4cb7955ef3befb5d3fa",
-            "size": 14766,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1931696/82ea795a06df7c3a825b7d991893b35cf6220bf5/resource.tar.gz#test.test_join-premap_no_premap--Analyze_/plan.txt"
+            "checksum": "f550a2df3954deb15cdec7886099f46a",
+            "size": 14838,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-premap_no_premap--Analyze_/plan.txt"
         }
     ],
     "test.test[join-premap_no_premap--Debug]": [
         {
-            "checksum": "48e210e6ce5d5d103002b3169a217963",
-            "size": 5496,
-            "uri": "https://storage.yandex-team.ru/get-devtools/937458/372c21dc6b7f4fa4447e1f25ce0343a62838ba0c/resource.tar.gz#test.test_join-premap_no_premap--Debug_/opt.yql_patched"
+            "checksum": "25c3886766618b873de45bf557cb26c5",
+            "size": 5455,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-premap_no_premap--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-premap_no_premap--Plan]": [
         {
-            "checksum": "0ad0845c89def4cb7955ef3befb5d3fa",
-            "size": 14766,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1871102/fc5ed8103fd812712bf2a97977898a961a27156e/resource.tar.gz#test.test_join-premap_no_premap--Plan_/plan.txt"
+            "checksum": "f550a2df3954deb15cdec7886099f46a",
+            "size": 14838,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-premap_no_premap--Plan_/plan.txt"
         }
     ],
     "test.test[join-premap_no_premap--Results]": [],
     "test.test[join-premap_no_premap-off-Analyze]": [
         {
-            "checksum": "6338ac19b4ccc0358a6d49146c6db38f",
-            "size": 16375,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1931696/82ea795a06df7c3a825b7d991893b35cf6220bf5/resource.tar.gz#test.test_join-premap_no_premap-off-Analyze_/plan.txt"
+            "checksum": "dbf77f6a3ef65d0eda0029dfe001c65b",
+            "size": 16447,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-premap_no_premap-off-Analyze_/plan.txt"
         }
     ],
     "test.test[join-premap_no_premap-off-Debug]": [
         {
-            "checksum": "c45a8dc1c6cb398ff2f2fffa3029ea0e",
-            "size": 5174,
-            "uri": "https://storage.yandex-team.ru/get-devtools/937458/372c21dc6b7f4fa4447e1f25ce0343a62838ba0c/resource.tar.gz#test.test_join-premap_no_premap-off-Debug_/opt.yql_patched"
+            "checksum": "64c6b5e53fbecbc69f724880a1120c31",
+            "size": 5138,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-premap_no_premap-off-Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-premap_no_premap-off-Plan]": [
         {
-            "checksum": "6338ac19b4ccc0358a6d49146c6db38f",
-            "size": 16375,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1871102/fc5ed8103fd812712bf2a97977898a961a27156e/resource.tar.gz#test.test_join-premap_no_premap-off-Plan_/plan.txt"
+            "checksum": "dbf77f6a3ef65d0eda0029dfe001c65b",
+            "size": 16447,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-premap_no_premap-off-Plan_/plan.txt"
         }
     ],
     "test.test[join-premap_no_premap-off-Results]": [
@@ -3357,23 +3357,23 @@
     ],
     "test.test[join-yql-4275--Analyze]": [
         {
-            "checksum": "368e920864c6f39af6944029bab8f4cf",
-            "size": 6408,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937150/c49758d527ec85011ab8f1e29da739cbd14731c8/resource.tar.gz#test.test_join-yql-4275--Analyze_/plan.txt"
+            "checksum": "1fd0c1673e61b4ae774bf9a557fe7b6c",
+            "size": 4569,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-yql-4275--Analyze_/plan.txt"
         }
     ],
     "test.test[join-yql-4275--Debug]": [
         {
-            "checksum": "cc7339ddf2ff8794fdf2607fad8b16af",
-            "size": 2969,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1917492/38396ffc75979034965f5365aa27fa1c534e80f8/resource.tar.gz#test.test_join-yql-4275--Debug_/opt.yql_patched"
+            "checksum": "212770110f676add568dd04a387145dc",
+            "size": 2734,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-yql-4275--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-yql-4275--Plan]": [
         {
-            "checksum": "368e920864c6f39af6944029bab8f4cf",
-            "size": 6408,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937150/c49758d527ec85011ab8f1e29da739cbd14731c8/resource.tar.gz#test.test_join-yql-4275--Plan_/plan.txt"
+            "checksum": "1fd0c1673e61b4ae774bf9a557fe7b6c",
+            "size": 4569,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_join-yql-4275--Plan_/plan.txt"
         }
     ],
     "test.test[join-yql-4275--Results]": [],
@@ -3821,45 +3821,45 @@
     "test.test[optimizers-yql-10737_lost_passthrough-default.txt-Results]": [],
     "test.test[optimizers-yql-5978_fill_multi_usage--Analyze]": [
         {
-            "checksum": "36cae3566455b3a81b22af930a917f38",
-            "size": 10853,
-            "uri": "https://storage.yandex-team.ru/get-devtools/212715/05112758aa31c86216a47b30fa10eee1e52db258/resource.tar.gz#test.test_optimizers-yql-5978_fill_multi_usage--Analyze_/plan.txt"
+            "checksum": "1a476eda5a72674ce99240b75d75b3f4",
+            "size": 9402,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_optimizers-yql-5978_fill_multi_usage--Analyze_/plan.txt"
         }
     ],
     "test.test[optimizers-yql-5978_fill_multi_usage--Debug]": [
         {
-            "checksum": "33f22bd3e05ad9690ef9752a8c599443",
-            "size": 4909,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1689644/90acca9b171ecce398f65b70b237cc25e6006718/resource.tar.gz#test.test_optimizers-yql-5978_fill_multi_usage--Debug_/opt.yql_patched"
+            "checksum": "88cd380636457815802a4c14a9d3d0e8",
+            "size": 4677,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_optimizers-yql-5978_fill_multi_usage--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-yql-5978_fill_multi_usage--Plan]": [
         {
-            "checksum": "36cae3566455b3a81b22af930a917f38",
-            "size": 10853,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/21da85bae1b4363f9d35ac14bdb3122767615cb5/resource.tar.gz#test.test_optimizers-yql-5978_fill_multi_usage--Plan_/plan.txt"
+            "checksum": "1a476eda5a72674ce99240b75d75b3f4",
+            "size": 9402,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_optimizers-yql-5978_fill_multi_usage--Plan_/plan.txt"
         }
     ],
     "test.test[optimizers-yql-5978_fill_multi_usage--Results]": [],
     "test.test[optimizers-yql_6179_merge_chunks_of_outputs--Analyze]": [
         {
-            "checksum": "e3701d0635792c332be078fe845905bf",
-            "size": 7887,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1931696/82ea795a06df7c3a825b7d991893b35cf6220bf5/resource.tar.gz#test.test_optimizers-yql_6179_merge_chunks_of_outputs--Analyze_/plan.txt"
+            "checksum": "3091efd3fd491993ef3b3c7f11e5c891",
+            "size": 6035,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_optimizers-yql_6179_merge_chunks_of_outputs--Analyze_/plan.txt"
         }
     ],
     "test.test[optimizers-yql_6179_merge_chunks_of_outputs--Debug]": [
         {
-            "checksum": "996a5c1ddd6540d51eda3d2faad64908",
-            "size": 3298,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1931696/82ea795a06df7c3a825b7d991893b35cf6220bf5/resource.tar.gz#test.test_optimizers-yql_6179_merge_chunks_of_outputs--Debug_/opt.yql_patched"
+            "checksum": "6e674a445b8669bdc5c555c4463d4841",
+            "size": 2915,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_optimizers-yql_6179_merge_chunks_of_outputs--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-yql_6179_merge_chunks_of_outputs--Plan]": [
         {
-            "checksum": "e3701d0635792c332be078fe845905bf",
-            "size": 7887,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1871102/fc5ed8103fd812712bf2a97977898a961a27156e/resource.tar.gz#test.test_optimizers-yql_6179_merge_chunks_of_outputs--Plan_/plan.txt"
+            "checksum": "3091efd3fd491993ef3b3c7f11e5c891",
+            "size": 6035,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_optimizers-yql_6179_merge_chunks_of_outputs--Plan_/plan.txt"
         }
     ],
     "test.test[optimizers-yql_6179_merge_chunks_of_outputs--Results]": [],
@@ -4724,24 +4724,24 @@
     ],
     "test.test[produce-reduce_with_presort_diff_order--Debug]": [
         {
-            "checksum": "48913517c933e0a343b5ecef6320ef3a",
-            "size": 10435,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1814674/29b24dbed7babe52d7bbbfea56ba89396baa0be1/resource.tar.gz#test.test_produce-reduce_with_presort_diff_order--Debug_/opt.yql_patched"
+            "checksum": "b126323901feb28b72ace8d328890154",
+            "size": 10688,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_produce-reduce_with_presort_diff_order--Debug_/opt.yql_patched"
         }
     ],
     "test.test[produce-reduce_with_presort_diff_order--Plan]": [
         {
-            "checksum": "b0d5e8f16d61800ca223c62f021834f2",
-            "size": 31375,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1871102/fc5ed8103fd812712bf2a97977898a961a27156e/resource.tar.gz#test.test_produce-reduce_with_presort_diff_order--Plan_/plan.txt"
+            "checksum": "231e74e4ad04f877357787a9aff29ee7",
+            "size": 31977,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_produce-reduce_with_presort_diff_order--Plan_/plan.txt"
         }
     ],
     "test.test[produce-reduce_with_presort_diff_order--Results]": [],
     "test.test[sampling-bind_expr-default.txt-Analyze]": [
         {
-            "checksum": "d8895823acfab4d11100cac67a842547",
-            "size": 6282,
-            "uri": "https://storage.yandex-team.ru/get-devtools/212715/05112758aa31c86216a47b30fa10eee1e52db258/resource.tar.gz#test.test_sampling-bind_expr-default.txt-Analyze_/plan.txt"
+            "checksum": "48c500323490b6c607e4a54b8382169a",
+            "size": 5400,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_sampling-bind_expr-default.txt-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_sampling-bind_expr-default.txt-Analyze_/extracted"
@@ -4749,16 +4749,16 @@
     ],
     "test.test[sampling-bind_expr-default.txt-Debug]": [
         {
-            "checksum": "89cf195e389b796b4f660e7a655c7a51",
-            "size": 2894,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1689644/90acca9b171ecce398f65b70b237cc25e6006718/resource.tar.gz#test.test_sampling-bind_expr-default.txt-Debug_/opt.yql_patched"
+            "checksum": "7c229f38fb2e70c7fcf4f62f56820346",
+            "size": 2795,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_sampling-bind_expr-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[sampling-bind_expr-default.txt-Plan]": [
         {
-            "checksum": "d8895823acfab4d11100cac67a842547",
-            "size": 6282,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937429/21da85bae1b4363f9d35ac14bdb3122767615cb5/resource.tar.gz#test.test_sampling-bind_expr-default.txt-Plan_/plan.txt"
+            "checksum": "48c500323490b6c607e4a54b8382169a",
+            "size": 5400,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_sampling-bind_expr-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[sampling-read--Analyze]": [
@@ -5178,9 +5178,9 @@
     "test.test[simple_columns-simple_columns_join_coalesce_qualified_all_disable-default.txt-Results]": [],
     "test.test[simple_columns-simple_columns_join_subreq_same_key_without-default.txt-Analyze]": [
         {
-            "checksum": "a1a21046043f5c4282e489c88a037bbe",
-            "size": 6999,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937150/c49758d527ec85011ab8f1e29da739cbd14731c8/resource.tar.gz#test.test_simple_columns-simple_columns_join_subreq_same_key_without-default.txt-Analyze_/plan.txt"
+            "checksum": "c65393938b16b05b9c178ac3cfbad6bb",
+            "size": 5266,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_simple_columns-simple_columns_join_subreq_same_key_without-default.txt-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_simple_columns-simple_columns_join_subreq_same_key_without-default.txt-Analyze_/extracted"
@@ -5188,16 +5188,16 @@
     ],
     "test.test[simple_columns-simple_columns_join_subreq_same_key_without-default.txt-Debug]": [
         {
-            "checksum": "5753894692cb746a6c929577d48b9366",
-            "size": 3166,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1917492/38396ffc75979034965f5365aa27fa1c534e80f8/resource.tar.gz#test.test_simple_columns-simple_columns_join_subreq_same_key_without-default.txt-Debug_/opt.yql_patched"
+            "checksum": "f2ff8f9584f386bf31303cb5131b80c8",
+            "size": 2925,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_simple_columns-simple_columns_join_subreq_same_key_without-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[simple_columns-simple_columns_join_subreq_same_key_without-default.txt-Plan]": [
         {
-            "checksum": "a1a21046043f5c4282e489c88a037bbe",
-            "size": 6999,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937150/c49758d527ec85011ab8f1e29da739cbd14731c8/resource.tar.gz#test.test_simple_columns-simple_columns_join_subreq_same_key_without-default.txt-Plan_/plan.txt"
+            "checksum": "c65393938b16b05b9c178ac3cfbad6bb",
+            "size": 5266,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_simple_columns-simple_columns_join_subreq_same_key_without-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[simple_columns-simple_columns_join_subreq_same_key_without-default.txt-Results]": [
@@ -5217,16 +5217,16 @@
     ],
     "test.test[simple_columns-simple_columns_union_all_qualified_star-default.txt-Debug]": [
         {
-            "checksum": "cb6dd58771f3c0ce1c8c71ca8d4e22be",
-            "size": 4579,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1937424/c8a4d69fe65c6bc371e1cc2bf2def6727070cfb5/resource.tar.gz#test.test_simple_columns-simple_columns_union_all_qualified_star-default.txt-Debug_/opt.yql_patched"
+            "checksum": "193e7e82552682533d9a85ebbf2ef702",
+            "size": 4213,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_simple_columns-simple_columns_union_all_qualified_star-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[simple_columns-simple_columns_union_all_qualified_star-default.txt-Plan]": [
         {
-            "checksum": "5b5385e0fba4d6bbb6a666fa2fcf2f1c",
-            "size": 16816,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1925821/7d03c02318ec52ae0e54d4999f68346bc093fa47/resource.tar.gz#test.test_simple_columns-simple_columns_union_all_qualified_star-default.txt-Plan_/plan.txt"
+            "checksum": "d52b843a732789964da8d4cfc86af999",
+            "size": 14136,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_simple_columns-simple_columns_union_all_qualified_star-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[simple_columns-simple_columns_union_all_qualified_star-default.txt-Results]": [],
@@ -5447,9 +5447,9 @@
     ],
     "test.test[type_v3-insert_struct_v3_wo_native--Debug]": [
         {
-            "checksum": "a046739f5ebe083d6ec797568885e491",
-            "size": 5171,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1814674/29b24dbed7babe52d7bbbfea56ba89396baa0be1/resource.tar.gz#test.test_type_v3-insert_struct_v3_wo_native--Debug_/opt.yql_patched"
+            "checksum": "22f3d26bc3455a5540c6d4875466e2ba",
+            "size": 5142,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_type_v3-insert_struct_v3_wo_native--Debug_/opt.yql_patched"
         }
     ],
     "test.test[type_v3-insert_struct_v3_wo_native--Plan]": [

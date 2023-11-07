@@ -78,8 +78,8 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
         std::deque<TReportHistoryItem> ReportHistory;
         size_t MaxReportHistory = 120;
         ui32 ReportId = 0;
-        double TotalConsumed; // Since last replication enabled
-        double TotalAllocated;
+        double TotalConsumed = 0; // Since last replication enabled
+        double TotalAllocated = 0;
         TInstant LastReplicationReport; // Aligned to `ReportPeriod` grid timestamp of last sent report
         TDuration ReplicationReportPeriod = TDuration::Max();
 

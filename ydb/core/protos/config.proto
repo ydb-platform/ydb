@@ -1956,6 +1956,7 @@ message TClientCertificateAuthorization {
 message TLocalPgWireConfig {
     optional int32 ListeningPort = 1 [default = 5432];
     optional string SslCertificate = 5;
+    optional string Address = 6 [default = "::"];
 }
 
 message TKafkaProxyConfig {

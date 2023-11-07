@@ -2655,6 +2655,10 @@ void TLocalPgWireServiceInitializer::InitializeServices(NActors::TActorSystemSet
         settings.SslCertificatePem = Config.GetLocalPgWireConfig().GetSslCertificate();
     }
 
+    if (Config.GetLocalPgWireConfig().HasAddress()) {
+        settings.Address = Config.GetLocalPgWireConfig().GetAddress();
+    }
+
     setup->LocalServices.emplace_back(
         TActorId(),
         TActorSetupCmd(NPG::CreatePGListener(MakePollerActorId(), NLocalPgWire::CreateLocalPgWireProxyId(), settings),

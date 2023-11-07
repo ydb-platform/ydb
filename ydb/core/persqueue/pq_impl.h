@@ -173,6 +173,7 @@ public:
 private:
     bool ConfigInited;
     ui32 PartitionsInited;
+    bool InitCompleted = false;
     THashMap<ui32, TPartitionInfo> Partitions;
     THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
 

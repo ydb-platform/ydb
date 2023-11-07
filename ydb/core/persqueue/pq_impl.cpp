@@ -34,10 +34,10 @@ static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
 
 struct TPartitionInfo {
     TPartitionInfo(const TActorId& actor, TMaybe<TPartitionKeyRange>&& keyRange,
-            const bool initDone, const TTabletCountersBase& baseline)
+            const TTabletCountersBase& baseline)
         : Actor(actor)
         , KeyRange(std::move(keyRange))
-        , InitDone(initDone)
+        , InitDone(false)
     {
         Baseline.Populate(baseline);
     }
@@ -642,12 +642,8 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
             Partitions.emplace(partitionId,
                 TPartitionInfo(ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, true, ctx)),
                 GetPartitionKeyRange(Config, partition),
-                true,
                 *Counters
             ));
-
-            // InitCompleted is true because this partition is empty
-            ++PartitionsInited; //newly created partition is empty and ready to work
         }
     }
 
@@ -861,7 +857,6 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         Partitions.emplace(partitionId, TPartitionInfo(
             ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, false, ctx)),
             GetPartitionKeyRange(Config, partition),
-            false,
             *Counters
         ));
     }
@@ -1180,7 +1175,7 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     ++PartitionsInited;
     Y_ABORT_UNLESS(ConfigInited);//partitions are inited only after config
 
-    if (PartitionsInited == Partitions.size()) {
+    if (!InitCompleted && PartitionsInited == Partitions.size()) {
         OnInitComplete(ctx);
     }
 
@@ -3493,10 +3488,7 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
                            std::forward_as_tuple(partitionId),
                            std::forward_as_tuple(actorId,
                                                  GetPartitionKeyRange(config, partition),
-                                                 true,
                                                  *Counters));
-
-        ++PartitionsInited;
     }
 }
 
@@ -3566,6 +3558,7 @@ void TPersQueue::OnInitComplete(const TActorContext& ctx)
 {
     SignalTabletActive(ctx);
     TryStartTransaction(ctx);
+    InitCompleted = true;
 }
 
 ui64 TPersQueue::GetAllowedStep() const

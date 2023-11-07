@@ -1377,6 +1377,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
 //        EnableDebugLogging(kikimr);
 
@@ -1391,7 +1392,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 1000;
         )");
 
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
         TInstant tsPrev = TInstant::MicroSeconds(1000000);
@@ -1412,6 +1412,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -1434,7 +1435,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 1000;
         )");
 
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
         TInstant tsPrev = TInstant::MicroSeconds(2000000);

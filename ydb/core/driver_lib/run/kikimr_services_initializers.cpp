@@ -1785,7 +1785,7 @@ void TStatsCollectorInitializer::InitializeServices(
             TActorSetupCmd(
                 statsCollector,
                 TMailboxType::HTSwap,
-                appData->UserPoolId));
+                appData->SystemPoolId));
 
         IActor* memStatsCollector = CreateMemStatsCollector(
                 1, // seconds
@@ -1795,7 +1795,7 @@ void TStatsCollectorInitializer::InitializeServices(
             TActorSetupCmd(
                 memStatsCollector,
                 TMailboxType::HTSwap,
-                appData->UserPoolId));
+                appData->SystemPoolId));
 
         IActor* procStatCollector = CreateProcStatCollector(
                 5, // seconds
@@ -1805,7 +1805,7 @@ void TStatsCollectorInitializer::InitializeServices(
             TActorSetupCmd(
                 procStatCollector,
                 TMailboxType::HTSwap,
-                appData->UserPoolId));
+                appData->SystemPoolId));
     }
 }
 #endif

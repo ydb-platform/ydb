@@ -10,6 +10,8 @@
 #include <library/cpp/actors/dnsresolver/dnsresolver.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
+#include <library/cpp/actors/interconnect/types.h>
+#include <library/cpp/actors/util/rope.h>
 #include <library/cpp/actors/util/should_continue.h>
 
 #include <util/datetime/base.h>
@@ -17,12 +19,40 @@
 #include <util/generic/yexception.h>
 #include <util/system/sigset.h>
 #include <util/system/types.h>
+#include <util/system/yassert.h>
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 
 namespace {
+
+const char* storeString32 =
+"................................"
+;
+
+const char* storeString64 =
+"................................"
+"................................"
+;
+
+const char* storeString128 =
+"................................"
+"................................"
+"................................"
+"................................"
+;
+
+const char* storeString256 =
+"................................"
+"................................"
+"................................"
+"................................"
+"................................"
+"................................"
+"................................"
+"................................"
+;
 
 using namespace NActors;
 
@@ -50,17 +80,20 @@ class TSenderActor : public NActors::TActorBootstrapped<TSenderActor> {
     const TActorId Target;
     ui64 SendEvents;
     ui64 AckEvents;
+    const char* const Payload = nullptr;
     TInstant PeriodStart;
+    TDuration Duration = TDuration::Seconds(1);
 
     void ScheduleStats() {
         HandledEvents = 0;
         PeriodStart = TInstant::Now();
-        Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+        Schedule(Duration, new TEvents::TEvWakeup());
     }
 
     void SendToTarget() {
         SendEvents++;
         auto* ptr = new NKikimr::TEvBlobStorage::TEvVPut;
+        ptr->StorePayload(TRope(Payload));
         Send(Target, ptr);
     }
 
@@ -77,11 +110,13 @@ class TSenderActor : public NActors::TActorBootstrapped<TSenderActor> {
     }
 
 public:
-    TSenderActor(TActorId target)
+    TSenderActor(TActorId target, const char* payload, TDuration duration = TDuration::Seconds(1))
         : Target(target)
         , SendEvents(0)
         , AckEvents(0)
+        , Payload(payload)
         , PeriodStart(TInstant::Now())
+        , Duration(duration)
     {}
 
     void Bootstrap() {
@@ -103,14 +138,23 @@ public:
 };
 
 class TReceiverActor : public TActor<TReceiverActor> {
+    TRope Payload;
+
     void Handle(NKikimr::TEvBlobStorage::TEvVPut::TPtr& ev) {
         Y_UNUSED(ev->Get());
+        auto* evLoad = ev->Get();
+        auto count = evLoad->GetPayloadCount();
+        for (ui32 i = 0; i < count; ++i) {
+            auto rope = evLoad->GetPayload(i);
+            Y_ASSERT(rope == Payload);
+        }
         Send(ev->Sender, new TEvAck());
     }
 
 public:
-    TReceiverActor()
+    TReceiverActor(const char* payload)
         : TActor<TReceiverActor>(&TThis::Main)
+        , Payload(payload)
     {}
 
     STFUNC(Main) {
@@ -142,7 +186,7 @@ THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 pools) {
     return setup;
 }
 
-int test() {
+int test(const char* payload, TDuration duration) {
 #ifdef _unix_
     signal(SIGPIPE, SIG_IGN);
 #endif
@@ -156,8 +200,8 @@ int test() {
 
     actorSystem.Start();
 
-    TActorId receiver = actorSystem.Register(new TReceiverActor(), TMailboxType::HTSwap, std::min(pools - 1, 0));
-    TActorId sender = actorSystem.Register(new TSenderActor(receiver), TMailboxType::HTSwap, std::min(pools - 1, 1));
+    TActorId receiver = actorSystem.Register(new TReceiverActor(payload), TMailboxType::HTSwap, std::min(pools - 1, 0));
+    TActorId sender = actorSystem.Register(new TSenderActor(receiver, payload, duration), TMailboxType::HTSwap, std::min(pools - 1, 1));
     Y_UNUSED(sender);
 
     while (ShouldContinue.PollState() == TProgramShouldContinue::Continue) {
@@ -229,7 +273,7 @@ THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId, ui32 totalNodes, u
     return setup;
 }
 
-int test() {
+int test(const char* payload, TDuration duration) {
 #ifdef _unix_
     signal(SIGPIPE, SIG_IGN);
 #endif
@@ -252,9 +296,9 @@ int test() {
     sys1.Start();
     sys2.Start();
 
-    TActorId receiver = sys1.Register(new TReceiverActor());
+    TActorId receiver = sys1.Register(new TReceiverActor(payload));
     Cerr << "Receiver: " << receiver << Endl;
-    TActorId sender = sys2.Register(new TSenderActor(receiver));
+    TActorId sender = sys2.Register(new TSenderActor(receiver, payload, duration));
     Cerr << "Sender: " << sender << Endl;
 
     while (ShouldContinue.PollState() == TProgramShouldContinue::Continue) {
@@ -274,5 +318,5 @@ int test() {
 } // namespace
 
 int main() {
-    return NRemoteBench::test();
+    return NRemoteBench::test(storeString128, TDuration::Seconds(10));
 }

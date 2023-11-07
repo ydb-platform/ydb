@@ -134,7 +134,7 @@ private:
 #ifndef NDEBUG
     std::optional<TSortableBatchPosition> CurrentKeyColumns;
 #endif
-    bool PossibleSameVersionFlag = false;
+    bool PossibleSameVersionFlag = true;
 
     class TBatchIterator {
     private:

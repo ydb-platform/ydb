@@ -1427,12 +1427,17 @@ protected:
             ExecuterSpan.EndError(TStringBuilder() << NYql::NDqProto::StatusIds_StatusCode_Name(status));
         }
 
+        static_cast<TDerived*>(this)->FillResponseStats(Ydb::StatusIds::TIMEOUT);
+
         // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
-        // If it have come from SessionActor there is no need to send new TEvAbortExecution back
         if (abortSender != Target) {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, "Request timeout exceeded");
             this->Send(Target, abortEv.Release());
         }
+
+        LOG_E("Sending timeout response to: " << Target);
+        this->Send(Target, ResponseEv.release());
+
         Request.Transactions.crop(0);
         TerminateComputeActors(Ydb::StatusIds::TIMEOUT, message);
         this->PassAway();

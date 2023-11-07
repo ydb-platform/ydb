@@ -292,10 +292,11 @@ private:
     }
 
 public:
-    void Finalize() {
+
+    void FillResponseStats(Ydb::StatusIds::StatusCode status) {
         auto& response = *ResponseEv->Record.MutableResponse();
 
-        response.SetStatus(Ydb::StatusIds::SUCCESS);
+        response.SetStatus(status);
 
         if (Stats) {
             ReportEventElapsedTime();
@@ -316,6 +317,10 @@ public:
                 }
             }
         }
+    }
+
+    void Finalize() {
+        FillResponseStats(Ydb::StatusIds::SUCCESS);
 
         LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, ResponseEv->ResultsSize());
 

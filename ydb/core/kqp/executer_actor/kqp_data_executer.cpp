@@ -211,6 +211,36 @@ public:
         return Stats->CollectStatsByLongTasks && HasOlapTable;
     }
 
+    void FillResponseStats(Ydb::StatusIds::StatusCode status) {
+        auto& response = *ResponseEv->Record.MutableResponse();
+
+        response.SetStatus(status);
+
+        if (Stats) {
+            ReportEventElapsedTime();
+
+            Stats->FinishTs = TInstant::Now();
+            Stats->Finish();
+
+            if (LogStatsByLongTasks() || CollectFullStats(Request.StatsMode)) {
+                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                    const auto& tx = Request.Transactions[txId].Body;
+                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
+                    response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
+                }
+            }
+
+            if (LogStatsByLongTasks()) {
+                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
+                if (!txPlansWithStats.empty()) {
+                    LOG_N("Full stats: " << txPlansWithStats);
+                }
+            }
+
+            Stats.reset();
+        }
+    }
+
     void Finalize() {
         if (LocksBroken) {
             TString message = "Transaction locks invalidated.";
@@ -221,7 +251,7 @@ public:
 
         auto& response = *ResponseEv->Record.MutableResponse();
 
-        response.SetStatus(Ydb::StatusIds::SUCCESS);
+        FillResponseStats(Ydb::StatusIds::SUCCESS);
         Counters->TxProxyMon->ReportStatusOK->Inc();
 
         auto addLocks = [&](const NYql::NDqProto::TExtraInputData& data) {
@@ -247,30 +277,6 @@ public:
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
             BuildLocks(*response.MutableResult()->MutableLocks(), Locks);
-        }
-
-        if (Stats) {
-            ReportEventElapsedTime();
-
-            Stats->FinishTs = TInstant::Now();
-            Stats->Finish();
-
-            if (LogStatsByLongTasks() || CollectFullStats(Request.StatsMode)) {
-                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
-                    const auto& tx = Request.Transactions[txId].Body;
-                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
-                    response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
-                }
-            }
-
-            if (LogStatsByLongTasks()) {
-                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
-                if (!txPlansWithStats.empty()) {
-                    LOG_N("Full stats: " << txPlansWithStats);
-                }
-            }
-
-            Stats.reset();
         }
 
         auto resultSize = ResponseEv->GetByteSize();

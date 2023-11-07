@@ -1027,7 +1027,7 @@ public:
 
     void SendToSchemeExecuter(const TKqpPhyTxHolder::TConstPtr& tx) {
         auto userToken = QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>();
-        const TString requestType = QueryState ? QueryState->GetRequestType() : TString(); 
+        const TString requestType = QueryState ? QueryState->GetRequestType() : TString();
         bool temporary = GetTemporaryTableInfo(tx).has_value();
 
         auto executerActor = CreateKqpSchemeExecuter(tx, SelfId(), requestType, Settings.Database, userToken,
@@ -1247,14 +1247,15 @@ public:
         LOG_I(logMsg << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode()) << " send to: " << ExecuterId);
 
         if (ExecuterId) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.GetStatusCode(), "Request timeout exceeded");
-            Send(ExecuterId, abortEv.Release());
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(
+                msg.GetStatusCode(),
+                "Request timeout exceeded");
+            Send(ExecuterId, abortEv.Release(), IEventHandle::FlagTrackDelivery);
         }
 
         // Do not shortcut in case of CancelAfter event. We can send this status only in case of RO TX.
         if (msg.GetStatusCode() != NYql::NDqProto::StatusIds::CANCELLED) {
             const auto& issues = ev->Get()->GetIssues();
-            ExecuterId = TActorId{};
             ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), logMsg, MessageFromIssues(issues));
             return;
         }
@@ -1299,8 +1300,8 @@ public:
         }
     }
 
-    void FillStats(NKikimrKqp::TEvQueryResponse* record) {
-        auto *response = record->MutableResponse();
+    void FillSystemViewQueryStats(NKikimrKqp::TEvQueryResponse* record) {
+        YQL_ENSURE(QueryState);
         auto* stats = &QueryState->Stats;
 
         stats->SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
@@ -1309,20 +1310,35 @@ public:
             stats->MutableCompilation()->Swap(&QueryState->CompileStats);
         }
 
-        auto requestInfo = TKqpRequestInfo(QueryState->UserRequestContext->TraceId, SessionId);
-        YQL_ENSURE(QueryState);
         if (IsExecuteAction(QueryState->GetAction())) {
             auto ru = NRuCalc::CalcRequestUnit(*stats);
-            record->SetConsumedRu(ru);
+
+            if (record != nullptr) {
+                record->SetConsumedRu(ru);
+            }
 
             auto now = TInstant::Now();
             auto queryDuration = now - QueryState->StartTime;
             CollectSystemViewQueryStats(stats, queryDuration, QueryState->GetDatabase(), ru);
+        }
+    }
+
+    void FillStats(NKikimrKqp::TEvQueryResponse* record) {
+        YQL_ENSURE(QueryState);
+
+        FillSystemViewQueryStats(record);
+
+        auto *response = record->MutableResponse();
+        auto requestInfo = TKqpRequestInfo(QueryState->UserRequestContext->TraceId, SessionId);
+
+        if (IsExecuteAction(QueryState->GetAction())) {
+            auto queryDuration = TDuration::MicroSeconds(QueryState->Stats.GetDurationUs());
             SlowLogQuery(TlsActivationContext->AsActorContext(), Config.Get(), requestInfo, queryDuration,
                 record->GetYdbStatus(), QueryState->UserToken, QueryState->ParametersSize, record,
                 [this]() { return this->QueryState->ExtractQueryText(); });
         }
 
+        auto* stats = &QueryState->Stats;
         if (QueryState->ReportStats()) {
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
                 response->SetQueryPlan(SerializeAnalyzePlan(*stats));
@@ -1778,6 +1794,61 @@ public:
         }
     }
 
+    void HandleWaitStats(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+        // outdated response from dead executer.
+        // it this case we should just ignore the event.
+        if (ExecuterId != ev->Sender) {
+            return;
+        }
+
+        auto* ptr = ev->Get();
+        auto* response = ptr->Record.MutableResponse();
+
+        LOG_D("TEvTxResponse at WaitStats, CurrentTx: " << QueryState->CurrentTx
+            << "/" << (QueryState->PreparedQuery ? QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize() : 0)
+            << " response.status: " << response->GetStatus());
+
+        ExecuterId = TActorId{};
+
+        YQL_ENSURE(QueryState);
+
+        auto& executerResults = *response->MutableResult();
+        if (executerResults.HasStats()) {
+            auto* exec = QueryState->Stats.AddExecutions();
+            exec->Swap(executerResults.MutableStats());
+        }
+
+        Become(&TKqpSessionActor::ExecuteState);
+
+        FillSystemViewQueryStats(nullptr);
+        Cleanup(false);
+    }
+
+    void HandleNoop(TEvents::TEvUndelivered::TPtr& ev) {
+        // outdated TEvUndelivered from another executer.
+        // it this case we should just ignore the event.
+        Y_ENSURE(ExecuterId != ev->Sender);
+    }
+
+    void HandleWaitStats(TEvents::TEvUndelivered::TPtr& ev) {
+        // outdated TEvUndelivered from another executer.
+        // it this case we should just ignore the event.
+        if (ExecuterId != ev->Sender) {
+            return;
+        }
+
+        LOG_D("TEvUndelivered at WaitStats, CurrentTx: " << QueryState->CurrentTx);
+
+        ExecuterId = TActorId{};
+
+        YQL_ENSURE(QueryState);
+
+        Become(&TKqpSessionActor::ExecuteState);
+
+        FillSystemViewQueryStats(nullptr);
+        Cleanup(false);
+    }
+
     void HandleCleanup(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         if (ev->Sender != ExecuterId) {
             return;
@@ -1882,6 +1953,15 @@ public:
 
         FillTxInfo(response);
 
+        if (ExecuterId && CurrentStateFunc() == &TThis::ExecuteState && ydbStatus == Ydb::StatusIds::TIMEOUT) {
+            Become(&TKqpSessionActor::WaitStatsState);
+            return;
+        }
+
+        ExecuterId = TActorId{};
+        if (CurrentStateFunc() == &TThis::CompileState && ydbStatus == Ydb::StatusIds::TIMEOUT) {
+            FillSystemViewQueryStats(nullptr);
+        }
         Cleanup(IsFatalError(ydbStatus));
     }
 
@@ -1929,6 +2009,7 @@ public:
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleNoop);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
+                hFunc(TEvents::TEvUndelivered, HandleNoop);
                 // message from KQP proxy in case of our reply just after kqp proxy timer tick
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
             default:
@@ -1957,6 +2038,7 @@ public:
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleNoop);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+                hFunc(TEvents::TEvUndelivered, HandleNoop);
             default:
                 UnexpectedEvent("CompileState", ev);
             }
@@ -1988,6 +2070,7 @@ public:
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
+                hFunc(TEvents::TEvUndelivered, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);
@@ -2018,6 +2101,7 @@ public:
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
+                hFunc(TEvents::TEvUndelivered, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
@@ -2033,6 +2117,14 @@ public:
     STATEFN(FinalCleanupState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, HandleFinalCleanup);
+            hFunc(TEvents::TEvUndelivered, HandleNoop);
+        }
+    }
+
+    STATEFN(WaitStatsState) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvents::TEvUndelivered, HandleWaitStats)
+            hFunc(TEvKqpExecuter::TEvTxResponse, HandleWaitStats);
         }
     }
 

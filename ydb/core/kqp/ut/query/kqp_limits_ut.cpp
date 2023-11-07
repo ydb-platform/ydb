@@ -10,65 +10,9 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-static const ui32 LargeTableShards = 8;
-static const ui32 LargeTableKeysPerShard = 1000000;
-
 namespace {
     bool IsRetryable(const EStatus& status) {
         return status == EStatus::OVERLOADED;
-    }
-}
-
-static void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize,
-    ui32 dataTextSize, ui32 batchSizeRows = 100, ui32 fillShardsCount = LargeTableShards)
-{
-    kikimr.GetTestClient().CreateTable("/Root", R"(
-        Name: "LargeTable"
-        Columns { Name: "Key", Type: "Uint64" }
-        Columns { Name: "KeyText", Type: "String" }
-        Columns { Name: "Data", Type: "Int64" }
-        Columns { Name: "DataText", Type: "String" }
-        KeyColumnNames: ["Key", "KeyText"],
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 1000000 } } } }
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 2000000 } } } }
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 3000000 } } } }
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 4000000 } } } }
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 5000000 } } } }
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 6000000 } } } }
-        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 7000000 } } } }
-    )");
-
-    auto client = kikimr.GetTableClient();
-
-    for (ui32 shardIdx = 0; shardIdx < fillShardsCount; ++shardIdx) {
-        ui32 rowIndex = 0;
-        while (rowIndex < rowsPerShard) {
-
-            auto rowsBuilder = TValueBuilder();
-            rowsBuilder.BeginList();
-            for (ui32 i = 0; i < batchSizeRows; ++i) {
-                rowsBuilder.AddListItem()
-                    .BeginStruct()
-                    .AddMember("Key")
-                        .OptionalUint64(shardIdx * LargeTableKeysPerShard + rowIndex)
-                    .AddMember("KeyText")
-                        .OptionalString(TString(keyTextSize, '0' + (i + shardIdx) % 10))
-                    .AddMember("Data")
-                        .OptionalInt64(rowIndex)
-                    .AddMember("DataText")
-                        .OptionalString(TString(dataTextSize, '0' + (i + shardIdx + 1) % 10))
-                    .EndStruct();
-
-                ++rowIndex;
-                if (rowIndex == rowsPerShard) {
-                    break;
-                }
-            }
-            rowsBuilder.EndList();
-
-            auto result = client.BulkUpsert("/Root/LargeTable", rowsBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
     }
 }
 

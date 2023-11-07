@@ -73,7 +73,7 @@ public:
                 }
             }
         } catch (const TErrorException& ex) {
-            auto error = ex << TErrorAttribute("listener", Name_);
+            auto error = TError(ex) << TErrorAttribute("listener", Name_);
             Abort(error);
             YT_LOG_FATAL(error, "Listener crashed with fatal error");
         }

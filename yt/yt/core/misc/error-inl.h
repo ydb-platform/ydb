@@ -70,9 +70,29 @@ TError::TErrorOr(TErrorCode code, const char (&messageOrFormat)[Length], TArgs&&
 { }
 
 template <class... TArgs>
-TError TError::Wrap(TArgs&&... args) const
+    requires std::constructible_from<TError, TArgs...>
+TError TError::Wrap(TArgs&&... args) const &
 {
     return TError(std::forward<TArgs>(args)...) << *this;
+}
+
+template <class... TArgs>
+    requires std::constructible_from<TError, TArgs...>
+TError TError::Wrap(TArgs&&... args) &&
+{
+    return TError(std::forward<TArgs>(args)...) << std::move(*this);
+}
+
+template <CErrorNestable TValue>
+TError&& TError::operator << (TValue&& operand) &&
+{
+    return std::move(*this <<= std::forward<TValue>(operand));
+}
+
+template <CErrorNestable TValue>
+TError TError::operator << (TValue&& operand) const &
+{
+    return TError(*this) << std::forward<TValue>(operand);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -261,6 +281,7 @@ TString ToString(const TErrorOr<T>& valueOrError)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TException>
+    requires std::derived_from<std::remove_cvref_t<TException>, TErrorException>
 TException&& operator <<= (TException&& ex, const TError& error)
 {
     YT_VERIFY(!error.IsOK());
@@ -269,6 +290,7 @@ TException&& operator <<= (TException&& ex, const TError& error)
 }
 
 template <class TException>
+    requires std::derived_from<std::remove_cvref_t<TException>, TErrorException>
 TException&& operator <<= (TException&& ex, TError&& error)
 {
     YT_VERIFY(!error.IsOK());
@@ -277,5 +299,35 @@ TException&& operator <<= (TException&& ex, TError&& error)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+namespace NDetail {
+
+template <class TArg>
+    requires std::constructible_from<TError, TArg>
+TError TErrorAdaptor::operator << (TArg&& rightOperand) const
+{
+    return TError(std::forward<TArg>(rightOperand));
+}
+
+template <class TArg>
+    requires std::constructible_from<TError, TArg> &&
+                std::derived_from<std::remove_cvref_t<TArg>, TError>
+TArg&& TErrorAdaptor::operator << (TArg&& rightOperand) const
+{
+    return std::forward<TArg>(rightOperand);
+}
+
+template <class TLikeError, class... TArgs>
+    requires
+        std::is_base_of_v<TError, std::remove_cvref_t<TLikeError>> &&
+        std::constructible_from<TError, TArgs...>
+void ThrowErrorExceptionIfFailed(TLikeError&& error, TArgs&&... args)
+{
+    if (!error.IsOK()) {
+        THROW_ERROR std::move(error).Wrap(std::forward<TArgs>(args)...);
+    }
+}
+
+} // namespace NDetail
 
 } // namespace NYT

@@ -79,6 +79,31 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TErrorAttribute
+{
+    template <class T>
+    TErrorAttribute(const TString& key, const T& value)
+        : Key(key)
+        , Value(NYson::ConvertToYsonString(value))
+    { }
+
+    TErrorAttribute(const TString& key, const NYson::TYsonString& value)
+        : Key(key)
+        , Value(value)
+    { }
+
+    TString Key;
+    NYson::TYsonString Value;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TValue>
+concept CErrorNestable = requires (TError& error, TValue&& operand)
+{
+    { error <<= std::forward<TValue>(operand) } -> std::same_as<TError&>;
+};
+
 template <>
 class [[nodiscard]] TErrorOr<void>
 {
@@ -157,8 +182,14 @@ public:
     std::optional<TError> FindMatching(TErrorCode code) const;
 
     template <class... TArgs>
-    TError Wrap(TArgs&&... args) const;
-    TError Wrap() const;
+        requires std::constructible_from<TError, TArgs...>
+    TError Wrap(TArgs&&... args) const &;
+    TError Wrap() const &;
+
+    template <class... TArgs>
+        requires std::constructible_from<TError, TArgs...>
+    TError Wrap(TArgs&&... args) &&;
+    TError Wrap() &&;
 
     //! Perform recursive aggregation of error codes and messages over the error tree.
     //! Result of this aggregation is suitable for error clustering in groups of
@@ -174,6 +205,20 @@ public:
 
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);
+
+    TError& operator <<= (const TErrorAttribute& attribute) &;
+    TError& operator <<= (const std::vector<TErrorAttribute>& attributes) &;
+    TError& operator <<= (const TError& innerError) &;
+    TError& operator <<= (TError&& innerError) &;
+    TError& operator <<= (const std::vector<TError>& innerErrors) &;
+    TError& operator <<= (std::vector<TError>&& innerErrors) &;
+    TError& operator <<= (const NYTree::IAttributeDictionary& attributes) &;
+
+    template <CErrorNestable TValue>
+    TError&& operator << (TValue&& operand) &&;
+
+    template <CErrorNestable TValue>
+    TError operator << (TValue&& operand) const &;
 
 private:
     class TImpl;
@@ -243,33 +288,6 @@ struct TErrorTraits<TErrorOr<T>>
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TErrorAttribute
-{
-    template <class T>
-    TErrorAttribute(const TString& key, const T& value)
-        : Key(key)
-        , Value(NYson::ConvertToYsonString(value))
-    { }
-
-    TErrorAttribute(const TString& key, const NYson::TYsonString& value)
-        : Key(key)
-        , Value(value)
-    { }
-
-    TString Key;
-    NYson::TYsonString Value;
-};
-
-TError operator << (TError error, const TErrorAttribute& attribute);
-TError operator << (TError error, const std::vector<TErrorAttribute>& attributes);
-TError operator << (TError error, const TError& innerError);
-TError operator << (TError error, TError&& innerError);
-TError operator << (TError error, const std::vector<TError>& innerErrors);
-TError operator << (TError error, std::vector<TError>&& innerErrors);
-TError operator << (TError error, const NYTree::IAttributeDictionary& attributes);
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TErrorException
     : public std::exception
 {
@@ -285,28 +303,51 @@ public:
 
 private:
     mutable TString CachedWhat_;
-
 };
 
 // Make these templates to avoid type erasure during throw.
 template <class TException>
+    requires std::derived_from<std::remove_cvref_t<TException>, TErrorException>
 TException&& operator <<= (TException&& ex, const TError& error);
 template <class TException>
+    requires std::derived_from<std::remove_cvref_t<TException>, TErrorException>
 TException&& operator <<= (TException&& ex, TError&& error);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+struct TErrorAdaptor
+{
+    template <class TArg>
+        requires std::constructible_from<TError, TArg>
+    TError operator << (TArg&& rightOperand) const;
+
+    template <class TArg>
+        requires std::constructible_from<TError, TArg> &&
+                 std::derived_from<std::remove_cvref_t<TArg>, TError>
+    TArg&& operator << (TArg&& rightOperand) const;
+};
+
+// Make these to correctly forward TError to Wrap call.
+template <class TLikeError, class... TArgs>
+    requires
+        std::is_base_of_v<TError, std::remove_cvref_t<TLikeError>> &&
+        std::constructible_from<TError, TArgs...>
+void ThrowErrorExceptionIfFailed(TLikeError&& error, TArgs&&... args);
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 #define THROW_ERROR \
-    throw ::NYT::TErrorException() <<=
+    throw ::NYT::TErrorException() <<= ::NYT::NDetail::TErrorAdaptor() <<
 
 #define THROW_ERROR_EXCEPTION(head, ...) \
     THROW_ERROR ::NYT::TError(head __VA_OPT__(,) __VA_ARGS__)
 
 #define THROW_ERROR_EXCEPTION_IF_FAILED(error, ...) \
-    if (const auto& error__  = (error); error__ .IsOK()) { \
-    } else { \
-        THROW_ERROR error__.Wrap(__VA_ARGS__); \
-    }
+    ::NYT::NDetail::ThrowErrorExceptionIfFailed((error) __VA_OPT__(,) __VA_ARGS__); \
 
 #define THROW_ERROR_EXCEPTION_UNLESS(condition, head, ...) \
     if ((condition)) {\

@@ -159,7 +159,7 @@ The example below shows how to use the `modified_at` column with a numeric type 
   ```go
   err := session.AlterTable(ctx, "mytable",
     options.WithSetTimeToLiveSettings(
-      options.NewTTLSettings().ColumnSecond("modified_at").ExpireAfter(time.Hour),
+      options.NewTTLSettings().ColumnSeconds("modified_at").ExpireAfter(time.Hour),
     ),
   )
   ```

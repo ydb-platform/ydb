@@ -2035,7 +2035,7 @@ void TMemProfMonitorInitializer::InitializeServices(
         TActorSetupCmd(
             monitorActor,
             TMailboxType::HTSwap,
-            appData->UserPoolId));
+            appData->BatchPoolId));
 }
 
 // TMemoryTrackerInitializer

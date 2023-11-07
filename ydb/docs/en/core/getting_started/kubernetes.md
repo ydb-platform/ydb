@@ -64,7 +64,7 @@ After the chart data is processed by the controller, the following resources are
 * [Service](https://kubernetes.io/docs/concepts/services-networking/service/): An object that is used to access the created databases from applications.
 * [ConfigMap](https://kubernetes.io/docs/concepts/configuration/configmap/): An object that is used to store the cluster configuration.
 
-See the operator's source code [on GitHub](https://github.com/ydb-platform/ydb-kubernetes-operator). The Helm chart is in the [deploy](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/deploy) directory.
+See the operator's source code [on GitHub](https://github.com/ydb-platform/ydb-kubernetes-operator). The Helm chart is in the [deploy](https://github.com/ydb-platform/ydb-kubernetes-operator/tree/master/deploy) folder.
 {{ ydb-short-name }} containers are deployed using `cr.yandex/yc/ydb` images. Currently, they are only available as prebuilt artifacts.
 
 ## Environment preparation

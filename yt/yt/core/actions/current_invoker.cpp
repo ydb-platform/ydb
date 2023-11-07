@@ -2,11 +2,13 @@
 
 #include "invoker_util.h"
 
+#include <library/cpp/yt/misc/tls.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-thread_local IInvoker* CurrentInvoker;
+YT_THREAD_LOCAL(IInvoker*) CurrentInvoker;
 
 IInvoker* GetCurrentInvoker()
 {
@@ -30,7 +32,7 @@ TCurrentInvokerGuard::TCurrentInvokerGuard(IInvoker* invoker)
     , Active_(true)
     , SavedInvoker_(std::move(invoker))
 {
-    std::swap(CurrentInvoker, SavedInvoker_);
+    std::swap(GetTlsRef(CurrentInvoker), SavedInvoker_);
 }
 
 void TCurrentInvokerGuard::Restore()

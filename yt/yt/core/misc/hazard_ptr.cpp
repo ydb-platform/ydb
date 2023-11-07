@@ -15,6 +15,8 @@
 
 #include <library/cpp/yt/memory/free_list.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 namespace NYT {
 
 using namespace NConcurrency;
@@ -30,7 +32,7 @@ namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////
 
-thread_local THazardPointerSet HazardPointers;
+YT_THREAD_LOCAL(THazardPointerSet) HazardPointers;
 
 //! A simple container based on free list which supports only Enqueue and DequeueAll.
 template <class T>
@@ -110,8 +112,8 @@ struct THazardThreadState
     { }
 };
 
-thread_local THazardThreadState* HazardThreadState;
-thread_local bool HazardThreadStateDestroyed;
+YT_THREAD_LOCAL(THazardThreadState*) HazardThreadState;
+YT_THREAD_LOCAL(bool) HazardThreadStateDestroyed;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -258,7 +260,7 @@ void THazardPointerManager::InitThreadState()
 
 THazardThreadState* THazardPointerManager::AllocateThreadState()
 {
-    auto* threadState = new THazardThreadState(&HazardPointers);
+    auto* threadState = new THazardThreadState(&GetTlsRef(HazardPointers));
 
     struct THazardThreadStateDestroyer
     {
@@ -271,7 +273,7 @@ THazardThreadState* THazardPointerManager::AllocateThreadState()
     };
 
     // Unregisters thread from hazard ptr manager on thread exit.
-    static thread_local THazardThreadStateDestroyer destroyer{threadState};
+    static YT_THREAD_LOCAL(THazardThreadStateDestroyer) destroyer{threadState};
 
     {
         auto guard = WriterGuard(ThreadRegistryLock_);

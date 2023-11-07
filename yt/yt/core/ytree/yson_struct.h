@@ -156,7 +156,7 @@ public:
     void InitializeStruct(TStruct* target);
 
 private:
-    static inline thread_local IYsonStructMeta* CurrentlyInitializingMeta_ = nullptr;
+    static inline YT_THREAD_LOCAL(IYsonStructMeta*) CurrentlyInitializingMeta_ = nullptr;
 
     template <class TStruct>
     friend class TYsonStructRegistrar;

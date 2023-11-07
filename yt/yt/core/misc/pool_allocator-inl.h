@@ -4,6 +4,8 @@
 #include "pool_allocator.h"
 #endif
 
+#include <library/cpp/yt/misc/tls.h>
+
 #include <util/system/align.h>
 
 namespace NYT {
@@ -70,13 +72,13 @@ std::unique_ptr<T> TPoolAllocator::New(TArgs&&... args)
     struct TChunkTag
     { };
     constexpr auto ChunkSize = 64_KB;
-    static thread_local TPoolAllocator Allocator(
+    static YT_THREAD_LOCAL(TPoolAllocator) Allocator(
         sizeof(T),
         alignof(T),
         ChunkSize,
         GetRefCountedTypeCookie<TChunkTag>());
 
-    return std::unique_ptr<T>(new(&Allocator) T(std::forward<TArgs>(args)...));
+    return std::unique_ptr<T>(new(&GetTlsRef(Allocator)) T(std::forward<TArgs>(args)...));
 }
 
 inline void TPoolAllocator::DoFree(void* ptr)

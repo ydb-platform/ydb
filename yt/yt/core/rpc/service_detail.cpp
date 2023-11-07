@@ -30,6 +30,8 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 namespace NYT::NRpc {
 
 using namespace NBus;
@@ -1295,7 +1297,7 @@ void TRequestQueue::OnRequestFinished()
 // Prevents reentrant invocations.
 // One case is: RunRequest calling the handler synchronously, which replies the
 // context, which calls context->Finish, and we're back here again.
-static thread_local bool ScheduleRequestsLatch = false;
+static YT_THREAD_LOCAL(bool) ScheduleRequestsLatch = false;
 
 void TRequestQueue::ScheduleRequestsFromQueue()
 {

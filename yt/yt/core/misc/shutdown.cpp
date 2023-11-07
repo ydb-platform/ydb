@@ -7,6 +7,8 @@
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 #include <library/cpp/yt/threading/event_count.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 #include <util/generic/algorithm.h>
 
 #include <util/system/env.h>
@@ -280,7 +282,7 @@ static const void* ShutdownGuardInitializer = [] {
         }
     };
 
-    static thread_local TShutdownGuard Guard;
+    static YT_THREAD_LOCAL(TShutdownGuard) Guard;
     return nullptr;
 }();
 

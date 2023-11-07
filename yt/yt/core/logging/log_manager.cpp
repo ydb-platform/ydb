@@ -40,6 +40,7 @@
 
 #include <library/cpp/yt/misc/hash.h>
 #include <library/cpp/yt/misc/variant.h>
+#include <library/cpp/yt/misc/tls.h>
 
 #include <library/cpp/yt/string/raw_formatter.h>
 
@@ -357,7 +358,7 @@ TCpuInstant GetEventInstant(const TLoggerQueueItem& item)
 using TThreadLocalQueue = TSpscQueue<TLoggerQueueItem>;
 
 static constexpr uintptr_t ThreadQueueDestroyedSentinel = -1;
-static thread_local TThreadLocalQueue* PerThreadQueue;
+static YT_THREAD_LOCAL(TThreadLocalQueue*) PerThreadQueue;
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1020,7 +1021,7 @@ private:
     {
         if (!PerThreadQueue) {
             PerThreadQueue = new TThreadLocalQueue();
-            RegisteredLocalQueues_.Enqueue(PerThreadQueue);
+            RegisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
         }
 
         ++EnqueuedEvents_;
@@ -1455,13 +1456,13 @@ struct TLocalQueueReclaimer
     {
         if (PerThreadQueue) {
             auto logManager = TLogManager::Get()->Impl_;
-            logManager->UnregisteredLocalQueues_.Enqueue(PerThreadQueue);
+            logManager->UnregisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
             PerThreadQueue = reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel);
         }
     }
 };
 
-static thread_local TLocalQueueReclaimer LocalQueueReclaimer;
+static YT_THREAD_LOCAL(TLocalQueueReclaimer) LocalQueueReclaimer;
 
 ////////////////////////////////////////////////////////////////////////////////
 

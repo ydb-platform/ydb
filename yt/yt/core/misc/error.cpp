@@ -22,6 +22,7 @@
 #include <library/cpp/yt/exception/exception.h>
 
 #include <library/cpp/yt/misc/thread_name.h>
+#include <library/cpp/yt/misc/tls.h>
 
 #include <util/string/subst.h>
 
@@ -60,15 +61,15 @@ TString ToString(TErrorCode code)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-thread_local bool ErrorSanitizerEnabled = false;
-thread_local TInstant ErrorSanitizerDatetimeOverride = {};
+YT_THREAD_LOCAL(bool) ErrorSanitizerEnabled = false;
+YT_THREAD_LOCAL(TInstant) ErrorSanitizerDatetimeOverride = {};
 
 TErrorSanitizerGuard::TErrorSanitizerGuard(TInstant datetimeOverride)
     : SavedEnabled_(ErrorSanitizerEnabled)
-    , SavedDatetimeOverride_(ErrorSanitizerDatetimeOverride)
+    , SavedDatetimeOverride_(GetTlsRef(ErrorSanitizerDatetimeOverride))
 {
     ErrorSanitizerEnabled = true;
-    ErrorSanitizerDatetimeOverride = datetimeOverride;
+    GetTlsRef(ErrorSanitizerDatetimeOverride) = datetimeOverride;
 }
 
 TErrorSanitizerGuard::~TErrorSanitizerGuard()
@@ -76,7 +77,7 @@ TErrorSanitizerGuard::~TErrorSanitizerGuard()
     YT_ASSERT(ErrorSanitizerEnabled);
 
     ErrorSanitizerEnabled = SavedEnabled_;
-    ErrorSanitizerDatetimeOverride = SavedDatetimeOverride_;
+    GetTlsRef(ErrorSanitizerDatetimeOverride) = SavedDatetimeOverride_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -282,7 +283,7 @@ private:
     void CaptureOriginAttributes()
     {
         if (ErrorSanitizerEnabled) {
-            Datetime_ = ErrorSanitizerDatetimeOverride;
+            Datetime_ = GetTlsRef(ErrorSanitizerDatetimeOverride);
             return;
         }
 

@@ -87,16 +87,16 @@ struct TFiberContext
     TFiberPtr CurrentFiber;
 };
 
-static thread_local TFiberContext* FiberContext;
+static YT_THREAD_LOCAL(TFiberContext*) FiberContext;
 
 // Forbid inlining these accessors to prevent the compiler from
 // miss-optimizing TLS access in presence of fiber context switches.
-Y_NO_INLINE TFiberContext* TryGetFiberContext()
+TFiberContext* TryGetFiberContext()
 {
     return FiberContext;
 }
 
-Y_NO_INLINE void SetFiberContext(TFiberContext* context)
+void SetFiberContext(TFiberContext* context)
 {
     FiberContext = context;
 }
@@ -716,7 +716,7 @@ private:
     const TFiber* const Fiber_;
 
     TFiberSwitchHandler* SavedThis_;
-    static thread_local TFiberSwitchHandler* This_;
+    static YT_THREAD_LOCAL(TFiberSwitchHandler*) This_;
 
     struct TContextSwitchHandlers
     {
@@ -736,7 +736,7 @@ private:
 
         TBaseSwitchHandler::OnSwitch();
 
-        std::swap(SavedThis_, This_);
+        std::swap(SavedThis_, GetTlsRef(This_));
     }
 
     // On finish fiber running.
@@ -768,7 +768,7 @@ private:
     }
 };
 
-thread_local TFiberSwitchHandler* TFiberSwitchHandler::This_;
+YT_THREAD_LOCAL(TFiberSwitchHandler*) TFiberSwitchHandler::This_;
 
 TFiberSwitchHandler* TryGetFiberSwitchHandler()
 {
@@ -875,7 +875,7 @@ void TFiberSchedulerThread::ThreadMain()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-thread_local TFiberId CurrentFiberId;
+YT_THREAD_LOCAL(TFiberId) CurrentFiberId;
 
 TFiberId GetCurrentFiberId()
 {
@@ -889,7 +889,7 @@ void SetCurrentFiberId(TFiberId id)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-thread_local bool ContextSwitchForbidden;
+YT_THREAD_LOCAL(bool) ContextSwitchForbidden;
 
 bool IsContextSwitchForbidden()
 {

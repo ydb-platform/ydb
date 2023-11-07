@@ -2,6 +2,8 @@
 
 #include <library/cpp/yt/backtrace/cursors/interop/interop.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 #include <absl/base/internal/spinlock.h>
 #include <absl/base/internal/cycleclock.h>
 
@@ -64,7 +66,7 @@ void TSpinlockProfiler::RecordEvent(const void* /*lock*/, int64_t waitCycles)
     RecordSample(&fpCursor, waitCycles);
 }
 
-static thread_local int SpinlockEventCount;
+static YT_THREAD_LOCAL(int) SpinlockEventCount;
 
 void TSpinlockProfiler::OnEvent(const void* lock, int64_t waitCycles)
 {
@@ -169,7 +171,7 @@ void TBlockingProfiler::RecordEvent(
     RecordSample(&fpCursor, cpuDelay);
 }
 
-static thread_local int YTSpinlockEventCount;
+static YT_THREAD_LOCAL(int) YTSpinlockEventCount;
 
 void TBlockingProfiler::OnEvent(
     TCpuDuration cpuDelay,

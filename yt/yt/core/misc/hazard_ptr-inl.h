@@ -5,6 +5,8 @@
 #endif
 #undef HAZARD_PTR_INL_H_
 
+#include <library/cpp/yt/misc/tls.h>
+
 #include <array>
 
 namespace NYT {
@@ -18,10 +20,10 @@ namespace NDetail {
 constexpr int MaxHazardPointersPerThread = 2;
 using THazardPointerSet = std::array<std::atomic<void*>, MaxHazardPointersPerThread>;
 
-extern thread_local THazardPointerSet HazardPointers;
+extern YT_THREAD_LOCAL(THazardPointerSet) HazardPointers;
 
 struct THazardThreadState;
-extern thread_local THazardThreadState* HazardThreadState;
+extern YT_THREAD_LOCAL(THazardThreadState*) HazardThreadState;
 
 void InitHazardThreadState();
 
@@ -87,8 +89,10 @@ THazardPtr<T> THazardPtr<T>::Acquire(TPtrLoader&& ptrLoader, T* ptr)
         return {};
     }
 
-    auto* hazardPtr = [] {
-        for (auto it = NYT::NDetail::HazardPointers.begin(); it !=  NYT::NDetail::HazardPointers.end(); ++it) {
+    auto& hazardPointers = GetTlsRef(NYT::NDetail::HazardPointers);
+
+    auto* hazardPtr = [&] {
+        for (auto it = hazardPointers.begin(); it !=  hazardPointers.end(); ++it) {
             auto& ptr = *it;
             if (!ptr.load(std::memory_order::relaxed)) {
                 return &ptr;

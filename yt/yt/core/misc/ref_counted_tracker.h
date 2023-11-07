@@ -6,6 +6,8 @@
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -98,14 +100,14 @@ private:
     using TNamedStatistics = std::vector<TNamedSlot>;
 
     // nullptr if not initialized or already destroyed
-    static thread_local TLocalSlots* LocalSlots_;
+    static YT_THREAD_LOCAL(TLocalSlots*) LocalSlots_;
 
     // nullptr if not initialized or already destroyed
-    static thread_local TLocalSlot* LocalSlotsBegin_;
+    static YT_THREAD_LOCAL(TLocalSlot*) LocalSlotsBegin_;
 
     //  0 if not initialized
     // -1 if already destroyed
-    static thread_local int LocalSlotsSize_;
+    static YT_THREAD_LOCAL(int) LocalSlotsSize_;
 
     mutable NThreading::TForkAwareSpinLock SpinLock_;
     std::map<TKey, TRefCountedTypeCookie> KeyToCookie_;

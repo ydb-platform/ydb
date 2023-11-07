@@ -17,6 +17,8 @@
 
 #include <library/cpp/yt/memory/public.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 #include <util/system/spinlock.h>
 
 #include <util/generic/xrange.h>
@@ -37,7 +39,7 @@ DECLARE_REFCOUNTED_CLASS(TBucket)
 struct TExecutionPool;
 
 // High 16 bits is thread index and 48 bits for thread pool ptr.
-thread_local TPackedPtr ThreadCookie = 0;
+YT_THREAD_LOCAL(TPackedPtr) ThreadCookie = 0;
 
 static constexpr auto LogDurationThreshold = TDuration::Seconds(1);
 

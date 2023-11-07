@@ -6,6 +6,8 @@
 
 #include <yt/yt/core/misc/proc.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 #ifdef _linux_
     #include <sched.h>
 #endif
@@ -14,7 +16,7 @@ namespace NYT::NThreading {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static thread_local TThreadId CurrentUniqueThreadId;
+static YT_THREAD_LOCAL(TThreadId) CurrentUniqueThreadId;
 static std::atomic<TThreadId> UniqueThreadIdGenerator;
 
 static const auto& Logger = ThreadingLogger;
@@ -218,11 +220,11 @@ void TThread::ThreadMainTrampoline()
         bool Armed_ = true;
     };
 
-    static thread_local TExitInterceptor Interceptor;
+    static YT_THREAD_LOCAL(TExitInterceptor) Interceptor;
 
     ThreadMain();
 
-    Interceptor.Disarm();
+    GetTlsRef(Interceptor).Disarm();
 
     StoppedEvent_.NotifyAll();
 }

@@ -8,6 +8,8 @@
 
 #include <library/cpp/yt/memory/memory_tag.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 #include <algorithm>
 
 namespace NYT {
@@ -142,14 +144,14 @@ size_t TRefCountedTracker::TNamedSlot::ClampNonnegative(size_t allocated, size_t
 ////////////////////////////////////////////////////////////////////////////////
 
 // nullptr if not initialized or already destroyed
-thread_local TRefCountedTracker::TLocalSlots* TRefCountedTracker::LocalSlots_;
+YT_THREAD_LOCAL(TRefCountedTracker::TLocalSlots*) TRefCountedTracker::LocalSlots_;
 
 // nullptr if not initialized or already destroyed
-thread_local TRefCountedTracker::TLocalSlot* TRefCountedTracker::LocalSlotsBegin_;
+YT_THREAD_LOCAL(TRefCountedTracker::TLocalSlot*) TRefCountedTracker::LocalSlotsBegin_;
 
 //  0 if not initialized
 // -1 if already destroyed
-thread_local int TRefCountedTracker::LocalSlotsSize_;
+YT_THREAD_LOCAL(int) TRefCountedTracker::LocalSlotsSize_;
 
 int TRefCountedTracker::GetTrackedThreadCount() const
 {
@@ -410,15 +412,17 @@ TRefCountedTracker::TLocalSlot* TRefCountedTracker::GetLocalSlot(TRefCountedType
 
             auto guard = Guard(this_->SpinLock_);
 
-            if (this_->GlobalSlots_.size() < LocalSlots_->size()) {
-                this_->GlobalSlots_.resize(std::max(LocalSlots_->size(), this_->GlobalSlots_.size()));
+            auto& localSlots = GetTlsRef(LocalSlots_);
+
+            if (this_->GlobalSlots_.size() < localSlots->size()) {
+                this_->GlobalSlots_.resize(std::max(localSlots->size(), this_->GlobalSlots_.size()));
             }
 
-            for (auto index = 0; index < std::ssize(*LocalSlots_); ++index) {
-                this_->GlobalSlots_[index] += (*LocalSlots_)[index];
+            for (auto index = 0; index < std::ssize(*localSlots); ++index) {
+                this_->GlobalSlots_[index] += (*localSlots)[index];
             }
 
-            YT_VERIFY(this_->AllLocalSlots_.erase(LocalSlots_) == 1);
+            YT_VERIFY(this_->AllLocalSlots_.erase(localSlots) == 1);
 
             delete LocalSlots_;
             LocalSlots_ = nullptr;
@@ -427,7 +431,7 @@ TRefCountedTracker::TLocalSlot* TRefCountedTracker::GetLocalSlot(TRefCountedType
         }
     };
 
-    static thread_local TReclaimer Reclaimer;
+    static YT_THREAD_LOCAL(TReclaimer) Reclaimer;
 
     YT_VERIFY(LocalSlotsSize_ >= 0);
 
@@ -435,7 +439,7 @@ TRefCountedTracker::TLocalSlot* TRefCountedTracker::GetLocalSlot(TRefCountedType
 
     if (!LocalSlots_) {
         LocalSlots_ = new TLocalSlots();
-        YT_VERIFY(AllLocalSlots_.insert(LocalSlots_).second);
+        YT_VERIFY(AllLocalSlots_.insert(GetTlsRef(LocalSlots_)).second);
     }
 
     auto index = cookie.Underlying();

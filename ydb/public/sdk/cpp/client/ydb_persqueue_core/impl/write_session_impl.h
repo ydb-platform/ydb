@@ -158,8 +158,7 @@ namespace NTests {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionImpl
 
-class TWriteSessionImpl : public IWriteSession,
-                          public std::enable_shared_from_this<TWriteSessionImpl> {
+class TWriteSessionImpl : public TEnableSelfContext<TWriteSessionImpl> {
 private:
     friend class TWriteSession;
     friend class TSimpleBlockingWriteSession;
@@ -302,28 +301,26 @@ public:
             std::shared_ptr<TGRpcConnectionsImpl> connections,
             TDbDriverStatePtr dbDriverState);
 
-    TMaybe<TWriteSessionEvent::TEvent> GetEvent(bool block = false) override;
+    TMaybe<TWriteSessionEvent::TEvent> GetEvent(bool block = false);
     TVector<TWriteSessionEvent::TEvent> GetEvents(bool block = false,
-                                                  TMaybe<size_t> maxEventsCount = Nothing()) override;
-    NThreading::TFuture<ui64> GetInitSeqNo() override;
+                                                  TMaybe<size_t> maxEventsCount = Nothing());
+    NThreading::TFuture<ui64> GetInitSeqNo();
 
     void Write(TContinuationToken&& continuationToken, TStringBuf data,
-               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
+               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing());
 
     void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize,
-               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
+               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing());
 
 
-    NThreading::TFuture<void> WaitEvent() override;
+    NThreading::TFuture<void> WaitEvent();
 
     // Empty maybe - block till all work is done. Otherwise block at most at closeTimeout duration.
-    bool Close(TDuration closeTimeout = TDuration::Max()) override;
+    bool Close(TDuration closeTimeout = TDuration::Max());
 
-    TWriterCounters::TPtr GetCounters() override {Y_ABORT("Unimplemented"); } //ToDo - unimplemented;
+    TWriterCounters::TPtr GetCounters() {Y_ABORT("Unimplemented"); } //ToDo - unimplemented;
 
     ~TWriteSessionImpl(); // will not call close - destroy everything without acks
-
-    void SetCallbackContext(std::shared_ptr<TCallbackContext<TWriteSessionImpl>> ctx);
 
 private:
 
@@ -393,7 +390,6 @@ private:
     TStringType PrevToken;
     bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
-    std::shared_ptr<TCallbackContext<TWriteSessionImpl>> CbContext;
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;
     NGrpc::IQueueClientContextPtr ClientContext; // Common client context.
     NGrpc::IQueueClientContextPtr ConnectContext;

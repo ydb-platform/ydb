@@ -135,6 +135,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(setup->GetTestTopic());
 
+        Cerr << "Before ReadSession was created" << Endl;
         ReadSession = topicClient.CreateFederatedReadSession(readSettings);
         Cerr << "Session was created" << Endl;
 

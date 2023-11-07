@@ -54,10 +54,10 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
     return SubsessionSettings;
 }
 
-TFederatedReadSession::TFederatedReadSession(const TFederatedReadSessionSettings& settings,
-                                             std::shared_ptr<TGRpcConnectionsImpl> connections,
-                                             const TFederatedTopicClientSettings& clientSetttings,
-                                             std::shared_ptr<TFederatedDbObserver> observer)
+TFederatedReadSessionImpl::TFederatedReadSessionImpl(const TFederatedReadSessionSettings& settings,
+                                                     std::shared_ptr<TGRpcConnectionsImpl> connections,
+                                                     const TFederatedTopicClientSettings& clientSetttings,
+                                                     std::shared_ptr<TFederatedDbObserver> observer)
     : Settings(settings)
     , Connections(std::move(connections))
     , SubClientSetttings(FromFederated(clientSetttings))
@@ -68,17 +68,19 @@ TFederatedReadSession::TFederatedReadSession(const TFederatedReadSessionSettings
 {
 }
 
-void TFederatedReadSession::Start() {
-    AsyncInit.Subscribe([self = shared_from_this()](const auto& f){
+void TFederatedReadSessionImpl::Start() {
+    AsyncInit.Subscribe([selfCtx = SelfContext](const auto& f){
         Y_UNUSED(f);
-        with_lock(self->Lock) {
-            self->FederationState = self->Observer->GetState();
-            self->OnFederatedStateUpdateImpl();
+        if (auto self = selfCtx->LockShared()) {
+            with_lock(self->Lock) {
+                self->FederationState = self->Observer->GetState();
+                self->OnFederatedStateUpdateImpl();
+            }
         }
     });
 }
 
-void TFederatedReadSession::OpenSubSessionsImpl() {
+void TFederatedReadSessionImpl::OpenSubSessionsImpl() {
     for (const auto& db : FederationState->DbInfos) {
         // TODO check if available
         NTopic::TTopicClientSettings settings = SubClientSetttings;
@@ -92,7 +94,7 @@ void TFederatedReadSession::OpenSubSessionsImpl() {
     SubsessionIndex = 0;
 }
 
-void TFederatedReadSession::OnFederatedStateUpdateImpl() {
+void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
     if (!FederationState->Status.IsSuccess()) {
         CloseImpl();
         return;
@@ -104,24 +106,27 @@ void TFederatedReadSession::OnFederatedStateUpdateImpl() {
     // 3) TODO LATER reschedule OnFederatedStateUpdate
 }
 
-NThreading::TFuture<void> TFederatedReadSession::WaitEvent() {
+NThreading::TFuture<void> TFederatedReadSessionImpl::WaitEvent() {
     // TODO override with read session settings timeout
-    return AsyncInit.Apply([self = shared_from_this()](const NThreading::TFuture<void>) {
-        if (self->Closing) {
-            return NThreading::MakeFuture();
-        }
-        std::vector<NThreading::TFuture<void>> waiters;
-        with_lock(self->Lock) {
-            Y_ABORT_UNLESS(!self->SubSessions.empty(), "SubSessions empty in discovered state");
-            for (const auto& sub : self->SubSessions) {
-                waiters.emplace_back(sub.Session->WaitEvent());
+    return AsyncInit.Apply([selfCtx = SelfContext](const NThreading::TFuture<void>) {
+        if (auto self = selfCtx->LockShared()) {
+            if (self->Closing) {
+                return NThreading::MakeFuture();
             }
+            std::vector<NThreading::TFuture<void>> waiters;
+            with_lock(self->Lock) {
+                Y_ABORT_UNLESS(!self->SubSessions.empty(), "SubSessions empty in discovered state");
+                for (const auto& sub : self->SubSessions) {
+                    waiters.emplace_back(sub.Session->WaitEvent());
+                }
+            }
+            return NThreading::WaitAny(std::move(waiters));
         }
-        return NThreading::WaitAny(std::move(waiters));
+        return NThreading::MakeFuture();
     });
 }
 
-TVector<TReadSessionEvent::TEvent> TFederatedReadSession::GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) {
+TVector<TReadSessionEvent::TEvent> TFederatedReadSessionImpl::GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) {
     if (block) {
         WaitEvent().Wait();
     }
@@ -152,16 +157,11 @@ TVector<TReadSessionEvent::TEvent> TFederatedReadSession::GetEvents(bool block, 
     return result;
 }
 
-TMaybe<TReadSessionEvent::TEvent> TFederatedReadSession::GetEvent(bool block, size_t maxByteSize) {
-    auto events = GetEvents(block, 1, maxByteSize);
-    return events.empty() ? Nothing() : TMaybe<TReadSessionEvent::TEvent>{std::move(events.front())};
-}
-
-void TFederatedReadSession::CloseImpl() {
+void TFederatedReadSessionImpl::CloseImpl() {
     Closing = true;
 }
 
-bool TFederatedReadSession::Close(TDuration timeout) {
+bool TFederatedReadSessionImpl::Close(TDuration timeout) {
     bool result = true;
     for (const auto& sub : SubSessions) {
         // TODO substract from user timeout

@@ -230,15 +230,9 @@ TStringBuilder TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetLogPrefix
     return TStringBuilder() << GetDatabaseLogPrefix(Database) << "[" << SessionId << "] [" << ClusterName << "] ";
 }
 
-template <bool UseMigrationProtocol>
-TCallbackContextPtr<UseMigrationProtocol> TSingleClusterReadSessionImpl<UseMigrationProtocol>::MakeCallbackContext() {
-    CbContext = std::make_shared<TCallbackContext<TSelf>>(this->shared_from_this());
-    return CbContext;
-}
-
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Start() {
-    Y_ABORT_UNLESS(CbContext);
+    Y_ABORT_UNLESS(this->SelfContext);
     Settings.DecompressionExecutor_->Start();
     Settings.EventHandlers_.HandlersExecutor_->Start();
     if (!Reconnect(TPlainStatus())) {
@@ -324,16 +318,16 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
         // Destroy all partition streams before connecting.
         DestroyAllPartitionStreamsImpl(deferred);
 
-        Y_ABORT_UNLESS(CbContext);
+        Y_ABORT_UNLESS(this->SelfContext);
 
-        connectCallback = [cbContext = CbContext,
+        connectCallback = [cbContext = this->SelfContext,
                            connectContext = connectContext](TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
             if (auto borrowedSelf = cbContext->LockShared()) {
                 borrowedSelf->OnConnect(std::move(st), std::move(processor), connectContext); // OnConnect could be called inplace!
             }
         };
 
-        connectTimeoutCallback = [cbContext = CbContext,
+        connectTimeoutCallback = [cbContext = this->SelfContext,
                                   connectTimeoutContext = connectTimeoutContext](bool ok) {
             if (ok) {
                 if (auto borrowedSelf = cbContext->LockShared()) {
@@ -375,7 +369,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::BreakConnectionAndReco
     Processor = nullptr;
     RetryState = Settings.RetryPolicy_->CreateRetryState(); // Explicitly create retry state to determine whether we should connect to server again.
 
-    deferred.DeferReconnection(CbContext, std::move(status));
+    deferred.DeferReconnection(this->SelfContext, std::move(status));
 }
 
 template<bool UseMigrationProtocol>
@@ -824,9 +818,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ReadFromProcessorImpl(
     if (Processor && !Closing) {
         ServerMessage->Clear();
 
-        Y_ABORT_UNLESS(CbContext);
+        Y_ABORT_UNLESS(this->SelfContext);
 
-        auto callback = [cbContext = CbContext,
+        auto callback = [cbContext = this->SelfContext,
                          connectionGeneration = ConnectionGeneration,
                          // Capture message & processor not to read in freed memory.
                          serverMessage = ServerMessage,
@@ -1018,7 +1012,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         }
 
         auto decompressionInfo = std::make_shared<TDataDecompressionInfo<true>>(std::move(partitionData),
-                                                                                CbContext,
+                                                                                SelfContext,
                                                                                 Settings.Decompress_);
         Y_ABORT_UNLESS(decompressionInfo);
 
@@ -1044,7 +1038,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         NextPartitionStreamId, msg.topic().path(), msg.cluster(),
         msg.partition() + 1, // Group.
         msg.partition(),     // Partition.
-        msg.assign_id(), msg.read_offset(), CbContext);
+        msg.assign_id(), msg.read_offset(), SelfContext);
     NextPartitionStreamId += PartitionStreamIdStep;
 
     // Renew partition stream.
@@ -1262,7 +1256,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         partitionStream->SetFirstNotReadOffset(desiredOffset);
 
         auto decompressionInfo = std::make_shared<TDataDecompressionInfo<false>>(std::move(partitionData),
-                                                                                 CbContext,
+                                                                                 SelfContext,
                                                                                  Settings.Decompress_,
                                                                                  serverBytesSize);
         // TODO (ildar-khisam@): share serverBytesSize between partitions data according to their actual sizes;
@@ -1290,7 +1284,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     auto partitionStream = MakeIntrusive<TPartitionStreamImpl<false>>(
         NextPartitionStreamId, msg.partition_session().path(), msg.partition_session().partition_id(),
         msg.partition_session().partition_session_id(), msg.committed_offset(),
-        CbContext);
+        SelfContext);
     NextPartitionStreamId += PartitionStreamIdStep;
 
     // Renew partition stream.

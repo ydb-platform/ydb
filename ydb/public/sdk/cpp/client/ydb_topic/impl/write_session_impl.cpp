@@ -75,12 +75,8 @@ TWriteSessionImpl::TWriteSessionImpl(
 
 }
 
-void TWriteSessionImpl::SetCallbackContext(std::shared_ptr<NPersQueue::TCallbackContext<TWriteSessionImpl>> ctx) {
-    CbContext = std::move(ctx);
-}
-
 void TWriteSessionImpl::Start(const TDuration& delay) {
-    Y_ABORT_UNLESS(CbContext);
+    Y_ABORT_UNLESS(SelfContext);
     ++ConnectionAttemptsDone;
     if (!Started) {
         with_lock(Lock) {
@@ -162,7 +158,7 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
     request.set_partition_id(*Settings.PartitionId_);
     request.set_include_location(true);
 
-    auto extractor = [cbContext = CbContext, context = describePartitionContext](Ydb::Topic::DescribePartitionResponse* response, TPlainStatus status) mutable {
+    auto extractor = [cbContext = SelfContext, context = describePartitionContext](Ydb::Topic::DescribePartitionResponse* response, TPlainStatus status) mutable {
         Ydb::Topic::DescribePartitionResult result;
         if (response)
             response->operation().result().UnpackTo(&result);
@@ -486,14 +482,14 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
 
         reqSettings = TRpcRequestSettings::Make(Settings, PreferredPartitionLocation.Endpoint);
 
-        connectCallback = [cbContext = CbContext,
+        connectCallback = [cbContext = SelfContext,
                            connectContext = connectContext](TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
             if (auto self = cbContext->LockShared()) {
                 self->OnConnect(std::move(st), std::move(processor), connectContext);
             }
         };
 
-        connectTimeoutCallback = [cbContext = CbContext, connectTimeoutContext = connectTimeoutContext](bool ok) {
+        connectTimeoutCallback = [cbContext = SelfContext, connectTimeoutContext = connectTimeoutContext](bool ok) {
             if (ok) {
                 if (auto self = cbContext->LockShared()) {
                     self->OnConnectTimeout(connectTimeoutContext);
@@ -621,7 +617,7 @@ void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&&
     if (Aborting) {
         return;
     }
-    auto callback = [cbContext = CbContext,
+    auto callback = [cbContext = SelfContext,
                      connectionGeneration = ConnectionGeneration](NGrpc::TGrpcStatus&& grpcStatus) {
         if (auto self = cbContext->LockShared()) {
             self->OnWriteDone(std::move(grpcStatus), connectionGeneration);
@@ -642,7 +638,7 @@ void TWriteSessionImpl::ReadFromProcessor() {
         }
         prc = Processor;
         generation = ConnectionGeneration;
-        callback = [cbContext = CbContext,
+        callback = [cbContext = SelfContext,
                     connectionGeneration = generation,
                     processor = prc,
                     serverMessage = ServerMessage]
@@ -958,7 +954,7 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
 
     std::shared_ptr<TBlock> blockPtr(std::make_shared<TBlock>());
     blockPtr->Move(block_);
-    auto lambda = [cbContext = CbContext,
+    auto lambda = [cbContext = SelfContext,
                    codec = Settings.Codec_,
                    level = Settings.CompressionLevel_,
                    isSyncCompression = !CompressionExecutor->IsAsync(),
@@ -1277,7 +1273,7 @@ void TWriteSessionImpl::HandleWakeUpImpl() {
     if (AtomicGet(Aborting)) {
         return;
     }
-    auto callback = [cbContext = CbContext] (bool ok)
+    auto callback = [cbContext = SelfContext] (bool ok)
     {
         if (!ok) {
             return;

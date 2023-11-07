@@ -622,7 +622,7 @@ TSingleClusterReadSessionImpl<true>* TReadSessionImplTestSetup::GetSession() {
         if (!Settings.EventHandlers_.HandlersExecutor_) {
             Settings.EventHandlers_.HandlersExecutor(GetDefaultExecutor());
         }
-        Session = std::make_shared<TSingleClusterReadSessionImpl<true>>(
+        CbContext = MakeWithCallbackContext<TSingleClusterReadSessionImpl<true>>(
             Settings,
             "db",
             "sessionid",
@@ -632,7 +632,7 @@ TSingleClusterReadSessionImpl<true>* TReadSessionImplTestSetup::GetSession() {
             GetEventsQueue(),
             FakeContext,
             PartitionIdStart, PartitionIdStep);
-        CbContext = Session->MakeCallbackContext();
+        Session = CbContext->TryGet();
     }
     return Session.get();
 }

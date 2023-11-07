@@ -21,7 +21,7 @@ namespace NTests {
 // TWriteSession
 
 class TWriteSession : public IWriteSession,
-                      public std::enable_shared_from_this<TWriteSession> {
+                      public TContextOwner<TWriteSessionImpl> {
 private:
     friend class TSimpleBlockingWriteSession;
     friend class TPersQueueClient;
@@ -56,10 +56,6 @@ public:
 
 private:
     void Start(const TDuration& delay);
-
-private:
-    std::shared_ptr<NPersQueue::TCallbackContext<TWriteSessionImpl>> CbContext;
-    std::shared_ptr<TWriteSessionImpl> Impl;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

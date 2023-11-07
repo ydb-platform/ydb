@@ -261,7 +261,7 @@ Events:
 2. Запустите новый под с [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md):
 
     ```bash
-    kubectl run -it --image=cr.yandex/yc/ydb:21.4.30 --rm ydb-cli bash
+    kubectl run -it --image=cr.yandex/crptqonuodf51kdj7a7d/ydb:22.4.44 --rm ydb-cli bash
     ```
 
 3. Выполните запрос к базе данных {{ ydb-short-name }}:

@@ -142,13 +142,14 @@ TSyncSlruCacheBase<TKey, TValue, THash>::Find(const TKey& key)
 
 template <class TKey, class TValue, class THash>
 std::vector<typename TSyncSlruCacheBase<TKey, TValue, THash>::TValuePtr>
-TSyncSlruCacheBase<TKey, TValue, THash>::GetAll()
+TSyncSlruCacheBase<TKey, TValue, THash>::GetAll() const
 {
     std::vector<TValuePtr> result;
-    result.reseve(GetSize());
-    for (const auto& shard : Shards_) {
-        auto guard = ReaderGuard(shard->SpinLock);
-        for (const auto& [key, item] : shard->ItemMap) {
+    result.reserve(GetSize());
+    for (int index = 0; index < Config_->ShardCount; ++index) {
+        const auto& shard = Shards_[index];
+        auto guard = ReaderGuard(shard.SpinLock);
+        for (const auto& [key, item] : shard.ItemMap) {
             result.push_back(item->Value);
         }
     }

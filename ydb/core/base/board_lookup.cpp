@@ -502,6 +502,7 @@ public:
         , StateStorageGroupId(groupId)
         , Subscriber(Mode == EBoardLookupMode::Subscription)
         , BoardRetrySettings(std::move(boardRetrySettings))
+        , WaitForReplicasToSuccess(0)
     {}
 
     void Bootstrap() {

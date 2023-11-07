@@ -263,7 +263,7 @@ protected:
 
     ui32 PerGenerationCounter; // for garbage collection
 
-    NMetrics::TResourceMetrics* ResourceMetrics;
+    NMetrics::TResourceMetrics* ResourceMetrics = nullptr;
 
     TMaybe<NKeyValue::THelpers::TGenerationStep> PartialCollectedGenerationStep;
     TVector<TLogoBlobID> PartialCollectedDoNotKeep;

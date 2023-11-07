@@ -208,6 +208,7 @@ public:
         , Query(query)
         , ProxyReplyTime(TDuration::MicroSeconds(Max<ui64>()))
         , WaitingForReplicas(0)
+        , SelfConfigContentHash(0)
     {}
 
     void Bootstrap(const TActorContext &ctx) {

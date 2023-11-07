@@ -11,6 +11,7 @@ TIntermediate::TRead::TRead()
     , ValueSize(0)
     , CreationUnixTime(0)
     , StorageChannel(NKikimrClient::TKeyValueRequest::MAIN)
+    , HandleClass(NKikimrBlobStorage::AsyncRead)
     , Status(NKikimrProto::UNKNOWN)
 {}
 
@@ -22,6 +23,7 @@ TIntermediate::TRead::TRead(const TString &key, ui32 valueSize, ui64 creationUni
     , ValueSize(valueSize)
     , CreationUnixTime(creationUnixTime)
     , StorageChannel(storageChannel)
+    , HandleClass(NKikimrBlobStorage::AsyncRead)
     , Status(NKikimrProto::UNKNOWN)
 {}
 

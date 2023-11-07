@@ -437,7 +437,7 @@ namespace NKikimr {
 
     private:
         const TInstant Start;
-        ui64 Size;
+        ui64 Size = 0;
         ::NMonitoring::TDynamicCounters::TCounterPtr CounterPtr;
         NVDiskMon::TLtcHistoPtr HistoPtr;
         bool Finalized = false;

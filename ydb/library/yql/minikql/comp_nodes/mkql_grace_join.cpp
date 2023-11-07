@@ -426,7 +426,15 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     ui64 nColumns = ColumnTypes.size();
     ui64 nKeyColumns = keyColumns.size();
 
-    std::vector<TColumnDataPackInfo> allColumnsPackInfo;
+    for (ui32 i = 0; i < keyColumns.size(); i++ ) {
+        auto colType = columnTypes[keyColumns[i]];
+        auto packInfo = GetPackInfo(colType);
+        packInfo.ColumnIdx = keyColumns[i];
+        packInfo.IsKeyColumn = true;
+        ColumnsPackInfo.push_back(packInfo);
+    }
+
+
 
     for ( ui32 i = 0; i < columnTypes.size(); i++  ) {
 
@@ -438,12 +446,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
         ui32 keyColNums = std::count_if(keyColumns.begin(), keyColumns.end(), [&](ui32 k) {return k == i;});
 
         Packers.push_back(std::make_shared<TValuePacker>(true,colType));
-        if (keyColNums > 0) {
-            packInfo.IsKeyColumn = true;
-            for (ui32 j = 0; j < keyColNums; j++) {
-                ColumnsPackInfo.push_back(packInfo);
-            }
-        } else {
+        if (keyColNums == 0) {
             ColumnsPackInfo.push_back(packInfo);
         }
      }
@@ -482,18 +485,6 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     JoinTupleData.IntColumns = TupleIntVals.data();
     JoinTupleData.StrColumns = TupleStrings.data();
     JoinTupleData.StrSizes = TupleStrSizes.data();
-
-     std::sort( ColumnsPackInfo.begin(), ColumnsPackInfo.end(), [](const TColumnDataPackInfo & a, const TColumnDataPackInfo & b)
-        {
-
-            if (a.IsKeyColumn && !b.IsKeyColumn) return true;
-            if (b.IsKeyColumn && !a.IsKeyColumn) return false;
-
-            if (a.Bytes > b.Bytes) return true;
-            if (b.Bytes > a.Bytes) return false;
-            if (a.ColumnIdx < b.ColumnIdx ) return true;
-            return false;
-        });
 
 
     TupleHolder.resize(nColumns);

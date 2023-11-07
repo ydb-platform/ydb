@@ -15,7 +15,7 @@ extern const TString UseMetaParamName; // COMPAT(aozeritsky)
 class IStringSource: public NDq::IDqAsyncInputBuffer {
 public:
     virtual ~IStringSource() = default;
-    virtual void PushString(TVector<TString>&& batch, i64 space) = 0;
+    virtual void PushString(NDq::TDqSerializedBatch&& batch, i64 space) = 0;
 };
 
 class IStringSink: public NDq::IDqAsyncOutputBuffer {

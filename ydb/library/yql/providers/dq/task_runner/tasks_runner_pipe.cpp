@@ -36,6 +36,8 @@ const TString WorkingDirectoryParamName = "TaskRunnerProxy.WorkingDirectory";
 const TString WorkingDirectoryDontInitParamName = "TaskRunnerProxy.WorkingDirectoryDontInit";
 const TString UseMetaParamName = "TaskRunnerProxy.UseMeta"; // COMPAT(aozeritsky)
 
+
+using namespace NKikimr::NMiniKQL;
 using namespace NKikimr;
 using namespace NDq;
 
@@ -664,18 +666,18 @@ private:
     IPipeTaskRunner* TaskRunner;
     IInputStream& Input;
     IOutputStream& Output;
-
     TDqInputChannelStats PushStats;
     TDqInputStats PopStats;
 };
 
 class TDqSource: public IStringSource {
 public:
-    TDqSource(ui64 taskId, ui64 inputIndex, IPipeTaskRunner* taskRunner)
+    TDqSource(ui64 taskId, ui64 inputIndex, TType* inputType, IPipeTaskRunner* taskRunner)
         : TaskId(taskId)
         , TaskRunner(taskRunner)
         , Input(TaskRunner->GetInput())
         , Output(TaskRunner->GetOutput())
+        , InputType(inputType)
     {
         PushStats.InputIndex = inputIndex;
     }
@@ -719,47 +721,9 @@ public:
         ythrow yexception() << "unimplemented";
     }
 
-    void PushString(TVector<TString>&& batch, i64 space) override {
-        if (space > static_cast<i64>(256_MB)) {
-            throw yexception() << "Too big batch " << space;
-        }
-        NDqProto::TSourcePushRequest data;
-        data.SetSpace(space);
-        data.SetChunks(batch.size());
-
-        NDqProto::TCommandHeader header;
-        header.SetVersion(4);
-        header.SetCommand(NDqProto::TCommandHeader::PUSH_SOURCE);
-        header.SetTaskId(TaskId);
-        header.SetChannelId(PushStats.InputIndex);
-        header.Save(&Output);
-        data.Save(&Output);
-
-        i64 partSize = 32_MB;
-        for (auto& b : batch) {
-            NDqProto::TSourcePushChunk chunk;
-            i64 parts = (b.size() + partSize - 1) /  partSize;
-            chunk.SetParts(parts);
-            if (parts == 1) {
-                chunk.SetString(std::move(b));
-                chunk.Save(&Output);
-            } else {
-                chunk.Save(&Output);
-                for (i64 i = 0; i < parts; i++) {
-                    NDqProto::TSourcePushPart part;
-                    part.SetString(b.substr(i*partSize, partSize));
-                    part.Save(&Output);
-                }
-            }
-        }
-    }
-
-    void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) override {
-        auto inputType = GetInputType();
-        NDqProto::TSourcePushRequest data;
-        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-        TDqSerializedBatch serialized = dataSerializer.Serialize(batch, inputType);
+    void PushString(NDq::TDqSerializedBatch&& serialized, i64 space) override {
         YQL_ENSURE(!serialized.IsOOB());
+        NDqProto::TSourcePushRequest data;
         *data.MutableData() = std::move(serialized.Proto);
         data.SetSpace(space);
 
@@ -770,7 +734,13 @@ public:
         header.SetChannelId(PushStats.InputIndex);
         header.Save(&Output);
         data.Save(&Output);
+    }
 
+    void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) override {
+        auto inputType = GetInputType();
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
+        TDqSerializedBatch serialized = dataSerializer.Serialize(batch, inputType);
+        PushString(std::move(serialized), space);
     }
 
     [[nodiscard]]
@@ -797,21 +767,6 @@ public:
     }
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {
-        if (InputType) {
-            return InputType;
-        }
-
-        NDqProto::TCommandHeader header;
-        header.SetVersion(4);
-        header.SetCommand(NDqProto::TCommandHeader::GET_SOURCE_TYPE);
-        header.SetTaskId(TaskId);
-        header.SetChannelId(PushStats.InputIndex);
-        header.Save(&Output);
-
-        NDqProto::TGetTypeResponse response;
-        response.Load(&Input);
-
-        InputType = static_cast<NKikimr::NMiniKQL::TType*>(NKikimr::NMiniKQL::DeserializeNode(response.GetResult(), TaskRunner->GetTypeEnv()));
         return InputType;
     }
 
@@ -1364,7 +1319,7 @@ public:
     }
 
     IDqAsyncInputBuffer::TPtr GetSource(ui64 index) override {
-        return new TDqSource(Task.GetId(), index, this);
+        return new TDqSource(Task.GetId(), index, InputTypes.at(index), this);
     }
 
     TDqSink::TPtr GetSink(ui64 index) override {
@@ -1468,6 +1423,36 @@ private:
         for (const auto& readRange : taskMeta.GetReadRanges()) {
             ReadRanges.push_back(readRange);
         }
+
+        {
+            auto guard = BindAllocator({});
+            ProgramNode = DeserializeRuntimeNode(Task.GetProgram().GetRaw(), GetTypeEnv()); 
+        }
+
+        auto& programStruct = static_cast<TStructLiteral&>(*ProgramNode.GetNode());
+        auto programType = programStruct.GetType();
+        YQL_ENSURE(programType);
+        auto programRootIdx = programType->FindMemberIndex("Program");
+        YQL_ENSURE(programRootIdx);
+        TRuntimeNode programRoot = programStruct.GetValue(*programRootIdx);
+
+        auto programInputsIdx = programType->FindMemberIndex("Inputs");
+        YQL_ENSURE(programInputsIdx);
+        TRuntimeNode programInputs = programStruct.GetValue(*programInputsIdx);
+        YQL_ENSURE(programInputs.IsImmediate() && programInputs.GetNode()->GetType()->IsTuple());
+        auto& programInputsTuple = static_cast<TTupleLiteral&>(*programInputs.GetNode());
+        auto programInputsCount = programInputsTuple.GetValuesCount();
+
+        InputTypes.resize(programInputsCount);
+
+        for (ui32 i = 0; i < programInputsCount; ++i) {
+            auto input = programInputsTuple.GetValue(i);
+            TType* type = input.GetStaticType();
+            YQL_ENSURE(type->GetKind() == TType::EKind::Stream);
+            TType* inputType = static_cast<TStreamType&>(*type).GetItemType();
+
+            InputTypes[i] = inputType;
+        }
     }
 
 private:
@@ -1503,6 +1488,9 @@ private:
     i32 ProtocolVersion = -1;
     const ui64 TaskId;
     const ui64 StageId;
+
+    NKikimr::NMiniKQL::TRuntimeNode ProgramNode;
+    std::vector<TType*> InputTypes;
 };
 
 class TDqTaskRunner: public NDq::IDqTaskRunner {
@@ -1567,11 +1555,7 @@ public:
     IDqAsyncInputBuffer::TPtr GetSource(ui64 inputIndex) override {
         auto& source = Sources[inputIndex];
         if (!source) {
-            source = new TDqSource(
-                Task.GetId(),
-                inputIndex,
-                Delegate.Get());
-            Stats.Sources[inputIndex] = source;
+            source = static_cast<TDqSource*>(Delegate->GetSource(inputIndex).Get());
         }
         return source;
     }

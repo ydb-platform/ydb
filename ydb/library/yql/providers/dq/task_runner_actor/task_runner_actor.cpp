@@ -257,19 +257,17 @@ private:
         auto* actorSystem = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
         auto selfId = SelfId();
 
-        TVector<TString> strings;
         YQL_ENSURE(!batch.IsWide());
-        batch.ForEachRow([&strings](const auto& value) {
-            strings.emplace_back(value.AsStringRef());
-        });
 
-        Invoker->Invoke([strings=std::move(strings),taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
+        auto source = TaskRunner->GetSource(index);
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
+        TDqSerializedBatch serialized = dataSerializer.Serialize(batch, source->GetInputType());
+
+        Invoker->Invoke([serialized=std::move(serialized),taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto source = taskRunner->GetSource(index);
-                if (!strings.empty()) {
-                    (static_cast<NTaskRunnerProxy::IStringSource*>(source.Get()))->PushString(std::move(strings), space);
-                }
+                (static_cast<NTaskRunnerProxy::IStringSource*>(source.Get()))->PushString(std::move(serialized), space);
                 if (finish) {
                     source->Finish();
                 }

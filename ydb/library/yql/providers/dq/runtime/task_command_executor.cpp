@@ -608,19 +608,13 @@ public:
                 auto bytes = sink->Pop(batch, request.GetBytes());
 
                 NDqProto::TSinkPopResponse response;
-                if (request.GetRaw()) {
-                    batch.ForEachRow([&response](const auto& value) {
-                        *response.AddString() = value.AsStringRef();
-                    });
-                } else {
-                    NDq::TDqDataSerializer dataSerializer(
-                        Runner->GetTypeEnv(),
-                        Runner->GetHolderFactory(),
-                        NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-                    NDq::TDqSerializedBatch serialized = dataSerializer.Serialize(batch, outputType);
-                    YQL_ENSURE(!serialized.IsOOB());
-                    *response.MutableData() = std::move(serialized.Proto);
-                }
+                NDq::TDqDataSerializer dataSerializer(
+                    Runner->GetTypeEnv(),
+                    Runner->GetHolderFactory(),
+                    NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
+                NDq::TDqSerializedBatch serialized = dataSerializer.Serialize(batch, outputType);
+                YQL_ENSURE(!serialized.IsOOB());
+                *response.MutableData() = std::move(serialized.Proto);
                 response.SetBytes(bytes);
                 response.Save(&output);
                 break;

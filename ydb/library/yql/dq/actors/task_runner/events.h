@@ -389,7 +389,7 @@ struct TEvSinkPopFinished
     { }
 
     const ui64 Index;
-    TVector<TString> Strings;
+    NDq::TDqSerializedBatch Batch;
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
     i64 Size;
     i64 CheckpointSize;

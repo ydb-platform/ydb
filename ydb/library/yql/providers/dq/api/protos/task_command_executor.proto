@@ -75,14 +75,12 @@ message TMeteringStatsResponse {
 
 message TSinkPopRequest {
     uint64 Bytes = 1;
-    bool Raw = 2;
 };
 
 message TSinkPopResponse {
     uint64 Bytes = 1;
     TData Data = 2;
     repeated TMetric Metric = 3;
-    repeated bytes String = 4;
 }
 
 message TIsFinishedResponse {

@@ -1051,7 +1051,7 @@ public:
         return PopStats;
     }
 
-    ui64 PopString(TVector<TString>& batch, ui64 bytes) override {
+    ui64 PopString(NDq::TDqSerializedBatch& batch, ui64 bytes) override {
         try {
             NDqProto::TCommandHeader header;
             header.SetVersion(5);
@@ -1062,16 +1062,12 @@ public:
 
             NDqProto::TSinkPopRequest request;
             request.SetBytes(bytes);
-            request.SetRaw(true);
             header.Save(&Output);
 
             NDqProto::TSinkPopResponse response;
             response.Load(&Input);
 
-            for (auto& row : response.GetString()) {
-                batch.emplace_back(std::move(row));
-            }
-
+            batch.Proto = std::move(*response.MutableData());
             return response.GetBytes();
         } catch (...) {
             TaskRunner->RaiseException();

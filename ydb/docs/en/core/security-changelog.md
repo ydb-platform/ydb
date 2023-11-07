@@ -10,12 +10,12 @@ Link to CVE: [https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-28228](htt
 
 Credits: Maxim Arnold.
 
-## Fixed in YDB Go SDK v3.53.3, 17.10.2023 2023-10-17 {#17-10-2023}
+## Fixed in YDB Go SDK v3.53.3, 2023-10-17 {#17-10-2023}
 
 ### CVE-2023-45825 {#cve-2023-45825}
 
 Token in custom credentials object can leak through logs.
 
-Link to CVE: [https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-28228](https://nvd.nist.gov/vuln/detail/CVE-2023-45825).
+Link to CVE: [https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-45825](https://nvd.nist.gov/vuln/detail/CVE-2023-45825).
 
 Credits: Sergey Foster.

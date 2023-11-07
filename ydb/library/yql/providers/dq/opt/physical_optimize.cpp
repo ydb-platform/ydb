@@ -52,7 +52,7 @@ public:
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(BuildOrderedLMapOverMuxStage));
         AddHandler(0, &TCoLMap::Match, HNDL(BuildLMapOverMuxStage));
         if (enablePrecompute) {
-            AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
+            AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems<false>));
             AddHandler(0, &TCoSqlIn::Match, HNDL(BuildSqlIn<false>));
             AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<false>));
             AddHandler(0, &TCoHead::Match, HNDL(BuildScalarPrecompute<false>));
@@ -80,6 +80,7 @@ public:
         AddHandler(1, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<true>));
         AddHandler(1, &TCoLMap::Match, HNDL(PushLMapToStage<true>));
         if (enablePrecompute) {
+            AddHandler(1, &TCoHasItems::Match, HNDL(BuildHasItems<true>));
             AddHandler(1, &TCoSqlIn::Match, HNDL(BuildSqlIn<true>));
             AddHandler(1, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<true>));
             AddHandler(1, &TCoHead::Match, HNDL(BuildScalarPrecompute<true>));
@@ -254,8 +255,9 @@ protected:
         return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode);
     }
 
-    TMaybeNode<TExprBase> BuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
-        return DqBuildHasItems(node, ctx, optCtx);
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> BuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqBuildHasItems(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>

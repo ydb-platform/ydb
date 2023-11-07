@@ -2229,7 +2229,7 @@ TExprBase DqBuildPrecompute(TExprBase node, TExprContext& ctx) {
     return phyPrecompute;
 }
 
-TExprBase DqBuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
+TExprBase DqBuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage) {
     if (!node.Maybe<TCoHasItems>()) {
         return node;
     }
@@ -2241,6 +2241,10 @@ TExprBase DqBuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContex
     }
 
     auto unionAll = hasItems.List().Cast<TDqCnUnionAll>();
+
+    if (!IsSingleConsumerConnection(unionAll, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
 
     if (auto connToPushableStage = DqBuildPushableStage(unionAll, ctx)) {
         return TExprBase(ctx.ChangeChild(*node.Raw(), TCoHasItems::idx_List, std::move(connToPushableStage)));

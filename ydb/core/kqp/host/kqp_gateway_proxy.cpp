@@ -491,6 +491,14 @@ public:
                         }
                     }
                     FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
+                    if (sequences.size() > 0 && !sessionCtx->Config().EnableSequences) {
+                        IKqpGateway::TGenericResult errResult;
+                        errResult.AddIssue(NYql::TIssue("Sequences are not supported yet."));
+                        errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::UNSUPPORTED));
+                        tablePromise.SetValue(errResult);
+                        return;
+                    }
+
                     for(const auto& [seq, seqType]: sequences) {
                         auto seqDesc = schemeTx.MutableCreateIndexedTable()->MutableSequenceDescription()->Add();
                         seqDesc->SetName(seq);

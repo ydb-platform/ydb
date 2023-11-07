@@ -19,7 +19,6 @@ message TCommandHeader {
         RUN = 5;
         PREPARE = 6;
         STOP = 7;
-        GET_INPUT_TYPE = 8;
         GET_FREE_SPACE = 9;
 
         FINISH_OUTPUT = 10;
@@ -35,13 +34,11 @@ message TCommandHeader {
         GET_FREE_SPACE_SOURCE = 18;
         GET_STORED_BYTES_SOURCE = 19;
         PUSH_SOURCE = 20;
-        GET_SOURCE_TYPE = 21;
         FINISH_SOURCE = 22;
 
         // Sink
         SINK_POP = 23; // TSinkPopRequest -> TSinkPopResponse
         SINK_IS_FINISHED = 24; // Header -> TIsFinishedResponse
-        SINK_OUTPUT_TYPE = 25; // Header -> TGetTypeResponse
         SINK_STATS = 26; // Header -> TGetSinkStatsResponse
 
         GET_METERING_STATS = 27;

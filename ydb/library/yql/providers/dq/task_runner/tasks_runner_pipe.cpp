@@ -1029,11 +1029,12 @@ private:
 
 class TDqSink : public IStringSink {
 public:
-    TDqSink(ui64 taskId, ui64 outputIndex, IPipeTaskRunner* taskRunner)
+    TDqSink(ui64 taskId, ui64 outputIndex, TType* type, IPipeTaskRunner* taskRunner)
         : TaskId(taskId)
         , TaskRunner(taskRunner)
         , Input(TaskRunner->GetInput())
         , Output(TaskRunner->GetOutput())
+        , OutputType(type)
     {
         PopStats.OutputIndex = outputIndex;
     }
@@ -1128,24 +1129,6 @@ public:
     }
 
     NKikimr::NMiniKQL::TType* GetOutputType() const override {
-        if (OutputType) {
-            return OutputType;
-        }
-
-        NDqProto::TCommandHeader header;
-        header.SetVersion(5);
-        header.SetCommand(NDqProto::TCommandHeader::SINK_OUTPUT_TYPE);
-        header.SetTaskId(TaskId);
-        header.SetChannelId(PopStats.OutputIndex);
-        header.Save(&Output);
-
-        NDqProto::TGetTypeResponse response;
-        response.Load(&Input);
-
-        OutputType = static_cast<NKikimr::NMiniKQL::TType*>(
-            NKikimr::NMiniKQL::DeserializeNode(
-                response.GetResult(),
-                TaskRunner->GetTypeEnv()));
         return OutputType;
     }
 
@@ -1209,7 +1192,7 @@ private:
     IInputStream& Input;
     IOutputStream& Output;
 
-    mutable NKikimr::NMiniKQL::TType* OutputType = nullptr;
+    NKikimr::NMiniKQL::TType* OutputType;
 
     TDqOutputStats PushStats;
     TDqAsyncOutputBufferStats PopStats;
@@ -1323,7 +1306,7 @@ public:
     }
 
     TDqSink::TPtr GetSink(ui64 index) override {
-        return new TDqSink(Task.GetId(), index, this);
+        return new TDqSink(Task.GetId(), index, OutputTypes.at(index), this);
     }
 
     const NMiniKQL::TTypeEnvironment& GetTypeEnv() const override {
@@ -1453,6 +1436,31 @@ private:
 
             InputTypes[i] = inputType;
         }
+
+        OutputTypes.resize(Task.OutputsSize());
+        if (programRoot.GetNode()->GetType()->IsCallable()) {
+            auto programResultType = static_cast<const TCallableType*>(programRoot.GetNode()->GetType());
+            YQL_ENSURE(programResultType->GetReturnType()->IsStream());
+            auto programResultItemType = static_cast<const TStreamType*>(programResultType->GetReturnType())->GetItemType();
+
+            if (programResultItemType->IsVariant()) {
+                auto variantType = static_cast<const TVariantType*>(programResultItemType);
+                YQL_ENSURE(variantType->GetUnderlyingType()->IsTuple());
+                auto variantTupleType = static_cast<const TTupleType*>(variantType->GetUnderlyingType());
+                YQL_ENSURE(Task.OutputsSize() == variantTupleType->GetElementsCount(),
+                    "" << Task.OutputsSize() << " != " << variantTupleType->GetElementsCount());
+                for (ui32 i = 0; i < variantTupleType->GetElementsCount(); ++i) {
+                    OutputTypes[i] = variantTupleType->GetElementType(i);
+                }
+            }
+            else {
+                YQL_ENSURE(Task.OutputsSize() == 1);
+                OutputTypes[0] = programResultItemType;
+            }
+        } else {
+            YQL_ENSURE(programRoot.GetNode()->GetType()->IsVoid());
+            YQL_ENSURE(Task.OutputsSize() == 0);
+        }
     }
 
 private:
@@ -1491,6 +1499,7 @@ private:
 
     NKikimr::NMiniKQL::TRuntimeNode ProgramNode;
     std::vector<TType*> InputTypes;
+    std::vector<TType*> OutputTypes;
 };
 
 class TDqTaskRunner: public NDq::IDqTaskRunner {
@@ -1578,10 +1587,7 @@ public:
     IDqAsyncOutputBuffer::TPtr GetSink(ui64 outputIndex) override {
         auto& sink = Sinks[outputIndex];
         if (!sink) {
-            sink = new TDqSink(
-                Task.GetId(),
-                outputIndex,
-                Delegate.Get());
+            sink = static_cast<TDqSink*>(Delegate->GetSink(outputIndex).Get());
         }
         return sink;
     }

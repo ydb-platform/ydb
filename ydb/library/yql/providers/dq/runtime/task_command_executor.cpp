@@ -525,34 +525,6 @@ public:
 
                 break;
             }
-            case NDqProto::TCommandHeader::GET_INPUT_TYPE: {
-                Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
-                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
-
-                Y_ENSURE(taskId == Runner->GetTaskId());
-                auto channel = Runner->GetInputChannel(channelId);
-                auto inputType = channel->GetInputType();
-
-                NDqProto::TGetTypeResponse response;
-                response.SetResult(NKikimr::NMiniKQL::SerializeNode(inputType, Runner->GetTypeEnv()));
-                response.Save(&output);
-
-                break;
-            }
-            case NDqProto::TCommandHeader::GET_SOURCE_TYPE: {
-                Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
-                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
-
-                Y_ENSURE(taskId == Runner->GetTaskId());
-                auto source = Runner->GetSource(channelId);
-                auto inputType = source->GetInputType();
-
-                NDqProto::TGetTypeResponse response;
-                response.SetResult(NKikimr::NMiniKQL::SerializeNode(inputType, Runner->GetTypeEnv()));
-                response.Save(&output);
-
-                break;
-            }
             case NDqProto::TCommandHeader::GET_FREE_SPACE: {
                 Y_ENSURE(header.GetVersion() >= 2);
 
@@ -651,19 +623,6 @@ public:
                 }
                 response.SetBytes(bytes);
                 response.Save(&output);
-                break;
-            }
-            case NDqProto::TCommandHeader::SINK_OUTPUT_TYPE: {
-                Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
-                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
-
-                Y_ENSURE(taskId == Runner->GetTaskId());
-                auto outputType = Runner->GetSink(channelId)->GetOutputType();
-
-                NDqProto::TGetTypeResponse response;
-                response.SetResult(NKikimr::NMiniKQL::SerializeNode(outputType, Runner->GetTypeEnv()));
-                response.Save(&output);
-
                 break;
             }
             case NDqProto::TCommandHeader::SINK_STATS: {

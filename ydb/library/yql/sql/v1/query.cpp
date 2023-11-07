@@ -1080,14 +1080,21 @@ public:
                 if (col.Nullable) {
                     type = Y("AsOptionalType", type);
                 }
+
                 columnDesc = L(columnDesc, type);
-                if (col.Families) {
-                    auto familiesDesc = Y();
-                    for (const auto& family : col.Families) {
-                        familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
-                    }
-                    columnDesc = L(columnDesc, Q(familiesDesc));
+                auto columnConstraints = Y();
+                if (col.Serial) {
+                    columnConstraints = L(columnConstraints, Q(Y(Q("serial"), Q("true"))));
                 }
+
+                columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
+
+                auto familiesDesc = Y();
+                for (const auto& family : col.Families) {
+                    familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
+                }
+                columnDesc = L(columnDesc, Q(familiesDesc));
+
                 columns = L(columns, Q(columnDesc));
             }
             actions = L(actions, Q(Y(Q("addColumns"), Q(columns))));

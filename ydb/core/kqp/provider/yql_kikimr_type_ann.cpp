@@ -1206,15 +1206,13 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    if (columnTuple.Size() > 2) {
-                        auto families = columnTuple.Item(2);
-                        if (families.Cast<TCoAtomList>().Size() > 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                << " Column: \"" << name
-                                << "\". Several column families for a single column are not yet supported"));
-                            return TStatus::Error;
-                        }
+                    auto families = columnTuple.Item(3);
+                    if (families.Cast<TCoAtomList>().Size() > 1) {
+                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                            << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                            << " Column: \"" << name
+                            << "\". Several column families for a single column are not yet supported"));
+                        return TStatus::Error;
                     }
                 }
             } else if (name == "dropColumns") {

@@ -247,9 +247,10 @@ public:
         Parsers[NYql::EDatabaseType::Ydb] = ydbParser;
         Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, bool useTls)
         {
+            bool isDedicatedDb  = databaseInfo.GetMap().contains("storageConfig");
             auto ret = ydbParser(databaseInfo, mdbEndpointGenerator, useTls);
             // TODO: Take explicit field from MVP
-            if (ret.Endpoint.StartsWith("ydb.")) {
+            if (!isDedicatedDb && ret.Endpoint.StartsWith("ydb.")) {
                 // Replace "ydb." -> "yds."
                 ret.Endpoint[2] = 's';
             }

@@ -615,6 +615,13 @@ message TGenericGatewayConfig {
     reserved 1, 2;
 }
 
+/////////////////////////////// Db Resolver ///////////////////////////////////
+
+message TDbResolverConfig {
+    // Ydb / Yds mvp endpoint
+    optional string YdbMvpEndpoint = 2;
+}
+
 /////////////////////////////// Revision filter ///////////////////////////////
 
 message TRevisionException {
@@ -652,4 +659,5 @@ message TGatewaysConfig {
     optional TDbToolConfig DbTool = 20;
     optional TGenericGatewayConfig Generic = 21;
     optional TRevisionFilterConfig RevisionFilter = 22;
+    optional TDbResolverConfig DbResolver = 23;
 }

@@ -268,7 +268,7 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     TActorIds actorIds;
 
     // Run actor system only if necessary
-    auto needActorSystem = gatewaysConfig.HasGeneric();
+    auto needActorSystem = gatewaysConfig.HasGeneric() ||  gatewaysConfig.HasDbResolver();
     if (!needActorSystem) {
         return std::make_tuple(std::move(actorSystemManager), std::move(actorIds));
     }
@@ -279,7 +279,7 @@ std::tuple<std::unique_ptr<TActorSystemManager>, TActorIds> RunActorSystem(
     actorSystemManager->Start();
 
     // Actor system is initialized; start actor registration.
-    if (gatewaysConfig.HasGeneric()) {
+    if (needActorSystem) {
         auto httpProxy = NHttp::CreateHttpProxy();
         actorIds.HttpProxy = actorSystemManager->GetActorSystem()->Register(httpProxy);
 
@@ -705,6 +705,17 @@ int RunMain(int argc, const char* argv[])
         dataProvidersInit.push_back(GetClickHouseDataProviderInitializer(httpGateway));
     }
 
+    std::shared_ptr<NFq::TDatabaseAsyncResolverImpl> dbResolver;
+    if (gatewaysConfig.HasDbResolver()) {
+        dbResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
+            actorSystemManager->GetActorSystem(),
+            actorIds.DatabaseResolver,
+            gatewaysConfig.GetDbResolver().GetYdbMvpEndpoint(),
+            gatewaysConfig.HasGeneric() ? gatewaysConfig.GetGeneric().GetMdbGateway() : "",
+            NFq::MakeMdbEndpointGeneratorGeneric(false)
+        );
+    }
+
     NConnector::IClient::TPtr genericClient;
     if (gatewaysConfig.HasGeneric()) {
         for (auto& cluster : *gatewaysConfig.MutableGeneric()->MutableClusterMapping()) {
@@ -712,13 +723,6 @@ int RunMain(int argc, const char* argv[])
         }
 
         genericClient = NConnector::MakeClientGRPC(gatewaysConfig.GetGeneric().GetConnector());
-        auto dbResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
-            actorSystemManager->GetActorSystem(),
-            actorIds.DatabaseResolver,
-            "",
-            gatewaysConfig.GetGeneric().GetMdbGateway(),
-            NFq::MakeMdbEndpointGeneratorGeneric(false)
-        );
         dataProvidersInit.push_back(GetGenericDataProviderInitializer(genericClient, dbResolver));
     }
 
@@ -752,7 +756,8 @@ int RunMain(int argc, const char* argv[])
         for (auto& cluster: gatewaysConfig.GetPq().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{PqProviderName});
         }
-        dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway));
+
+        dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
     }
 
     if (gatewaysConfig.HasSolomon()) {

@@ -24,8 +24,10 @@ namespace NTest {
 
         struct TEggs {
             bool Rooted;
-            TVector<TPageId> IndexGroupsPages;
-            TVector<TPageId> IndexHistoricPages;
+            TVector<TPageId> GroupIndexes;
+            TVector<TPageId> HistoricIndexes;
+            TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes;
+            TVector<NPage::TBtreeIndexMeta> BTreeHistoricIndexes;
             TData *Scheme;
             TData *Blobs;
             TData *ByKey;
@@ -104,6 +106,11 @@ namespace NTest {
                     });
         }
 
+        ui64 GetDataBytes(ui32 room) const noexcept
+        {
+            return DataBytes[room];
+        }
+
         TData* GetMeta() const noexcept
         {
             return Meta ? &Meta : nullptr;
@@ -126,6 +133,8 @@ namespace NTest {
             return {
                 Rooted,
                 { Indexes.back() }, 
+                { },
+                { },
                 { },
                 GetPage(MainPageCollection, Scheme),
                 GetPage(MainPageCollection, Globs),
@@ -214,6 +223,9 @@ namespace NTest {
             Y_ABORT_UNLESS(!Finished, "This store is already finished");
             NPageCollection::Checksum(page); /* will catch uninitialised values */
 
+            if (type == EPage::DataPage) {
+                DataBytes[group] += page.size();
+            }
             TPageId id = PageCollections[group].size();
             PageCollections[group].push_back(std::move(page));
             PageTypes[group].push_back(type);
@@ -274,6 +286,7 @@ namespace NTest {
             , GlobOffset(globOffset)
             , PageCollections(groups + 2)
             , PageTypes(groups + 2)
+            , DataBytes(groups + 2)
         { }
 
         ui32 NextGlobOffset() const {
@@ -286,6 +299,7 @@ namespace NTest {
         const ui32 GlobOffset;
         TVector<TVector<TSharedData>> PageCollections;
         TVector<TVector<EPage>> PageTypes;
+        TVector<ui64> DataBytes;
 
         /*_ Sometimes will be replaced just with one root TPageId */
 

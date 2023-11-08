@@ -39,6 +39,14 @@ namespace NKikimr::NTable::NPage {
             Y_ABORT_UNLESS(!End);
         }
 
+        void Reset() {
+            Keys.clear();
+            KeysSize = 0;
+            Children.clear();
+            Ptr = 0;
+            End = 0;
+        }
+
         TString SerializeKey(TCellsRef cells) {
             Y_ABORT_UNLESS(cells.size() <= GroupInfo.KeyTypes.size());
 
@@ -113,6 +121,10 @@ namespace NKikimr::NTable::NPage {
 
         size_t GetKeysCount() const {
             return Keys.size();
+        }
+
+        TPgSize CalcKeySizeWithMeta(TCellsRef cells) const noexcept {
+            return sizeof(TRecordsEntry) + CalcKeySize(cells) + sizeof(TChild);
         }
 
     private:
@@ -256,15 +268,15 @@ namespace NKikimr::NTable::NPage {
                 return result;
             }
 
-            size_t GetKeysSize() {
+            size_t GetKeysSize() const {
                 return KeysSize;
             }
 
-            size_t GetKeysCount() {
+            size_t GetKeysCount() const {
                 return Keys.size();
             }
 
-            size_t GetChildrenCount() {
+            size_t GetChildrenCount() const {
                 return Children.size();
             }
 
@@ -288,6 +300,19 @@ namespace NKikimr::NTable::NPage {
             Y_ABORT_UNLESS(NodeKeysMax >= NodeKeysMin);
         }
 
+        TPgSize CalcSize(TCellsRef cells) const {
+            return Writer.CalcKeySizeWithMeta(cells);
+        }
+
+        // returns approximate value, doesn't include new child creation on Flush step
+        ui64 EstimateBytesUsed() const {
+            ui64 result = IndexSize; // written bytes
+            for (const auto &lvl : Levels) {
+                result += CalcPageSize(lvl);
+            }
+            return result;
+        }
+
         void AddKey(TCellsRef cells) {
             Levels[0].PushKey(Writer.SerializeKey(cells));
         }
@@ -296,7 +321,7 @@ namespace NKikimr::NTable::NPage {
             // aggregate in order to perform search by row id from any leaf node
             child.Count = (ChildrenCount += child.Count);
             child.ErasedCount = (ChildrenErasedCount += child.ErasedCount);
-            child.Size = (ChildrenSize += child.Size);
+            child.DataSize = (ChildrenSize += child.DataSize);
 
             Levels[0].PushChild(child);
         }
@@ -305,7 +330,7 @@ namespace NKikimr::NTable::NPage {
             for (size_t levelIndex = 0; levelIndex < Levels.size(); levelIndex++) {
                 if (last && !Levels[levelIndex].GetKeysCount()) {
                     Y_ABORT_UNLESS(Levels[levelIndex].GetChildrenCount() == 1, "Should be root");
-                    return TBtreeIndexMeta{ Levels[levelIndex].PopChild(), levelIndex };
+                    return TBtreeIndexMeta{ Levels[levelIndex].PopChild(), levelIndex, IndexSize };
                 }
 
                 if (!TryFlush(levelIndex, pager, last)) {
@@ -318,10 +343,17 @@ namespace NKikimr::NTable::NPage {
             return { };
         }
 
+        void Reset() {
+            IndexSize = 0;
+            Writer.Reset();
+            Levels = { TLevel() };
+            ChildrenCount = 0;
+            ChildrenErasedCount = 0;
+            ChildrenSize = 0;
+        }
+
     private:
         bool TryFlush(size_t levelIndex, IPageWriter &pager, bool last) {
-            Y_ABORT_UNLESS(Levels[levelIndex].GetKeysCount(), "Shouldn't have empty levels");
-
             if (!last && Levels[levelIndex].GetKeysCount() <= 2 * NodeKeysMax) {
                 // Note: node should meet both NodeKeysMin and NodeSize restrictions for split
 
@@ -361,13 +393,15 @@ namespace NKikimr::NTable::NPage {
             }
             auto lastChild = Levels[levelIndex].PopChild();
             Writer.AddChild(lastChild);
-                        
-            auto pageId = pager.Write(Writer.Finish(), EPage::BTreeIndex, 0);
+
+            auto page = Writer.Finish();
+            IndexSize += page.size();
+            auto pageId = pager.Write(std::move(page), EPage::BTreeIndex, 0);
 
             if (levelIndex + 1 == Levels.size()) {
                 Levels.emplace_back();
             }
-            Levels[levelIndex + 1].PushChild(TChild{pageId, lastChild.Count, lastChild.ErasedCount, lastChild.Size});
+            Levels[levelIndex + 1].PushChild(TChild{pageId, lastChild.Count, lastChild.ErasedCount, lastChild.DataSize});
             if (!last) {
                 Levels[levelIndex + 1].PushKey(Levels[levelIndex].PopKey());
             }
@@ -383,11 +417,13 @@ namespace NKikimr::NTable::NPage {
             return true;
         }
 
-        size_t CalcPageSize(TLevel& level) {
+        size_t CalcPageSize(const TLevel& level) const {
             return Writer.CalcPageSize(level.GetKeysSize(), level.GetKeysCount());
         }
 
     private:
+        ui64 IndexSize = 0;
+
         TBtreeIndexNodeWriter Writer;
         TVector<TLevel> Levels; // from bottom to top
 

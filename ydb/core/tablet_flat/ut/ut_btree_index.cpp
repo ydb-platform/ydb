@@ -57,26 +57,29 @@ namespace {
         return TChild{index + 10000, index + 100, index + 30, index + 1000};
     }
 
-    void Dump(TChild page, const TPartScheme& scheme, const TStore& store, ui32 level = 0) noexcept
+    void Dump(TChild meta, const TPartScheme& scheme, const TStore& store, ui32 level = 0) noexcept
     {
-        TString intend(level * 2, ' ');
+        TString intend;
+        for (size_t i = 0; i < level; i++) {
+            intend += " |";
+        }
+
         auto dumpChild = [&] (TChild child) {
             if (child.PageId < 1000) {
                 Dump(child, scheme, store, level + 1);
             } else {
-                Cerr << intend << "| " << child.ToString() << Endl;
+                Cerr << intend << " | " << child.ToString() << Endl;
             }
         };
 
-        auto node = TBtreeIndexNode(*store.GetPage(0, page.PageId));
+        auto node = TBtreeIndexNode(*store.GetPage(0, meta.PageId));
 
         auto label = node.Label();
 
         Cerr
             << intend
-            << "+ BTreeIndex{id=" << page.PageId << ", "
-            << "cnt=" << page.Count << ", "
-            << "size=" << page.Size << ", "
+            << " + BTreeIndex{"
+            << meta.ToString() << ", "
             << (ui16)label.Type << " rev " << label.Format << ", " 
             << label.Size << "b}"
             << Endl;
@@ -84,7 +87,7 @@ namespace {
         dumpChild(node.GetChild(0));
 
         for (TRecIdx i : xrange(node.GetKeysCount())) {
-            Cerr << intend << "|-> ";
+            Cerr << intend << " | > ";
 
             auto cells = node.GetKeyCells(i, scheme.Groups[0].ColsKeyIdx);
             for (TPos pos : xrange(cells.Count())) {
@@ -344,6 +347,23 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
     using namespace NTest;
     using TChild = TBtreeIndexNode::TChild;
 
+    Y_UNIT_TEST(NoNodes) {
+        TLayoutCook lay = MakeLayout();
+        TIntrusivePtr<TPartScheme> scheme = new TPartScheme(lay.RowScheme()->Cols);
+
+        TBtreeIndexBuilder builder(scheme, { }, Max<ui32>(), Max<ui32>(), Max<ui32>());
+
+        const auto child = MakeChild(42);
+        builder.AddChild(child);
+
+        TWriterBundle pager(1, TLogoBlobID());
+        auto result = builder.Flush(pager, true);
+        UNIT_ASSERT(result);
+
+        TBtreeIndexMeta expected{child, 0, 0};
+        UNIT_ASSERT_EQUAL_C(*result, expected, "Got " + result->ToString());
+    }
+
     Y_UNIT_TEST(OneNode) {
         TLayoutCook lay = MakeLayout();
         TIntrusivePtr<TPartScheme> scheme = new TPartScheme(lay.RowScheme()->Cols);
@@ -373,7 +393,9 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
 
         Dump(*result, *scheme, pager.Back());
 
-        UNIT_ASSERT_VALUES_EQUAL(result->LevelsCount, 1);
+        TBtreeIndexMeta expected{{0, 1155, 385, 11055}, 1, 594};
+        UNIT_ASSERT_EQUAL_C(*result, expected, "Got " + result->ToString());
+
         CheckKeys(result->PageId, keys, *scheme, pager.Back());
     }
 
@@ -455,13 +477,13 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
             keys[8]
         });
 
-        TChild expected{9, 0, 0, 0};
+        TBtreeIndexMeta expected{{9, 0, 0, 0}, 3, 1540};
         for (auto c : children) {
             expected.Count += c.Count;
             expected.ErasedCount += c.ErasedCount;
-            expected.Size += c.Size;
+            expected.DataSize += c.DataSize;
         }
-        UNIT_ASSERT_EQUAL(*result, expected);
+        UNIT_ASSERT_EQUAL_C(*result, expected, "Got " + result->ToString());
     }
 
     Y_UNIT_TEST(SplitBySize) {
@@ -494,9 +516,222 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
 
         Dump(*result, *scheme, pager.Back());
         
-        UNIT_ASSERT_VALUES_EQUAL(result->LevelsCount, 3);
+        TBtreeIndexMeta expected{{15, 15150, 8080, 106050}, 3, 10254};
+        UNIT_ASSERT_EQUAL_C(*result, expected, "Got " + result->ToString());
     }
 
+}
+
+Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
+
+    Y_UNIT_TEST(NoNodes) {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf{ true, 7 * 1024 };
+        conf.WriteBTreeIndex = true;
+
+        TPartCook cook(lay, conf);
+        
+        for (ui32 i : xrange(5)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + std::to_string(i)));
+        }
+
+        TPartEggs eggs = cook.Finish();
+
+        const auto part = eggs.Lone();
+
+        Cerr << DumpPart(*part, 1) << Endl;
+
+        auto pages = IndexTools::CountMainPages(*part);
+        UNIT_ASSERT_VALUES_EQUAL(pages, 1);
+
+        TBtreeIndexMeta expected{{0 /*Data page*/, 5, 0, 5240}, 0, 0};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
+    }
+
+    Y_UNIT_TEST(OneNode) {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf{ true, 7 * 1024 };
+        conf.WriteBTreeIndex = true;
+
+        TPartCook cook(lay, conf);
+        
+        for (ui32 i : xrange(10)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + std::to_string(i)));
+        }
+
+        TPartEggs eggs = cook.Finish();
+
+        const auto part = eggs.Lone();
+
+        Cerr << DumpPart(*part, 1) << Endl;
+
+        auto pages = IndexTools::CountMainPages(*part);
+        UNIT_ASSERT_VALUES_EQUAL(pages, 2);
+
+        TBtreeIndexMeta expected{{3, 10, 0, 10480}, 1, 1114};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
+    }
+
+    Y_UNIT_TEST(FewNodes) {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf{ true, 7 * 1024 };
+        conf.WriteBTreeIndex = true;
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+
+        TPartCook cook(lay, conf);
+        
+        for (ui32 i : xrange(700)) {
+            // some index keys will be cut
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + std::to_string(i % 9)));
+        }
+
+        TPartEggs eggs = cook.Finish();
+
+        const auto part = eggs.Lone();
+
+        Cerr << DumpPart(*part, 2) << Endl;
+
+        auto pages = IndexTools::CountMainPages(*part);
+        UNIT_ASSERT_VALUES_EQUAL(pages, 117);
+
+        TBtreeIndexMeta expected{{143, 700, 0, 733140}, 3, 86010};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
+    }
+
+    Y_UNIT_TEST(Erases) {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf conf{ true, 7 * 1024 };
+        conf.WriteBTreeIndex = true;
+        conf.Final = false;
+        conf.Group(0).PageRows = 33;
+        conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 5;
+
+        TPartCook cook(lay, conf);
+        
+        for (ui32 i : xrange(1000)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i, ToString(i)), 
+                i % 7 ? ERowOp::Upsert : ERowOp::Erase);
+        }
+
+        TPartEggs eggs = cook.Finish();
+
+        const auto part = eggs.Lone();
+
+        Cerr << DumpPart(*part, 2) << Endl;
+
+        auto pages = IndexTools::CountMainPages(*part);
+        UNIT_ASSERT_VALUES_EQUAL(pages, 31);
+
+        TBtreeIndexMeta expected{{37, 1000, 143, 22098}, 2, 1374};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
+    }
+
+    Y_UNIT_TEST(Groups) {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(1, 1,  NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf conf{ true, 7 * 1024 };
+        conf.WriteBTreeIndex = true;
+        conf.Group(0).PageRows = 3;
+        conf.Group(1).PageRows = 4;
+        conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 5;
+        conf.Group(1).BTreeIndexNodeKeysMin = conf.Group(1).BTreeIndexNodeKeysMax = 6;
+
+        TPartCook cook(lay, conf);
+        
+        for (ui32 i : xrange(1000)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i, ToString(i)));
+        }
+
+        TPartEggs eggs = cook.Finish();
+
+        const auto part = eggs.Lone();
+
+        Cerr << DumpPart(*part, 2) << Endl;
+
+        auto pages = IndexTools::CountMainPages(*part);
+        UNIT_ASSERT_VALUES_EQUAL(pages, 334);
+
+        TBtreeIndexMeta expected0{{438, 1000, 0, 16680}, 3, 15181};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected0, "Got " + part->IndexPages.BTreeGroups[0].ToString());
+
+        TBtreeIndexMeta expected1{{441, 1000, 0, 21890}, 3, 9772};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[1], expected1, "Got " + part->IndexPages.BTreeGroups[1].ToString());
+    }
+
+    Y_UNIT_TEST(History) {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(1, 1,  NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf conf{ true, 7 * 1024 };
+        conf.WriteBTreeIndex = true;
+        conf.Group(0).PageRows = 3;
+        conf.Group(1).PageRows = 4;
+        conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 5;
+        conf.Group(1).BTreeIndexNodeKeysMin = conf.Group(1).BTreeIndexNodeKeysMax = 6;
+
+        TPartCook cook(lay, conf);
+        
+        for (ui32 i : xrange(1000)) {
+            for (ui32 j : xrange(i % 5 + 1)) {
+                cook.Ver({0, 10 - j}).Add(*TSchemedCookRow(*lay).Col(i, ToString(i * 10 + j)));
+            }
+        }
+
+        TPartEggs eggs = cook.Finish();
+
+        const auto part = eggs.Lone();
+
+        Cerr << DumpPart(*part, 2) << Endl;
+
+        auto pages = IndexTools::CountMainPages(*part);
+        UNIT_ASSERT_VALUES_EQUAL(pages, 334);
+
+        TBtreeIndexMeta expected0{{1315, 1000, 0, 32680}, 3, 15181};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected0, "Got " + part->IndexPages.BTreeGroups[0].ToString());
+
+        TBtreeIndexMeta expected1{{1318, 1000, 0, 22889}, 3, 9772};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[1], expected1, "Got " + part->IndexPages.BTreeGroups[1].ToString());
+
+        TBtreeIndexMeta expectedHist0{{1322, 2000, 0, 77340}, 4, 43814};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[0], expectedHist0, "Got " + part->IndexPages.BTreeHistoric[0].ToString());
+
+        TBtreeIndexMeta expectedHist1{{1325, 2000, 0, 45780}, 3, 19576};
+        UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[1], expectedHist1, "Got " + part->IndexPages.BTreeHistoric[1].ToString());
+    }
 }
 
 }

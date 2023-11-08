@@ -93,33 +93,33 @@ namespace NKikimr::NTable::NPage {
             }
 
             bool IsNull(TPos pos) const {
-                ui8 x = IsNullBitmap[pos >> 3];
+                ui8 x = reinterpret_cast<const ui8*>(this)[pos >> 3];
                 return (x >> (pos & 7)) & 1;
             }
 
             void SetNull(TPos pos) {
-                ui8& x = IsNullBitmap[pos >> 3];
+                ui8& x = reinterpret_cast<ui8*>(this)[pos >> 3];
                 x |= (1 << (pos & 7));
             }
 
-            // 1 = null
-            ui8 IsNullBitmap[0];
+            // 1 bit = null
+            ui8 IsNullBitmap_;
         } Y_PACKED;
 
-        static_assert(sizeof(TKey) == 0, "Invalid TBtreeIndexNode TKey size");
+        static_assert(sizeof(TKey) == 1, "Invalid TBtreeIndexNode TKey size");
 
         struct TChild {
             TPageId PageId;
             TRowId Count;
             TRowId ErasedCount;
-            ui64 Size;
+            ui64 DataSize;
 
             auto operator<=>(const TChild&) const = default;
 
             TString ToString() const noexcept
             {
                 // copy values to prevent 'reference binding to misaligned address' error
-                return TStringBuilder() << "PageId: " << TPageId(PageId) << " Count: " << TRowId(Count) << " Size: " << ui64(Size);
+                return TStringBuilder() << "PageId: " << TPageId(PageId) << " Count: " << TRowId(Count) << " Erased: " << TRowId(ErasedCount) << " DataSize: " << ui64(DataSize);
             }
         } Y_PACKED;
 
@@ -129,7 +129,7 @@ namespace NKikimr::NTable::NPage {
 
     public:
         TBtreeIndexNode(TSharedData raw)
-            : Raw(std::move(raw)) 
+            : Raw(std::move(raw))
         {
             const auto data = NPage::TLabelWrapper().Read(Raw, EPage::BTreeIndex);
             Y_ABORT_UNLESS(data == ECodec::Plain && data.Version == 0);
@@ -180,5 +180,13 @@ namespace NKikimr::NTable::NPage {
 
     struct TBtreeIndexMeta : public TBtreeIndexNode::TChild {
         size_t LevelsCount;
+        ui64 IndexSize;
+
+        auto operator<=>(const TBtreeIndexMeta&) const = default;
+
+        TString ToString() const noexcept
+        {
+            return TStringBuilder() << TBtreeIndexNode::TChild::ToString() << " LevelsCount: " << LevelsCount << " IndexSize: " << IndexSize;
+        }
     };
 }

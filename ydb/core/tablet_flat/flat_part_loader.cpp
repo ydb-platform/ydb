@@ -76,6 +76,21 @@ void TLoader::StageParseMeta() noexcept
             HistoricIndexesIds.push_back(id);
         }
 
+        BTreeGroupIndexes.clear();
+        BTreeHistoricIndexes.clear();
+        for (bool history : {false, true}) {
+            for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
+                NPage::TBtreeIndexMeta converted{{
+                    meta.GetRootPageId(), 
+                    meta.GetCount(), 
+                    meta.GetErasedCount(), 
+                    meta.GetDataSize()}, 
+                    meta.GetLevelsCount(), 
+                    meta.GetIndexSize()};
+                (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+            }
+        }
+
     } else { /* legacy page collection w/o layout data, (Evolution < 14) */
         do {
             pageId--;
@@ -176,7 +191,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
         {
             epoch,
             TPartScheme::Parse(*scheme, Rooted),
-            { std::move(groupIndexesIds), HistoricIndexesIds },
+            { std::move(groupIndexesIds), HistoricIndexesIds, BTreeGroupIndexes, BTreeHistoricIndexes },
             blobs ? new NPage::TExtBlobs(*blobs, extra) : nullptr,
             byKey ? new NPage::TBloom(*byKey) : nullptr,
             large ? new NPage::TFrames(*large) : nullptr,
@@ -238,7 +253,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
     } else if (auto fetches = KeysEnv->GetFetches()) {
         return fetches;
     } else {
-        Y_ABORT("Screen keys loader stalled withoud result");
+        Y_ABORT("Screen keys loader stalled without result");
     }
 }
 

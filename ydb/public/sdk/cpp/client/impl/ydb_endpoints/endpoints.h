@@ -55,6 +55,11 @@ struct TEndpointKey {
         , NodeId(nodeId)
     {}
 
+    TEndpointKey(ui64 nodeId)
+        : Endpoint()
+        , NodeId(nodeId)
+    {}
+
     const std::string& GetEndpoint() const {
         return Endpoint;
     }

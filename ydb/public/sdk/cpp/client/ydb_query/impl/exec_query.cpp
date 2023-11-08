@@ -2,6 +2,7 @@
 #include "exec_query.h"
 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/kqp_session_common/kqp_session_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
@@ -217,6 +218,11 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
 
     auto promise = NewPromise<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>>();
 
+    auto rpcSettings = TRpcRequestSettings::Make(settings);
+    if (sessionId) {
+        rpcSettings.PreferredEndpoint = TEndpointKey(GetNodeIdFromSession(sessionId));
+    }
+
     connections->StartReadStream<
         Ydb::Query::V1::QueryService,
         Ydb::Query::ExecuteQueryRequest,
@@ -228,7 +234,7 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
         },
         &Ydb::Query::V1::QueryService::Stub::AsyncExecuteQuery,
         driverState,
-        TRpcRequestSettings::Make(settings)
+        rpcSettings
     );
 
     return promise.GetFuture();

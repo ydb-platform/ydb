@@ -264,7 +264,7 @@ protected:
                             BLOG_D("Balancer moving tablet " << tablet->ToString() << " " << tablet->GetResourceValues()
                                    << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues
                                    << " to node " << result.BestNode->Id << " " << result.BestNode->ResourceValues);
-                            Hive->RecordTabletMove({now, tablet->GetFullTabletId(), tablet->Node->Id, result.BestNode->Id});
+                            Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, result.BestNode->Id));
                             Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), result.BestNode->Id));
                             UpdateProgress();
                             if (!CanKickNextTablet()) {

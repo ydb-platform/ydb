@@ -38,6 +38,7 @@ SRCS(
     storage_pool_info.h
     tablet_info.cpp
     tablet_info.h
+    tablet_move_info.cpp
     tx__adopt_tablet.cpp
     tx__block_storage_result.cpp
     tx__configure_subdomain.cpp

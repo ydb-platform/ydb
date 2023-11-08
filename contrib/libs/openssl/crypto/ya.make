@@ -1106,7 +1106,7 @@ IF (OS_WINDOWS AND ARCH_I386)
         -DMD5_ASM
     )
     MASMFLAGS(
-        /SAFESEH
+        /safeseh
     )
     SRCS(
         ../asm/windows/crypto/aes/aesni-x86.masm

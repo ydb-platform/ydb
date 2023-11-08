@@ -2254,16 +2254,16 @@
     ],
     "test.test[join-aggr_diff_order-default.txt-Debug]": [
         {
-            "checksum": "7a7f1bb6bf9f7c8402c3a7ca10eade39",
-            "size": 4603,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1936273/c31604f98e4b20ef9eba4bdda051e70d5b99c86b/resource.tar.gz#test.test_join-aggr_diff_order-default.txt-Debug_/opt.yql"
+            "checksum": "6faa4b3f95977f1cc81c7eca687fa0f4",
+            "size": 4750,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1880306/936795bd02647b71aac5643eb913ac548fe04af6/resource.tar.gz#test.test_join-aggr_diff_order-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[join-aggr_diff_order-default.txt-Plan]": [
         {
-            "checksum": "e2fda47295be75a28f0c7f7a5dc508c3",
-            "size": 7008,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1936947/f7951ec72b4e04c6fc68a66ad3312c664a52414b/resource.tar.gz#test.test_join-aggr_diff_order-default.txt-Plan_/plan.txt"
+            "checksum": "b8e7252756b56d3dd4123db54477814d",
+            "size": 5969,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942173/65ae40707d3cd7e740f6a2f062bcfcf002e4ec2f/resource.tar.gz#test.test_join-aggr_diff_order-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[join-aggr_diff_order-default.txt-Results]": [

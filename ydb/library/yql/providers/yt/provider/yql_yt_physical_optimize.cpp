@@ -109,6 +109,7 @@ public:
         AddHandler(1, &TYtSort::Match, HNDL(TopSort));
         AddHandler(1, &TYtWithUserJobsOpBase::Match, HNDL(EmbedLimit));
         AddHandler(1, &TYtMerge::Match, HNDL(PushMergeLimitToInput));
+        AddHandler(1, &TYtReduce::Match, HNDL(FuseReduce));
 
         AddHandler(2, &TStatWriteTable::Match, HNDL(ReplaceStatWriteTable));
         AddHandler(2, &TYtMap::Match, HNDL(MapToMerge));
@@ -4349,6 +4350,187 @@ private:
             .Done();
 
         return WrapOp(map, ctx);
+    }
+
+    TMaybeNode<TExprBase> FuseReduce(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+        auto outerReduce = node.Cast<TYtReduce>();
+       
+        if (outerReduce.Input().Size() != 1 || outerReduce.Input().Item(0).Paths().Size() != 1) {
+            return node;
+        }
+        if (outerReduce.Input().Item(0).Settings().Size() != 0) {
+            return node;
+        }
+        TYtPath path = outerReduce.Input().Item(0).Paths().Item(0);
+        if (!path.Ranges().Maybe<TCoVoid>()) {
+            return node;
+        }
+        auto maybeInnerReduce = path.Table().Maybe<TYtOutput>().Operation().Maybe<TYtReduce>();
+        if (!maybeInnerReduce) {
+            return node;
+        }
+        TYtReduce innerReduce = maybeInnerReduce.Cast();
+
+        if (innerReduce.Ref().StartsExecution() || innerReduce.Ref().HasResult()) {
+            return node;
+        }
+        if (innerReduce.Output().Size() > 1) {
+            return node;
+        }
+
+        if (outerReduce.DataSink().Cluster().Value() != innerReduce.DataSink().Cluster().Value()) {
+            return node;
+        }
+
+        const TParentsMap* parentsReduce = getParents();
+        if (IsOutputUsedMultipleTimes(innerReduce.Ref(), *parentsReduce)) {
+            // Inner reduce output is used more than once
+            return node;
+        }
+        // Check world dependencies
+        auto parentsIt = parentsReduce->find(innerReduce.Raw());
+        YQL_ENSURE(parentsIt != parentsReduce->cend());
+        for (auto dep: parentsIt->second) {
+            if (!TYtOutput::Match(dep)) {
+                return node;
+            }
+        }
+
+        if (!NYql::HasSetting(innerReduce.Settings().Ref(), EYtSettingType::KeySwitch) ||
+            !NYql::HasSetting(innerReduce.Settings().Ref(), EYtSettingType::Flow) ||
+            !NYql::HasSetting(innerReduce.Settings().Ref(), EYtSettingType::ReduceBy)) {
+            return node;
+        }
+
+        if (NYql::HasSetting(outerReduce.Settings().Ref(), EYtSettingType::SortBy)) {
+            return node;
+        }
+
+        if (NYql::HasSettingsExcept(innerReduce.Settings().Ref(), EYtSettingType::ReduceBy |
+                                                                 EYtSettingType::KeySwitch |
+                                                                 EYtSettingType::Flow |
+                                                                 EYtSettingType::FirstAsPrimary |
+                                                                 EYtSettingType::SortBy |
+                                                                 EYtSettingType::NoDq)) {
+            return node;
+        }
+
+        if (!EqualSettingsExcept(innerReduce.Settings().Ref(), outerReduce.Settings().Ref(),
+                                                                EYtSettingType::ReduceBy |
+                                                                EYtSettingType::FirstAsPrimary |
+                                                                EYtSettingType::NoDq |
+                                                                EYtSettingType::SortBy)) {
+            return node;
+        }
+
+        auto innerLambda = innerReduce.Reducer();
+        auto outerLambda = outerReduce.Reducer();
+        auto fuseRes = CanFuseLambdas(innerLambda, outerLambda, ctx);
+        if (!fuseRes) {
+            // Some error
+            return {};
+        }
+        if (!*fuseRes) {
+            // Cannot fuse
+            return node;
+        }
+
+        auto [placeHolder, lambdaWithPlaceholder] = ReplaceDependsOn(outerLambda.Ptr(), ctx, State_->Types);
+        if (!placeHolder) {
+            return {};
+        }
+
+
+        if (lambdaWithPlaceholder != outerLambda.Ptr()) {
+            outerLambda = TCoLambda(lambdaWithPlaceholder);
+        }
+
+        innerLambda = FallbackLambdaOutput(innerLambda, ctx);
+        outerLambda = FallbackLambdaInput(outerLambda, ctx);
+
+        
+        const auto outerReduceBy = NYql::GetSettingAsColumnList(outerReduce.Settings().Ref(), EYtSettingType::ReduceBy);
+        auto reduceByList = [&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+            size_t index = 0;
+            for (const auto& reduceByName: outerReduceBy) {
+                parent.Callable(index++, "Member")
+                    .Arg(0, "item")
+                    .Atom(1, reduceByName)
+                .Seal();
+            }
+            return parent;
+        };
+
+        // adds _yql_sys_tablekeyswitch column which is required for outer lambda
+        // _yql_sys_tableswitch equals "true" when reduce key is changed
+        TExprNode::TPtr keySwitchLambda = ctx.Builder(node.Pos())
+            .Lambda()
+                .Param("stream")
+                .Callable(0, "Fold1Map")
+                    .Arg(0, "stream")
+                    .Lambda(1)
+                        .Param("item")
+                        .List(0)
+                            .Callable(0, "AddMember")
+                                .Arg(0, "item")
+                                .Atom(1, "_yql_sys_tablekeyswitch")
+                                .Callable(2, "Bool").Atom(0, "true").Seal()
+                            .Seal()
+                            .List(1).Do(reduceByList).Seal()
+                        .Seal()
+                    .Seal()
+                    .Lambda(2)
+                        .Param("item")
+                        .Param("state")
+                        .List(0)
+                            .Callable(0, "AddMember")
+                                .Arg(0, "item")
+                                .Atom(1, "_yql_sys_tablekeyswitch")
+                                .Callable(2, "If")
+                                    .Callable(0, "AggrEquals")
+                                        .List(0).Do(reduceByList).Seal()
+                                        .Arg(1, "state")
+                                    .Seal()
+                                    .Callable(1, "Bool").Atom(0, "false").Seal()
+                                    .Callable(2, "Bool").Atom(0, "true").Seal()
+                                .Seal()
+                            .Seal()
+                            .List(1).Do(reduceByList).Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Build();
+
+        auto newSettings = innerReduce.Settings().Ptr();
+        if (NYql::HasSetting(outerReduce.Settings().Ref(), EYtSettingType::NoDq) &&
+           !NYql::HasSetting(innerReduce.Settings().Ref(), EYtSettingType::NoDq)) {
+            newSettings = NYql::AddSetting(*newSettings, EYtSettingType::NoDq, {}, ctx);
+        }
+
+        return Build<TYtReduce>(ctx, node.Pos())
+            .InitFrom(outerReduce)
+            .World<TCoSync>()
+                .Add(innerReduce.World())
+                .Add(outerReduce.World())
+            .Build()
+            .Input(innerReduce.Input())
+            .Reducer()
+                .Args({"stream"})
+                .Body<TExprApplier>()
+                    .Apply(outerLambda)
+                    .With<TExprApplier>(0)
+                        .Apply(TCoLambda(keySwitchLambda))
+                        .With<TExprApplier>(0)
+                            .Apply(innerLambda)
+                            .With(0, "stream")
+                        .Build()
+                    .Build()
+                    .With(TExprBase(placeHolder), "stream")
+                .Build()
+            .Build()
+            .Settings(newSettings)
+            .Done();
     }
 
     TMaybeNode<TExprBase> FuseInnerMap(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {

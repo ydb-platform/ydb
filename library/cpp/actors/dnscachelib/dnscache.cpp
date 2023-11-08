@@ -194,7 +194,7 @@ TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
         } else {
             /* Never resolved, create cache entry */
             LWPROBE(ResolveCacheNew, hostname);
-            p = HostCache.insert(std::make_pair(hostname, THost())).first;
+            p = HostCache.emplace(std::piecewise_construct, std::forward_as_tuple(hostname), std::forward_as_tuple()).first;
         }
         ACacheMisses += 1;
     }
@@ -202,7 +202,7 @@ TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
     if (cacheOnly)
         return NullHost;
 
-    TAtomic& inprogress = (family == AF_INET ? p->second.InProgressV4 : p->second.InProgressV6);
+    std::atomic<bool>& inprogress = (family == AF_INET ? p->second.InProgressV4 : p->second.InProgressV6);
 
     {
         /* This way only! CacheMtx should always be taken AFTER AresMtx,
@@ -212,14 +212,13 @@ TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
         TGuard<TMutex> areslock(AresMtx);
         TGuard<TMutex> cachelock(CacheMtx);
 
-        if (!inprogress) {
+        if (!inprogress.exchange(true)) {
             ares_channel chan = static_cast<ares_channel>(Channel);
             TGHBNContext* ctx = new TGHBNContext();
             ctx->Owner = this;
             ctx->Hostname = hostname;
             ctx->Family = family;
 
-            AtomicSet(inprogress, 1);
             ares_gethostbyname(chan, hostname.c_str(), family,
                                &TDnsCache::GHBNCallback, ctx);
         }
@@ -249,8 +248,7 @@ const TDnsCache::TAddr& TDnsCache::ResolveAddr(const in6_addr& addr, int family)
             }
         } else {
             /* Never resolved, create cache entry */
-
-            p = AddrCache.insert(std::make_pair(addr, TAddr())).first;
+            p = AddrCache.emplace(std::piecewise_construct, std::forward_as_tuple(addr), std::forward_as_tuple()).first;
         }
         PtrCacheMisses += 1;
     }
@@ -263,13 +261,12 @@ const TDnsCache::TAddr& TDnsCache::ResolveAddr(const in6_addr& addr, int family)
         TGuard<TMutex> areslock(AresMtx);
         TGuard<TMutex> cachelock(CacheMtx);
 
-        if (!p->second.InProgress) {
+        if (!p->second.InProgress.exchange(true)) {
             ares_channel chan = static_cast<ares_channel>(Channel);
             TGHBAContext* ctx = new TGHBAContext();
             ctx->Owner = this;
             ctx->Addr = addr;
 
-            AtomicSet(p->second.InProgress, 1);
             ares_gethostbyaddr(chan, &addr,
                                family == AF_INET ? sizeof(in_addr) : sizeof(in6_addr),
                                family, &TDnsCache::GHBACallback, ctx);
@@ -281,10 +278,10 @@ const TDnsCache::TAddr& TDnsCache::ResolveAddr(const in6_addr& addr, int family)
     return p->second;
 }
 
-void TDnsCache::WaitTask(TAtomic& flag) {
+void TDnsCache::WaitTask(std::atomic<bool>& flag) {
     const TInstant start = TInstant(TTimeKeeper::GetTimeval());
 
-    while (AtomicGet(flag)) {
+    while (flag.load(std::memory_order_acquire)) {
         ares_channel chan = static_cast<ares_channel>(Channel);
 
         struct pollfd pfd[ARES_GETSOCK_MAXNUM];
@@ -367,7 +364,7 @@ void TDnsCache::GHBNCallback(void* arg, int status, int, struct hostent* info) {
 
     time_t& resolved = (ctx->Family == AF_INET ? p->second.ResolvedV4 : p->second.ResolvedV6);
     time_t& notfound = (ctx->Family == AF_INET ? p->second.NotFoundV4 : p->second.NotFoundV6);
-    TAtomic& inprogress = (ctx->Family == AF_INET ? p->second.InProgressV4 : p->second.InProgressV6);
+    std::atomic<bool>& inprogress = (ctx->Family == AF_INET ? p->second.InProgressV4 : p->second.InProgressV6);
 
     if (status == ARES_SUCCESS) {
         if (info->h_addrtype == AF_INET) {
@@ -380,7 +377,7 @@ void TDnsCache::GHBNCallback(void* arg, int status, int, struct hostent* info) {
              */
             p->second.ResolvedV4 = TTimeKeeper::GetTime();
             p->second.ResolvedV4 = 0;
-            AtomicSet(p->second.InProgressV4, 0);
+            p->second.InProgressV4.store(false, std::memory_order_release);
         } else if (info->h_addrtype == AF_INET6) {
             p->second.AddrsV6.clear();
             for (int i = 0; info->h_addr_list[i] != nullptr; i++) {
@@ -395,7 +392,7 @@ void TDnsCache::GHBNCallback(void* arg, int status, int, struct hostent* info) {
         notfound = TTimeKeeper::GetTime();
         resolved = 0;
     }
-    AtomicSet(inprogress, 0);
+    inprogress.store(false, std::memory_order_release);
 }
 
 void TDnsCache::GHBACallback(void* arg, int status, int, struct hostent* info) {
@@ -413,7 +410,7 @@ void TDnsCache::GHBACallback(void* arg, int status, int, struct hostent* info) {
         p->second.NotFound = TTimeKeeper::GetTime();
         p->second.Resolved = 0;
     }
-    AtomicSet(p->second.InProgress, 0);
+    p->second.InProgress.store(false, std::memory_order_release);
 }
 
 TString TDnsCache::THost::AddrsV4ToString() const {

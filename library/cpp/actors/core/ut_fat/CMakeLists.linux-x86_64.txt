@@ -16,6 +16,7 @@ target_link_libraries(library-cpp-actors-core-ut_fat PUBLIC
   cpp-testing-unittest_main
   cpp-actors-core
 )
+
 target_link_options(library-cpp-actors-core-ut_fat PRIVATE
   -ldl
   -lrt

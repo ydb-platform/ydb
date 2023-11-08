@@ -30,7 +30,7 @@ namespace NActors {
         TUnitedWorkersConfig Config;
         TCpuAllocationConfig Allocation;
 
-        volatile bool StopFlag = false;
+        std::atomic<bool> StopFlag = false;
         TMinusOneCpuEstimator<1024> MinusOneCpuEstimator;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
     public:
@@ -46,7 +46,7 @@ namespace NActors {
         void Shutdown();
 
         bool IsStopped() const {
-            return RelaxedLoad(&StopFlag);
+            return StopFlag.load(std::memory_order_relaxed);
         }
 
         TWorkerId GetWorkerCount() const {

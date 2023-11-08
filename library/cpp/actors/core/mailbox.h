@@ -11,7 +11,6 @@
 #include <util/generic/hash.h>
 #include <util/system/hp_timer.h>
 #include <util/generic/ptr.h>
-// TODO: clean all broken arcadia atomic stuff and replace with intrinsics
 
 namespace NActors {
     class IActor;
@@ -60,7 +59,7 @@ namespace NActors {
         using TActorMap = THashMap<ui64, IActor*>;
 
         struct TExecutionState {
-            enum EState {
+            enum EState : ui32 {
                 // normal states
                 Inactive = 0,
                 Scheduled = 1,
@@ -76,7 +75,7 @@ namespace NActors {
             };
         };
 
-        volatile ui32 ExecutionState;
+        std::atomic<TExecutionState::EState> ExecutionState;
         ui32 Reserved : 4; // never changes, always zero
         ui32 Type : 4; // never changes
         ui32 ActorPack : 2;

@@ -42,7 +42,7 @@ namespace NInterconnect {
         template <bool IsWrite>
         void RunLoop();
 
-        volatile bool StopFlag;
+        std::atomic<bool> StopFlag;
         TThread ReadLoop, WriteLoop;
 
     protected:

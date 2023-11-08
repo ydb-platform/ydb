@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-
+#include "interconnect_common.h"
 #include "packet.h"
 
 namespace NActors {
@@ -11,12 +11,12 @@ namespace NActors {
         std::list<TEventHolder> FreeQueue;
         TStackVec<THolder<IEventBase>, MaxEvents> Events;
         TStackVec<THolder<TEventSerializedData>, MaxEvents> Buffers;
-        std::shared_ptr<std::atomic<TAtomicBase>> Counter;
+        std::shared_ptr<std::atomic<i64>> Counter;
         ui64 NumBytes = 0;
 
         ~TEvFreeItems() {
             if (Counter) {
-                TAtomicBase res = Counter->fetch_sub(NumBytes) - NumBytes;
+                i64 res = Counter->fetch_sub(NumBytes) - NumBytes;
                 Y_ABORT_UNLESS(res >= 0);
             }
         }
@@ -25,7 +25,7 @@ namespace NActors {
             Y_ABORT_UNLESS(!Counter);
             const auto& counter = common->DestructorQueueSize;
             const auto& max = common->MaxDestructorQueueSize;
-            if (counter && (TAtomicBase)(counter->fetch_add(NumBytes) + NumBytes) > max) {
+            if (counter && (i64)(counter->fetch_add(NumBytes) + NumBytes) > max) {
                 counter->fetch_sub(NumBytes);
                 return false;
             }

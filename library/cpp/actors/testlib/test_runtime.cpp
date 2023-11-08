@@ -255,7 +255,7 @@ namespace NActors {
             Y_UNUSED(Runtime);
         }
 
-        void Prepare(TActorSystem *actorSystem, volatile ui64 *currentTimestamp, volatile ui64 *currentMonotonic) override {
+        void Prepare(TActorSystem *actorSystem, std::atomic<ui64> *currentTimestamp, std::atomic<ui64> *currentMonotonic) override {
             Y_UNUSED(actorSystem);
             Node->ActorSystemTimestamp = currentTimestamp;
             Node->ActorSystemMonotonic = currentMonotonic;
@@ -839,8 +839,8 @@ namespace NActors {
         if (newTime.MicroSeconds() > CurrentTimestamp) {
             CurrentTimestamp = newTime.MicroSeconds();
             for (auto& kv : Nodes) {
-                AtomicStore(kv.second->ActorSystemTimestamp, CurrentTimestamp);
-                AtomicStore(kv.second->ActorSystemMonotonic, CurrentTimestamp);
+                kv.second->ActorSystemTimestamp->store(CurrentTimestamp, std::memory_order_release);
+                kv.second->ActorSystemMonotonic->store(CurrentTimestamp, std::memory_order_release);
             }
         }
     }

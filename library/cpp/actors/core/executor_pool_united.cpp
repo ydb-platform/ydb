@@ -36,7 +36,7 @@ namespace NActors {
         TUnorderedCache<ui32, 512, 4> Activations; // MPMC-queue for mailbox activations
         TAtomic Active = 0; // Number of mailboxes ready for execution or currently executing
         TAtomic Tokens = 0; // Pending tokens (token is required for worker to start execution, guarantees concurrency limit and activation availability)
-        volatile bool StopFlag = false;
+        std::atomic<bool> StopFlag = false;
 
         // Configuration
         TPoolId PoolId;
@@ -55,7 +55,7 @@ namespace NActors {
         }
 
         void Stop() {
-            AtomicStore(&StopFlag, true);
+            StopFlag.store(true, std::memory_order_release);
         }
 
         bool IsUnited() const {
@@ -104,7 +104,7 @@ namespace NActors {
 
         // Get activation. Requires acquired token.
         void BeginExecution(ui32& activation, ui64 revolvingCounter) {
-            while (!RelaxedLoad(&StopFlag)) {
+            while (!StopFlag.load(std::memory_order_acquire)) {
                 if (activation = Activations.Pop(++revolvingCounter)) {
                     return;
                 }
@@ -1218,7 +1218,7 @@ namespace NActors {
     }
 
     void TUnitedWorkers::PrepareStop() {
-        AtomicStore(&StopFlag, true);
+        StopFlag.store(true, std::memory_order_release);
         for (TPoolId pool = 0; pool < PoolCount; pool++) {
             Pools[pool].Stop();
         }

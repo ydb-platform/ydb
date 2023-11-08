@@ -33,20 +33,20 @@ namespace NInterconnect {
     }
 
     TPollerUnit::~TPollerUnit() {
-        if (!AtomicLoad(&StopFlag))
+        if (!StopFlag.load(std::memory_order_acquire))
             Stop();
     }
 
     void
     TPollerUnit::Start() {
-        AtomicStore(&StopFlag, false);
+        StopFlag.store(false, std::memory_order_release);
         ReadLoop.Start();
         WriteLoop.Start();
     }
 
     void
     TPollerUnit::Stop() {
-        AtomicStore(&StopFlag, true);
+        StopFlag.store(true, std::memory_order_release);
         ReadLoop.Join();
         WriteLoop.Join();
     }
@@ -68,7 +68,7 @@ namespace NInterconnect {
         const TIntrusivePtr<TSharedDescriptor>& stream,
         TFDDelegate&& operation) {
         Y_DEBUG_ABORT_UNLESS(stream);
-        if (AtomicLoad(&StopFlag))
+        if (StopFlag.load(std::memory_order_acquire))
             return;
         GetSide<false>().InputQueue.Push(TSide::TItem(stream, std::move(operation)));
     }
@@ -78,7 +78,7 @@ namespace NInterconnect {
         const TIntrusivePtr<TSharedDescriptor>& stream,
         TFDDelegate&& operation) {
         Y_DEBUG_ABORT_UNLESS(stream);
-        if (AtomicLoad(&StopFlag))
+        if (StopFlag.load(std::memory_order_acquire))
             return;
         GetSide<true>().InputQueue.Push(TSide::TItem(stream, std::move(operation)));
     }
@@ -102,7 +102,7 @@ namespace NInterconnect {
     void
     TPollerUnit::RunLoop<false>() {
         NProfiling::TMemoryTagScope tag("INTERCONNECT_RECEIVED_DATA");
-        while (!AtomicLoad(&StopFlag))
+        while (!StopFlag.load(std::memory_order_acquire))
             ProcessRead();
     }
 
@@ -110,7 +110,7 @@ namespace NInterconnect {
     void
     TPollerUnit::RunLoop<true>() {
         NProfiling::TMemoryTagScope tag("INTERCONNECT_SEND_DATA");
-        while (!AtomicLoad(&StopFlag))
+        while (!StopFlag.load(std::memory_order_acquire))
             ProcessWrite();
     }
 

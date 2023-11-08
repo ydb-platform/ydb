@@ -202,16 +202,14 @@ namespace NActors {
     ui64 TActorSystem::AllocateIDSpace(ui64 count) {
         Y_DEBUG_ABORT_UNLESS(count < Max<ui32>() / 65536);
 
-        static_assert(sizeof(TAtomic) == sizeof(ui64), "expect sizeof(TAtomic) == sizeof(ui64)");
-
         // get high 32 bits as seconds from epoch
         // it could wrap every century, but we don't expect any actor-reference to live this long so such wrap will do no harm
-        const ui64 timeFromEpoch = TInstant::MicroSeconds(RelaxedLoad(&CurrentTimestamp)).Seconds();
+        const ui64 timeFromEpoch = TInstant::MicroSeconds(CurrentTimestamp.load(std::memory_order_relaxed)).Seconds();
 
         // get low 32 bits as counter value
-        ui32 lowPartEnd = (ui32)(AtomicAdd(CurrentIDCounter, count));
+        ui32 lowPartEnd = static_cast<ui32>(CurrentIDCounter.fetch_add(count) + count);
         while (lowPartEnd < count) // if our request crosses 32bit boundary - retry
-            lowPartEnd = (ui32)(AtomicAdd(CurrentIDCounter, count));
+            lowPartEnd = static_cast<ui32>(CurrentIDCounter.fetch_add(count) + count);
 
         const ui64 lowPart = lowPartEnd - count;
         const ui64 ret = (timeFromEpoch << 32) | lowPart;

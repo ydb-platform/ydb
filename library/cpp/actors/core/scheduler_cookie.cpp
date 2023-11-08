@@ -2,7 +2,7 @@
 
 namespace NActors {
     class TSchedulerCookie2Way: public ISchedulerCookie {
-        TAtomic Value;
+        std::atomic<i64> Value;
 
     public:
         TSchedulerCookie2Way()
@@ -11,11 +11,11 @@ namespace NActors {
         }
 
         bool IsArmed() noexcept override {
-            return (AtomicGet(Value) == 2);
+            return Value.load(std::memory_order_acquire) == 2;
         }
 
         bool Detach() noexcept override {
-            const ui64 x = AtomicDecrement(Value);
+            const ui64 x = Value.fetch_sub(1, std::memory_order_seq_cst) - 1;
             if (x == 1)
                 return true;
 
@@ -37,7 +37,7 @@ namespace NActors {
     }
 
     class TSchedulerCookie3Way: public ISchedulerCookie {
-        TAtomic Value;
+        std::atomic<i64> Value;
 
     public:
         TSchedulerCookie3Way()
@@ -46,11 +46,11 @@ namespace NActors {
         }
 
         bool IsArmed() noexcept override {
-            return (AtomicGet(Value) == 3);
+            return Value.load(std::memory_order_acquire) == 3;
         }
 
         bool Detach() noexcept override {
-            const ui64 x = AtomicDecrement(Value);
+            const ui64 x = Value.fetch_sub(1, std::memory_order_seq_cst) - 1;
             if (x == 2)
                 return true;
             if (x == 1)
@@ -64,7 +64,7 @@ namespace NActors {
         }
 
         bool DetachEvent() noexcept override {
-            const ui64 x = AtomicDecrement(Value);
+            const ui64 x = Value.fetch_sub(1, std::memory_order_seq_cst) - 1;
             if (x == 2)
                 return false;
             if (x == 1)

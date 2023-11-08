@@ -19,24 +19,22 @@
 namespace NActors {
     class TBasicExecutorPool: public TExecutorPoolBase {
         struct TThreadCtx {
-            TAutoPtr<TExecutorThread> Thread;
-            TThreadParkPad Pad;
-            TThreadParkPad BlockedPad;
-            TAtomic WaitingFlag;
-            TAtomic BlockedFlag;
-
-            // different threads must spin/block on different cache-lines.
-            // we add some padding bytes to enforce this rule
-            static const size_t SizeWithoutPadding = sizeof(TAutoPtr<TExecutorThread>) + 2 * sizeof(TThreadParkPad) + sizeof(TAtomic);
-            ui8 Padding[64 - SizeWithoutPadding];
-            static_assert(64 >= SizeWithoutPadding);
-
             enum EWaitState {
                 WS_NONE,
                 WS_ACTIVE,
                 WS_BLOCKED,
                 WS_RUNNING
             };
+
+            TAutoPtr<TExecutorThread> Thread;
+            TThreadParkPad Pad;
+            std::atomic<EWaitState> WaitingFlag;
+
+            // different threads must spin/block on different cache-lines.
+            // we add some padding bytes to enforce this rule
+            static const size_t SizeWithoutPadding = sizeof(TAutoPtr<TExecutorThread>) + sizeof(TThreadParkPad) + sizeof(WaitingFlag);
+            ui8 Padding[64 - SizeWithoutPadding];
+            static_assert(64 >= SizeWithoutPadding);
 
             TThreadCtx()
                 : WaitingFlag(WS_NONE)
@@ -94,7 +92,7 @@ namespace NActors {
             // Sign bit
             i16 CurrentThreadCount = 0; // 14 bits
 
-            inline i64 ConverToI64() {
+            inline i64 ConvertToI64() {
                 i64 value = (1ll << 34) + OldSemaphore;
                 return value
                     | (((i64)CurrentSleepThreadCount + (1 << 14)) << 35)

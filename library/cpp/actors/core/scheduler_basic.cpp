@@ -56,7 +56,7 @@ namespace NActors {
 #endif
         ::SetCurrentThreadName("Scheduler");
 
-        ui64 currentMonotonic = RelaxedLoad(CurrentMonotonic);
+        ui64 currentMonotonic = CurrentMonotonic->load(std::memory_order_relaxed);
         ui64 throttledMonotonic = currentMonotonic;
 
         ui64 activeTick = AlignUp<ui64>(throttledMonotonic, IntrasecondThreshold);
@@ -66,7 +66,7 @@ namespace NActors {
         ui64 nextTimestamp = TInstant::Now().MicroSeconds();
         ui64 nextMonotonic = Max(currentMonotonic, GetMonotonicMicroSeconds());
 
-        while (!AtomicLoad(&StopFlag)) {
+        while (!StopFlag.load(std::memory_order_acquire)) {
             {
                 const ui64 delta = nextMonotonic - throttledMonotonic;
                 const ui64 elapsedDelta = nextMonotonic - currentMonotonic;
@@ -78,8 +78,8 @@ namespace NActors {
                     *MonCounters->TimeDelayMs = (nextMonotonic - throttledMonotonic) / 1000;
                 }
             }
-            AtomicStore(CurrentTimestamp, nextTimestamp);
-            AtomicStore(CurrentMonotonic, nextMonotonic);
+            CurrentTimestamp->store(nextTimestamp, std::memory_order_release);
+            CurrentMonotonic->store(nextMonotonic, std::memory_order_release);
             currentMonotonic = nextMonotonic;
 
             if (MonCounters) {
@@ -211,7 +211,7 @@ namespace NActors {
         // ok, die!
     }
 
-    void TBasicSchedulerThread::Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) {
+    void TBasicSchedulerThread::Prepare(TActorSystem* actorSystem, std::atomic<ui64>* currentTimestamp, std::atomic<ui64>* currentMonotonic) {
         ActorSystem = actorSystem;
         CurrentTimestamp = currentTimestamp;
         CurrentMonotonic = currentMonotonic;
@@ -232,8 +232,8 @@ namespace NActors {
         // more recent value, taking initialization time into account. This is
         // safe to do, since scheduler thread is not started yet, so no other
         // threads are updating time concurrently.
-        AtomicStore(CurrentTimestamp, TInstant::Now().MicroSeconds());
-        AtomicStore(CurrentMonotonic, Max(RelaxedLoad(CurrentMonotonic), GetMonotonicMicroSeconds()));
+        CurrentTimestamp->store(TInstant::Now().MicroSeconds(), std::memory_order_release);
+        CurrentMonotonic->store(Max(CurrentMonotonic->load(std::memory_order_relaxed), GetMonotonicMicroSeconds()), std::memory_order_release);
     }
 
     void TBasicSchedulerThread::Start() {
@@ -241,7 +241,7 @@ namespace NActors {
     }
 
     void TBasicSchedulerThread::PrepareStop() {
-        AtomicStore(&StopFlag, true);
+        StopFlag.store(true, std::memory_order_release);
     }
 
     void TBasicSchedulerThread::Stop() {

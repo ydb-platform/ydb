@@ -119,7 +119,7 @@ namespace NActors {
         Context->UpdateState = EUpdateState::NONE;
 
         // ensure that we do not spawn new session while the previous one is still alive
-        TAtomicBase sessions = AtomicIncrement(Context->NumInputSessions);
+        i64 sessions = Context->NumInputSessions.fetch_add(1, std::memory_order_seq_cst) + 1;
         Y_ABORT_UNLESS(sessions == 1, "sessions# %" PRIu64, ui64(sessions));
 
         // calculate number of bytes to catch
@@ -158,7 +158,7 @@ namespace NActors {
         }
 
         if (termEv) {
-            AtomicDecrement(Context->NumInputSessions);
+            Context->NumInputSessions.fetch_sub(1, std::memory_order_seq_cst);
             Send(SessionId, termEv.release());
             PassAway();
             Socket.Reset();
@@ -354,8 +354,8 @@ namespace NActors {
         }
         if (ConfirmedByInput < confirm) {
             ConfirmedByInput = confirm;
-            if (AtomicGet(Context->ControlPacketId) <= confirm && !NewPingProtocol) {
-                ui64 sendTime = AtomicGet(Context->ControlPacketSendTimer);
+            if (Context->ControlPacketId.load(std::memory_order_acquire) <= confirm && !NewPingProtocol) {
+                ui64 sendTime = Context->ControlPacketSendTimer.load(std::memory_order_acquire);
                 TDuration duration = CyclesToDuration(GetCycleCountFast() - sendTime);
                 const auto durationUs = duration.MicroSeconds();
                 Metrics->UpdatePingTimeHistogram(durationUs);
@@ -363,7 +363,7 @@ namespace NActors {
                 if (PingQ.size() > 16) {
                     PingQ.pop_front();
                 }
-                AtomicSet(Context->ControlPacketId, 0ULL);
+                Context->ControlPacketId.store(0ULL, std::memory_order_release);
             }
         }
         if (PayloadSize) {

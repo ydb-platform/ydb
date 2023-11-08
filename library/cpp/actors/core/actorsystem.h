@@ -53,7 +53,7 @@ namespace NActors {
         virtual ~ISchedulerThread() {
         }
 
-        virtual void Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) = 0;
+        virtual void Prepare(TActorSystem* actorSystem, std::atomic<ui64>* currentTimestamp, std::atomic<ui64>* currentMonotonic) = 0;
         virtual void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) = 0;
         virtual void PrepareStart() { /* empty */ }
         virtual void Start() = 0;
@@ -150,9 +150,9 @@ namespace NActors {
         const ui32 InterconnectCount;
         TArrayHolder<TActorId> Interconnect;
 
-        volatile ui64 CurrentTimestamp;
-        volatile ui64 CurrentMonotonic;
-        volatile ui64 CurrentIDCounter;
+        std::atomic<ui64> CurrentTimestamp;
+        std::atomic<ui64> CurrentMonotonic;
+        std::atomic<ui64> CurrentIDCounter;
 
         THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
         mutable TTicketLock ScheduleLock;
@@ -273,11 +273,11 @@ namespace NActors {
         TActorId RegisterLocalService(const TActorId& serviceId, const TActorId& actorId);
 
         TInstant Timestamp() const {
-            return TInstant::MicroSeconds(RelaxedLoad(&CurrentTimestamp));
+            return TInstant::MicroSeconds(CurrentTimestamp.load(std::memory_order_relaxed));
         }
 
         TMonotonic Monotonic() const {
-            return TMonotonic::MicroSeconds(RelaxedLoad(&CurrentMonotonic));
+            return TMonotonic::MicroSeconds(CurrentMonotonic.load(std::memory_order_relaxed));
         }
 
         template <typename T>

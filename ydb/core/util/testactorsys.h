@@ -25,8 +25,8 @@ class TTestExecutorPool;
 class TTestActorSystem {
     class TTestSchedulerThread : public ISchedulerThread {
         TTestActorSystem *Context;
-        volatile ui64 *CurrentTimestampPtr = nullptr;
-        volatile ui64 *CurrentMonotonicPtr = nullptr;
+        std::atomic<ui64> *CurrentTimestampPtr = nullptr;
+        std::atomic<ui64> *CurrentMonotonicPtr = nullptr;
         std::vector<NSchedulerQueue::TReader*> Readers;
         const ui32 NodeId;
 
@@ -36,7 +36,7 @@ class TTestActorSystem {
             , NodeId(nodeId)
         {}
 
-        void Prepare(TActorSystem* /*actorSystem*/, volatile ui64 *currentTimestamp, volatile ui64 *currentMonotonic) override {
+        void Prepare(TActorSystem* /*actorSystem*/, std::atomic<ui64> *currentTimestamp, std::atomic<ui64> *currentMonotonic) override {
             CurrentTimestampPtr = currentTimestamp;
             CurrentMonotonicPtr = currentMonotonic;
         }

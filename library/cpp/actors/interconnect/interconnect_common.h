@@ -106,8 +106,8 @@ namespace NActors {
         TInterconnectSettings Settings;
         TRegisterMonPageCallback RegisterMonPage;
         TActorId DestructorId;
-        std::shared_ptr<std::atomic<TAtomicBase>> DestructorQueueSize;
-        TAtomicBase MaxDestructorQueueSize = 1024 * 1024 * 1024;
+        std::shared_ptr<std::atomic<i64>> DestructorQueueSize;
+        i64 MaxDestructorQueueSize = 1024 * 1024 * 1024;
         TString ClusterUUID;
         TVector<TString> AcceptUUID;
         ui64 StartTime = GetCycleCountFast();
@@ -115,7 +115,7 @@ namespace NActors {
         TInitWhiteboardCallback InitWhiteboard;
         TUpdateWhiteboardCallback UpdateWhiteboard;
         ui32 HandshakeBallastSize = 0;
-        TAtomic StartedSessionKiller = 0;
+        std::atomic<bool> StartedSessionKiller = 0;
         TScopeId LocalScopeId;
         std::shared_ptr<TEventFilter> EventFilter;
         TString Cookie; // unique random identifier of a node instance (generated randomly at every start)

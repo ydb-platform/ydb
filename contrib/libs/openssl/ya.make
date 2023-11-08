@@ -273,6 +273,9 @@ IF (OS_WINDOWS AND ARCH_I386)
     CFLAGS(
         -DPADLOCK_ASM
     )
+    MASMFLAGS(
+        /SAFESEH
+    )
     SRCS(
         asm/windows/engines/e_padlock-x86.masm
     )

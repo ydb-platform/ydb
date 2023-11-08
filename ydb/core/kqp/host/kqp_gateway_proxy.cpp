@@ -658,7 +658,11 @@ public:
 
         if (!IsPrepare()) {
             SessionCtx->Query().PrepareOnly = false;
-            if (SessionCtx->Query().PreparingQuery) {
+            if (!SessionCtx->Query().PreparingQuery) {
+                SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+            }
+
+            if (SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->GetTransactions().size() > 0) {
                 auto code = Ydb::StatusIds::BAD_REQUEST;
                 auto error = TStringBuilder() << "multiple transactions are not supported for alter table operation.";
                 IKqpGateway::TGenericResult errResult;
@@ -667,8 +671,6 @@ public:
                 tablePromise.SetValue(errResult);
                 return tablePromise.GetFuture();
             }
-
-            SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
         }
 
         auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags);

@@ -222,7 +222,7 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
     fetches.reserve(lookup.GetKeyRanges().size());
 
     for (auto& keyRange : lookup.GetKeyRanges()) {
-        bool useDataQueryLookup = false;
+        bool useDataOrGenericQueryLookup = false;
         bool useScanQueryLookup = false;
         if (onlyPointRanges && !IsPointPrefix(keyRange)) {
             return node;
@@ -233,13 +233,13 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
             // NOTE: Use more efficient full key lookup implementation in datashard.
             // Consider using lookup for partial keys as well once better constant folding
             // is available, currently it can introduce redundant compute stage.
-            useDataQueryLookup = kqpCtx.IsDataQuery() && isFullKey;
+            useDataOrGenericQueryLookup = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery()) && isFullKey;
             useScanQueryLookup = kqpCtx.IsScanQuery() && isFullKey
                 && kqpCtx.Config->EnableKqpScanQueryStreamLookup;
         }
 
         TMaybeNode<TExprBase> readInput;
-        if (useDataQueryLookup) {
+        if (useDataOrGenericQueryLookup) {
             auto lookupKeys = BuildEquiRangeLookup(keyRange, tableDesc, read.Pos(), ctx);
 
             if (indexName) {

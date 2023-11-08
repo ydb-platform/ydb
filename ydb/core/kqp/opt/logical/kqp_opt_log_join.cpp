@@ -462,6 +462,9 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     Y_ENSURE(rightTableKeyPrefix);
 
     const auto& rightTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, lookupTable);
+    if (rightTableDesc.Metadata->Kind == NYql::EKikimrTableKind::Olap) {
+        return {};
+    }
 
     TMap<std::string_view, TString> rightJoinKeyToLeft;
     TVector<TCoAtom> rightKeyColumns;

@@ -641,7 +641,6 @@ private:
             case NKikimrKqp::QUERY_TYPE_SQL_DML:
             case NKikimrKqp::QUERY_TYPE_AST_DML: {
                 bool isSql = (type == NKikimrKqp::QUERY_TYPE_SQL_DML);
-
                 QueryState->AsyncQueryResult = KqpHost->ExplainDataQuery(query, isSql);
                 break;
             }

@@ -59,8 +59,11 @@ public:
 
     void PassAway() override {
         if (NodesInfo != nullptr) {
+            TIntrusivePtr<TDynamicNameserviceConfig> dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
             for (const auto& ni : NodesInfo->Nodes) {
-                Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe);
+                if (ni.NodeId <= dynamicNameserviceConfig->MaxStaticNodeId) {
+                    Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe);
+                }
             }
         }
         TBase::PassAway();

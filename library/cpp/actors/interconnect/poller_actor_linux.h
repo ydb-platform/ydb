@@ -4,6 +4,13 @@
 
 namespace NActors {
 
+    enum {
+        ReadExpected = 1,
+        ReadHit = 2,
+        WriteExpected = 4,
+        WriteHit = 8,
+    };
+
     class TEpollThread : public TPollerThreadBase<TEpollThread> {
         // epoll file descriptor
         int EpollDescriptor;
@@ -55,32 +62,33 @@ namespace NActors {
                 if (auto *record = static_cast<TSocketRecord*>(ev.data.ptr)) {
                     const bool read = ev.events & (EPOLLIN | EPOLLHUP | EPOLLRDHUP | EPOLLERR);
                     const bool write = ev.events & (EPOLLOUT | EPOLLERR);
-
-                    // remove hit flags from the bit set
-                    ui32 flags = record->Flags;
-                    const ui32 remove = (read ? EPOLLIN : 0) | (write ? EPOLLOUT : 0);
-                    while (!record->Flags.compare_exchange_weak(flags, flags & ~remove))
-                    {}
-                    flags &= ~remove;
-
-                    // rearm poller if some flags remain
-                    if (flags) {
-                        epoll_event event;
-                        event.events = EPOLLONESHOT | EPOLLRDHUP | flags;
-                        event.data.ptr = record;
-                        if (epoll_ctl(EpollDescriptor, EPOLL_CTL_MOD, record->Socket->GetDescriptor(), &event) == -1) {
-                            Y_ABORT("epoll_ctl(EPOLL_CTL_MOD) failed with %s", strerror(errno));
-                        }
-                    }
-
-                    // issue notifications
-                    Notify(record, read, write);
+                    UpdateFlags(record, (read ? ReadHit : 0) | (write ? WriteHit : 0), false);
                 } else {
                     res = true;
                 }
             }
 
             return res;
+        }
+
+        bool UpdateFlags(TSocketRecord *record, ui32 addMask, bool suppressNotify) {
+            ui32 flags = record->Flags.load(std::memory_order_acquire);
+            for (;;) {
+                ui32 updated = flags | addMask;
+                static constexpr ui32 fullRead = ReadExpected | ReadHit;
+                static constexpr ui32 fullWrite = WriteExpected | WriteHit;
+                const bool read = (updated & fullRead) == fullRead;
+                const bool write = (updated & fullWrite) == fullWrite;
+                updated &= ~((read ? fullRead : 0) | (write ? fullWrite : 0));
+                if (record->Flags.compare_exchange_weak(flags, updated, std::memory_order_acq_rel)) {
+                    if (suppressNotify) {
+                        return read || write;
+                    } else {
+                        Notify(record, read, write);
+                        return false;
+                    }
+                }
+            }
         }
 
         void UnregisterSocketInLoop(const TIntrusivePtr<TSharedDescriptor>& socket) {
@@ -91,27 +99,15 @@ namespace NActors {
 
         void RegisterSocket(const TIntrusivePtr<TSocketRecord>& record) {
             epoll_event event;
-            event.events = EPOLLONESHOT | EPOLLRDHUP;
+            event.events = EPOLLET | EPOLLRDHUP | EPOLLIN | EPOLLOUT;
             event.data.ptr = record.Get();
             if (epoll_ctl(EpollDescriptor, EPOLL_CTL_ADD, record->Socket->GetDescriptor(), &event) == -1) {
                 Y_ABORT("epoll_ctl(EPOLL_CTL_ADD) failed with %s", strerror(errno));
             }
         }
 
-        void Request(const TIntrusivePtr<TSocketRecord>& record, bool read, bool write) {
-            const ui32 add = (read ? EPOLLIN : 0) | (write ? EPOLLOUT : 0);
-            ui32 flags = record->Flags;
-            while (!record->Flags.compare_exchange_weak(flags, flags | add))
-            {}
-            flags |= add;
-            if (flags) {
-                epoll_event event;
-                event.events = EPOLLONESHOT | EPOLLRDHUP | flags;
-                event.data.ptr = record.Get();
-                if (epoll_ctl(EpollDescriptor, EPOLL_CTL_MOD, record->Socket->GetDescriptor(), &event) == -1) {
-                    Y_ABORT("epoll_ctl(EPOLL_CTL_MOD) failed with %s", strerror(errno));
-                }
-            }
+        bool Request(const TIntrusivePtr<TSocketRecord>& record, bool read, bool write, bool suppressNotify) {
+            return UpdateFlags(record.Get(), (read ? ReadExpected : 0) | (write ? WriteExpected : 0), suppressNotify);
         }
     };
 

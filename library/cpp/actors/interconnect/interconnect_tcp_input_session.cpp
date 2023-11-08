@@ -714,39 +714,45 @@ namespace NActors {
 
     ssize_t TInputSessionTCP::Read(NInterconnect::TStreamSocket& socket, const TPollerToken::TPtr& token,
             bool *readPending, const TIoVec *iov, size_t num) {
-        ssize_t recvres = 0;
-        TString err;
-        LWPROBE_IF_TOO_LONG(SlowICReadFromSocket, ms) {
-            do {
-                const ui64 begin = GetCycleCountFast();
-                if (num == 1) {
-                    recvres = socket.Recv(iov->Data, iov->Size, &err);
-                } else {
-                    recvres = socket.ReadV(reinterpret_cast<const iovec*>(iov), num);
-                }
-                const ui64 end = GetCycleCountFast();
-                Metrics->IncRecvSyscalls((end - begin) * 1'000'000 / GetCyclesPerMillisecond());
-            } while (recvres == -EINTR);
-        }
-
-        LOG_DEBUG_IC_SESSION("ICIS12", "Read recvres# %zd num# %zu err# %s", recvres, num, err.data());
-
-        if (recvres <= 0 || CloseInputSessionRequested) {
-            if ((-recvres != EAGAIN && -recvres != EWOULDBLOCK) || CloseInputSessionRequested) {
-                TString message = CloseInputSessionRequested ? "connection closed by debug command"
-                    : recvres == 0 ? "connection closed by peer"
-                    : err ? err
-                    : Sprintf("socket: %s", strerror(-recvres));
-                LOG_NOTICE_NET(NodeId, "%s", message.data());
-                throw TExReestablishConnection{CloseInputSessionRequested ? TDisconnectReason::Debug() :
-                    recvres == 0 ? TDisconnectReason::EndOfStream() : TDisconnectReason::FromErrno(-recvres)};
-            } else if (token && !std::exchange(*readPending, true)) {
-                socket.Request(*token, true, false);
+        for (;;) {
+            ssize_t recvres = 0;
+            TString err;
+            LWPROBE_IF_TOO_LONG(SlowICReadFromSocket, ms) {
+                do {
+                    const ui64 begin = GetCycleCountFast();
+                    if (num == 1) {
+                        recvres = socket.Recv(iov->Data, iov->Size, &err);
+                    } else {
+                        recvres = socket.ReadV(reinterpret_cast<const iovec*>(iov), num);
+                    }
+                    const ui64 end = GetCycleCountFast();
+                    Metrics->IncRecvSyscalls((end - begin) * 1'000'000 / GetCyclesPerMillisecond());
+                } while (recvres == -EINTR);
             }
-            return -1;
-        }
 
-        return recvres;
+            LOG_DEBUG_IC_SESSION("ICIS12", "Read recvres# %zd num# %zu err# %s", recvres, num, err.data());
+
+            if (recvres <= 0 || CloseInputSessionRequested) {
+                if ((-recvres != EAGAIN && -recvres != EWOULDBLOCK) || CloseInputSessionRequested) {
+                    TString message = CloseInputSessionRequested ? "connection closed by debug command"
+                        : recvres == 0 ? "connection closed by peer"
+                        : err ? err
+                        : Sprintf("socket: %s", strerror(-recvres));
+                    LOG_NOTICE_NET(NodeId, "%s", message.data());
+                    throw TExReestablishConnection{CloseInputSessionRequested ? TDisconnectReason::Debug() :
+                        recvres == 0 ? TDisconnectReason::EndOfStream() : TDisconnectReason::FromErrno(-recvres)};
+                } else if (token && !*readPending) {
+                    if (socket.RequestEx(*token, true, false)) {
+                        continue; // can try again
+                    } else {
+                        *readPending = true;
+                    }
+                }
+                return -1;
+            }
+
+            return recvres;
+        }
     }
 
     constexpr ui64 GetUsageCountClearMask(size_t items, int bits) {

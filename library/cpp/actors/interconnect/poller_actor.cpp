@@ -230,9 +230,11 @@ namespace NActors {
             }
         }
 
-        void Request(bool read, bool write) {
+        bool Request(bool read, bool write, bool suppressNotify) {
             if (auto thread = Thread.lock()) {
-                thread->Request(Record, read, write);
+                return thread->Request(Record, read, write, suppressNotify);
+            } else {
+                return false;
             }
         }
 
@@ -283,8 +285,8 @@ namespace NActors {
     TPollerToken::~TPollerToken()
     {}
 
-    void TPollerToken::Request(bool read, bool write) {
-        Impl->Request(read, write);
+    bool TPollerToken::Request(bool read, bool write, bool suppressNotify) {
+        return Impl->Request(read, write, suppressNotify);
     }
 
     IActor* CreatePollerActor() {

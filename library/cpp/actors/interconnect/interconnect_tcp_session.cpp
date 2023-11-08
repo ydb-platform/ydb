@@ -568,18 +568,21 @@ namespace NActors {
             size_t totalWritten = 0;
 
             if (stream && socket && !*writeBlocked) {
-                if (const ssize_t r = Write(stream, *socket, maxBytes); r > 0) {
-                    stream.Advance(r);
-                    totalWritten += r;
-                } else if (r == -1) {
-                    *writeBlocked = true;
-                    if (token) {
-                        socket->Request(*token, false, true);
+                for (;;) {
+                    if (const ssize_t r = Write(stream, *socket, maxBytes); r > 0) {
+                        stream.Advance(r);
+                        totalWritten += r;
+                    } else if (r == -1) {
+                        if (token && socket->RequestEx(*token, false, true)) {
+                            continue; // we can try again
+                        }
+                        *writeBlocked = true;
+                    } else if (r == 0) {
+                        // error condition
+                    } else {
+                        Y_UNREACHABLE();
                     }
-                } else if (r == 0) {
-                    // error condition
-                } else {
-                    Y_UNREACHABLE();
+                    break;
                 }
             }
 

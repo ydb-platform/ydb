@@ -27,7 +27,7 @@ namespace NActors {
 
     public:
         ~TPollerToken();
-        void Request(bool read, bool write);
+        bool Request(bool read, bool write, bool suppressNotify = false);
 
         using TPtr = TIntrusivePtr<TPollerToken>;
     };

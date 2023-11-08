@@ -92,8 +92,9 @@ namespace NActors {
             SafeKevent(ev, 2);
         }
 
-        void Request(const TIntrusivePtr<TSocketRecord>& /*socket*/, bool /*read*/, bool /*write*/)
-        {} // no special processing here as we use kqueue in edge-triggered mode
+        bool Request(const TIntrusivePtr<TSocketRecord>& /*socket*/, bool /*read*/, bool /*write*/, bool /*suppressNotify*/) {
+            return false; // no special processing here as we use kqueue in edge-triggered mode
+        }
     };
 
     using TPollerThread = TKqueueThread;

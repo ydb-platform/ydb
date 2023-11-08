@@ -214,6 +214,10 @@ namespace NInterconnect {
         token.Request(read, write);
     }
 
+    bool TStreamSocket::RequestEx(NActors::TPollerToken& token, bool read, bool write) {
+        return token.Request(read, write);
+    }
+
     size_t TStreamSocket::ExpectedWriteLength() const {
         return 0;
     }
@@ -649,6 +653,10 @@ namespace NInterconnect {
 
     void TSecureSocket::Request(NActors::TPollerToken& token, bool /*read*/, bool /*write*/) {
         token.Request(WantRead(), WantWrite());
+    }
+
+    bool TSecureSocket::RequestEx(NActors::TPollerToken& token, bool /*read*/, bool /*write*/) {
+        return token.Request(WantRead(), WantWrite(), true);
     }
 
     size_t TSecureSocket::ExpectedWriteLength() const {

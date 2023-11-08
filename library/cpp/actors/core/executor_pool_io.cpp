@@ -35,7 +35,8 @@ namespace NActors {
         NHPTimer::STime hpstart = GetCycleCountFast();
         NHPTimer::STime hpnow;
 
-        const TAtomic x = AtomicDecrement(Semaphore);
+        const i64 x = Semaphore.fetch_sub(1, std::memory_order_acq_rel) - 1;
+
         if (x < 0) {
             TThreadCtx& threadCtx = Threads[workerId];
             ThreadQueue.Push(workerId + 1, revolvingCounter);
@@ -47,7 +48,7 @@ namespace NActors {
             parked += hpstart - hpnow;
         }
 
-        while (!RelaxedLoad(&StopFlag)) {
+        while (!StopFlag.load(std::memory_order_relaxed)) {
             if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
                 hpnow = GetCycleCountFast();
                 elapsed += hpnow - hpstart;
@@ -88,7 +89,8 @@ namespace NActors {
 
     void TIOExecutorPool::ScheduleActivationEx(ui32 activation, ui64 revolvingWriteCounter) {
         Activations.Push(activation, revolvingWriteCounter);
-        const TAtomic x = AtomicIncrement(Semaphore);
+
+        const i64 x = Semaphore.fetch_add(1, std::memory_order_acq_rel) + 1;
         if (x <= 0) {
             for (;; ++revolvingWriteCounter) {
                 if (const ui32 x = ThreadQueue.Pop(revolvingWriteCounter)) {
@@ -124,7 +126,7 @@ namespace NActors {
     }
 
     void TIOExecutorPool::PrepareStop() {
-        AtomicStore(&StopFlag, true);
+        StopFlag.store(true, std::memory_order_release);
         for (i16 i = 0; i != PoolThreads; ++i) {
             Threads[i].Thread->StopFlag = true;
             Threads[i].Pad.Interrupt();

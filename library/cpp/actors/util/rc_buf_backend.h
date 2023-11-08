@@ -2,8 +2,6 @@
 
 #include <atomic>
 
-#include <library/cpp/deprecated/atomic/atomic.h>
-
 #include <util/system/types.h>
 #include <util/system/compiler.h>
 #include <util/generic/array_ref.h>
@@ -30,7 +28,7 @@ public:
 private:
     // to be binary compatible with TSharedData
     struct THeader : public TCookies {
-        TAtomic RefCount;
+        std::atomic<size_t> RefCount;
         ui64 Zero = 0;
     };
 
@@ -167,19 +165,19 @@ private:
     }
 
     static bool IsPrivate(THeader* header) noexcept {
-        return 1 == AtomicGet(header->RefCount);
+        return 1 == header->RefCount.load(std::memory_order_acquire);
     }
 
     void AddRef() noexcept {
         if (Data_) {
-            AtomicIncrement(Header()->RefCount);
+            Header()->RefCount.fetch_add(1, std::memory_order_seq_cst);
         }
     }
 
     void Release() noexcept {
         if (Data_) {
             auto* header = Header();
-            if (IsPrivate(header) || 0 == AtomicDecrement(header->RefCount)) {
+            if (IsPrivate(header) || 0 == header->RefCount.fetch_sub(1, std::memory_order_seq_cst) - 1) {
                 Deallocate(Data_);
             }
         }
@@ -206,7 +204,7 @@ private:
             auto* header = reinterpret_cast<THeader*>(raw);
             header->Begin = raw + OverheadSize + headroom;
             header->End = raw + allocSize - tailroom;
-            header->RefCount = 1;
+            header->RefCount.store(1, std::memory_order_seq_cst);
 
             data = raw;
         }

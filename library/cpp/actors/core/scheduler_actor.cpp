@@ -55,8 +55,8 @@ namespace NActors {
 
         static const ui64 IntrasecondThreshold = 1048576; // ~second
         TAutoPtr<TMomentMap> ActiveSec;
-        volatile ui64* CurrentTimestamp = nullptr;
-        volatile ui64* CurrentMonotonic = nullptr;
+        std::atomic<ui64>* CurrentTimestamp = nullptr;
+        std::atomic<ui64>* CurrentMonotonic = nullptr;
         TDeque<TAutoPtr<IEventHandle>> EventsToBeSent;
 
     public:
@@ -96,8 +96,8 @@ namespace NActors {
             const bool success = ctx.Send(PollerActor, new TEvPollerRegister(TimerDescriptor, SelfId(), {}));
             Y_ABORT_UNLESS(success);
 
-            RealTime = RelaxedLoad(CurrentTimestamp);
-            MonotonicTime = RelaxedLoad(CurrentMonotonic);
+            RealTime = CurrentTimestamp->load(std::memory_order_relaxed);
+            MonotonicTime = CurrentMonotonic->load(std::memory_order_relaxed);
 
             ActiveTick = AlignUp<ui64>(MonotonicTime, IntrasecondThreshold);
         }
@@ -110,8 +110,8 @@ namespace NActors {
         void UpdateTime() {
             RealTime = TInstant::Now().MicroSeconds();
             MonotonicTime = Max(MonotonicTime, GetMonotonicMicroSeconds());
-            AtomicStore(CurrentTimestamp, RealTime);
-            AtomicStore(CurrentMonotonic, MonotonicTime);
+            CurrentTimestamp->store(RealTime, std::memory_order_release);
+            CurrentMonotonic->store(MonotonicTime, std::memory_order_release);
         }
 
         void TryUpdateTime(NHPTimer::STime* lastTimeUpdate) {

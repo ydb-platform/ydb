@@ -53,6 +53,7 @@ namespace NActors {
         }
 
         void AddParkedCycles(i64 elapsed) {
+
             RelaxedStore(&Stats->ParkedTicks, RelaxedLoad(&Stats->ParkedTicks) + elapsed);
         }
 
@@ -128,10 +129,11 @@ namespace NActors {
 
         void UpdateActorsStats(size_t dyingActorsCnt) {
             if (dyingActorsCnt) {
-                AtomicAdd(Executor->DestroyedActors, dyingActorsCnt);
+                Executor->DestroyedActors.fetch_add(dyingActorsCnt);
             }
-            RelaxedStore(&Stats->PoolDestroyedActors, (ui64)RelaxedLoad(&Executor->DestroyedActors));
-            RelaxedStore(&Stats->PoolActorRegistrations, (ui64)RelaxedLoad(&Executor->ActorRegistrations));
+
+            RelaxedStore(&Stats->PoolDestroyedActors, Executor->DestroyedActors.load(std::memory_order_relaxed));
+            RelaxedStore(&Stats->PoolActorRegistrations, Executor->ActorRegistrations.load(std::memory_order_relaxed));
             RelaxedStore(&Stats->PoolAllocatedMailboxes, MailboxTable->GetAllocatedMailboxCount());
         }
 

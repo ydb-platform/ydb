@@ -44,10 +44,10 @@ namespace NActors {
     protected:
         const i16 PoolThreads;
         TIntrusivePtr<TAffinity> ThreadsAffinity;
-        TAtomic Semaphore = 0;
+        std::atomic<i64> Semaphore = 0;
         TUnorderedCache<ui32, 512, 4> Activations;
         TAtomic ActivationsRevolvingCounter = 0;
-        volatile bool StopFlag = false;
+        std::atomic<bool> StopFlag = false;
     public:
         TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity);
         ~TExecutorPoolBase();

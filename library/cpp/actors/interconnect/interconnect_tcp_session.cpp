@@ -156,7 +156,8 @@ namespace NActors {
         ui64 outputBuffersTotalSizeLimit = Proxy->Common->Settings.OutputBuffersTotalSizeLimitInMB * ui64(1 << 20);
         if (outputBuffersTotalSizeLimit != 0 && static_cast<ui64>(Proxy->Metrics->GetOutputBuffersTotalSize()) > outputBuffersTotalSizeLimit) {
             LOG_ERROR_IC_SESSION("ICS77", "Exceeded total limit on output buffers size");
-            if (AtomicTryLock(&Proxy->Common->StartedSessionKiller)) {
+
+            if (!Proxy->Common->StartedSessionKiller.exchange(true)) {
                 CreateSessionKillingActor(Proxy->Common);
             }
         }
@@ -796,9 +797,9 @@ namespace NActors {
                 Proxy->Metrics->IncInflyLimitReach();
             }
 
-            if (AtomicGet(ReceiveContext->ControlPacketId) == 0) {
-                AtomicSet(ReceiveContext->ControlPacketSendTimer, GetCycleCountFast());
-                AtomicSet(ReceiveContext->ControlPacketId, OutputCounter);
+            if (ReceiveContext->ControlPacketId.load(std::memory_order_acquire) == 0) {
+                ReceiveContext->ControlPacketSendTimer.store(GetCycleCountFast(), std::memory_order_release);
+                ReceiveContext->ControlPacketId.store(OutputCounter, std::memory_order_release);
             }
 
             // update payload activity timer

@@ -141,7 +141,7 @@ namespace NActors {
         }
         AtomicIncrement(Stats.ActorsAliveByActivity[at]);
 #endif
-        AtomicIncrement(ActorRegistrations);
+        ActorRegistrations.fetch_add(1, std::memory_order_seq_cst);
 
         // first step - find good enough mailbox
         ui32 hint = 0;
@@ -225,7 +225,7 @@ namespace NActors {
             at = 0;
         AtomicIncrement(Stats.ActorsAliveByActivity[at]);
 #endif
-        AtomicIncrement(ActorRegistrations);
+        ActorRegistrations.fetch_add(1, std::memory_order_seq_cst);
 
         const ui64 localActorId = AllocateID();
         mailbox->AttachActor(localActorId, actor);

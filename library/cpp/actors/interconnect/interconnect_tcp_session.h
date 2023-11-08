@@ -99,15 +99,15 @@ namespace NActors {
     struct TReceiveContext: public TAtomicRefCount<TReceiveContext> {
         /* All invokations to these fields should be thread-safe */
 
-        ui64 ControlPacketSendTimer = 0;
-        ui64 ControlPacketId = 0;
+        std::atomic<ui64> ControlPacketSendTimer = 0;
+        std::atomic<ui64> ControlPacketId = 0;
 
         // last processed packet by input session
         std::atomic_uint64_t LastPacketSerialToConfirm = 0;
         static constexpr uint64_t LastPacketSerialToConfirmLockBit = uint64_t(1) << 63;
 
         // for hardened checks
-        TAtomic NumInputSessions = 0;
+        std::atomic<i64> NumInputSessions = 0;
 
         NHPTimer::STime StartTime;
 
@@ -677,7 +677,7 @@ namespace NActors {
             }
             if (RepliesReceived == RepliesNumber) {
                 Send(LargestSession, new TEvents::TEvPoisonPill);
-                AtomicUnlock(&Common->StartedSessionKiller);
+                Common->StartedSessionKiller.store(false);
                 PassAway();
             }
         }

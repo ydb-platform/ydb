@@ -1,7 +1,5 @@
 #pragma once
 
-#include <library/cpp/deprecated/atomic/atomic.h>
-
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
 #include <util/network/address.h>
@@ -54,18 +52,17 @@ private:
     };
 
     struct THost {
-        THost() noexcept {
-        }
+        THost() = default;
 
         TVector<TIpHost> AddrsV4;
         time_t ResolvedV4 = 0;
         time_t NotFoundV4 = 0;
-        TAtomic InProgressV4 = 0;
+        std::atomic<bool> InProgressV4 = 0;
 
         TVector<in6_addr> AddrsV6;
         time_t ResolvedV6 = 0;
         time_t NotFoundV6 = 0;
-        TAtomic InProgressV6 = 0;
+        std::atomic<bool> InProgressV6 = 0;
 
         TString AddrsV4ToString() const;
         TString AddrsV6ToString() const;
@@ -79,7 +76,7 @@ private:
         TString Hostname;
         time_t Resolved = 0;
         time_t NotFound = 0;
-        TAtomic InProgress = 0;
+        std::atomic<bool> InProgress = 0;
     };
     /* IRemoteAddr is annoingly hard to use, so I'll use in6_addr as key
      * and put v4 addrs in it.
@@ -103,7 +100,7 @@ private:
 
     const TAddr& ResolveAddr(const in6_addr&, int family);
 
-    void WaitTask(TAtomic&);
+    void WaitTask(std::atomic<bool>& flag);
 
     static void GHBNCallback(void* arg, int status, int timeouts,
                              struct hostent* info);

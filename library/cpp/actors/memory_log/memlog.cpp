@@ -98,7 +98,7 @@ unsigned TMemoryLog::GetSelfCpu() noexcept {
 #endif
 }
 
-TMemoryLog* TMemoryLog::MemLogBuffer = nullptr;
+std::atomic<TMemoryLog*> TMemoryLog::MemLogBuffer = nullptr;
 Y_POD_THREAD(TThread::TId)
 TMemoryLog::LogThreadId;
 char* TMemoryLog::LastMarkIsHere = nullptr;

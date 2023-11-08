@@ -18,13 +18,13 @@ namespace NActors {
         const THolder<TMonCounters> MonCounters;
 
         TActorSystem* ActorSystem;
-        volatile ui64* CurrentTimestamp;
-        volatile ui64* CurrentMonotonic;
+        std::atomic<ui64>* CurrentTimestamp;
+        std::atomic<ui64>* CurrentMonotonic;
 
         ui32 TotalReaders;
         TArrayHolder<NSchedulerQueue::TReader*> Readers;
 
-        volatile bool StopFlag;
+        std::atomic<bool> StopFlag;
 
         typedef TMap<ui64, TAutoPtr<NSchedulerQueue::TQueueType>> TMomentMap; // intrasecond queues
         typedef THashMap<ui64, TAutoPtr<TMomentMap>> TScheduleMap;            // over-second schedule
@@ -41,7 +41,7 @@ namespace NActors {
         TBasicSchedulerThread(const TSchedulerConfig& config = TSchedulerConfig());
         ~TBasicSchedulerThread();
 
-        void Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) override;
+        void Prepare(TActorSystem* actorSystem, std::atomic<ui64>* currentTimestamp, std::atomic<ui64>* currentMonotonic) override;
         void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) override;
 
         void PrepareStart() override;
@@ -55,10 +55,10 @@ namespace NActors {
         virtual ~TMockSchedulerThread() override {
         }
 
-        void Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) override {
+        void Prepare(TActorSystem* actorSystem, std::atomic<ui64>* currentTimestamp, std::atomic<ui64>* currentMonotonic) override {
             Y_UNUSED(actorSystem);
-            *currentTimestamp = TInstant::Now().MicroSeconds();
-            *currentMonotonic = GetMonotonicMicroSeconds();
+            currentTimestamp->store(TInstant::Now().MicroSeconds(), std::memory_order_release);
+            currentMonotonic->store(GetMonotonicMicroSeconds(), std::memory_order_release);
         }
 
         void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) override {

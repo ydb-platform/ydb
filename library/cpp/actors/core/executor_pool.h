@@ -26,8 +26,8 @@ namespace NActors {
     public:
         const ui32 PoolId;
 
-        TAtomic ActorRegistrations;
-        TAtomic DestroyedActors;
+        std::atomic<uint64_t> ActorRegistrations;
+        std::atomic<uint64_t> DestroyedActors;
 
         IExecutorPool(ui32 poolId)
             : PoolId(poolId)

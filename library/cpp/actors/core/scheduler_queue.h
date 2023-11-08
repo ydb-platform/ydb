@@ -3,6 +3,8 @@
 #include "scheduler_cookie.h"
 
 #include <library/cpp/actors/util/queue_chunk.h>
+/// TODO: Import bug
+#include <library/cpp/actors/core/event.h>
 
 namespace NActors {
     class IEventHandle;

@@ -12,7 +12,7 @@ using namespace NActors;
 template<typename T>
 TEventHolderPool Setup(T&& callback) {
     auto common = MakeIntrusive<TInterconnectProxyCommon>();
-    common->DestructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>();
+    common->DestructorQueueSize = std::make_shared<std::atomic<i64>>();
     common->MaxDestructorQueueSize = 1024 * 1024;
     return TEventHolderPool(common, callback);
 }

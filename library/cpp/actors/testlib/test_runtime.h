@@ -638,8 +638,8 @@ namespace NActors {
             TIntrusivePtr<NMonitoring::TDynamicCounters> DynamicCounters;
             TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
             TIntrusivePtr<NInterconnect::TPollerThreads> Poller;
-            volatile ui64* ActorSystemTimestamp;
-            volatile ui64* ActorSystemMonotonic;
+            std::atomic<ui64>* ActorSystemTimestamp;
+            std::atomic<ui64>* ActorSystemMonotonic;
             TVector<std::pair<TActorId, TTestActorSetupCmd>> LocalServices;
             TMap<TActorId, IActor*> LocalServicesActors;
             TMap<IActor*, TActorId> ActorToActorId;

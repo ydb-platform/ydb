@@ -76,7 +76,7 @@ namespace NActors {
         ThreadCount = MaxThreadCount;
         auto semaphore = TSemaphore();
         semaphore.CurrentThreadCount = ThreadCount;
-        Semaphore = semaphore.ConverToI64();
+        Semaphore = semaphore.ConvertToI64();
     }
 
     TBasicExecutorPool::TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer)
@@ -113,21 +113,26 @@ namespace NActors {
                 return true;
             timers.HPStart = GetCycleCountFast();
             timers.Parked += timers.HPStart - timers.HPNow;
-        } while (AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_BLOCKED && !RelaxedLoad(&StopFlag));
+        } while (threadCtx.WaitingFlag.load(std::memory_order_acquire) == TThreadCtx::WS_BLOCKED && !StopFlag.load(std::memory_order_relaxed));
         return false;
     }
 
     void TBasicExecutorPool::GoToSpin(TThreadCtx& threadCtx) {
         ui64 start = GetCycleCountFast();
         bool doSpin = true;
+
+        #pragma clang loop unroll(disable)
         while (true) {
+            #pragma clang loop unroll(disable)
             for (ui32 j = 0; doSpin && j < 12; ++j) {
                 if (GetCycleCountFast() >= (start + SpinThresholdCycles)) {
                     doSpin = false;
                     break;
                 }
+
+                #pragma clang loop unroll(disable)
                 for (ui32 i = 0; i < 12; ++i) {
-                    if (AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_ACTIVE) {
+                    if (threadCtx.WaitingFlag.load(std::memory_order_acquire) == TThreadCtx::WS_ACTIVE) {
                         SpinLockPause();
                     } else {
                         doSpin = false;
@@ -138,9 +143,9 @@ namespace NActors {
             if (!doSpin) {
                 break;
             }
-            if (RelaxedLoad(&StopFlag)) {
-                break;
-            }
+            // if (StopFlag.load(std::memory_order_relaxed)) {
+            //     break;
+            // }
         }
     }
 
@@ -161,29 +166,30 @@ namespace NActors {
         }
 #endif
 
-        TAtomic state = AtomicLoad(&threadCtx.WaitingFlag);
+        TThreadCtx::EWaitState state = threadCtx.WaitingFlag.load(std::memory_order_acquire);
         Y_ABORT_UNLESS(state == TThreadCtx::WS_NONE, "WaitingFlag# %d", int(state));
 
         if (SpinThreshold > 0 && !needToBlock) {
             // spin configured period
-            AtomicSet(threadCtx.WaitingFlag, TThreadCtx::WS_ACTIVE);
+            threadCtx.WaitingFlag.store(TThreadCtx::WS_ACTIVE, std::memory_order_release);
             GoToSpin(threadCtx);
             // then - sleep
-            if (AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_ACTIVE) {
-                if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_BLOCKED, TThreadCtx::WS_ACTIVE)) {
+            state = threadCtx.WaitingFlag.load(std::memory_order_acquire);
+            if (state == TThreadCtx::WS_ACTIVE) {
+                if (threadCtx.WaitingFlag.compare_exchange_strong(state, TThreadCtx::WS_BLOCKED)) {
                     if (GoToSleep(threadCtx, timers)) {  // interrupted
                         return true;
                     }
                 }
             }
         } else {
-            AtomicSet(threadCtx.WaitingFlag, TThreadCtx::WS_BLOCKED);
+            threadCtx.WaitingFlag.store(TThreadCtx::WS_BLOCKED, std::memory_order_release);
             if (GoToSleep(threadCtx, timers)) {  // interrupted
                 return true;
             }
         }
 
-        Y_DEBUG_ABORT_UNLESS(AtomicLoad(&StopFlag) || AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_NONE);
+        Y_DEBUG_ABORT_UNLESS(StopFlag.load(std::memory_order_acquire) || threadCtx.WaitingFlag.load(std::memory_order_acquire) == TThreadCtx::WS_NONE);
 
 #if defined ACTORSLIB_COLLECT_EXEC_STATS
         if (AtomicDecrement(ThreadUtilization) == 0) {
@@ -208,14 +214,13 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::AskToGoToSleep(bool *needToWait, bool *needToBlock) {
-        TAtomic x = AtomicGet(Semaphore);
+        i64 x = Semaphore.load(std::memory_order_relaxed);
+
         do {
-            i64 oldX = x;
-            TSemaphore semaphore = TSemaphore::GetSemaphore(x);;
+            TSemaphore semaphore = TSemaphore::GetSemaphore(x);
             if (semaphore.CurrentSleepThreadCount < 0) {
                 semaphore.CurrentSleepThreadCount++;
-                x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), x);
-                if (x == oldX) {
+                if (Semaphore.compare_exchange_strong(x, semaphore.ConvertToI64())) {
                     *needToWait = true;
                     *needToBlock = true;
                     return;
@@ -225,8 +230,7 @@ namespace NActors {
 
             if (semaphore.OldSemaphore == 0) {
                 semaphore.CurrentSleepThreadCount++;
-                x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), x);
-                if (x == oldX) {
+                if (Semaphore.compare_exchange_strong(x, semaphore.ConvertToI64())) {
                     *needToWait = true;
                     *needToBlock = false;
                     return;
@@ -252,12 +256,12 @@ namespace NActors {
         }
 
         if (workerId >= 0) {
-            AtomicSet(Threads[workerId].WaitingFlag, TThreadCtx::WS_NONE);
+            Threads[workerId].WaitingFlag.store(TThreadCtx::WS_NONE, std::memory_order_release);
         }
 
-        TAtomic x = AtomicGet(Semaphore);
+        i64 x = Semaphore.load(std::memory_order_acquire);
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
-        while (!RelaxedLoad(&StopFlag)) {
+        while (!StopFlag.load(std::memory_order_relaxed)) {
             if (!semaphore.OldSemaphore || semaphore.CurrentSleepThreadCount < 0) {
                 if (workerId < 0 || !wctx.IsNeededToWaitNextActivation) {
                     timers.HPNow = GetCycleCountFast();
@@ -276,25 +280,24 @@ namespace NActors {
             } else {
                 if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
                     if (workerId >= 0) {
-                        AtomicSet(Threads[workerId].WaitingFlag, TThreadCtx::WS_RUNNING);
+                        Threads[workerId].WaitingFlag.store(TThreadCtx::WS_RUNNING, std::memory_order_release);
                     }
-                    AtomicDecrement(Semaphore);
+
+                    Semaphore.fetch_sub(1, std::memory_order_release);
                     timers.HPNow = GetCycleCountFast();
                     timers.Elapsed += timers.HPNow - timers.HPStart;
                     wctx.AddElapsedCycles(ActorSystemIndex, timers.Elapsed);
                     if (timers.Parked > 0) {
                         wctx.AddParkedCycles(timers.Parked);
                     }
-                    if (timers.Blocked > 0) {
-                        wctx.AddBlockedCycles(timers.Blocked);
-                    }
+
                     return activation;
                 }
                 semaphore.CurrentSleepThreadCount++;
             }
 
-            SpinLockPause();
-            x = AtomicGet(Semaphore);
+            // SpinLockPause();
+            x = Semaphore.load(std::memory_order_acquire);
             semaphore = TSemaphore::GetSemaphore(x);
         }
 
@@ -331,7 +334,8 @@ namespace NActors {
     inline void TBasicExecutorPool::WakeUpLoop(i16 currentThreadCount) {
         for (i16 i = 0;;) {
             TThreadCtx& threadCtx = Threads[i];
-            TThreadCtx::EWaitState state = static_cast<TThreadCtx::EWaitState>(AtomicLoad(&threadCtx.WaitingFlag));
+            TThreadCtx::EWaitState state = threadCtx.WaitingFlag.load(std::memory_order_acquire);
+
             switch (state) {
                 case TThreadCtx::WS_NONE:
                 case TThreadCtx::WS_RUNNING:
@@ -341,10 +345,9 @@ namespace NActors {
                     break;
                 case TThreadCtx::WS_ACTIVE:
                 case TThreadCtx::WS_BLOCKED:
-                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_NONE, state)) {
-                        if (state  == TThreadCtx::WS_BLOCKED) {
-                            threadCtx.Pad.Unpark();
-                        }
+                    if (threadCtx.WaitingFlag.compare_exchange_strong(state, TThreadCtx::WS_NONE)) {
+                        threadCtx.Pad.Unpark();
+
                         if (i >= currentThreadCount) {
                             AtomicIncrement(WrongWakenedThreadCount);
                         }
@@ -361,19 +364,19 @@ namespace NActors {
         Activations.Push(activation, revolvingCounter);
         bool needToWakeUp = false;
 
-        TAtomic x = AtomicGet(Semaphore);
+        i64 x = Semaphore.load(std::memory_order_acquire);
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
         do {
             needToWakeUp = semaphore.CurrentSleepThreadCount > SharedExecutorsCount;
-            i64 oldX = semaphore.ConverToI64();
             semaphore.OldSemaphore++;
             if (needToWakeUp) {
                 semaphore.CurrentSleepThreadCount--;
             }
-            x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), oldX);
-            if (x == oldX) {
+
+            if (Semaphore.compare_exchange_strong(x, semaphore.ConvertToI64())) {
                 break;
             }
+
             semaphore = TSemaphore::GetSemaphore(x);
         } while (true);
 
@@ -486,11 +489,10 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::PrepareStop() {
-        AtomicStore(&StopFlag, true);
+        StopFlag.store(true, std::memory_order_release);
         for (i16 i = 0; i != PoolThreads; ++i) {
-            Threads[i].Thread->StopFlag = true;
+            Threads[i].Thread->StopFlag.store(true, std::memory_order_release);
             Threads[i].Pad.Interrupt();
-            Threads[i].BlockedPad.Interrupt();
         }
     }
 
@@ -547,15 +549,16 @@ namespace NActors {
         with_lock (ChangeThreadsLock) {
             i16 prevCount = GetThreadCount();
             AtomicSet(ThreadCount, threads);
-            TSemaphore semaphore = TSemaphore::GetSemaphore(AtomicGet(Semaphore));
-            i64 oldX = semaphore.ConverToI64();
+            TSemaphore semaphore = TSemaphore::GetSemaphore(Semaphore.load(std::memory_order_acquire));
+            i64 oldX = semaphore.ConvertToI64();
             semaphore.CurrentThreadCount = threads;
             if (threads > prevCount) {
                 semaphore.CurrentSleepThreadCount += (i64)threads - prevCount;
             } else {
                 semaphore.CurrentSleepThreadCount -= (i64)prevCount - threads;
             }
-            AtomicAdd(Semaphore, semaphore.ConverToI64() - oldX);
+
+            Semaphore.fetch_add(semaphore.ConvertToI64() - oldX, std::memory_order_release);
             LWPROBE(ThreadCount, PoolId, PoolName, threads, MinThreadCount, MaxThreadCount, DefaultThreadCount);
         }
     }
@@ -583,7 +586,7 @@ namespace NActors {
     }
 
     i16 TBasicExecutorPool::GetBlockingThreadCount() const {
-        TAtomic x = AtomicGet(Semaphore);
+        i64 x = Semaphore.load(std::memory_order_acquire);
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
         return -Min<i16>(semaphore.CurrentSleepThreadCount, 0);
     }

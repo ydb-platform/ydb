@@ -35,6 +35,7 @@ enum ENodeType : int
     NT_USER                 /* "user" */,
     NT_SCHEDULER_POOL       /* "scheduler_pool" */,
     NT_LINK                 /* "link" */,
+    NT_GROUP                /* "group" */,
 };
 
 ///

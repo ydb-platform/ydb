@@ -192,31 +192,32 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TNodeWarden::SendPDiskReport(ui32 pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::EPDiskPhase phase) {
-        STLOG(PRI_DEBUG, BS_NODE, NW41, "SendPDiskReport", (PDiskId, pdiskId), (Phase, phase));
+    void TNodeWarden::RestartLocalPDiskStart(ui32 pdiskId, TIntrusivePtr<TPDiskConfig> pdiskConfig) {
+        auto it = LocalPDisks.find(TPDiskKey(LocalNodeId, pdiskId));
+        if (it == LocalPDisks.end()) {
+            STLOG(PRI_WARN, BS_NODE, NW66, "Cannot restart local pdisk since there is no such pdisk",
+                    (NodeId, LocalNodeId), (PDiskId, pdiskId));
+            return;
+        }
 
-        auto report = std::make_unique<TEvBlobStorage::TEvControllerNodeReport>(LocalNodeId);
-        auto *pReport = report->Record.AddPDiskReports();
-        pReport->SetPDiskId(pdiskId);
-        pReport->SetPhase(phase);
-        
-        SendToController(std::move(report));
+        bool inserted = InFlightRestartedPDisks.emplace(LocalNodeId, pdiskId).second;
+        if (!inserted) {
+            STLOG(PRI_WARN, BS_NODE, NW67, "Cannot restart local pdisk since it already in the process of restart",
+                    (NodeId, LocalNodeId), (PDiskId, pdiskId));
+            return;
+        }
+
+        const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
+        Cfg->PDiskKey.Initialize();
+        Send(actorId, new TEvBlobStorage::TEvRestartPDisk(pdiskId, Cfg->PDiskKey, pdiskConfig));
+        STLOG(PRI_NOTICE, BS_NODE, NW69, "RestartLocalPDisk is started", (PDiskId, pdiskId));
     }
 
-    void TNodeWarden::AskBSCToRestartPDisk(ui32 pdiskId, ui64 requestCookie) {
-        auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
-
-        NKikimrBlobStorage::TRestartPDisk* cmd = ev->Record.MutableRequest()->AddCommand()->MutableRestartPDisk();
-        
-        auto targetPDiskId = cmd->MutableTargetPDiskId();
-        targetPDiskId->SetNodeId(LocalNodeId);
-        targetPDiskId->SetPDiskId(pdiskId);
-
-        SendToController(std::move(ev), requestCookie);
-    }
-
-    void TNodeWarden::OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status) {
+    void TNodeWarden::RestartLocalPDiskFinish(ui32 pdiskId, NKikimrProto::EReplyStatus status) {
         const TPDiskKey pdiskKey(LocalNodeId, pdiskId);
+
+        size_t erasedCount = InFlightRestartedPDisks.erase(pdiskKey);
+        Y_VERIFY_S(erasedCount == 1, "PDiskId# " << pdiskId << " restarted, but wasn't in the process of removal");
 
         const TVSlotId from(pdiskKey.NodeId, pdiskKey.PDiskId, 0);
         const TVSlotId to(pdiskKey.NodeId, pdiskKey.PDiskId, Max<ui32>());
@@ -252,35 +253,6 @@ namespace NKikimr::NStorage {
                 }
             }
         }
-        
-        SendPDiskReport(pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::PD_RESTARTED);
-    }
-
-    void TNodeWarden::DoRestartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk) {
-        ui32 pdiskId = pdisk.GetPDiskID();
-
-        const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
-
-        auto it = LocalPDisks.find(TPDiskKey(LocalNodeId, pdiskId));
-        if (it == LocalPDisks.end()) {
-            // This can happen if warden didn't handle pdisk's restart before node's restart.
-            // In this case, PDisk has EntityStatus::RESTART instead of EntityStatus::INITIAL.
-            StartLocalPDisk(pdisk);
-            SendPDiskReport(pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::PD_RESTARTED);
-            return;
-        }
-
-        TIntrusivePtr<TPDiskConfig> pdiskConfig = CreatePDiskConfig(it->second.Record);
-
-        Cfg->PDiskKey.Initialize();
-        Send(actorId, new TEvBlobStorage::TEvAskWardenRestartPDiskResult(pdiskId, Cfg->PDiskKey, true, pdiskConfig));
-    }
-
-    void TNodeWarden::OnUnableToRestartPDisk(ui32 pdiskId, TString error) {
-        const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
-
-        Cfg->PDiskKey.Initialize();
-        Send(actorId, new TEvBlobStorage::TEvAskWardenRestartPDiskResult(pdiskId, Cfg->PDiskKey, false, nullptr, error));
     }
 
     void TNodeWarden::ApplyServiceSetPDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet) {
@@ -305,7 +277,10 @@ namespace NKikimr::NStorage {
                     break;
 
                 case NKikimrBlobStorage::RESTART:
-                    DoRestartLocalPDisk(pdisk);
+                    if (auto it = LocalPDisks.find({pdisk.GetNodeID(), pdisk.GetPDiskID()}); it != LocalPDisks.end()) {
+                        it->second.Record = pdisk;
+                    }
+                    RestartLocalPDiskStart(pdisk.GetPDiskID(), CreatePDiskConfig(pdisk));
                     break;
             }
         }

@@ -787,7 +787,7 @@ struct TEvBlobStorage {
         // EvControllerReadSchemeString = EvPut + 11 * 512,
         // EvControllerReadDataString,
         EvControllerRegisterNode = EvPut + 11 * 512 + 2,
-        EvControllerCreatePDisk, // Not used.
+        EvControllerCreatePDisk,
         EvControllerCreateVDiskSlots,
         EvControllerCreateGroup,
         EvControllerSelectGroups,
@@ -821,7 +821,7 @@ struct TEvBlobStorage {
         // EvControllerReadSchemeStringResult = EvPut + 12 * 512,
         // EvControllerReadDataStringResult,
         EvControllerNodeServiceSetUpdate = EvPut + 12 * 512 + 2,
-        EvControllerCreatePDiskResult, // Not used.
+        EvControllerCreatePDiskResult,
         EvControllerCreateVDiskSlotsResult,
         EvControllerCreateGroupResult,
         EvControllerSelectGroupsResult,
@@ -851,9 +851,9 @@ struct TEvBlobStorage {
 
         // node controller internal messages
         EvRegisterNodeRetry = EvPut + 14 * 512,
-        EvAskWardenRestartPDisk,
+        EvAskRestartPDisk,
         EvRestartPDisk,
-        EvNotifyWardenPDiskRestarted,
+        EvRestartPDiskResult,
         EvNodeWardenQueryGroupInfo,
         EvNodeWardenGroupInfo,
         EvNodeConfigPush,
@@ -2355,10 +2355,10 @@ struct TEvBlobStorage {
     struct TEvDropDonor;
     struct TEvBunchOfEvents;
 
+    struct TEvAskRestartPDisk;
     struct TEvAskRestartVDisk;
-    struct TEvAskWardenRestartPDisk;
-    struct TEvAskWardenRestartPDiskResult;
-    struct TEvNotifyWardenPDiskRestarted;
+    struct TEvRestartPDisk;
+    struct TEvRestartPDiskResult;
 };
 
 // EPutHandleClass defines BlobStorage queue to a request to

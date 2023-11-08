@@ -68,5 +68,4 @@ RECURSE_FOR_TESTS(
     ut_replication
     ut_scrub
     ut_vdisk_restart
-    ut_restart_pdisk
 )

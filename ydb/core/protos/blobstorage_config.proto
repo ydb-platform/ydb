@@ -400,10 +400,6 @@ message TWipeVDisk {
     NKikimrBlobStorage.TVDiskID VDiskId = 2;
 }
 
-message TRestartPDisk {
-    TPDiskId TargetPDiskId = 1;
-}
-
 message TSetScrubPeriodicity {
     uint32 ScrubPeriodicity = 1; // in seconds; 0 = disable
 }
@@ -535,7 +531,6 @@ message TConfigRequest {
             TReadSettings ReadSettings = 43;
             TCancelVirtualGroup CancelVirtualGroup = 44;
             TSetVDiskReadOnly SetVDiskReadOnly = 47;
-            TRestartPDisk RestartPDisk = 48;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

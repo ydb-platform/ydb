@@ -85,6 +85,7 @@ namespace NKikimr {
         }
     };
 
+
     struct TEvBlobStorage::TEvControllerNodeServiceSetUpdate : public TEventPB<
         TEvBlobStorage::TEvControllerNodeServiceSetUpdate,
         NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate,
@@ -422,10 +423,10 @@ namespace NKikimr {
         }
     };
 
-    struct TEvBlobStorage::TEvAskWardenRestartPDisk : TEventLocal<TEvAskWardenRestartPDisk, EvAskWardenRestartPDisk> {
+    struct TEvBlobStorage::TEvAskRestartPDisk : TEventLocal<TEvAskRestartPDisk, EvAskRestartPDisk> {
         const ui32 PDiskId;
 
-        TEvAskWardenRestartPDisk(const ui32& pdiskId)
+        TEvAskRestartPDisk(const ui32& pdiskId)
             : PDiskId(pdiskId)
         {}
     };
@@ -443,28 +444,23 @@ namespace NKikimr {
         {}
     };
 
-    struct TEvBlobStorage::TEvAskWardenRestartPDiskResult : TEventLocal<TEvAskWardenRestartPDiskResult, EvRestartPDisk> {
+    struct TEvBlobStorage::TEvRestartPDisk : TEventLocal<TEvRestartPDisk, EvRestartPDisk> {
         const ui32 PDiskId;
         const NPDisk::TMainKey MainKey;
-        const bool RestartAllowed;
         TIntrusivePtr<TPDiskConfig> Config;
-        TString Details;
 
-        TEvAskWardenRestartPDiskResult(const ui32 pdiskId, const NPDisk::TMainKey& mainKey, const bool restartAllowed, const TIntrusivePtr<TPDiskConfig>& config, 
-            TString details = "")
+        TEvRestartPDisk(const ui32& pdiskId, const NPDisk::TMainKey& mainKey, const TIntrusivePtr<TPDiskConfig>& config)
             : PDiskId(pdiskId)
             , MainKey(mainKey)
-            , RestartAllowed(restartAllowed)
             , Config(config)
-            , Details(details)
         {}
     };
 
-    struct TEvBlobStorage::TEvNotifyWardenPDiskRestarted : TEventLocal<TEvNotifyWardenPDiskRestarted, EvNotifyWardenPDiskRestarted> {
+    struct TEvBlobStorage::TEvRestartPDiskResult : TEventLocal<TEvRestartPDiskResult, EvRestartPDiskResult> {
         const ui32 PDiskId;
         NKikimrProto::EReplyStatus Status;
 
-        TEvNotifyWardenPDiskRestarted(const ui32 pdiskId, NKikimrProto::EReplyStatus status = NKikimrProto::EReplyStatus::OK)
+        TEvRestartPDiskResult(const ui32& pdiskId, NKikimrProto::EReplyStatus status = NKikimrProto::EReplyStatus::OK)
             : PDiskId(pdiskId)
             , Status(status)
         {}

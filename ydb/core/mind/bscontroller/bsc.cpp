@@ -69,7 +69,7 @@ void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
         TBlobStorageGroupInfo::TGroupVDisks failed(Topology.get());
         TBlobStorageGroupInfo::TGroupVDisks failedByPDisk(Topology.get());
         for (const TVSlotInfo *slot : VDisksInGroup) {
-            if (!slot->IsReady || slot->PDisk->Mood == TPDiskMood::Restarting) {
+            if (!slot->IsReady) {
                 failed |= {Topology.get(), slot->GetShortVDiskId()};
             } else if (!slot->PDisk->HasGoodExpectedStatus()) {
                 failedByPDisk |= {Topology.get(), slot->GetShortVDiskId()};
@@ -446,7 +446,6 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSanitizeGroup:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kCancelVirtualGroup:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetVDiskReadOnly:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kRestartPDisk:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

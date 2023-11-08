@@ -278,6 +278,8 @@ TListJobsCommand::TListJobsCommand()
         .Optional();
     RegisterParameter("with_competitors", Options.WithCompetitors)
         .Optional();
+    RegisterParameter("with_monitoring_descriptor", Options.WithMonitoringDescriptor)
+        .Optional();
     RegisterParameter("job_competition_id", Options.JobCompetitionId)
         .Optional();
     RegisterParameter("task_name", Options.TaskName)

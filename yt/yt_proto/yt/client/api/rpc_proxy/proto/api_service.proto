@@ -2173,6 +2173,8 @@ message TReqListJobs
 
     optional string task_name = 19;
 
+    optional bool with_monitoring_descriptor = 21;
+
     optional TMasterReadOptions master_read_options = 102;
 }
 

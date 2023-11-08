@@ -187,6 +187,7 @@ struct TListJobsOptions
     std::optional<bool> WithFailContext;
     std::optional<bool> WithSpec;
     std::optional<bool> WithCompetitors;
+    std::optional<bool> WithMonitoringDescriptor;
     std::optional<TString> TaskName;
 
     TDuration RunningJobsLookbehindPeriod = TDuration::Max();

@@ -177,10 +177,6 @@ runs:
           extra_params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi
         
-        # FIXME: remove after KIKIMR-19209
-        sed -i 's/^END()/SKIP_TEST("wait for KIKIMR-19209") END()/' ydb/library/yql/tests/sql/sql2yql/ya.make
-        
-        
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
         

@@ -464,7 +464,7 @@ namespace NKikimr {
                     }
 
                     for (const auto& filter : StoragePool.PDiskFilters) {
-                        if (filter.MatchPDisk(info)) {
+                        if (filter.MatchPDisk(info) && (!State.TargetNodeId.has_value() || *State.TargetNodeId == id.NodeId)) {
                             const bool inserted = RegisterPDisk(id, info, true);
                             Y_ABORT_UNLESS(inserted);
                             break;

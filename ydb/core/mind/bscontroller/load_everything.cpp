@@ -89,6 +89,7 @@ public:
                 Self->GroupLayoutSanitizerEnabled = state.GetValue<T::GroupLayoutSanitizer>();
                 Self->AllowMultipleRealmsOccupation = state.GetValueOrDefault<T::AllowMultipleRealmsOccupation>();
                 Self->SysViewChangedSettings = true;
+                Self->UseSelfHealLocalPolicy = state.GetValue<T::UseSelfHealLocalPolicy>();
             }
         }
 

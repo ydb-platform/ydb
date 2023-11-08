@@ -142,6 +142,10 @@ namespace NKikimr::NBsController {
                             ev->AllowMultipleRealmsOccupation = Self->AllowMultipleRealmsOccupation;
                             Self->Send(Self->SelfHealId, ev.release());
                         }
+                        for (bool value : settings.GetUseSelfHealLocalPolicy()) {
+                            Self->UseSelfHealLocalPolicy = value;
+                            db.Table<T>().Key(true).Update<T::UseSelfHealLocalPolicy>(Self->UseSelfHealLocalPolicy);
+                        }
                         return true;
                     }
 
@@ -307,6 +311,7 @@ namespace NKikimr::NBsController {
                 state.SanitizingRequests.clear();
                 state.ExplicitReconfigureMap.clear();
                 state.SuppressDonorMode.clear();
+                state.TargetNodeId.reset();
                 switch (cmd.GetCommandCase()) {
 #define HANDLE_COMMAND(NAME) \
                     case NKikimrBlobStorage::TConfigRequest::TCommand::k ## NAME: return state.ExecuteStep(cmd.Get ## NAME(), status);

@@ -9,83 +9,107 @@
 
 Y_UNIT_TEST_SUITE(BsControllerTest) {
 
-    void TestSelfHeal(const ui32 numDCs = 3, ui32 numRacksPerDC = 4, const ui32 numUnitsPerRack = 4, const ui32 numDisksPerNode = 2, const ui32 numGroups = 64,
-            TString erasure = "block-4-2", TBlobStorageGroupType groupType = TBlobStorageGroupType::Erasure4Plus2Block) {
-        ui32 numNodes = numDCs * numRacksPerDC * numUnitsPerRack;
-        auto locationGenerator = [=](ui32 nodeId) {
-            NActorsInterconnect::TNodeLocation proto;
-            proto.SetDataCenter(ToString((nodeId - 1) / (numUnitsPerRack * numRacksPerDC)));
-            proto.SetRack(ToString((nodeId - 1) / numUnitsPerRack));
-            proto.SetUnit(ToString((nodeId - 1)));
-            return TNodeLocation(proto);
-        };
-
-        TEnvironmentSetup env(numNodes, locationGenerator);
-
-        const TGroupGeometryInfo geom = CreateGroupGeometry(groupType);
-        ui32 disksNum = geom.GetNumFailRealms() * geom.GetNumFailDomainsPerFailRealm() * geom.GetNumVDisksPerFailDomain();
-
-        NKikimrBlobStorage::TConfigRequest request;
-        TVector<TEnvironmentSetup::TDrive> drives;
-        for (ui32 i = 0; i < numDisksPerNode; ++i) {
-            drives.push_back({ .Path = "/dev/disk" + std::to_string(1 + i)});
-        }
-        env.DefineBox(1, drives, {{1, numNodes}}, &request);
-        env.DefineStoragePool(1, 1, numGroups, NKikimrBlobStorage::ROT, {}, &request, erasure);
-        auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-
-        env.WaitForNodeWardensToConnect();
-
-        request.Clear();
-        auto *cmd = request.AddCommand()->MutableEnableSelfHeal();
-        cmd->SetEnable(true);
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-
-        std::set<TPDiskId> active, faulty;
-
-        request = {};
-        env.QueryBaseConfig(&request);
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-        for (const auto& pdisk : response.GetStatus(0).GetBaseConfig().GetPDisk()) {
-            active.emplace(pdisk.GetNodeId(), pdisk.GetPDiskId());
+    struct TTestSelfHeal {
+        TTestSelfHeal(
+            ui32 numDCs = 3, ui32 numRacksPerDC = 4, ui32 numUnitsPerRack = 4, ui32 numDisksPerNode = 2, ui32 numGroups = 64,
+            TString erasure = "block-4-2", TBlobStorageGroupType groupType = TBlobStorageGroupType::Erasure4Plus2Block
+        )
+            : NumDCs(numDCs)
+            , NumRacksPerDC(numRacksPerDC)
+            , NumUnitsPerRack(numUnitsPerRack)
+            , NumNodes(NumDCs * NumRacksPerDC * NumUnitsPerRack)
+            , NumDisksPerNode(numDisksPerNode)
+            , NumGroups(numGroups)
+            , Erasure(erasure)
+            , GroupType(groupType)
+            , Env(NumNodes, [=](ui32 nodeId) {
+                NActorsInterconnect::TNodeLocation proto;
+                proto.SetDataCenter(ToString((nodeId - 1) / (NumUnitsPerRack * NumRacksPerDC)));
+                proto.SetRack(ToString((nodeId - 1) / NumUnitsPerRack));
+                proto.SetUnit(ToString((nodeId - 1)));
+                return TNodeLocation(proto);
+            })
+            , Geom(CreateGroupGeometry(GroupType))
+        {
         }
 
-        TString error;
-        UNIT_ASSERT_C(CheckBaseConfigLayout(geom, response.GetStatus(0).GetBaseConfig(), true, error),
-                "Initial group layout is incorrect, ErrorReason# " << error);
+        void InitCluster() {
+            NKikimrBlobStorage::TConfigRequest request;
+            TVector<TEnvironmentSetup::TDrive> drives;
+            for (ui32 i = 0; i < NumDisksPerNode; ++i) {
+                drives.push_back({ .Path = "/dev/disk" + std::to_string(1 + i)});
+            }
+            Env.DefineBox(1, drives, {{1, NumNodes}}, &request);
+            Env.DefineStoragePool(1, 1, NumGroups, NKikimrBlobStorage::ROT, {}, &request, Erasure);
+            auto response = Env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
 
-        UNIT_ASSERT_VALUES_EQUAL(active.size(), numNodes * numDisksPerNode);
+            Env.WaitForNodeWardensToConnect();
 
-        auto move = [&](auto& from, auto& to, NKikimrBlobStorage::EDriveStatus status) {
+            request.Clear();
+            auto *cmd = request.AddCommand()->MutableEnableSelfHeal();
+            cmd->SetEnable(true);
+            response = Env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        }
+
+        void SetSelfHealLocalPolicyTimeout(TDuration timeout) {
+            NKikimrBlobStorage::TConfigRequest request;
+            auto *cmd = request.AddCommand()->MutableUpdateSettings();
+            Y_UNUSED(timeout);
+            cmd->AddUseSelfHealLocalPolicy(true);
+            cmd->AddGroupReserveMin(8 + 4);
+            cmd->AddEnableDonorMode(true);
+            auto response = Env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        }
+
+        std::set<TPDiskId> GetActiveDisks() {
+            std::set<TPDiskId> active;
+
+            NKikimrBlobStorage::TConfigRequest request;
+            Env.QueryBaseConfig(&request);
+            auto response = Env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            for (const auto& pdisk : response.GetStatus(0).GetBaseConfig().GetPDisk()) {
+                active.emplace(pdisk.GetNodeId(), pdisk.GetPDiskId());
+            }
+
+            TString error;
+            UNIT_ASSERT_C(CheckBaseConfigLayout(Geom, response.GetStatus(0).GetBaseConfig(), true, error),
+                    "Initial group layout is incorrect, ErrorReason# " << error);
+
+            UNIT_ASSERT_VALUES_EQUAL(active.size(), NumNodes * NumDisksPerNode);
+
+            return active;
+        }
+
+        TPDiskId Move(std::set<TPDiskId>& from, std::set<TPDiskId>& to, NKikimrBlobStorage::EDriveStatus status) {
             auto it = from.begin();
+            auto pDiskId = *it;
             std::advance(it, RandomNumber(from.size()));
             Ctest << "PDisk# " << *it
                 << " setting status to " << NKikimrBlobStorage::EDriveStatus_Name(status)
                 << Endl;
-            request = {};
-            env.UpdateDriveStatus(*it, status, &request);
-            response = env.Invoke(request);
+            NKikimrBlobStorage::TConfigRequest request;
+            Env.UpdateDriveStatus(*it, status, &request);
+            auto response = Env.Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
             to.insert(from.extract(it));
-        };
+            return pDiskId;
+        }
 
-        for (size_t i = 0; i < numNodes; ++i) {
-            env.Wait(TDuration::Seconds(300));
-            if (faulty.size() < disksNum) {
-                move(active, faulty, NKikimrBlobStorage::FAULTY);
-            } else {
-                move(faulty, active, NKikimrBlobStorage::ACTIVE);
-            }
-            env.Wait(TDuration::Seconds(300));
-
-            request = {};
-            env.QueryBaseConfig(&request);
-            response = env.Invoke(request);
+        auto RequestBasicConfig() {
+            NKikimrBlobStorage::TConfigRequest request;
+            Env.QueryBaseConfig(&request);
+            auto response = Env.Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-            for (const auto& pdisk : response.GetStatus(0).GetBaseConfig().GetPDisk()) {
+            return response.GetStatus(0).GetBaseConfig();
+        }
+
+        void CheckDiskStatuses(const std::set<TPDiskId>& active, std::set<TPDiskId>& faulty) {
+            auto conf = RequestBasicConfig();
+            for (const auto& pdisk : conf.GetPDisk()) {
                 const TPDiskId pdiskId(pdisk.GetNodeId(), pdisk.GetPDiskId());
                 if (pdisk.GetDriveStatus() == NKikimrBlobStorage::ACTIVE) {
                     UNIT_ASSERT(active.count(pdiskId));
@@ -94,7 +118,11 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
                     UNIT_ASSERT(faulty.count(pdiskId));
                 }
             }
-            for (const auto& vslot : response.GetStatus(0).GetBaseConfig().GetVSlot()) {
+        }
+
+        void CheckDiskLocations(const std::set<TPDiskId>& active, std::set<TPDiskId>& faulty) {
+            auto conf = RequestBasicConfig();
+            for (const auto& vslot : conf.GetVSlot()) {
                 const auto& id = vslot.GetVSlotId();
                 const TPDiskId pdiskId(id.GetNodeId(), id.GetPDiskId());
                 if (!active.count(pdiskId)) {
@@ -112,17 +140,83 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
                     UNIT_FAIL("non-active disk is present in group");
                 }
             }
-            UNIT_ASSERT_C(CheckBaseConfigLayout(geom, response.GetStatus(0).GetBaseConfig(), true, error), "Error on step# " << i
-                << ", ErrorReason# " << error);
         }
-    }
+
+        void TestCorrectMoves() {
+            ui32 disksNum = Geom.GetNumFailRealms() * Geom.GetNumFailDomainsPerFailRealm() * Geom.GetNumVDisksPerFailDomain();
+            std::set<TPDiskId> active = GetActiveDisks(), faulty;
+
+            for (size_t i = 0; i < NumNodes; ++i) {
+                Env.Wait(TDuration::Seconds(300));
+                if (faulty.size() < disksNum) {
+                    Move(active, faulty, NKikimrBlobStorage::FAULTY);
+                } else {
+                    Move(faulty, active, NKikimrBlobStorage::ACTIVE);
+                }
+                Env.Wait(TDuration::Seconds(300));
+
+                CheckDiskStatuses(active, faulty);
+                CheckDiskLocations(active, faulty);
+
+                TString error;
+                UNIT_ASSERT_C(CheckBaseConfigLayout(Geom, RequestBasicConfig(), true, error), "Error on step# " << i
+                    << ", ErrorReason# " << error);
+            }
+        }
+
+        void RunTestCorrectMoves() {
+            InitCluster();
+            TestCorrectMoves();
+        }
+
+        THashMap<ui32, ui32> CountVDisksPerNode() {
+            THashMap<ui32, ui32> result;
+            const auto conf = RequestBasicConfig();
+            for (const auto& vslot : conf.GetVSlot()) {
+                ++result[vslot.GetVSlotId().GetNodeId()];
+            }
+            return result;
+        }
+
+        void RunTestCorrectLocalMoves() {
+            InitCluster();
+            SetSelfHealLocalPolicyTimeout(TDuration::Days(1));
+            std::set<TPDiskId> active = GetActiveDisks(), faulty;
+            auto checkVDisksPerNode = [&]() {
+                for (const auto& [_, count]: CountVDisksPerNode()) {
+                    UNIT_ASSERT_VALUES_EQUAL(count, 8 * NumDisksPerNode);
+                }
+            };
+            checkVDisksPerNode();
+
+            Env.Wait(TDuration::Seconds(300));
+            Move(active, faulty, NKikimrBlobStorage::FAULTY);
+            Env.Wait(TDuration::Seconds(300 * 8));
+
+            CheckDiskStatuses(active, faulty);
+            checkVDisksPerNode();
+            CheckDiskLocations(active, faulty);
+        }
+
+        const ui32 NumDCs;
+        const ui32 NumRacksPerDC;
+        const ui32 NumUnitsPerRack;
+        const ui32 NumNodes;
+        const ui32 NumDisksPerNode;
+        const ui32 NumGroups;
+        const TString Erasure;
+        const TBlobStorageGroupType GroupType;
+
+        TEnvironmentSetup Env;
+        const TGroupGeometryInfo Geom;
+    };
 
     Y_UNIT_TEST(SelfHealBlock4Plus2) {
-        TestSelfHeal(1, 32, 1, 2, 64, "block-4-2", TBlobStorageGroupType::Erasure4Plus2Block);
+        TTestSelfHeal(1, 32, 1, 2, 64, "block-4-2", TBlobStorageGroupType::Erasure4Plus2Block).RunTestCorrectMoves();
     }
 
     Y_UNIT_TEST(SelfHealMirror3dc) {
-        TestSelfHeal(3, 4, 3, 4, 128, "mirror-3-dc", TBlobStorageGroupType::ErasureMirror3dc);
+        TTestSelfHeal(3, 4, 3, 4, 128, "mirror-3-dc", TBlobStorageGroupType::ErasureMirror3dc).RunTestCorrectMoves();
     }
 
     Y_UNIT_TEST(DecommitRejected) {
@@ -204,5 +298,9 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
             }
             UNIT_ASSERT_EQUAL(group1nodes, (THashSet<ui32>{{1, 2, 3, 10, 11, 12, 13, 14, 15}}));
         }
+    }
+
+    Y_UNIT_TEST(TestLocalSelfHeal) {
+        TTestSelfHeal(3, 4, 3, 4, 128, "mirror-3-dc", TBlobStorageGroupType::ErasureMirror3dc).RunTestCorrectLocalMoves();
     }
 }

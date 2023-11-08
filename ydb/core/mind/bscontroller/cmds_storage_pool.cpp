@@ -364,6 +364,8 @@ namespace NKikimr::NBsController {
                 throw TExError() << "TargetPDiskId# " << pdiskId.ToString() << " not found";
             }
             targetPDiskId = pdiskId;
+        } else if (cmd.HasTargetNodeId() && Self.UseSelfHealLocalPolicy) {
+            TargetNodeId = cmd.GetTargetNodeId();
         }
 
         ExplicitReconfigureMap.emplace(vslotId, targetPDiskId);

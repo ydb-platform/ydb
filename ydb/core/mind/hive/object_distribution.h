@@ -77,6 +77,12 @@ struct TObjectDistribution {
         Mean = newMean;
     }
 
+    void SetCount(const TNodeInfo& node, i64 value) {
+        auto it = Distribution.find(node.Id);
+        i64 oldValue = (it == Distribution.end()) ? 0 : it->second;
+        UpdateCount(node, value - oldValue);
+    }
+
     void RemoveNode(TNodeId node) {
         auto it = Distribution.find(node);
         if (it == Distribution.end()) {
@@ -202,7 +208,11 @@ struct TObjectDistributions {
             UpdateCount(obj, node, 0);
         }
         for (const auto& [obj, tablets] : node.TabletsOfObject) {
-            UpdateCount(obj, node, tablets.size());
+            ui64 cnt = tablets.size();
+            auto updateFunc = [&](TObjectDistribution& dist) {
+                dist.SetCount(node, cnt);
+            };
+            UpdateDistribution(obj, updateFunc);
         }
     }
 

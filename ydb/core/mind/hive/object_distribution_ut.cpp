@@ -210,4 +210,27 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
         UNIT_ASSERT_DOUBLES_EQUAL(distributions.at(tablets[2]->ObjectId)->GetImbalance(), getTrueImbalance(tablets[2]->ObjectId, 0, NUM_NODES), 1e-5);
 
     }
+
+    Y_UNIT_TEST(TestAddSameNode) {
+        TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        THive hive(hiveStorage.Get(), TActorId());
+
+        std::unordered_map<TNodeId, TNodeInfo> nodes;
+        TObjectDistributions objectDistributions(nodes);
+
+        TNodeInfo node1(1, hive);
+        TNodeInfo node2(2, hive);
+        TTabletInfo tablet(NKikimr::NHive::TTabletInfo::ETabletRole::Leader, hive);
+        node1.TabletsOfObject[{1, 1}].insert(&tablet);
+        objectDistributions.AddNode(node1);
+        objectDistributions.AddNode(node2);
+
+        auto imbalance = objectDistributions.GetMaxImbalance();
+        for (int i = 0; i < 10; ++i) {
+            objectDistributions.AddNode(node1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(imbalance, objectDistributions.GetMaxImbalance());
+
+    }
 }

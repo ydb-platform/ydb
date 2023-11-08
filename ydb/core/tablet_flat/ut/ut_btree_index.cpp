@@ -57,7 +57,7 @@ namespace {
         return TChild{index + 10000, index + 100, index + 30, index + 1000};
     }
 
-    void Dump(TChild meta, const TPartScheme& scheme, const TStore& store, ui32 level = 0) noexcept
+    void Dump(TChild meta, const TPartScheme::TGroupInfo& groupInfo, const TStore& store, ui32 level = 0) noexcept
     {
         TString intend;
         for (size_t i = 0; i < level; i++) {
@@ -66,7 +66,7 @@ namespace {
 
         auto dumpChild = [&] (TChild child) {
             if (child.PageId < 1000) {
-                Dump(child, scheme, store, level + 1);
+                Dump(child, groupInfo, store, level + 1);
             } else {
                 Cerr << intend << " | " << child.ToString() << Endl;
             }
@@ -89,10 +89,10 @@ namespace {
         for (TRecIdx i : xrange(node.GetKeysCount())) {
             Cerr << intend << " | > ";
 
-            auto cells = node.GetKeyCells(i, scheme.Groups[0].ColsKeyIdx);
+            auto cells = node.GetKeyCells(i, groupInfo.ColsKeyIdx);
             for (TPos pos : xrange(cells.Count())) {
                 TString str;
-                DbgPrintValue(str, cells.Next(), scheme.Groups[0].KeyTypes[pos]);
+                DbgPrintValue(str, cells.Next(), groupInfo.KeyTypes[pos]);
                 if (str.size() > 10) {
                     str = str.substr(0, 10) + "..";
                 }
@@ -106,19 +106,19 @@ namespace {
         Cerr << Endl;
     }
 
-    void Dump(TSharedData node, const TPartScheme& scheme) {
+    void Dump(TSharedData node, const TPartScheme::TGroupInfo& groupInfo) {
         TWriterBundle pager(1, TLogoBlobID());
         auto pageId = ((IPageWriter*)&pager)->Write(node, EPage::BTreeIndex, 0);
         TChild page{pageId, 0, 0, 0};
-        Dump(page, scheme, pager.Back());
+        Dump(page, groupInfo, pager.Back());
     }
 
-    void CheckKeys(const NPage::TBtreeIndexNode& node, const TVector<TString>& keys, const TPartScheme& scheme) {
+    void CheckKeys(const NPage::TBtreeIndexNode& node, const TVector<TString>& keys, const TPartScheme::TGroupInfo& groupInfo) {
         UNIT_ASSERT_VALUES_EQUAL(node.GetKeysCount(), keys.size());
         for (TRecIdx i : xrange(node.GetKeysCount())) {
             TVector<TCell> actualCells;
-            auto cells = node.GetKeyCells(i, scheme.Groups[0].ColsKeyIdx);
-            UNIT_ASSERT_VALUES_EQUAL(cells.Count(), scheme.Groups[0].ColsKeyIdx.size());
+            auto cells = node.GetKeyCells(i, groupInfo.ColsKeyIdx);
+            UNIT_ASSERT_VALUES_EQUAL(cells.Count(), groupInfo.ColsKeyIdx.size());
             
             for (TPos pos : xrange(cells.Count())) {
                 Y_UNUSED(pos);
@@ -130,10 +130,10 @@ namespace {
         }
     }
 
-    void CheckKeys(TPageId pageId, const TVector<TString>& keys, const TPartScheme& scheme, const TStore& store) {
+    void CheckKeys(TPageId pageId, const TVector<TString>& keys, const TPartScheme::TGroupInfo& groupInfo, const TStore& store) {
         auto page = store.GetPage(0, pageId);
         auto node = TBtreeIndexNode(*page);
-        CheckKeys(node, keys, scheme);
+        CheckKeys(node, keys, groupInfo);
     }
 
     void CheckChildren(const NPage::TBtreeIndexNode& node, const TVector<TChild>& children) {
@@ -148,23 +148,23 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
     using namespace NTest;
     using TChild = TBtreeIndexNode::TChild;
 
-    Y_UNIT_TEST(TKeyBitmap) {
+    Y_UNIT_TEST(TIsNullBitmap) {
         TString buffer(754, 0);
-        auto* key = (TBtreeIndexNode::TKey*)(buffer.data());
+        auto* bitmap = (TBtreeIndexNode::TIsNullBitmap*)(buffer.data());
 
-        UNIT_ASSERT_VALUES_EQUAL(key->NullBitmapLength(0), 0);
-        UNIT_ASSERT_VALUES_EQUAL(key->NullBitmapLength(1), 1);
-        UNIT_ASSERT_VALUES_EQUAL(key->NullBitmapLength(4), 1);
-        UNIT_ASSERT_VALUES_EQUAL(key->NullBitmapLength(7), 1);
-        UNIT_ASSERT_VALUES_EQUAL(key->NullBitmapLength(8), 1);
-        UNIT_ASSERT_VALUES_EQUAL(key->NullBitmapLength(9), 2);
-        UNIT_ASSERT_VALUES_EQUAL(key->NullBitmapLength(256), 32);
-        UNIT_ASSERT_VALUES_EQUAL(key->NullBitmapLength(257), 33);
+        UNIT_ASSERT_VALUES_EQUAL(bitmap->Length(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(bitmap->Length(1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(bitmap->Length(4), 1);
+        UNIT_ASSERT_VALUES_EQUAL(bitmap->Length(7), 1);
+        UNIT_ASSERT_VALUES_EQUAL(bitmap->Length(8), 1);
+        UNIT_ASSERT_VALUES_EQUAL(bitmap->Length(9), 2);
+        UNIT_ASSERT_VALUES_EQUAL(bitmap->Length(256), 32);
+        UNIT_ASSERT_VALUES_EQUAL(bitmap->Length(257), 33);
 
         for (TPos pos : xrange(buffer.size() * 8)) {
-            UNIT_ASSERT(!key->IsNull(pos));
-            key->SetNull(pos);
-            UNIT_ASSERT(key->IsNull(pos));
+            UNIT_ASSERT(!bitmap->IsNull(pos));
+            bitmap->SetNull(pos);
+            UNIT_ASSERT(bitmap->IsNull(pos));
         }
     }
 
@@ -206,8 +206,93 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         auto node = TBtreeIndexNode(serialized);
 
-        Dump(serialized, *writer.Scheme);
-        CheckKeys(node, keys, *writer.Scheme);
+        Dump(serialized, writer.GroupInfo);
+        CheckKeys(node, keys, writer.GroupInfo);
+        CheckChildren(node, children);
+    }
+
+    Y_UNIT_TEST(Group) {
+        TLayoutCook lay;
+        
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Col(1, 2,  NScheme::NTypeIds::Bool)
+            .Col(1, 3,  NScheme::NTypeIds::Uint64)
+            .Key({0, 1});
+
+        TBtreeIndexNodeWriter writer(new TPartScheme(lay.RowScheme()->Cols), TGroupId{ 1 });
+
+        TVector<TString> keys;
+        for (ui32 i : xrange(13)) {
+            Y_UNUSED(i);
+            TVector<TCell> cells;
+            keys.push_back(TSerializedCellVec::Serialize(cells));
+        }
+
+        TVector<TChild> children;
+        for (ui32 i : xrange(keys.size() + 1)) {
+            children.push_back(MakeChild(i));
+        }
+
+        for (auto k : keys) {
+            TSerializedCellVec deserialized(k);
+            writer.AddKey(deserialized.GetCells());
+        }
+        for (auto c : children) {
+            writer.AddChild(c);
+        }
+
+        auto serialized = writer.Finish();
+
+        auto node = TBtreeIndexNode(serialized);
+
+        Dump(serialized, writer.GroupInfo);
+        CheckKeys(node, keys, writer.GroupInfo);
+        CheckChildren(node, children);
+    }
+
+    Y_UNIT_TEST(History) {
+        TLayoutCook lay;
+        
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Col(1, 2,  NScheme::NTypeIds::Bool)
+            .Col(1, 3,  NScheme::NTypeIds::Uint64)
+            .Key({0, 1});
+
+        TBtreeIndexNodeWriter writer(new TPartScheme(lay.RowScheme()->Cols), TGroupId{ 0, 1 });
+
+        TVector<TString> keys;
+        for (ui32 i : xrange(13)) {
+            Y_UNUSED(i);
+            TVector<TCell> cells;
+            cells.push_back(TCell::Make(TRowId(i)));
+            cells.push_back(TCell::Make(ui64(10 * i)));
+            cells.push_back(TCell::Make(ui64(100 * i)));
+            keys.push_back(TSerializedCellVec::Serialize(cells));
+        }
+
+        TVector<TChild> children;
+        for (ui32 i : xrange(keys.size() + 1)) {
+            children.push_back(MakeChild(i));
+        }
+
+        for (auto k : keys) {
+            TSerializedCellVec deserialized(k);
+            writer.AddKey(deserialized.GetCells());
+        }
+        for (auto c : children) {
+            writer.AddChild(c);
+        }
+
+        auto serialized = writer.Finish();
+
+        auto node = TBtreeIndexNode(serialized);
+
+        Dump(serialized, writer.GroupInfo);
+        CheckKeys(node, keys, writer.GroupInfo);
         CheckChildren(node, children);
     }
 
@@ -237,8 +322,8 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
             auto node = TBtreeIndexNode(serialized);
 
-            Dump(serialized, *writer.Scheme);
-            CheckKeys(node, keys, *writer.Scheme);
+            Dump(serialized, writer.GroupInfo);
+            CheckKeys(node, keys, writer.GroupInfo);
             CheckChildren(node, children);
         };
 
@@ -291,8 +376,8 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         auto node = TBtreeIndexNode(serialized);
 
-        Dump(serialized, *writer.Scheme);
-        CheckKeys(node, keys, *writer.Scheme);
+        Dump(serialized, writer.GroupInfo);
+        CheckKeys(node, keys, writer.GroupInfo);
         CheckChildren(node, children);
     }
 
@@ -336,8 +421,8 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
 
         auto node = TBtreeIndexNode(serialized);
 
-        Dump(serialized, *writer.Scheme);
-        CheckKeys(node, fullKeys, *writer.Scheme);
+        Dump(serialized, writer.GroupInfo);
+        CheckKeys(node, fullKeys, writer.GroupInfo);
         CheckChildren(node, children);
     }
 
@@ -391,12 +476,12 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
         auto result = builder.Flush(pager, true);
         UNIT_ASSERT(result);
 
-        Dump(*result, *scheme, pager.Back());
+        Dump(*result, builder.GroupInfo, pager.Back());
 
-        TBtreeIndexMeta expected{{0, 1155, 385, 11055}, 1, 594};
+        TBtreeIndexMeta expected{{0, 1155, 385, 11055}, 1, 595};
         UNIT_ASSERT_EQUAL_C(*result, expected, "Got " + result->ToString());
 
-        CheckKeys(result->PageId, keys, *scheme, pager.Back());
+        CheckKeys(result->PageId, keys, builder.GroupInfo, pager.Back());
     }
 
     Y_UNIT_TEST(FewNodes) {
@@ -427,12 +512,12 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
         auto result = builder.Flush(pager, true);
         UNIT_ASSERT(result);
 
-        Dump(*result, *scheme, pager.Back());
+        Dump(*result, builder.GroupInfo, pager.Back());
         
         UNIT_ASSERT_VALUES_EQUAL(result->LevelsCount, 3);
         
         auto checkKeys = [&](TPageId pageId, const TVector<TString>& keys) {
-            CheckKeys(pageId, keys, *scheme, pager.Back());
+            CheckKeys(pageId, keys, builder.GroupInfo, pager.Back());
         };
 
         // Level 0:
@@ -477,7 +562,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
             keys[8]
         });
 
-        TBtreeIndexMeta expected{{9, 0, 0, 0}, 3, 1540};
+        TBtreeIndexMeta expected{{9, 0, 0, 0}, 3, 1550};
         for (auto c : children) {
             expected.Count += c.Count;
             expected.ErasedCount += c.ErasedCount;
@@ -514,9 +599,9 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
         auto result = builder.Flush(pager, true);
         UNIT_ASSERT(result);
 
-        Dump(*result, *scheme, pager.Back());
+        Dump(*result, builder.GroupInfo, pager.Back());
         
-        TBtreeIndexMeta expected{{15, 15150, 8080, 106050}, 3, 10254};
+        TBtreeIndexMeta expected{{15, 15150, 8080, 106050}, 3, 10270};
         UNIT_ASSERT_EQUAL_C(*result, expected, "Got " + result->ToString());
     }
 
@@ -580,7 +665,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 2);
 
-        TBtreeIndexMeta expected{{3, 10, 0, 10480}, 1, 1114};
+        TBtreeIndexMeta expected{{3, 10, 0, 10480}, 1, 1115};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
     }
 
@@ -613,7 +698,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 117);
 
-        TBtreeIndexMeta expected{{143, 700, 0, 733140}, 3, 86010};
+        TBtreeIndexMeta expected{{143, 700, 0, 733140}, 3, 86036};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
     }
 
@@ -647,7 +732,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 31);
 
-        TBtreeIndexMeta expected{{37, 1000, 143, 22098}, 2, 1374};
+        TBtreeIndexMeta expected{{37, 1000, 143, 22098}, 2, 1380};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
     }
 
@@ -681,10 +766,10 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 334);
 
-        TBtreeIndexMeta expected0{{438, 1000, 0, 16680}, 3, 15181};
+        TBtreeIndexMeta expected0{{438, 1000, 0, 16680}, 3, 15246};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected0, "Got " + part->IndexPages.BTreeGroups[0].ToString());
 
-        TBtreeIndexMeta expected1{{441, 1000, 0, 21890}, 3, 9772};
+        TBtreeIndexMeta expected1{{441, 1000, 0, 21890}, 3, 8817};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[1], expected1, "Got " + part->IndexPages.BTreeGroups[1].ToString());
     }
 
@@ -720,16 +805,16 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 334);
 
-        TBtreeIndexMeta expected0{{1315, 1000, 0, 32680}, 3, 15181};
+        TBtreeIndexMeta expected0{{1315, 1000, 0, 32680}, 3, 15246};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected0, "Got " + part->IndexPages.BTreeGroups[0].ToString());
 
-        TBtreeIndexMeta expected1{{1318, 1000, 0, 22889}, 3, 9772};
+        TBtreeIndexMeta expected1{{1318, 1000, 0, 22889}, 3, 8817};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[1], expected1, "Got " + part->IndexPages.BTreeGroups[1].ToString());
 
-        TBtreeIndexMeta expectedHist0{{1322, 2000, 0, 77340}, 4, 43814};
+        TBtreeIndexMeta expectedHist0{{1322, 2000, 0, 77340}, 4, 40617};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[0], expectedHist0, "Got " + part->IndexPages.BTreeHistoric[0].ToString());
 
-        TBtreeIndexMeta expectedHist1{{1325, 2000, 0, 45780}, 3, 19576};
+        TBtreeIndexMeta expectedHist1{{1325, 2000, 0, 45780}, 3, 17662};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[1], expectedHist1, "Got " + part->IndexPages.BTreeHistoric[1].ToString());
     }
 }

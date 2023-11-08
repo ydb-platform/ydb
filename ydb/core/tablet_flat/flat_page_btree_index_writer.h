@@ -7,7 +7,7 @@ namespace NKikimr::NTable::NPage {
 
     class TBtreeIndexNodeWriter {
         using THeader = TBtreeIndexNode::THeader;
-        using TKey = TBtreeIndexNode::TKey;
+        using TIsNullBitmap = TBtreeIndexNode::TIsNullBitmap;
         using TChild = TBtreeIndexNode::TChild;
 
     public:
@@ -16,6 +16,21 @@ namespace NKikimr::NTable::NPage {
             , GroupId(groupId)
             , GroupInfo(Scheme->GetLayout(groupId))
         {
+            if (GroupId.IsMain()) {
+                FixedKeySize = Max<ui8>();
+            } else {
+                FixedKeySize = 0;
+                for (TPos pos : xrange(GroupInfo.KeyTypes.size())) {
+                    Y_ABORT_UNLESS(GroupInfo.ColsKeyIdx[pos].IsFixed);
+                    FixedKeySize += GroupInfo.ColsKeyIdx[pos].FixedSize;
+                }
+                Y_ABORT_UNLESS(FixedKeySize < Max<ui8>(), "KeysSize is out of bounds");
+            }
+        }
+
+        bool IsFixedFormat() const noexcept
+        {
+            return FixedKeySize != Max<ui8>();
         }
 
         void AddKey(TCellsRef cells) {
@@ -80,20 +95,26 @@ namespace NKikimr::NTable::NPage {
             header.KeysCount = Keys.size();
             Y_ABORT_UNLESS(KeysSize < Max<TPgSize>(), "KeysSize is out of bounds");
             header.KeysSize = KeysSize;
+            header.FixedKeySize = FixedKeySize;
 
-            size_t keyOffset = Ptr - buf.mutable_begin() + sizeof(TRecordsEntry) * Keys.size();
-            for (const auto &key : Keys) {
-                auto &meta = Place<TRecordsEntry>();
-                Y_ABORT_UNLESS(keyOffset < Max<TPgSize>(), "Key offset is out of bounds");
-                meta.Offset = keyOffset;
-                keyOffset += key.size();
+            if (!IsFixedFormat()) {
+                size_t keyOffset = Ptr - buf.mutable_begin() + sizeof(TRecordsEntry) * Keys.size();
+                for (const auto &key : Keys) {
+                    auto &meta = Place<TRecordsEntry>();
+                    Y_ABORT_UNLESS(keyOffset < Max<TPgSize>(), "Key offset is out of bounds");
+                    meta.Offset = keyOffset;
+                    keyOffset += key.size();
+                }
+                Y_ABORT_UNLESS(Ptr == buf.mutable_begin() + sizeof(TLabel) + sizeof(THeader) + sizeof(TRecordsEntry) * Keys.size());
             }
-            Y_ABORT_UNLESS(Ptr == buf.mutable_begin() + sizeof(TLabel) + sizeof(THeader) + sizeof(TRecordsEntry) * Keys.size());
 
             for (auto &key : Keys) {
                 PlaceBytes(std::move(key));
             }
-            Y_ABORT_UNLESS(Ptr == buf.mutable_begin() + sizeof(TLabel) + sizeof(THeader) + sizeof(TRecordsEntry) * Keys.size() + KeysSize);
+            Y_ABORT_UNLESS(Ptr == buf.mutable_begin() + 
+                sizeof(TLabel) + sizeof(THeader) + 
+                (IsFixedFormat() ? 0 : sizeof(TRecordsEntry) * Keys.size()) + 
+                KeysSize);
             Keys.clear();
             KeysSize = 0;
 
@@ -111,10 +132,10 @@ namespace NKikimr::NTable::NPage {
             return CalcPageSize(KeysSize, Keys.size());
         }
 
-        static size_t CalcPageSize(size_t keysSize, size_t keysCount) {
+        size_t CalcPageSize(size_t keysSize, size_t keysCount) const {
             return
                 sizeof(TLabel) + sizeof(THeader) +
-                sizeof(TRecordsEntry) * keysCount +
+                (IsFixedFormat() ? 0 : sizeof(TRecordsEntry) * keysCount) +
                 keysSize +
                 sizeof(TChild) * (keysCount + 1);
         }
@@ -130,7 +151,11 @@ namespace NKikimr::NTable::NPage {
     private:
         TPgSize CalcKeySize(TCellsRef cells) const noexcept
         {
-            TPgSize size = TKey::NullBitmapLength(GroupInfo.ColsKeyIdx.size());
+            if (IsFixedFormat()) {
+                return FixedKeySize;
+            }
+
+            TPgSize size = TIsNullBitmap::Length(GroupInfo.ColsKeyIdx.size());
 
             for (TPos pos : xrange(cells.size())) {
                 if (const auto &val = cells[pos]) {
@@ -146,10 +171,21 @@ namespace NKikimr::NTable::NPage {
 
         void PlaceKey(TCellsRef cells) 
         {
-            auto *key = TDeref<TKey>::At(Ptr);
+            if (IsFixedFormat()) {
+                for (TPos pos : xrange(cells.size())) {
+                    Y_ABORT_UNLESS(cells[pos], "Can't have null cells in fixed format");
+                    const auto &info = GroupInfo.ColsKeyIdx[pos];
+                    Y_ABORT_UNLESS(info.IsFixed, "Can't have non-fixed cells in fixed format");
+                    Y_ABORT_UNLESS(cells[pos].Size() == info.FixedSize, "invalid fixed cell size)");
+                    memcpy(Advance(cells[pos].Size()), cells[pos].Data(), cells[pos].Size());
+                }
+                return;
+            }
+
+            auto *isNullBitmap = TDeref<TIsNullBitmap>::At(Ptr);
 
             // mark all cells as non-null
-            Zero(key->NullBitmapLength(GroupInfo.ColsKeyIdx.size()));
+            Zero(isNullBitmap->Length(GroupInfo.ColsKeyIdx.size()));
 
             auto* keyCellsPtr = Ptr;
 
@@ -158,21 +194,21 @@ namespace NKikimr::NTable::NPage {
                     const auto &info = GroupInfo.ColsKeyIdx[pos];
                     Zero(info.FixedSize);
                 } else {
-                    key->SetNull(pos);
+                    isNullBitmap->SetNull(pos);
                 }
             }
             for (TPos pos : xrange(cells.size(), GroupInfo.ColsKeyIdx.size())) {
-                key->SetNull(pos);
+                isNullBitmap->SetNull(pos);
             }
 
             for (TPos pos : xrange(cells.size())) {
                 if (const auto &cell = cells[pos]) {
-                    Y_DEBUG_ABORT_UNLESS(!key->IsNull(pos));
+                    Y_DEBUG_ABORT_UNLESS(!isNullBitmap->IsNull(pos));
                     const auto &info = GroupInfo.ColsKeyIdx[pos];
                     PlaceCell(info, cell, keyCellsPtr);
                     keyCellsPtr += info.FixedSize;
                 } else {
-                    Y_DEBUG_ABORT_UNLESS(key->IsNull(pos));
+                    Y_DEBUG_ABORT_UNLESS(isNullBitmap->IsNull(pos));
                 }
             }
         }
@@ -224,10 +260,11 @@ namespace NKikimr::NTable::NPage {
 
     public:
         const TIntrusiveConstPtr<TPartScheme> Scheme;
-
-    private:
         const TGroupId GroupId;
         const TPartScheme::TGroupInfo& GroupInfo;
+
+    private:
+        size_t FixedKeySize;
 
         TVector<TString> Keys;
         size_t KeysSize = 0;
@@ -289,7 +326,10 @@ namespace NKikimr::NTable::NPage {
     public:
         TBtreeIndexBuilder(TIntrusiveConstPtr<TPartScheme> scheme, TGroupId groupId,
                 ui32 nodeTargetSize, ui32 nodeKeysMin, ui32 nodeKeysMax)
-            : Writer(std::move(scheme), groupId)
+            : Scheme(std::move(scheme))
+            , GroupId(groupId)
+            , GroupInfo(Scheme->GetLayout(groupId))
+            , Writer(Scheme, groupId)
             , Levels(1)
             , NodeTargetSize(nodeTargetSize)
             , NodeKeysMin(nodeKeysMin)
@@ -420,6 +460,11 @@ namespace NKikimr::NTable::NPage {
         size_t CalcPageSize(const TLevel& level) const {
             return Writer.CalcPageSize(level.GetKeysSize(), level.GetKeysCount());
         }
+
+    public:
+        const TIntrusiveConstPtr<TPartScheme> Scheme;
+        const TGroupId GroupId;
+        const TPartScheme::TGroupInfo& GroupInfo;
 
     private:
         ui64 IndexSize = 0;

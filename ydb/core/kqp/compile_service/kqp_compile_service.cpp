@@ -411,6 +411,9 @@ private:
 
         auto indexAutoChooser = TableServiceConfig.GetIndexAutoChooseMode();
 
+        bool enableSequences = TableServiceConfig.GetEnableSequences();
+        bool enableColumnsWithDefault = TableServiceConfig.GetEnableColumnsWithDefault();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -428,7 +431,9 @@ private:
             TableServiceConfig.GetPredicateExtract20() != predicateExtract20 ||
             TableServiceConfig.GetEnableSequentialReads() != enableSequentialReads ||
             TableServiceConfig.GetEnableKqpImmediateEffects() != enableKqpImmediateEffects ||
-            TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser) {
+            TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser || 
+            TableServiceConfig.GetEnableSequences() != enableSequences || 
+            TableServiceConfig.GetEnableColumnsWithDefault() != enableColumnsWithDefault) {
 
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
                 "Iterator read flags was changed. StreamLookup from " << enableKqpDataQueryStreamLookup <<

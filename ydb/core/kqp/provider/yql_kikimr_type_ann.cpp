@@ -840,6 +840,12 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             auto columnInfo = typeAnnotations.find(name);
             auto columnMetaIt = meta->Columns.find(name);
 
+            if (!SessionCtx->Config().EnableColumnsWithDefault) {
+                ctx.AddError(TIssue(ctx.GetPosition(defaultSettingExpr.Pos()),
+                    "Columns with default values are not supported yet."));
+                return TStatus::Error;
+            }
+
             if (columnInfo == typeAnnotations.end() || columnMetaIt == meta->Columns.end()) {
                 ctx.AddError(TIssue(ctx.GetPosition(defaultSettingExpr.Pos()), TStringBuilder()
                     << "Unexpected default expr for column " << name));

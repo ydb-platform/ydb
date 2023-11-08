@@ -210,39 +210,6 @@ Y_UNIT_TEST_SUITE(TSequence) {
         }
     }
 
-    Y_UNIT_TEST(CreateTableWithDefaultFromSequenceNotEnabled) {
-        TPortManager pm;
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(appConfig);
-
-        Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
-        auto sender = runtime.AllocateEdgeActor();
-
-        // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        // runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
-
-        InitRoot(server, sender);
-
-        CreateShardedTable(server, sender, "/Root", "table-2",
-            TShardedTableOptions()
-                .Sequences(true)
-                .Columns({
-                    {"key", "Int64", true, false, "default", "myseq"},
-                    {"value", "Uint32", true, false},
-                }));
-
-        {
-            TString result = KqpSimpleExec(runtime, "UPSERT INTO `/Root/table-2` (value) VALUES (1), (2), (3);");
-            UNIT_ASSERT_VALUES_EQUAL(result, "ERROR: BAD_REQUEST");
-        }
-    }
-
     Y_UNIT_TEST(CreateTableWithDefaultFromSequenceBadRequest) {
         TPortManager pm;
         NKikimrConfig::TAppConfig appConfig;

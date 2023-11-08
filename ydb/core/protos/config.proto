@@ -1394,6 +1394,8 @@ message TTableServiceConfig {
         MAX_USED_PREFIX = 3;
     }
     optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = DISABLED];
+
+    optional bool EnableColumnsWithDefault = 51 [default = true];
 };
 
 message TQueryServiceConfig {

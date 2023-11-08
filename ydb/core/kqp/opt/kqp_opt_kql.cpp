@@ -799,8 +799,7 @@ TExprBase WriteTableWithIndexUpdate(const TKiWriteTable& write, const TCoAtomLis
     Y_UNREACHABLE();
 }
 
-TVector<TExprBase> HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, const TKikimrTablesData& tablesData,
-    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+TVector<TExprBase> HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, const TKikimrTablesData& tablesData)
 {
     auto& tableData = GetTableData(tablesData, write.DataSink().Cluster(), write.Table().Value());
 
@@ -811,12 +810,6 @@ TVector<TExprBase> HandleWriteTable(const TKiWriteTable& write, TExprContext& ct
     auto autoincrementColumnsSetting = GetSetting(write.Settings().Ref(), "autoincrement_columns");
     YQL_ENSURE(autoincrementColumnsSetting);
     auto autoincrementColumns = TCoNameValueTuple(autoincrementColumnsSetting).Value().Cast<TCoAtomList>();
-
-    if (autoincrementColumns.Ref().ChildrenSize() > 0 && !kqpCtx->Config->EnableSequences) {
-        const TString err = "Sequences are not supported.";
-        ctx.AddError(YqlIssue(ctx.GetPosition(write.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, err));
-        return {};
-    }
 
     auto op = GetTableOp(write);
     if (autoincrementColumns.Ref().ChildrenSize() > 0) {
@@ -911,7 +904,7 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
         TVector<TExprBase> kqlEffects;
         for (const auto& effect : block.Effects()) {
             if (auto maybeWrite = effect.Maybe<TKiWriteTable>()) {
-                auto result = HandleWriteTable(maybeWrite.Cast(), ctx, tablesData, kqpCtx);
+                auto result = HandleWriteTable(maybeWrite.Cast(), ctx, tablesData);
                 if (result.empty()) {
                     return {};
                 }

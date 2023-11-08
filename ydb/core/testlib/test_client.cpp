@@ -855,10 +855,10 @@ namespace Tests {
                 auto databaseResolverActorId = NFq::MakeDatabaseResolverActorId();
                 Runtime->RegisterService(
                     databaseResolverActorId,
-                    Runtime->Register(NFq::CreateDatabaseResolver(httpProxyActorId, nullptr), nodeIdx),
+                    Runtime->Register(NFq::CreateDatabaseResolver(httpProxyActorId, Settings->CredentialsFactory), nodeIdx),
                     nodeIdx
                 );
-                
+
                 std::shared_ptr<NFq::TDatabaseAsyncResolverImpl> databaseAsyncResolver;
                 if (queryServiceConfig.GetGeneric().HasMdbGateway() && queryServiceConfig.HasMdbTransformHost()) {
                     databaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
@@ -873,7 +873,7 @@ namespace Tests {
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NYql::IHTTPGateway::Make(&queryServiceConfig.GetHttpGateway()),
                     NYql::NConnector::MakeClientGRPC(queryServiceConfig.GetGeneric().GetConnector()),
-                    nullptr,
+                    Settings->CredentialsFactory,
                     databaseAsyncResolver,
                     queryServiceConfig.GetS3(),
                     queryServiceConfig.GetGeneric()

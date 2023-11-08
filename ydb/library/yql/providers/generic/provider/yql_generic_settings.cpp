@@ -3,7 +3,6 @@
 
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <util/system/env.h>
 
 namespace NYql {
 
@@ -84,7 +83,7 @@ namespace NYql {
         const auto iamToken = credentials->FindCredentialContent(
             "default_" + cluster.name(),
             "default_generic",
-            cluster.GetToken() ? cluster.GetToken() : GetEnv("YQL_TOKEN"));
+            cluster.GetToken());
         if (iamToken) {
             return b.SetIAMToken(iamToken).ToJson();
         }

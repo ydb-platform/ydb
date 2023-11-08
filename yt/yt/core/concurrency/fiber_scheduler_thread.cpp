@@ -91,12 +91,12 @@ static YT_THREAD_LOCAL(TFiberContext*) FiberContext;
 
 // Forbid inlining these accessors to prevent the compiler from
 // miss-optimizing TLS access in presence of fiber context switches.
-TFiberContext* TryGetFiberContext()
+Y_NO_INLINE TFiberContext* TryGetFiberContext()
 {
     return FiberContext;
 }
 
-void SetFiberContext(TFiberContext* context)
+Y_NO_INLINE void SetFiberContext(TFiberContext* context)
 {
     FiberContext = context;
 }

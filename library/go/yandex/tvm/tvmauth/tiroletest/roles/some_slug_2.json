@@ -1,0 +1,22 @@
+{
+    "revision": "some_revision_2",
+    "born_date": 1642160002,
+    "tvm": {
+        "1000000001": {
+            "/role/service/read/": [{}],
+            "/role/service/write/": [{
+                "foo": "bar",
+                "kek": "lol"
+            }]
+        }
+    },
+    "user": {
+        "1120000000000001": {
+            "/role/user/write/": [{}],
+            "/role/user/read/": [{
+                "foo": "bar",
+                "kek": "lol"
+            }]
+        }
+    }
+}

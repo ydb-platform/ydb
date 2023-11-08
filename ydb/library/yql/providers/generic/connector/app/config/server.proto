@@ -21,6 +21,8 @@ message TServerConfig {
     // Go runtime profiler.
     // Disabled if this part of config is empty.
     TPprofServerConfig pprof_server = 6;
+    // Metrics server config
+    TMetricsServerConfig metrics_server = 7;
 }
 
 // TConnectorServerConfig - configuration of the main GRPC server
@@ -67,6 +69,15 @@ enum ELogLevel {
 
 // TPprofServerConfig configures HTTP server delivering Go runtime profiler data 
 message TPprofServerConfig {
+    // Network address server will be listening on
+    NYql.NConnector.NApi.TEndpoint endpoint = 1;
+    // TLS settings.
+    // Leave it empty for insecure connections.
+    TServerTLSConfig tls = 2;
+}
+
+// TMetricsConfig - configuration of the metrics service
+message TMetricsServerConfig {
     // Network address server will be listening on
     NYql.NConnector.NApi.TEndpoint endpoint = 1;
     // TLS settings.

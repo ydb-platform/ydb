@@ -1,0 +1,32 @@
+{
+  "BbEnvType": 3,
+  "clients": {
+    "main": {
+      "secret": "fake_secret",
+      "self_tvm_id": 42,
+      "dsts": {
+        "he": {
+          "dst_id": 100500
+        },
+        "he_clone": {
+          "dst_id": 100500
+        },
+        "slave": {
+          "dst_id": 43
+        },
+        "self": {
+          "dst_id": 42
+        }
+      }
+    },
+    "slave": {
+      "secret": "fake_secret",
+      "self_tvm_id": 43,
+      "dsts": {
+        "he": {
+          "dst_id": 100500
+        }
+      }
+    }
+  }
+}

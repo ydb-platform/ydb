@@ -70,6 +70,8 @@ RESOURCE(
     tpch_schema.sql tpch_schema.sql
 )
 
+ALL_RESOURCE_FILES(result click_bench_canonical)
+
 END()
 
 RECURSE_FOR_TESTS(

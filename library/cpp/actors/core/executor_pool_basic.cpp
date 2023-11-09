@@ -285,9 +285,7 @@ namespace NActors {
                     if (timers.Parked > 0) {
                         wctx.AddParkedCycles(timers.Parked);
                     }
-                    if (timers.Blocked > 0) {
-                        wctx.AddBlockedCycles(timers.Blocked);
-                    }
+
                     return activation;
                 }
                 semaphore.CurrentSleepThreadCount++;
@@ -490,7 +488,6 @@ namespace NActors {
         for (i16 i = 0; i != PoolThreads; ++i) {
             Threads[i].Thread->StopFlag = true;
             Threads[i].Pad.Interrupt();
-            Threads[i].BlockedPad.Interrupt();
         }
     }
 

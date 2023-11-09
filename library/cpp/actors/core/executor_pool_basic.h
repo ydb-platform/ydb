@@ -21,13 +21,11 @@ namespace NActors {
         struct TThreadCtx {
             TAutoPtr<TExecutorThread> Thread;
             TThreadParkPad Pad;
-            TThreadParkPad BlockedPad;
             TAtomic WaitingFlag;
-            TAtomic BlockedFlag;
 
             // different threads must spin/block on different cache-lines.
             // we add some padding bytes to enforce this rule
-            static const size_t SizeWithoutPadding = sizeof(TAutoPtr<TExecutorThread>) + 2 * sizeof(TThreadParkPad) + sizeof(TAtomic);
+            static const size_t SizeWithoutPadding = sizeof(TAutoPtr<TExecutorThread>) + sizeof(TThreadParkPad) + sizeof(TAtomic);
             ui8 Padding[64 - SizeWithoutPadding];
             static_assert(64 >= SizeWithoutPadding);
 
@@ -47,7 +45,6 @@ namespace NActors {
         struct TTimers {
             NHPTimer::STime Elapsed = 0;
             NHPTimer::STime Parked = 0;
-            NHPTimer::STime Blocked = 0;
             NHPTimer::STime HPStart = GetCycleCountFast();
             NHPTimer::STime HPNow;
         };

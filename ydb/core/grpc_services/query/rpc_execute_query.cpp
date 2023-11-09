@@ -2,11 +2,12 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/ydb_issue/issue_helpers.h>
-#include <ydb/core/grpc_services/base/base.h>
-#include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/grpc_services/audit_dml_operations.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/cancelation/cancelation_event.h>
+#include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -210,6 +211,7 @@ private:
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
                 HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
                 HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+                HFunc(NKikimr::NGRpcService::TEvSubscribeGrpcCancel, Handle);
                 default:
                     UnexpectedEvent(__func__, ev);
             }
@@ -274,6 +276,10 @@ private:
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));
             ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, std::move(issues));
         }
+    }
+
+    void Handle(NKikimr::NGRpcService::TEvSubscribeGrpcCancel::TPtr&, const TActorContext&) {
+        // Ignore event now
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {

@@ -6,7 +6,34 @@
 
 namespace NActors {
     Y_POD_THREAD(TThreadContext*) TlsThreadContext(nullptr);
-    Y_POD_THREAD(TActivationContext*) TlsActivationContext(nullptr);
+    thread_local TActivationContext *TActivationContextHolder::Value = nullptr;
+    TActivationContextHolder TlsActivationContext;
+
+    [[gnu::noinline]] TActivationContextHolder::operator bool() const {
+        asm volatile("");
+        return Value != nullptr;
+    }
+
+    [[gnu::noinline]] TActivationContextHolder::operator TActivationContext*() const {
+        asm volatile("");
+        return Value;
+    }
+
+    [[gnu::noinline]] TActivationContext *TActivationContextHolder::operator ->() {
+        asm volatile("");
+        return Value;
+    }
+
+    [[gnu::noinline]] TActivationContext& TActivationContextHolder::operator *() {
+        asm volatile("");
+        return *Value;
+    }
+
+    [[gnu::noinline]] TActivationContextHolder& TActivationContextHolder::operator =(TActivationContext *context) {
+        asm volatile("");
+        Value = context;
+        return *this;
+    }
 
     template<i64 Increment>
     static void UpdateQueueSizeAndTimestamp(TActorUsageImpl<true>& impl, ui64 time) {

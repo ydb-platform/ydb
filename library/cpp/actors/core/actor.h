@@ -29,7 +29,18 @@ namespace NActors {
     struct TActorContext;
     struct TActivationContext;
 
-    extern Y_POD_THREAD(TActivationContext*) TlsActivationContext;
+    class TActivationContextHolder {
+        static thread_local TActivationContext *Value;
+
+    public:
+        [[gnu::noinline]] operator bool() const;
+        [[gnu::noinline]] operator TActivationContext*() const;
+        [[gnu::noinline]] TActivationContext *operator ->();
+        [[gnu::noinline]] TActivationContext& operator *();
+        [[gnu::noinline]] TActivationContextHolder& operator=(TActivationContext *context);
+    };
+
+    extern TActivationContextHolder TlsActivationContext;
 
     struct TActivationContext {
     public:

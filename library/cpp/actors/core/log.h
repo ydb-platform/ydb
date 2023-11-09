@@ -25,13 +25,11 @@
 // TODO: limit number of messages per second
 // TODO: make TLogComponentLevelRequest/Response network messages
 
-#define IS_LOG_PRIORITY_ENABLED(priority, component)                           \
-    (NActors::TlsActivationContext ? (static_cast<::NActors::NLog::TSettings*>((*NActors::TlsActivationContext).LoggerSettings()) &&            \
-     static_cast<::NActors::NLog::TSettings*>((*NActors::TlsActivationContext).LoggerSettings())->Satisfies(   \
-             static_cast<::NActors::NLog::EPriority>(priority),                                  \
-             static_cast<::NActors::NLog::EComponent>(component),                                \
-             0ull)                                                                               \
-    ) : true)
+#define IS_LOG_PRIORITY_ENABLED(priority, component) \
+    [p = static_cast<::NActors::NLog::EPriority>(priority), c = static_cast<::NActors::NLog::EComponent>(component)]() -> bool { \
+        ::NActors::TActivationContext *context = ::NActors::TlsActivationContext; \
+        return !context || context->LoggerSettings()->Satisfies(p, c, 0ull); \
+    }()
 
 #define IS_EMERG_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_EMERG, component)
 #define IS_ALERT_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_ALERT, component)

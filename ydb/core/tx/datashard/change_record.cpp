@@ -107,6 +107,10 @@ TChangeRecordBuilder::TChangeRecordBuilder(EKind kind) {
     Record.Kind = kind;
 }
 
+TChangeRecordBuilder::TChangeRecordBuilder(TChangeRecord&& record) {
+    Record = std::move(record);
+}
+
 TChangeRecordBuilder& TChangeRecordBuilder::WithLockId(ui64 lockId) {
     Record.LockId = lockId;
     return *this;

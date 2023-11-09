@@ -85,6 +85,7 @@ class TChangeRecordBuilder {
 
 public:
     explicit TChangeRecordBuilder(EKind kind);
+    explicit TChangeRecordBuilder(TChangeRecord&& record);
 
     TChangeRecordBuilder& WithLockId(ui64 lockId);
     TChangeRecordBuilder& WithLockOffset(ui64 lockOffset);

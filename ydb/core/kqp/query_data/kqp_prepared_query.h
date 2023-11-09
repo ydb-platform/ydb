@@ -33,7 +33,7 @@ struct TPhyTxResultMetadata {
 };
 
 struct TTableConstInfoMap : public TAtomicRefCount<TTableConstInfoMap> {
-    THashMap<TTableId, TIntrusivePtr<TKqpTableKeys::TTableConstInfo>> Map;
+    THashMap<TTableId, TIntrusivePtr<TTableConstInfo>> Map;
 };
 
 class TKqpPhyTxHolder {
@@ -127,7 +127,6 @@ public:
 
 class TPreparedQueryHolder {
 private:
-    using TTableConstInfo = TKqpTableKeys::TTableConstInfo;
 
     YDB_ACCESSOR_DEF(TLlvmSettings, LlvmSettings);
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> Proto;

@@ -23,110 +23,108 @@ enum class ETableKind {
     External
 };
 
-class TKqpTableKeys {
-public:
-    using TColumn = NSharding::TShardingBase::TColumn;
 
-    struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
-        TString Path;
-        TMap<TString, TColumn> Columns;
-        TVector<TString> KeyColumns;
-        TVector<NScheme::TTypeInfo> KeyColumnTypes;
-        ETableKind TableKind = ETableKind::Unknown;
-        THashMap<TString, TString> Sequences;
-        THashMap<TString, NKikimrMiniKQL::TResult> DefaultFromLiteral;
+struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
+    TString Path;
+    TMap<TString, NSharding::TShardingBase::TColumn> Columns;
+    TVector<TString> KeyColumns;
+    TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    ETableKind TableKind = ETableKind::Unknown;
+    THashMap<TString, TString> Sequences;
+    THashMap<TString, NKikimrMiniKQL::TResult> DefaultFromLiteral;
 
-        TTableConstInfo() {}
-        TTableConstInfo(const TString& path) : Path(path) {}
+    TTableConstInfo() {}
+    TTableConstInfo(const TString& path) : Path(path) {}
 
-        void FillColumn(const NKqpProto::TKqpPhyColumn& phyColumn) {
-            if (Columns.FindPtr(phyColumn.GetId().GetName())) {
-                return;
+    void FillColumn(const NKqpProto::TKqpPhyColumn& phyColumn) {
+        if (Columns.FindPtr(phyColumn.GetId().GetName())) {
+            return;
+        }
+
+        NSharding::TShardingBase::TColumn column;
+        column.Id = phyColumn.GetId().GetId();
+
+        if (phyColumn.GetTypeId() != NScheme::NTypeIds::Pg) {
+            column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId());
+        } else {
+            column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId(),
+                NPg::TypeDescFromPgTypeName(phyColumn.GetPgTypeName()));
+        }
+        column.NotNull = phyColumn.GetNotNull();
+
+        Columns.emplace(phyColumn.GetId().GetName(), std::move(column));
+        if (!phyColumn.GetDefaultFromSequence().empty()) {
+            TString seq = phyColumn.GetDefaultFromSequence();
+            if (!seq.StartsWith(Path)) {
+                seq = Path + "/" + seq;
             }
-
-            TKqpTableKeys::TColumn column;
-            column.Id = phyColumn.GetId().GetId();
-
-            if (phyColumn.GetTypeId() != NScheme::NTypeIds::Pg) {
-                column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId());
-            } else {
-                column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId(),
-                    NPg::TypeDescFromPgTypeName(phyColumn.GetPgTypeName()));
-            }
-            column.NotNull = phyColumn.GetNotNull();
-
-            Columns.emplace(phyColumn.GetId().GetName(), std::move(column));
-            if (!phyColumn.GetDefaultFromSequence().empty()) {
-                TString seq = phyColumn.GetDefaultFromSequence();
-                if (!seq.StartsWith(Path)) {
-                    seq = Path + "/" + seq;
-                }
 
                 Sequences.emplace(phyColumn.GetId().GetName(), seq);
-            }
-
-            if (phyColumn.HasDefaultFromLiteral()) {
-                DefaultFromLiteral.emplace(
-                    phyColumn.GetId().GetName(),
-                    phyColumn.GetDefaultFromLiteral());
-            }
         }
 
-        void AddColumn(const TString& columnName) {
-            auto& sysColumns = GetSystemColumns();
-            if (Columns.FindPtr(columnName)) {
+        if (phyColumn.HasDefaultFromLiteral()) {
+            DefaultFromLiteral.emplace(
+                phyColumn.GetId().GetName(),
+                phyColumn.GetDefaultFromLiteral());
+        }
+    }
+
+    void AddColumn(const TString& columnName) {
+        auto& sysColumns = GetSystemColumns();
+        if (Columns.FindPtr(columnName)) {
+            return;
+        }
+
+        auto* systemColumn = sysColumns.FindPtr(columnName);
+        YQL_ENSURE(systemColumn, "Unknown table column"
+            << ", table: " << Path
+            << ", column: " << columnName);
+
+        NSharding::TShardingBase::TColumn column;
+        column.Id = systemColumn->ColumnId;
+        column.Type = NScheme::TTypeInfo(systemColumn->TypeId);
+        column.NotNull = false;
+        Columns.emplace(columnName, std::move(column));
+    }
+
+    void FillTable(const NKqpProto::TKqpPhyTable& phyTable) {
+        switch (phyTable.GetKind()) {
+            case NKqpProto::TABLE_KIND_DS:
+                TableKind = ETableKind::Datashard;
+                break;
+            case NKqpProto::TABLE_KIND_OLAP:
+                TableKind = ETableKind::Olap;
+                break;
+            case NKqpProto::TABLE_KIND_SYS_VIEW:
+                TableKind = ETableKind::SysView;
+                break;
+            case NKqpProto::TABLE_KIND_EXTERNAL:
+                TableKind = ETableKind::External;
                 return;
-            }
-
-            auto* systemColumn = sysColumns.FindPtr(columnName);
-            YQL_ENSURE(systemColumn, "Unknown table column"
-                << ", table: " << Path
-                << ", column: " << columnName);
-
-            TKqpTableKeys::TColumn column;
-            column.Id = systemColumn->ColumnId;
-            column.Type = NScheme::TTypeInfo(systemColumn->TypeId);
-            column.NotNull = false;
-            Columns.emplace(columnName, std::move(column));
+            default:
+                YQL_ENSURE(false, "Unexpected phy table kind: " << (i64) phyTable.GetKind());
         }
 
-
-        void FillTable(const NKqpProto::TKqpPhyTable& phyTable) {
-            switch (phyTable.GetKind()) {
-                case NKqpProto::TABLE_KIND_DS:
-                    TableKind = ETableKind::Datashard;
-                    break;
-                case NKqpProto::TABLE_KIND_OLAP:
-                    TableKind = ETableKind::Olap;
-                    break;
-                case NKqpProto::TABLE_KIND_SYS_VIEW:
-                    TableKind = ETableKind::SysView;
-                    break;
-                case NKqpProto::TABLE_KIND_EXTERNAL:
-                    TableKind = ETableKind::External;
-                    return;
-                default:
-                    YQL_ENSURE(false, "Unexpected phy table kind: " << (i64) phyTable.GetKind());
-            }
-
-            for (const auto& [_, phyColumn] : phyTable.GetColumns()) {
-                FillColumn(phyColumn);
-            }
-
-            YQL_ENSURE(KeyColumns.empty());
-            KeyColumns.reserve(phyTable.KeyColumnsSize());
-            YQL_ENSURE(KeyColumnTypes.empty());
-            KeyColumnTypes.reserve(phyTable.KeyColumnsSize());
-            for (const auto& keyColumnId : phyTable.GetKeyColumns()) {
-                const auto& column = Columns.FindPtr(keyColumnId.GetName());
-                YQL_ENSURE(column);
-
-                KeyColumns.push_back(keyColumnId.GetName());
-                KeyColumnTypes.push_back(column->Type);
-            }
+        for (const auto& [_, phyColumn] : phyTable.GetColumns()) {
+            FillColumn(phyColumn);
         }
-    };
 
+        YQL_ENSURE(KeyColumns.empty());
+        KeyColumns.reserve(phyTable.KeyColumnsSize());
+        YQL_ENSURE(KeyColumnTypes.empty());
+        KeyColumnTypes.reserve(phyTable.KeyColumnsSize());
+        for (const auto& keyColumnId : phyTable.GetKeyColumns()) {
+            const auto& column = Columns.FindPtr(keyColumnId.GetName());
+            YQL_ENSURE(column);
+
+            KeyColumns.push_back(keyColumnId.GetName());
+            KeyColumnTypes.push_back(column->Type);
+        }
+    }
+};
+
+class TKqpTableKeys {
+public:
     struct TTable {
     private:
         TIntrusivePtr<TTableConstInfo> TableConstInfo;
@@ -142,7 +140,7 @@ public:
             return TableConstInfo->Path;
         }
 
-        const TMap<TString, TColumn>& GetColumns() const {
+        const TMap<TString, NSharding::TShardingBase::TColumn>& GetColumns() const {
             return TableConstInfo->Columns;
         }
         

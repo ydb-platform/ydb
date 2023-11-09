@@ -33,7 +33,7 @@ struct TStageInfoMeta {
     TTableId TableId;
     TString TablePath;
     ETableKind TableKind;
-    TIntrusiveConstPtr<TKqpTableKeys::TTableConstInfo> TableConstInfo;
+    TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
     TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfoPtr;
 
     TVector<bool> SkipNullKeys;
@@ -259,7 +259,7 @@ void FillChannelDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TChannel&
     const NYql::NDq::TChannel& channel, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion);
 
 template<typename Proto>
-TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<TKqpTableKeys::TTableConstInfo> tableInfo) {
+TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<TTableConstInfo> tableInfo) {
     TVector<TTaskMeta::TColumn> columns;
     columns.reserve(op.GetColumns().size());
 

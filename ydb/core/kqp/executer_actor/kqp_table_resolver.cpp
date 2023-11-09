@@ -198,7 +198,7 @@ private:
     }
 
 private:
-    THolder<TKeyDesc> ExtractKey(const TTableId& table, const TIntrusiveConstPtr<TKqpTableKeys::TTableConstInfo>& tableInfo, TKeyDesc::ERowOperation operation) {
+    THolder<TKeyDesc> ExtractKey(const TTableId& table, const TIntrusiveConstPtr<TTableConstInfo>& tableInfo, TKeyDesc::ERowOperation operation) {
         auto range = GetFullRange(tableInfo->KeyColumnTypes.size());
 
         return MakeHolder<TKeyDesc>(table, range.ToTableRange(), operation, tableInfo->KeyColumnTypes,

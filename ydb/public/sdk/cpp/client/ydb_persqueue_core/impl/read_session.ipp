@@ -243,12 +243,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Start() {
 template<bool UseMigrationProtocol>
 bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlainStatus& status) {
     TDuration delay = TDuration::Zero();
-    NGrpc::IQueueClientContextPtr delayContext = nullptr;
-    NGrpc::IQueueClientContextPtr connectContext = ClientContext->CreateContext();
-    NGrpc::IQueueClientContextPtr connectTimeoutContext = ClientContext->CreateContext();
-    if (!connectContext || !connectTimeoutContext) {
-        return false;
-    }
 
     // Previous operations contexts.
     NGrpc::IQueueClientContextPtr prevConnectContext;
@@ -264,8 +258,18 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
                                             << ". Description: " << IssuesSingleLineString(status.Issues));
     }
 
+    NGrpc::IQueueClientContextPtr delayContext = nullptr;
+    NGrpc::IQueueClientContextPtr connectContext = nullptr;
+    NGrpc::IQueueClientContextPtr connectTimeoutContext = nullptr;
+
     TDeferredActions<UseMigrationProtocol> deferred;
     with_lock (Lock) {
+        connectContext = ClientContext->CreateContext();
+        connectTimeoutContext = ClientContext->CreateContext();
+        if (!connectContext || !connectTimeoutContext) {
+            return false;
+        }
+
         if (Aborting) {
             Cancel(connectContext);
             Cancel(connectTimeoutContext);
@@ -1553,11 +1557,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl() {
         Cancel(ConnectContext);
         Cancel(ConnectTimeoutContext);
         Cancel(ConnectDelayContext);
-
-        if (ClientContext) {
-            ClientContext->Cancel();
-            ClientContext.reset();
-        }
 
         if (Processor) {
             Processor->Cancel();

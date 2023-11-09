@@ -188,7 +188,7 @@ runs:
           --canonization-backend=ydb-canondata.storage.yandexcloud.net \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" "${extra_params[@]}" || (
             RC=$?
-            if [ $RC == 10 ]; then
+            if [[ $RC -ge 10 && $RC -le 14 ]]; then
               echo "ya test returned failed tests status, recovering.."
             else
               exit $RC

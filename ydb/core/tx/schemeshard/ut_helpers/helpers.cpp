@@ -1676,14 +1676,6 @@ namespace NSchemeShardUT_Private {
         return std::make_unique<TEvIndexBuilder::TEvCreateRequest>(id, dbName, std::move(settings));
     }
 
-    TStringBuilder PrintIssues(const ::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage >& issues) {
-        TStringBuilder result;
-        for (const auto& x: issues) {
-            result << "ISSUE( severity: " << x.severity() << "; message: " << x.message() << ") ";
-        }
-        return result;
-    }
-
     void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg) {
         auto sender = runtime.AllocateEdgeActor();
         auto request = CreateBuildIndexRequest(id, dbName, src, cfg);
@@ -1720,7 +1712,7 @@ namespace NSchemeShardUT_Private {
                             "status mismatch"
                                 << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
                                 << " expected "  << Ydb::StatusIds::StatusCode_Name(expectedStatus)
-                                << " issues was " << PrintIssues(event->Record.GetIssues()));
+                                << " issues was " << event->Record.GetIssues());
     }
 
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
@@ -1737,7 +1729,7 @@ namespace NSchemeShardUT_Private {
                             "status mismatch"
                                 << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
                                 << " expected "  << Ydb::StatusIds::StatusCode_Name(expectedStatus)
-                                << " issues was " << PrintIssues(event->Record.GetIssues()));
+                                << " issues was " << event->Record.GetIssues());
     }
 
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
@@ -1783,7 +1775,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE CANCEL: " << event->ToString() << Endl;
-        CheckExpectedStatusCode(expectedStatuses, event->Record.GetStatus(), PrintIssues(event->Record.GetIssues()));
+        CheckExpectedStatusCode(expectedStatuses, event->Record.GetStatus(), TStringBuilder{} << event->Record.GetIssues());
 
         return event->Record;
     }
@@ -1804,7 +1796,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE LIST: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, PrintIssues(event->Record.GetIssues()));
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, event->Record.GetIssues());
         return event->Record;
     }
 
@@ -1823,7 +1815,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE Get: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, PrintIssues(event->Record.GetIssues()));
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, event->Record.GetIssues());
         return event->Record;
     }
 
@@ -1849,7 +1841,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE Forget: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus, PrintIssues(event->Record.GetIssues()));
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus, event->Record.GetIssues());
 
         return event->Record;
     }

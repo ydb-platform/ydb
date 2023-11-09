@@ -177,22 +177,18 @@ runs:
           extra_params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi
         
-        # FIXME: remove after KIKIMR-19209
-        sed -i 's/^END()/SKIP_TEST("wait for KIKIMR-19209") END()/' ydb/library/yql/tests/sql/sql2yql/ya.make
-        
-        
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
         
-        ./ya test -k --build "${build_type}" -D'BUILD_LANGUAGES=CPP PY3' \
+        ./ya test -k --build "${build_type}" -D'BUILD_LANGUAGES=CPP PY3 PY2' \
           ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=} \
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}" \
           --cache-size 512G --do-not-output-stderrs -T \
           --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" \
-          --dump-graph --dump-graph-to-file "$LOG_DIR/ya_graph.json" \
+          --canonization-backend=ydb-canondata.storage.yandexcloud.net \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" "${extra_params[@]}" || (
             RC=$?
-            if [ $RC == 10 ]; then
+            if [[ $RC -ge 10 && $RC -le 14 ]]; then
               echo "ya test returned failed tests status, recovering.."
             else
               exit $RC

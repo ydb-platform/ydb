@@ -246,7 +246,7 @@ class YQLRun(object):
         if parameters:
             parameters_file = res_file_path('params.yson')
             with open(parameters_file, 'w') as f:
-                f.write(yson.dumps(parameters))
+                f.write(six.ensure_str(yson.dumps(parameters)))
             cmd += '--params-file=%s ' % parameters_file
 
         if verbose:

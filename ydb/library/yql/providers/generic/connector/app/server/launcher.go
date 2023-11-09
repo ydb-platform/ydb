@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/ydb-platform/ydb/library/go/core/log"
+	"github.com/ydb-platform/ydb/library/go/core/metrics/solomon"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 )
@@ -49,6 +50,7 @@ func (l *launcher) stop() {
 const (
 	connectorServiceKey = "connector"
 	pprofServiceKey     = "pprof"
+	metricsKey          = "metrics"
 )
 
 func newLauncher(logger log.Logger, cfg *config.TServerConfig) (*launcher, error) {
@@ -59,10 +61,21 @@ func newLauncher(logger log.Logger, cfg *config.TServerConfig) (*launcher, error
 
 	var err error
 
+	registry := solomon.NewRegistry(&solomon.RegistryOpts{
+		Separator:  '.',
+		UseNameTag: true,
+	})
+
+	if cfg.MetricsServer != nil {
+		l.services[metricsKey] = newServiceMetrics(
+			log.With(logger, log.String("service", metricsKey)),
+			cfg.MetricsServer, registry)
+	}
+
 	// init GRPC server
 	l.services[connectorServiceKey], err = newServiceConnector(
 		log.With(logger, log.String("service", connectorServiceKey)),
-		cfg)
+		cfg, registry)
 	if err != nil {
 		return nil, fmt.Errorf("new connector server: %w", err)
 	}

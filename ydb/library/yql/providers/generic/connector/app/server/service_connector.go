@@ -8,6 +8,7 @@ import (
 
 	"github.com/apache/arrow/go/v13/arrow/memory"
 	"github.com/ydb-platform/ydb/library/go/core/log"
+	"github.com/ydb-platform/ydb/library/go/core/metrics/solomon"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
@@ -242,7 +243,7 @@ func (s *serviceConnector) start() error {
 	return nil
 }
 
-func makeGRPCOptions(logger log.Logger, cfg *config.TServerConfig) ([]grpc.ServerOption, error) {
+func makeGRPCOptions(logger log.Logger, cfg *config.TServerConfig, registry *solomon.Registry) ([]grpc.ServerOption, error) {
 	var (
 		opts      []grpc.ServerOption
 		tlsConfig *config.TServerTLSConfig
@@ -272,7 +273,11 @@ func makeGRPCOptions(logger log.Logger, cfg *config.TServerConfig) ([]grpc.Serve
 	// for security reasons we do not allow TLS < 1.2, see YQ-1877
 	creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
 
-	opts = append(opts, grpc.Creds(creds))
+	unaryInterceptors := []grpc.UnaryServerInterceptor{UnaryServerMetrics(registry)}
+
+	streamInterceptors := []grpc.StreamServerInterceptor{StreamServerMetrics(registry)}
+
+	opts = append(opts, grpc.Creds(creds), grpc.ChainUnaryInterceptor(unaryInterceptors...), grpc.ChainStreamInterceptor(streamInterceptors...))
 
 	return opts, nil
 }
@@ -284,6 +289,7 @@ func (s *serviceConnector) stop() {
 func newServiceConnector(
 	logger log.Logger,
 	cfg *config.TServerConfig,
+	registry *solomon.Registry,
 ) (service, error) {
 	queryLoggerFactory := utils.NewQueryLoggerFactory(cfg.Logger)
 
@@ -306,7 +312,7 @@ func newServiceConnector(
 		return nil, fmt.Errorf("net listen: %w", err)
 	}
 
-	options, err := makeGRPCOptions(logger, cfg)
+	options, err := makeGRPCOptions(logger, cfg, registry)
 	if err != nil {
 		return nil, fmt.Errorf("make GRPC options: %w", err)
 	}

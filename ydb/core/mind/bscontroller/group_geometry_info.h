@@ -49,8 +49,21 @@ namespace NKikimr::NBsController {
             }
 
             if (RealmLevelBegin || RealmLevelEnd || DomainLevelBegin || DomainLevelEnd) {
-                if (RealmLevelEnd < RealmLevelBegin || DomainLevelEnd < DomainLevelBegin) {
-                    throw TExFitGroupError() << "XxxLevelBegin must be less than or equal to XxxLevelEnd";
+                TStringStream err;
+                bool needComma = false;
+                if (RealmLevelEnd < RealmLevelBegin) {
+                    needComma = true;
+                    err << "RealmLevelBegin = " << RealmLevelBegin << " must be less than or equal to RealmLevelEnd = " << RealmLevelEnd;
+                }
+                if (DomainLevelEnd < DomainLevelBegin) {
+                    if (needComma) {
+                        err << ", ";
+                    }
+                    err << "DomainLevelBegin = " << DomainLevelBegin
+                        << " must be less than or equal to DomainLevelEnd = " << DomainLevelEnd;
+                }
+                if (!err.empty()) {
+                    throw TExFitGroupError() << err.Str();
                 }
             } else {
                 RealmLevelBegin = 10;
@@ -91,7 +104,7 @@ namespace NKikimr::NBsController {
                 for (const bool requireOperational : {true, false}) {
                     for (const auto& replacedDisk : misplacedVDisks.Disks) {
                         TPDiskId pdiskId = group[replacedDisk.FailRealm][replacedDisk.FailDomain][replacedDisk.VDisk];
-                        if (mapper.TargetMisplacedVDisk(groupId, group, replacedDisk, forbid, requiredSpace, 
+                        if (mapper.TargetMisplacedVDisk(groupId, group, replacedDisk, forbid, requiredSpace,
                                 requireOperational, error)) {
                             return {replacedDisk, pdiskId};
                         }

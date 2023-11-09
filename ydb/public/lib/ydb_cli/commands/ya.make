@@ -108,8 +108,6 @@ RESOURCE(
     click_bench_canonical/q42.result q42.result
 )
 
-ALL_RESOURCE_FILES(result click_bench_canonical)
-
 END()
 
 RECURSE_FOR_TESTS(

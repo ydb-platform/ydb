@@ -498,7 +498,6 @@ public:
         }
 
         EventQueue_->Shutdown();
-        LoggingThread_->Stop();
     }
 
     /*!
@@ -615,7 +614,6 @@ public:
 
             // Flush everything and die.
             Shutdown();
-
             std::terminate();
         }
 
@@ -712,7 +710,9 @@ private:
             : TSchedulerThread(
                 owner->EventCount_,
                 "Logging",
-                "Logging")
+                "Logging",
+                /*threadPriority*/ NThreading::EThreadPriority::Normal,
+                /*shutdownPriority*/ 201)
             , Owner_(owner)
         { }
 

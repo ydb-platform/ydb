@@ -312,6 +312,10 @@ public:
         return Task_->HasUseLlvm();
     }
 
+    bool IsLLVMDisabled() const {
+        return HasUseLlvm() && !GetUseLlvm();
+    }
+
     const TVector<google::protobuf::Message*>& GetSourceSettings() const {
         return SourceSettings;
     }

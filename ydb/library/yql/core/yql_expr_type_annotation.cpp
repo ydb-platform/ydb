@@ -3032,6 +3032,18 @@ bool IsWideBlockType(const TTypeAnnotationNode& type) {
     return blockLenType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Uint64;
 }
 
+bool IsWideSequenceBlockType(const TTypeAnnotationNode& type) {
+    const TTypeAnnotationNode* itemType = nullptr;
+    if (type.GetKind() == ETypeAnnotationKind::Stream) {
+        itemType = type.Cast<TStreamExprType>()->GetItemType();
+    } else if (type.GetKind() == ETypeAnnotationKind::Flow) {
+        itemType = type.Cast<TFlowExprType>()->GetItemType();
+    } else {
+        return false;
+    }
+    return IsWideBlockType(*itemType);
+}
+
 bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (!types.ArrowResolver) {
         return false;

@@ -38,6 +38,7 @@ struct TDqStageSettings {
     static constexpr TStringBuf IdSettingName = "_id";
     static constexpr TStringBuf SinglePartitionSettingName = "_single_partition";
     static constexpr TStringBuf WideChannelsSettingName = "_wide_channels";
+    static constexpr TStringBuf BlockStatusSettingName = "_block_status";
 
     ui64 LogicalId = 0;
     TString Id;
@@ -46,8 +47,17 @@ struct TDqStageSettings {
     bool WideChannels = false;
     const TStructExprType* OutputNarrowType = nullptr;
 
+    enum class EBlockStatus {
+        None,
+        Partial,
+        Full,
+    };
+
+    TMaybe<EBlockStatus> BlockStatus;
+
     TDqStageSettings& SetSinglePartition(bool value = true) { SinglePartition = value; return *this; }
     TDqStageSettings& SetWideChannels(const TStructExprType& narrowType) { WideChannels = true; OutputNarrowType = &narrowType; return *this; }
+    TDqStageSettings& SetBlockStatus(EBlockStatus status) { BlockStatus = status; return *this; }
 
     static TDqStageSettings New(const NNodes::TDqStageBase& node);
     static TDqStageSettings New();

@@ -1119,6 +1119,8 @@ TDqStageSettings TDqStageSettings::Parse(const TDqStageBase& node) {
         } else if (name == WideChannelsSettingName) {
             settings.WideChannels = true;
             settings.OutputNarrowType = tuple.Value().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+        } else if (name == BlockStatusSettingName) {
+            settings.BlockStatus = FromString<EBlockStatus>(tuple.Value().Cast<TCoAtom>().Value());
         }
     }
 
@@ -1141,7 +1143,7 @@ bool TDqStageSettings::Validate(const TExprNode& stage, TExprContext& ctx) {
         }
 
         TStringBuf name = setting->Head().Content();
-        if (name == IdSettingName || name == LogicalIdSettingName) {
+        if (name == IdSettingName || name == LogicalIdSettingName || name == BlockStatusSettingName) {
             if (setting->ChildrenSize() != 2) {
                 ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Setting " << name << " should contain single value"));
                 return false;
@@ -1153,6 +1155,10 @@ bool TDqStageSettings::Validate(const TExprNode& stage, TExprContext& ctx) {
 
             if (name == LogicalIdSettingName && !TryFromString<ui64>(value->Content())) {
                 ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Setting " << name << " should contain ui64 value, but got: " << value->Content()));
+                return false;
+            }
+            if (name == BlockStatusSettingName && !TryFromString<EBlockStatus>(value->Content())) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Unsupported " << name << " value: " << value->Content()));
                 return false;
             }
         } else if (name == WideChannelsSettingName) {
@@ -1226,6 +1232,13 @@ NNodes::TCoNameValueTupleList TDqStageSettings::BuildNode(TExprContext& ctx, TPo
         settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(WideChannelsSettingName)
             .Value(ExpandType(pos, *OutputNarrowType, ctx))
+            .Done());
+    }
+
+    if (BlockStatus.Defined()) {
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(BlockStatusSettingName)
+            .Value<TCoAtom>().Build(ToString(*BlockStatus))
             .Done());
     }
 

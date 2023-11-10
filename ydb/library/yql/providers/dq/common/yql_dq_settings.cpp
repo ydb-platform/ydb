@@ -86,6 +86,7 @@ TDqConfiguration::TDqConfiguration() {
                 EnableDqReplicate = true;
             }
         });
+    REGISTER_SETTING(*this, DisableLLVMForBlockStages);
 }
 
 } // namespace NYql

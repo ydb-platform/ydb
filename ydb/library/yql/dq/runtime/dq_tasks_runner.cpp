@@ -280,11 +280,12 @@ public:
         return TaskId;
     }
 
-    bool UseSeparatePatternAlloc() const {
-        return Context.PatternCache && (Settings.OptLLVM == "OFF" || Settings.UseCacheForLLVM);
+    bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {
+        return Context.PatternCache &&
+            (Settings.OptLLVM == "OFF" || taskSettings.IsLLVMDisabled() || Settings.UseCacheForLLVM);
     }
 
-    TComputationPatternOpts CreatePatternOpts(TScopedAlloc& alloc, TTypeEnvironment& typeEnv) {
+    TComputationPatternOpts CreatePatternOpts(const TDqTaskSettings& task, TScopedAlloc& alloc, TTypeEnvironment& typeEnv) {
         auto validatePolicy = Settings.TerminateOnError ? NUdf::EValidatePolicy::Fail : NUdf::EValidatePolicy::Exception;
 
         auto taskRunnerFactory = [this](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
@@ -301,8 +302,14 @@ public:
         if (Y_UNLIKELY(CollectFull() && !AllocatedHolder->ProgramParsed.StatsRegistry)) {
             AllocatedHolder->ProgramParsed.StatsRegistry = NMiniKQL::CreateDefaultStatsRegistry();
         }
+
+        TString optLLVM = Settings.OptLLVM;
+        if (task.IsLLVMDisabled()) {
+            optLLVM = "OFF";
+        }
+
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
-            Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, Settings.OptLLVM, EGraphPerProcess::Multi,
+            Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
             AllocatedHolder->ProgramParsed.StatsRegistry.Get());
 
         if (!SecureParamsProvider) {
@@ -315,9 +322,10 @@ public:
 
     std::shared_ptr<TPatternCacheEntry> CreateComputationPattern(const TDqTaskSettings& task, const TString& rawProgram, bool forCache, bool& canBeCached) {
         canBeCached = true;
-        auto entry = TComputationPatternLRUCache::CreateCacheEntry(UseSeparatePatternAlloc());
-        auto& patternAlloc = UseSeparatePatternAlloc() ? entry->Alloc : Alloc();
-        auto& patternEnv = UseSeparatePatternAlloc() ? entry->Env : TypeEnv();
+        const bool useSeparatePattern = UseSeparatePatternAlloc(task);
+        auto entry = TComputationPatternLRUCache::CreateCacheEntry(useSeparatePattern);
+        auto& patternAlloc = useSeparatePattern ? entry->Alloc : Alloc();
+        auto& patternEnv = useSeparatePattern ? entry->Env : TypeEnv();
         patternAlloc.Ref().UseRefLocking = forCache;
 
         {
@@ -411,7 +419,7 @@ public:
         LOG(TStringBuilder() << "task: " << TaskId << ", program size: " << programSize
             << ", llvm: `" << Settings.OptLLVM << "`.");
 
-        auto opts = CreatePatternOpts(patternAlloc, patternEnv);
+        auto opts = CreatePatternOpts(task, patternAlloc, patternEnv);
         opts.SetPatternEnv(entry);
 
         {
@@ -431,7 +439,7 @@ public:
 
         std::shared_ptr<TPatternCacheEntry> entry;
         bool canBeCached;
-        if (UseSeparatePatternAlloc() && Context.PatternCache) {
+        if (UseSeparatePatternAlloc(task) && Context.PatternCache) {
             auto& cache = Context.PatternCache;
             auto ticket = cache->FindOrSubscribe(program.GetRaw());
             if (!ticket.HasFuture()) {
@@ -454,7 +462,7 @@ public:
         AllocatedHolder->ProgramParsed.PatternCacheEntry = entry;
 
         // clone pattern using TDqTaskRunner's alloc
-        auto opts = CreatePatternOpts(Alloc(), TypeEnv());
+        auto opts = CreatePatternOpts(task, Alloc(), TypeEnv());
 
         AllocatedHolder->ProgramParsed.CompGraph = AllocatedHolder->ProgramParsed.GetPattern()->Clone(
             opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider, &TypeEnv()));

@@ -457,6 +457,13 @@ namespace NYql::NDqs {
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
 
+            if (Settings->DisableLLVMForBlockStages.Get().GetOrElse(true)) {
+                auto& stage = TasksGraph.GetStageInfo(task.StageId).Meta.Stage;
+                auto settings = TDqStageSettings::Parse(stage);
+                if (settings.BlockStatus.Defined() && settings.BlockStatus == TDqStageSettings::EBlockStatus::Full) {
+                    taskDesc.SetUseLlvm(false);
+                }
+            }
             plan.emplace_back(std::move(taskDesc));
         }
 

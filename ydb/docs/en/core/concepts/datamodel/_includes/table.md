@@ -131,7 +131,13 @@ If there are multiple followers, their delay from the leader may vary: although 
 
 | Parameter name | Type | Acceptable values | Update capability | Reset capability |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
-| `TTL` | Expression | `Interval("<literal>") ON <column>` | Yes | Yes |
+| `TTL` | Expression | `Interval("<literal>") ON <column> [AS <unit>]` | Yes | Yes |
+
+Where `<unit>` is a unit of measurement, specified only for column with a [numeric type](../../../concepts/ttl.md#restrictions):
+* `SECONDS`;
+* `MILLISECONDS`;
+* `MICROSECONDS`;
+* `NANOSECONDS`.
 
 For more information about deleting expired data, see [Time to Live (TTL)](../../../concepts/ttl.md).
 

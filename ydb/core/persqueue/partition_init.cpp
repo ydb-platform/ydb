@@ -983,7 +983,7 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {
     for (ui32 i = 0; i < response.GetStatusResultSize(); ++i) {
         auto& res = response.GetGetStatusResult(i);
         TStorageStatusFlags status = res.GetStatusFlags();
-        diskIsOk = diskIsOk && !status.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove);
+        diskIsOk = diskIsOk && !status.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop);
     }
     return !diskIsOk;
 }

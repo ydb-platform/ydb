@@ -36,6 +36,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     std::unordered_map<TString, TSchemeCacheNavigate::TEntry> NavigateResult;
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
     std::unordered_map<ui32, const NKikimrBlobStorage::TBaseConfig::TGroup*> BaseConfigGroupIndex;
+    std::unordered_map<TNodeId, ui64> DisconnectTime;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TString FilterTenant;
@@ -438,9 +439,10 @@ public:
             }
             NavigateResult.emplace(path, std::move(entry));
 
-            if (HiveId != 0 && FilterPathId != TPathId()) {
+            if (HiveId != 0) {
                 BLOG_TRACE("Requesting hive " << HiveId << " for path id " << FilterPathId);
                 RequestHiveNodeStats(HiveId, FilterPathId);
+                ++RequestsBeforeNodeList;
             }
         } else {
             BLOG_TRACE("Error receiving Navigate response");
@@ -465,6 +467,12 @@ public:
                 viewerTablet.SetCount(stateStats.GetCount());
                 viewerTablet.SetState(GetFlagFromTabletState(stateStats.GetVolatileState()));
             }
+            BLOG_TRACE("HiveNodeStats filter node by " << nodeId);
+            FilterNodeIds.insert(nodeId);
+            DisconnectTime[nodeId] = nodeStats.GetLastAliveTimestamp();
+        }
+        if (--RequestsBeforeNodeList == 0) {
+            ProcessNodeIds();
         }
         RequestDone();
     }
@@ -519,6 +527,7 @@ public:
 
     void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
+        BLOG_TRACE("Undelivered type " << ev->Get()->SourceType << " from node " << nodeId);
         switch (ev->Get()->SourceType) {
         case TEvWhiteboard::EvSystemStateRequest:
             if (SysInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
@@ -536,15 +545,14 @@ public:
             }
             break;
         case TEvWhiteboard::EvTabletStateRequest:
-            if (TabletInfo.emplace(nodeId, std::vector<NKikimrViewer::TTabletStateInfo>()).second) {
-                RequestDone();
-            }
+            RequestDone();
             break;
         }
     }
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         ui32 nodeId = ev->Get()->NodeId;
+        BLOG_TRACE("Disconnected from node " << nodeId);
         if (SysInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
             RequestDone();
         }
@@ -565,24 +573,28 @@ public:
 
     void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
+        BLOG_TRACE("SystemStateResponse from node " << nodeId);
         SysInfo[nodeId] = std::move(ev->Get()->Record);
         RequestDone();
     }
 
     void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
+        BLOG_TRACE("PDiskStateResponse from node " << nodeId);
         PDiskInfo[nodeId] = std::move(ev->Get()->Record);
         RequestDone();
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
+        BLOG_TRACE("VDiskStateResponse from node " << nodeId);
         VDiskInfo[nodeId] = std::move(ev->Get()->Record);
         RequestDone();
     }
 
     void Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
+        BLOG_TRACE("TabletStateResponse from node " << nodeId);
         NKikimrWhiteboard::TEvTabletStateResponse response = std::move(ev->Get()->Record);
         bool needToGroup = response.TabletStateInfoSize() > 0 && !response.GetTabletStateInfo(0).HasCount();
         if (needToGroup) { // for compatibility with older versions
@@ -658,7 +670,6 @@ public:
 
     void ReplyAndPassAway() {
         NKikimrViewer::TNodesInfo result;
-        std::unordered_map<TNodeId, ui64> disconnectTime;
 
         if (Storage && BaseConfig) {
             const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(BaseConfig->Record);
@@ -691,7 +702,7 @@ public:
                     continue;
                 }
                 if (node.GetLastDisconnectTimestamp() > node.GetLastConnectTimestamp()) {
-                    disconnectTime[node.GetNodeId()] = node.GetLastDisconnectTimestamp() / 1000; // us -> ms
+                    DisconnectTime[node.GetNodeId()] = node.GetLastDisconnectTimestamp() / 1000; // us -> ms
                 }
             }
         }
@@ -712,8 +723,8 @@ public:
                 if (icNodeInfo != nullptr) {
                     nodeInfo.MutableSystemState()->SetHost(icNodeInfo->Host);
                 }
-                auto itDisconnectTime = disconnectTime.find(nodeId);
-                if (itDisconnectTime != disconnectTime.end()) {
+                auto itDisconnectTime = DisconnectTime.find(nodeId);
+                if (itDisconnectTime != DisconnectTime.end()) {
                     nodeInfo.MutableSystemState()->SetDisconnectTime(itDisconnectTime->second);
                 }
             }

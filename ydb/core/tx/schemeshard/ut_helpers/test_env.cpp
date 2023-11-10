@@ -492,18 +492,14 @@ private:
 
 
 // Globally enable/disable log batching at datashard creation time in test
-struct TDatashardLogBatchingSwitch {
-    explicit TDatashardLogBatchingSwitch(bool newVal) {
-        PrevVal = NKikimr::NDataShard::gAllowLogBatchingDefaultValue;
-        NKikimr::NDataShard::gAllowLogBatchingDefaultValue = newVal;
-    }
+NSchemeShardUT_Private::TTestWithReboots::TDatashardLogBatchingSwitch::TDatashardLogBatchingSwitch(bool newVal) {
+    PrevVal = NKikimr::NDataShard::gAllowLogBatchingDefaultValue;
+    NKikimr::NDataShard::gAllowLogBatchingDefaultValue = newVal;
+}
 
-    ~TDatashardLogBatchingSwitch() {
-        NKikimr::NDataShard::gAllowLogBatchingDefaultValue = PrevVal;
-    }
-private:
-    bool PrevVal;
-};
+NSchemeShardUT_Private::TTestWithReboots::TDatashardLogBatchingSwitch::~TDatashardLogBatchingSwitch() {
+    NKikimr::NDataShard::gAllowLogBatchingDefaultValue = PrevVal;
+}
 
 NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTestEnvOptions& opts, TSchemeShardFactory ssFactory, std::shared_ptr<NKikimr::NDataShard::IExportFactory> dsExportFactory)
     : SchemeShardFactory(ssFactory)

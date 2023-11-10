@@ -127,6 +127,14 @@ namespace NSchemeShardUT_Private {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // A wrapper to run test scenarios with reboots of schemeshard, hive and coordinator
     class TTestWithReboots {
+    protected:
+        struct TDatashardLogBatchingSwitch {
+            explicit TDatashardLogBatchingSwitch(bool newVal);
+            ~TDatashardLogBatchingSwitch();
+        private:
+            bool PrevVal;
+        };
+
     public:
         TVector<ui64> TabletIds;
         THolder<TTestActorRuntime> Runtime;

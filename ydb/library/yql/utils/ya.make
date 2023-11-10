@@ -61,6 +61,7 @@ RECURSE(
     fetch
     log
     simd
+    sys
     test_http_server
     threading
 )

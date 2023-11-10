@@ -4364,9 +4364,9 @@
     ],
     "test.test[ManyYamrOperations-Bug1465-Debug]": [
         {
-            "checksum": "70b91cb4e743f6ddc571beb54bb1ecf6",
-            "size": 26539,
-            "uri": "https://{canondata_backend}/1784826/c542c09b6560f5325cde5c3af8d515884014a60d/resource.tar.gz#test.test_ManyYamrOperations-Bug1465-Debug_/opt.yql"
+            "checksum": "3ef6ce160beec6e1e5d27e46a7014e01",
+            "size": 26563,
+            "uri": "https://{canondata_backend}/1903885/c644bf3ce421931222e6c42ba67b3d98750918a9/resource.tar.gz#test.test_ManyYamrOperations-Bug1465-Debug_/opt.yql"
         },
         {
             "checksum": "d99e0b76a35d0ddd03f81201cac14bf7",
@@ -4556,9 +4556,9 @@
     ],
     "test.test[ManyYamrOperations-Bug1465-Plan]": [
         {
-            "checksum": "f64498c18f1c9bd744b4fb548b5be56c",
-            "size": 35694,
-            "uri": "https://{canondata_backend}/1784826/c542c09b6560f5325cde5c3af8d515884014a60d/resource.tar.gz#test.test_ManyYamrOperations-Bug1465-Plan_/plan.txt"
+            "checksum": "0b592381746eee5e692ac71caf018469",
+            "size": 35701,
+            "uri": "https://{canondata_backend}/1903885/c644bf3ce421931222e6c42ba67b3d98750918a9/resource.tar.gz#test.test_ManyYamrOperations-Bug1465-Plan_/plan.txt"
         }
     ],
     "test.test[ManyYamrOperations-Bug1465-Results]": [
@@ -6159,9 +6159,9 @@
     ],
     "test.test[Udf-RecordRemapWeakRange-Debug]": [
         {
-            "checksum": "2a9455b3f691fbf2a2c2f241263b0356",
-            "size": 1675,
-            "uri": "https://{canondata_backend}/1925821/078ac171919ee93d5e5707bb75dc63ab74134894/resource.tar.gz#test.test_Udf-RecordRemapWeakRange-Debug_/opt.yql"
+            "checksum": "7580dadfd3a527fb4225a119cb0e7ded",
+            "size": 1696,
+            "uri": "https://{canondata_backend}/1903885/c644bf3ce421931222e6c42ba67b3d98750918a9/resource.tar.gz#test.test_Udf-RecordRemapWeakRange-Debug_/opt.yql"
         },
         {
             "checksum": "770e028fecaefffa0652604f3c52c45e",
@@ -6176,9 +6176,9 @@
     ],
     "test.test[Udf-RecordRemapWeakRange-Plan]": [
         {
-            "checksum": "64938f84f08ce31671d030769c65986c",
-            "size": 3402,
-            "uri": "https://{canondata_backend}/1925821/078ac171919ee93d5e5707bb75dc63ab74134894/resource.tar.gz#test.test_Udf-RecordRemapWeakRange-Plan_/plan.txt"
+            "checksum": "2dbb32740f3314d55efb5ececa087fb9",
+            "size": 3409,
+            "uri": "https://{canondata_backend}/1903885/c644bf3ce421931222e6c42ba67b3d98750918a9/resource.tar.gz#test.test_Udf-RecordRemapWeakRange-Plan_/plan.txt"
         }
     ],
     "test.test[Udf-RecordRemapWeakRange-Results]": [

@@ -5382,9 +5382,9 @@
     ],
     "test.test[Udf-RecordRemapRangeDiffUdf-Debug]": [
         {
-            "checksum": "56cd43d772794f4aa0d7d539e70ccb64",
-            "size": 3982,
-            "uri": "https://{canondata_backend}/1925821/20c75b448792125f48352e975769a979f916d358/resource.tar.gz#test.test_Udf-RecordRemapRangeDiffUdf-Debug_/opt.yql"
+            "checksum": "a4a770c7535b98334af3d61bd3bbd0f4",
+            "size": 4024,
+            "uri": "https://{canondata_backend}/1903885/ecac64d52b080e5c3e01d3f407f9a9ad665026be/resource.tar.gz#test.test_Udf-RecordRemapRangeDiffUdf-Debug_/opt.yql"
         },
         {
             "checksum": "e665b3586f6db0c4a5d62e004d45c248",
@@ -5444,9 +5444,9 @@
     ],
     "test.test[Udf-RecordRemapRangeDiffUdf-Plan]": [
         {
-            "checksum": "aaa7cf1c0019df269ee9f9ea2c62b029",
-            "size": 14851,
-            "uri": "https://{canondata_backend}/1925821/20c75b448792125f48352e975769a979f916d358/resource.tar.gz#test.test_Udf-RecordRemapRangeDiffUdf-Plan_/plan.txt"
+            "checksum": "4e26af20c72d8f2daa55b1d3a97c9940",
+            "size": 14879,
+            "uri": "https://{canondata_backend}/1903885/ecac64d52b080e5c3e01d3f407f9a9ad665026be/resource.tar.gz#test.test_Udf-RecordRemapRangeDiffUdf-Plan_/plan.txt"
         }
     ],
     "test.test[Udf-RecordRemapRangeDiffUdf-Results]": [
@@ -5458,9 +5458,9 @@
     ],
     "test.test[Udf-RecordRemapWithConfigResult-Debug]": [
         {
-            "checksum": "9b0bd19c566d84b0dcf35dabff38d39e",
-            "size": 1804,
-            "uri": "https://{canondata_backend}/1925821/20c75b448792125f48352e975769a979f916d358/resource.tar.gz#test.test_Udf-RecordRemapWithConfigResult-Debug_/opt.yql"
+            "checksum": "5c596eed6742bf2a042db62e436f8f81",
+            "size": 1825,
+            "uri": "https://{canondata_backend}/1903885/ecac64d52b080e5c3e01d3f407f9a9ad665026be/resource.tar.gz#test.test_Udf-RecordRemapWithConfigResult-Debug_/opt.yql"
         },
         {
             "checksum": "a9a9f66192247798f50231e38e0891a9",
@@ -5475,9 +5475,9 @@
     ],
     "test.test[Udf-RecordRemapWithConfigResult-Plan]": [
         {
-            "checksum": "64938f84f08ce31671d030769c65986c",
-            "size": 3402,
-            "uri": "https://{canondata_backend}/1925821/20c75b448792125f48352e975769a979f916d358/resource.tar.gz#test.test_Udf-RecordRemapWithConfigResult-Plan_/plan.txt"
+            "checksum": "2dbb32740f3314d55efb5ececa087fb9",
+            "size": 3409,
+            "uri": "https://{canondata_backend}/1903885/ecac64d52b080e5c3e01d3f407f9a9ad665026be/resource.tar.gz#test.test_Udf-RecordRemapWithConfigResult-Plan_/plan.txt"
         }
     ],
     "test.test[Udf-RecordRemapWithConfigResult-Results]": [
@@ -5540,9 +5540,9 @@
     ],
     "test.test[View-Key1AfterUdfData-Debug]": [
         {
-            "checksum": "49a1180dffa0ac4b0b13a4e5c96d4798",
-            "size": 2039,
-            "uri": "https://{canondata_backend}/1871182/0fb8f52c1c023836965522a05112dc8934232e9d/resource.tar.gz#test.test_View-Key1AfterUdfData-Debug_/opt.yql"
+            "checksum": "3f9de71f15504aae36d6e0478b586016",
+            "size": 2060,
+            "uri": "https://{canondata_backend}/1903885/ecac64d52b080e5c3e01d3f407f9a9ad665026be/resource.tar.gz#test.test_View-Key1AfterUdfData-Debug_/opt.yql"
         },
         {
             "checksum": "f4a08524d8b79ee873aa6df190516ae7",
@@ -5557,9 +5557,9 @@
     ],
     "test.test[View-Key1AfterUdfData-Plan]": [
         {
-            "checksum": "a1839b6d808625fedab59ab50ce9a503",
-            "size": 3301,
-            "uri": "https://{canondata_backend}/1925821/20c75b448792125f48352e975769a979f916d358/resource.tar.gz#test.test_View-Key1AfterUdfData-Plan_/plan.txt"
+            "checksum": "5bdcbe812276a97e9ff00f94da531bd4",
+            "size": 3308,
+            "uri": "https://{canondata_backend}/1903885/ecac64d52b080e5c3e01d3f407f9a9ad665026be/resource.tar.gz#test.test_View-Key1AfterUdfData-Plan_/plan.txt"
         }
     ],
     "test.test[View-Key1AfterUdfData-Results]": [

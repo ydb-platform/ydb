@@ -4415,9 +4415,9 @@
     ],
     "test.test[Udf-ProtoFieldOpt-Debug]": [
         {
-            "checksum": "1abb09097133116113f337057b09b236",
-            "size": 3018,
-            "uri": "https://{canondata_backend}/1925821/75ade0a37b2fe44cca366f7ba75ac08a3f94524b/resource.tar.gz#test.test_Udf-ProtoFieldOpt-Debug_/opt.yql"
+            "checksum": "7d2391d7c4dca78e1b833dc40ada041c",
+            "size": 3039,
+            "uri": "https://{canondata_backend}/1942100/707f1302bba71a81a2e9d82bc388fbcc672eb344/resource.tar.gz#test.test_Udf-ProtoFieldOpt-Debug_/opt.yql"
         },
         {
             "checksum": "4c6752b8040d5e5f6f47d69338f71556",
@@ -4432,9 +4432,9 @@
     ],
     "test.test[Udf-ProtoFieldOpt-Plan]": [
         {
-            "checksum": "8583f3f4e7197e39e1b726824ea3c4eb",
-            "size": 3846,
-            "uri": "https://{canondata_backend}/1925821/75ade0a37b2fe44cca366f7ba75ac08a3f94524b/resource.tar.gz#test.test_Udf-ProtoFieldOpt-Plan_/plan.txt"
+            "checksum": "67cc6552f3d426400e388aa9ed1c9492",
+            "size": 3853,
+            "uri": "https://{canondata_backend}/1942100/707f1302bba71a81a2e9d82bc388fbcc672eb344/resource.tar.gz#test.test_Udf-ProtoFieldOpt-Plan_/plan.txt"
         }
     ],
     "test.test[Udf-ProtoFieldOpt-Results]": [
@@ -4488,9 +4488,9 @@
     ],
     "test.test[Udf-RecordRemapCopy-Debug]": [
         {
-            "checksum": "1f680f1f749a5e04df0b0781e330a55f",
-            "size": 1641,
-            "uri": "https://{canondata_backend}/1925821/75ade0a37b2fe44cca366f7ba75ac08a3f94524b/resource.tar.gz#test.test_Udf-RecordRemapCopy-Debug_/opt.yql"
+            "checksum": "cc586948c9f2e0f6fd19868faf761239",
+            "size": 1662,
+            "uri": "https://{canondata_backend}/1942100/707f1302bba71a81a2e9d82bc388fbcc672eb344/resource.tar.gz#test.test_Udf-RecordRemapCopy-Debug_/opt.yql"
         },
         {
             "checksum": "99a23a80241cdd0057583910f9155f61",
@@ -4510,9 +4510,9 @@
     ],
     "test.test[Udf-RecordRemapCopy-Plan]": [
         {
-            "checksum": "742749c682ce92ec61a8184b28434171",
-            "size": 5590,
-            "uri": "https://{canondata_backend}/1925821/75ade0a37b2fe44cca366f7ba75ac08a3f94524b/resource.tar.gz#test.test_Udf-RecordRemapCopy-Plan_/plan.txt"
+            "checksum": "bf2804af33b283e441861cdbdd473f52",
+            "size": 5597,
+            "uri": "https://{canondata_backend}/1942100/707f1302bba71a81a2e9d82bc388fbcc672eb344/resource.tar.gz#test.test_Udf-RecordRemapCopy-Plan_/plan.txt"
         }
     ],
     "test.test[Udf-RecordRemapCopy-Results]": [

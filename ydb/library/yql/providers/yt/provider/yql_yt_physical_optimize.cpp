@@ -2590,23 +2590,12 @@ private:
             outItemType, ctx, State_, flatMap.Ref().GetConstraintSet());
 
         auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, flatMap.Pos());
-        if (sortedOutput) {
+        if (TCoOrderedFlatMap::Match(flatMap.Raw()) || sortedOutput) {
             settingsBuilder
                 .Add()
                     .Name()
                         .Value(ToString(EYtSettingType::Ordered))
                     .Build()
-                .Build();
-        } else if (TCoOrderedFlatMap::Match(flatMap.Raw()) && outTables.size() == 1) {
-            mapper = ctx.Builder(node.Pos())
-                .Lambda()
-                    .Param("stream")
-                    .Callable(TCoUnordered::CallableName())
-                        .Apply(0, mapper)
-                            .With(0, "stream")
-                        .Seal()
-                    .Seal()
-                .Seal()
                 .Build();
         }
         if (State_->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW)) {
@@ -4354,7 +4343,7 @@ private:
 
     TMaybeNode<TExprBase> FuseReduce(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
         auto outerReduce = node.Cast<TYtReduce>();
-       
+
         if (outerReduce.Input().Size() != 1 || outerReduce.Input().Item(0).Paths().Size() != 1) {
             return node;
         }
@@ -4448,7 +4437,7 @@ private:
         innerLambda = FallbackLambdaOutput(innerLambda, ctx);
         outerLambda = FallbackLambdaInput(outerLambda, ctx);
 
-        
+
         const auto outerReduceBy = NYql::GetSettingAsColumnList(outerReduce.Settings().Ref(), EYtSettingType::ReduceBy);
         auto reduceByList = [&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
             size_t index = 0;

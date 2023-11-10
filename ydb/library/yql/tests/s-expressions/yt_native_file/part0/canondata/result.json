@@ -3724,9 +3724,9 @@
     ],
     "test.test[View-Key1AfterUdfRawData-Debug]": [
         {
-            "checksum": "cc036aacebbf96e5ea7cc4ac5ffcb142",
-            "size": 1738,
-            "uri": "https://{canondata_backend}/1871182/d078c82640022cbf34d8c06adab69004c9a9bdf7/resource.tar.gz#test.test_View-Key1AfterUdfRawData-Debug_/opt.yql"
+            "checksum": "fc32be882bb167c7ee8e01e367cf1003",
+            "size": 1759,
+            "uri": "https://{canondata_backend}/1775319/38399aa0e127ba68c256f32a655476a3d396599b/resource.tar.gz#test.test_View-Key1AfterUdfRawData-Debug_/opt.yql"
         },
         {
             "checksum": "35f15081539ad9e2a2bcb482c187f1d9",
@@ -3741,9 +3741,9 @@
     ],
     "test.test[View-Key1AfterUdfRawData-Plan]": [
         {
-            "checksum": "67eb9ede1da09745cbc1b5a194ab27af",
-            "size": 2760,
-            "uri": "https://{canondata_backend}/1031349/11e86f678dae4862e21db464a68df6b4d3773704/resource.tar.gz#test.test_View-Key1AfterUdfRawData-Plan_/plan.txt"
+            "checksum": "d65e10bab5e146efc22a1c1acba7b306",
+            "size": 2767,
+            "uri": "https://{canondata_backend}/1775319/38399aa0e127ba68c256f32a655476a3d396599b/resource.tar.gz#test.test_View-Key1AfterUdfRawData-Plan_/plan.txt"
         }
     ],
     "test.test[View-Key1AfterUdfRawData-Results]": [
@@ -3755,9 +3755,9 @@
     ],
     "test.test[View-Key1Data-Debug]": [
         {
-            "checksum": "4e01a818638271e692ccd3101e1e7ab2",
-            "size": 1714,
-            "uri": "https://{canondata_backend}/1871182/d078c82640022cbf34d8c06adab69004c9a9bdf7/resource.tar.gz#test.test_View-Key1Data-Debug_/opt.yql"
+            "checksum": "d62ff8fef279087db17672372bbb381c",
+            "size": 1735,
+            "uri": "https://{canondata_backend}/1775319/38399aa0e127ba68c256f32a655476a3d396599b/resource.tar.gz#test.test_View-Key1Data-Debug_/opt.yql"
         },
         {
             "checksum": "35f15081539ad9e2a2bcb482c187f1d9",
@@ -3772,9 +3772,9 @@
     ],
     "test.test[View-Key1Data-Plan]": [
         {
-            "checksum": "e2608de95714b0d27557539aa7aeaa87",
-            "size": 2760,
-            "uri": "https://{canondata_backend}/1031349/11e86f678dae4862e21db464a68df6b4d3773704/resource.tar.gz#test.test_View-Key1Data-Plan_/plan.txt"
+            "checksum": "4bc0800dc70839da4c3efbc34ccb1af1",
+            "size": 2767,
+            "uri": "https://{canondata_backend}/1775319/38399aa0e127ba68c256f32a655476a3d396599b/resource.tar.gz#test.test_View-Key1Data-Plan_/plan.txt"
         }
     ],
     "test.test[View-Key1Data-Results]": [

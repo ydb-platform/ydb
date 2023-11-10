@@ -628,8 +628,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     if (Self->GetVolatileTxManager().FindByTxId(txId)) {
         // This readset is for a known volatile transaction, we need to
         // hand it off to volatile tx manager.
-        Self->GetVolatileTxManager().ProcessReadSet(rs, txc);
-        return true;
+        return Self->GetVolatileTxManager().ProcessReadSet(rs, std::move(ack), txc);
     }
 
     if (step <= OutdatedReadSetStep()) {

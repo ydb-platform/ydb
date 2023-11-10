@@ -59,6 +59,12 @@ def pytest_generate_tests(metafunc):
                     argvalues=available_yq_versions)
         else:
             pytest.fail("yq_version marker was not specified: " + str(metafunc.function))
+    if 'stats_mode' in metafunc.fixturenames:
+        marker = metafunc.definition.get_closest_marker('stats_mode')
+        if marker is not None:
+            metafunc.parametrize(
+                argnames='stats_mode',
+                argvalues=[marker.args[0]])
 
 
 def pytest_collection_modifyitems(config, items):

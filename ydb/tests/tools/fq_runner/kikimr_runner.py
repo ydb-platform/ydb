@@ -69,6 +69,12 @@ class BaseTenant(abc.ABC):
     def fq_config(self):
         return self.config_generator.yaml_config['federated_query_config']
 
+    @property
+    def qs_config(self):
+        if 'query_service_config' not in self.config_generator.yaml_config:
+            self.config_generator.yaml_config['query_service_config'] = {}
+        return self.config_generator.yaml_config['query_service_config']
+
     def enable_logging(self, component, level=LogLevels.TRACE):
         log_config = self.config_generator.yaml_config['log_config']
         if not isinstance(log_config['entry'], list):
@@ -231,7 +237,7 @@ class BaseTenant(abc.ABC):
             while True:
                 assert time.time() < deadline, "Node {} bootstrap deadline {}s exceeded".format(node_index, wait_time)
                 try:
-                    if self.get_worker_count(node_index) is None:
+                    if self.get_actor_count(node_index, "GRPC_PROXY") == 0:
                         continue
                 except Exception:
                     time.sleep(yatest_common.plain_or_under_sanitizer(0.3, 2))
@@ -569,8 +575,12 @@ class StreamingOverKikimr(object):
                 tenant.mvp_mock_port = self.mvp_mock_port
                 if control_services:
                     self.control_plane = tenant
-                if compute_services and self.compute_plane is None:
-                    self.compute_plane = tenant
+                if compute_services:
+                    if self.compute_plane is None:
+                        self.compute_plane = tenant
+                    elif isinstance(self.compute_plane, YqTenant) and isinstance(tenant, YdbTenant):
+                        # v2 compute tenant overrides v1
+                        self.compute_plane = tenant
                 if compute_services and fill_mapping:  # by default map each tenant to itself
                     _tenant_mapping[name] = name
                 self.tenants[tenant.tenant_name] = tenant

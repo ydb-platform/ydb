@@ -277,7 +277,7 @@ class FederatedQueryClient(object):
             time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
 
     # Wait query status or one of statuses in list
-    def wait_query_status(self, query_id, expected_status, timeout=yatest_common.plain_or_under_sanitizer(30, 150)):
+    def wait_query_status(self, query_id, expected_status, timeout=yatest_common.plain_or_under_sanitizer(60, 150)):
         statuses = expected_status if isinstance(expected_status, list) else [expected_status]
         return self.wait_query(query_id, timeout, statuses=statuses).query.meta.status
 

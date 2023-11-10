@@ -8,6 +8,7 @@ from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
 from ydb.tests.tools.fq_runner.kikimr_runner import TenantType
+from ydb.tests.tools.fq_runner.kikimr_runner import YqTenant
 
 
 class ExtensionPoint(abc.ABC):
@@ -78,7 +79,8 @@ class AddFormatSizeLimitExtension(ExtensionPoint):
             else:
                 s3['format_size_limit'].append(
                     {'name': name, 'file_size_limit': limit})
-        kikimr.compute_plane.fq_config['gateways']['s3'] = s3
+        kikimr.compute_plane.fq_config['gateways']['s3'] = s3  # v1
+        kikimr.compute_plane.qs_config['s3'] = s3  # v2
 
 
 class DefaultConfigExtension(ExtensionPoint):
@@ -95,8 +97,10 @@ class DefaultConfigExtension(ExtensionPoint):
         return True
 
     def apply_to_kikimr(self, request, kikimr):
-        kikimr.compute_plane.fq_config['common']['object_storage_endpoint'] = self.s3_url
-        kikimr.compute_plane.fq_config['control_plane_storage']['retry_policy_mapping'] = [
+        kikimr.control_plane.fq_config['common']['object_storage_endpoint'] = self.s3_url
+        if isinstance(kikimr.compute_plane, YqTenant):
+            kikimr.compute_plane.fq_config['common']['object_storage_endpoint'] = self.s3_url
+        kikimr.control_plane.fq_config['control_plane_storage']['retry_policy_mapping'] = [
             {
                 'status_code': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
                 'policy': {
@@ -123,16 +127,21 @@ class YQv2Extension(ExtensionPoint):
         self.yq_version = yq_version
 
     def apply_to_kikimr_conf(self, request, configuration):
-        configuration.node_count = {
-            "/cp": TenantConfig(node_count=1),
-            "/compute": TenantConfig(node_count=1,
-                                     tenant_type=TenantType.YDB,
-                                     extra_feature_flags=[
-                                         'enable_external_data_sources',
-                                         'enable_script_execution_operations'
-                                     ],
-                                     extra_grpc_services=['query_service']),
-        }
+        if isinstance(configuration.node_count, dict):
+            configuration.node_count["/compute"].tenant_type = TenantType.YDB
+            configuration.node_count["/compute"].extra_feature_flags = ['enable_external_data_sources', 'enable_script_execution_operations']
+            configuration.node_count["/compute"].extra_grpc_services = ['query_service']
+        else:
+            configuration.node_count = {
+                "/cp": TenantConfig(node_count=1),
+                "/compute": TenantConfig(node_count=1,
+                                         tenant_type=TenantType.YDB,
+                                         extra_feature_flags=[
+                                             'enable_external_data_sources',
+                                             'enable_script_execution_operations'
+                                         ],
+                                         extra_grpc_services=['query_service']),
+            }
 
     def is_applicable(self, request):
         return self.yq_version == 'v2'
@@ -167,10 +176,13 @@ class YQv2Extension(ExtensionPoint):
 
 class ComputeExtension(ExtensionPoint):
     def apply_to_kikimr_conf(self, request, configuration):
-        configuration.node_count = {
-            "/cp": TenantConfig(node_count=1),
-            "/compute": TenantConfig(node_count=request.param["compute"]),
-        }
+        if isinstance(configuration.node_count, dict):
+            configuration.node_count["/compute"].node_count = request.param["compute"]
+        else:
+            configuration.node_count = {
+                "/cp": TenantConfig(node_count=1),
+                "/compute": TenantConfig(node_count=request.param["compute"]),
+            }
 
     def is_applicable(self, request):
         return (hasattr(request, 'param')
@@ -195,16 +207,21 @@ class AuditExtension(ExtensionPoint):
 
 
 class StatsModeExtension(ExtensionPoint):
+
+    def __init__(self, stats_mode):
+        YQv2Extension.__init__.__annotations__ = {
+            'stats_mode': str,
+            'return': None
+        }
+        super().__init__()
+        self.stats_mode = stats_mode
+
     def is_applicable(self, request):
-        return (hasattr(request, 'param')
-                and isinstance(request.param, dict)
-                and "stats_mode" in request.param)
+        return self.stats_mode != ''
 
     def apply_to_kikimr(self, request, kikimr):
-        kikimr.stats_mode = request.param["stats_mode"]
-        kikimr.compute_plane.fq_config['control_plane_storage']['stats_mode'] = kikimr.stats_mode
-        kikimr.compute_plane.fq_config['control_plane_storage']['dump_raw_statistics'] = True
-        del request.param["stats_mode"]
+        kikimr.control_plane.fq_config['control_plane_storage']['stats_mode'] = self.stats_mode
+        kikimr.control_plane.fq_config['control_plane_storage']['dump_raw_statistics'] = True
 
 
 @contextmanager
@@ -240,3 +257,4 @@ def start_kikimr(request, kikimr_extensions):
 yq_v1 = pytest.mark.yq_version('v1')
 yq_v2 = pytest.mark.yq_version('v2')
 yq_all = pytest.mark.yq_version('v1', 'v2')
+yq_stats_full = pytest.mark.stats_mode('STATS_MODE_FULL')

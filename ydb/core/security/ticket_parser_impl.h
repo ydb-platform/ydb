@@ -19,6 +19,7 @@
 #include <util/generic/queue.h>
 #include "ticket_parser_log.h"
 #include "ldap_auth_provider.h"
+#include <util/stream/file.h>
 
 namespace NKikimr {
 

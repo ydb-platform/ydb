@@ -3,6 +3,7 @@
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
 #include "ydb/core/tablet_flat/shared_sausagecache.h"
+#include <ydb/core/protos/datashard_config.pb.h>
 
 namespace NKikimr {
 namespace NDataShard {

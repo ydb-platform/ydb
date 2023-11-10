@@ -5,6 +5,8 @@
 #include "export_scan.h"
 #include "export_s3.h"
 
+#include <ydb/core/protos/datashard_config.pb.h>
+
 namespace NKikimr {
 namespace NDataShard {
 

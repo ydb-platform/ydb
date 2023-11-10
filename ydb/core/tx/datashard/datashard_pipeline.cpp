@@ -6,6 +6,7 @@
 
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/cputime.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
 
 namespace NKikimr {

@@ -14,6 +14,7 @@
 #include <ydb/core/wrappers/events/common.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/maybe.h>
@@ -21,6 +22,8 @@
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+
+#include <google/protobuf/text_format.h>
 
 namespace NKikimr {
 namespace NDataShard {

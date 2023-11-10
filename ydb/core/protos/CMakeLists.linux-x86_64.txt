@@ -1538,6 +1538,42 @@ get_built_tool_path(
   cpp_styleguide
 )
 get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
+get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency
   tools/enum_parser/enum_parser
@@ -1593,7 +1629,9 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_vdisk_internal.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blockstore_config.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/datashard_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/db_metadata_cache.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/feature_flags.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/filestore_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/bootstrapper.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/change_exchange.proto
@@ -1672,6 +1710,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/statistics.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/stream.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/subdomains.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/table_service_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/table_stats.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tablet_counters.proto

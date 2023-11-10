@@ -23,7 +23,9 @@ SRCS(
     blobstorage_vdisk_internal.proto
     blobstorage_config.proto
     blockstore_config.proto
+    datashard_config.proto
     db_metadata_cache.proto
+    feature_flags.proto
     filestore_config.proto
     bootstrapper.proto
     change_exchange.proto
@@ -102,6 +104,7 @@ SRCS(
     statistics.proto
     stream.proto
     subdomains.proto
+    table_service_config.proto
     table_stats.proto
     tablet.proto
     tablet_counters.proto

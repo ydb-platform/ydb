@@ -38,6 +38,7 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     AddApiKey<TSaslAuthenticateRequestData>(response->ApiKeys, SASL_AUTHENTICATE);
     AddApiKey<TListOffsetsRequestData>(response->ApiKeys, LIST_OFFSETS);
     AddApiKey<TFetchRequestData>(response->ApiKeys, FETCH, {.MaxVersion=3});
+    AddApiKey<TOffsetFetchRequestData>(response->ApiKeys, OFFSET_FETCH); //sergeyveselov: set versions
 
     return response;
 }

@@ -12,6 +12,7 @@ const std::unordered_map<EApiKey, TString> EApiKeyNames = {
     {EApiKey::FETCH, "FETCH"},
     {EApiKey::LIST_OFFSETS, "LIST_OFFSETS"},
     {EApiKey::METADATA, "METADATA"},
+    {EApiKey::OFFSET_FETCH, "OFFSET_FETCH"},
     {EApiKey::SASL_HANDSHAKE, "SASL_HANDSHAKE"},
     {EApiKey::API_VERSIONS, "API_VERSIONS"},
     {EApiKey::INIT_PRODUCER_ID, "INIT_PRODUCER_ID"},
@@ -29,6 +30,8 @@ std::unique_ptr<TApiMessage> CreateRequest(i16 apiKey) {
             return std::make_unique<TListOffsetsRequestData>();
         case METADATA:
             return std::make_unique<TMetadataRequestData>();
+        case OFFSET_FETCH:
+            return std::make_unique<TOffsetFetchRequestData>();
         case SASL_HANDSHAKE:
             return std::make_unique<TSaslHandshakeRequestData>();
         case API_VERSIONS:
@@ -52,6 +55,8 @@ std::unique_ptr<TApiMessage> CreateResponse(i16 apiKey) {
             return std::make_unique<TListOffsetsResponseData>();
         case METADATA:
             return std::make_unique<TMetadataResponseData>();
+        case OFFSET_FETCH:
+            return std::make_unique<TOffsetFetchResponseData>();
         case SASL_HANDSHAKE:
             return std::make_unique<TSaslHandshakeResponseData>();
         case API_VERSIONS:
@@ -87,6 +92,12 @@ TKafkaVersion RequestHeaderVersion(i16 apiKey, TKafkaVersion _version) {
             }
         case METADATA:
             if (_version >= 9) {
+                return 2;
+            } else {
+                return 1;
+            }
+        case OFFSET_FETCH:
+            if (_version >= 6) {
                 return 2;
             } else {
                 return 1;
@@ -139,6 +150,12 @@ TKafkaVersion ResponseHeaderVersion(i16 apiKey, TKafkaVersion _version) {
             }
         case METADATA:
             if (_version >= 9) {
+                return 1;
+            } else {
+                return 0;
+            }
+        case OFFSET_FETCH:
+            if (_version >= 6) {
                 return 1;
             } else {
                 return 0;
@@ -2272,6 +2289,621 @@ i32 TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::S
     NPrivate::Size<ReplicaNodesMeta>(_collector, _version, ReplicaNodes);
     NPrivate::Size<IsrNodesMeta>(_collector, _version, IsrNodes);
     NPrivate::Size<OfflineReplicasMeta>(_collector, _version, OfflineReplicas);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TOffsetFetchRequestData
+//
+const TOffsetFetchRequestData::GroupIdMeta::Type TOffsetFetchRequestData::GroupIdMeta::Default = {""};
+const TOffsetFetchRequestData::RequireStableMeta::Type TOffsetFetchRequestData::RequireStableMeta::Default = false;
+
+TOffsetFetchRequestData::TOffsetFetchRequestData() 
+        : GroupId(GroupIdMeta::Default)
+        , RequireStable(RequireStableMeta::Default)
+{}
+
+void TOffsetFetchRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TOffsetFetchRequestData";
+    }
+    NPrivate::Read<GroupIdMeta>(_readable, _version, GroupId);
+    NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
+    NPrivate::Read<GroupsMeta>(_readable, _version, Groups);
+    NPrivate::Read<RequireStableMeta>(_readable, _version, RequireStable);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TOffsetFetchRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TOffsetFetchRequestData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<GroupIdMeta>(_collector, _writable, _version, GroupId);
+    NPrivate::Write<TopicsMeta>(_collector, _writable, _version, Topics);
+    NPrivate::Write<GroupsMeta>(_collector, _writable, _version, Groups);
+    NPrivate::Write<RequireStableMeta>(_collector, _writable, _version, RequireStable);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TOffsetFetchRequestData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<GroupIdMeta>(_collector, _version, GroupId);
+    NPrivate::Size<TopicsMeta>(_collector, _version, Topics);
+    NPrivate::Size<GroupsMeta>(_collector, _version, Groups);
+    NPrivate::Size<RequireStableMeta>(_collector, _version, RequireStable);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TOffsetFetchRequestData::TOffsetFetchRequestTopic
+//
+const TOffsetFetchRequestData::TOffsetFetchRequestTopic::NameMeta::Type TOffsetFetchRequestData::TOffsetFetchRequestTopic::NameMeta::Default = {""};
+
+TOffsetFetchRequestData::TOffsetFetchRequestTopic::TOffsetFetchRequestTopic() 
+        : Name(NameMeta::Default)
+{}
+
+void TOffsetFetchRequestData::TOffsetFetchRequestTopic::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TOffsetFetchRequestData::TOffsetFetchRequestTopic";
+    }
+    NPrivate::Read<NameMeta>(_readable, _version, Name);
+    NPrivate::Read<PartitionIndexesMeta>(_readable, _version, PartitionIndexes);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TOffsetFetchRequestData::TOffsetFetchRequestTopic::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TOffsetFetchRequestData::TOffsetFetchRequestTopic";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
+    NPrivate::Write<PartitionIndexesMeta>(_collector, _writable, _version, PartitionIndexes);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TOffsetFetchRequestData::TOffsetFetchRequestTopic::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
+    NPrivate::Size<PartitionIndexesMeta>(_collector, _version, PartitionIndexes);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TOffsetFetchRequestData::TOffsetFetchRequestGroup
+//
+const TOffsetFetchRequestData::TOffsetFetchRequestGroup::GroupIdMeta::Type TOffsetFetchRequestData::TOffsetFetchRequestGroup::GroupIdMeta::Default = {""};
+
+TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestGroup() 
+        : GroupId(GroupIdMeta::Default)
+{}
+
+void TOffsetFetchRequestData::TOffsetFetchRequestGroup::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TOffsetFetchRequestData::TOffsetFetchRequestGroup";
+    }
+    NPrivate::Read<GroupIdMeta>(_readable, _version, GroupId);
+    NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TOffsetFetchRequestData::TOffsetFetchRequestGroup::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TOffsetFetchRequestData::TOffsetFetchRequestGroup";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<GroupIdMeta>(_collector, _writable, _version, GroupId);
+    NPrivate::Write<TopicsMeta>(_collector, _writable, _version, Topics);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TOffsetFetchRequestData::TOffsetFetchRequestGroup::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<GroupIdMeta>(_collector, _version, GroupId);
+    NPrivate::Size<TopicsMeta>(_collector, _version, Topics);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics
+//
+const TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics::NameMeta::Type TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics::NameMeta::Default = {""};
+
+TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics::TOffsetFetchRequestTopics() 
+        : Name(NameMeta::Default)
+{}
+
+void TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics";
+    }
+    NPrivate::Read<NameMeta>(_readable, _version, Name);
+    NPrivate::Read<PartitionIndexesMeta>(_readable, _version, PartitionIndexes);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
+    NPrivate::Write<PartitionIndexesMeta>(_collector, _writable, _version, PartitionIndexes);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
+    NPrivate::Size<PartitionIndexesMeta>(_collector, _version, PartitionIndexes);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TOffsetFetchResponseData
+//
+const TOffsetFetchResponseData::ThrottleTimeMsMeta::Type TOffsetFetchResponseData::ThrottleTimeMsMeta::Default = 0;
+const TOffsetFetchResponseData::ErrorCodeMeta::Type TOffsetFetchResponseData::ErrorCodeMeta::Default = 0;
+
+TOffsetFetchResponseData::TOffsetFetchResponseData() 
+        : ThrottleTimeMs(ThrottleTimeMsMeta::Default)
+        , ErrorCode(ErrorCodeMeta::Default)
+{}
+
+void TOffsetFetchResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TOffsetFetchResponseData";
+    }
+    NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, ThrottleTimeMs);
+    NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
+    NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
+    NPrivate::Read<GroupsMeta>(_readable, _version, Groups);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TOffsetFetchResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TOffsetFetchResponseData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, ThrottleTimeMs);
+    NPrivate::Write<TopicsMeta>(_collector, _writable, _version, Topics);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<GroupsMeta>(_collector, _writable, _version, Groups);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TOffsetFetchResponseData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, ThrottleTimeMs);
+    NPrivate::Size<TopicsMeta>(_collector, _version, Topics);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<GroupsMeta>(_collector, _version, Groups);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TOffsetFetchResponseData::TOffsetFetchResponseTopic
+//
+const TOffsetFetchResponseData::TOffsetFetchResponseTopic::NameMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseTopic::NameMeta::Default = {""};
+
+TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponseTopic() 
+        : Name(NameMeta::Default)
+{}
+
+void TOffsetFetchResponseData::TOffsetFetchResponseTopic::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TOffsetFetchResponseData::TOffsetFetchResponseTopic";
+    }
+    NPrivate::Read<NameMeta>(_readable, _version, Name);
+    NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TOffsetFetchResponseData::TOffsetFetchResponseTopic::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TOffsetFetchResponseData::TOffsetFetchResponseTopic";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
+    NPrivate::Write<PartitionsMeta>(_collector, _writable, _version, Partitions);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TOffsetFetchResponseData::TOffsetFetchResponseTopic::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
+    NPrivate::Size<PartitionsMeta>(_collector, _version, Partitions);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition
+//
+const TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::PartitionIndexMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::PartitionIndexMeta::Default = 0;
+const TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::CommittedOffsetMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::CommittedOffsetMeta::Default = 0;
+const TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::CommittedLeaderEpochMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::CommittedLeaderEpochMeta::Default = -1;
+const TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::MetadataMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::MetadataMeta::Default = {""};
+const TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::ErrorCodeMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::ErrorCodeMeta::Default = 0;
+
+TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::TOffsetFetchResponsePartition() 
+        : PartitionIndex(PartitionIndexMeta::Default)
+        , CommittedOffset(CommittedOffsetMeta::Default)
+        , CommittedLeaderEpoch(CommittedLeaderEpochMeta::Default)
+        , Metadata(MetadataMeta::Default)
+        , ErrorCode(ErrorCodeMeta::Default)
+{}
+
+void TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition";
+    }
+    NPrivate::Read<PartitionIndexMeta>(_readable, _version, PartitionIndex);
+    NPrivate::Read<CommittedOffsetMeta>(_readable, _version, CommittedOffset);
+    NPrivate::Read<CommittedLeaderEpochMeta>(_readable, _version, CommittedLeaderEpoch);
+    NPrivate::Read<MetadataMeta>(_readable, _version, Metadata);
+    NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<PartitionIndexMeta>(_collector, _writable, _version, PartitionIndex);
+    NPrivate::Write<CommittedOffsetMeta>(_collector, _writable, _version, CommittedOffset);
+    NPrivate::Write<CommittedLeaderEpochMeta>(_collector, _writable, _version, CommittedLeaderEpoch);
+    NPrivate::Write<MetadataMeta>(_collector, _writable, _version, Metadata);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<PartitionIndexMeta>(_collector, _version, PartitionIndex);
+    NPrivate::Size<CommittedOffsetMeta>(_collector, _version, CommittedOffset);
+    NPrivate::Size<CommittedLeaderEpochMeta>(_collector, _version, CommittedLeaderEpoch);
+    NPrivate::Size<MetadataMeta>(_collector, _version, Metadata);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TOffsetFetchResponseData::TOffsetFetchResponseGroup
+//
+const TOffsetFetchResponseData::TOffsetFetchResponseGroup::GroupIdMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseGroup::GroupIdMeta::Default = {""};
+const TOffsetFetchResponseData::TOffsetFetchResponseGroup::ErrorCodeMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseGroup::ErrorCodeMeta::Default = 0;
+
+TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseGroup() 
+        : GroupId(GroupIdMeta::Default)
+        , ErrorCode(ErrorCodeMeta::Default)
+{}
+
+void TOffsetFetchResponseData::TOffsetFetchResponseGroup::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TOffsetFetchResponseData::TOffsetFetchResponseGroup";
+    }
+    NPrivate::Read<GroupIdMeta>(_readable, _version, GroupId);
+    NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
+    NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TOffsetFetchResponseData::TOffsetFetchResponseGroup::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TOffsetFetchResponseData::TOffsetFetchResponseGroup";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<GroupIdMeta>(_collector, _writable, _version, GroupId);
+    NPrivate::Write<TopicsMeta>(_collector, _writable, _version, Topics);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TOffsetFetchResponseData::TOffsetFetchResponseGroup::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<GroupIdMeta>(_collector, _version, GroupId);
+    NPrivate::Size<TopicsMeta>(_collector, _version, Topics);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics
+//
+const TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::NameMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::NameMeta::Default = {""};
+
+TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponseTopics() 
+        : Name(NameMeta::Default)
+{}
+
+void TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics";
+    }
+    NPrivate::Read<NameMeta>(_readable, _version, Name);
+    NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
+    NPrivate::Write<PartitionsMeta>(_collector, _writable, _version, Partitions);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
+    NPrivate::Size<PartitionsMeta>(_collector, _version, Partitions);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions
+//
+const TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::PartitionIndexMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::PartitionIndexMeta::Default = 0;
+const TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::CommittedOffsetMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::CommittedOffsetMeta::Default = 0;
+const TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::CommittedLeaderEpochMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::CommittedLeaderEpochMeta::Default = -1;
+const TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::MetadataMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::MetadataMeta::Default = {""};
+const TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::ErrorCodeMeta::Type TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::ErrorCodeMeta::Default = 0;
+
+TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::TOffsetFetchResponsePartitions() 
+        : PartitionIndex(PartitionIndexMeta::Default)
+        , CommittedOffset(CommittedOffsetMeta::Default)
+        , CommittedLeaderEpoch(CommittedLeaderEpochMeta::Default)
+        , Metadata(MetadataMeta::Default)
+        , ErrorCode(ErrorCodeMeta::Default)
+{}
+
+void TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions";
+    }
+    NPrivate::Read<PartitionIndexMeta>(_readable, _version, PartitionIndex);
+    NPrivate::Read<CommittedOffsetMeta>(_readable, _version, CommittedOffset);
+    NPrivate::Read<CommittedLeaderEpochMeta>(_readable, _version, CommittedLeaderEpoch);
+    NPrivate::Read<MetadataMeta>(_readable, _version, Metadata);
+    NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<PartitionIndexMeta>(_collector, _writable, _version, PartitionIndex);
+    NPrivate::Write<CommittedOffsetMeta>(_collector, _writable, _version, CommittedOffset);
+    NPrivate::Write<CommittedLeaderEpochMeta>(_collector, _writable, _version, CommittedLeaderEpoch);
+    NPrivate::Write<MetadataMeta>(_collector, _writable, _version, Metadata);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<PartitionIndexMeta>(_collector, _version, PartitionIndex);
+    NPrivate::Size<CommittedOffsetMeta>(_collector, _version, CommittedOffset);
+    NPrivate::Size<CommittedLeaderEpochMeta>(_collector, _version, CommittedLeaderEpoch);
+    NPrivate::Size<MetadataMeta>(_collector, _version, Metadata);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);

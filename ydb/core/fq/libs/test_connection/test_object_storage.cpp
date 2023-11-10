@@ -156,13 +156,8 @@ private:
         const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, structedToken);
         const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
-        NYql::IHTTPGateway::THeaders headers;
-        if (authToken) {
-            headers.push_back(TString("X-YaCloud-SubjectToken:") += authToken);
-        }
-
         TString requestId = CreateGuidAsString();
-        headers.emplace_back(TString{"X-Request-ID:"} + requestId);
+        NYql::IHTTPGateway::THeaders headers = NYql::IHTTPGateway::MakeYcHeaders(requestId, authToken, {});
 
         const auto retryPolicy = NYql::IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(RetryS3SlowDown);
 

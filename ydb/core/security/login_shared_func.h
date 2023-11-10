@@ -4,6 +4,10 @@
 #include <util/generic/ptr.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
+namespace NKikimrProto {
+    class TAuthConfig;
+};
+
 namespace NKikimr {
 
 struct TAuthCredentials {

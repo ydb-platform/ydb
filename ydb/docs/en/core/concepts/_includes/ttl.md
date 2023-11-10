@@ -118,7 +118,7 @@ In the example below, the items of the `mytable` table will be deleted an hour a
 
 {% note tip %}
 
-When setting up TTL using YQL, an `Interval` is created from a string literal in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format.
+When setting up TTL using YQL, an `Interval` is created from a string literal in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format with [some restrictions](../../yql/reference/builtins/basic#data-type-literals).
 
 {% endnote %}
 

@@ -24,13 +24,13 @@ public:
         , EndRowId(groupId.IsMain() && part->Stat.Rows ? part->Stat.Rows : Max<TRowId>())
     { }
     
-    EReady Seek(TRowId rowId, bool restart = false) {
+    EReady Seek(TRowId rowId) {
         auto index = TryGetIndex();
         if (!index) {
             return EReady::Page;
         }
 
-        Iter = index->LookupRow(rowId, restart ? TIter() : Iter);
+        Iter = index->LookupRow(rowId, Iter);
         return DataOrGone();
     }
 
@@ -54,28 +54,6 @@ public:
         return DataOrGone();
     }
 
-    EReady Next() {
-        auto index = TryGetIndex();
-        if (!index) {
-            return EReady::Page;
-        }
-        Iter++;
-        return DataOrGone();
-    }
-
-    EReady Prev() {
-        auto index = TryGetIndex();
-        if (!index) {
-            return EReady::Page;
-        }
-        if (Iter.Off() == 0) {
-            Iter = { };
-            return EReady::Gone;
-        }
-        Iter--;
-        return DataOrGone();
-    }
-
     EReady SeekLast() {
         auto index = TryGetIndex();
         if (!index) {
@@ -89,7 +67,26 @@ public:
         return DataOrGone();
     }
 
+    EReady Next() {
+        Y_DEBUG_ABORT_UNLESS(Index);
+        Y_DEBUG_ABORT_UNLESS(Iter);
+        Iter++;
+        return DataOrGone();
+    }
+
+    EReady Prev() {
+        Y_DEBUG_ABORT_UNLESS(Index);
+        Y_DEBUG_ABORT_UNLESS(Iter);
+        if (Iter.Off() == 0) {
+            Iter = { };
+            return EReady::Gone;
+        }
+        Iter--;
+        return DataOrGone();
+    }
+
     bool IsValid() const {
+        Y_DEBUG_ABORT_UNLESS(Index);
         return bool(Iter);
     }
 
@@ -125,10 +122,11 @@ public:
 
     TRowId GetNextRowId() const {
         Y_ABORT_UNLESS(Index);
+        Y_ABORT_UNLESS(Iter);
         auto next = Iter + 1;
         return next
             ? next->GetRowId()
-            : Max<TRowId>();
+            : EndRowId;
     }
 
     const TRecord * GetRecord() const {

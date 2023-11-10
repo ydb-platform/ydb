@@ -49,7 +49,6 @@ namespace NKikimr::NTable::NPage {
         using TColumns = TArrayRef<const TPartScheme::TColumn>;
 
 #pragma pack(push,1)
-    public:
         struct THeader {
             TRecIdx KeysCount;
             TPgSize KeysSize;
@@ -191,6 +190,11 @@ namespace NKikimr::NTable::NPage {
             return Header->KeysCount;
         }
 
+        TRecIdx GetChildrenCount() const noexcept
+        {
+            return GetKeysCount() + 1;
+        }
+
         TCellsIter GetKeyCells(TRecIdx pos, TColumns columns) const noexcept
         {
             if (IsFixedFormat()) {
@@ -207,7 +211,55 @@ namespace NKikimr::NTable::NPage {
             return Children[pos];
         }
 
-        // TODO: Seek methods will go here
+        TRecIdx Seek(TRowId rowId, std::optional<TRecIdx> on = { }) const noexcept
+        {
+            const TRecIdx childrenCount = GetChildrenCount();
+            if (on >= childrenCount) {
+                Y_DEBUG_ABORT_UNLESS(false, "Should point to some child");
+                on = { };
+            }
+
+            const auto cmp = [](TRowId rowId, const TChild& child) {
+                return rowId < child.Count;
+            };
+
+            TRecIdx result;
+            if (!on) {
+                // Use a full binary search
+                result = std::upper_bound(Children, Children + childrenCount, rowId, cmp) - Children;
+            } else if (Children[*on].Count <= rowId) {
+                // Try a short linear search first
+                result = *on;
+                for (int linear = 0; linear < 4; ++linear) {
+                    result++;
+                    Y_ABORT_UNLESS(result < childrenCount, "Should always seek some child");
+                    if (Children[result].Count > rowId) {
+                        return result;
+                    }
+                }
+
+                // Binary search from the next record
+                result = std::upper_bound(Children + result + 1, Children + childrenCount, rowId, cmp) - Children;
+            } else { // Children[*on].Count > rowId
+                // Try a short linear search first
+                result = *on;
+                for (int linear = 0; linear < 4; ++linear) {
+                    if (result == 0) {
+                        return 0;
+                    }
+                    if (Children[result - 1].Count <= rowId) {
+                        return result;
+                    }
+                    result--;
+                }
+
+                // Binary search up to current record
+                result = std::upper_bound(Children, Children + result, rowId, cmp) - Children;
+            }
+
+            Y_ABORT_UNLESS(result < childrenCount, "Should always seek some child");
+            return result;
+        }
 
     private:
         TSharedData Raw;

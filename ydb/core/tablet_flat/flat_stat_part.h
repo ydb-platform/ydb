@@ -59,7 +59,9 @@ public:
 
     EReady Start() {
         auto ready = Pos.Seek(0);
-        FillKey();
+        if (ready != EReady::Page) {
+            FillKey();
+        }
 
         for (auto& g : AltGroups) {
             if (g.Pos.Seek(0) == EReady::Page) {

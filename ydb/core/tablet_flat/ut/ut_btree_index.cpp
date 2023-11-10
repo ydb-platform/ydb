@@ -1,5 +1,6 @@
 #include "flat_page_btree_index.h"
 #include "flat_page_btree_index_writer.h"
+#include "flat_part_btree_index_iter.h"
 #include "test/libs/table/test_writer.h"
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -9,6 +10,19 @@ namespace NKikimr::NTable::NPage {
 namespace {
     using namespace NTest;
     using TChild = TBtreeIndexNode::TChild;
+
+    struct TTouchEnv : public NTest::TTestEnv {
+        const TSharedData* TryGetPage(const TPart *part, TPageId id, TGroupId groupId) override
+        {
+            UNIT_ASSERT_C(part->GetPageType(id) == EPage::BTreeIndex || part->GetPageType(id) == EPage::Index, "Shouldn't request non-index pages");
+            if (!Touched[groupId].insert(id).second) {
+                return NTest::TTestEnv::TryGetPage(part, id, groupId);
+            }
+            return nullptr;
+        }
+
+        TMap<TGroupId, TSet<TPageId>> Touched;
+    };
 
     TLayoutCook MakeLayout() {
         TLayoutCook lay;
@@ -623,7 +637,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         TPartCook cook(lay, conf);
         
         for (ui32 i : xrange(5)) {
-            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + std::to_string(i)));
+            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
         }
 
         TPartEggs eggs = cook.Finish();
@@ -653,7 +667,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         TPartCook cook(lay, conf);
         
         for (ui32 i : xrange(10)) {
-            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + std::to_string(i)));
+            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
         }
 
         TPartEggs eggs = cook.Finish();
@@ -686,7 +700,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         
         for (ui32 i : xrange(700)) {
             // some index keys will be cut
-            cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + std::to_string(i % 9)));
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
         }
 
         TPartEggs eggs = cook.Finish();
@@ -816,6 +830,103 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
 
         TBtreeIndexMeta expectedHist1{{1325, 2000, 0, 45780}, 3, 17662};
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[1], expectedHist1, "Got " + part->IndexPages.BTreeHistoric[1].ToString());
+    }
+}
+
+Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
+    void AssertEqual(const TPartBtreeIndexIt& bTree, const TPartIndexIt& flat, const TString& message) {
+        UNIT_ASSERT_VALUES_EQUAL_C(bTree.IsValid(), flat.IsValid(), message);
+        if (flat.IsValid()) {
+            UNIT_ASSERT_VALUES_EQUAL_C(bTree.GetPageId(), flat.GetPageId(), message);
+            UNIT_ASSERT_VALUES_EQUAL_C(bTree.GetRowId(), flat.GetRowId(), message);
+            UNIT_ASSERT_VALUES_EQUAL_C(bTree.GetNextRowId(), flat.GetNextRowId(), message);
+        }
+    }
+
+    template<typename TIter>
+    EReady SeekRowId(TIter& iter, TRowId rowId) {
+        for (ui32 attempt : xrange(10)) {
+            Y_UNUSED(attempt);
+            if (auto ready = iter.Seek(rowId); ready != EReady::Page) {
+                return ready;
+            }
+        }
+        UNIT_ASSERT_C(false, "Too many attempts");
+        return EReady::Page;
+    }
+
+    template<typename TEnv>
+    void CheckSeekRowId(const TPartStore& part) {
+        for (TRowId rowId1 : xrange(part.Stat.Rows + 1)) {
+            for (TRowId rowId2 : xrange(part.Stat.Rows + 1)) {
+                TEnv env;
+                TPartBtreeIndexIt bTree(&part, &env, { });
+                TPartIndexIt flat(&part, &env, { });
+
+                // checking initial seek:
+                {
+                    TString message = TStringBuilder() << "SeekRowId<" << typeid(TEnv).name() << "> " << rowId1;
+                    UNIT_ASSERT_VALUES_EQUAL_C(SeekRowId(bTree, rowId1), SeekRowId(flat, rowId1), message);
+                    AssertEqual(bTree, flat, message);
+                }
+
+                // checking repositioning:
+                {
+                    TString message = TStringBuilder() << "SeekRowId<" << typeid(TEnv).name() << "> " << rowId1 << " -> " << rowId2;
+                    UNIT_ASSERT_VALUES_EQUAL_C(SeekRowId(bTree, rowId2), SeekRowId(flat, rowId2), message);
+                    AssertEqual(bTree, flat, message);
+                }
+            }
+        }
+    }
+
+    void CheckPart(TConf&& conf, ui32 rows, ui32 levels) {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::Uint32)
+            .Key({0, 1});
+
+        conf.WriteBTreeIndex = true;
+        TPartCook cook(lay, conf);
+        
+        for (ui32 i : xrange(rows)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 7, i % 7));
+        }
+
+        TPartEggs eggs = cook.Finish();
+
+        const auto part = *eggs.Lone();
+
+        Cerr << DumpPart(part, 1) << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelsCount, levels);
+
+        CheckSeekRowId<TTestEnv>(part);
+        CheckSeekRowId<TTouchEnv>(part);
+    }
+
+    Y_UNIT_TEST(NoNodes) {
+        NPage::TConf conf;
+
+        CheckPart(std::move(conf), 100, 0);
+    }
+
+    Y_UNIT_TEST(OneNode) {
+        NPage::TConf conf;
+        conf.Group(0).PageRows = 2;
+
+        CheckPart(std::move(conf), 100, 1);
+    }
+
+    Y_UNIT_TEST(FewNodes) {
+        NPage::TConf conf;
+        conf.Group(0).PageRows = 2;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+        conf.Group(0).BTreeIndexNodeKeysMax = 4;
+
+        CheckPart(std::move(conf), 300, 3);
     }
 }
 

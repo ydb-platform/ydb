@@ -27,7 +27,7 @@ namespace NKikimr {
             DbMainPageLogoBlobs = 14,
             DbMainPageBlocks = 15,
             DbMainPageBarriers = 16,
-            Defrag = 17
+            Defrag = 17,
         };
 
         static const char *SubRequestIDToStr(int val) {

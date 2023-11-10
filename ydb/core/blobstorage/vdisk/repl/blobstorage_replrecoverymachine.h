@@ -109,6 +109,13 @@ namespace NKikimr {
                 }
             };
 
+            enum class ERecoverStatus {
+                UNKNOWN,
+                RESTORED,
+                PHANTOM_CHECK,
+                RETRY,
+            };
+
         public:
             TRecoveryMachine(
                     std::shared_ptr<TReplCtx> replCtx,
@@ -121,7 +128,7 @@ namespace NKikimr {
                 , Arena(&TRopeArenaBackend::Allocate)
             {}
 
-            bool Recover(TPartSet& item, TRecoveredBlobsQueue& rbq, NMatrix::TVectorType& parts) {
+            ERecoverStatus Recover(TPartSet& item, TRecoveredBlobsQueue& rbq, NMatrix::TVectorType& parts, TIngress& ingress) {
                 const TLogoBlobID& id = item.Id;
                 Y_ABORT_UNLESS(!id.PartId());
                 Y_ABORT_UNLESS(!LastRecoveredId || *LastRecoveredId < id);
@@ -137,7 +144,7 @@ namespace NKikimr {
                 if (LostVec.empty() || LostVec.front().Id != id) {
                     STLOG(PRI_ERROR, BS_REPL, BSVR27, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "blob not in LostVec"),
                         (BlobId, id));
-                    return true;
+                    return ERecoverStatus::RESTORED;
                 }
 
                 const TLost& lost = LostVec.front();
@@ -146,6 +153,7 @@ namespace NKikimr {
                 const TBlobStorageGroupType groupType = ReplCtx->VCtx->Top->GType;
 
                 parts = lost.PartsToRecover;
+                ingress = lost.Ingress;
 
                 ui32 partsSize = 0;
                 bool hasExactParts = false;
@@ -161,18 +169,19 @@ namespace NKikimr {
                 Y_DEBUG_ABORT_UNLESS((item.PartsMask >> groupType.TotalPartCount()) == 0);
                 const ui32 presentParts = PopCount(item.PartsMask);
                 bool canRestore = presentParts >= groupType.MinimalRestorablePartCount();
-                bool nonPhantom = true;
+                ERecoverStatus status = ERecoverStatus::UNKNOWN;
 
                 // first of all, count present parts and recover only if there are enough of these parts
                 if (!canRestore && needToRestore && !hasExactParts) {
                     if (lost.PossiblePhantom) {
-                        nonPhantom = false;
+                        status = ERecoverStatus::PHANTOM_CHECK;
                     } else {
                         STLOG(PRI_INFO, BS_REPL, BSVR28, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "not enough data parts to recover"),
                             (BlobId, id), (NumPresentParts, presentParts), (MinParts, groupType.DataParts()),
                             (PartSet, item.ToString()), (Ingress, lost.Ingress.ToString(ReplCtx->VCtx->Top.get(),
                             ReplCtx->VCtx->ShortSelfVDisk, id)));
                         BlobDone(id, false, true, &TEvReplFinished::TInfo::ItemsNotRecovered);
+                        status = ERecoverStatus::RETRY;
                     }
                 } else {
                     // recover
@@ -230,21 +239,25 @@ namespace NKikimr {
                             if (lost.PossiblePhantom) {
                                 ++ReplCtx->MonGroup.ReplPhantomLikeRecovered();
                             }
+                            status = ERecoverStatus::RESTORED;
                         } else if (lost.PossiblePhantom) {
-                            nonPhantom = false; // run phantom check for this blob
+                            status = ERecoverStatus::PHANTOM_CHECK; // run phantom check for this blob
                         } else {
                             BlobDone(id, false, true, &TEvReplFinished::TInfo::ItemsPartiallyRecovered);
+                            status = ERecoverStatus::RETRY;
                         }
                     } catch (const std::exception& ex) {
                         ++ReplCtx->MonGroup.ReplRecoveryGroupTypeErrors();
                         STLOG(PRI_ERROR, BS_REPL, BSVR29, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "recovery exception"),
                             (BlobId, id), (Error, TString(ex.what())));
                         BlobDone(id, false, true, &TEvReplFinished::TInfo::ItemsException);
+                        status = ERecoverStatus::RETRY;
                     }
                 }
 
                 LostVec.pop_front();
-                return nonPhantom;
+                Y_ABORT_UNLESS(status != ERecoverStatus::UNKNOWN);
+                return status;
             }
 
             void ProcessPhantomBlob(const TLogoBlobID& id, NMatrix::TVectorType parts, bool isPhantom, bool looksLikePhantom) {

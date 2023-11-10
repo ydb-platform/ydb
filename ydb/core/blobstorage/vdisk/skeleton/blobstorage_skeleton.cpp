@@ -2437,6 +2437,18 @@ namespace NKikimr {
             RescheduleSnapshotExpirationCheck();
         }
 
+        void Handle(TEvReplInvoke::TPtr ev) {
+            if (Db->ReplID) {
+                TActivationContext::Send(ev->Forward(Db->ReplID));
+            } else {
+                HandleReplNotInProgress(ev);
+            }
+        }
+
+        void HandleReplNotInProgress(TEvReplInvoke::TPtr ev) {
+            ev->Get()->Callback({}, "replication is not in progress");
+        }
+
         // NOTES: we have 4 state functions, one of which is an error state (StateDatabaseError) and
         // others are good: StateLocalRecovery, StateSyncGuidRecovery, StateNormal
         // We switch between states in the following manner:
@@ -2489,6 +2501,7 @@ namespace NKikimr {
             HFunc(TEvProxyQueueState, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
+            hFunc(TEvReplInvoke, HandleReplNotInProgress)
         )
 
         STRICT_STFUNC(StateSyncGuidRecovery,
@@ -2541,6 +2554,7 @@ namespace NKikimr {
             HFunc(TEvProxyQueueState, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
+            hFunc(TEvReplInvoke, HandleReplNotInProgress)
         )
 
         STRICT_STFUNC(StateNormal,
@@ -2607,6 +2621,7 @@ namespace NKikimr {
             HFunc(TEvProxyQueueState, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
+            hFunc(TEvReplInvoke, Handle)
         )
 
         STRICT_STFUNC(StateDatabaseError,
@@ -2633,6 +2648,7 @@ namespace NKikimr {
             hFunc(TEvVPatchDyingRequest, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
+            hFunc(TEvReplInvoke, HandleReplNotInProgress)
         )
 
         PDISK_TERMINATE_STATE_FUNC_DEF;

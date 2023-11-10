@@ -150,7 +150,8 @@ namespace NKikimr {
                 }
                 NRepl::TRecoveryMachine::TRecoveredBlobsQueue rbq;
                 NMatrix::TVectorType parts;
-                const bool success = m.Recover(p, rbq, parts);
+                TIngress ingress;
+                const bool success = m.Recover(p, rbq, parts, ingress) == NRepl::TRecoveryMachine::ERecoverStatus::RESTORED;
                 Y_ABORT_UNLESS(success);
 
                 ui8 partIndex;

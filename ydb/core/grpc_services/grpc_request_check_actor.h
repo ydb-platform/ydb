@@ -104,7 +104,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        TBase::Become(&TSelf::DbAccessStateFunc);
+        TBase::UnsafeBecome(&TSelf::DbAccessStateFunc);
 
         if (AppData()->FeatureFlags.GetEnableDbCounters()) {
             Counters_ = WrapGRpcProxyDbCounters(Counters_);

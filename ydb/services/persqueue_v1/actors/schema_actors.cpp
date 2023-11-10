@@ -1406,7 +1406,7 @@ TPartitionsLocationActor::TPartitionsLocationActor(const TGetPartitionsLocationR
 void TPartitionsLocationActor::Bootstrap(const NActors::TActorContext&)
 {
     SendDescribeProposeRequest();
-    Become(&TPartitionsLocationActor::StateWork);
+    UnsafeBecome(&TPartitionsLocationActor::StateWork);
     SendNodesRequest();
 
 }

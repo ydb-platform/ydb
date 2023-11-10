@@ -121,7 +121,7 @@ public:
         request->Record.SetUserToken(BrowseContext.UserToken);
         ctx.Send(TxProxy, request.Release());
         ++Requests;
-        Become(&TThis::StateWork);
+        UnsafeBecome(&TThis::StateWork);
     }
 
     virtual void ReplyAndDie(const TActorContext &ctx) override {

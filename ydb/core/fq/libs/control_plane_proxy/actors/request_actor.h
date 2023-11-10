@@ -205,7 +205,7 @@ public:
     }
 
     void OnBootstrap() override {
-        Become(&TCreateQueryRequestActor::StateFunc);
+        this->UnsafeBecome(&TCreateQueryRequestActor::StateFunc);
         if (RequestProxy->Get()->Quotas) {
             SendCreateRateLimiterResourceRequest();
         } else {

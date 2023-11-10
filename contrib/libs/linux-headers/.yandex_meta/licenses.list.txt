@@ -2025,6 +2025,10 @@
 
 
 ====================COPYRIGHT====================
+ * Copyright (C) 2023 BayLibre Incorporated - https://www.baylibre.com/
+
+
+====================COPYRIGHT====================
  * Copyright (C) Matt Helsley, IBM Corp. 2005
  * Based on cn_fork.h by Nguyen Anh Quynh and Guillaume Thouvenin
  * Copyright (C) 2005 Nguyen Anh Quynh <aquynh@gmail.com>
@@ -2566,7 +2570,7 @@
  * Copyright 2008 Jouni Malinen <jouni.malinen@atheros.com>
  * Copyright 2008 Colin McCabe <colin@cozybit.com>
  * Copyright 2015-2017	Intel Deutschland GmbH
- * Copyright (C) 2018-2022 Intel Corporation
+ * Copyright (C) 2018-2023 Intel Corporation
 
 
 ====================COPYRIGHT====================

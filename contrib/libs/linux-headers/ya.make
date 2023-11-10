@@ -28,9 +28,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(6.4.5)
+VERSION(6.5.9)
 
-ORIGINAL_SOURCE(mirror://kernel/linux/kernel/v6.x/linux-6.4.5.tar.xz)
+ORIGINAL_SOURCE(mirror://kernel/linux/kernel/v6.x/linux-6.5.9.tar.xz)
 
 DISABLE(NEED_PLATFORM_PEERDIRS)
 

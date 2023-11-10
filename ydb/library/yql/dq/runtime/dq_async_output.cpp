@@ -135,6 +135,11 @@ public:
         return usedBytes;
     }
 
+    virtual ui64 Pop(TDqSerializedBatch&, ui64) override {
+        YQL_ENSURE(!"Unimplemented");
+        return 0;
+    }
+
     bool Pop(NDqProto::TWatermark& watermark) override {
         if (!Values.empty() && std::holds_alternative<NDqProto::TWatermark>(Values.front().Value)) {
             watermark = std::move(std::get<NDqProto::TWatermark>(Values.front().Value));

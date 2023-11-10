@@ -670,7 +670,7 @@ private:
     TDqInputStats PopStats;
 };
 
-class TDqSource: public IStringSource {
+class TDqSource: public IDqAsyncInputBuffer {
 public:
     TDqSource(ui64 taskId, ui64 inputIndex, TType* inputType, IPipeTaskRunner* taskRunner)
         : TaskId(taskId)
@@ -721,7 +721,7 @@ public:
         ythrow yexception() << "unimplemented";
     }
 
-    void PushString(NDq::TDqSerializedBatch&& serialized, i64 space) override {
+    void Push(NDq::TDqSerializedBatch&& serialized, i64 space) override {
         YQL_ENSURE(!serialized.IsOOB());
         NDqProto::TSourcePushRequest data;
         *data.MutableData() = std::move(serialized.Proto);
@@ -740,7 +740,7 @@ public:
         auto inputType = GetInputType();
         TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
         TDqSerializedBatch serialized = dataSerializer.Serialize(batch, inputType);
-        PushString(std::move(serialized), space);
+        Push(std::move(serialized), space);
     }
 
     [[nodiscard]]
@@ -1027,7 +1027,7 @@ private:
     TDqOutputChannelStats PopStats;
 };
 
-class TDqSink : public IStringSink {
+class TDqSink : public IDqAsyncOutputBuffer {
 public:
     TDqSink(ui64 taskId, ui64 outputIndex, TType* type, IPipeTaskRunner* taskRunner)
         : TaskId(taskId)
@@ -1051,7 +1051,7 @@ public:
         return PopStats;
     }
 
-    ui64 PopString(NDq::TDqSerializedBatch& batch, ui64 bytes) override {
+    ui64 Pop(NDq::TDqSerializedBatch& batch, ui64 bytes) override {
         try {
             NDqProto::TCommandHeader header;
             header.SetVersion(5);

@@ -267,7 +267,7 @@ private:
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto source = taskRunner->GetSource(index);
-                (static_cast<NTaskRunnerProxy::IStringSource*>(source.Get()))->PushString(std::move(serialized), space);
+                source->Push(std::move(serialized), space);
                 if (finish) {
                     source->Finish();
                 }
@@ -397,7 +397,7 @@ private:
                 i64 size = 0;
                 i64 checkpointSize = 0;
                 if (ev->Get()->Size > 0) {
-                    size = (static_cast<NTaskRunnerProxy::IStringSink*>(sink.Get()))->PopString(batch, ev->Get()->Size);
+                    size = sink->Pop(batch, ev->Get()->Size);
                 }
                 bool hasCheckpoint = sink->Pop(checkpoint);
                 if (hasCheckpoint) {

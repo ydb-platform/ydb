@@ -12,18 +12,6 @@ extern const TString WorkingDirectoryParamName;
 extern const TString WorkingDirectoryDontInitParamName; // COMPAT(aozeritsky)
 extern const TString UseMetaParamName; // COMPAT(aozeritsky)
 
-class IStringSource: public NDq::IDqAsyncInputBuffer {
-public:
-    virtual ~IStringSource() = default;
-    virtual void PushString(NDq::TDqSerializedBatch&& batch, i64 space) = 0;
-};
-
-class IStringSink: public NDq::IDqAsyncOutputBuffer {
-public:
-    virtual ~IStringSink() = default;
-    virtual ui64 PopString(NDq::TDqSerializedBatch& batch, ui64 bytes) = 0;
-};
-
 class IInputChannel : public TThrRefBase, private TNonCopyable {
 public:
     using TPtr = TIntrusivePtr<IInputChannel>;

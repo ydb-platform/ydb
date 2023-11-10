@@ -372,7 +372,7 @@ public:
     TImpl()
         : EventQueue_(New<TMpscInvokerQueue>(
             EventCount_,
-            NConcurrency::GetThreadTags("Profiling")))
+            NConcurrency::GetThreadTags("Logging")))
         , LoggingThread_(New<TThread>(this))
         , SystemWriters_({
             CreateStderrLogWriter(

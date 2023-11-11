@@ -321,20 +321,21 @@ struct TErrorAdaptor
 {
     template <class TArg>
         requires std::constructible_from<TError, TArg>
-    TError operator << (TArg&& rightOperand) const;
+    TError operator << (TArg&& rhs) const;
 
     template <class TArg>
-        requires std::constructible_from<TError, TArg> &&
-                 std::derived_from<std::remove_cvref_t<TArg>, TError>
-    TArg&& operator << (TArg&& rightOperand) const;
+        requires
+            std::constructible_from<TError, TArg> &&
+            std::derived_from<std::remove_cvref_t<TArg>, TError>
+    TArg&& operator << (TArg&& rhs) const;
 };
 
 // Make these to correctly forward TError to Wrap call.
-template <class TLikeError, class... TArgs>
+template <class TErrorLike, class... TArgs>
     requires
-        std::is_base_of_v<TError, std::remove_cvref_t<TLikeError>> &&
+        std::is_base_of_v<TError, std::remove_cvref_t<TErrorLike>> &&
         std::constructible_from<TError, TArgs...>
-void ThrowErrorExceptionIfFailed(TLikeError&& error, TArgs&&... args);
+void ThrowErrorExceptionIfFailed(TErrorLike&& error, TArgs&&... args);
 
 } // namespace NDetail
 

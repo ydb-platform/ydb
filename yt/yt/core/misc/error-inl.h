@@ -84,15 +84,15 @@ TError TError::Wrap(TArgs&&... args) &&
 }
 
 template <CErrorNestable TValue>
-TError&& TError::operator << (TValue&& operand) &&
+TError&& TError::operator << (TValue&& rhs) &&
 {
-    return std::move(*this <<= std::forward<TValue>(operand));
+    return std::move(*this <<= std::forward<TValue>(rhs));
 }
 
 template <CErrorNestable TValue>
-TError TError::operator << (TValue&& operand) const &
+TError TError::operator << (TValue&& rhs) const &
 {
-    return TError(*this) << std::forward<TValue>(operand);
+    return TError(*this) << std::forward<TValue>(rhs);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -304,17 +304,18 @@ namespace NDetail {
 
 template <class TArg>
     requires std::constructible_from<TError, TArg>
-TError TErrorAdaptor::operator << (TArg&& rightOperand) const
+TError TErrorAdaptor::operator << (TArg&& rhs) const
 {
-    return TError(std::forward<TArg>(rightOperand));
+    return TError(std::forward<TArg>(rhs));
 }
 
 template <class TArg>
-    requires std::constructible_from<TError, TArg> &&
-                std::derived_from<std::remove_cvref_t<TArg>, TError>
-TArg&& TErrorAdaptor::operator << (TArg&& rightOperand) const
+    requires
+        std::constructible_from<TError, TArg> &&
+        std::derived_from<std::remove_cvref_t<TArg>, TError>
+TArg&& TErrorAdaptor::operator << (TArg&& rhs) const
 {
-    return std::forward<TArg>(rightOperand);
+    return std::forward<TArg>(rhs);
 }
 
 template <class TLikeError, class... TArgs>

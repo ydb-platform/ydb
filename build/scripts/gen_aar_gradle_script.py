@@ -108,6 +108,11 @@ android {{
     compileSdkVersion compileVersion
     buildToolsVersion buildVersion
 
+    compileOptions {{
+        sourceCompatibility 1.8
+        targetCompatibility 1.8
+    }}
+
     defaultConfig {{
         minSdkVersion minVersion
         targetSdkVersion targetVersion

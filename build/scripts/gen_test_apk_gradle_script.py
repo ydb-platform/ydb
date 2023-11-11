@@ -65,6 +65,10 @@ android {{
     compileSdkVersion 30
     buildToolsVersion "30.0.3"
 
+    compileOptions {{
+        sourceCompatibility 1.8
+        targetCompatibility 1.8
+    }}
 
     defaultConfig {{
         minSdkVersion 21

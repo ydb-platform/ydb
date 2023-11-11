@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -99,7 +99,7 @@ int SetHTTPrequest(struct OperationConfig *config, HttpReq req, HttpReq *store)
     return 0;
   }
   warnf(config->global, "You can only select one HTTP request method! "
-        "You asked for both %s and %s.\n",
+        "You asked for both %s and %s.",
         reqname[req], reqname[*store]);
 
   return 1;
@@ -122,11 +122,11 @@ void customrequest_helper(struct OperationConfig *config, HttpReq req,
     ;
   else if(curl_strequal(method, dflt[req])) {
     notef(config->global, "Unnecessary use of -X or --request, %s is already "
-          "inferred.\n", dflt[req]);
+          "inferred.", dflt[req]);
   }
   else if(curl_strequal(method, "head")) {
     warnf(config->global,
           "Setting custom HTTP method to HEAD with -X/--request may not work "
-          "the way you want. Consider using -I/--head instead.\n");
+          "the way you want. Consider using -I/--head instead.");
   }
 }

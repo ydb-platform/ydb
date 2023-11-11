@@ -16,7 +16,7 @@ namespace NYT::NClient::NCache {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NCompression::ECodec GetResponseCodecFromProto(const ECompressionCodec& protoCodec)
+NCompression::ECodec GetResponseCodecFromProto(ECompressionCodec protoCodec)
 {
     switch (protoCodec) {
         case ECompressionCodec::None:
@@ -24,7 +24,7 @@ NCompression::ECodec GetResponseCodecFromProto(const ECompressionCodec& protoCod
         case ECompressionCodec::Lz4:
             return NCompression::ECodec::Lz4;
     }
-    Y_UNREACHABLE();
+    YT_ABORT();
 }
 
 NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
@@ -36,18 +36,18 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
     if (!config.GetProxyRole().empty()) {
         connectionConfig->ProxyRole = config.GetProxyRole();
     }
-    if (0 != config.GetChannelPoolSize()) {
+    if (config.GetChannelPoolSize() != 0) {
         connectionConfig->DynamicChannelPool->MaxPeerCount = config.GetChannelPoolSize();
     }
-    if (0 != config.GetChannelPoolRebalanceIntervalSeconds()) {
+    if (config.GetChannelPoolRebalanceIntervalSeconds() != 0) {
         connectionConfig->DynamicChannelPool->RandomPeerEvictionPeriod = TDuration::Seconds(config.GetChannelPoolRebalanceIntervalSeconds());
     }
-    if (0 != config.GetModifyRowsBatchCapacity()) {
+    if (config.GetModifyRowsBatchCapacity() != 0) {
         connectionConfig->ModifyRowsBatchCapacity = config.GetModifyRowsBatchCapacity();
     }
 
 #define SET_TIMEOUT_OPTION(name) \
-    if (0 != config.Get##name()) connectionConfig->name = TDuration::MilliSeconds(config.Get ## name())
+    if (config.Get##name() != 0) connectionConfig->name = TDuration::MilliSeconds(config.Get ## name())
 
     SET_TIMEOUT_OPTION(DefaultTransactionTimeout);
     SET_TIMEOUT_OPTION(DefaultSelectRowsTimeout);

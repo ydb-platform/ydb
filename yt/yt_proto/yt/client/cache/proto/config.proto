@@ -4,10 +4,11 @@ import "yt_proto/yt/core/yson/proto/protobuf_interop.proto";
 
 option (NYT.NYson.NProto.derive_underscore_case_names) = true;
 
-enum ECompressionCodec {
+enum ECompressionCodec
+{
     None = 0;
     Lz4 = 1;
-};
+}
 
 // Connection options.
 message TConfig
@@ -32,7 +33,7 @@ message TConfig
     optional uint32 RetryBackoffTime = 14;
     optional uint32 RetryAttempts = 15;
     optional uint32 RetryTimeout = 16;
-};
+}
 
 message TClustersConfig
 {
@@ -45,4 +46,4 @@ message TClustersConfig
     map<string, TConfig> ClusterConfigs = 2 [
         (NYT.NYson.NProto.yson_map) = true
     ];
-};
+}

@@ -3,6 +3,7 @@ RECURSE(
     fq_runner
     idx_test
     kqprun
+    pq_read
     s3_recipe
     ydb_serializable
     ydb_serializable/replay

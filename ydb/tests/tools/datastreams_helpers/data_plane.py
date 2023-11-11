@@ -49,7 +49,7 @@ def read_stream(path, messages_count, commit_after_processing=True, consumer_nam
     )
     result_file = yatest.common.output_path(result_file_name)
     cmd = [
-        yatest.common.binary_path("kikimr/yq/tools/pq_read/pq_read"),
+        yatest.common.binary_path("ydb/tests/tools/pq_read/pq_read"),
         "--endpoint", os.getenv("YDB_ENDPOINT"),
         "--database", os.getenv("YDB_DATABASE"),
         "--topic-path", path,

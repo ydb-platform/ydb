@@ -6,6 +6,21 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(idx_test)
-add_subdirectory(kqprun)
-add_subdirectory(pq_read)
+
+add_executable(pq_read)
+target_link_libraries(pq_read PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  library-cpp-colorizer
+  library-cpp-getopt
+  cpp-threading-future
+  cpp-client-ydb_persqueue_public
+)
+target_sources(pq_read PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/tests/tools/pq_read/main.cpp
+)
+target_allocator(pq_read
+  system_allocator
+)
+vcs_info(pq_read)

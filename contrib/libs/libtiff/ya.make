@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(4.5.1)
+VERSION(4.6.0)
 
-ORIGINAL_SOURCE(https://gitlab.com/api/v4/projects/libtiff%2Flibtiff/repository/archive.tar.gz?sha=v4.5.1)
+ORIGINAL_SOURCE(https://gitlab.com/api/v4/projects/libtiff%2Flibtiff/repository/archive.tar.gz?sha=v4.6.0)
 
 PEERDIR(
     contrib/libs/libjpeg-turbo

@@ -5,6 +5,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 	"github.com/ydb-platform/ydb/library/go/core/metrics"
 	"github.com/ydb-platform/ydb/library/go/core/metrics/internal/pkg/metricsutil"
 	"github.com/ydb-platform/ydb/library/go/core/metrics/internal/pkg/registryutil"
@@ -12,6 +13,7 @@ import (
 )
 
 var _ metrics.Registry = (*Registry)(nil)
+var _ metrics.MetricsStreamer = (*Registry)(nil)
 
 type Registry struct {
 	rg *prometheus.Registry
@@ -22,6 +24,7 @@ type Registry struct {
 	tags          map[string]string
 	prefix        string
 	nameSanitizer func(string) string
+	streamFormat  expfmt.Format
 }
 
 // NewRegistry creates new Prometheus backed registry.
@@ -31,11 +34,13 @@ func NewRegistry(opts *RegistryOpts) *Registry {
 		m:             new(sync.Mutex),
 		subregistries: make(map[string]*Registry),
 		tags:          make(map[string]string),
+		streamFormat:  StreamCompact,
 	}
 
 	if opts != nil {
 		r.prefix = opts.Prefix
 		r.tags = opts.Tags
+		r.streamFormat = opts.StreamFormat
 		if opts.rg != nil {
 			r.rg = opts.rg
 		}

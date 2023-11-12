@@ -1,1 +1,3 @@
-RECURSE(pkg)
+RECURSE(
+    pkg
+)

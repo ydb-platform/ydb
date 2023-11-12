@@ -9,20 +9,22 @@ import (
 )
 
 type RegistryOpts struct {
-	Separator  rune
-	Prefix     string
-	Tags       map[string]string
-	Rated      bool
-	UseNameTag bool
-	Collectors []func(metrics.Registry)
+	Separator    rune
+	Prefix       string
+	Tags         map[string]string
+	Rated        bool
+	UseNameTag   bool
+	Collectors   []func(metrics.Registry)
+	StreamFormat StreamFormat
 }
 
 // NewRegistryOpts returns new initialized instance of RegistryOpts
 func NewRegistryOpts() *RegistryOpts {
 	return &RegistryOpts{
-		Separator:  '.',
-		Tags:       make(map[string]string),
-		UseNameTag: false,
+		Separator:    '.',
+		Tags:         make(map[string]string),
+		UseNameTag:   false,
+		StreamFormat: StreamSpack,
 	}
 }
 
@@ -83,5 +85,11 @@ func (o *RegistryOpts) AddCollectors(
 			collector(ctx, r, c)
 		}
 	})
+	return o
+}
+
+// SetStreamFormat sets default sensors stream format
+func (o *RegistryOpts) SetStreamFormat(format StreamFormat) *RegistryOpts {
+	o.StreamFormat = format
 	return o
 }

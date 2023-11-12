@@ -23,6 +23,7 @@ func TestNewRegistry(t *testing.T) {
 		subregistries: make(map[string]*Registry),
 		tags:          map[string]string{},
 		prefix:        "",
+		streamFormat:  StreamCompact,
 	}
 
 	r := NewRegistry(nil)

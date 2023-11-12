@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/expfmt"
 	"github.com/ydb-platform/ydb/library/go/core/metrics"
 	"github.com/ydb-platform/ydb/library/go/core/metrics/collect"
 	"github.com/ydb-platform/ydb/library/go/core/metrics/internal/pkg/registryutil"
@@ -15,12 +16,14 @@ type RegistryOpts struct {
 	rg            *prometheus.Registry
 	Collectors    []func(metrics.Registry)
 	NameSanitizer func(string) string
+	StreamFormat  expfmt.Format
 }
 
 // NewRegistryOpts returns new initialized instance of RegistryOpts.
 func NewRegistryOpts() *RegistryOpts {
 	return &RegistryOpts{
-		Tags: make(map[string]string),
+		Tags:         make(map[string]string),
+		StreamFormat: StreamCompact,
 	}
 }
 
@@ -80,5 +83,11 @@ func (o *RegistryOpts) AddCollectors(
 // It allows to alter names, for example to replace invalid characters
 func (o *RegistryOpts) SetNameSanitizer(v func(string) string) *RegistryOpts {
 	o.NameSanitizer = v
+	return o
+}
+
+// SetStreamFormat sets default metrics stream format
+func (o *RegistryOpts) SetStreamFormat(format expfmt.Format) *RegistryOpts {
+	o.StreamFormat = format
 	return o
 }

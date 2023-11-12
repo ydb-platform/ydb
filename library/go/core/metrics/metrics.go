@@ -3,6 +3,7 @@ package metrics
 
 import (
 	"context"
+	"io"
 	"time"
 )
 
@@ -153,6 +154,11 @@ type Registry interface {
 
 	DurationHistogram(name string, buckets DurationBuckets) Timer
 	DurationHistogramVec(name string, buckets DurationBuckets, labels []string) TimerVec
+}
+
+// MetricsStreamer represents a registry that can stream collected metrics data to some destination
+type MetricsStreamer interface {
+	Stream(context.Context, io.Writer) (int, error)
 }
 
 // CollectPolicy defines how registered gauge metrics are updated via collect func.

@@ -11,13 +11,15 @@ import (
 )
 
 var _ metrics.Registry = (*Registry)(nil)
+var _ metrics.MetricsStreamer = (*Registry)(nil)
 
 type Registry struct {
-	separator  string
-	prefix     string
-	tags       map[string]string
-	rated      bool
-	useNameTag bool
+	separator    string
+	prefix       string
+	tags         map[string]string
+	rated        bool
+	useNameTag   bool
+	streamFormat StreamFormat
 
 	subregistries map[string]*Registry
 	m             *sync.Mutex
@@ -27,8 +29,9 @@ type Registry struct {
 
 func NewRegistry(opts *RegistryOpts) *Registry {
 	r := &Registry{
-		separator:  ".",
-		useNameTag: false,
+		separator:    ".",
+		useNameTag:   false,
+		streamFormat: StreamSpack,
 
 		subregistries: make(map[string]*Registry),
 		m:             new(sync.Mutex),
@@ -42,6 +45,7 @@ func NewRegistry(opts *RegistryOpts) *Registry {
 		r.tags = opts.Tags
 		r.rated = opts.Rated
 		r.useNameTag = opts.UseNameTag
+		r.streamFormat = opts.StreamFormat
 		for _, collector := range opts.Collectors {
 			collector(r)
 		}

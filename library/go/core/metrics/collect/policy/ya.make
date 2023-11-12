@@ -1,1 +1,3 @@
-RECURSE(inflight)
+RECURSE(
+    inflight
+)

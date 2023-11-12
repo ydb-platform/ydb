@@ -12,6 +12,18 @@ const HeaderSize = 24
 
 type StreamFormat string
 
+const (
+	StreamSpack StreamFormat = "spack"
+	StreamJSON  StreamFormat = "json"
+)
+
+func (r *Registry) Stream(ctx context.Context, w io.Writer) (written int, err error) {
+	if r.streamFormat == StreamJSON {
+		return r.StreamJSON(ctx, w)
+	}
+	return r.StreamSpack(ctx, w, CompressionLz4)
+}
+
 func (r *Registry) StreamJSON(ctx context.Context, w io.Writer) (written int, err error) {
 	cw := newCompressedWriter(w, CompressionNone)
 

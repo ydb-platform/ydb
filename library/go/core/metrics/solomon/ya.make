@@ -7,8 +7,8 @@ SRCS(
     func_gauge.go
     func_int_gauge.go
     gauge.go
-    int_gauge.go
     histogram.go
+    int_gauge.go
     metrics.go
     metrics_opts.go
     registry.go
@@ -27,18 +27,20 @@ GO_TEST_SRCS(
     func_gauge_test.go
     func_int_gauge_test.go
     gauge_test.go
-    int_gauge_test.go
     histogram_test.go
+    int_gauge_test.go
     metrics_test.go
+    race_test.go
     registry_test.go
     spack_compression_test.go
     spack_test.go
     stream_test.go
     timer_test.go
     vec_test.go
-    race_test.go
 )
 
 END()
 
-RECURSE(gotest)
+RECURSE(
+    gotest
+)

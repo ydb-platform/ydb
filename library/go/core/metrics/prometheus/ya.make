@@ -3,10 +3,11 @@ GO_LIBRARY()
 SRCS(
     counter.go
     gauge.go
-    int_gauge.go
     histogram.go
+    int_gauge.go
     registry.go
     registry_opts.go
+    stream.go
     timer.go
     vec.go
 )
@@ -22,4 +23,6 @@ GO_TEST_SRCS(
 
 END()
 
-RECURSE(gotest)
+RECURSE(
+    gotest
+)

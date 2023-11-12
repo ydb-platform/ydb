@@ -1,5 +1,7 @@
 GO_LIBRARY()
 
-SRCS(buckets.go)
+SRCS(
+    buckets.go
+)
 
 END()

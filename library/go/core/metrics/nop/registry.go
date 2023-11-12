@@ -1,8 +1,14 @@
 package nop
 
-import "github.com/ydb-platform/ydb/library/go/core/metrics"
+import (
+	"context"
+	"io"
+
+	"github.com/ydb-platform/ydb/library/go/core/metrics"
+)
 
 var _ metrics.Registry = (*Registry)(nil)
+var _ metrics.MetricsStreamer = (*Registry)(nil)
 
 type Registry struct{}
 
@@ -76,4 +82,8 @@ func (r Registry) HistogramVec(_ string, _ metrics.Buckets, _ []string) metrics.
 
 func (r Registry) DurationHistogramVec(_ string, _ metrics.DurationBuckets, _ []string) metrics.TimerVec {
 	return DurationHistogramVec{}
+}
+
+func (r Registry) Stream(_ context.Context, _ io.Writer) (int, error) {
+	return 0, nil
 }

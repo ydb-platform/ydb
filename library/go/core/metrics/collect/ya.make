@@ -7,4 +7,6 @@ SRCS(
 
 END()
 
-RECURSE(policy)
+RECURSE(
+    policy
+)

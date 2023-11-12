@@ -24,7 +24,11 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 
-#include <yt/cpp/mapreduce/interface/config.h>
+#include <yt/yt/core/ytree/convert.h>
+
+#include <yt/yt/library/program/config.h>
+#include <yt/yt/library/program/helpers.h>
+
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
@@ -115,6 +119,9 @@ public:
     TYqlPlugin(TYqlPluginOptions& options)
     {
         try {
+            auto singletonsConfig = NYTree::ConvertTo<TSingletonsConfigPtr>(options.SingletonsConfig);
+            ConfigureSingletons(singletonsConfig);
+
             NYql::NLog::InitLogger(std::move(options.LogBackend));
 
             auto& logger = NYql::NLog::YqlLogger();

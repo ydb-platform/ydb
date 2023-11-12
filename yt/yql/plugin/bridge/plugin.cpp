@@ -72,7 +72,12 @@ public:
             ? options.DefaultCluster->data()
             : nullptr;
 
+        TString singletonsConfig = options.SingletonsConfig ? options.SingletonsConfig.ToString() : "{}";
+
         TBridgeYqlPluginOptions bridgeOptions {
+            .RequiredABIVersion = options.RequiredABIVersion,
+            .SingletonsConfig = singletonsConfig.data(),
+            .SingletonsConfigLength = static_cast<int>(singletonsConfig.size()),
             .MRJobBinary = options.MRJobBinary.data(),
             .UdfDirectory = options.UdfDirectory.data(),
             .ClusterCount = ssize(bridgeClusters),

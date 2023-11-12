@@ -4,6 +4,7 @@ BridgeFreeYqlPlugin
 BridgeFreeQueryResult
 BridgeRun
 BridgeGetProgress
+BridgeGetABIVersion
 
 # YQL <-> YQL UDFs interface.
 UdfAllocateWithSize

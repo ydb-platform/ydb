@@ -10,8 +10,17 @@ extern "C" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+ssize_t BridgeGetABIVersion()
+{
+    return 0;
+}
+
 TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOptions)
 {
+    YT_VERIFY(bridgeOptions->RequiredABIVersion == BridgeGetABIVersion());
+
+    static const TYsonString EmptyMap = TYsonString(TString("{}"));
+
     THashMap<TString, TString> clusters;
     for (auto clusterIndex = 0; clusterIndex < bridgeOptions->ClusterCount; ++clusterIndex) {
         const auto& Cluster = bridgeOptions->Clusters[clusterIndex];
@@ -20,9 +29,14 @@ TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOpt
 
     auto operationAttributes = bridgeOptions->OperationAttributes
         ? TYsonString(TString(bridgeOptions->OperationAttributes, bridgeOptions->OperationAttributesLength))
-        : TYsonString();
+        : EmptyMap;
+
+    auto singletonsConfig = bridgeOptions->SingletonsConfig
+        ? TYsonString(TString(bridgeOptions->SingletonsConfig, bridgeOptions->SingletonsConfigLength))
+        : EmptyMap;
 
     TYqlPluginOptions options{
+        .SingletonsConfig = singletonsConfig,
         .MRJobBinary = TString(bridgeOptions->MRJobBinary),
         .UdfDirectory = TString(bridgeOptions->UdfDirectory),
         .Clusters = std::move(clusters),

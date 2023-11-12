@@ -26,6 +26,10 @@ using TQueryId = TGuid;
 class TYqlPluginOptions
 {
 public:
+    int RequiredABIVersion;
+
+    TYsonString SingletonsConfig;
+
     TString MRJobBinary = "./mrjob";
     TString UdfDirectory;
 

@@ -61,8 +61,10 @@ public:
 
     const TSharedRefArray& GetResponseMessage() const override;
 
-    void SubscribeCanceled(const TClosure& callback) override;
-    void UnsubscribeCanceled(const TClosure& callback) override;
+    using TCanceledCallback = TCallback<void(const TError&)>;
+
+    void SubscribeCanceled(const TCanceledCallback& callback) override;
+    void UnsubscribeCanceled(const TCanceledCallback& callback) override;
 
     void SubscribeReplied(const TClosure& callback) override;
     void UnsubscribeReplied(const TClosure& callback) override;
@@ -200,8 +202,10 @@ public:
     TFuture<TSharedRefArray> GetAsyncResponseMessage() const override;
     const TSharedRefArray& GetResponseMessage() const override;
 
-    void SubscribeCanceled(const TClosure& callback) override;
-    void UnsubscribeCanceled(const TClosure& callback) override;
+    using TCanceledCallback = TCallback<void(const TError&)>;
+
+    void SubscribeCanceled(const TCanceledCallback& callback) override;
+    void UnsubscribeCanceled(const TCanceledCallback& callback) override;
 
     void SubscribeReplied(const TClosure& callback) override;
     void UnsubscribeReplied(const TClosure& callback) override;

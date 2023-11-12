@@ -207,10 +207,10 @@ bool TServiceContextBase::IsReplied() const
     return Replied_.load();
 }
 
-void TServiceContextBase::SubscribeCanceled(const TClosure& /*callback*/)
+void TServiceContextBase::SubscribeCanceled(const TCanceledCallback& /*callback*/)
 { }
 
-void TServiceContextBase::UnsubscribeCanceled(const TClosure& /*callback*/)
+void TServiceContextBase::UnsubscribeCanceled(const TCanceledCallback& /*callback*/)
 { }
 
 void TServiceContextBase::SubscribeReplied(const TClosure& /*callback*/)
@@ -593,12 +593,12 @@ void TServiceContextWrapper::SetComplete()
     UnderlyingContext_->SetComplete();
 }
 
-void TServiceContextWrapper::SubscribeCanceled(const TClosure& callback)
+void TServiceContextWrapper::SubscribeCanceled(const TCanceledCallback& callback)
 {
     UnderlyingContext_->SubscribeCanceled(callback);
 }
 
-void TServiceContextWrapper::UnsubscribeCanceled(const TClosure& callback)
+void TServiceContextWrapper::UnsubscribeCanceled(const TCanceledCallback& callback)
 {
     UnderlyingContext_->UnsubscribeCanceled(callback);
 }

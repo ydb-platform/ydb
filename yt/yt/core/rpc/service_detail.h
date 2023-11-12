@@ -47,6 +47,13 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DEFINE_ENUM(ERequestProcessingStage,
+    (Waiting)
+    (Executing)
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TRequestMessage>
 class TTypedServiceRequest
     : public TRequestMessage
@@ -246,7 +253,7 @@ public:
             underlyingContext->Reply(TError(
                 NRpc::EErrorCode::ProtocolError,
                 "Error deserializing request attachments")
-                << ex);
+                << TError(ex));
             return false;
         }
 
@@ -455,6 +462,24 @@ protected:
 ////////////////////////////////////////////////////////////////////////////////
 
 TRequestQueuePtr CreateRequestQueue(TString name, const NProfiling::TProfiler& profiler = {});
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TDynamicConcurrencyLimit
+{
+public:
+    DEFINE_SIGNAL(void(), Updated);
+
+    void Reconfigure(int limit);
+    int GetLimitFromConfiguration() const;
+
+    int GetDynamicLimit() const;
+    void SetDynamicLimit(std::optional<int> dynamicLimit);
+
+private:
+    std::atomic<int> ConfigLimit_ = 0;
+    std::atomic<int> DynamicLimit_ = 0;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -682,7 +707,10 @@ protected:
         std::atomic<bool> Pooled = true;
 
         std::atomic<int> QueueSizeLimit = 0;
-        std::atomic<int> ConcurrencyLimit = 0;
+
+        TDynamicConcurrencyLimit ConcurrencyLimit;
+        std::atomic<double> WaitingTimeoutFraction = 0;
+
         NProfiling::TCounter RequestQueueSizeLimitErrorCounter;
         NProfiling::TCounter UnauthenticatedRequestsCounter;
 
@@ -763,7 +791,7 @@ protected:
 
     //! Registers a method handler.
     //! This call is must be performed prior to service registration.
-    TRuntimeMethodInfoPtr RegisterMethod(const TMethodDescriptor& descriptor);
+    virtual TRuntimeMethodInfoPtr RegisterMethod(const TMethodDescriptor& descriptor);
 
     //! Register a feature as being supported by server.
     //! This call is must be performed prior to service registration.
@@ -814,6 +842,8 @@ protected:
     void DoConfigure(
         const TServiceCommonConfigPtr& configDefaults,
         const TServiceConfigPtr& config);
+
+    virtual std::optional<TError> GetThrottledError(const NProto::TRequestHeader& requestHeader);
 
 protected:
     void ReplyError(
@@ -910,6 +940,7 @@ private:
         std::unique_ptr<NRpc::NProto::TRequestHeader> Header;
         TSharedRefArray Message;
         TRequestQueue* RequestQueue;
+        std::optional<TError> ThrottledError;
     };
 
     void DoDeclareServerFeature(int featureId);
@@ -917,7 +948,7 @@ private:
     TError DoCheckRequestProtocol(const NRpc::NProto::TRequestHeader& header);
     TError DoCheckRequestFeatures(const NRpc::NProto::TRequestHeader& header);
 
-    void OnRequestTimeout(TRequestId requestId, bool aborted);
+    void OnRequestTimeout(TRequestId requestId, ERequestProcessingStage stage, bool aborted);
     void OnReplyBusTerminated(const NYT::NBus::IBusPtr& bus, const TError& error);
 
     void OnRequestAuthenticated(
@@ -1044,6 +1075,8 @@ private:
     bool AreThrottlersOverdrafted() const;
     void AcquireThrottlers(const TServiceBase::TServiceContextPtr& context);
     void SubscribeToThrottlers();
+
+    void OnConcurrencyLimitChanged();
 };
 
 DEFINE_REFCOUNTED_TYPE(TRequestQueue)

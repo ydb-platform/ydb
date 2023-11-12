@@ -6,13 +6,13 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(astdiff)
-add_subdirectory(dq)
-add_subdirectory(dqrun)
-add_subdirectory(mrjob)
-add_subdirectory(sql2yql)
-add_subdirectory(sql_formatter)
-add_subdirectory(udf_dep_stub)
-add_subdirectory(udf_probe)
-add_subdirectory(udf_resolver)
-add_subdirectory(yqlrun)
+
+add_shared_library(yql_udf_dep_stub)
+target_link_libraries(yql_udf_dep_stub PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+)
+target_sources(yql_udf_dep_stub PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/udf_dep_stub/main.cpp
+)
+vcs_info(yql_udf_dep_stub)

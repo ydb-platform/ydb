@@ -84,7 +84,7 @@ public:
         union {
             double d;
             uint64_t i;
-        } v;
+        } v = { 0 };
         reader_.read(v.i);
         val = v.d;
     }

@@ -68,7 +68,7 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(TChecksum, Checksum);
 
 private:
-    NConcurrency::IAsyncOutputStreamPtr UnderlyingStream_;
+    const NConcurrency::IAsyncOutputStreamPtr UnderlyingStream_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

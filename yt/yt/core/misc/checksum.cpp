@@ -779,7 +779,7 @@ void TChecksumOutput::DoFinish()
 ////////////////////////////////////////////////////////////////////////////////
 
 TChecksumAsyncOutput::TChecksumAsyncOutput(IAsyncOutputStreamPtr underlyingStream)
-    : UnderlyingStream_(underlyingStream)
+    : UnderlyingStream_(std::move(underlyingStream))
 { }
 
 TFuture<void> TChecksumAsyncOutput::Close()

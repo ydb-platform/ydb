@@ -87,16 +87,16 @@ struct TFiberContext
     TFiberPtr CurrentFiber;
 };
 
-static YT_THREAD_LOCAL(TFiberContext*) FiberContext;
+YT_THREAD_LOCAL(TFiberContext*) FiberContext;
 
 // Forbid inlining these accessors to prevent the compiler from
 // miss-optimizing TLS access in presence of fiber context switches.
-Y_NO_INLINE TFiberContext* TryGetFiberContext()
+TFiberContext* TryGetFiberContext()
 {
     return FiberContext;
 }
 
-Y_NO_INLINE void SetFiberContext(TFiberContext* context)
+void SetFiberContext(TFiberContext* context)
 {
     FiberContext = context;
 }

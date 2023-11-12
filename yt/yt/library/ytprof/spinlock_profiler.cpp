@@ -66,7 +66,7 @@ void TSpinlockProfiler::RecordEvent(const void* /*lock*/, int64_t waitCycles)
     RecordSample(&fpCursor, waitCycles);
 }
 
-static YT_THREAD_LOCAL(int) SpinlockEventCount;
+YT_THREAD_LOCAL(int) SpinlockEventCount;
 
 void TSpinlockProfiler::OnEvent(const void* lock, int64_t waitCycles)
 {
@@ -171,7 +171,7 @@ void TBlockingProfiler::RecordEvent(
     RecordSample(&fpCursor, cpuDelay);
 }
 
-static YT_THREAD_LOCAL(int) YTSpinlockEventCount;
+YT_THREAD_LOCAL(int) YTSpinlockEventCount;
 
 void TBlockingProfiler::OnEvent(
     TCpuDuration cpuDelay,

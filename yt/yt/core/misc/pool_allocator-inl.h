@@ -72,7 +72,7 @@ std::unique_ptr<T> TPoolAllocator::New(TArgs&&... args)
     struct TChunkTag
     { };
     constexpr auto ChunkSize = 64_KB;
-    static YT_THREAD_LOCAL(TPoolAllocator) Allocator(
+    YT_THREAD_LOCAL(TPoolAllocator) Allocator(
         sizeof(T),
         alignof(T),
         ChunkSize,

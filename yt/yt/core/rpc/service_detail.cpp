@@ -1297,7 +1297,7 @@ void TRequestQueue::OnRequestFinished()
 // Prevents reentrant invocations.
 // One case is: RunRequest calling the handler synchronously, which replies the
 // context, which calls context->Finish, and we're back here again.
-static YT_THREAD_LOCAL(bool) ScheduleRequestsLatch = false;
+YT_THREAD_LOCAL(bool) ScheduleRequestsLatch = false;
 
 void TRequestQueue::ScheduleRequestsFromQueue()
 {

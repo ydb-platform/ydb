@@ -16,7 +16,7 @@ namespace NYT::NThreading {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_THREAD_LOCAL(TThreadId) CurrentUniqueThreadId;
+YT_THREAD_LOCAL(TThreadId) CurrentUniqueThreadId;
 static std::atomic<TThreadId> UniqueThreadIdGenerator;
 
 static const auto& Logger = ThreadingLogger;
@@ -220,7 +220,7 @@ void TThread::ThreadMainTrampoline()
         bool Armed_ = true;
     };
 
-    static YT_THREAD_LOCAL(TExitInterceptor) Interceptor;
+    YT_THREAD_LOCAL(TExitInterceptor) Interceptor;
 
     ThreadMain();
 

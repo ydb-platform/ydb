@@ -273,7 +273,7 @@ THazardThreadState* THazardPointerManager::AllocateThreadState()
     };
 
     // Unregisters thread from hazard ptr manager on thread exit.
-    static YT_THREAD_LOCAL(THazardThreadStateDestroyer) destroyer{threadState};
+    YT_THREAD_LOCAL(THazardThreadStateDestroyer) destroyer{threadState};
 
     {
         auto guard = WriterGuard(ThreadRegistryLock_);

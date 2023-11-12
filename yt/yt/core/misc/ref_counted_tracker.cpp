@@ -431,7 +431,7 @@ TRefCountedTracker::TLocalSlot* TRefCountedTracker::GetLocalSlot(TRefCountedType
         }
     };
 
-    static YT_THREAD_LOCAL(TReclaimer) Reclaimer;
+    YT_THREAD_LOCAL(TReclaimer) Reclaimer;
 
     YT_VERIFY(LocalSlotsSize_ >= 0);
 

@@ -358,7 +358,7 @@ TCpuInstant GetEventInstant(const TLoggerQueueItem& item)
 using TThreadLocalQueue = TSpscQueue<TLoggerQueueItem>;
 
 static constexpr uintptr_t ThreadQueueDestroyedSentinel = -1;
-static YT_THREAD_LOCAL(TThreadLocalQueue*) PerThreadQueue;
+YT_THREAD_LOCAL(TThreadLocalQueue*) PerThreadQueue;
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1462,7 +1462,7 @@ struct TLocalQueueReclaimer
     }
 };
 
-static YT_THREAD_LOCAL(TLocalQueueReclaimer) LocalQueueReclaimer;
+YT_THREAD_LOCAL(TLocalQueueReclaimer) LocalQueueReclaimer;
 
 ////////////////////////////////////////////////////////////////////////////////
 

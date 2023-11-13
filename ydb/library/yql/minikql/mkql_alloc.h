@@ -682,7 +682,7 @@ private:
 };
 
 inline void TBoxedValueWithFree::operator delete(void *mem) noexcept {
-    auto size = ((TMkqlPAllocHeader*)mem)->Size;
+    auto size = ((TMkqlPAllocHeader*)mem)->Size + sizeof(TMkqlPAllocHeader);
     return MKQLFreeWithSize(mem, size, EMemorySubPool::Default);
 }
 

@@ -10814,6 +10814,13 @@
             "uri": "https://{canondata_backend}/1599023/af9c2f81df0601cf266a0926b5ce73b6101b9115/resource.tar.gz#test_sql2yql.test_pg-order_by_shadow_input_columns_qual_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-palloc_big_string]": [
+        {
+            "checksum": "14fe96718c591dd1af1ed6c60f472e29",
+            "size": 65932,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942100/07ef396fd78c6142ee282f43bd4950f9cadbd86b/resource.tar.gz#test_sql2yql.test_pg-palloc_big_string_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-parametrized]": [
         {
             "checksum": "fc4e90fca8be82512da7df0e6417ddda",

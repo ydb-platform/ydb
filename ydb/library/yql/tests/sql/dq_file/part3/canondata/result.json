@@ -3331,6 +3331,28 @@
         }
     ],
     "test.test[pg-long_ident-default.txt-Results]": [],
+    "test.test[pg-palloc_big_string-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942100/285e905e2474369b3f45b547f2afa647f1a81533/resource.tar.gz#test.test_pg-palloc_big_string-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg-palloc_big_string-default.txt-Debug]": [
+        {
+            "checksum": "0689242c0e167d672039331d07dfc4e5",
+            "size": 65891,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942100/285e905e2474369b3f45b547f2afa647f1a81533/resource.tar.gz#test.test_pg-palloc_big_string-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-palloc_big_string-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://storage.yandex-team.ru/get-devtools/1942100/285e905e2474369b3f45b547f2afa647f1a81533/resource.tar.gz#test.test_pg-palloc_big_string-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-palloc_big_string-default.txt-Results]": [],
     "test.test[pg-pg_array_compare-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

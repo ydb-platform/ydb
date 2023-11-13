@@ -159,9 +159,10 @@ public:
             } else {
                 if (reverse) {
                     if (LastKey.empty()) {
+                        size_t last = FirstUnprocessedRequest.GetOrElse(Ranges.size() - 1);
                         return TTableRange(
                             Ranges.front().From.GetCells(), Ranges.front().FromInclusive,
-                            Ranges[FirstUnprocessedRequest.GetOrElse(Ranges.size() - 1)].To.GetCells(), Ranges.back().ToInclusive);
+                            Ranges[last].To.GetCells(), Ranges[last].ToInclusive);
                     } else {
                         return TTableRange(
                             Ranges.front().From.GetCells(), Ranges.front().FromInclusive,
@@ -169,8 +170,9 @@ public:
                     }
                 } else {
                     if (LastKey.empty()) {
+                        size_t first = FirstUnprocessedRequest.GetOrElse(0);
                         return TTableRange(
-                            Ranges[FirstUnprocessedRequest.GetOrElse(0)].From.GetCells(), Ranges.front().FromInclusive,
+                            Ranges[first].From.GetCells(), Ranges[first].FromInclusive,
                             Ranges.back().To.GetCells(), Ranges.back().ToInclusive);
                     } else {
                         return TTableRange(
@@ -410,6 +412,8 @@ public:
             Settings->GetTable().GetTableId().GetSchemaVersion()
         );
 
+        Snapshot = IKqpGateway::TKqpSnapshot(Settings->GetSnapshot().GetStep(), Settings->GetSnapshot().GetTxId());
+
         if (Settings->GetUseFollowers() && !Snapshot.IsValid()) {
             // reading from followers is allowed only of snapshot is not specified and
             // specific flag is set. otherwise we always read from main replicas.
@@ -431,7 +435,6 @@ public:
                         ) : nullptr));
         }
         Counters->ReadActorsCount->Inc();
-        Snapshot = IKqpGateway::TKqpSnapshot(Settings->GetSnapshot().GetStep(), Settings->GetSnapshot().GetTxId());
 
         if (Settings->HasMaxInFlightShards()) {
             MaxInFlight = Settings->GetMaxInFlightShards();
@@ -634,8 +637,8 @@ public:
                 PendingShards.PushBack(state.Release());
                 return;
             }
-        } else if (!Snapshot.IsValid()) {
-            return RuntimeError("inconsistent reads after shards split", NDqProto::StatusIds::UNAVAILABLE);
+        } else if (!Snapshot.IsValid() && !Settings->GetAllowInconsistentReads()) {
+            return RuntimeError("Inconsistent reads after shards split", NDqProto::StatusIds::UNAVAILABLE);
         }
 
         if (keyDesc->GetPartitions().empty()) {

@@ -894,6 +894,11 @@ protected:
                 settings->MutableSnapshot()->SetTxId(snapshot.TxId);
             }
 
+
+            if (Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED) {
+                settings->SetAllowInconsistentReads(true);
+            }
+
             shardInfo.KeyReadRanges->SerializeTo(settings);
             settings->SetReverse(source.GetReverse());
             settings->SetSorted(source.GetSorted());

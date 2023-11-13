@@ -31,10 +31,10 @@ using namespace NApi;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReadJournalCommand::TReadJournalCommand()
+void TReadJournalCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("journal_reader", JournalReader)
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("journal_reader", &TThis::JournalReader)
         .Default();
 }
 
@@ -265,15 +265,26 @@ private:
     }
 };
 
-TWriteJournalCommand::TWriteJournalCommand()
+void TWriteJournalCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("journal_writer", JournalWriter)
+    registrar.Parameter("path", &TThis::Path);
+
+    registrar.Parameter("journal_writer", &TThis::JournalWriter)
         .Default();
-    RegisterParameter("enable_chunk_preallocation", Options.EnableChunkPreallocation)
-        .Optional();
-    RegisterParameter("replica_lag_limit", Options.ReplicaLagLimit)
-        .Optional();
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "enable_chunk_preallocation",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableChunkPreallocation;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<i64>(
+        "replica_lag_limit",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicaLagLimit;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TWriteJournalCommand::DoExecute(ICommandContextPtr context)
@@ -322,10 +333,10 @@ void TWriteJournalCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTruncateJournalCommand::TTruncateJournalCommand()
+void TTruncateJournalCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("row_count", RowCount);
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("row_count", &TThis::RowCount);
 }
 
 void TTruncateJournalCommand::DoExecute(NYT::NDriver::ICommandContextPtr context)

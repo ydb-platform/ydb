@@ -14,7 +14,9 @@ class TGetCommand
     : public TTypedCommand<NApi::TGetNodeOptions>
 {
 public:
-    TGetCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -29,7 +31,9 @@ class TSetCommand
     : public TTypedCommand<NApi::TSetNodeOptions>
 {
 public:
-    TSetCommand();
+    REGISTER_YSON_STRUCT_LITE(TSetCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -43,7 +47,9 @@ class TMultisetAttributesCommand
     : public TTypedCommand<NApi::TMultisetAttributesNodeOptions>
 {
 public:
-    TMultisetAttributesCommand();
+    REGISTER_YSON_STRUCT_LITE(TMultisetAttributesCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -57,7 +63,9 @@ class TRemoveCommand
     : public TTypedCommand<NApi::TRemoveNodeOptions>
 {
 public:
-    TRemoveCommand();
+    REGISTER_YSON_STRUCT_LITE(TRemoveCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -71,7 +79,9 @@ class TListCommand
     : public TTypedCommand<NApi::TListNodeOptions>
 {
 public:
-    TListCommand();
+    REGISTER_YSON_STRUCT_LITE(TListCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -102,7 +112,9 @@ class TCreateNodeCommand
     : public TTypedCommand<NApi::TCreateNodeOptions>
 {
 public:
-    TCreateNodeCommand();
+    REGISTER_YSON_STRUCT_LITE(TCreateNodeCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -118,7 +130,9 @@ class TCreateObjectCommand
     : public TTypedCommand<NApi::TCreateObjectOptions>
 {
 public:
-    TCreateObjectCommand();
+    REGISTER_YSON_STRUCT_LITE(TCreateObjectCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NObjectClient::EObjectType Type;
@@ -133,7 +147,9 @@ class TLockCommand
     : public TTypedCommand<NApi::TLockNodeOptions>
 {
 public:
-    TLockCommand();
+    REGISTER_YSON_STRUCT_LITE(TLockCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -148,7 +164,9 @@ class TUnlockCommand
     : public TTypedCommand<NApi::TUnlockNodeOptions>
 {
 public:
-    TUnlockCommand();
+    REGISTER_YSON_STRUCT_LITE(TUnlockCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -162,7 +180,9 @@ class TCopyCommand
     : public TTypedCommand<NApi::TCopyNodeOptions>
 {
 public:
-    TCopyCommand();
+    REGISTER_YSON_STRUCT_LITE(TCopyCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath SourcePath;
@@ -177,7 +197,9 @@ class TMoveCommand
     : public TTypedCommand<NApi::TMoveNodeOptions>
 {
 public:
-    TMoveCommand();
+    REGISTER_YSON_STRUCT_LITE(TMoveCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath SourcePath;
@@ -192,7 +214,9 @@ class TExistsCommand
     : public TTypedCommand<NApi::TNodeExistsOptions>
 {
 public:
-    TExistsCommand();
+    REGISTER_YSON_STRUCT_LITE(TExistsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -206,7 +230,9 @@ class TLinkCommand
     : public TTypedCommand<NApi::TLinkNodeOptions>
 {
 public:
-    TLinkCommand();
+    REGISTER_YSON_STRUCT_LITE(TLinkCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath LinkPath;
@@ -222,7 +248,9 @@ class TConcatenateCommand
     : public TTypedCommand<NApi::TConcatenateNodesOptions>
 {
 public:
-    TConcatenateCommand();
+    REGISTER_YSON_STRUCT_LITE(TConcatenateCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     std::vector<NYPath::TRichYPath> SourcePaths;
@@ -237,7 +265,9 @@ class TExternalizeCommand
     : public TTypedCommand<NApi::TExternalizeNodeOptions>
 {
 public:
-    TExternalizeCommand();
+    REGISTER_YSON_STRUCT_LITE(TExternalizeCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TYPath Path;
@@ -252,7 +282,9 @@ class TInternalizeCommand
     : public TTypedCommand<NApi::TInternalizeNodeOptions>
 {
 public:
-    TInternalizeCommand();
+    REGISTER_YSON_STRUCT_LITE(TInternalizeCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TYPath Path;
@@ -263,4 +295,3 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDriver
-

@@ -12,7 +12,9 @@ class TRegisterQueueConsumerCommand
     : public TTypedCommand<NApi::TRegisterQueueConsumerOptions>
 {
 public:
-    TRegisterQueueConsumerCommand();
+    REGISTER_YSON_STRUCT_LITE(TRegisterQueueConsumerCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath QueuePath;
@@ -29,7 +31,9 @@ class TUnregisterQueueConsumerCommand
     : public TTypedCommand<NApi::TUnregisterQueueConsumerOptions>
 {
 public:
-    TUnregisterQueueConsumerCommand();
+    REGISTER_YSON_STRUCT_LITE(TUnregisterQueueConsumerCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath QueuePath;
@@ -44,7 +48,9 @@ class TListQueueConsumerRegistrationsCommand
     : public TTypedCommand<NApi::TListQueueConsumerRegistrationsOptions>
 {
 public:
-    TListQueueConsumerRegistrationsCommand();
+    REGISTER_YSON_STRUCT_LITE(TListQueueConsumerRegistrationsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     std::optional<NYPath::TRichYPath> QueuePath;
@@ -59,7 +65,9 @@ class TPullQueueCommand
     : public TTypedCommand<NApi::TPullQueueOptions>
 {
 public:
-    TPullQueueCommand();
+    REGISTER_YSON_STRUCT_LITE(TPullQueueCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath QueuePath;
@@ -76,7 +84,9 @@ class TPullConsumerCommand
     : public TTypedCommand<NApi::TPullConsumerOptions>
 {
 public:
-    TPullConsumerCommand();
+    REGISTER_YSON_STRUCT_LITE(TPullConsumerCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath ConsumerPath;
@@ -98,7 +108,9 @@ class TAdvanceConsumerCommand
     : public TTypedCommand<TAdvanceConsumerOptions>
 {
 public:
-    TAdvanceConsumerCommand();
+    REGISTER_YSON_STRUCT_LITE(TAdvanceConsumerCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath ConsumerPath;

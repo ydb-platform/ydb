@@ -21,6 +21,7 @@ using namespace NScheduler;
 using namespace NTableClient;
 using namespace NYson;
 using namespace NYTree;
+using namespace NJobTrackerClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -28,10 +29,10 @@ static inline const NLogging::TLogger JobShellStructuredLogger("JobShell");
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDumpJobContextCommand::TDumpJobContextCommand()
+void TDumpJobContextCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("job_id", JobId);
-    RegisterParameter("path", Path);
+    registrar.Parameter("job_id", &TThis::JobId);
+    registrar.Parameter("path", &TThis::Path);
 }
 
 void TDumpJobContextCommand::DoExecute(ICommandContextPtr context)
@@ -44,10 +45,15 @@ void TDumpJobContextCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetJobInputCommand::TGetJobInputCommand()
+void TGetJobInputCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("job_id", JobId);
-    RegisterParameter("job_spec_source", Options.JobSpecSource)
+    registrar.Parameter("job_id", &TThis::JobId);
+
+    registrar.ParameterWithUniversalAccessor<EJobSpecSource>(
+        "job_spec_source",
+        [] (TThis* command) -> auto& {
+            return command->Options.JobSpecSource;
+        })
         .Default(EJobSpecSource::Auto);
 }
 
@@ -62,10 +68,15 @@ void TGetJobInputCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetJobInputPathsCommand::TGetJobInputPathsCommand()
+void TGetJobInputPathsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("job_id", JobId);
-    RegisterParameter("job_spec_source", Options.JobSpecSource)
+    registrar.Parameter("job_id", &TThis::JobId);
+
+    registrar.ParameterWithUniversalAccessor<EJobSpecSource>(
+        "job_spec_source",
+        [] (TThis* command) -> auto& {
+            return command->Options.JobSpecSource;
+        })
         .Default(EJobSpecSource::Auto);
 }
 
@@ -79,16 +90,36 @@ void TGetJobInputPathsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetJobSpecCommand::TGetJobSpecCommand()
+void TGetJobSpecCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("job_id", JobId);
-    RegisterParameter("job_spec_source", Options.JobSpecSource)
+    registrar.Parameter("job_id", &TThis::JobId);
+
+    registrar.ParameterWithUniversalAccessor<EJobSpecSource>(
+        "job_spec_source",
+        [] (TThis* command) -> auto& {
+            return command->Options.JobSpecSource;
+        })
         .Default(EJobSpecSource::Auto);
-    RegisterParameter("omit_node_directory", Options.OmitNodeDirectory)
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "omit_node_directory",
+        [] (TThis* command) -> auto& {
+            return command->Options.OmitNodeDirectory;
+        })
         .Default(true);
-    RegisterParameter("omit_input_table_specs", Options.OmitInputTableSpecs)
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "omit_input_table_specs",
+        [] (TThis* command) -> auto& {
+            return command->Options.OmitInputTableSpecs;
+        })
         .Default(false);
-    RegisterParameter("omit_output_table_specs", Options.OmitOutputTableSpecs)
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "omit_output_table_specs",
+        [] (TThis* command) -> auto& {
+            return command->Options.OmitOutputTableSpecs;
+        })
         .Default(false);
 }
 
@@ -102,9 +133,9 @@ void TGetJobSpecCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetJobStderrCommand::TGetJobStderrCommand()
+void TGetJobStderrCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("job_id", JobId);
+    registrar.Parameter("job_id", &TThis::JobId);
 }
 
 void TGetJobStderrCommand::DoExecute(ICommandContextPtr context)
@@ -119,9 +150,9 @@ void TGetJobStderrCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetJobFailContextCommand::TGetJobFailContextCommand()
+void TGetJobFailContextCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("job_id", JobId);
+    registrar.Parameter("job_id", &TThis::JobId);
 }
 
 void TGetJobFailContextCommand::DoExecute(ICommandContextPtr context)
@@ -136,43 +167,128 @@ void TGetJobFailContextCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TListOperationsCommand::TListOperationsCommand()
+void TListOperationsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("from_time", Options.FromTime)
-        .Optional();
-    RegisterParameter("to_time", Options.ToTime)
-        .Optional();
-    RegisterParameter("cursor_time", Options.CursorTime)
-        .Optional();
-    RegisterParameter("cursor_direction", Options.CursorDirection)
-        .Optional();
-    RegisterParameter("user", Options.UserFilter)
-        .Optional();
-    RegisterParameter("access", Options.AccessFilter)
-        .Optional();
-    RegisterParameter("state", Options.StateFilter)
-        .Optional();
-    RegisterParameter("type", Options.TypeFilter)
-        .Optional();
-    RegisterParameter("filter", Options.SubstrFilter)
-        .Optional();
-    RegisterParameter("pool_tree", Options.PoolTree)
-        .Optional();
-    RegisterParameter("pool", Options.Pool)
-        .Optional();
-    RegisterParameter("with_failed_jobs", Options.WithFailedJobs)
-        .Optional();
-    RegisterParameter("include_archive", Options.IncludeArchive)
-        .Optional();
-    RegisterParameter("include_counters", Options.IncludeCounters)
-        .Optional();
-    RegisterParameter("limit", Options.Limit)
-        .Optional();
-    RegisterParameter("attributes", Options.Attributes)
-        .Optional();
-    RegisterParameter("enable_ui_mode", EnableUIMode)
-        .Optional();
-    RegisterParameter("archive_fetching_timeout", Options.ArchiveFetchingTimeout)
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
+        "from_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.FromTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
+        "to_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.ToTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
+        "cursor_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.CursorTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<EOperationSortDirection>(
+        "cursor_direction",
+        [] (TThis* command) -> auto& {
+            return command->Options.CursorDirection;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "user",
+        [] (TThis* command) -> auto& {
+            return command->Options.UserFilter;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TListOperationsAccessFilterPtr>(
+        "access",
+        [] (TThis* command) -> auto& {
+            return command->Options.AccessFilter;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<EOperationState>>(
+        "state",
+        [] (TThis* command) -> auto& {
+            return command->Options.StateFilter;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<EOperationType>>(
+        "type",
+        [] (TThis* command) -> auto& {
+            return command->Options.TypeFilter;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "filter",
+        [] (TThis* command) -> auto& {
+            return command->Options.SubstrFilter;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "pool_tree",
+        [] (TThis* command) -> auto& {
+            return command->Options.PoolTree;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "pool",
+        [] (TThis* command) -> auto& {
+            return command->Options.Pool;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "with_failed_jobs",
+        [] (TThis* command) -> auto& {
+            return command->Options.WithFailedJobs;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "include_archive",
+        [] (TThis* command) -> auto& {
+            return command->Options.IncludeArchive;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "include_counters",
+        [] (TThis* command) -> auto& {
+            return command->Options.IncludeCounters;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<ui64>(
+        "limit",
+        [] (TThis* command) -> auto& {
+            return command->Options.Limit;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
+        "attributes",
+        [] (TThis* command) -> auto& {
+            return command->Options.Attributes;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TDuration>(
+        "archive_fetching_timeout",
+        [] (TThis* command) -> auto& {
+            return command->Options.ArchiveFetchingTimeout;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.Parameter("enable_ui_mode", &TThis::EnableUIMode)
         .Optional();
 }
 
@@ -260,55 +376,120 @@ void TListOperationsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TListJobsCommand::TListJobsCommand()
+void TListJobsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("type", Options.Type)
+    registrar.ParameterWithUniversalAccessor<std::optional<EJobType>>(
+        "type",
+        [] (TThis* command) -> auto& {return command->Options.Type; })
         .Alias("job_type")
-        .Optional();
-    RegisterParameter("state", Options.State)
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<EJobState>>(
+        "state",
+        [] (TThis* command) -> auto& {return command->Options.State; })
         .Alias("job_state")
-        .Optional();
-    RegisterParameter("address", Options.Address)
-        .Optional();
-    RegisterParameter("with_stderr", Options.WithStderr)
-        .Optional();
-    RegisterParameter("with_spec", Options.WithSpec)
-        .Optional();
-    RegisterParameter("with_fail_context", Options.WithFailContext)
-        .Optional();
-    RegisterParameter("with_competitors", Options.WithCompetitors)
-        .Optional();
-    RegisterParameter("with_monitoring_descriptor", Options.WithMonitoringDescriptor)
-        .Optional();
-    RegisterParameter("job_competition_id", Options.JobCompetitionId)
-        .Optional();
-    RegisterParameter("task_name", Options.TaskName)
-        .Optional();
+        .Optional(/*init*/ false);
 
-    RegisterParameter("sort_field", Options.SortField)
-        .Optional();
-    RegisterParameter("sort_order", Options.SortOrder)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "address",
+        [] (TThis* command) -> auto& {return command->Options.Address; })
+        .Optional(/*init*/ false);
 
-    RegisterParameter("limit", Options.Limit)
-        .Optional();
-    RegisterParameter("offset", Options.Offset)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "with_stderr",
+        [] (TThis* command) -> auto& {return command->Options.WithStderr; })
+        .Optional(/*init*/ false);
 
-    RegisterParameter("data_source", Options.DataSource)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "with_spec",
+        [] (TThis* command) -> auto& {return command->Options.WithSpec; })
+        .Optional(/*init*/ false);
 
-    RegisterParameter("include_cypress", Options.IncludeCypress)
-        .Optional();
-    RegisterParameter("include_controller_agent", Options.IncludeControllerAgent)
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "with_fail_context",
+        [] (TThis* command) -> auto& {return command->Options.WithFailContext; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "with_competitors",
+        [] (TThis* command) -> auto& { return command->Options.WithCompetitors; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "with_monitoring_descriptor",
+        [] (TThis* command) -> auto& { return command->Options.WithMonitoringDescriptor; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TJobId>(
+        "job_competition_id",
+        [] (TThis* command) -> auto& { return command->Options.JobCompetitionId; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "task_name",
+        [] (TThis* command) -> auto& { return command->Options.TaskName; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<EJobSortField>(
+        "sort_field",
+        [] (TThis* command) -> auto& { return command->Options.SortField; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<EJobSortDirection>(
+        "sort_order",
+        [] (TThis* command) -> auto& { return command->Options.SortOrder; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<i64>(
+        "limit",
+        [] (TThis* command) -> auto& {
+            return command->Options.Limit;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<i64>(
+        "offset",
+        [] (TThis* command) -> auto& {
+            return command->Options.Offset;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<EDataSource>(
+        "data_source",
+        [] (TThis* command) -> auto& {
+            return command->Options.DataSource;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "include_cypress",
+        [] (TThis* command) -> auto& {
+            return command->Options.IncludeCypress;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "include_controller_agent",
+        [] (TThis* command) -> auto& {
+            return command->Options.IncludeControllerAgent;
+        })
         .Alias("include_runtime")
         .Alias("include_scheduler")
-        .Optional();
-    RegisterParameter("include_archive", Options.IncludeArchive)
-        .Optional();
+        .Optional(/*init*/ false);
 
-    RegisterParameter("running_jobs_lookbehind_period", Options.RunningJobsLookbehindPeriod)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "include_archive",
+        [] (TThis* command) -> auto& {
+            return command->Options.IncludeArchive;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TDuration>(
+        "running_jobs_lookbehind_period",
+        [] (TThis* command) -> auto& {
+            return command->Options.RunningJobsLookbehindPeriod;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TListJobsCommand::DoExecute(ICommandContextPtr context)
@@ -347,11 +528,16 @@ void TListJobsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetJobCommand::TGetJobCommand()
+void TGetJobCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("job_id", JobId);
-    RegisterParameter("attributes", Options.Attributes)
-        .Optional();
+    registrar.Parameter("job_id", &TThis::JobId);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
+        "attributes",
+        [] (TThis* command) -> auto& {
+            return command->Options.Attributes;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TGetJobCommand::DoExecute(ICommandContextPtr context)
@@ -365,9 +551,9 @@ void TGetJobCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAbandonJobCommand::TAbandonJobCommand()
+void TAbandonJobCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("job_id", JobId);
+    registrar.Parameter("job_id", &TThis::JobId);
 }
 
 void TAbandonJobCommand::DoExecute(ICommandContextPtr context)
@@ -380,17 +566,17 @@ void TAbandonJobCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPollJobShellCommand::TPollJobShellCommand()
+void TPollJobShellCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("job_id", JobId);
-    RegisterParameter("parameters", Parameters);
-    RegisterParameter("shell_name", ShellName)
+    registrar.Parameter("job_id", &TThis::JobId);
+    registrar.Parameter("parameters", &TThis::Parameters);
+    registrar.Parameter("shell_name", &TThis::ShellName)
         .Default();
 
-    RegisterPostprocessor([&] {
+    registrar.Postprocessor([] (TThis* command) {
         // Compatibility with initial job shell protocol.
-        if (Parameters->GetType() == NYTree::ENodeType::String) {
-            Parameters = NYTree::ConvertToNode(NYson::TYsonString(Parameters->AsString()->GetValue()));
+        if (command->Parameters->GetType() == NYTree::ENodeType::String) {
+            command->Parameters = NYTree::ConvertToNode(NYson::TYsonString(command->Parameters->AsString()->GetValue()));
         }
     });
 }
@@ -421,11 +607,16 @@ void TPollJobShellCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAbortJobCommand::TAbortJobCommand()
+void TAbortJobCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("job_id", JobId);
-    RegisterParameter("interrupt_timeout", Options.InterruptTimeout)
-        .Optional();
+    registrar.Parameter("job_id", &TThis::JobId);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TDuration>>(
+        "interrupt_timeout",
+        [] (TThis* command) -> auto& {
+            return command->Options.InterruptTimeout;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TAbortJobCommand::DoExecute(ICommandContextPtr context)
@@ -438,17 +629,19 @@ void TAbortJobCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TStartOperationCommand::TStartOperationCommand(std::optional<NScheduler::EOperationType> operationType)
+void TStartOperationCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("spec", Spec);
-    if (operationType) {
-        OperationType = *operationType;
-    } else {
-        RegisterParameter("operation_type", OperationType);
-    }
+    registrar.BaseClassParameter("operation_type", &TThis::OperationType);
 }
 
-void TStartOperationCommand::DoExecute(ICommandContextPtr context)
+////////////////////////////////////////////////////////////////////////////////
+
+void TStartOperationCommandBase::Register(TRegistrar registrar)
+{
+    registrar.Parameter("spec", &TThis::Spec);
+}
+
+void TStartOperationCommandBase::DoExecute(ICommandContextPtr context)
 {
     auto asyncOperationId = context->GetClient()->StartOperation(
         OperationType,
@@ -463,58 +656,78 @@ void TStartOperationCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMapCommand::TMapCommand()
-    : TStartOperationCommand(EOperationType::Map)
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
-TMergeCommand::TMergeCommand()
-    : TStartOperationCommand(EOperationType::Merge)
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
-TSortCommand::TSortCommand()
-    : TStartOperationCommand(EOperationType::Sort)
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
-TEraseCommand::TEraseCommand()
-    : TStartOperationCommand(EOperationType::Erase)
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
-TReduceCommand::TReduceCommand()
-    : TStartOperationCommand(EOperationType::Reduce)
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
-TJoinReduceCommand::TJoinReduceCommand()
-    : TStartOperationCommand(EOperationType::JoinReduce)
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
-TMapReduceCommand::TMapReduceCommand()
-    : TStartOperationCommand(EOperationType::MapReduce)
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
-TRemoteCopyCommand::TRemoteCopyCommand()
-    : TStartOperationCommand(EOperationType::RemoteCopy)
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
-TAbortOperationCommand::TAbortOperationCommand()
+void TMapCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("abort_message", Options.AbortMessage)
-        .Optional();
+    registrar.BaseClassParameter("operation_type", &TThis::OperationType)
+        .Default(EOperationType::Map);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TMergeCommand::Register(TRegistrar registrar)
+{
+    registrar.BaseClassParameter("operation_type", &TThis::OperationType)
+        .Default(EOperationType::Merge);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TSortCommand::Register(TRegistrar registrar)
+{
+    registrar.BaseClassParameter("operation_type", &TThis::OperationType)
+        .Default(EOperationType::Sort);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TEraseCommand::Register(TRegistrar registrar)
+{
+    registrar.BaseClassParameter("operation_type", &TThis::OperationType)
+        .Default(EOperationType::Erase);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TReduceCommand::Register(TRegistrar registrar)
+{
+    registrar.BaseClassParameter("operation_type", &TThis::OperationType)
+        .Default(EOperationType::Reduce);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TJoinReduceCommand::Register(TRegistrar registrar)
+{
+    registrar.BaseClassParameter("operation_type", &TThis::OperationType)
+        .Default(EOperationType::JoinReduce);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TMapReduceCommand::Register(TRegistrar registrar)
+{
+    registrar.BaseClassParameter("operation_type", &TThis::OperationType)
+        .Default(EOperationType::MapReduce);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRemoteCopyCommand::Register(TRegistrar registrar)
+{
+    registrar.BaseClassParameter("operation_type", &TThis::OperationType)
+        .Default(EOperationType::RemoteCopy);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TAbortOperationCommand::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "abort_message",
+        [] (TThis* command) -> auto& {
+            return command->Options.AbortMessage;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TAbortOperationCommand::DoExecute(ICommandContextPtr context)
@@ -527,10 +740,14 @@ void TAbortOperationCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSuspendOperationCommand::TSuspendOperationCommand()
+void TSuspendOperationCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("abort_running_jobs", Options.AbortRunningJobs)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "abort_running_jobs",
+        [] (TThis* command) -> auto& {
+            return command->Options.AbortRunningJobs;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TSuspendOperationCommand::DoExecute(ICommandContextPtr context)
@@ -563,9 +780,9 @@ void TCompleteOperationCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TUpdateOperationParametersCommand::TUpdateOperationParametersCommand()
+void TUpdateOperationParametersCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("parameters", Parameters);
+    registrar.Parameter("parameters", &TThis::Parameters);
 }
 
 void TUpdateOperationParametersCommand::DoExecute(ICommandContextPtr context)
@@ -581,15 +798,29 @@ void TUpdateOperationParametersCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetOperationCommand::TGetOperationCommand()
+void TGetOperationCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("attributes", Options.Attributes)
-        .Optional();
-    RegisterParameter("include_runtime", Options.IncludeRuntime)
+    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
+        "attributes",
+        [] (TThis* command) -> auto& {
+            return command->Options.Attributes;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "include_runtime",
+        [] (TThis* command) -> auto& {
+            return command->Options.IncludeRuntime;
+        })
         .Alias("include_scheduler")
-        .Optional();
-    RegisterParameter("maximum_cypress_progress_age", Options.MaximumCypressProgressAge)
-        .Optional();
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TDuration>(
+        "maximum_cypress_progress_age",
+        [] (TThis* command) -> auto& {
+            return command->Options.MaximumCypressProgressAge;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TGetOperationCommand::DoExecute(ICommandContextPtr context)

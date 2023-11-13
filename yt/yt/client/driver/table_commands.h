@@ -17,7 +17,9 @@ class TReadTableCommand
     : public TTypedCommand<NApi::TTableReaderOptions>
 {
 public:
-    TReadTableCommand();
+    REGISTER_YSON_STRUCT_LITE(TReadTableCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -36,7 +38,9 @@ class TReadBlobTableCommand
     : public TTypedCommand<NApi::TTableReaderOptions>
 {
 public:
-    TReadBlobTableCommand();
+    REGISTER_YSON_STRUCT_LITE(TReadBlobTableCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -58,7 +62,9 @@ class TLocateSkynetShareCommand
     : public TTypedCommand<NApi::TLocateSkynetShareOptions>
 {
 public:
-    TLocateSkynetShareCommand();
+    REGISTER_YSON_STRUCT_LITE(TLocateSkynetShareCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -72,7 +78,9 @@ class TWriteTableCommand
     : public TTypedCommand<NApi::TTableWriterOptions>
 {
 public:
-    TWriteTableCommand();
+    REGISTER_YSON_STRUCT_LITE(TWriteTableCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -88,7 +96,9 @@ class TGetTableColumnarStatisticsCommand
     : public TTypedCommand<NApi::TGetColumnarStatisticsOptions>
 {
 public:
-    TGetTableColumnarStatisticsCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetTableColumnarStatisticsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     std::vector<NYPath::TRichYPath> Paths;
@@ -105,7 +115,9 @@ class TPartitionTablesCommand
     : public TTypedCommand<NApi::TPartitionTablesOptions>
 {
 public:
-    TPartitionTablesCommand();
+    REGISTER_YSON_STRUCT_LITE(TPartitionTablesCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     std::vector<NYPath::TRichYPath> Paths;
@@ -135,12 +147,24 @@ class TTabletCommandBase
 protected:
     NYPath::TRichYPath Path;
 
-    TTabletCommandBase()
+    REGISTER_YSON_STRUCT_LITE(TTabletCommandBase);
+
+    static void Register(TRegistrar registrar)
     {
-        this->RegisterParameter("path", Path);
-        this->RegisterParameter("first_tablet_index", this->Options.FirstTabletIndex)
+        registrar.Parameter("path", &TThis::Path);
+
+        registrar.template ParameterWithUniversalAccessor<std::optional<int>>(
+            "first_tablet_index",
+            [] (TThis* command) -> auto& {
+                return command->Options.FirstTabletIndex;
+            })
             .Default();
-        this->RegisterParameter("last_tablet_index", this->Options.LastTabletIndex)
+
+        registrar.template ParameterWithUniversalAccessor<std::optional<int>>(
+            "last_tablet_index",
+            [] (TThis* command) -> auto& {
+                return command->Options.LastTabletIndex;
+            })
             .Default();
     }
 };
@@ -151,7 +175,9 @@ class TMountTableCommand
     : public TTabletCommandBase<NApi::TMountTableOptions>
 {
 public:
-    TMountTableCommand();
+    REGISTER_YSON_STRUCT_LITE(TMountTableCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     void DoExecute(ICommandContextPtr context) override;
@@ -163,7 +189,9 @@ class TUnmountTableCommand
     : public TTabletCommandBase<NApi::TUnmountTableOptions>
 {
 public:
-    TUnmountTableCommand();
+    REGISTER_YSON_STRUCT_LITE(TUnmountTableCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     void DoExecute(ICommandContextPtr context) override;
@@ -175,6 +203,11 @@ class TRemountTableCommand
     : public TTabletCommandBase<NApi::TRemountTableOptions>
 {
 public:
+    REGISTER_YSON_STRUCT_LITE(TRemountTableCommand);
+
+    static void Register(TRegistrar /*registrar*/)
+    { }
+
     void DoExecute(ICommandContextPtr context) override;
 };
 
@@ -183,6 +216,11 @@ public:
 class TFreezeTableCommand
     : public TTabletCommandBase<NApi::TFreezeTableOptions>
 {
+    REGISTER_YSON_STRUCT_LITE(TFreezeTableCommand);
+
+    static void Register(TRegistrar /*registrar*/)
+    { }
+
 private:
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -192,6 +230,11 @@ private:
 class TUnfreezeTableCommand
     : public TTabletCommandBase<NApi::TUnfreezeTableOptions>
 {
+    REGISTER_YSON_STRUCT_LITE(TUnfreezeTableCommand);
+
+    static void Register(TRegistrar /*registrar*/)
+    { }
+
 public:
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -202,7 +245,9 @@ class TReshardTableCommand
     : public TTabletCommandBase<NApi::TReshardTableOptions>
 {
 public:
-    TReshardTableCommand();
+    REGISTER_YSON_STRUCT_LITE(TReshardTableCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     std::optional<std::vector<NTableClient::TLegacyOwningKey>> PivotKeys;
@@ -217,7 +262,9 @@ class TReshardTableAutomaticCommand
     : public TTabletCommandBase<NApi::TReshardTableAutomaticOptions>
 {
 public:
-    TReshardTableAutomaticCommand();
+    REGISTER_YSON_STRUCT_LITE(TReshardTableAutomaticCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     void DoExecute(ICommandContextPtr context) override;
@@ -229,7 +276,9 @@ class TAlterTableCommand
     : public TTypedCommand<NApi::TAlterTableOptions>
 {
 public:
-    TAlterTableCommand();
+    REGISTER_YSON_STRUCT_LITE(TAlterTableCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -248,7 +297,9 @@ class TSelectRowsCommand
     : public TTypedCommand<TSelectRowsOptions>
 {
 public:
-    TSelectRowsCommand();
+    REGISTER_YSON_STRUCT_LITE(TSelectRowsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString Query;
@@ -270,7 +321,9 @@ class TExplainQueryCommand
     : public TTypedCommand<TExplainQueryOptions>
 {
 public:
-    TExplainQueryCommand();
+    REGISTER_YSON_STRUCT_LITE(TExplainQueryCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString Query;
@@ -284,7 +337,9 @@ class TInsertRowsCommand
     : public TTypedCommand<TInsertRowsOptions>
 {
 public:
-    TInsertRowsCommand();
+    REGISTER_YSON_STRUCT_LITE(TInsertRowsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYTree::INodePtr TableWriter;
@@ -306,7 +361,9 @@ class TLookupRowsCommand
     : public TTypedCommand<TLookupRowsOptions>
 {
 public:
-    TLookupRowsCommand();
+    REGISTER_YSON_STRUCT_LITE(TLookupRowsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYTree::INodePtr TableWriter;
@@ -328,7 +385,9 @@ class TPullRowsCommand
     : public TTypedCommand<TPullRowsOptions>
 {
 public:
-    TPullRowsCommand();
+    REGISTER_YSON_STRUCT_LITE(TPullRowsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -343,7 +402,9 @@ class TGetInSyncReplicasCommand
     : public TTypedCommand<NApi::TGetInSyncReplicasOptions>
 {
 public:
-    TGetInSyncReplicasCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetInSyncReplicasCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -358,7 +419,9 @@ class TDeleteRowsCommand
     : public TTypedCommand<TDeleteRowsOptions>
 {
 public:
-    TDeleteRowsCommand();
+    REGISTER_YSON_STRUCT_LITE(TDeleteRowsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYTree::INodePtr TableWriter;
@@ -373,7 +436,9 @@ class TLockRowsCommand
     : public TTypedCommand<TLockRowsOptions>
 {
 public:
-    TLockRowsCommand();
+    REGISTER_YSON_STRUCT_LITE(TLockRowsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYTree::INodePtr TableWriter;
@@ -390,7 +455,9 @@ class TTrimRowsCommand
     : public TTypedCommand<NApi::TTrimTableOptions>
 {
 public:
-    TTrimRowsCommand();
+    REGISTER_YSON_STRUCT_LITE(TTrimRowsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -406,7 +473,9 @@ class TEnableTableReplicaCommand
     : public TTypedCommand<NApi::TAlterTableReplicaOptions>
 {
 public:
-    TEnableTableReplicaCommand();
+    REGISTER_YSON_STRUCT_LITE(TEnableTableReplicaCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NTabletClient::TTableReplicaId ReplicaId;
@@ -420,7 +489,9 @@ class TDisableTableReplicaCommand
     : public TTypedCommand<NApi::TAlterTableReplicaOptions>
 {
 public:
-    TDisableTableReplicaCommand();
+    REGISTER_YSON_STRUCT_LITE(TDisableTableReplicaCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NTabletClient::TTableReplicaId ReplicaId;
@@ -434,7 +505,9 @@ class TAlterTableReplicaCommand
     : public TTypedCommand<NApi::TAlterTableReplicaOptions>
 {
 public:
-    TAlterTableReplicaCommand();
+    REGISTER_YSON_STRUCT_LITE(TAlterTableReplicaCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NTabletClient::TTableReplicaId ReplicaId;
@@ -448,7 +521,9 @@ class TGetTabletInfosCommand
     : public TTypedCommand<NApi::TGetTabletInfosOptions>
 {
 public:
-    TGetTabletInfosCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetTabletInfosCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TYPath Path;
@@ -463,7 +538,9 @@ class TGetTabletErrorsCommand
     : public TTypedCommand<NApi::TGetTabletErrorsOptions>
 {
 public:
-    TGetTabletErrorsCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetTabletErrorsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TYPath Path;
@@ -477,7 +554,9 @@ class TGetTablePivotKeysCommand
     : public TTypedCommand<NApi::TGetTablePivotKeysOptions>
 {
 public:
-    TGetTablePivotKeysCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetTablePivotKeysCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TYPath Path;
@@ -491,7 +570,9 @@ class TCreateTableBackupCommand
     : public TTypedCommand<NApi::TCreateTableBackupOptions>
 {
 public:
-    TCreateTableBackupCommand();
+    REGISTER_YSON_STRUCT_LITE(TCreateTableBackupCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NApi::TBackupManifestPtr Manifest;
@@ -505,7 +586,9 @@ class TRestoreTableBackupCommand
     : public TTypedCommand<NApi::TRestoreTableBackupOptions>
 {
 public:
-    TRestoreTableBackupCommand();
+    REGISTER_YSON_STRUCT_LITE(TRestoreTableBackupCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NApi::TBackupManifestPtr Manifest;

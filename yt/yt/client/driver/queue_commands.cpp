@@ -13,12 +13,12 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRegisterQueueConsumerCommand::TRegisterQueueConsumerCommand()
+void TRegisterQueueConsumerCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("queue_path", QueuePath);
-    RegisterParameter("consumer_path", ConsumerPath);
-    RegisterParameter("vital", Vital);
-    RegisterParameter("partitions", Partitions)
+    registrar.Parameter("queue_path", &TThis::QueuePath);
+    registrar.Parameter("consumer_path", &TThis::ConsumerPath);
+    registrar.Parameter("vital", &TThis::Vital);
+    registrar.Parameter("partitions", &TThis::Partitions)
         .Default();
 }
 
@@ -40,10 +40,10 @@ void TRegisterQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TUnregisterQueueConsumerCommand::TUnregisterQueueConsumerCommand()
+void TUnregisterQueueConsumerCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("queue_path", QueuePath);
-    RegisterParameter("consumer_path", ConsumerPath);
+    registrar.Parameter("queue_path", &TThis::QueuePath);
+    registrar.Parameter("consumer_path", &TThis::ConsumerPath);
 }
 
 void TUnregisterQueueConsumerCommand::DoExecute(ICommandContextPtr context)
@@ -61,11 +61,11 @@ void TUnregisterQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TListQueueConsumerRegistrationsCommand::TListQueueConsumerRegistrationsCommand()
+void TListQueueConsumerRegistrationsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("queue_path", QueuePath)
+    registrar.Parameter("queue_path", &TThis::QueuePath)
         .Default();
-    RegisterParameter("consumer_path", ConsumerPath)
+    registrar.Parameter("consumer_path", &TThis::ConsumerPath)
         .Default();
 }
 
@@ -95,21 +95,39 @@ void TListQueueConsumerRegistrationsCommand::DoExecute(ICommandContextPtr contex
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPullQueueCommand::TPullQueueCommand()
+void TPullQueueCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("queue_path", QueuePath);
-    RegisterParameter("offset", Offset);
-    RegisterParameter("partition_index", PartitionIndex);
+    registrar.Parameter("queue_path", &TThis::QueuePath);
+    registrar.Parameter("offset", &TThis::Offset);
+    registrar.Parameter("partition_index", &TThis::PartitionIndex);
 
-    RegisterParameter("max_row_count", RowBatchReadOptions.MaxRowCount)
-        .Optional();
-    RegisterParameter("max_data_weight", RowBatchReadOptions.MaxDataWeight)
-        .Optional();
-    RegisterParameter("data_weight_per_row_hint", RowBatchReadOptions.DataWeightPerRowHint)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<i64>(
+        "max_row_count",
+        [] (TThis* command) -> auto& {
+            return command->RowBatchReadOptions.MaxRowCount;
+        })
+        .Optional(/*init*/ false);
 
-    RegisterParameter("replica_consistency", Options.ReplicaConsistency)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<i64>(
+        "max_data_weight",
+        [] (TThis* command) -> auto& {
+            return command->RowBatchReadOptions.MaxDataWeight;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "data_weight_per_row_hint",
+        [] (TThis* command) -> auto& {
+            return command->RowBatchReadOptions.DataWeightPerRowHint;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<EReplicaConsistency>(
+        "replica_consistency",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicaConsistency;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TPullQueueCommand::DoExecute(ICommandContextPtr context)
@@ -136,22 +154,43 @@ void TPullQueueCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPullConsumerCommand::TPullConsumerCommand()
+void TPullConsumerCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("consumer_path", ConsumerPath);
-    RegisterParameter("queue_path", QueuePath);
-    RegisterParameter("offset", Offset);
-    RegisterParameter("partition_index", PartitionIndex);
+    registrar.Parameter("consumer_path", &TThis::ConsumerPath);
 
-    RegisterParameter("max_row_count", RowBatchReadOptions.MaxRowCount)
-        .Optional();
-    RegisterParameter("max_data_weight", RowBatchReadOptions.MaxDataWeight)
-        .Optional();
-    RegisterParameter("data_weight_per_row_hint", RowBatchReadOptions.DataWeightPerRowHint)
-        .Optional();
+    registrar.Parameter("queue_path", &TThis::QueuePath);
 
-    RegisterParameter("replica_consistency", Options.ReplicaConsistency)
-        .Optional();
+    registrar.Parameter("offset", &TThis::Offset);
+
+    registrar.Parameter("partition_index", &TThis::PartitionIndex);
+
+    registrar.ParameterWithUniversalAccessor<i64>(
+        "max_row_count",
+        [] (TThis* command) -> auto& {
+            return command->RowBatchReadOptions.MaxRowCount;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<i64>(
+        "max_data_weight",
+        [] (TThis* command) -> auto& {
+            return command->RowBatchReadOptions.MaxDataWeight;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "data_weight_per_row_hint",
+        [] (TThis* command) -> auto& {
+            return command->RowBatchReadOptions.DataWeightPerRowHint;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<EReplicaConsistency>(
+        "replica_consistency",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicaConsistency;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TPullConsumerCommand::DoExecute(ICommandContextPtr context)
@@ -179,14 +218,14 @@ void TPullConsumerCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAdvanceConsumerCommand::TAdvanceConsumerCommand()
+void TAdvanceConsumerCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("consumer_path", ConsumerPath);
-    RegisterParameter("queue_path", QueuePath);
-    RegisterParameter("partition_index", PartitionIndex);
-    RegisterParameter("old_offset", OldOffset)
+    registrar.Parameter("consumer_path", &TThis::ConsumerPath);
+    registrar.Parameter("queue_path", &TThis::QueuePath);
+    registrar.Parameter("partition_index", &TThis::PartitionIndex);
+    registrar.Parameter("old_offset", &TThis::OldOffset)
         .Optional();
-    RegisterParameter("new_offset", NewOffset);
+    registrar.Parameter("new_offset", &TThis::NewOffset);
 }
 
 void TAdvanceConsumerCommand::DoExecute(ICommandContextPtr context)

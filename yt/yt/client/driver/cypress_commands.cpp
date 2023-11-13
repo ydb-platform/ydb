@@ -20,27 +20,48 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetCommand::TGetCommand()
+void TGetCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("attributes", Options.Attributes)
-        .Optional();
+    registrar.Parameter("path", &TThis::Path);
+
+    registrar.ParameterWithUniversalAccessor<TAttributeFilter>(
+        "attributes",
+        [] (TThis* command) -> auto& {
+            return command->Options.Attributes;
+        })
+        .Optional(/*init*/ false);
+
     // TODO(babenko): rename to "limit"
-    RegisterParameter("max_size", Options.MaxSize)
-        .Optional();
-    RegisterParameter("return_only_value", ShouldReturnOnlyValue)
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "max_size",
+        [] (TThis* command) -> auto& {
+            return command->Options.MaxSize;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.Parameter("return_only_value", &TThis::ShouldReturnOnlyValue)
         .Default(false);
-    RegisterParameter("node_count_limit", Options.ComplexityLimits.NodeCount)
-        .Optional()
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "node_count_limit",
+        [] (TThis* command) -> auto& {
+            return command->Options.ComplexityLimits.NodeCount;
+        })
+        .Optional(/*init*/ false)
         .GreaterThanOrEqual(0);
-    RegisterParameter("result_size_limit", Options.ComplexityLimits.ResultSize)
-        .Optional()
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "result_size_limit",
+        [] (TThis* command) -> auto& {
+            return command->Options.ComplexityLimits.ResultSize;
+        })
+        .Optional(/*init*/ false)
         .GreaterThanOrEqual(0);
 }
 
 void TGetCommand::DoExecute(ICommandContextPtr context)
 {
-    Options.Options = IAttributeDictionary::FromMap(GetUnrecognized());
+    Options.Options = IAttributeDictionary::FromMap(GetLocalUnrecognized());
 
     auto asyncResult = context->GetClient()->GetNode(Path.GetPath(), Options);
     auto result = WaitFor(asyncResult)
@@ -56,13 +77,23 @@ void TGetCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSetCommand::TSetCommand()
+void TSetCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("recursive", Options.Recursive)
-        .Optional();
-    RegisterParameter("force", Options.Force)
-        .Optional();
+    registrar.Parameter("path", &TThis::Path);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "recursive",
+        [] (TThis* command) -> auto& {
+            return command->Options.Recursive;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TSetCommand::DoExecute(ICommandContextPtr context)
@@ -78,11 +109,16 @@ void TSetCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMultisetAttributesCommand::TMultisetAttributesCommand()
+void TMultisetAttributesCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("force", Options.Force)
-        .Optional();
+    registrar.Parameter("path", &TThis::Path);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TMultisetAttributesCommand::DoExecute(ICommandContextPtr context)
@@ -98,13 +134,23 @@ void TMultisetAttributesCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRemoveCommand::TRemoveCommand()
+void TRemoveCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("recursive", Options.Recursive)
-        .Optional();
-    RegisterParameter("force", Options.Force)
-        .Optional();
+    registrar.Parameter("path", &TThis::Path);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "recursive",
+        [] (TThis* command) -> auto& {
+            return command->Options.Recursive;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TRemoveCommand::DoExecute(ICommandContextPtr context)
@@ -120,23 +166,44 @@ void TRemoveCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TListCommand::TListCommand()
+void TListCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
+    registrar.Parameter("path", &TThis::Path);
+
     // NB: default value is an empty filter in contrast to GetCommand, for which it is the universal filter.
     // Refer to YT-5543 for details.
-    RegisterParameter("attributes", Options.Attributes)
+    registrar.ParameterWithUniversalAccessor<TAttributeFilter>(
+        "attributes",
+        [] (TThis* command) -> auto& {
+            return command->Options.Attributes;
+        })
         .Default(TAttributeFilter({}, {}));
+
     // TODO(babenko): rename to "limit"
-    RegisterParameter("max_size", Options.MaxSize)
-        .Optional();
-    RegisterParameter("return_only_value", ShouldReturnOnlyValue)
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "max_size",
+        [] (TThis* command) -> auto& {
+            return command->Options.MaxSize;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.Parameter("return_only_value", &TThis::ShouldReturnOnlyValue)
         .Default(false);
-    RegisterParameter("node_count_limit", Options.ComplexityLimits.NodeCount)
-        .Optional()
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "node_count_limit",
+        [] (TThis* command) -> auto& {
+            return command->Options.ComplexityLimits.NodeCount;
+        })
+        .Optional(/*init*/ false)
         .GreaterThanOrEqual(0);
-    RegisterParameter("result_size_limit", Options.ComplexityLimits.ResultSize)
-        .Optional()
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "result_size_limit",
+        [] (TThis* command) -> auto& {
+            return command->Options.ComplexityLimits.ResultSize;
+        })
+        .Optional(/*init*/ false)
         .GreaterThanOrEqual(0);
 }
 
@@ -174,23 +241,50 @@ void TCreateCommand::Execute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCreateNodeCommand::TCreateNodeCommand()
+void TCreateNodeCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path)
+    registrar.Parameter("path", &TThis::Path)
         .Optional();
-    RegisterParameter("type", Type);
-    RegisterParameter("attributes", Attributes)
+
+    registrar.Parameter("type", &TThis::Type);
+
+    registrar.Parameter("attributes", &TThis::Attributes)
         .Optional();
-    RegisterParameter("recursive", Options.Recursive)
-        .Optional();
-    RegisterParameter("ignore_existing", Options.IgnoreExisting)
-        .Optional();
-    RegisterParameter("lock_existing", Options.LockExisting)
-        .Optional();
-    RegisterParameter("force", Options.Force)
-        .Optional();
-    RegisterParameter("ignore_type_mismatch", Options.IgnoreTypeMismatch)
-        .Optional();
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "recursive",
+        [] (TThis* command) -> auto& {
+            return command->Options.Recursive;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "ignore_existing",
+        [] (TThis* command) -> auto& {
+            return command->Options.IgnoreExisting;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "lock_existing",
+        [] (TThis* command) -> auto& {
+            return command->Options.LockExisting;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "ignore_type_mismatch",
+        [] (TThis* command) -> auto& {
+            return command->Options.IgnoreTypeMismatch;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TCreateNodeCommand::DoExecute(ICommandContextPtr context)
@@ -208,14 +302,25 @@ void TCreateNodeCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCreateObjectCommand::TCreateObjectCommand()
+void TCreateObjectCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("type", Type);
-    RegisterParameter("ignore_existing", Options.IgnoreExisting)
-        .Optional();
-    RegisterParameter("sync", Options.Sync)
-        .Optional();
-    RegisterParameter("attributes", Attributes)
+    registrar.Parameter("type", &TThis::Type);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "ignore_existing",
+        [] (TThis* command) -> auto& {
+            return command->Options.IgnoreExisting;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "sync",
+        [] (TThis* command) -> auto& {
+            return command->Options.Sync;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.Parameter("attributes", &TThis::Attributes)
         .Optional();
 }
 
@@ -236,28 +341,44 @@ void TCreateObjectCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLockCommand::TLockCommand()
+void TLockCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("mode", Mode)
-        .Default(NCypressClient::ELockMode::Exclusive);
-    RegisterParameter("waitable", Options.Waitable)
-        .Optional();
-    RegisterParameter("child_key", Options.ChildKey)
-        .Optional();
-    RegisterParameter("attribute_key", Options.AttributeKey)
-        .Optional();
+    registrar.Parameter("path", &TThis::Path);
 
-    RegisterPostprocessor([&] () {
-        if (Mode != NCypressClient::ELockMode::Shared) {
-            if (Options.ChildKey) {
+    registrar.Parameter("mode", &TThis::Mode)
+        .Default(NCypressClient::ELockMode::Exclusive);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "waitable",
+        [] (TThis* command) -> auto& {
+            return command->Options.Waitable;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "child_key",
+        [] (TThis* command) -> auto& {
+            return command->Options.ChildKey;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "attribute_key",
+        [] (TThis* command) -> auto& {
+            return command->Options.AttributeKey;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.Postprocessor([] (TThis* command) {
+        if (command->Mode != NCypressClient::ELockMode::Shared) {
+            if (command->Options.ChildKey) {
                 THROW_ERROR_EXCEPTION("\"child_key\" can only be specified for shared locks");
             }
-            if (Options.AttributeKey) {
+            if (command->Options.AttributeKey) {
                 THROW_ERROR_EXCEPTION("\"attribute_key\" can only be specified for shared locks");
             }
         }
-        if (Options.ChildKey && Options.AttributeKey) {
+        if (command->Options.ChildKey && command->Options.AttributeKey) {
             THROW_ERROR_EXCEPTION("Cannot specify both \"child_key\" and \"attribute_key\"");
         }
     });
@@ -288,9 +409,9 @@ void TLockCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TUnlockCommand::TUnlockCommand()
+void TUnlockCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
+    registrar.Parameter("path", &TThis::Path);
 }
 
 void TUnlockCommand::DoExecute(ICommandContextPtr context)
@@ -304,36 +425,102 @@ void TUnlockCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCopyCommand::TCopyCommand()
+void TCopyCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("source_path", SourcePath);
-    RegisterParameter("destination_path", DestinationPath);
-    RegisterParameter("recursive", Options.Recursive)
-        .Optional();
-    RegisterParameter("ignore_existing", Options.IgnoreExisting)
-        .Optional();
-    RegisterParameter("lock_existing", Options.LockExisting)
-        .Optional();
-    RegisterParameter("force", Options.Force)
-        .Optional();
-    RegisterParameter("preserve_account", Options.PreserveAccount)
-        .Optional();
-    RegisterParameter("preserve_creation_time", Options.PreserveCreationTime)
-        .Optional();
-    RegisterParameter("preserve_modification_time", Options.PreserveModificationTime)
-        .Optional();
-    RegisterParameter("preserve_expiration_time", Options.PreserveExpirationTime)
-        .Optional();
-    RegisterParameter("preserve_expiration_timeout", Options.PreserveExpirationTimeout)
-        .Optional();
-    RegisterParameter("preserve_owner", Options.PreserveOwner)
-        .Optional();
-    RegisterParameter("preserve_acl", Options.PreserveAcl)
-        .Optional();
-    RegisterParameter("pessimistic_quota_check", Options.PessimisticQuotaCheck)
-        .Optional();
-    RegisterParameter("enable_cross_cell_copying", Options.EnableCrossCellCopying)
-        .Optional();
+    registrar.Parameter("source_path", &TThis::SourcePath);
+
+    registrar.Parameter("destination_path", &TThis::DestinationPath);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "recursive",
+        [] (TThis* command) -> auto& {
+            return command->Options.Recursive;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "ignore_existing",
+        [] (TThis* command) -> auto& {
+            return command->Options.IgnoreExisting;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "lock_existing",
+        [] (TThis* command) -> auto& {
+            return command->Options.LockExisting;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_account",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveAccount;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_creation_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveCreationTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_modification_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveModificationTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_expiration_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveExpirationTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_expiration_timeout",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveExpirationTimeout;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_owner",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveOwner;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_acl",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveAcl;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "pessimistic_quota_check",
+        [] (TThis* command) -> auto& {
+            return command->Options.PessimisticQuotaCheck;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "enable_cross_cell_copying",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableCrossCellCopying;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TCopyCommand::DoExecute(ICommandContextPtr context)
@@ -350,30 +537,81 @@ void TCopyCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMoveCommand::TMoveCommand()
+void TMoveCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("source_path", SourcePath);
-    RegisterParameter("destination_path", DestinationPath);
-    RegisterParameter("recursive", Options.Recursive)
-        .Optional();
-    RegisterParameter("force", Options.Force)
-        .Optional();
-    RegisterParameter("preserve_account", Options.PreserveAccount)
-        .Optional();
-    RegisterParameter("preserve_creation_time", Options.PreserveCreationTime)
-        .Optional();
-    RegisterParameter("preserve_modification_time", Options.PreserveModificationTime)
-        .Optional();
-    RegisterParameter("preserve_expiration_time", Options.PreserveExpirationTime)
-        .Optional();
-    RegisterParameter("preserve_expiration_timeout", Options.PreserveExpirationTimeout)
-        .Optional();
-    RegisterParameter("preserve_owner", Options.PreserveOwner)
-        .Optional();
-    RegisterParameter("pessimistic_quota_check", Options.PessimisticQuotaCheck)
-        .Optional();
-    RegisterParameter("enable_cross_cell_copying", Options.EnableCrossCellCopying)
-        .Optional();
+    registrar.Parameter("source_path", &TThis::SourcePath);
+
+    registrar.Parameter("destination_path", &TThis::DestinationPath);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "recursive",
+        [] (TThis* command) -> auto& {
+            return command->Options.Recursive;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_account",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveAccount;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_creation_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveCreationTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_modification_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveModificationTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_expiration_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveExpirationTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_expiration_timeout",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveExpirationTimeout;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "preserve_owner",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveOwner;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "pessimistic_quota_check",
+        [] (TThis* command) -> auto& {
+            return command->Options.PessimisticQuotaCheck;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "enable_cross_cell_copying",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableCrossCellCopying;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TMoveCommand::DoExecute(ICommandContextPtr context)
@@ -390,9 +628,9 @@ void TMoveCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TExistsCommand::TExistsCommand()
+void TExistsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
+    registrar.Parameter("path", &TThis::Path);
 }
 
 void TExistsCommand::DoExecute(ICommandContextPtr context)
@@ -406,20 +644,40 @@ void TExistsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLinkCommand::TLinkCommand()
+void TLinkCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("link_path", LinkPath);
-    RegisterParameter("target_path", TargetPath);
-    RegisterParameter("attributes", Attributes)
+    registrar.Parameter("link_path", &TThis::LinkPath);
+    registrar.Parameter("target_path", &TThis::TargetPath);
+    registrar.Parameter("attributes", &TThis::Attributes)
         .Optional();
-    RegisterParameter("recursive", Options.Recursive)
-        .Optional();
-    RegisterParameter("ignore_existing", Options.IgnoreExisting)
-        .Optional();
-    RegisterParameter("lock_existing", Options.LockExisting)
-        .Optional();
-    RegisterParameter("force", Options.Force)
-        .Optional();
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "recursive",
+        [] (TThis* command) -> auto& {
+            return command->Options.Recursive;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "ignore_existing",
+        [] (TThis* command) -> auto& {
+            return command->Options.IgnoreExisting;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "lock_existing",
+        [] (TThis* command) -> auto& {
+            return command->Options.LockExisting;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TLinkCommand::DoExecute(ICommandContextPtr context)
@@ -440,12 +698,16 @@ void TLinkCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TConcatenateCommand::TConcatenateCommand()
+void TConcatenateCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("source_paths", SourcePaths);
-    RegisterParameter("destination_path", DestinationPath);
+    registrar.Parameter("source_paths", &TThis::SourcePaths);
+    registrar.Parameter("destination_path", &TThis::DestinationPath);
 
-    RegisterParameter("uniqualize_chunks", Options.UniqualizeChunks)
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "uniqualize_chunks",
+        [] (TThis* command) -> auto& {
+            return command->Options.UniqualizeChunks;
+        })
         .Default(false);
 }
 
@@ -466,10 +728,10 @@ void TConcatenateCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TExternalizeCommand::TExternalizeCommand()
+void TExternalizeCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("cell_tag", CellTag);
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("cell_tag", &TThis::CellTag);
 }
 
 void TExternalizeCommand::DoExecute(ICommandContextPtr context)
@@ -485,9 +747,9 @@ void TExternalizeCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TInternalizeCommand::TInternalizeCommand()
+void TInternalizeCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
+    registrar.Parameter("path", &TThis::Path);
 }
 
 void TInternalizeCommand::DoExecute(ICommandContextPtr context)

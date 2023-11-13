@@ -10,7 +10,9 @@ class TBuildSnapshotCommand
     : public TTypedCommand<NApi::TBuildSnapshotOptions>
 {
 public:
-    TBuildSnapshotCommand();
+    REGISTER_YSON_STRUCT_LITE(TBuildSnapshotCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     void DoExecute(ICommandContextPtr context) override;
@@ -22,7 +24,9 @@ class TBuildMasterSnapshotsCommand
     : public TTypedCommand<NApi::TBuildMasterSnapshotsOptions>
 {
 public:
-    TBuildMasterSnapshotsCommand();
+    REGISTER_YSON_STRUCT_LITE(TBuildMasterSnapshotsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     void DoExecute(ICommandContextPtr context) override;
@@ -34,7 +38,9 @@ class TExitReadOnlyCommand
     : public TTypedCommand<NApi::TExitReadOnlyOptions>
 {
 public:
-    TExitReadOnlyCommand();
+    REGISTER_YSON_STRUCT_LITE(TExitReadOnlyCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NHydra::TCellId CellId_;
@@ -48,7 +54,9 @@ class TMasterExitReadOnlyCommand
     : public TTypedCommand<NApi::TMasterExitReadOnlyOptions>
 {
 public:
-    TMasterExitReadOnlyCommand();
+    REGISTER_YSON_STRUCT_LITE(TMasterExitReadOnlyCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     void DoExecute(ICommandContextPtr context) override;
@@ -60,7 +68,9 @@ class TDiscombobulateNonvotingPeersCommand
     : public TTypedCommand<NApi::TDiscombobulateNonvotingPeersOptions>
 {
 public:
-    TDiscombobulateNonvotingPeersCommand();
+    REGISTER_YSON_STRUCT_LITE(TDiscombobulateNonvotingPeersCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NHydra::TCellId CellId_;
@@ -74,7 +84,9 @@ class TSwitchLeaderCommand
     : public TTypedCommand<NApi::TSwitchLeaderOptions>
 {
 public:
-    TSwitchLeaderCommand();
+    REGISTER_YSON_STRUCT_LITE(TSwitchLeaderCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NHydra::TCellId CellId_;
@@ -89,7 +101,9 @@ class TResetStateHashCommand
     : public TTypedCommand<NApi::TResetStateHashOptions>
 {
 public:
-    TResetStateHashCommand();
+    REGISTER_YSON_STRUCT_LITE(TResetStateHashCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NHydra::TCellId CellId_;
@@ -103,7 +117,9 @@ class THealExecNodeCommand
     : public TTypedCommand<NApi::THealExecNodeOptions>
 {
 public:
-    THealExecNodeCommand();
+    REGISTER_YSON_STRUCT_LITE(THealExecNodeCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString Address_;
@@ -117,7 +133,9 @@ class TSuspendCoordinatorCommand
     : public TTypedCommand<NApi::TSuspendCoordinatorOptions>
 {
 public:
-    TSuspendCoordinatorCommand();
+    REGISTER_YSON_STRUCT_LITE(TSuspendCoordinatorCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NObjectClient::TCellId CoordinatorCellId_;
@@ -131,7 +149,9 @@ class TResumeCoordinatorCommand
     : public TTypedCommand<NApi::TResumeCoordinatorOptions>
 {
 public:
-    TResumeCoordinatorCommand();
+    REGISTER_YSON_STRUCT_LITE(TResumeCoordinatorCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NObjectClient::TCellId CoordinatorCellId_;
@@ -145,7 +165,9 @@ class TMigrateReplicationCardsCommand
     : public TTypedCommand<NApi::TMigrateReplicationCardsOptions>
 {
 public:
-    TMigrateReplicationCardsCommand();
+    REGISTER_YSON_STRUCT_LITE(TMigrateReplicationCardsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NObjectClient::TCellId ChaosCellId_;
@@ -159,7 +181,9 @@ class TSuspendChaosCellsCommand
     : public TTypedCommand<NApi::TSuspendChaosCellsOptions>
 {
 public:
-    TSuspendChaosCellsCommand();
+    REGISTER_YSON_STRUCT_LITE(TSuspendChaosCellsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     std::vector<NObjectClient::TCellId> CellIds_;
@@ -173,7 +197,9 @@ class TResumeChaosCellsCommand
     : public TTypedCommand<NApi::TResumeChaosCellsOptions>
 {
 public:
-    TResumeChaosCellsCommand();
+    REGISTER_YSON_STRUCT_LITE(TResumeChaosCellsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     std::vector<NObjectClient::TCellId> CellIds_;
@@ -187,7 +213,9 @@ class TSuspendTabletCellsCommand
     : public TTypedCommand<NApi::TSuspendTabletCellsOptions>
 {
 public:
-    TSuspendTabletCellsCommand();
+    REGISTER_YSON_STRUCT_LITE(TSuspendTabletCellsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     std::vector<NObjectClient::TCellId> CellIds_;
@@ -201,7 +229,9 @@ class TResumeTabletCellsCommand
     : public TTypedCommand<NApi::TResumeTabletCellsOptions>
 {
 public:
-    TResumeTabletCellsCommand();
+    REGISTER_YSON_STRUCT_LITE(TResumeTabletCellsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     std::vector<NObjectClient::TCellId> CellIds_;
@@ -215,7 +245,9 @@ class TAddMaintenanceCommand
     : public TTypedCommand<NApi::TAddMaintenanceOptions>
 {
 public:
-    TAddMaintenanceCommand();
+    REGISTER_YSON_STRUCT_LITE(TAddMaintenanceCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NApi::EMaintenanceComponent Component_;
@@ -232,7 +264,9 @@ class TRemoveMaintenanceCommand
     : public TTypedCommand<NApi::TRemoveMaintenanceOptions>
 {
 public:
-    TRemoveMaintenanceCommand();
+    REGISTER_YSON_STRUCT_LITE(TRemoveMaintenanceCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NApi::EMaintenanceComponent Component_;
@@ -253,7 +287,9 @@ class TDisableChunkLocationsCommand
     : public TTypedCommand<NApi::TDisableChunkLocationsOptions>
 {
 public:
-   TDisableChunkLocationsCommand();
+    REGISTER_YSON_STRUCT_LITE(TDisableChunkLocationsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString NodeAddress_;
@@ -268,7 +304,9 @@ class TDestroyChunkLocationsCommand
     : public TTypedCommand<NApi::TDestroyChunkLocationsOptions>
 {
 public:
-   TDestroyChunkLocationsCommand();
+    REGISTER_YSON_STRUCT_LITE(TDestroyChunkLocationsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString NodeAddress_;
@@ -283,7 +321,9 @@ class TResurrectChunkLocationsCommand
     : public TTypedCommand<NApi::TResurrectChunkLocationsOptions>
 {
 public:
-   TResurrectChunkLocationsCommand();
+    REGISTER_YSON_STRUCT_LITE(TResurrectChunkLocationsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString NodeAddress_;
@@ -300,7 +340,9 @@ class TRequestRestartCommand
     : public TTypedCommand<NApi::TRequestRestartOptions>
 {
 public:
-   TRequestRestartCommand();
+    REGISTER_YSON_STRUCT_LITE(TRequestRestartCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString NodeAddress_;

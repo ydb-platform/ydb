@@ -164,6 +164,9 @@ private:
     template <class TStruct, class TValue>
     friend class TYsonFieldAccessor;
 
+    template <class TStruct, class TValue>
+    friend class TUniversalYsonParameterAccessor;
+
     //! Performs dynamic cast using thread safe cache.
     /*!
      * We need a lot of dynamic casts and they can be expensive for large type hierarchies.
@@ -206,6 +209,9 @@ public:
 
     template <class TBase, class TValue>
     TYsonStructParameter<TValue>& BaseClassParameter(const TString& key, TValue(TBase::*field));
+
+    template <class TValue>
+    TYsonStructParameter<TValue>& ParameterWithUniversalAccessor(const TString& key, std::function<TValue&(TStruct*)> accessor);
 
     void Preprocessor(std::function<void(TStruct*)> preprocessor);
 

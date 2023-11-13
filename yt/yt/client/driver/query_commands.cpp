@@ -1,5 +1,6 @@
 #include "query_commands.h"
 
+#include <yt/yt/client/api/public.h>
 #include <yt/yt/client/api/rowset.h>
 
 #include <yt/yt/client/formats/config.h>
@@ -11,6 +12,8 @@
 
 namespace NYT::NDriver {
 
+using namespace NApi;
+using namespace NQueryTrackerClient;
 using namespace NYTree;
 using namespace NConcurrency;
 using namespace NYson;
@@ -19,20 +22,46 @@ using namespace NFormats;
 
 //////////////////////////////////////////////////////////////////////////////
 
-TStartQueryCommand::TStartQueryCommand()
+void TStartQueryCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("engine", Engine);
-    RegisterParameter("query", Query);
-    RegisterParameter("files", Options.Files)
-        .Optional();
-    RegisterParameter("stage", Options.QueryTrackerStage)
-        .Optional();
-    RegisterParameter("settings", Options.Settings)
-        .Optional();
-    RegisterParameter("draft", Options.Draft)
-        .Optional();
-    RegisterParameter("annotations", Options.Annotations)
-        .Optional();
+    registrar.Parameter("engine", &TThis::Engine);
+
+    registrar.Parameter("query", &TThis::Query);
+
+    registrar.ParameterWithUniversalAccessor<std::vector<TQueryFilePtr>>(
+        "files",
+        [] (TThis* command) -> auto& {
+            return command->Options.Files;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TString>(
+        "stage",
+        [] (TThis* command) -> auto& {
+            return command->Options.QueryTrackerStage;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<INodePtr>(
+        "settings",
+        [] (TThis* command) -> auto& {
+            return command->Options.Settings;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "draft",
+        [] (TThis* command) -> auto& {
+            return command->Options.Draft;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<IMapNodePtr>(
+        "annotations",
+        [] (TThis* command) -> auto& {
+            return command->Options.Annotations;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TStartQueryCommand::DoExecute(ICommandContextPtr context)
@@ -50,11 +79,16 @@ void TStartQueryCommand::DoExecute(ICommandContextPtr context)
 
 //////////////////////////////////////////////////////////////////////////////
 
-TAbortQueryCommand::TAbortQueryCommand()
+void TAbortQueryCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("query_id", QueryId);
-    RegisterParameter("stage", Options.QueryTrackerStage)
-        .Optional();
+    registrar.Parameter("query_id", &TThis::QueryId);
+
+    registrar.ParameterWithUniversalAccessor<TString>(
+        "stage",
+        [] (TThis* command) -> auto& {
+            return command->Options.QueryTrackerStage;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TAbortQueryCommand::DoExecute(ICommandContextPtr context)
@@ -68,13 +102,17 @@ void TAbortQueryCommand::DoExecute(ICommandContextPtr context)
 
 //////////////////////////////////////////////////////////////////////////////
 
-TGetQueryResultCommand::TGetQueryResultCommand()
+void TGetQueryResultCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("query_id", QueryId);
-    RegisterParameter("result_index", ResultIndex)
+    registrar.Parameter("query_id", &TThis::QueryId);
+    registrar.Parameter("result_index", &TThis::ResultIndex)
         .Default(0);
-    RegisterParameter("stage", Options.QueryTrackerStage)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<TString>(
+        "stage",
+        [] (TThis* command) -> auto& {
+            return command->Options.QueryTrackerStage;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TGetQueryResultCommand::DoExecute(ICommandContextPtr context)
@@ -87,19 +125,40 @@ void TGetQueryResultCommand::DoExecute(ICommandContextPtr context)
 
 //////////////////////////////////////////////////////////////////////////////
 
-TReadQueryResultCommand::TReadQueryResultCommand()
+void TReadQueryResultCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("query_id", QueryId);
-    RegisterParameter("result_index", ResultIndex)
+    registrar.Parameter("query_id", &TThis::QueryId);
+
+    registrar.Parameter("result_index", &TThis::ResultIndex)
         .Default(0);
-    RegisterParameter("stage", Options.QueryTrackerStage)
-        .Optional();
-    RegisterParameter("columns", Options.Columns)
-        .Default();
-    RegisterParameter("lower_row_index", Options.LowerRowIndex)
-        .Default();
-    RegisterParameter("upper_row_index", Options.UpperRowIndex)
-        .Default();
+
+    registrar.ParameterWithUniversalAccessor<TString>(
+        "stage",
+        [] (TThis* command) -> auto& {
+            return command->Options.QueryTrackerStage;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<TString>>>(
+        "columns",
+        [] (TThis* command) -> auto& {
+            return command->Options.Columns;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "lower_row_index",
+        [] (TThis* command) -> auto& {
+            return command->Options.LowerRowIndex;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "upper_row_index",
+        [] (TThis* command) -> auto& {
+            return command->Options.UpperRowIndex;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TReadQueryResultCommand::DoExecute(ICommandContextPtr context)
@@ -123,13 +182,23 @@ void TReadQueryResultCommand::DoExecute(ICommandContextPtr context)
 
 //////////////////////////////////////////////////////////////////////////////
 
-TGetQueryCommand::TGetQueryCommand()
+void TGetQueryCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("query_id", QueryId);
-    RegisterParameter("attributes", Options.Attributes)
-        .Optional();
-    RegisterParameter("stage", Options.QueryTrackerStage)
-        .Optional();
+    registrar.Parameter("query_id", &TThis::QueryId);
+
+    registrar.ParameterWithUniversalAccessor<TAttributeFilter>(
+        "attributes",
+        [] (TThis* command) -> auto& {
+            return command->Options.Attributes;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TString>(
+        "stage",
+        [] (TThis* command) -> auto& {
+            return command->Options.QueryTrackerStage;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TGetQueryCommand::DoExecute(ICommandContextPtr context)
@@ -142,30 +211,84 @@ void TGetQueryCommand::DoExecute(ICommandContextPtr context)
 
 //////////////////////////////////////////////////////////////////////////////
 
-TListQueriesCommand::TListQueriesCommand()
+void TListQueriesCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("stage", Options.QueryTrackerStage)
+    registrar.ParameterWithUniversalAccessor<TString>(
+        "stage",
+        [] (TThis* command) -> auto& {
+            return command->Options.QueryTrackerStage;
+        })
         .Default("production");
-    RegisterParameter("from_time", Options.FromTime)
-        .Optional();
-    RegisterParameter("to_time", Options.ToTime)
-        .Optional();
-    RegisterParameter("cursor_time", Options.CursorTime)
-        .Optional();
-    RegisterParameter("cursor_direction", Options.CursorDirection)
-        .Optional();
-    RegisterParameter("user", Options.UserFilter)
-        .Optional();
-    RegisterParameter("state", Options.StateFilter)
-        .Optional();
-    RegisterParameter("engine", Options.EngineFilter)
-        .Optional();
-    RegisterParameter("filter", Options.SubstrFilter)
-        .Optional();
-    RegisterParameter("limit", Options.Limit)
-        .Optional();
-    RegisterParameter("attributes", Options.Attributes)
-        .Optional();
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
+        "from_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.FromTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
+        "to_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.ToTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
+        "cursor_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.CursorTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<EOperationSortDirection>(
+        "cursor_direction",
+        [] (TThis* command) -> auto& {
+            return command->Options.CursorDirection;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "user",
+        [] (TThis* command) -> auto& {
+            return command->Options.UserFilter;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<EQueryState>>(
+        "state",
+        [] (TThis* command) -> auto& {
+            return command->Options.StateFilter;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<EQueryEngine>>(
+        "engine",
+        [] (TThis* command) -> auto& {
+            return command->Options.EngineFilter;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "filter",
+        [] (TThis* command) -> auto& {
+            return command->Options.SubstrFilter;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<ui64>(
+        "limit",
+        [] (TThis* command) -> auto& {
+            return command->Options.Limit;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TAttributeFilter>(
+        "attributes",
+        [] (TThis* command) -> auto& {
+            return command->Options.Attributes;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TListQueriesCommand::DoExecute(ICommandContextPtr context)
@@ -183,11 +306,16 @@ void TListQueriesCommand::DoExecute(ICommandContextPtr context)
 
 //////////////////////////////////////////////////////////////////////////////
 
-TAlterQueryCommand::TAlterQueryCommand()
+void TAlterQueryCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("query_id", QueryId);
-    RegisterParameter("annotations", Options.Annotations)
-        .Optional();
+    registrar.Parameter("query_id", &TThis::QueryId);
+
+    registrar.ParameterWithUniversalAccessor<IMapNodePtr>(
+        "annotations",
+        [] (TThis* command) -> auto& {
+            return command->Options.Annotations;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TAlterQueryCommand::DoExecute(ICommandContextPtr context)

@@ -14,7 +14,9 @@ class TReadHunksCommand
     : public TTypedCommand<NApi::TReadHunksOptions>
 {
 public:
-    TReadHunksCommand();
+    REGISTER_YSON_STRUCT_LITE(TReadHunksCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     std::vector<NApi::TSerializableHunkDescriptorPtr> Descriptors;
@@ -31,7 +33,9 @@ class TWriteHunksCommand
     : public TTypedCommand<NApi::TWriteHunksOptions>
 {
 public:
-    TWriteHunksCommand();
+    REGISTER_YSON_STRUCT_LITE(TWriteHunksCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYTree::TYPath Path;
@@ -47,7 +51,9 @@ class TLockHunkStoreCommand
     : public TTypedCommand<NApi::TLockHunkStoreOptions>
 {
 public:
-    TLockHunkStoreCommand();
+    REGISTER_YSON_STRUCT_LITE(TLockHunkStoreCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYTree::TYPath Path;
@@ -64,7 +70,9 @@ class TUnlockHunkStoreCommand
     : public TTypedCommand<NApi::TUnlockHunkStoreOptions>
 {
 public:
-    TUnlockHunkStoreCommand();
+    REGISTER_YSON_STRUCT_LITE(TUnlockHunkStoreCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYTree::TYPath Path;
@@ -84,7 +92,10 @@ class TGetConnectionConfigCommand
     : public TTypedCommand<TGetConnectionConfigCommandOptions>
 {
 public:
-    TGetConnectionConfigCommand() = default;
+    REGISTER_YSON_STRUCT_LITE(TGetConnectionConfigCommand);
+
+    static void Register(TRegistrar /*registrar*/)
+    { }
 
 private:
     void DoExecute(ICommandContextPtr context) override;

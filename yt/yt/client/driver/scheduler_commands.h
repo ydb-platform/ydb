@@ -25,26 +25,28 @@ protected:
     NScheduler::TOperationIdOrAlias OperationIdOrAlias;
 
 public:
-    TSimpleOperationCommandBase()
+    REGISTER_YSON_STRUCT_LITE(TSimpleOperationCommandBase);
+
+    static void Register(TRegistrar registrar)
     {
-        this->RegisterParameter("operation_id", OperationId)
+        registrar.Parameter("operation_id", &TThis::OperationId)
             .Default();
-        this->RegisterParameter("operation_alias", OperationAlias)
+        registrar.Parameter("operation_alias", &TThis::OperationAlias)
             .Default();
 
-        this->RegisterPostprocessor([&] {
-            if (!OperationId.IsEmpty() && OperationAlias.operator bool() ||
-                OperationId.IsEmpty() && !OperationAlias.operator bool())
+        registrar.Postprocessor([] (TThis* command) {
+            if (!command->OperationId.IsEmpty() && command->OperationAlias.operator bool() ||
+                command->OperationId.IsEmpty() && !command->OperationAlias.operator bool())
             {
                 THROW_ERROR_EXCEPTION("Exactly one of \"operation_id\" and \"operation_alias\" should be set")
-                    << TErrorAttribute("operation_id", OperationId)
-                    << TErrorAttribute("operation_alias", OperationAlias);
+                    << TErrorAttribute("operation_id", command->OperationId)
+                    << TErrorAttribute("operation_alias", command->OperationAlias);
             }
 
-            if (OperationId) {
-                OperationIdOrAlias = OperationId;
+            if (command->OperationId) {
+                command->OperationIdOrAlias = command->OperationId;
             } else {
-                OperationIdOrAlias = *OperationAlias;
+                command->OperationIdOrAlias = *command->OperationAlias;
             }
         });
     }
@@ -56,7 +58,9 @@ class TDumpJobContextCommand
     : public TTypedCommand<NApi::TDumpJobContextOptions>
 {
 public:
-    TDumpJobContextCommand();
+    REGISTER_YSON_STRUCT_LITE(TDumpJobContextCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NJobTrackerClient::TJobId JobId;
@@ -71,7 +75,9 @@ class TGetJobInputCommand
     : public TTypedCommand<NApi::TGetJobInputOptions>
 {
 public:
-    TGetJobInputCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetJobInputCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NJobTrackerClient::TJobId JobId;
@@ -85,7 +91,9 @@ class TGetJobInputPathsCommand
     : public TTypedCommand<NApi::TGetJobInputPathsOptions>
 {
 public:
-    TGetJobInputPathsCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetJobInputPathsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NJobTrackerClient::TJobId JobId;
@@ -99,7 +107,9 @@ class TGetJobSpecCommand
     : public TTypedCommand<NApi::TGetJobSpecOptions>
 {
 public:
-    TGetJobSpecCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetJobSpecCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NJobTrackerClient::TJobId JobId;
@@ -113,7 +123,9 @@ class TGetJobStderrCommand
     : public TSimpleOperationCommandBase<NApi::TGetJobStderrOptions>
 {
 public:
-    TGetJobStderrCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetJobStderrCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NJobTrackerClient::TJobId JobId;
@@ -127,7 +139,9 @@ class TGetJobFailContextCommand
     : public TSimpleOperationCommandBase<NApi::TGetJobFailContextOptions>
 {
 public:
-    TGetJobFailContextCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetJobFailContextCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NJobTrackerClient::TJobId JobId;
@@ -141,7 +155,9 @@ class TListOperationsCommand
     : public TTypedCommand<NApi::TListOperationsOptions>
 {
 public:
-    TListOperationsCommand();
+    REGISTER_YSON_STRUCT_LITE(TListOperationsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     bool EnableUIMode = false;
@@ -157,7 +173,9 @@ class TListJobsCommand
     : public TSimpleOperationCommandBase<NApi::TListJobsOptions>
 {
 public:
-    TListJobsCommand();
+    REGISTER_YSON_STRUCT_LITE(TListJobsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     void DoExecute(ICommandContextPtr context) override;
@@ -169,7 +187,9 @@ class TGetJobCommand
     : public TSimpleOperationCommandBase<NApi::TGetJobOptions>
 {
 public:
-    TGetJobCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetJobCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NJobTrackerClient::TJobId JobId;
@@ -183,7 +203,9 @@ class TAbandonJobCommand
     : public TTypedCommand<NApi::TAbandonJobOptions>
 {
 public:
-    TAbandonJobCommand();
+    REGISTER_YSON_STRUCT_LITE(TAbandonJobCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NJobTrackerClient::TJobId JobId;
@@ -197,7 +219,9 @@ class TPollJobShellCommand
     : public TTypedCommand<NApi::TPollJobShellOptions>
 {
 public:
-    TPollJobShellCommand();
+    REGISTER_YSON_STRUCT_LITE(TPollJobShellCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NJobTrackerClient::TJobId JobId;
@@ -216,7 +240,28 @@ private:
     NJobTrackerClient::TJobId JobId;
 
 public:
-    TAbortJobCommand();
+    REGISTER_YSON_STRUCT_LITE(TAbortJobCommand);
+
+    static void Register(TRegistrar registrar);
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TStartOperationCommandBase
+    : public TTypedCommand<NApi::TStartOperationOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TStartOperationCommandBase);
+
+    static void Register(TRegistrar registrar);
+
+protected:
+    NScheduler::EOperationType OperationType;
+
+private:
+    NYTree::INodePtr Spec;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -224,89 +269,100 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TStartOperationCommand
-    : public TTypedCommand<NApi::TStartOperationOptions>
+    : public TStartOperationCommandBase
 {
 public:
-    explicit TStartOperationCommand(
-        std::optional<NScheduler::EOperationType> operationType = std::optional<NScheduler::EOperationType>());
+    REGISTER_YSON_STRUCT_LITE(TStartOperationCommand);
 
-private:
-    NYTree::INodePtr Spec;
-    NScheduler::EOperationType OperationType;
-
-    void DoExecute(ICommandContextPtr context) override;
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TMapCommand
-    : public TStartOperationCommand
+    : public TStartOperationCommandBase
 {
 public:
-    TMapCommand();
+    REGISTER_YSON_STRUCT_LITE(TMapCommand);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TMergeCommand
-    : public TStartOperationCommand
+    : public TStartOperationCommandBase
 {
 public:
-    TMergeCommand();
+    REGISTER_YSON_STRUCT_LITE(TMergeCommand);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSortCommand
-    : public TStartOperationCommand
+    : public TStartOperationCommandBase
 {
 public:
-    TSortCommand();
+    REGISTER_YSON_STRUCT_LITE(TSortCommand);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TEraseCommand
-    : public TStartOperationCommand
+    : public TStartOperationCommandBase
 {
 public:
-    TEraseCommand();
+    REGISTER_YSON_STRUCT_LITE(TEraseCommand);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TReduceCommand
-    : public TStartOperationCommand
+    : public TStartOperationCommandBase
 {
 public:
-    TReduceCommand();
+    REGISTER_YSON_STRUCT_LITE(TReduceCommand);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TJoinReduceCommand
-    : public TStartOperationCommand
+    : public TStartOperationCommandBase
 {
 public:
-    TJoinReduceCommand();
+    REGISTER_YSON_STRUCT_LITE(TJoinReduceCommand);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TMapReduceCommand
-    : public TStartOperationCommand
+    : public TStartOperationCommandBase
 {
 public:
-    TMapReduceCommand();
+    REGISTER_YSON_STRUCT_LITE(TMapReduceCommand);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TRemoteCopyCommand
-    : public TStartOperationCommand
+    : public TStartOperationCommandBase
 {
 public:
-    TRemoteCopyCommand();
+    REGISTER_YSON_STRUCT_LITE(TRemoteCopyCommand);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -315,7 +371,9 @@ class TAbortOperationCommand
     : public TSimpleOperationCommandBase<NApi::TAbortOperationOptions>
 {
 public:
-    TAbortOperationCommand();
+    REGISTER_YSON_STRUCT_LITE(TAbortOperationCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     void DoExecute(ICommandContextPtr context) override;
@@ -327,7 +385,9 @@ class TSuspendOperationCommand
     : public TSimpleOperationCommandBase<NApi::TSuspendOperationOptions>
 {
 public:
-    TSuspendOperationCommand();
+    REGISTER_YSON_STRUCT_LITE(TSuspendOperationCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     void DoExecute(ICommandContextPtr context) override;
@@ -338,6 +398,11 @@ private:
 class TResumeOperationCommand
     : public TSimpleOperationCommandBase<NApi::TResumeOperationOptions>
 {
+    REGISTER_YSON_STRUCT_LITE(TResumeOperationCommand);
+
+    static void Register(TRegistrar)
+    { }
+
 public:
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -347,6 +412,11 @@ public:
 class TCompleteOperationCommand
     : public TSimpleOperationCommandBase<NApi::TCompleteOperationOptions>
 {
+    REGISTER_YSON_STRUCT_LITE(TCompleteOperationCommand);
+
+    static void Register(TRegistrar)
+    { }
+
 public:
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -357,7 +427,9 @@ class TUpdateOperationParametersCommand
     : public TSimpleOperationCommandBase<NApi::TUpdateOperationParametersOptions>
 {
 public:
-    TUpdateOperationParametersCommand();
+    REGISTER_YSON_STRUCT_LITE(TUpdateOperationParametersCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYTree::INodePtr Parameters;
@@ -371,7 +443,9 @@ class TGetOperationCommand
     : public TSimpleOperationCommandBase<NApi::TGetOperationOptions>
 {
 public:
-    TGetOperationCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetOperationCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     void DoExecute(ICommandContextPtr context) override;

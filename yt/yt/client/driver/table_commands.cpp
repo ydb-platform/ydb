@@ -31,6 +31,7 @@
 namespace NYT::NDriver {
 
 using namespace NApi;
+using namespace NChaosClient;
 using namespace NChunkClient;
 using namespace NConcurrency;
 using namespace NFormats;
@@ -55,18 +56,23 @@ static NLogging::TLogger WithCommandTag(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReadTableCommand::TReadTableCommand()
+void TReadTableCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("table_reader", TableReader)
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("table_reader", &TThis::TableReader)
         .Default();
-    RegisterParameter("control_attributes", ControlAttributes)
+    registrar.Parameter("control_attributes", &TThis::ControlAttributes)
         .DefaultNew();
-    RegisterParameter("unordered", Unordered)
+    registrar.Parameter("unordered", &TThis::Unordered)
         .Default(false);
-    RegisterParameter("start_row_index_only", StartRowIndexOnly)
+    registrar.Parameter("start_row_index_only", &TThis::StartRowIndexOnly)
         .Default(false);
-    RegisterParameter("omit_inaccessible_columns", Options.OmitInaccessibleColumns)
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "omit_inaccessible_columns",
+        [] (TThis* command) -> auto& {
+            return command->Options.OmitInaccessibleColumns;
+        })
         .Default(false);
 }
 
@@ -153,19 +159,19 @@ bool TReadTableCommand::HasResponseParameters() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReadBlobTableCommand::TReadBlobTableCommand()
+void TReadBlobTableCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("part_size", PartSize);
-    RegisterParameter("table_reader", TableReader)
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("part_size", &TThis::PartSize);
+    registrar.Parameter("table_reader", &TThis::TableReader)
         .Default();
-    RegisterParameter("part_index_column_name", PartIndexColumnName)
+    registrar.Parameter("part_index_column_name", &TThis::PartIndexColumnName)
         .Default();
-    RegisterParameter("data_column_name", DataColumnName)
+    registrar.Parameter("data_column_name", &TThis::DataColumnName)
         .Default();
-    RegisterParameter("start_part_index", StartPartIndex)
+    registrar.Parameter("start_part_index", &TThis::StartPartIndex)
         .Default(0);
-    RegisterParameter("offset", Offset)
+    registrar.Parameter("offset", &TThis::Offset)
         .Default(0);
 }
 
@@ -216,9 +222,9 @@ void TReadBlobTableCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLocateSkynetShareCommand::TLocateSkynetShareCommand()
+void TLocateSkynetShareCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
+    registrar.Parameter("path", &TThis::Path);
 }
 
 void TLocateSkynetShareCommand::DoExecute(ICommandContextPtr context)
@@ -245,12 +251,12 @@ void TLocateSkynetShareCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TWriteTableCommand::TWriteTableCommand()
+void TWriteTableCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("table_writer", TableWriter)
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("table_writer", &TThis::TableWriter)
         .Default();
-    RegisterParameter("max_row_buffer_size", MaxRowBufferSize)
+    registrar.Parameter("max_row_buffer_size", &TThis::MaxRowBufferSize)
         .Default(1_MB);
 }
 
@@ -297,14 +303,14 @@ void TWriteTableCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetTableColumnarStatisticsCommand::TGetTableColumnarStatisticsCommand()
+void TGetTableColumnarStatisticsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("paths", Paths);
-    RegisterParameter("fetcher_mode", FetcherMode)
+    registrar.Parameter("paths", &TThis::Paths);
+    registrar.Parameter("fetcher_mode", &TThis::FetcherMode)
         .Default(EColumnarStatisticsFetcherMode::FromNodes);
-    RegisterParameter("max_chunks_per_node_fetch", MaxChunksPerNodeFetch)
+    registrar.Parameter("max_chunks_per_node_fetch", &TThis::MaxChunksPerNodeFetch)
         .Default();
-    RegisterParameter("enable_early_finish", EnableEarlyFinish)
+    registrar.Parameter("enable_early_finish", &TThis::EnableEarlyFinish)
         .Default(true);
 }
 
@@ -407,17 +413,17 @@ void TGetTableColumnarStatisticsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPartitionTablesCommand::TPartitionTablesCommand()
+void TPartitionTablesCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("paths", Paths);
-    RegisterParameter("partition_mode", PartitionMode)
+    registrar.Parameter("paths", &TThis::Paths);
+    registrar.Parameter("partition_mode", &TThis::PartitionMode)
         .Default(ETablePartitionMode::Unordered);
-    RegisterParameter("data_weight_per_partition", DataWeightPerPartition);
-    RegisterParameter("max_partition_count", MaxPartitionCount)
+    registrar.Parameter("data_weight_per_partition", &TThis::DataWeightPerPartition);
+    registrar.Parameter("max_partition_count", &TThis::MaxPartitionCount)
         .Default();
-    RegisterParameter("enable_key_guarantee", EnableKeyGuarantee)
+    registrar.Parameter("enable_key_guarantee", &TThis::EnableKeyGuarantee)
         .Default(false);
-    RegisterParameter("adjust_data_weight_per_partition", AdjustDataWeightPerPartition)
+    registrar.Parameter("adjust_data_weight_per_partition", &TThis::AdjustDataWeightPerPartition)
         .Default(true);
 }
 
@@ -441,14 +447,28 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMountTableCommand::TMountTableCommand()
+void TMountTableCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("cell_id", Options.CellId)
-        .Optional();
-    RegisterParameter("freeze", Options.Freeze)
-        .Optional();
-    RegisterParameter("target_cell_ids", Options.TargetCellIds)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<TTabletCellId>(
+        "cell_id",
+        [] (TThis* command) -> auto& {
+            return command->Options.CellId;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "freeze",
+        [] (TThis* command) -> auto& {
+            return command->Options.Freeze;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::vector<TTabletCellId>>(
+        "target_cell_ids",
+        [] (TThis* command) -> auto& {
+            return command->Options.TargetCellIds;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TMountTableCommand::DoExecute(ICommandContextPtr context)
@@ -464,10 +484,14 @@ void TMountTableCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TUnmountTableCommand::TUnmountTableCommand()
+void TUnmountTableCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("force", Options.Force)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TUnmountTableCommand::DoExecute(ICommandContextPtr context)
@@ -522,40 +546,61 @@ void TUnfreezeTableCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReshardTableCommand::TReshardTableCommand()
+void TReshardTableCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("pivot_keys", PivotKeys)
-        .Default();
-    RegisterParameter("tablet_count", TabletCount)
-        .Default()
-        .GreaterThan(0);
-    RegisterParameter("uniform", Options.Uniform)
-        .Default();
-    RegisterParameter("enable_slicing", Options.EnableSlicing)
-        .Default();
-    RegisterParameter("slicing_accuracy", Options.SlicingAccuracy)
-        .Default()
-        .GreaterThan(0);
-    RegisterParameter("trimmed_row_counts", Options.TrimmedRowCounts)
+    registrar.Parameter("pivot_keys", &TThis::PivotKeys)
         .Default();
 
-    RegisterPostprocessor([&] () {
-        if (PivotKeys && TabletCount) {
+    registrar.Parameter("tablet_count", &TThis::TabletCount)
+        .Default()
+        .GreaterThan(0);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "uniform",
+        [] (TThis* command) -> auto& {
+            return command->Options.Uniform;
+        })
+        .Default();
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "enable_slicing",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableSlicing;
+        })
+        .Default();
+
+    registrar.ParameterWithUniversalAccessor<std::optional<double>>(
+        "slicing_accuracy",
+        [] (TThis* command) -> auto& {
+            return command->Options.SlicingAccuracy;
+        })
+        .Default()
+        .GreaterThan(0);
+
+    registrar.ParameterWithUniversalAccessor<std::vector<i64>>(
+        "trimmed_row_counts",
+        [] (TThis* command) -> auto& {
+            return command->Options.TrimmedRowCounts;
+        })
+        .Default();
+
+    registrar.Postprocessor([] (TThis* command) {
+        if (command->PivotKeys && command->TabletCount) {
             THROW_ERROR_EXCEPTION("Cannot specify both \"pivot_keys\" and \"tablet_count\"");
         }
-        if (!PivotKeys && !TabletCount) {
+        if (!command->PivotKeys && !command->TabletCount) {
             THROW_ERROR_EXCEPTION("Must specify either \"pivot_keys\" or \"tablet_count\"");
         }
-        if (Options.Uniform && PivotKeys) {
+        if (command->Options.Uniform && command->PivotKeys) {
             THROW_ERROR_EXCEPTION("\"uniform\" can be specified only with \"tablet_count\"");
         }
-        if (Options.EnableSlicing && PivotKeys) {
+        if (command->Options.EnableSlicing && command->PivotKeys) {
             THROW_ERROR_EXCEPTION("\"enable_slicing\" can be specified only with \"tablet_count\"");
         }
-        if (Options.EnableSlicing && Options.Uniform) {
+        if (command->Options.EnableSlicing && command->Options.Uniform) {
             THROW_ERROR_EXCEPTION("Cannot specify both \"enable_slicing\" and \"uniform\"");
         }
-        if (Options.SlicingAccuracy && !Options.EnableSlicing) {
+        if (command->Options.SlicingAccuracy && !command->Options.EnableSlicing) {
             THROW_ERROR_EXCEPTION("\"slicing_accuracy\" can be specified only with \"enable_slicing\"");
         }
     });
@@ -583,9 +628,13 @@ void TReshardTableCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReshardTableAutomaticCommand::TReshardTableAutomaticCommand()
+void TReshardTableAutomaticCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("keep_actions", Options.KeepActions)
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "keep_actions",
+        [] (TThis* command) -> auto& {
+            return command->Options.KeepActions;
+        })
         .Default(false);
 }
 
@@ -601,21 +650,51 @@ void TReshardTableAutomaticCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAlterTableCommand::TAlterTableCommand()
+void TAlterTableCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("schema", Options.Schema)
-        .Optional();
-    RegisterParameter("schema_id", Options.SchemaId)
-        .Optional();
-    RegisterParameter("dynamic", Options.Dynamic)
-        .Optional();
-    RegisterParameter("upstream_replica_id", Options.UpstreamReplicaId)
-        .Optional();
-    RegisterParameter("schema_modification", Options.SchemaModification)
-        .Optional();
-    RegisterParameter("replication_progress", Options.ReplicationProgress)
-        .Optional();
+    registrar.Parameter("path", &TThis::Path);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TTableSchema>>(
+        "schema",
+        [] (TThis* command) -> auto& {
+            return command->Options.Schema;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TMasterTableSchemaId>>(
+        "schema_id",
+        [] (TThis* command) -> auto& {
+            return command->Options.SchemaId;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "dynamic",
+        [] (TThis* command) -> auto& {
+            return command->Options.Dynamic;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TTableReplicaId>>(
+        "upstream_replica_id",
+        [] (TThis* command) -> auto& {
+            return command->Options.UpstreamReplicaId;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<ETableSchemaModification>>(
+        "schema_modification",
+        [] (TThis* command) -> auto& {
+            return command->Options.SchemaModification;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TReplicationProgress>>(
+        "replication_progress",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicationProgress;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TAlterTableCommand::DoExecute(ICommandContextPtr context)
@@ -631,33 +710,85 @@ void TAlterTableCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSelectRowsCommand::TSelectRowsCommand()
+void TSelectRowsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("query", Query);
-    RegisterParameter("input_row_limit", Options.InputRowLimit)
+    registrar.Parameter("query", &TThis::Query);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "input_row_limit",
+        [] (TThis* command) -> auto& {
+            return command->Options.InputRowLimit;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "output_row_limit",
+        [] (TThis* command) -> auto& {
+            return command->Options.OutputRowLimit;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "allow_full_scan",
+        [] (TThis* command) -> auto& {
+            return command->Options.AllowFullScan;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "allow_join_without_index",
+        [] (TThis* command) -> auto& {
+            return command->Options.AllowJoinWithoutIndex;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "execution_pool",
+        [] (TThis* command) -> auto& {
+            return command->Options.ExecutionPool;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "fail_on_incomplete_result",
+        [] (TThis* command) -> auto& {
+            return command->Options.FailOnIncompleteResult;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "enable_code_cache",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableCodeCache;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TUserWorkloadDescriptor>(
+        "workload_descriptor",
+        [] (TThis* command) -> auto& {
+            return command->Options.WorkloadDescriptor;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.Parameter("enable_statistics", &TThis::EnableStatistics)
         .Optional();
-    RegisterParameter("output_row_limit", Options.OutputRowLimit)
+
+    registrar.ParameterWithUniversalAccessor<EReplicaConsistency>(
+        "replica_consistency",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicaConsistency;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.Parameter("placeholder_values", &TThis::PlaceholderValues)
         .Optional();
-    RegisterParameter("allow_full_scan", Options.AllowFullScan)
-        .Optional();
-    RegisterParameter("allow_join_without_index", Options.AllowJoinWithoutIndex)
-        .Optional();
-    RegisterParameter("execution_pool", Options.ExecutionPool)
-        .Optional();
-    RegisterParameter("fail_on_incomplete_result", Options.FailOnIncompleteResult)
-        .Optional();
-    RegisterParameter("enable_code_cache", Options.EnableCodeCache)
-        .Optional();
-    RegisterParameter("workload_descriptor", Options.WorkloadDescriptor)
-        .Optional();
-    RegisterParameter("enable_statistics", EnableStatistics)
-        .Optional();
-    RegisterParameter("replica_consistency", Options.ReplicaConsistency)
-        .Optional();
-    RegisterParameter("placeholder_values", PlaceholderValues)
-        .Optional();
-    RegisterParameter("use_canonical_null_relations", Options.UseCanonicalNullRelations)
-        .Optional();
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "use_canonical_null_relations",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseCanonicalNullRelations;
+        })
+        .Optional(/*init*/ false);
 }
 
 bool TSelectRowsCommand::HasResponseParameters() const
@@ -699,11 +830,16 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TExplainQueryCommand::TExplainQueryCommand()
+void TExplainQueryCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("query", Query);
-    RegisterParameter("verbose_output", Options.VerboseOutput)
-        .Optional();
+    registrar.Parameter("query", &TThis::Query);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "verbose_output",
+        [] (TThis* command) -> auto& {
+            return command->Options.VerboseOutput;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TExplainQueryCommand::DoExecute(ICommandContextPtr context)
@@ -728,20 +864,38 @@ static std::vector<TUnversionedRow> ParseRows(
     return valueConsumer->GetRows();
 }
 
-TInsertRowsCommand::TInsertRowsCommand()
+void TInsertRowsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("require_sync_replica", Options.RequireSyncReplica)
-        .Optional();
-    RegisterParameter("sequence_number", Options.SequenceNumber)
-        .Optional();
-    RegisterParameter("table_writer", TableWriter)
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "require_sync_replica",
+        [] (TThis* command) -> auto& {
+            return command->Options.RequireSyncReplica;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "sequence_number",
+        [] (TThis* command) -> auto& {
+            return command->Options.SequenceNumber;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.Parameter("table_writer", &TThis::TableWriter)
         .Default();
-    RegisterParameter("path", Path);
-    RegisterParameter("update", Update)
+
+    registrar.Parameter("path", &TThis::Path);
+
+    registrar.Parameter("update", &TThis::Update)
         .Default(false);
-    RegisterParameter("aggregate", Aggregate)
+
+    registrar.Parameter("aggregate", &TThis::Aggregate)
         .Default(false);
-    RegisterParameter("allow_missing_key_columns", Options.AllowMissingKeyColumns)
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "allow_missing_key_columns",
+        [] (TThis* command) -> auto& {
+            return command->Options.AllowMissingKeyColumns;
+        })
         .Default(false);
 }
 
@@ -800,27 +954,52 @@ void TInsertRowsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLookupRowsCommand::TLookupRowsCommand()
+void TLookupRowsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("table_writer", TableWriter)
+    registrar.Parameter("table_writer", &TThis::TableWriter)
         .Default();
-    RegisterParameter("path", Path);
-    RegisterParameter("column_names", ColumnNames)
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("column_names", &TThis::ColumnNames)
         .Default();
-    RegisterParameter("versioned", Versioned)
+    registrar.Parameter("versioned", &TThis::Versioned)
         .Default(false);
-    RegisterParameter("retention_config", RetentionConfig)
+    registrar.Parameter("retention_config", &TThis::RetentionConfig)
         .Optional();
-    RegisterParameter("keep_missing_rows", Options.KeepMissingRows)
-        .Optional();
-    RegisterParameter("enable_partial_result", Options.EnablePartialResult)
-        .Optional();
-    RegisterParameter("use_lookup_cache", Options.UseLookupCache)
-        .Optional();
-    RegisterParameter("cached_sync_replicas_timeout", Options.CachedSyncReplicasTimeout)
-        .Optional();
-    RegisterParameter("replica_consistency", Options.ReplicaConsistency)
-        .Optional();
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "keep_missing_rows",
+        [] (TThis* command) -> auto& {
+            return command->Options.KeepMissingRows;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "enable_partial_result",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnablePartialResult;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "use_lookup_cache",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseLookupCache;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TDuration>>(
+        "cached_sync_replicas_timeout",
+        [] (TThis* command) -> auto& {
+            return command->Options.CachedSyncReplicasTimeout;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<EReplicaConsistency>(
+        "replica_consistency",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicaConsistency;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
@@ -926,14 +1105,34 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPullRowsCommand::TPullRowsCommand()
+void TPullRowsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("upstream_replica_id", Options.UpstreamReplicaId);
-    RegisterParameter("replication_progress", Options.ReplicationProgress);
-    RegisterParameter("upper_timestamp", Options.UpperTimestamp)
-        .Optional();
-    RegisterParameter("order_rows_by_timestamp", Options.OrderRowsByTimestamp)
+    registrar.Parameter("path", &TThis::Path);
+
+    registrar.ParameterWithUniversalAccessor<TReplicaId>(
+        "upstream_replica_id",
+        [] (TThis* command) -> auto& {
+            return command->Options.UpstreamReplicaId;
+        });
+
+    registrar.ParameterWithUniversalAccessor<TReplicationProgress>(
+        "replication_progress",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicationProgress;
+        });
+
+    registrar.ParameterWithUniversalAccessor<TTimestamp>(
+        "upper_timestamp",
+        [] (TThis* command) -> auto& {
+            return command->Options.UpperTimestamp;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "order_rows_by_timestamp",
+        [] (TThis* command) -> auto& {
+            return command->Options.OrderRowsByTimestamp;
+        })
         .Default(false);
 }
 
@@ -982,14 +1181,25 @@ bool TPullRowsCommand::HasResponseParameters() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetInSyncReplicasCommand::TGetInSyncReplicasCommand()
+void TGetInSyncReplicasCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("timestamp", Options.Timestamp);
-    RegisterParameter("all_keys", AllKeys)
+    registrar.Parameter("path", &TThis::Path);
+
+    registrar.ParameterWithUniversalAccessor<TTimestamp>(
+        "timestamp",
+        [] (TThis* command) -> auto& {
+            return command->Options.Timestamp;
+        });
+
+    registrar.Parameter("all_keys", &TThis::AllKeys)
         .Default(false);
-    RegisterParameter("cached_sync_replicas_timeout", Options.CachedSyncReplicasTimeout)
-        .Optional();
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TDuration>>(
+        "cached_sync_replicas_timeout",
+        [] (TThis* command) -> auto& {
+            return command->Options.CachedSyncReplicasTimeout;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TGetInSyncReplicasCommand::DoExecute(ICommandContextPtr context)
@@ -1044,15 +1254,26 @@ void TGetInSyncReplicasCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDeleteRowsCommand::TDeleteRowsCommand()
+void TDeleteRowsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("sequence_number", Options.SequenceNumber)
-        .Optional();
-    RegisterParameter("require_sync_replica", Options.RequireSyncReplica)
-        .Optional();
-    RegisterParameter("table_writer", TableWriter)
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "sequence_number",
+        [] (TThis* command) -> auto& {
+            return command->Options.SequenceNumber;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "require_sync_replica",
+        [] (TThis* command) -> auto& {
+            return command->Options.RequireSyncReplica;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.Parameter("table_writer", &TThis::TableWriter)
         .Default();
-    RegisterParameter("path", Path);
+
+    registrar.Parameter("path", &TThis::Path);
 }
 
 void TDeleteRowsCommand::DoExecute(ICommandContextPtr context)
@@ -1104,13 +1325,13 @@ void TDeleteRowsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLockRowsCommand::TLockRowsCommand()
+void TLockRowsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("table_writer", TableWriter)
+    registrar.Parameter("table_writer", &TThis::TableWriter)
         .Default();
-    RegisterParameter("path", Path);
-    RegisterParameter("locks", Locks);
-    RegisterParameter("lock_type", LockType)
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("locks", &TThis::Locks);
+    registrar.Parameter("lock_type", &TThis::LockType)
         .Default(NTableClient::ELockType::SharedStrong);
 }
 
@@ -1159,11 +1380,11 @@ void TLockRowsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTrimRowsCommand::TTrimRowsCommand()
+void TTrimRowsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("tablet_index", TabletIndex);
-    RegisterParameter("trimmed_row_count", TrimmedRowCount);
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("tablet_index", &TThis::TabletIndex);
+    registrar.Parameter("trimmed_row_count", &TThis::TrimmedRowCount);
 }
 
 void TTrimRowsCommand::DoExecute(ICommandContextPtr context)
@@ -1182,10 +1403,13 @@ void TTrimRowsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEnableTableReplicaCommand::TEnableTableReplicaCommand()
+void TEnableTableReplicaCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("replica_id", ReplicaId);
-    Options.Enabled = true;
+    registrar.Parameter("replica_id", &TThis::ReplicaId);
+
+    registrar.Preprocessor([] (TThis* command) {
+        command->Options.Enabled = true;
+    });
 }
 
 void TEnableTableReplicaCommand::DoExecute(ICommandContextPtr context)
@@ -1200,10 +1424,13 @@ void TEnableTableReplicaCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDisableTableReplicaCommand::TDisableTableReplicaCommand()
+void TDisableTableReplicaCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("replica_id", ReplicaId);
-    Options.Enabled = false;
+    registrar.Parameter("replica_id", &TThis::ReplicaId);
+
+    registrar.Preprocessor([] (TThis* command) {
+        command->Options.Enabled = false;
+    });
 }
 
 void TDisableTableReplicaCommand::DoExecute(ICommandContextPtr context)
@@ -1218,19 +1445,44 @@ void TDisableTableReplicaCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAlterTableReplicaCommand::TAlterTableReplicaCommand()
+void TAlterTableReplicaCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("replica_id", ReplicaId);
-    RegisterParameter("enabled", Options.Enabled)
-        .Optional();
-    RegisterParameter("mode", Options.Mode)
-        .Optional();
-    RegisterParameter("preserve_timestamps", Options.PreserveTimestamps)
-        .Optional();
-    RegisterParameter("atomicity", Options.Atomicity)
-        .Optional();
-    RegisterParameter("enable_replicated_table_tracker", Options.EnableReplicatedTableTracker)
-        .Optional();
+    registrar.Parameter("replica_id", &TThis::ReplicaId);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "enabled",
+        [] (TThis* command) -> auto& {
+            return command->Options.Enabled;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<ETableReplicaMode>>(
+        "mode",
+        [] (TThis* command) -> auto& {
+            return command->Options.Mode;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "preserve_timestamps",
+        [] (TThis* command) -> auto& {
+            return command->Options.PreserveTimestamps;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<EAtomicity>>(
+        "atomicity",
+        [] (TThis* command) -> auto& {
+            return command->Options.Atomicity;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "enable_replicated_table_tracker",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableReplicatedTableTracker;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TAlterTableReplicaCommand::DoExecute(ICommandContextPtr context)
@@ -1245,10 +1497,15 @@ void TAlterTableReplicaCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetTablePivotKeysCommand::TGetTablePivotKeysCommand()
+void TGetTablePivotKeysCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("represent_key_as_list", Options.RepresentKeyAsList)
+    registrar.Parameter("path", &TThis::Path);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "represent_key_as_list",
+        [] (TThis* command) -> auto& {
+            return command->Options.RepresentKeyAsList;
+        })
         .Default(false);
 }
 
@@ -1262,16 +1519,36 @@ void TGetTablePivotKeysCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCreateTableBackupCommand::TCreateTableBackupCommand()
+void TCreateTableBackupCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("manifest", Manifest);
-    RegisterParameter("checkpoint_timestamp_delay", Options.CheckpointTimestampDelay)
+    registrar.Parameter("manifest", &TThis::Manifest);
+
+    registrar.ParameterWithUniversalAccessor<TDuration>(
+        "checkpoint_timestamp_delay",
+        [] (TThis* command) -> auto& {
+            return command->Options.CheckpointTimestampDelay;
+        })
         .Default(TDuration::Seconds(5));
-    RegisterParameter("checkpoint_check_period", Options.CheckpointCheckPeriod)
+
+    registrar.ParameterWithUniversalAccessor<TDuration>(
+        "checkpoint_check_period",
+        [] (TThis* command) -> auto& {
+            return command->Options.CheckpointCheckPeriod;
+        })
         .Default(TDuration::Seconds(1));
-    RegisterParameter("checkpoint_check_timeout", Options.CheckpointCheckTimeout)
+
+    registrar.ParameterWithUniversalAccessor<TDuration>(
+        "checkpoint_check_timeout",
+        [] (TThis* command) -> auto& {
+            return command->Options.CheckpointCheckTimeout;
+        })
         .Default(TDuration::Seconds(10));
-    RegisterParameter("force", Options.Force)
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
+        })
         .Default(false);
 }
 
@@ -1285,14 +1562,29 @@ void TCreateTableBackupCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRestoreTableBackupCommand::TRestoreTableBackupCommand()
+void TRestoreTableBackupCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("manifest", Manifest);
-    RegisterParameter("force", Options.Force)
+    registrar.Parameter("manifest", &TThis::Manifest);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
+        })
         .Default(false);
-    RegisterParameter("mount", Options.Mount)
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "mount",
+        [] (TThis* command) -> auto& {
+            return command->Options.Mount;
+        })
         .Default(false);
-    RegisterParameter("enable_replicas", Options.EnableReplicas)
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "enable_replicas",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableReplicas;
+        })
         .Default(false);
 }
 
@@ -1306,11 +1598,16 @@ void TRestoreTableBackupCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetTabletInfosCommand::TGetTabletInfosCommand()
+void TGetTabletInfosCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("tablet_indexes", TabletIndexes);
-    RegisterParameter("request_errors", Options.RequestErrors)
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("tablet_indexes", &TThis::TabletIndexes);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "request_errors",
+        [] (TThis* command) -> auto& {
+            return command->Options.RequestErrors;
+        })
         .Default(false);
 }
 
@@ -1369,10 +1666,15 @@ void TGetTabletInfosCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGetTabletErrorsCommand::TGetTabletErrorsCommand()
+void TGetTabletErrorsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("limit", Options.Limit)
+    registrar.Parameter("path", &TThis::Path);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "limit",
+        [] (TThis* command) -> auto& {
+            return command->Options.Limit;
+        })
         .Default()
         .GreaterThan(0);
 }

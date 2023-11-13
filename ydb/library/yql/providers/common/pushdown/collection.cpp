@@ -222,7 +222,8 @@ bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bo
                 // SSA program cast those values to Int32
                 if (rightTypeId == NYql::NProto::Int8 ||
                     rightTypeId == NYql::NProto::Int16 ||
-                    rightTypeId == NYql::NProto::Int32)
+                    rightTypeId == NYql::NProto::Int32 ||
+                    (settings.IsEnabled(TSettings::EFeatureFlag::ImplicitConversionToInt64) && rightTypeId == NYql::NProto::Int64))
                 {
                     return ECompareOptions::Comparable;
                 }
@@ -237,7 +238,8 @@ bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bo
                 // SSA program cast those values to Uint32
                 if (rightTypeId == NYql::NProto::Uint8 ||
                     rightTypeId == NYql::NProto::Uint16 ||
-                    rightTypeId == NYql::NProto::Uint32)
+                    rightTypeId == NYql::NProto::Uint32 ||
+                    (settings.IsEnabled(TSettings::EFeatureFlag::ImplicitConversionToInt64) && rightTypeId == NYql::NProto::Uint64))
                 {
                     return ECompareOptions::Comparable;
                 }
@@ -254,9 +256,25 @@ bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bo
                     return ECompareOptions::Comparable;
                 }
                 break;
-            case NYql::NProto::Bool:
             case NYql::NProto::Int64:
+                if (settings.IsEnabled(TSettings::EFeatureFlag::ImplicitConversionToInt64) && (
+                    rightTypeId == NYql::NProto::Int8 ||
+                    rightTypeId == NYql::NProto::Int16 ||
+                    rightTypeId == NYql::NProto::Int32))
+                {
+                    return ECompareOptions::Comparable;
+                }
+                break;
             case NYql::NProto::Uint64:
+                if (settings.IsEnabled(TSettings::EFeatureFlag::ImplicitConversionToInt64) && (
+                    rightTypeId == NYql::NProto::Uint8 ||
+                    rightTypeId == NYql::NProto::Uint16 ||
+                    rightTypeId == NYql::NProto::Uint32))
+                {
+                    return ECompareOptions::Comparable;
+                }
+                break;
+            case NYql::NProto::Bool:
             case NYql::NProto::Float:
             case NYql::NProto::Double:
             case NYql::NProto::Decimal:

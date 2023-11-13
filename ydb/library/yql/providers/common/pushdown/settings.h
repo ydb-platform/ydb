@@ -21,6 +21,7 @@ struct TSettings {
         UuidType = 1 << 11,
         DecimalType = 1 << 12,
         DyNumberType = 1 << 13,
+        ImplicitConversionToInt64 = 1 << 14, // Allow implicit conversions to 64-bits integers from other types of integers
     };
 
     explicit TSettings(NLog::EComponent logComponent)

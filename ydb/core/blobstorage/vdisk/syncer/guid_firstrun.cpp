@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_syncneighbors.h>
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <library/cpp/random_provider/random_provider.h>
 
 using namespace NKikimrServices;
 using namespace NKikimr::NSync;

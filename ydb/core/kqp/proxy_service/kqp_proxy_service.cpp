@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/location.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>

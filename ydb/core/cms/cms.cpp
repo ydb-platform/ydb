@@ -11,6 +11,7 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/cms.pb.h>
@@ -22,6 +23,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>

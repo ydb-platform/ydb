@@ -462,7 +462,7 @@ namespace NQuery {
 
 void DoExecuteQuery(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     // Use default channel buffer size as inflight limit
-    ui64 inflightLimitBytes = f.GetAppConfig()->GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
+    ui64 inflightLimitBytes = f.GetChannelBufferSize();
 
     auto* req = dynamic_cast<TEvExecuteQueryRequest*>(p.release());
     Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");

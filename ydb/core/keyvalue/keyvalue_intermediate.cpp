@@ -1,5 +1,6 @@
 #include "keyvalue_intermediate.h"
 #include <ydb/core/base/appdata.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr {
 namespace NKeyValue {

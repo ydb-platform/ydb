@@ -13,6 +13,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>

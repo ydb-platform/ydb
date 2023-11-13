@@ -1,6 +1,12 @@
 #include "single_thread_ic_mock.h"
 #include "testactorsys.h"
 #include "stlog.h"
+#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/domain.h>
 
 using namespace NActors;
 using namespace NKikimr;

@@ -33,6 +33,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
 #include <util/generic/vector.h>
+#include <util/generic/guid.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

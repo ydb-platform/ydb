@@ -5,6 +5,7 @@
 #include <ydb/core/tx/tx_processing.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/scheme/scheme_borders.h>

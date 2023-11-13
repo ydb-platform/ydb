@@ -14,6 +14,8 @@
 #include <ydb/core/util/queue_oneone_inplace.h>
 #include <util/generic/map.h>
 #include <util/generic/deque.h>
+#include <library/cpp/random_provider/random_provider.h>
+
 
 namespace NKikimr {
 

@@ -1,6 +1,7 @@
 #include "mediator_impl.h"
 
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr {
 namespace NTxMediator {

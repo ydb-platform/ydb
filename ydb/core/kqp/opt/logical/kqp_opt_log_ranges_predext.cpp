@@ -9,6 +9,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/providers/common/provider/yql_table_lookup.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
+#include <ydb/core/protos/config.pb.h>
 
 
 namespace NKikimr::NKqp::NOpt {

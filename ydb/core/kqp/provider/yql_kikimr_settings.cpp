@@ -1,5 +1,7 @@
 #include "yql_kikimr_settings.h"
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NYql {
 
 using namespace NCommon;
@@ -69,6 +71,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
+
+    IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_DISABLED;
 }
 
 bool TKikimrSettings::HasAllowKqpUnsafeCommit() const {

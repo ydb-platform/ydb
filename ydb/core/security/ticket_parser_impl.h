@@ -11,6 +11,7 @@
 #include <ydb/library/ycloud/impl/access_service.h>
 #include <ydb/library/ycloud/impl/grpc_service_cache.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/ticket_parser.h>

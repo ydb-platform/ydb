@@ -4,6 +4,7 @@
 #include "blobstorage_hullcompactworker.h"
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullload.h>
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
+#include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/queue.h>
 

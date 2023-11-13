@@ -4,6 +4,8 @@
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <library/cpp/actors/core/actor_bootstrapped.h>
+
 
 
 namespace NKikimr::NKqp {

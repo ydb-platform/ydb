@@ -1,4 +1,6 @@
 #include "kqp_pure_compute_actor.h"
+#include <ydb/core/base/feature_flags.h>
+
 
 namespace NKikimr {
 namespace NKqp {

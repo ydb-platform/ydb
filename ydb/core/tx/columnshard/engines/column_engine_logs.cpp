@@ -13,6 +13,9 @@
 #include "changes/cleanup.h"
 #include "changes/ttl.h"
 
+#include <library/cpp/time_provider/time_provider.h>
+#include <library/cpp/actors/core/monotonic_provider.h>
+
 #include <concepts>
 
 namespace NKikimr::NOlap {

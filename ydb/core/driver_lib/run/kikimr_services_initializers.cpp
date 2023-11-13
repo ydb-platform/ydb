@@ -14,6 +14,7 @@
 #include <ydb/core/base/config_units.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/event_filter.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/pool_stats_collector.h>

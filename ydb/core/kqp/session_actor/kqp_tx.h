@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>

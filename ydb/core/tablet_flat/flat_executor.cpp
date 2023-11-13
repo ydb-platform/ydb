@@ -37,6 +37,7 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/monotonic_provider.h>
 
 #include <util/generic/xrange.h>
 #include <util/generic/ymath.h>

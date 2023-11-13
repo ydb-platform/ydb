@@ -1,6 +1,7 @@
 #include "kqp_query_compiler.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/query_data/kqp_request_predictor.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/kqp/query_compiler/kqp_mkql_compiler.h>
 #include <ydb/core/kqp/query_compiler/kqp_olap_compiler.h>

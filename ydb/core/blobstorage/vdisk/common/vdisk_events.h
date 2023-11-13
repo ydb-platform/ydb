@@ -21,6 +21,7 @@
 
 #include <ydb/core/util/pb.h>
 
+#include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/digest/multi.h>

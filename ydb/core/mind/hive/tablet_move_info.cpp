@@ -1,5 +1,5 @@
 #include "hive_impl.h"
-
+#include <library/cpp/random_provider/random_provider.h>
 #include <random>
 
 namespace NKikimr {

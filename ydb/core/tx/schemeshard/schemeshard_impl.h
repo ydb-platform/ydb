@@ -22,6 +22,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>

@@ -7,6 +7,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/hash.h>

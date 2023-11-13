@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/system/mutex.h>

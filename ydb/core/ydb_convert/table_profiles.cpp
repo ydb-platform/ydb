@@ -2,6 +2,8 @@
 #include "table_description.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/domain.h>
 
 #include <util/string/printf.h>
 

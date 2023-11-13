@@ -1,5 +1,7 @@
 #include "tablet_responsiveness_pinger.h"
 #include <ydb/core/base/appdata.h>
+#include <library/cpp/time_provider/time_provider.h>
+
 
 namespace NKikimr {
 

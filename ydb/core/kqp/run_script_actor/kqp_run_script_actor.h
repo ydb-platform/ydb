@@ -7,6 +7,10 @@
 
 #include <library/cpp/actors/core/actor.h>
 
+namespace NKikimrConfig {
+    class TQueryServiceConfig;
+}
+
 namespace NKikimr::NKqp {
 
 struct TEvKqpRunScriptActor {

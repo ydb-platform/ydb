@@ -1,6 +1,7 @@
 #include "counters.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/sys_view/service/db_counters.h>
 #include <ydb/core/sys_view/service/sysview_service.h>

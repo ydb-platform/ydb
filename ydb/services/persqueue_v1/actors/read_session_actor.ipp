@@ -9,6 +9,7 @@
 #include <ydb/core/persqueue/user_info.h>
 
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
+#include <library/cpp/random_provider/random_provider.h>
 
 #include <google/protobuf/util/time_util.h>
 

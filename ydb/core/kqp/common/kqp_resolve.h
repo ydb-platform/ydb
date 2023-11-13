@@ -59,7 +59,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
                 seq = Path + "/" + seq;
             }
 
-                Sequences.emplace(phyColumn.GetId().GetName(), seq);
+            Sequences.emplace(phyColumn.GetId().GetName(), seq);
         }
 
         if (phyColumn.HasDefaultFromLiteral()) {

@@ -7,6 +7,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>

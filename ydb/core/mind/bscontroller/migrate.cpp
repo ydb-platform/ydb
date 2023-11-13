@@ -1,4 +1,6 @@
 #include "impl.h"
+#include <ydb/core/base/feature_flags.h>
+
 
 namespace NKikimr {
 namespace NBsController {

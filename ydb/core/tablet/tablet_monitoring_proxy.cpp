@@ -7,6 +7,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/tx/tx.h>

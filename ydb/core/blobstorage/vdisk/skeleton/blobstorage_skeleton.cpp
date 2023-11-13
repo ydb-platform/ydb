@@ -16,6 +16,7 @@
 #include "skeleton_capturevdisklayout.h"
 #include "skeleton_compactionstate.h"
 #include "skeleton_block_and_get.h"
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/blobstorage/vdisk/localrecovery/localrecovery_public.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>

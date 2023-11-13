@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/library/pdisk_io/file_params.h>
+#include <ydb/core/base/nameservice.h>
+
 
 using namespace NKikimr;
 using namespace NStorage;

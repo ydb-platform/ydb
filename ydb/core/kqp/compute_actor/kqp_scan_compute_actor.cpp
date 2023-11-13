@@ -3,6 +3,7 @@
 #include "kqp_compute_actor_impl.h"
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>

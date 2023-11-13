@@ -298,6 +298,9 @@ public:
             case ETabletType::SysViewProcessor:
                 context.SS->TabletCounters->Simple()[COUNTER_SYS_VIEW_PROCESSOR_COUNT].Add(1);
                 break;
+            case ETabletType::StatisticsAggregator:
+                context.SS->TabletCounters->Simple()[COUNTER_STATISTICS_AGGREGATOR_COUNT].Add(1);
+                break;
             default:
                 break;
             }

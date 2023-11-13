@@ -99,6 +99,7 @@ PEERDIR(
     ydb/core/scheme_types
     ydb/core/security
     ydb/core/statistics
+    ydb/core/statistics/aggregator
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/tablet

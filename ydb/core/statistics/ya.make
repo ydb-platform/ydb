@@ -15,6 +15,10 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    aggregator
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

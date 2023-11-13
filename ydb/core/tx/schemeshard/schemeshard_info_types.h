@@ -1567,6 +1567,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TTabletId(ProcessingParams.GetSysViewProcessor());
     }
 
+    TTabletId GetTenantStatisticsAggregatorID() const {
+        if (!ProcessingParams.HasStatisticsAggregator()) {
+            return InvalidTabletId;
+        }
+        return TTabletId(ProcessingParams.GetStatisticsAggregator());
+    }
+
     ui64 GetPathsInside() const {
         return PathsInsideCount;
     }
@@ -1936,6 +1943,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         Y_VERIFY_S(sysViewProcessors.size() <= 1, "size was: " << sysViewProcessors.size());
         if (sysViewProcessors.size()) {
             ProcessingParams.SetSysViewProcessor(ui64(sysViewProcessors.front()));
+        }
+
+        ProcessingParams.ClearStatisticsAggregator();
+        TVector<TTabletId> statisticsAggregators = FilterPrivateTablets(ETabletType::StatisticsAggregator, allShards);
+        Y_VERIFY_S(statisticsAggregators.size() <= 1, "size was: " << statisticsAggregators.size());
+        if (statisticsAggregators.size()) {
+            ProcessingParams.SetStatisticsAggregator(ui64(statisticsAggregators.front()));
         }
     }
 

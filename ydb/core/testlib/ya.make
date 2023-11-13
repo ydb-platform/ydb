@@ -62,6 +62,7 @@ PEERDIR(
     ydb/core/persqueue
     ydb/core/protos
     ydb/core/security
+    ydb/core/statistics/aggregator
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/testlib/actors

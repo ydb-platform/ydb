@@ -47,6 +47,8 @@ struct TEvStatistics {
         EvBroadcastStatistics,
         EvRegisterNode,
 
+        EvConfigureAggregator,
+
         EvEnd
     };
 
@@ -70,6 +72,19 @@ struct TEvStatistics {
         NKikimrStat::TEvRegisterNode,
         EvRegisterNode>
     {};
+
+    struct TEvConfigureAggregator : public TEventPB<
+        TEvConfigureAggregator,
+        NKikimrStat::TEvConfigureAggregator,
+        EvConfigureAggregator>
+    {
+        TEvConfigureAggregator() = default;
+
+        explicit TEvConfigureAggregator(const TString& database) {
+            Record.SetDatabase(database);
+        }
+    };
+
 };
 
 } // NStat

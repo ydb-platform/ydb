@@ -51,6 +51,7 @@ SRCS(
     counters_replication.proto
     counters_schemeshard.proto
     counters_sequenceshard.proto
+    counters_statistics_aggregator.proto
     counters_sysview_processor.proto
     counters_testshard.proto
     counters_tx_proxy.proto

@@ -527,6 +527,7 @@ public:
         bool IsExternalSubdomain;
         bool IsExternalHive;
         bool IsExternalSysViewProcessor;
+        bool IsExternalStatisticsAggregator;
         bool AreResourcesShared;
         THashSet<TTenant::TPtr> HostedTenants;
 

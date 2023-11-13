@@ -95,6 +95,7 @@
 #include <ydb/core/kesus/proxy/proxy.h>
 #include <ydb/core/kesus/tablet/tablet.h>
 #include <ydb/core/sys_view/processor/processor.h>
+#include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
@@ -722,6 +723,10 @@ namespace Tests {
         localConfig.TabletClassInfo[TTabletTypes::ReplicationController] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NReplication::CreateController, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::StatisticsAggregator] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NStat::CreateStatisticsAggregator, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
     }
 

@@ -59,6 +59,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   ydb-core-persqueue
   ydb-core-protos
   ydb-core-security
+  core-statistics-aggregator
   core-sys_view-processor
   core-sys_view-service
   core-testlib-actors

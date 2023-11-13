@@ -94,7 +94,6 @@ struct TCombinerNodes {
         UpdateOnKeys = GetPasstroughtMap(UpdateResultNodes, KeyNodes);
         UpdateOnItems = GetPasstroughtMap(UpdateResultNodes, ItemNodes);
         UpdateOnState = GetPasstroughtMap(UpdateResultNodes, StateNodes);
-        UpdateOnState = GetPasstroughtMap(UpdateResultNodes, StateNodes);
         StateOnUpdate = GetPasstroughtMap(StateNodes, UpdateResultNodes);
         ItemsOnResult = GetPasstroughtMap(FinishNodes, FinishResultNodes);
         ResultOnItems = GetPasstroughtMap(FinishResultNodes, FinishNodes);

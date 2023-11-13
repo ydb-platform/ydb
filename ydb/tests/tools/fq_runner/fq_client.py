@@ -255,6 +255,22 @@ class FederatedQueryClient(object):
         logging.debug("Result: {}".format(self._pretty_retry(result)))
         return FederatedQueryClient.Response(response.operation.issues, result, check_issues)
 
+    @retry.retry_intrusive
+    def get_query_status(self, query_id, check_issues=True):
+        request = fq.GetQueryStatusRequest()
+        request.query_id = query_id
+
+        response = self.service.GetQueryStatus(
+            request,
+            metadata=self._create_meta(),
+            timeout=CONTROL_PLANE_REQUEST_TIMEOUT,
+        )
+
+        result = fq.GetQueryStatusResult()
+        response.operation.result.Unpack(result)
+        logging.debug("Result: {}".format(self._pretty_retry(result)))
+        return result.status
+
     # TODO: merge wait_query() and wait_query_status
     def wait_query(self, query_id, timeout=yatest_common.plain_or_under_sanitizer(40, 200), statuses=final_statuses):
         start = time.time()

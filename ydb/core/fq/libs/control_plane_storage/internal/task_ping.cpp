@@ -176,30 +176,39 @@ TPingTaskParams ConstructHardPingTask(
                 // failure query should be processed instantly
                 queryStatus = FederatedQuery::QueryMeta::FAILING;
                 backoff = TDuration::Zero();
-                if (!issues) {
-                    issues.ConstructInPlace();
-                }
                 TStringBuilder builder;
                 builder << "Query failed with code " << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code());
                 if (policy.RetryCount) {
                     builder << " (failure rate " << retryLimiter.RetryRate << " exceeds limit of "  << policy.RetryCount << ")";
                 }
                 builder << " at " << Now();
-                auto issue = NYql::TIssue(builder);
-                if (query.issue().size() > 0 && request.issues().empty()) {
-                    NYql::TIssues queryIssues;
-                    NYql::IssuesFromMessage(query.issue(), queryIssues);
-                    for (auto& subIssue : queryIssues) {
-                        issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
+
+                // in case of problems with finalization, do not change the issues
+                if (query.meta().status() == FederatedQuery::QueryMeta::FAILING) {
+                    if (issues) {
+                        transientIssues->AddIssues(*issues);
                     }
-                }
-                if (transientIssues) {
-                    for (auto& subIssue : *transientIssues) {
-                        issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
+                    transientIssues->AddIssue(NYql::TIssue(builder));
+                } else {
+                    if (!issues) {
+                        issues.ConstructInPlace();
                     }
-                    transientIssues.Clear();
+                    auto issue = NYql::TIssue(builder);
+                    if (query.issue().size() > 0 && request.issues().empty()) {
+                        NYql::TIssues queryIssues;
+                        NYql::IssuesFromMessage(query.issue(), queryIssues);
+                        for (auto& subIssue : queryIssues) {
+                            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
+                        }
+                    }
+                    if (transientIssues) {
+                        for (auto& subIssue : *transientIssues) {
+                            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
+                        }
+                        transientIssues.Clear();
+                    }
+                    issues->AddIssue(issue);
                 }
-                issues->AddIssue(issue);
             }
             CPS_LOG_AS_D(*actorSystem, "PingTaskRequest (resign): " << (!policyFound ? " DEFAULT POLICY" : "") << (owner ? " FAILURE " : " ") << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code()) << " " << retryLimiter.RetryCount << " " << retryLimiter.RetryCounterUpdatedAt << " " << backoff);
         }

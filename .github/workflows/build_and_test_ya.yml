@@ -42,6 +42,10 @@ on:
       folder_prefix:
         type: string
         default: "ya-"
+      cache_tests:
+        type: boolean
+        default: false
+        description: "Use cache for tests"
 
 jobs:
   main:

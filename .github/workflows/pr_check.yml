@@ -103,11 +103,13 @@ jobs:
       matrix:
         build_preset: ["relwithdebinfo", "release-asan"]
     name: Build and test ${{ matrix.build_preset }}
-    uses: ./.github/workflows/build_and_test_ya_ondemand.yml
+    uses: ./.github/workflows/build_and_test_ya_provisioned.yml
     with:
       build_preset: ${{ matrix.build_preset }}
       build_target: "ydb/"
       test_size: "small,medium"
       test_type: "unittest,py3test,py2test,pytest"
       test_threads: 52
+      runner_label: ya-make
+      cache_tests: true
     secrets: inherit

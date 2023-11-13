@@ -41,6 +41,9 @@ inputs:
   bazel_remote_uri:
     required: false
     description: "bazel-remote endpoint"
+  cache_tests:
+    required: false
+    description: "Use cache for tests"
 runs:
   using: "composite"
   steps:
@@ -175,6 +178,10 @@ runs:
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           extra_params+=(--bazel-remote-store)
           extra_params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+        fi
+        
+        if [ "${{ inputs.cache_tests }}" = "true" ]; then
+          extra_params+=(--cache-tests)
         fi
         
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")

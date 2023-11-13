@@ -1,0 +1,23 @@
+common:
+  - from: /reference/ydb-cli/table-ttl-drop.md
+    to: /reference/ydb-cli/table-ttl-reset.md
+  - from: changelog.md
+    to: changelog-server.md
+  - from: /administration/quickstart.md
+    to: /getting_started/quickstart.md
+  - from: /getting_started/create_db.md
+    to: /getting_started/quickstart.md
+  - from: /getting_started/auth.md
+    to: /concepts/auth.md
+  - from: /getting_started/cli.md
+    to: /reference/ydb-cli/index.md
+  - from: /getting_started/sdk.md
+    to: /reference/ydb-sdk/index.md
+  - from: /ops/devslice-user-guide-k8s-baremetal-host.md
+    to: /ops/devslice-setup-kikimr-slice.md
+
+ru:
+  - from: /concepts/column-table.md
+    to: /concepts/datamodel/table.md
+  - from: /postgresql/index.md
+    to: /postgresql/intro.md

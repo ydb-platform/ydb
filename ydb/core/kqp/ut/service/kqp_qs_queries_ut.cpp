@@ -174,6 +174,61 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         CheckQueryResult(result);
     }
 
+    Y_UNIT_TEST(ExecuteQueryExplicitBeginCommitRollback) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        auto sessionResult = db.GetSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), EStatus::SUCCESS, sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+
+        {
+            auto beginTxResult = session.BeginTransaction(TTxSettings::OnlineRO()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(beginTxResult.GetStatus(), EStatus::BAD_REQUEST, beginTxResult.GetIssues().ToString());
+            UNIT_ASSERT(beginTxResult.GetIssues());
+        }
+
+        {
+            auto beginTxResult = session.BeginTransaction(TTxSettings::SerializableRW()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(beginTxResult.GetStatus(), EStatus::SUCCESS, beginTxResult.GetIssues().ToString());
+
+            auto transaction = beginTxResult.GetTransaction();
+            auto commitTxResult = transaction.Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commitTxResult.GetStatus(), EStatus::SUCCESS, commitTxResult.GetIssues().ToString());
+
+            auto rollbackTxResult = transaction.Rollback().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(rollbackTxResult.GetStatus(), EStatus::NOT_FOUND, rollbackTxResult.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ExecuteQueryExplicitTxTLI) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        auto sessionResult = db.GetSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), EStatus::SUCCESS, sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+
+        auto beginTxResult = session.BeginTransaction(TTxSettings::SerializableRW()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(beginTxResult.GetStatus(), EStatus::SUCCESS, beginTxResult.GetIssues().ToString());
+        auto transaction = beginTxResult.GetTransaction();
+        UNIT_ASSERT(transaction.IsActive());
+
+        {
+            const TString query = "UPDATE TwoShard SET Value2 = 0";
+            auto result = transaction.GetSession().ExecuteQuery(query, TTxControl::Tx(transaction.GetId())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+
+            const TString query = "UPDATE TwoShard SET Value2 = 1";
+            auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto commitTxResult = transaction.Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commitTxResult.GetStatus(), EStatus::ABORTED, commitTxResult.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(ExecuteRetryQuery) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

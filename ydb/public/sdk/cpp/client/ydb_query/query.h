@@ -104,6 +104,10 @@ struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
     FLUENT_SETTING_OPTIONAL(bool, ConcurrentResultSets);
 };
 
+struct TBeginTxSettings : public TRequestSettings<TBeginTxSettings> {};
+struct TCommitTxSettings : public TRequestSettings<TCommitTxSettings> {};
+struct TRollbackTxSettings : public TRequestSettings<TRollbackTxSettings> {};
+
 class TExecuteQueryResult : public TStatus {
 public:
     const TVector<TResultSet>& GetResultSets() const;
@@ -127,7 +131,16 @@ private:
     TMaybe<TExecStats> Stats_;
 };
 
+class TCommitTransactionResult : public TStatus {
+public:
+    TCommitTransactionResult(TStatus&& status);
+};
+
+class TBeginTransactionResult;
+
 using TAsyncExecuteQueryResult = NThreading::TFuture<TExecuteQueryResult>;
+using TAsyncBeginTransactionResult = NThreading::TFuture<TBeginTransactionResult>;
+using TAsyncCommitTransactionResult = NThreading::TFuture<TCommitTransactionResult>;
 
 struct TExecuteScriptSettings : public TOperationRequestSettings<TExecuteScriptSettings> {
     FLUENT_SETTING_DEFAULT(Ydb::Query::Syntax, Syntax, Ydb::Query::SYNTAX_YQL_V1);

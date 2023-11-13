@@ -60,6 +60,24 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
                 (ctx, &DoAttachSession, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
     })
 
+    ADD_REQUEST(BeginTransaction, BeginTransactionRequest, BeginTransactionResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_,
+            new TGrpcRequestNoOperationCall<BeginTransactionRequest, BeginTransactionResponse>
+                (ctx, &DoBeginTransaction, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
+    })
+
+    ADD_REQUEST(CommitTransaction, CommitTransactionRequest, CommitTransactionResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_,
+            new TGrpcRequestNoOperationCall<CommitTransactionRequest, CommitTransactionResponse>
+                (ctx, &DoCommitTransaction, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
+    })
+
+    ADD_REQUEST(RollbackTransaction, RollbackTransactionRequest, RollbackTransactionResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_,
+            new TGrpcRequestNoOperationCall<RollbackTransactionRequest, RollbackTransactionResponse>
+                (ctx, &DoRollbackTransaction, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
+    })
+
 #undef ADD_REQUEST
 }
 

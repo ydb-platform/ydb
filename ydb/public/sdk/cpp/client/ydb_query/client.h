@@ -109,8 +109,10 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
+class TTransaction;
 class TSession {
     friend class TQueryClient;
+    friend class TTransaction;
 public:
     const TString& GetId() const;
 
@@ -126,6 +128,8 @@ public:
     TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query, const TTxControl& txControl,
         const TParams& params, const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
+    TAsyncBeginTransactionResult BeginTransaction(const TTxSettings& txSettings,
+        const TBeginTxSettings& settings = TBeginTxSettings());
 
     class TImpl;
 private:
@@ -144,6 +148,41 @@ public:
 
 private:
     TSession Session_;
+};
+
+class TTransaction {
+    friend class TQueryClient;
+public:
+    const TString& GetId() const {
+        return TxId_;
+    }
+
+    bool IsActive() const {
+        return !TxId_.empty();
+    }
+
+    TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
+    TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
+
+    TSession GetSession() const {
+        return Session_;
+    }
+
+private:
+    TTransaction(const TSession& session, const TString& txId);
+
+    TSession Session_;
+    TString TxId_;
+};
+
+class TBeginTransactionResult : public TStatus {
+public:
+    TBeginTransactionResult(TStatus&& status, TTransaction transaction);
+
+    const TTransaction& GetTransaction() const;
+
+private:
+    TTransaction Transaction_;
 };
 
 } // namespace NYdb::NQuery

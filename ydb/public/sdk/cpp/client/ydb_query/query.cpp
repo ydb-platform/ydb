@@ -67,4 +67,8 @@ TScriptExecutionOperation::TScriptExecutionOperation(TStatus&& status, Ydb::Oper
     }
 }
 
+TCommitTransactionResult::TCommitTransactionResult(TStatus&& status)
+    : TStatus(std::move(status))
+{}
+
 } // namespace NYdb::NQuery

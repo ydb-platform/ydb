@@ -80,6 +80,7 @@ SRCS(
     query/rpc_execute_script.cpp
     query/rpc_fetch_script_results.cpp
     query/rpc_attach_session.cpp
+    query/rpc_kqp_tx.cpp
     query/service_query.h
 )
 

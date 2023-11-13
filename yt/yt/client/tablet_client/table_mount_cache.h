@@ -61,6 +61,14 @@ DEFINE_REFCOUNTED_TYPE(TTableReplicaInfo)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TIndexInfo
+{
+    NObjectClient::TObjectId TableId;
+    ESecondaryIndexKind Kind;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Describes the primary and the auxiliary schemas derived from the table schema.
 //! Cf. TTableSchema::ToXXX methods.
 DEFINE_ENUM(ETableSchemaKind,
@@ -106,6 +114,8 @@ struct TTableMountInfo
     std::vector<TTabletInfoPtr> MountedTablets;
 
     std::vector<TTableReplicaInfoPtr> Replicas;
+
+    std::vector<TIndexInfo> Indices;
 
     //! For sorted tables, these are -infinity and +infinity.
     //! For ordered tablets, these are |[0]| and |[tablet_count]| resp.

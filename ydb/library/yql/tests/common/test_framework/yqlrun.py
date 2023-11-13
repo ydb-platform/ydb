@@ -38,7 +38,7 @@ class YQLRun(object):
             self.sql2yql_binary = None
 
         try:
-            self.udf_resolver_binary = yql_utils.yql_binary_path('yql/tools/udf_resolver/udf_resolver')
+            self.udf_resolver_binary = yql_utils.yql_binary_path(os.getenv('YQL_UDFRESOLVER_PATH') or 'ydb/library/yql/tools/udf_resolver/udf_resolver')
         except Exception:
             self.udf_resolver_binary = None
 

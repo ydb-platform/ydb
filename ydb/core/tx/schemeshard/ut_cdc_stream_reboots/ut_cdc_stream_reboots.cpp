@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
@@ -6,34 +7,6 @@
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
-    class TTestWithTabletReboots: public TTestWithReboots {
-    public:
-        void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario) {
-            TDatashardLogBatchingSwitch logBatchingSwitch(false /* without batching */);
-            RunWithTabletReboots(testScenario);
-        }
-    };
-
-    class TTestWithPipeResets: public TTestWithReboots {
-    public:
-        void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario) {
-            TDatashardLogBatchingSwitch logBatchingSwitch(false /* without batching */);
-            RunWithPipeResets(testScenario);
-        }
-    };
-
-    #define Y_UNIT_TEST_WITH_REBOOTS(N)                         \
-        template <typename T> void N(NUnitTest::TTestContext&); \
-        struct TTestRegistration##N {                           \
-            TTestRegistration##N() {                            \
-                TCurrentTest::AddTest(#N "[TabletReboots]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<TTestWithTabletReboots>), false); \
-                TCurrentTest::AddTest(#N "[PipeResets]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<TTestWithPipeResets>), false); \
-            }                                                   \
-        };                                                      \
-        static TTestRegistration##N testRegistration##N;        \
-        template <typename T>                                   \
-        void N(NUnitTest::TTestContext&)
-
     template <typename T>
     void CreateStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false) {
         T t;

@@ -45,7 +45,7 @@ TStructuredTokenBuilder& TStructuredTokenBuilder::SetNoAuth() {
     return *this;
 }
 
-TStructuredTokenBuilder& TStructuredTokenBuilder::ReplaceReferences(const TMap<TString, TString> secrets) {
+TStructuredTokenBuilder& TStructuredTokenBuilder::ReplaceReferences(const std::map<TString, TString>& secrets) {
     if (Data.HasField("basic_password_ref")) {
         auto reference = Data.GetField("basic_password_ref");
         Data.ClearField("basic_password_ref");

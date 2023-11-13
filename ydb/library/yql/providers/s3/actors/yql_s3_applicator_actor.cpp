@@ -204,7 +204,7 @@ public:
         IHTTPGateway::TPtr gateway,
         const TString& queryId,
         const TString& jobId,
-        ui32 restartNumber,
+        std::optional<ui32> restartNumber,
         bool commit,
         const THashMap<TString, TString>& secureParams,
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
@@ -213,7 +213,7 @@ public:
     , Gateway(gateway) 
     , QueryId(queryId)
     , KeyPrefix(jobId + "_")
-    , KeySubPrefix(ToString(restartNumber) + "_")
+    , KeySubPrefix(restartNumber ? ToString(*restartNumber) + "_" : "")
     , Commit(commit)
     , SecureParams(secureParams)
     , CredentialsFactory(credentialsFactory)
@@ -326,6 +326,11 @@ public:
     }
 
     void Finish(bool fatal = false, const TString& message = "") {
+        if (ApplicationFinished) {
+            return;
+        }
+        ApplicationFinished = true;
+
         if (message) {
             Issues.AddIssue(TIssue(message));
         }
@@ -442,9 +447,15 @@ public:
 
     void Process(TEvPrivate::TEvAbortMultipartUpload::TPtr& ev) {
         auto& result = ev->Get()->Result;
-        if (!result.Issues && result.Content.HttpResponseCode >= 200 && result.Content.HttpResponseCode < 300) {
-            LOG_D("AbortMultipartUpload SUCCESS " << ev->Get()->State->BuildUrl());
-            return;
+        if (!result.Issues) {
+            if (result.Content.HttpResponseCode == 404) {
+                LOG_W("AbortMultipartUpload NOT FOUND " << ev->Get()->State->BuildUrl() << " (may be aborted already)");
+                return;
+            }
+            if (result.Content.HttpResponseCode >= 200 && result.Content.HttpResponseCode < 300) {
+                LOG_D("AbortMultipartUpload SUCCESS " << ev->Get()->State->BuildUrl());
+                return;
+            }
         }
         LOG_D("AbortMultipartUpload ERROR " << ev->Get()->State->BuildUrl());
         if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode)) {
@@ -572,6 +583,7 @@ private:
     THashSet<TString> CommitUploads;
     NYql::TIssues Issues;
     std::queue<TObjectStorageRequest> RequestQueue;
+    bool ApplicationFinished = false;
 };
 
 } // namespace
@@ -581,7 +593,7 @@ THolder<NActors::IActor> MakeS3ApplicatorActor(
     IHTTPGateway::TPtr gateway,
     const TString& queryId,
     const TString& jobId,
-    ui32 restartNumber,
+    std::optional<ui32> restartNumber,
     bool commit,
     const THashMap<TString, TString>& secureParams,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,

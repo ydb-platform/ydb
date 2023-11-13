@@ -142,6 +142,13 @@ struct TKqpScriptExecutionEvents {
         EvCheckAliveRequest,
         EvCheckAliveResponse,
         EvFetchScriptResultsQueryResponse,
+        EvSaveScriptExternalEffectRequest,
+        EvSaveScriptExternalEffectResponse,
+        EvScriptFinalizeRequest,
+        EvScriptFinalizeResponse,
+        EvSaveScriptFinalStatusResponse,
+        EvGetScriptExecutionOperationQueryResponse,
+        EvDescribeSecretsResponse,
     };
 };
 

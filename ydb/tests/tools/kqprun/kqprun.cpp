@@ -17,6 +17,8 @@ struct TExecutionOptions {
     TString SchemeQuery;
 
     NKikimrKqp::EQueryAction ScriptQueryAction = NKikimrKqp::QUERY_ACTION_EXECUTE;
+
+    TString ScriptTraceId = "kqprun";
 };
 
 
@@ -35,7 +37,7 @@ void RunScript(const TExecutionOptions& executionOptions, const NKqpRun::TRunner
 
     if (executionOptions.ScriptQuery) {
         Cout << colors.Yellow() << "Executing script..." << colors.Default() << Endl;
-        if (!runner.ExecuteScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction)) {
+        if (!runner.ExecuteScript(executionOptions.ScriptQuery, executionOptions.ScriptQueryAction, executionOptions.ScriptTraceId)) {
             ythrow yexception() << "Script execution failed";
         }
     }

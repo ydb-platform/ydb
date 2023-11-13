@@ -313,9 +313,9 @@ public:
                 hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
                 hFunc(TEvKqpExecuter::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
+                hFunc(TEvSaveScriptExternalEffectResponse, HandleResolve);
+                hFunc(TEvDescribeSecretsResponse, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-                hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, HandleRefreshSubscriberData);
-                hFunc(NActors::TEvents::TEvWakeup, HandleSecretsWaitingTimeout);
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
             }
@@ -363,7 +363,6 @@ private:
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
-                IgnoreFunc(NActors::TEvents::TEvWakeup);
                 default: {
                     CancelProposal(0);
                     UnexpectedEvent("PrepareState", ev->GetTypeRewrite());
@@ -953,7 +952,6 @@ private:
                 hFunc(TEvDqCompute::TEvChannelData, HandleExecute);
                 hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
-                IgnoreFunc(NActors::TEvents::TEvWakeup);
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
             }
@@ -1360,7 +1358,7 @@ private:
         return true;
     }
 
-    void BuildDatashardTasks(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
+    void BuildDatashardTasks(TStageInfo& stageInfo) {
         THashMap<ui64, ui64> shardTasks; // shardId -> taskId
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
@@ -1375,7 +1373,7 @@ private:
             task.Meta.ShardId = shardId;
             shardTasks.emplace(shardId, task.Id);
 
-            BuildSinks(stage, task, secureParams);
+            BuildSinks(stage, task);
 
             return task;
         };
@@ -1588,47 +1586,82 @@ private:
         YQL_ENSURE(result.second);
     }
 
+    bool WaitRequired() const {
+        return SecretSnapshotRequired || ResourceSnapshotRequired || SaveScriptExternalEffectRequired;
+    }
+
+    void HandleResolve(TEvDescribeSecretsResponse::TPtr& ev) {
+        YQL_ENSURE(ev->Get()->Description.Status == Ydb::StatusIds::SUCCESS, "failed to get secrets snapshot with issues: " << ev->Get()->Description.Issues.ToOneLineString());
+        
+        for (size_t i = 0; i < SecretNames.size(); ++i) {
+            SecureParams.emplace(SecretNames[i], ev->Get()->Description.SecretValues[i]);
+        }
+
+        SecretSnapshotRequired = false;
+        if (!WaitRequired()) {
+            Execute();
+        }
+    }
+
     void HandleResolve(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
         if (ev->Get()->Snapshot.empty()) {
             LOG_E("Can not find default state storage group for database " << Database);
         }
         ResourceSnapshot = std::move(ev->Get()->Snapshot);
         ResourceSnapshotRequired = false;
-        if (!SecretSnapshotRequired) {
+        if (!WaitRequired()) {
+            Execute();
+        }
+    }
+
+    void HandleResolve(TEvSaveScriptExternalEffectResponse::TPtr& ev) {
+        YQL_ENSURE(ev->Get()->Status == Ydb::StatusIds::SUCCESS, "failed to save script external effect with issues: " << ev->Get()->Issues.ToOneLineString());
+        
+        SaveScriptExternalEffectRequired = false;
+        if (!WaitRequired()) {
             Execute();
         }
     }
 
     void DoExecute() {
-        TVector<TString> secretNames;
+        const auto& requestContext = GetUserRequestContext();
+        auto scriptExternalEffect = std::make_unique<TEvSaveScriptExternalEffectRequest>(
+            requestContext->CurrentExecutionId, requestContext->Database, 
+            requestContext->CustomerSuppliedId, UserToken ? UserToken->GetUserSID() : ""
+        );
         for (const auto& transaction : Request.Transactions) {
             for (const auto& secretName : transaction.Body->GetSecretNames()) {
                 SecretSnapshotRequired = true;
-                secretNames.push_back(secretName);
+                SecretNames.push_back(secretName);
             }
             for (const auto& stage : transaction.Body->GetStages()) {
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
                     ResourceSnapshotRequired = true;
                     HasExternalSources = true;
                 }
+                if (requestContext->CurrentExecutionId) {
+                    for (const auto& sink : stage.GetSinks()) {
+                        if (sink.GetTypeCase() == NKqpProto::TKqpSink::kExternalSink) {
+                            SaveScriptExternalEffectRequired = true;
+                            scriptExternalEffect->Sinks.push_back(sink.GetExternalSink());
+                        }
+                    }
+                }
             }
         }
+        scriptExternalEffect->SecretNames = SecretNames;
 
-        if (!SecretSnapshotRequired && !ResourceSnapshotRequired) {
+        if (!WaitRequired()) {
             return Execute();
         }
         if (SecretSnapshotRequired) {
-            FetchSecrets(std::move(secretNames));
+            GetSecretsSnapshot();
         }
         if (ResourceSnapshotRequired) {
             GetResourcesSnapshot();
         }
-    }
-
-    void OnSecretsFetched() override {
-        SecretSnapshotRequired = false;
-        if (!ResourceSnapshotRequired) {
-            Execute();
+        if (SaveScriptExternalEffectRequired) {
+            SaveScriptExternalEffect(std::move(scriptExternalEffect));
         }
     }
 
@@ -1651,8 +1684,6 @@ private:
         size_t readActors = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
-            TMap<TString, TString> secureParams = ResolveSecretNames(tx.Body->GetSecretNames());
-
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
                 auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
@@ -1689,14 +1720,14 @@ private:
                 if (stage.SourcesSize() > 0) {
                     switch (stage.GetSources(0).GetTypeCase()) {
                         case NKqpProto::TKqpSource::kReadRangesSource:
-                            if (auto actors = BuildScanTasksFromSource(stageInfo, secureParams)) {
+                            if (auto actors = BuildScanTasksFromSource(stageInfo)) {
                                 readActors += *actors;
                             } else {
                                 UnknownAffectedShardCount = true;
                             }
                             break;
                         case NKqpProto::TKqpSource::kExternalSource:
-                            BuildReadTasksFromSource(stageInfo, secureParams, ResourceSnapshot);
+                            BuildReadTasksFromSource(stageInfo, ResourceSnapshot);
                             break;
                         default:
                             YQL_ENSURE(false, "unknown source type");
@@ -1704,11 +1735,11 @@ private:
                 } else if (StreamResult && stageInfo.Meta.IsOlap()) {
                     BuildScanTasksFromShards(stageInfo);
                 } else if (stageInfo.Meta.ShardOperations.empty()) {
-                    BuildComputeTasks(stageInfo, secureParams);
+                    BuildComputeTasks(stageInfo);
                 } else if (stageInfo.Meta.IsSysView()) {
-                    BuildSysViewScanTasks(stageInfo, secureParams);
+                    BuildSysViewScanTasks(stageInfo);
                 } else {
-                    BuildDatashardTasks(stageInfo, secureParams);
+                    BuildDatashardTasks(stageInfo);
                 }
 
                 if (stage.GetIsSinglePartition()) {
@@ -1910,7 +1941,6 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-                IgnoreFunc(NActors::TEvents::TEvWakeup);
                 default:
                     UnexpectedEvent("WaitSnapshotState", ev->GetTypeRewrite());
             }
@@ -2368,6 +2398,7 @@ private:
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
     bool ResourceSnapshotRequired = false;
+    bool SaveScriptExternalEffectRequired = false;
     TVector<NKikimrKqp::TKqpNodeResources> ResourceSnapshot;
 
     ui64 TxCoordinator = 0;

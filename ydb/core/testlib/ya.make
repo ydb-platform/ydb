@@ -52,6 +52,7 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/kqp
     ydb/core/kqp/federated_query
+    ydb/core/kqp/finalize_script_service
     ydb/core/metering
     ydb/core/mind
     ydb/core/mind/address_classification

@@ -147,8 +147,10 @@ public:
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvQueryRequest, NKikimr::NKqp::TEvKqp::TEvQueryResponse>(std::move(event));
     }
 
-    NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr ScriptQueryRequest(const TString& script, NKikimrKqp::EQueryAction action) const {
+    NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr ScriptQueryRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId) const {
         auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvScriptRequest>();
+        event->Record.SetTraceId(traceId);
+
         FillScriptRequest(script, action, *event->Record.MutableRequest());
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvScriptRequest, NKikimr::NKqp::TEvKqp::TEvScriptResponse>(std::move(event));
@@ -170,11 +172,6 @@ public:
         GetRuntime()->Register(fetchActor);
 
         return GetRuntime()->GrabEdgeEvent<NKikimr::NKqp::TEvKqp::TEvFetchScriptResultsResponse>(edgeActor);
-    }
-
-    ~TImpl() {
-        Server_.Reset();
-        Client_.Reset();
     }
 
 private:
@@ -262,8 +259,8 @@ TRequestResult TYdbSetup::SchemeQueryRequest(const TString& query, TSchemeMeta& 
     return TRequestResult(schemeQueryOperationResponse.GetYdbStatus(), issues);
 }
 
-TRequestResult TYdbSetup::ScriptQueryRequest(const TString& script, NKikimrKqp::EQueryAction action, TString& operation) const {
-    auto scriptExecutionOperation = Impl_->ScriptQueryRequest(script, action);
+TRequestResult TYdbSetup::ScriptQueryRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const {
+    auto scriptExecutionOperation = Impl_->ScriptQueryRequest(script, action, traceId);
 
     operation = scriptExecutionOperation->Get()->OperationId;
 

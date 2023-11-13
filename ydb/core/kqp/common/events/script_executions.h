@@ -14,6 +14,11 @@
 
 namespace NKikimr::NKqp {
 
+enum EFinalizationStatus : i32 {
+    FS_COMMIT,
+    FS_ROLLBACK,
+};
+
 struct TEvForgetScriptExecutionOperation : public NActors::TEventLocal<TEvForgetScriptExecutionOperation, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperation> {
     explicit TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
         : Database(database)
@@ -47,28 +52,44 @@ struct TEvGetScriptExecutionOperation : public NActors::TEventLocal<TEvGetScript
     NOperationId::TOperationId OperationId;
 };
 
-struct TEvGetScriptExecutionOperationResponse : public NActors::TEventLocal<TEvGetScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvGetScriptExecutionOperationResponse> {
-    TEvGetScriptExecutionOperationResponse(bool ready, bool leaseExpired, TActorId runScriptActorId, Ydb::StatusIds::StatusCode status, NYql::TIssues issues, TMaybe<google::protobuf::Any> metadata)
+struct TEvGetScriptExecutionOperationQueryResponse : public NActors::TEventLocal<TEvGetScriptExecutionOperationQueryResponse, TKqpScriptExecutionEvents::EvGetScriptExecutionOperationQueryResponse> {
+    TEvGetScriptExecutionOperationQueryResponse(bool ready, bool leaseExpired, std::optional<EFinalizationStatus> finalizationStatus, TActorId runScriptActorId,
+        const TString& executionId, Ydb::StatusIds::StatusCode status, NYql::TIssues issues, Ydb::Query::ExecuteScriptMetadata metadata)
         : Ready(ready)
         , LeaseExpired(leaseExpired)
+        , FinalizationStatus(finalizationStatus)
         , RunScriptActorId(runScriptActorId)
+        , ExecutionId(executionId)
         , Status(status)
         , Issues(std::move(issues))
         , Metadata(std::move(metadata))
-    {
-    }
-
-    TEvGetScriptExecutionOperationResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
-        : Ready(false)
-        , LeaseExpired(false)
-        , Status(status)
-        , Issues(std::move(issues))
-    {
-    }
+    {}
 
     bool Ready;
     bool LeaseExpired;
+    std::optional<EFinalizationStatus> FinalizationStatus;
     TActorId RunScriptActorId;
+    TString ExecutionId;
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
+    Ydb::Query::ExecuteScriptMetadata Metadata;
+};
+
+struct TEvGetScriptExecutionOperationResponse : public NActors::TEventLocal<TEvGetScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvGetScriptExecutionOperationResponse> {
+    TEvGetScriptExecutionOperationResponse(bool ready, Ydb::StatusIds::StatusCode status, NYql::TIssues issues, TMaybe<google::protobuf::Any> metadata)
+        : Ready(ready)
+        , Status(status)
+        , Issues(std::move(issues))
+        , Metadata(std::move(metadata))
+    {}
+
+    TEvGetScriptExecutionOperationResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+        : Ready(false)
+        , Status(status)
+        , Issues(std::move(issues))
+    {}
+
+    bool Ready;
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
     TMaybe<google::protobuf::Any> Metadata;
@@ -153,12 +174,19 @@ struct TEvCancelScriptExecutionOperationResponse : public NActors::TEventLocal<T
 };
 
 struct TEvScriptExecutionFinished : public NActors::TEventLocal<TEvScriptExecutionFinished, TKqpScriptExecutionEvents::EvScriptExecutionFinished> {
-    TEvScriptExecutionFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
-        : Status(status)
+    explicit TEvScriptExecutionFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
+        : OperationAlreadyFinalized(false)
+        , Status(status)
         , Issues(std::move(issues))
-    {
-    }
+    {}
 
+    TEvScriptExecutionFinished(bool operationAlreadyFinalized, Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
+        : OperationAlreadyFinalized(operationAlreadyFinalized)
+        , Status(status)
+        , Issues(std::move(issues))
+    {}
+
+    bool OperationAlreadyFinalized;
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
 };
@@ -194,6 +222,107 @@ struct TEvFetchScriptResultsQueryResponse : public NActors::TEventLocal<TEvFetch
 
     bool Truncated;
     NKikimrKqp::TEvFetchScriptResultsResponse Results;
+};
+
+struct TEvSaveScriptExternalEffectRequest : public NActors::TEventLocal<TEvSaveScriptExternalEffectRequest, TKqpScriptExecutionEvents::EvSaveScriptExternalEffectRequest> {
+    TEvSaveScriptExternalEffectRequest(const TString& executionId, const TString& database, const TString& customerSuppliedId, const TString& userToken)
+        : ExecutionId(executionId)
+        , Database(database)
+        , CustomerSuppliedId(customerSuppliedId)
+        , UserToken(userToken)
+    {}
+
+    TString ExecutionId;
+    TString Database;
+
+    TString CustomerSuppliedId;
+    TString UserToken;
+    std::vector<NKqpProto::TKqpExternalSink> Sinks;
+    std::vector<TString> SecretNames;
+};
+
+struct TEvSaveScriptExternalEffectResponse : public NActors::TEventLocal<TEvSaveScriptExternalEffectResponse, TKqpScriptExecutionEvents::EvSaveScriptExternalEffectResponse> {
+    TEvSaveScriptExternalEffectResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+        : Status(status)
+        , Issues(std::move(issues))
+    {}
+
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
+};
+
+struct TEvScriptFinalizeRequest : public NActors::TEventLocal<TEvScriptFinalizeRequest, TKqpScriptExecutionEvents::EvScriptFinalizeRequest> {
+    TEvScriptFinalizeRequest(EFinalizationStatus finalizationStatus, const TString& executionId, const TString& database,
+        Ydb::StatusIds::StatusCode operationStatus, Ydb::Query::ExecStatus execStatus, NYql::TIssues issues = {}, std::optional<NKqpProto::TKqpStatsQuery> queryStats = std::nullopt,
+        std::optional<TString> queryPlan = std::nullopt, std::optional<TString> queryAst = std::nullopt, std::optional<ui64> leaseGeneration = std::nullopt)
+        : FinalizationStatus(finalizationStatus)
+        , ExecutionId(executionId)
+        , Database(database)
+        , OperationStatus(operationStatus)
+        , ExecStatus(execStatus)
+        , Issues(std::move(issues))
+        , QueryStats(std::move(queryStats))
+        , QueryPlan(std::move(queryPlan))
+        , QueryAst(std::move(queryAst))
+        , LeaseGeneration(leaseGeneration)
+    {}
+
+    EFinalizationStatus FinalizationStatus;
+    TString ExecutionId;
+    TString Database;
+    Ydb::StatusIds::StatusCode OperationStatus;
+    Ydb::Query::ExecStatus ExecStatus;
+    NYql::TIssues Issues;
+    std::optional<NKqpProto::TKqpStatsQuery> QueryStats;
+    std::optional<TString> QueryPlan;
+    std::optional<TString> QueryAst;
+    std::optional<ui64> LeaseGeneration;
+    TDuration OperationTtl;
+    TDuration ResultsTtl;
+};
+
+struct TEvScriptFinalizeResponse : public NActors::TEventLocal<TEvScriptFinalizeResponse, TKqpScriptExecutionEvents::EvScriptFinalizeResponse> {
+    explicit TEvScriptFinalizeResponse(const TString& executionId)
+        : ExecutionId(executionId)
+    {}
+
+    TString ExecutionId;
+};
+
+struct TEvSaveScriptFinalStatusResponse : public NActors::TEventLocal<TEvSaveScriptFinalStatusResponse, TKqpScriptExecutionEvents::EvSaveScriptFinalStatusResponse> {
+    TEvSaveScriptFinalStatusResponse(const TString& customerSuppliedId, const TString& userToken)
+        : CustomerSuppliedId(customerSuppliedId)
+        , UserToken(userToken)
+    {}
+
+    TString CustomerSuppliedId;
+    TString UserToken;
+    std::vector<NKqpProto::TKqpExternalSink> Sinks;
+    std::vector<TString> SecretNames;
+};
+
+struct TEvDescribeSecretsResponse : public NActors::TEventLocal<TEvDescribeSecretsResponse, TKqpScriptExecutionEvents::EvDescribeSecretsResponse> {
+    struct TDescription {
+        TDescription(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+            : Status(status)
+            , Issues(std::move(issues))
+        {}
+
+        TDescription(const std::vector<TString>& secretValues)
+            : SecretValues(secretValues)
+            , Status(Ydb::StatusIds::SUCCESS)
+        {}
+
+        std::vector<TString> SecretValues;
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+    };
+
+    TEvDescribeSecretsResponse(const TDescription& description)
+        : Description(description)
+    {}
+
+    TDescription Description;
 };
 
 } // namespace NKikimr::NKqp

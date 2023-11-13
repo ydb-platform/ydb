@@ -43,7 +43,7 @@ public:
 
     TRequestResult SchemeQueryRequest(const TString& query, TSchemeMeta& meta) const;
 
-    TRequestResult ScriptQueryRequest(const TString& script, NKikimrKqp::EQueryAction action, TString& operation) const;
+    TRequestResult ScriptQueryRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const;
 
     TRequestResult GetScriptExecutionOperationRequest(const TString& operation, TExecutionMeta& meta) const;
 

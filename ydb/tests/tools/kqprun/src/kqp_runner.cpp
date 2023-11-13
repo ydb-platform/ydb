@@ -37,8 +37,8 @@ public:
         return true;
     }
 
-    bool ExecuteScript(const TString& script, NKikimrKqp::EQueryAction action) {
-        TRequestResult status = YdbSetup_.ScriptQueryRequest(script, action, ExecutionOperation_);
+    bool ExecuteScript(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId) {
+        TRequestResult status = YdbSetup_.ScriptQueryRequest(script, action, traceId, ExecutionOperation_);
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to start script execution, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
@@ -124,8 +124,8 @@ bool TKqpRunner::ExecuteSchemeQuery(const TString& query) const {
     return Impl_->ExecuteSchemeQuery(query);
 }
 
-bool TKqpRunner::ExecuteScript(const TString& query, NKikimrKqp::EQueryAction action) const {
-    return Impl_->ExecuteScript(query, action);
+bool TKqpRunner::ExecuteScript(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
+    return Impl_->ExecuteScript(query, action, traceId);
 }
 
 bool TKqpRunner::WriteScriptResults() const {

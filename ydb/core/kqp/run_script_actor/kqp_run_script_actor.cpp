@@ -128,6 +128,7 @@ private:
         auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
         ev->Record = Request;
         ev->Record.MutableRequest()->SetSessionId(SessionId);
+        ev->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(Request.GetTraceId(), Database, SessionId, ExecutionId, Request.GetTraceId()));
 
         NActors::ActorIdToProto(SelfId(), ev->Record.MutableRequestActorId());
 
@@ -170,10 +171,17 @@ private:
     }
 
     void RunScriptExecutionFinisher() {
+        if (RunState == ERunState::Cancelling) {
+            Issues.AddIssue("Script execution is cancelled");
+        }
+
         if (!FinalStatusIsSaved) {
             FinalStatusIsSaved = true;
-            Register(CreateScriptExecutionFinisher(ExecutionId, Database, LeaseGeneration, Status, GetExecStatusFromStatusCode(Status),
-                                                     Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst)));
+            auto scriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(
+                GetFinalizationStatusFromRunState(), ExecutionId, Database, Status, GetExecStatusFromStatusCode(Status),
+                Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst), LeaseGeneration
+            );
+            Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptFinalizeRequest.release());
             return;
         }
 
@@ -439,6 +447,12 @@ private:
         }
     }
 
+    EFinalizationStatus GetFinalizationStatusFromRunState() const {
+        if (Status == Ydb::StatusIds::SUCCESS && (RunState == ERunState::Finishing || RunState == ERunState::Finished)) {
+            return EFinalizationStatus::FS_COMMIT;
+        }
+        return EFinalizationStatus::FS_ROLLBACK;
+    }
 
     void CheckInflight() {
         if (Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED || (Status == Ydb::StatusIds::SUCCESS && RunState == ERunState::Finishing && (SaveResultMetaInflight || SaveResultInflight))) {
@@ -450,10 +464,6 @@ private:
             RunScriptExecutionFinisher();
         } else {
             FinishAfterLeaseUpdate = true;
-        }
-
-        if (RunState == ERunState::Cancelling) {
-            Issues.AddIssue("Script execution is cancelled");
         }
     }
 
@@ -513,9 +523,9 @@ private:
     ui32 SaveResultInflight = 0;
     ui32 SaveResultMetaInflight = 0;
     bool PendingResultMeta = false;
-    TMaybe<TString> QueryPlan;
-    TMaybe<TString> QueryAst;
-    TMaybe<NKqpProto::TKqpStatsQuery> QueryStats;
+    std::optional<TString> QueryPlan;
+    std::optional<TString> QueryAst;
+    std::optional<NKqpProto::TKqpStatsQuery> QueryStats;
 };
 
 } // namespace

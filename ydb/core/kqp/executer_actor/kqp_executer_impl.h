@@ -21,6 +21,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 
 #include <ydb/services/metadata/secret/fetcher.h>
@@ -386,71 +387,6 @@ protected:
         return res;
     }
 
-    NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetSecretsSnapshotParser() {
-        return std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
-    }
-
-    void FetchSecrets(TVector<TString>&& secretNames) {
-        YQL_ENSURE(NMetadata::NProvider::TServiceOperator::IsEnabled(), "metadata service is not active");
-        SecretNames = std::move(secretNames);
-
-        SubscribedOnSecrets = true;
-        this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
-        this->Schedule(MaximalSecretsSnapshotWaitTime, new NActors::TEvents::TEvWakeup());
-    }
-
-    void HandleRefreshSubscriberData(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        if (!SubscribedOnSecrets) {
-            return;
-        }
-
-        Secrets = ev->Get()->GetSnapshotPtrAs<NMetadata::NSecret::TSnapshot>();
-
-        TString secretValue;
-        for (const TString& secretName : SecretNames) {
-            auto secretId = NMetadata::NSecret::TSecretId(UserToken->GetUserSID(), secretName);
-            if (!Secrets->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId), secretValue)) {
-                return;
-            }
-        }
-
-        UnsubscribeFromSecrets();
-        OnSecretsFetched();
-    }
-
-    void HandleSecretsWaitingTimeout(NActors::TEvents::TEvWakeup::TPtr&) {
-        if (!SubscribedOnSecrets) {
-            return;
-        }
-
-        YQL_ENSURE(Secrets != nullptr, "secrets snapshot fetching timeout");
-        UnsubscribeFromSecrets();
-        OnSecretsFetched();
-    }
-
-    void UnsubscribeFromSecrets() {
-        if (SubscribedOnSecrets) {
-            SubscribedOnSecrets = false;
-            this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
-        }
-    }
-
-    virtual void OnSecretsFetched() {}
-
-    TMap<TString, TString> ResolveSecretNames(const google::protobuf::RepeatedPtrField<TProtoStringType>& secretNames) {
-        TMap<TString, TString> secureParams;
-        for (const auto& secretName : secretNames) {
-            auto secretId = NMetadata::NSecret::TSecretId(UserToken->GetUserSID(), secretName);
-
-            TString secretValue;
-            YQL_ENSURE(Secrets->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId), secretValue), "secret with name '" << secretName << "' not found");
-
-            secureParams[secretName] = secretValue;
-        }
-
-        return secureParams;
-    }
-
 protected:
     bool CheckExecutionComplete() {
         if (Planner && Planner->GetPendingComputeActors().empty() && Planner->GetPendingComputeTasks().empty()) {
@@ -735,7 +671,7 @@ protected:
 
 
 protected:
-    void BuildSysViewScanTasks(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
+    void BuildSysViewScanTasks(TStageInfo& stageInfo) {
         Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.IsSysView());
 
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
@@ -778,13 +714,13 @@ protected:
             task.Meta.ReadInfo.Reverse = op.GetReadRange().GetReverse();
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
 
-            BuildSinks(stage, task, secureParams);
+            BuildSinks(stage, task);
 
             LOG_D("Stage " << stageInfo.Id << " create sysview scan task: " << task.Id);
         }
     }
 
-    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task, const TMap<TString, TString>& secureParams) {
+    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task) {
         if (stage.SinksSize() > 0) {
             YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
             const auto& sink = stage.GetSinks(0);
@@ -794,10 +730,10 @@ protected:
 
             auto sinkName = extSink.GetSinkName();
             if (sinkName) {
-                auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(secureParams).ToJson();
+                auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
                 task.Meta.SecureParams.emplace(sinkName, structuredToken);
                 if (GetUserRequestContext()->TraceId) {
-                    task.Meta.TaskParams.emplace("fq.job_id", GetUserRequestContext()->TraceId);
+                    task.Meta.TaskParams.emplace("fq.job_id", GetUserRequestContext()->CustomerSuppliedId);
                     // "fq.restart_count"
                 }
             }
@@ -809,7 +745,7 @@ protected:
         }
     }
 
-    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         YQL_ENSURE(stage.GetSources(0).HasExternalSource());
@@ -830,7 +766,7 @@ protected:
         auto sourceName = externalSource.GetSourceName();
         TString structuredToken;
         if (sourceName) {
-            structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(secureParams).ToJson();
+            structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
         }
 
         TVector<ui64> tasksIds;
@@ -869,11 +805,11 @@ protected:
 
         // finish building
         for (auto taskId : tasksIds) {
-            BuildSinks(stage, TasksGraph.GetTask(taskId), secureParams);
+            BuildSinks(stage, TasksGraph.GetTask(taskId));
         }
     }
 
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -983,7 +919,7 @@ protected:
                 settings->SetLockNodeId(self.NodeId());
             }
 
-            BuildSinks(stage, task, secureParams);
+            BuildSinks(stage, task);
         };
 
         THashMap<ui64, TShardInfo> partitions = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv());
@@ -1019,7 +955,7 @@ protected:
         }
     }
 
-    void BuildComputeTasks(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
+    void BuildComputeTasks(TStageInfo& stageInfo) {
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         ui32 partitionsCount = 1;
@@ -1077,7 +1013,7 @@ protected:
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
             task.Meta.ExecuterId = SelfId();
-            BuildSinks(stage, task, secureParams);
+            BuildSinks(stage, task);
             LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
         }
     }
@@ -1347,12 +1283,20 @@ protected:
             });
     }
 
+    void GetSecretsSnapshot() {
+        RegisterDescribeSecretsActor(this->SelfId(), UserToken ? UserToken->GetUserSID() : "", SecretNames, this->ActorContext(), MaximalSecretsSnapshotWaitTime);
+    }
+
     void GetResourcesSnapshot() {
         GetKqpResourceManager()->RequestClusterResourcesInfo(
             [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
                 TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new typename TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
                 as->Send(eh);
             });
+    }
+
+    void SaveScriptExternalEffect(std::unique_ptr<TEvSaveScriptExternalEffectRequest> scriptEffects) {
+        this->Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptEffects.release());
     }
 
 protected:
@@ -1542,8 +1486,6 @@ protected:
 
 protected:
     void PassAway() override {
-        UnsubscribeFromSecrets();
-
         for (auto channelPair: ResultChannelProxies) {
             LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
 
@@ -1655,10 +1597,9 @@ protected:
     std::unique_ptr<TKqpPlanner> Planner;
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig ExecuterRetriesConfig;
 
-    std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
-    TVector<TString> SecretNames;
+    std::vector<TString> SecretNames;
+    std::map<TString, TString> SecureParams;
     TDuration MaximalSecretsSnapshotWaitTime;
-    bool SubscribedOnSecrets = false;
 
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;

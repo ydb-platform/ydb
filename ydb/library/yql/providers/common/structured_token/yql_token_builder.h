@@ -18,7 +18,7 @@ public:
     TStructuredTokenBuilder& SetBasicAuthWithSecret(const TString& login, const TString& passwordReference);
     TStructuredTokenBuilder& SetIAMToken(const TString& token);
     TStructuredTokenBuilder& SetNoAuth();
-    TStructuredTokenBuilder& ReplaceReferences(const TMap<TString, TString> secrets);
+    TStructuredTokenBuilder& ReplaceReferences(const std::map<TString, TString>& secrets);
     TStructuredTokenBuilder& RemoveSecrets();
 
     TString ToJson() const;

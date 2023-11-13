@@ -13,7 +13,7 @@ THolder<NActors::IActor> MakeS3ApplicatorActor(
     IHTTPGateway::TPtr gateway,
     const TString& queryId,
     const TString& jobId,
-    ui32 restartNumber,
+    std::optional<ui32> restartNumber,
     bool commit,
     const THashMap<TString, TString>& secureParams,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,

@@ -11,7 +11,7 @@ public:
 
     bool ExecuteSchemeQuery(const TString& query) const;
 
-    bool ExecuteScript(const TString& script, NKikimrKqp::EQueryAction action) const;
+    bool ExecuteScript(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId) const;
 
     bool WriteScriptResults() const;
 

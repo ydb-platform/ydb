@@ -23,19 +23,6 @@ NActors::IActor* CreateGetScriptExecutionOperationActor(TEvGetScriptExecutionOpe
 NActors::IActor* CreateListScriptExecutionOperationsActor(TEvListScriptExecutionOperations::TPtr ev);
 NActors::IActor* CreateCancelScriptExecutionOperationActor(TEvCancelScriptExecutionOperation::TPtr ev);
 
-// Updates status in database.
-NActors::IActor* CreateScriptExecutionFinisher(
-    const TString& executionId,
-    const TString& database,
-    ui64 leaseGeneration,
-    Ydb::StatusIds::StatusCode operationStatus,
-    Ydb::Query::ExecStatus execStatus,
-    NYql::TIssues issues,
-    TMaybe<NKqpProto::TKqpStatsQuery> queryStats = Nothing(),
-    TMaybe<TString> queryPlan = Nothing(),
-    TMaybe<TString> queryAst = Nothing()
-);
-
 // Updates lease deadline in database.
 NActors::IActor* CreateScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, TDuration leaseDuration, TIntrusivePtr<TKqpCounters> counters);
 
@@ -43,5 +30,10 @@ NActors::IActor* CreateScriptLeaseUpdateActor(const TActorId& runScriptActorId, 
 NActors::IActor* CreateSaveScriptExecutionResultMetaActor(const NActors::TActorId& runScriptActorId, const TString& database, const TString& executionId, const TString& serializedMeta);
 NActors::IActor* CreateSaveScriptExecutionResultActor(const NActors::TActorId& runScriptActorId, const TString& database, const TString& executionId, i32 resultSetId, TInstant expireAt, i64 firstRow, std::vector<TString>&& serializedRows);
 NActors::IActor* CreateGetScriptExecutionResultActor(const NActors::TActorId& runScriptActorId, const TString& database, const TString& executionId, i32 resultSetId, i64 offset, i64 limit);
+
+// Compute external effects and updates status in database
+NActors::IActor* CreateSaveScriptExternalEffectActor(TEvSaveScriptExternalEffectRequest::TPtr ev);
+NActors::IActor* CreateSaveScriptFinalStatusActor(TEvScriptFinalizeRequest::TPtr ev);
+NActors::IActor* CreateScriptFinalizationFinisherActor(const TString& executionId, const TString& database, std::optional<Ydb::StatusIds::StatusCode> operationStatus, NYql::TIssues operationIssues);
 
 } // namespace NKikimr::NKqp

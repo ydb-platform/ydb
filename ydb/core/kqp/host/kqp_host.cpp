@@ -1504,12 +1504,13 @@ private:
             *PlanBuilder, sqlVersion, true /* UseDqExplain */);
     }
 
-    void InitS3Provider() {
+    void InitS3Provider(EKikimrQueryType queryType) {
         auto state = MakeIntrusive<NYql::TS3State>();
         state->Types = TypesCtx.Get();
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         state->Configuration->WriteThroughDqIntegration = true;
+        state->Configuration->AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
 
         state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
 
@@ -1565,7 +1566,7 @@ private:
         TypesCtx->AddDataSink(providerNames, kikimrDataSink);
 
         if ((queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query) && FederatedQuerySetup) {
-            InitS3Provider();
+            InitS3Provider(queryType);
             InitGenericProvider();
         }
 

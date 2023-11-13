@@ -368,14 +368,12 @@ Pear,15,33'''
         check_result(query2_id, "Fruit")
 
     @yq_all
-    @pytest.mark.parametrize("blocks", [False, True])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_invalid_column_in_parquet(self, kikimr, s3, client, blocks):
+    def test_invalid_column_in_parquet(self, kikimr, s3, client):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
         client.create_storage_connection("fruitbucket", "fbucket")
 
-        sql = 'pragma s3.UseBlocksSource="{}";'.format("true" if blocks else "false")
-        sql = sql + '''
+        sql = '''
             SELECT *
             FROM fruitbucket.`test.parquet`
             WITH (format=parquet, SCHEMA (
@@ -391,7 +389,7 @@ Pear,15,33'''
         logging.debug("Describe result: {}".format(describe_result))
         issues = describe_result.query.issue[0].issues
         assert '''Error while reading file test.parquet''' in issues[0].message
-        assert ("Missing field: ZZZZZ" if blocks else '''Column "ZZZZZ" is not presented in input data.''') in issues[0].issues[0].message
+        assert "Missing field: ZZZZZ" in issues[0].issues[0].message
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

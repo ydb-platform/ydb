@@ -135,10 +135,10 @@ public:
         double size = 0;
         double cols = 0;
         double rows = 0;
-        if (const auto& maybeArrowSettings = TMaybeNode<TS3ArrowSettings>(sourceWrap->Child(0))) {
-            const auto& arrowSettings = maybeArrowSettings.Cast();
-            for (size_t i = 0; i < arrowSettings.Paths().Size(); ++i) {
-                auto batch = arrowSettings.Paths().Item(i);
+        if (const auto& maybeParseSettings = TMaybeNode<TS3ParseSettings>(sourceWrap->Child(0))) {
+            const auto& parseSettings = maybeParseSettings.Cast();
+            for (size_t i = 0; i < parseSettings.Paths().Size(); ++i) {
+                auto batch = parseSettings.Paths().Item(i);
                 TStringBuf packed = batch.Data().Literal().Value();
                 bool isTextEncoded = FromString<bool>(batch.IsText().Literal().Value());
                 TPathList paths;
@@ -149,8 +149,8 @@ public:
                 }
             }
 
-            if (arrowSettings.RowType().Maybe<TCoStructType>()) {
-                cols = arrowSettings.RowType().Ptr()->ChildrenSize();
+            if (parseSettings.RowType().Maybe<TCoStructType>()) {
+                cols = parseSettings.RowType().Ptr()->ChildrenSize();
             }
 
             rows = size / 1024; // magic estimate
@@ -213,24 +213,17 @@ public:
 
             auto format = s3ReadObject.Object().Format().Ref().Content();
             if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && format != "raw" && format != "json_list") {
-                bool supportedArrowTypes = false;
-                if (State_->Types->UseBlocks) {
-                    YQL_ENSURE(State_->Configuration->UseBlocksSource.Get().GetOrElse(true), "Scalar Source is not compatible with Blocks engine");
-                }
-                if (State_->Configuration->UseBlocksSource.Get().GetOrElse(State_->Types->UseBlocks) && State_->Types->ArrowResolver) {
+                if (format == "parquet") {
+                    YQL_ENSURE(State_->Types->ArrowResolver);
                     TVector<const TTypeAnnotationNode*> allTypes;
                     for (const auto& x : rowType->Cast<TStructExprType>()->GetItems()) {
                         allTypes.push_back(x->GetItemType());
                     }
-
                     auto resolveStatus = State_->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(read->Pos()), allTypes, ctx);
-                    YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
-                    supportedArrowTypes = resolveStatus == IArrowResolver::OK;
+                    YQL_ENSURE(resolveStatus == IArrowResolver::OK);
                 }
                 return Build<TDqSourceWrap>(ctx, read->Pos())
-                    .Input<TS3ParseSettingsBase>()
-                        .CallableName((supportedArrowTypes && format == "parquet") ? TS3ArrowSettings::CallableName():
-                                                                                     TS3ParseSettings::CallableName())
+                    .Input<TS3ParseSettings>()
                         .Paths(s3ReadObject.Object().Paths())
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
@@ -312,10 +305,9 @@ public:
             YQL_ENSURE(paths.Size() > 0);
             const TStructExprType* extraColumnsType = paths.Item(0).ExtraColumns().Ref().GetTypeAnn()->Cast<TStructExprType>();
 
-            if (const auto mayParseSettings = settings.Maybe<TS3ParseSettingsBase>()) {
+            if (const auto mayParseSettings = settings.Maybe<TS3ParseSettings>()) {
                 const auto parseSettings = mayParseSettings.Cast();
                 srcDesc.SetFormat(parseSettings.Format().StringValue().c_str());
-                srcDesc.SetArrow(bool(parseSettings.Maybe<TS3ArrowSettings>()));
                 srcDesc.SetParallelRowGroupCount(State_->Configuration->ArrowParallelRowGroupCount.Get().GetOrElse(0));
                 srcDesc.SetRowGroupReordering(State_->Configuration->ArrowRowGroupReordering.Get().GetOrElse(true));
                 srcDesc.SetParallelDownloadCount(State_->Configuration->ParallelDownloadCount.Get().GetOrElse(0));

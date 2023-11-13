@@ -49,11 +49,10 @@ class TestS3(object):
         assert sum(kikimr.control_plane.get_metering()) == 10
 
     @yq_all
-    @pytest.mark.parametrize("blocks", [False, True])
     @pytest.mark.parametrize("format1", ["json_list", "json_each_row", "csv_with_names", "parquet"])
     @pytest.mark.parametrize("format2", ["json_list", "json_each_row", "csv_with_names", "parquet"])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_convert(self, kikimr, s3, client, format1, format2, blocks, yq_version):
+    def test_convert(self, kikimr, s3, client, format1, format2, yq_version):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -66,12 +65,10 @@ class TestS3(object):
 
         client.create_storage_connection("sbucket", "convert_bucket")
 
-        mode = "blocks" if blocks else "scalar"
-
         sql = R'''
-            insert into sbucket.`{0}_1_{1}_{2}_{3}/` with (format={0})
+            insert into sbucket.`{0}_1_{1}_{2}/` with (format={0})
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
-            '''.format(format1, format2, mode, yq_version)
+            '''.format(format1, format2, yq_version)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -81,14 +78,13 @@ class TestS3(object):
         egress_bytes_1 = stat[graph_name]["EgressObjectStorageBytes"]["sum"]
         print(json.dumps(stat, indent=4))
 
-        sql = '' if blocks else 'pragma s3.UseBlocksSource="false";'
-        sql = sql + R'''
-            insert into sbucket.`{0}_2_{1}_{2}_{3}/` with (format={1})
-            select foo, bar from sbucket.`{0}_1_{1}_{2}_{3}/*` with (format={0}, schema(
+        sql = R'''
+            insert into sbucket.`{0}_2_{1}_{2}/` with (format={1})
+            select foo, bar from sbucket.`{0}_1_{1}_{2}/*` with (format={0}, schema(
                 foo Int NOT NULL,
                 bar String NOT NULL
             ))
-            '''.format(format1, format2, mode, yq_version)
+            '''.format(format1, format2, yq_version)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -99,13 +95,12 @@ class TestS3(object):
         egress_bytes_2 = stat[graph_name]["EgressObjectStorageBytes"]["sum"]
         print(json.dumps(stat, indent=4))
 
-        sql = '' if blocks else 'pragma s3.UseBlocksSource="false";'
-        sql = sql + R'''
-            select foo, bar from sbucket.`{0}_2_{1}_{2}_{3}/*` with (format={1}, schema(
+        sql = R'''
+            select foo, bar from sbucket.`{0}_2_{1}_{2}/*` with (format={1}, schema(
                 foo Int NOT NULL,
                 bar String NOT NULL
             ))
-            '''.format(format1, format2, mode, yq_version)
+            '''.format(format1, format2, yq_version)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -118,22 +113,22 @@ class TestS3(object):
         file_size_1 = 0
         file_size_2 = 0
         for file in bucket.objects.all():
-            if file.key.startswith("{0}_1_{1}_{2}_{3}/".format(format1, format2, mode, yq_version)):
+            if file.key.startswith("{0}_1_{1}_{2}/".format(format1, format2, yq_version)):
                 file_size_1 += bucket.Object(file.key).content_length
-            if file.key.startswith("{0}_2_{1}_{2}_{3}/".format(format1, format2, mode, yq_version)):
+            if file.key.startswith("{0}_2_{1}_{2}/".format(format1, format2, yq_version)):
                 file_size_2 += bucket.Object(file.key).content_length
 
         assert file_size_1 == egress_bytes_1, "File {} size {} mistmatches egress bytes {}".format(format1, file_size_1, egress_bytes_1)
         assert file_size_2 == egress_bytes_2, "File {} size {} mistmatches egress bytes {}".format(format2, file_size_2, egress_bytes_2)
-        if not blocks:
+        if format1 != "parquet":
             assert file_size_1 == ingress_bytes_1, "File {} size {} mistmatches ingress bytes {}".format(format1, file_size_1, ingress_bytes_1)
+        if format2 != "parquet":
             assert file_size_2 == ingress_bytes_2, "File {} size {} mistmatches ingress bytes {}".format(format2, file_size_2, ingress_bytes_2)
         assert sum(kikimr.control_plane.get_metering()) == 30
 
     @yq_all
-    @pytest.mark.parametrize("blocks", [False, True])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_precompute(self, kikimr, s3, client, blocks, yq_version):
+    def test_precompute(self, kikimr, s3, client, yq_version):
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -155,15 +150,14 @@ class TestS3(object):
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         sql = R'''
-            insert into pb.`path2/` with (format=parquet)
+            insert into pb.`path2/` with (format=csv_with_names)
             select * from AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
             '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        sql = '' if blocks else 'pragma s3.UseBlocksSource="false";'
-        sql = sql + R'''
+        sql = R'''
             $c1 =
                 SELECT
                 count(*) as `count`
@@ -179,7 +173,7 @@ class TestS3(object):
                 count(*) as `count`
                 FROM
                 pb.`path2/`
-                with (format=parquet, schema(
+                with (format=csv_with_names, schema(
                     foo Int NOT NULL,
                     bar String NOT NULL
                 ));
@@ -203,9 +197,7 @@ class TestS3(object):
         for file in bucket.objects.all():
             file_size += bucket.Object(file.key).content_length
 
-        if not blocks:
-            assert file_size == ingress, "Total size {} mistmatches ingress bytes {}".format(file_size, ingress)
-
+        assert file_size == ingress, "Total size {} mistmatches ingress bytes {}".format(file_size, ingress)
         assert sum(kikimr.control_plane.get_metering()) == 30
 
     @yq_all

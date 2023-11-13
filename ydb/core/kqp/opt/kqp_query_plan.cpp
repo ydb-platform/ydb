@@ -919,7 +919,7 @@ private:
                         }
                         op.Properties["Cluster"] = cluster;
                         AddOperator(stagePlanNode, "Source", op);
-                    } else if (auto settings = source.Settings().Maybe<TS3ParseSettingsBase>(); settings.IsValid()) {
+                    } else if (auto settings = source.Settings().Maybe<TS3ParseSettings>(); settings.IsValid()) {
                         TOperator op;
                         op.Properties["Name"] = S3ProviderName;
                         op.Properties["Format"] = settings.Cast().Format().StringValue();

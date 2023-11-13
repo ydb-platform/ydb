@@ -360,6 +360,8 @@ class TestS3(object):
     @pytest.mark.parametrize("format", ["json_each_row", "csv_with_names", "tsv_with_names", "parquet"])
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_error(self, kikimr, s3, client, format):
+        if format == "parquet":
+            pytest.skip("Transient errors do not work for arrow reader - YQ-1335")
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,

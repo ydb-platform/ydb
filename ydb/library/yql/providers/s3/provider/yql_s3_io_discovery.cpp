@@ -116,7 +116,7 @@ private:
                 if (dqSource.DataSource().Category() != S3ProviderName) {
                     return false;
                 }
-                auto maybeS3ParseSettings = dqSource.Input().Maybe<TS3ParseSettingsBase>();
+                auto maybeS3ParseSettings = dqSource.Input().Maybe<TS3ParseSettings>();
                 if (!maybeS3ParseSettings) {
                     return false;
                 }
@@ -162,7 +162,7 @@ private:
     TStatus ApplyDirectoryListing(const TDqSourceWrap& source, const TPendingRequests& pendingRequests,
         const TVector<TListRequest>& requests, TNodeOnNodeOwnedMap& replaces, TExprContext& ctx)
     {
-        TS3ParseSettingsBase parse = source.Input().Maybe<TS3ParseSettingsBase>().Cast();
+        TS3ParseSettings parse = source.Input().Maybe<TS3ParseSettings>().Cast();
         TExprNodeList newPaths;
         TExprNodeList extraValuesItems;
         size_t dirIndex = 0;
@@ -257,8 +257,7 @@ private:
         }
 
         auto newExtraValues = ctx.NewCallable(source.Pos(), "OrderedExtend", std::move(extraValuesItems));
-        auto newInput = Build<TS3ParseSettingsBase>(ctx, parse.Pos())
-            .CallableName(parse.Ref().Content())
+        auto newInput = Build<TS3ParseSettings>(ctx, parse.Pos())
             .InitFrom(parse)
             .Paths(ctx.NewList(parse.Paths().Pos(), std::move(newPaths)))
             .Settings(RemoveSetting(parse.Settings().Cast().Ref(), "directories", ctx))
@@ -573,10 +572,10 @@ private:
         const TString url = connect.Url;
         const TString tokenStr = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
-        auto s3ParseSettingsBase = source.Input().Maybe<TS3ParseSettingsBase>().Cast();
+        auto s3ParseSettings = source.Input().Maybe<TS3ParseSettings>().Cast();
         TString filePattern;
-        if (s3ParseSettingsBase.Ref().ChildrenSize() > TS3ParseSettingsBase::idx_Settings) {
-            const auto& settings = *s3ParseSettingsBase.Ref().Child(TS3ParseSettingsBase::idx_Settings);
+        if (s3ParseSettings.Ref().ChildrenSize() > TS3ParseSettings::idx_Settings) {
+            const auto& settings = *s3ParseSettings.Ref().Child(TS3ParseSettings::idx_Settings);
             if (!FindFilePattern(settings, ctx, filePattern)) {
                 return false;
             }
@@ -584,15 +583,15 @@ private:
         const TString effectiveFilePattern = filePattern ? filePattern : "*";
 
         auto resultSetLimitPerPath = std::max(State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxDirectoriesAndFilesPerQuery);
-        if (!s3ParseSettingsBase.Paths().Empty()) {
-            resultSetLimitPerPath /= s3ParseSettingsBase.Paths().Size();
+        if (!s3ParseSettings.Paths().Empty()) {
+            resultSetLimitPerPath /= s3ParseSettings.Paths().Size();
         }
         resultSetLimitPerPath =
             std::min(resultSetLimitPerPath,
                      State_->Configuration->MaxDiscoveryFilesPerDirectory.Get().GetOrElse(
                          State_->Configuration->MaxListingResultSizePerPhysicalPartition));
 
-        for (auto path : s3ParseSettingsBase.Paths()) {
+        for (auto path : s3ParseSettings.Paths()) {
             NS3Details::TPathList directories;
             NS3Details::UnpackPathsList(path.Data().Literal().Value(), FromString<bool>(path.IsText().Literal().Value()), directories);
 

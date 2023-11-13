@@ -6,20 +6,19 @@ import (
 	"strings"
 
 	"github.com/ydb-platform/ydb/library/go/core/log"
-	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-type handlerImpl[CONN utils.Connection] struct {
+type handlerImpl struct {
 	typeMapper        utils.TypeMapper
-	queryBuilder      utils.QueryExecutor[CONN]
-	connectionManager utils.ConnectionManager[CONN]
+	queryBuilder      utils.QueryExecutor
+	connectionManager utils.ConnectionManager
 	logger            log.Logger
 }
 
-func (h *handlerImpl[CONN]) DescribeTable(
+func (h *handlerImpl) DescribeTable(
 	ctx context.Context,
 	logger log.Logger,
 	request *api_service_protos.TDescribeTableRequest,
@@ -67,22 +66,11 @@ func (h *handlerImpl[CONN]) DescribeTable(
 	return &api_service_protos.TDescribeTableResponse{Schema: schema}, nil
 }
 
-func (h *handlerImpl[CONN]) ReadSplit(
-	ctx context.Context,
+func (h *handlerImpl) makeReadSplitQuery(
 	logger log.Logger,
-	dataSourceInstance *api_common.TDataSourceInstance,
 	split *api_service_protos.TSplit,
-	pagingWriter paging.Writer,
-) error {
-	conn, err := h.connectionManager.Make(ctx, logger, dataSourceInstance)
-	if err != nil {
-		return fmt.Errorf("make connection: %w", err)
-	}
-
-	defer h.connectionManager.Release(logger, conn)
-
+) (string, error) {
 	// SELECT $columns
-
 	// interpolate request
 	var sb strings.Builder
 
@@ -90,7 +78,7 @@ func (h *handlerImpl[CONN]) ReadSplit(
 
 	columns, err := utils.SelectWhatToYDBColumns(split.Select.What)
 	if err != nil {
-		return fmt.Errorf("convert Select.What.Items to Ydb.Columns: %w", err)
+		return "", fmt.Errorf("convert Select.What.Items to Ydb.Columns: %w", err)
 	}
 
 	// for the case of empty column set select some constant for constructing a valid sql statement
@@ -109,7 +97,7 @@ func (h *handlerImpl[CONN]) ReadSplit(
 	// SELECT $columns FROM $from
 	tableName := split.GetSelect().GetFrom().GetTable()
 	if tableName == "" {
-		return fmt.Errorf("empty table name")
+		return "", fmt.Errorf("empty table name")
 	}
 
 	sb.WriteString(" FROM ")
@@ -127,7 +115,26 @@ func (h *handlerImpl[CONN]) ReadSplit(
 
 	// execute query
 
-	query := sb.String()
+	return sb.String(), nil
+}
+
+func (h *handlerImpl) doReadSplit(
+	ctx context.Context,
+	logger log.Logger,
+	split *api_service_protos.TSplit,
+	sink paging.Sink,
+) error {
+	query, err := h.makeReadSplitQuery(logger, split)
+	if err != nil {
+		return fmt.Errorf("make read split query: %w", err)
+	}
+
+	conn, err := h.connectionManager.Make(ctx, logger, split.Select.DataSourceInstance)
+	if err != nil {
+		return fmt.Errorf("make connection: %w", err)
+	}
+
+	defer h.connectionManager.Release(logger, conn)
 
 	rows, err := conn.Query(ctx, query)
 	if err != nil {
@@ -146,7 +153,7 @@ func (h *handlerImpl[CONN]) ReadSplit(
 			return fmt.Errorf("rows scan error: %w", err)
 		}
 
-		if err := pagingWriter.AddRow(acceptors); err != nil {
+		if err := sink.AddRow(acceptors); err != nil {
 			return fmt.Errorf("add row to paging writer: %w", err)
 		}
 	}
@@ -158,13 +165,27 @@ func (h *handlerImpl[CONN]) ReadSplit(
 	return nil
 }
 
-func (h *handlerImpl[CONN]) TypeMapper() utils.TypeMapper { return h.typeMapper }
-
-func newHandler[CONN utils.Connection](
+func (h *handlerImpl) ReadSplit(
+	ctx context.Context,
 	logger log.Logger,
-	preset *preset[CONN],
+	split *api_service_protos.TSplit,
+	sink paging.Sink,
+) {
+	err := h.doReadSplit(ctx, logger, split, sink)
+	if err != nil {
+		sink.AddError(err)
+	}
+
+	sink.Finish()
+}
+
+func (h *handlerImpl) TypeMapper() utils.TypeMapper { return h.typeMapper }
+
+func newHandler(
+	logger log.Logger,
+	preset *handlerPreset,
 ) Handler {
-	return &handlerImpl[CONN]{
+	return &handlerImpl{
 		logger:            logger,
 		queryBuilder:      preset.queryExecutor,
 		connectionManager: preset.connectionManager,

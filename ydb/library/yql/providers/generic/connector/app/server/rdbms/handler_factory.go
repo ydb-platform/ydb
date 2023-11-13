@@ -10,43 +10,43 @@ import (
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 )
 
-type preset[CONN utils.Connection] struct {
-	queryExecutor     utils.QueryExecutor[CONN]
-	connectionManager utils.ConnectionManager[CONN]
+type handlerPreset struct {
+	queryExecutor     utils.QueryExecutor
+	connectionManager utils.ConnectionManager
 	typeMapper        utils.TypeMapper
 }
 
-type HandlerFactory struct {
-	clickhouse preset[*clickhouse.Connection]
-	postgresql preset[*postgresql.Connection]
+type handlerFactoryImpl struct {
+	clickhouse handlerPreset
+	postgresql handlerPreset
 }
 
-func (hf *HandlerFactory) Make(
+func (hf *handlerFactoryImpl) Make(
 	logger log.Logger,
 	dataSourceType api_common.EDataSourceKind,
 ) (Handler, error) {
 	switch dataSourceType {
 	case api_common.EDataSourceKind_CLICKHOUSE:
-		return newHandler[*clickhouse.Connection](logger, &hf.clickhouse), nil
+		return newHandler(logger, &hf.clickhouse), nil
 	case api_common.EDataSourceKind_POSTGRESQL:
-		return newHandler[*postgresql.Connection](logger, &hf.postgresql), nil
+		return newHandler(logger, &hf.postgresql), nil
 	default:
 		return nil, fmt.Errorf("pick handler for data source type '%v': %w", dataSourceType, utils.ErrDataSourceNotSupported)
 	}
 }
 
-func NewHandlerFactory(qlf utils.QueryLoggerFactory) *HandlerFactory {
+func NewHandlerFactory(qlf utils.QueryLoggerFactory) HandlerFactory {
 	connManagerCfg := utils.ConnectionManagerBase{
 		QueryLoggerFactory: qlf,
 	}
 
-	return &HandlerFactory{
-		clickhouse: preset[*clickhouse.Connection]{
+	return &handlerFactoryImpl{
+		clickhouse: handlerPreset{
 			queryExecutor:     clickhouse.NewQueryExecutor(),
 			connectionManager: clickhouse.NewConnectionManager(connManagerCfg),
 			typeMapper:        clickhouse.NewTypeMapper(),
 		},
-		postgresql: preset[*postgresql.Connection]{
+		postgresql: handlerPreset{
 			queryExecutor:     postgresql.NewQueryExecutor(),
 			connectionManager: postgresql.NewConnectionManager(connManagerCfg),
 			typeMapper:        postgresql.NewTypeMapper(),

@@ -21,6 +21,7 @@ var (
 	ErrUnimplementedExpression    = fmt.Errorf("unimplemented expression")
 	ErrUnimplementedOperation     = fmt.Errorf("unimplemented operation")
 	ErrUnimplementedPredicateType = fmt.Errorf("unimplemented predicate type")
+	ErrInvariantViolation         = fmt.Errorf("implementation error (invariant violation)")
 )
 
 func NewSuccess() *api_service_protos.TError {

@@ -8,43 +8,44 @@ import (
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-var _ Writer = (*WriterMock)(nil)
+var _ Sink = (*SinkMock)(nil)
 
-type WriterMock struct {
-	ColumnarBufferChan chan ColumnarBuffer
+type SinkMock struct {
 	mock.Mock
 }
 
-func (m *WriterMock) AddRow(acceptors []any) error {
-	panic("not implemented") // TODO: Implement
-}
-
-func (m *WriterMock) Finish() error {
-	args := m.Called()
-
-	close(m.ColumnarBufferChan)
+func (m *SinkMock) AddRow(acceptors []any) error {
+	args := m.Called(acceptors...)
 
 	return args.Error(0)
 }
 
-func (m *WriterMock) BufferQueue() <-chan ColumnarBuffer {
-	return m.ColumnarBufferChan
+func (m *SinkMock) AddError(err error) {
+	m.Called(err)
 }
 
-var _ WriterFactory = (*WriterFactoryMock)(nil)
+func (m *SinkMock) Finish() {
+	m.Called()
+}
 
-type WriterFactoryMock struct {
+func (m *SinkMock) ResultQueue() <-chan *ReadResult {
+	return m.Called().Get(0).(chan *ReadResult)
+}
+
+var _ SinkFactory = (*SinkFactoryMock)(nil)
+
+type SinkFactoryMock struct {
 	mock.Mock
 }
 
-func (m *WriterFactoryMock) MakeWriter(
+func (m *SinkFactoryMock) MakeSink(
 	ctx context.Context,
 	logger log.Logger,
 	pagination *api_service_protos.TPagination,
-) (Writer, error) {
+) (Sink, error) {
 	args := m.Called(pagination)
 
-	return args.Get(0).(Writer), args.Error(1)
+	return args.Get(0).(Sink), args.Error(1)
 }
 
 var _ ColumnarBuffer = (*ColumnarBufferMock)(nil)
@@ -65,4 +66,8 @@ func (m *ColumnarBufferMock) ToResponse() (*api_service_protos.TReadSplitsRespon
 
 func (m *ColumnarBufferMock) Release() {
 	m.Called()
+}
+
+func (m *ColumnarBufferMock) TotalRows() int {
+	panic("not implemented") // TODO: Implement
 }

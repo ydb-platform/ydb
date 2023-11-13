@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 
@@ -123,14 +122,19 @@ func fileMustExist(path string) error {
 }
 
 func newConfigFromPath(configPath string) (*config.TServerConfig, error) {
-	data, err := ioutil.ReadFile(configPath)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("read file %v: %w", configPath, err)
 	}
 
 	var cfg config.TServerConfig
 
-	if err := prototext.Unmarshal(data, &cfg); err != nil {
+	unmarshaller := prototext.UnmarshalOptions{
+		// Do not emit an error if config contains outdated or too fresh fields
+		DiscardUnknown: true,
+	}
+
+	if err := unmarshaller.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("prototext unmarshal `%v`: %w", string(data), err)
 	}
 

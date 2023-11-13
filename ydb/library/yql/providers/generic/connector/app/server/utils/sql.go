@@ -5,6 +5,7 @@ import (
 
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
+	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
 type Connection interface {
@@ -20,11 +21,15 @@ type Rows interface {
 	MakeAcceptors() ([]any, error)
 }
 
-type ConnectionManager[CONN any] interface {
-	Make(ctx context.Context, logger log.Logger, dataSourceInstance *api_common.TDataSourceInstance) (CONN, error)
-	Release(logger log.Logger, conn CONN)
+type ConnectionManager interface {
+	Make(ctx context.Context, logger log.Logger, dataSourceInstance *api_common.TDataSourceInstance) (Connection, error)
+	Release(logger log.Logger, connection Connection)
 }
 
 type ConnectionManagerBase struct {
 	QueryLoggerFactory QueryLoggerFactory
+}
+
+type QueryExecutor interface {
+	DescribeTable(ctx context.Context, conn Connection, request *api_service_protos.TDescribeTableRequest) (Rows, error)
 }

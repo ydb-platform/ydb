@@ -57,7 +57,7 @@ func (c Connection) Query(ctx context.Context, query string, args ...any) (utils
 	return rows{Rows: out}, err
 }
 
-var _ utils.ConnectionManager[*Connection] = (*connectionManager)(nil)
+var _ utils.ConnectionManager = (*connectionManager)(nil)
 
 type connectionManager struct {
 	utils.ConnectionManagerBase
@@ -68,7 +68,7 @@ func (c *connectionManager) Make(
 	ctx context.Context,
 	logger log.Logger,
 	dsi *api_common.TDataSourceInstance,
-) (*Connection, error) {
+) (utils.Connection, error) {
 	if dsi.GetCredentials().GetBasic() == nil {
 		return nil, fmt.Errorf("currently only basic auth is supported")
 	}
@@ -118,10 +118,10 @@ func (c *connectionManager) Make(
 	return &Connection{conn, queryLogger}, nil
 }
 
-func (c *connectionManager) Release(logger log.Logger, conn *Connection) {
+func (c *connectionManager) Release(logger log.Logger, conn utils.Connection) {
 	utils.LogCloserError(logger, conn, "close posgresql connection")
 }
 
-func NewConnectionManager(cfg utils.ConnectionManagerBase) utils.ConnectionManager[*Connection] {
+func NewConnectionManager(cfg utils.ConnectionManagerBase) utils.ConnectionManager {
 	return &connectionManager{ConnectionManagerBase: cfg}
 }

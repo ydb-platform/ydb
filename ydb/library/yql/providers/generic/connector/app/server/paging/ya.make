@@ -7,12 +7,9 @@ SRCS(
     interface.go
     mock.go
     read_limiter.go
-    writer.go
-    writer_factory.go
-)
-
-GO_TEST_SRCS(
-    time_test.go
+    sink.go
+    sink_factory.go
+    sink_string.go
 )
 
 END()

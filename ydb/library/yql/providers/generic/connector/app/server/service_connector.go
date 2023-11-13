@@ -19,11 +19,12 @@ import (
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/reflection"
 )
 
 type serviceConnector struct {
 	api_service.UnimplementedConnectorServer
-	handlerFactory     *rdbms.HandlerFactory
+	handlerFactory     rdbms.HandlerFactory
 	memoryAllocator    memory.Allocator
 	readLimiterFactory *paging.ReadLimiterFactory
 	cfg                *config.TServerConfig
@@ -183,14 +184,30 @@ func (s *serviceConnector) doReadSplits(
 
 	for i, split := range request.Splits {
 		columnarBufferFactory, err := paging.NewColumnarBufferFactory(
-			logger, s.memoryAllocator, s.readLimiterFactory, request.Format, split.Select.What, handler.TypeMapper())
+			logger,
+			s.memoryAllocator,
+			s.readLimiterFactory,
+			request.Format,
+			split.Select.What,
+			handler.TypeMapper())
 		if err != nil {
 			return 0, fmt.Errorf("new columnar buffer factory: %w", err)
 		}
 
-		pagingWriterFactory := paging.NewWriterFactory(columnarBufferFactory)
+		// TODO: use configs
+		const (
+			resultQueueCapacity = 10
+			rowsPerBuffer       = 10000
+		)
 
-		bytesInSplit, err := s.readSplit(logger, stream, request, split, pagingWriterFactory, handler)
+		sinkFactory := paging.NewSinkFactory(columnarBufferFactory, resultQueueCapacity, rowsPerBuffer)
+
+		sink, err := sinkFactory.MakeSink(stream.Context(), logger, request.Pagination)
+		if err != nil {
+			return 0, fmt.Errorf("new sink: %w", err)
+		}
+
+		bytesInSplit, err := s.readSplit(logger, stream, request, split, sink, handler)
 		if err != nil {
 			return 0, fmt.Errorf("read split %d: %w", i, err)
 		}
@@ -206,22 +223,19 @@ func (s *serviceConnector) readSplit(
 	stream api_service.Connector_ReadSplitsServer,
 	request *api_service_protos.TReadSplitsRequest,
 	split *api_service_protos.TSplit,
-	pagingWriterFactory paging.WriterFactory,
+	sink paging.Sink,
 	handler rdbms.Handler,
 ) (uint64, error) {
 	logger.Debug("split reading started")
 
-	streamer, err := streaming.NewStreamer(
+	streamer := streaming.NewStreamer(
 		logger,
 		stream,
 		request,
 		split,
-		pagingWriterFactory,
+		sink,
 		handler,
 	)
-	if err != nil {
-		return 0, fmt.Errorf("new streamer: %w", err)
-	}
 
 	totalBytesSent, err := streamer.Run()
 	if err != nil {
@@ -318,6 +332,7 @@ func newServiceConnector(
 	}
 
 	grpcServer := grpc.NewServer(options...)
+	reflection.Register(grpcServer)
 
 	s := &serviceConnector{
 		handlerFactory:     rdbms.NewHandlerFactory(queryLoggerFactory),

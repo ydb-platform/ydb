@@ -20,10 +20,16 @@ type Handler interface {
 	ReadSplit(
 		ctx context.Context,
 		logger log.Logger,
-		dataSourceInstance *api_common.TDataSourceInstance,
 		split *api_service_protos.TSplit,
-		pagingWriter paging.Writer,
-	) error
+		sink paging.Sink,
+	)
 
 	TypeMapper() utils.TypeMapper
+}
+
+type HandlerFactory interface {
+	Make(
+		logger log.Logger,
+		dataSourceType api_common.EDataSourceKind,
+	) (Handler, error)
 }

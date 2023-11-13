@@ -1,13 +1,21 @@
 package streaming
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"testing"
 
+	"github.com/apache/arrow/go/v13/arrow"
+	"github.com/apache/arrow/go/v13/arrow/array"
+	"github.com/apache/arrow/go/v13/arrow/ipc"
+	"github.com/apache/arrow/go/v13/arrow/memory"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/ydb-platform/ydb/library/go/core/log"
+	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/clickhouse"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
@@ -20,7 +28,7 @@ var _ api_service.Connector_ReadSplitsServer = (*streamMock)(nil)
 type streamMock struct {
 	mock.Mock
 	api_service.Connector_ReadSplitsServer
-	sendTriggeredChan chan struct{}
+	logger log.Logger
 }
 
 func (m *streamMock) Context() context.Context {
@@ -32,228 +40,268 @@ func (m *streamMock) Context() context.Context {
 func (m *streamMock) Send(response *api_service_protos.TReadSplitsResponse) error {
 	args := m.Called(response)
 
-	if m.sendTriggeredChan != nil {
-		close(m.sendTriggeredChan)
-	}
-
 	return args.Error(0)
 }
 
-func TestStreaming(t *testing.T) {
-	logger := utils.NewTestLogger(t)
+func (m *streamMock) makeSendMatcher(
+	t *testing.T,
+	split *api_service_protos.TSplit,
+	expectedColumnarBlock [][]any,
+	expectedRowCount int,
+) func(response *api_service_protos.TReadSplitsResponse) bool {
+	return func(response *api_service_protos.TReadSplitsResponse) bool {
+		buf := bytes.NewBuffer(response.GetArrowIpcStreaming())
 
+		reader, err := ipc.NewReader(buf)
+		require.NoError(t, err)
+
+		for reader.Next() {
+			record := reader.Record()
+
+			require.Equal(t, len(split.Select.What.Items), len(record.Columns()))
+
+			if record.NumRows() != int64(expectedRowCount) {
+				return false
+			}
+
+			col0 := record.Column(0).(*array.Int32)
+			require.Equal(t, &arrow.Int32Type{}, col0.DataType())
+
+			for i := 0; i < len(expectedColumnarBlock[0]); i++ {
+				if expectedColumnarBlock[0][i] != col0.Value(i) {
+					return false
+				}
+			}
+
+			// FIXME: YQ-2590: String -> Binary
+			col1 := record.Column(1).(*array.String)
+			require.Equal(t, &arrow.StringType{}, col1.DataType())
+
+			for i := 0; i < len(expectedColumnarBlock[1]); i++ {
+				if expectedColumnarBlock[1][i].(string) != col1.Value(i) {
+					return false
+				}
+			}
+		}
+
+		reader.Release()
+
+		return true
+	}
+}
+
+type testCaseStreaming struct {
+	src                 [][]any
+	rowsPerBlock        int
+	bufferQueueCapacity int
+	scanErr             error
+	sendErr             error
+}
+
+func (tc testCaseStreaming) name() string {
+	return fmt.Sprintf(
+		"totalRows_%d_rowsPerBlock_%d_bufferQueueCapacity_%d",
+		len(tc.src), tc.rowsPerBlock, tc.bufferQueueCapacity)
+}
+
+func (tc testCaseStreaming) messageParams() (sentMessages, rowsInLastMessage int) {
+	modulo := len(tc.src) % tc.rowsPerBlock
+
+	if modulo == 0 {
+		sentMessages = len(tc.src) / tc.rowsPerBlock
+		rowsInLastMessage = tc.rowsPerBlock
+	} else {
+		sentMessages = len(tc.src)/tc.rowsPerBlock + 1
+		rowsInLastMessage = modulo
+	}
+
+	if tc.scanErr != nil {
+		sentMessages--
+		rowsInLastMessage = tc.rowsPerBlock
+	}
+
+	return
+}
+
+func (tc testCaseStreaming) execute(t *testing.T) {
+	logger := utils.NewTestLogger(t)
 	request := &api_service_protos.TReadSplitsRequest{}
-	split := &api_service_protos.TSplit{}
+	split := utils.MakeTestSplit()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream := &streamMock{logger: logger}
+
+	stream.On("Context").Return(ctx)
+
+	connection := &utils.ConnectionMock{}
+
+	connectionManager := &utils.ConnectionManagerMock{}
+	connectionManager.On("Make", split.Select.DataSourceInstance).Return(connection, nil).Once()
+	connectionManager.On("Release", connection).Return().Once()
+
+	rows := &utils.RowsMock{
+		PredefinedData: tc.src,
+	}
+	connection.On("Query", "SELECT col0, col1 FROM example_1").Return(rows, nil).Once()
+
+	// FIXME: YQ-2590: string -> []byte
+	col0Acceptor := new(*int32)
+	*col0Acceptor = new(int32)
+	col1Acceptor := new(*string)
+	*col1Acceptor = new(string)
+
+	acceptors := []any{col0Acceptor, col1Acceptor}
+
+	if tc.scanErr == nil {
+		rows.On("MakeAcceptors").Return(acceptors, nil).Once()
+		rows.On("Next").Return(true).Times(len(rows.PredefinedData))
+		rows.On("Next").Return(false).Once()
+		rows.On("Scan", acceptors...).Return(nil).Times(len(rows.PredefinedData))
+		rows.On("Err").Return(nil).Once()
+		rows.On("Close").Return(nil).Once()
+	} else {
+		rows.On("MakeAcceptors").Return(acceptors, nil).Once()
+		rows.On("Next").Return(true).Times(len(rows.PredefinedData) + 1)
+		rows.On("Scan", acceptors...).Return(nil).Times(len(rows.PredefinedData) - 1)
+		// instead of the last message, an error occurs
+		rows.On("Scan", acceptors...).Return(tc.scanErr).Once()
+		rows.On("Err").Return(nil).Once()
+		rows.On("Close").Return(nil).Once()
+	}
+
+	totalMessages, rowsInLastMessage := tc.messageParams()
+
+	expectedColumnarBlocks := utils.DataConverter{}.RowsToColumnBlocks(rows.PredefinedData, tc.rowsPerBlock)
+
+	if tc.sendErr == nil {
+		for sendCallID := 0; sendCallID < totalMessages; sendCallID++ {
+			expectedColumnarBlock := expectedColumnarBlocks[sendCallID]
+
+			rowsInMessage := tc.rowsPerBlock
+			if sendCallID == totalMessages-1 {
+				rowsInMessage = rowsInLastMessage
+			}
+
+			matcher := stream.makeSendMatcher(t, split, expectedColumnarBlock, rowsInMessage)
+
+			stream.On("Send", mock.MatchedBy(matcher)).Return(nil).Once()
+		}
+	} else {
+		// the first attempt to send response is failed
+		stream.On("Send", mock.MatchedBy(func(response *api_service_protos.TReadSplitsResponse) bool {
+			cancel() // emulate real behavior of GRPC
+
+			return true
+		})).Return(tc.sendErr).Once()
+	}
+
+	typeMapper := clickhouse.NewTypeMapper()
+
+	handlerFactory := &rdbms.HandlerFactoryMock{
+		ConnectionManager: connectionManager,
+		TypeMapper:        typeMapper,
+	}
+
+	handler, err := handlerFactory.Make(logger, api_common.EDataSourceKind_CLICKHOUSE)
+	require.NoError(t, err)
+
+	cbf, err := paging.NewColumnarBufferFactory(
+		logger,
+		memory.NewGoAllocator(),
+		paging.NewReadLimiterFactory(nil),
+		api_service_protos.TReadSplitsRequest_ARROW_IPC_STREAMING,
+		split.Select.What,
+		typeMapper)
+	require.NoError(t, err)
+
+	sink, err := paging.NewSinkFactory(cbf, tc.bufferQueueCapacity, tc.rowsPerBlock).MakeSink(ctx, logger, nil)
+	require.NoError(t, err)
+
+	streamer := NewStreamer(logger, stream, request, split, sink, handler)
+
+	_, err = streamer.Run()
+
+	switch {
+	case tc.scanErr != nil:
+		require.True(t, errors.Is(err, tc.scanErr))
+	case tc.sendErr != nil:
+		require.True(t, errors.Is(err, tc.sendErr))
+	default:
+		require.NoError(t, err)
+	}
+
+	mocks := []interface{}{stream, connectionManager, connection}
+
+	mock.AssertExpectationsForObjects(t, mocks...)
+}
+
+func TestStreaming(t *testing.T) {
+	srcValues := [][][]any{
+		{
+			{int32(1), "a"},
+			{int32(2), "b"},
+			{int32(3), "c"},
+			{int32(4), "d"},
+		},
+		{
+			{int32(1), "a"},
+			{int32(2), "b"},
+			{int32(3), "c"},
+			{int32(4), "d"},
+			{int32(5), "e"},
+		},
+	}
+	rowsPerBlockValues := []int{2}
+	bufferQueueCapacityValues := []int{0, 1, 10}
+
+	var testCases []testCaseStreaming
+
+	for _, src := range srcValues {
+		for _, rowsPerBlock := range rowsPerBlockValues {
+			for _, bufferQueueCapacity := range bufferQueueCapacityValues {
+				tc := testCaseStreaming{
+					src:                 src,
+					rowsPerBlock:        rowsPerBlock,
+					bufferQueueCapacity: bufferQueueCapacity,
+				}
+
+				testCases = append(testCases, tc)
+			}
+		}
+	}
 
 	t.Run("positive", func(t *testing.T) {
-		ctx := context.Background()
-		stream := &streamMock{}
-		stream.On("Context").Return(ctx)
-
-		writer := &paging.WriterMock{
-			ColumnarBufferChan: make(chan paging.ColumnarBuffer),
+		for _, tc := range testCases {
+			tc := tc
+			t.Run(tc.name(), func(t *testing.T) {
+				tc.execute(t)
+			})
 		}
-
-		writerFactory := &paging.WriterFactoryMock{}
-		writerFactory.On("MakeWriter", request.GetPagination()).Return(writer, nil)
-
-		handler := &rdbms.HandlerMock{
-			ReadFinished: make(chan struct{}),
-		}
-
-		// populate channel with predefined data
-		const (
-			pageSize   = 1 << 10
-			totalPages = 3
-		)
-
-		preparedColumnarBuffers := []paging.ColumnarBuffer{}
-
-		for i := 0; i < totalPages; i++ {
-			cb := &paging.ColumnarBufferMock{}
-			response := &api_service_protos.TReadSplitsResponse{
-				Payload: &api_service_protos.TReadSplitsResponse_ArrowIpcStreaming{
-					ArrowIpcStreaming: make([]byte, pageSize),
-				},
-			}
-			cb.On("ToResponse").Return(response, nil).Once()
-			stream.On("Send", response).Return(nil).Once()
-			cb.On("Release").Return().Once()
-
-			preparedColumnarBuffers = append(preparedColumnarBuffers, cb)
-		}
-
-		go func() {
-			// inject buffers into queue
-			for _, cb := range preparedColumnarBuffers {
-				writer.ColumnarBufferChan <- cb
-			}
-
-			// let handler return
-			close(handler.ReadFinished)
-		}()
-
-		// read is succesfull
-		readFinished := handler.
-			On("ReadSplit", request.GetDataSourceInstance(), split, writer).
-			Return(nil).Once()
-
-		writer.On("Finish").Return(nil).NotBefore(readFinished).Once()
-
-		streamer, err := NewStreamer(
-			logger,
-			stream,
-			request,
-			split,
-			writerFactory,
-			handler,
-		)
-
-		require.NoError(t, err)
-		require.NotNil(t, streamer)
-
-		totalBytes, err := streamer.Run()
-		require.NoError(t, err)
-		require.Equal(t, totalBytes, uint64(pageSize*totalPages))
-
-		mocks := []interface{}{stream, writer, writerFactory, handler}
-		for _, cb := range preparedColumnarBuffers {
-			mocks = append(mocks, cb)
-		}
-
-		mock.AssertExpectationsForObjects(t, mocks...)
 	})
 
-	t.Run("handler read splits error", func(t *testing.T) {
-		ctx := context.Background()
-		stream := &streamMock{}
-		stream.On("Context").Return(ctx)
+	t.Run("scan error", func(t *testing.T) {
+		scanErr := fmt.Errorf("scan error")
 
-		writer := &paging.WriterMock{
-			ColumnarBufferChan: make(chan paging.ColumnarBuffer),
+		for _, tc := range testCases {
+			tc := tc
+			tc.scanErr = scanErr
+			t.Run(tc.name(), func(t *testing.T) {
+				tc.execute(t)
+			})
 		}
-
-		writerFactory := &paging.WriterFactoryMock{}
-		writerFactory.On("MakeWriter", request.GetPagination()).Return(writer, nil)
-
-		handler := &rdbms.HandlerMock{
-			ReadFinished: make(chan struct{}),
-		}
-
-		// populate channel with predefined data
-		const pageSize = 1 << 10
-
-		cb := &paging.ColumnarBufferMock{}
-		response1 := &api_service_protos.TReadSplitsResponse{
-			Payload: &api_service_protos.TReadSplitsResponse_ArrowIpcStreaming{
-				ArrowIpcStreaming: make([]byte, pageSize),
-			},
-		}
-
-		cb.On("ToResponse").Return(response1, nil).Once()
-		stream.On("Send", response1).Return(nil).Once()
-		cb.On("Release").Return().NotBefore().Once()
-
-		go func() {
-			// after first received block an error occurs
-			writer.ColumnarBufferChan <- cb
-
-			close(handler.ReadFinished)
-		}()
-
-		// reading from data source returned an error
-		readErr := fmt.Errorf("failed to read from data source")
-		handler.
-			On("ReadSplit", request.GetDataSourceInstance(), split, writer).
-			Return(readErr).Once()
-
-		streamer, err := NewStreamer(
-			logger,
-			stream,
-			request,
-			split,
-			writerFactory,
-			handler,
-		)
-
-		require.NoError(t, err)
-		require.NotNil(t, streamer)
-
-		totalBytes, err := streamer.Run()
-		require.Error(t, err)
-		require.True(t, errors.Is(err, readErr))
-		require.Equal(t, totalBytes, uint64(pageSize))
-
-		mock.AssertExpectationsForObjects(t, stream, writer, writerFactory, handler, cb)
 	})
 
-	t.Run("grpc stream send error", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		stream := &streamMock{
-			sendTriggeredChan: make(chan struct{}),
+	t.Run("send error", func(t *testing.T) {
+		sendErr := fmt.Errorf("stream send error")
+
+		for _, tc := range testCases {
+			tc := tc
+			tc.sendErr = sendErr
+			t.Run(tc.name(), func(t *testing.T) {
+				tc.execute(t)
+			})
 		}
-		stream.On("Context").Return(ctx)
-
-		writer := &paging.WriterMock{
-			ColumnarBufferChan: make(chan paging.ColumnarBuffer),
-		}
-
-		writerFactory := &paging.WriterFactoryMock{}
-		writerFactory.On("MakeWriter", request.GetPagination()).Return(writer, nil)
-
-		handler := &rdbms.HandlerMock{
-			ReadFinished: stream.sendTriggeredChan,
-		}
-
-		// populate channel with predefined data
-		const pageSize = 1 << 10
-
-		cb := &paging.ColumnarBufferMock{}
-		response1 := &api_service_protos.TReadSplitsResponse{
-			Payload: &api_service_protos.TReadSplitsResponse_ArrowIpcStreaming{
-				ArrowIpcStreaming: make([]byte, pageSize),
-			},
-		}
-
-		cb.On("ToResponse").Return(response1, nil).Once()
-
-		// network error occures when trying to send first page to the stream
-		sendErr := fmt.Errorf("GRPC error")
-		send1 := stream.On("Send", response1).Return(sendErr).Once()
-		cb.On("Release").Return().Once()
-
-		go func() {
-			// populate incoming queue with data
-			writer.ColumnarBufferChan <- cb
-		}()
-
-		go func() {
-			// trigger context cancellation after send error occurs
-			<-stream.sendTriggeredChan
-			cancel()
-		}()
-
-		handler.
-			On("ReadSplit", request.GetDataSourceInstance(), split, writer).
-			Return(nil).NotBefore(send1).Once()
-
-		streamer, err := NewStreamer(
-			logger,
-			stream,
-			request,
-			split,
-			writerFactory,
-			handler,
-		)
-
-		require.NoError(t, err)
-		require.NotNil(t, streamer)
-
-		totalBytes, err := streamer.Run()
-		require.Error(t, err)
-		require.True(t, errors.Is(err, sendErr))
-		require.Equal(t, totalBytes, uint64(0))
-
-		mock.AssertExpectationsForObjects(t, stream, writer, writerFactory, handler, cb)
 	})
 }

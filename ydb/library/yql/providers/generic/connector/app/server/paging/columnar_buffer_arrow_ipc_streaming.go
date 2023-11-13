@@ -86,13 +86,15 @@ func (cb *columnarBufferArrowIPCStreaming) Release() {
 	}
 }
 
+func (cb *columnarBufferArrowIPCStreaming) TotalRows() int { return cb.builders[0].Len() }
+
 // special implementation for buffer that writes schema with empty columns set
 type columnarBufferArrowIPCStreamingEmptyColumns struct {
 	arrowAllocator memory.Allocator
 	readLimiter    ReadLimiter
 	schema         *arrow.Schema
 	typeMapper     utils.TypeMapper
-	rowsAdded      int64
+	rowsAdded      int
 }
 
 // AddRow saves a row obtained from the datasource into the buffer
@@ -114,7 +116,7 @@ func (cb *columnarBufferArrowIPCStreamingEmptyColumns) AddRow(acceptors []any) e
 func (cb *columnarBufferArrowIPCStreamingEmptyColumns) ToResponse() (*api_service_protos.TReadSplitsResponse, error) {
 	columns := make([]arrow.Array, 0)
 
-	record := array.NewRecord(cb.schema, columns, cb.rowsAdded)
+	record := array.NewRecord(cb.schema, columns, int64(cb.rowsAdded))
 
 	// prepare arrow writer
 	var buf bytes.Buffer
@@ -137,6 +139,8 @@ func (cb *columnarBufferArrowIPCStreamingEmptyColumns) ToResponse() (*api_servic
 
 	return out, nil
 }
+
+func (cb *columnarBufferArrowIPCStreamingEmptyColumns) TotalRows() int { return int(cb.rowsAdded) }
 
 // Frees resources if buffer is no longer used
 func (cb *columnarBufferArrowIPCStreamingEmptyColumns) Release() {

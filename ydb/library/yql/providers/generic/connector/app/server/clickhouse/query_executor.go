@@ -11,7 +11,7 @@ import (
 type queryExecutor struct {
 }
 
-func (qm queryExecutor) DescribeTable(ctx context.Context, conn *Connection, request *api_service_protos.TDescribeTableRequest) (utils.Rows, error) {
+func (qm queryExecutor) DescribeTable(ctx context.Context, conn utils.Connection, request *api_service_protos.TDescribeTableRequest) (utils.Rows, error) {
 	out, err := conn.Query(
 		ctx,
 		"SELECT name, type FROM system.columns WHERE table = ? and database = ?",
@@ -30,6 +30,6 @@ func (qm queryExecutor) DescribeTable(ctx context.Context, conn *Connection, req
 	return out, nil
 }
 
-func NewQueryExecutor() utils.QueryExecutor[*Connection] {
+func NewQueryExecutor() utils.QueryExecutor {
 	return queryExecutor{}
 }

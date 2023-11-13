@@ -1,6 +1,7 @@
 package streaming
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -17,33 +18,32 @@ type Streamer struct {
 	request        *api_service_protos.TReadSplitsRequest
 	handler        rdbms.Handler
 	split          *api_service_protos.TSplit
-	pagingWriter   paging.Writer
+	sink           paging.Sink
 	totalBytesSent uint64 // TODO: replace with stats accumulator
 	logger         log.Logger
+	ctx            context.Context // clone of a stream context
+	cancel         context.CancelFunc
 }
 
-func (s *Streamer) writeDataToStream(readErrChan <-chan error) error {
+func (s *Streamer) writeDataToStream() error {
+	// exit from this function will cause publisher's goroutine termination as well
+	defer s.cancel()
+
 	for {
 		select {
-		case buffer, ok := <-s.pagingWriter.BufferQueue():
+		case result, ok := <-s.sink.ResultQueue():
 			if !ok {
 				// correct termination
 				return nil
 			}
 
-			// handle next data block
-			if err := s.sendBufferToStream(buffer); err != nil {
-				return fmt.Errorf("send buffer to stream: %w", err)
-			}
-		case err := <-readErrChan:
-			// terminate loop in case of read error
-			if err != nil {
-				return fmt.Errorf("read error: %w", err)
+			if result.Error != nil {
+				return fmt.Errorf("read result: %w", result.Error)
 			}
 
-			// otherwise drain the last rows left in writer into a channel
-			if err := s.pagingWriter.Finish(); err != nil {
-				return fmt.Errorf("finish paging writer: %w", err)
+			// handle next data block
+			if err := s.sendBufferToStream(result.ColumnarBuffer); err != nil {
+				return fmt.Errorf("send buffer to stream: %w", err)
 			}
 		case <-s.stream.Context().Done():
 			// handle request termination
@@ -73,44 +73,22 @@ func (s *Streamer) sendBufferToStream(buffer paging.ColumnarBuffer) error {
 	return nil
 }
 
-func (s *Streamer) readDataFromSource() error {
-	// run blocking read
-	err := s.handler.ReadSplit(
-		s.stream.Context(),
-		s.logger,
-		s.request.GetDataSourceInstance(),
-		s.split,
-		s.pagingWriter,
-	)
-
-	if err != nil {
-		return fmt.Errorf("read split: %w", err)
-	}
-
-	return nil
-}
-
 func (s *Streamer) Run() (uint64, error) {
-	readErrChan := make(chan error)
-
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 
 	defer wg.Wait()
 
 	// launch read from the data source;
-	// reading goroutine controls writing goroutine lifetime
+	// subsriber goroutine controls publisher goroutine lifetime
 	go func() {
 		defer wg.Done()
 
-		select {
-		case readErrChan <- s.readDataFromSource():
-		case <-s.stream.Context().Done():
-		}
+		s.handler.ReadSplit(s.ctx, s.logger, s.split, s.sink)
 	}()
 
 	// pass received blocks into the GRPC channel
-	if err := s.writeDataToStream(readErrChan); err != nil {
+	if err := s.writeDataToStream(); err != nil {
 		return s.totalBytesSent, fmt.Errorf("write data to stream: %w", err)
 	}
 
@@ -122,24 +100,19 @@ func NewStreamer(
 	stream api_service.Connector_ReadSplitsServer,
 	request *api_service_protos.TReadSplitsRequest,
 	split *api_service_protos.TSplit,
-	pagingWriterFactory paging.WriterFactory,
+	sink paging.Sink,
 	handler rdbms.Handler,
-) (*Streamer, error) {
-	pagingWriter, err := pagingWriterFactory.MakeWriter(
-		stream.Context(),
-		logger,
-		request.GetPagination(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("new paging writer: %w", err)
-	}
+) *Streamer {
+	ctx, cancel := context.WithCancel(stream.Context())
 
 	return &Streamer{
-		logger:       logger,
-		stream:       stream,
-		split:        split,
-		request:      request,
-		handler:      handler,
-		pagingWriter: pagingWriter,
-	}, nil
+		logger:  logger,
+		stream:  stream,
+		split:   split,
+		request: request,
+		handler: handler,
+		sink:    sink,
+		ctx:     ctx,
+		cancel:  cancel,
+	}
 }

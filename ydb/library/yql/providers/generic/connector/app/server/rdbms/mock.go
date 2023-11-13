@@ -15,7 +15,6 @@ var _ Handler = (*HandlerMock)(nil)
 
 type HandlerMock struct {
 	mock.Mock
-	ReadFinished chan struct{} // close this channel to allow
 }
 
 func (m *HandlerMock) DescribeTable(
@@ -29,17 +28,33 @@ func (m *HandlerMock) DescribeTable(
 func (m *HandlerMock) ReadSplit(
 	ctx context.Context,
 	logger log.Logger,
-	dataSourceInstance *api_common.TDataSourceInstance,
 	split *api_service_protos.TSplit,
-	pagingWriter paging.Writer,
-) error {
-	<-m.ReadFinished
-
-	args := m.Called(dataSourceInstance, split, pagingWriter)
-
-	return args.Error(0)
+	pagingWriter paging.Sink,
+) {
+	m.Called(split, pagingWriter)
 }
 
 func (m *HandlerMock) TypeMapper() utils.TypeMapper {
 	panic("not implemented") // TODO: Implement
+}
+
+var _ HandlerFactory = (*HandlerFactoryMock)(nil)
+
+type HandlerFactoryMock struct {
+	QueryExecutor     utils.QueryExecutor
+	ConnectionManager utils.ConnectionManager
+	TypeMapper        utils.TypeMapper
+}
+
+func (m *HandlerFactoryMock) Make(logger log.Logger, dataSourceType api_common.EDataSourceKind) (Handler, error) {
+	handler := newHandler(
+		logger,
+		&handlerPreset{
+			queryExecutor:     m.QueryExecutor,
+			connectionManager: m.ConnectionManager,
+			typeMapper:        m.TypeMapper,
+		},
+	)
+
+	return handler, nil
 }

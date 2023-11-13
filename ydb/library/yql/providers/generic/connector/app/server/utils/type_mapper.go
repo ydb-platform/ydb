@@ -8,6 +8,7 @@ import (
 
 type TypeMapper interface {
 	SQLTypeToYDBColumn(columnName, typeName string, rules *api_service_protos.TTypeMappingSettings) (*Ydb.Column, error)
+
 	AddRowToArrowIPCStreaming(
 		ydbTypes []*Ydb.Type,
 		acceptors []any,

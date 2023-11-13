@@ -69,7 +69,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                             << result->GetStatus() << " errors: " << errors);
             }
 
-            TActorId target = Op ? Op->GetTarget() : Ev->Get()->GetSource();
+            TActorId target = Op ? Op->GetTarget() : Ev->Sender;
             ui64 cookie = Op ? Op->GetCookie() : Ev->Cookie;
 
             if (ProposeTransactionSpan) {
@@ -83,7 +83,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         if (Ev) {
             Y_ABORT_UNLESS(!Op);
 
-            if (Self->CheckDataTxRejectAndReply(Ev->Get(), ctx)) {
+            if (Self->CheckDataTxRejectAndReply(Ev, ctx)) {
                 Ev = nullptr;
                 return true;
             }

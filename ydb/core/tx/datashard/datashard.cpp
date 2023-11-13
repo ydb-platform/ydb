@@ -2590,8 +2590,9 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
     return reject;
 }
 
-bool TDataShard::CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* msg, const TActorContext& ctx)
+bool TDataShard::CheckDataTxRejectAndReply(const TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
+    auto* msg = ev->Get();
     switch (msg->GetTxKind()) {
         case NKikimrTxDataShard::TX_KIND_DATA:
         case NKikimrTxDataShard::TX_KIND_SCAN:
@@ -2621,7 +2622,7 @@ bool TDataShard::CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* 
         result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectDescription);
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectDescription);
 
-        ctx.Send(msg->GetSource(), result.Release());
+        ctx.Send(ev->Sender, result.Release());
         IncCounter(COUNTER_PREPARE_OVERLOADED);
         IncCounter(COUNTER_PREPARE_COMPLETE);
         return true;
@@ -2671,7 +2672,7 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
 
     IncCounter(COUNTER_PREPARE_REQUEST);
 
-    if (CheckDataTxRejectAndReply(ev->Get(), ctx)) {
+    if (CheckDataTxRejectAndReply(ev, ctx)) {
         return;
     }
 
@@ -2696,7 +2697,7 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
                                                         ev->Get()->GetTxId(),
                                                         NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
     result->AddError(NKikimrTxDataShard::TError::BAD_TX_KIND, "Unknown kind of transaction");
-    ctx.Send(ev->Get()->GetSource(), result.Release());
+    ctx.Send(ev->Sender, result.Release());
     IncCounter(COUNTER_PREPARE_ERROR);
     IncCounter(COUNTER_PREPARE_COMPLETE);
 
@@ -2732,7 +2733,7 @@ void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev,
         THolder<TEvDataShard::TEvProposeTransactionResult> result =
             THolder(new TEvDataShard::TEvProposeTransactionResult(ev->Get()->GetTxKind(), TabletID(),
                 ev->Get()->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED));
-        ctx.Send(ev->Get()->GetSource(), result.Release());
+        ctx.Send(ev->Sender, result.Release());
         IncCounter(COUNTER_PREPARE_OVERLOADED);
         IncCounter(COUNTER_PREPARE_COMPLETE);
         return;
@@ -2749,7 +2750,7 @@ void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev,
                                                         ev->Get()->GetTxId(),
                                                         NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
     result->AddError(NKikimrTxDataShard::TError::BAD_TX_KIND, "Unsupported transaction kind");
-    ctx.Send(ev->Get()->GetSource(), result.Release());
+    ctx.Send(ev->Sender, result.Release());
     IncCounter(COUNTER_PREPARE_ERROR);
     IncCounter(COUNTER_PREPARE_COMPLETE);
 }
@@ -2849,7 +2850,7 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
             return;
         }
 
-        TActorId target = item.Event->Get()->GetSource();
+        TActorId target = item.Event->Sender;
         ui64 cookie = item.Event->Cookie;
         auto kind = item.Event->Get()->GetTxKind();
         auto txId = item.Event->Get()->GetTxId();

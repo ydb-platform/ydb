@@ -2607,7 +2607,7 @@ Y_UNIT_TEST(TestPlannedCancelSplit) {
         if (event && event->GetRecipientRewrite() == actors[1]) {
             Cerr << "---- found propose for table-2 ----" << Endl;
             const auto* msg = event->Get<TEvDataShard::TEvProposeTransaction>();
-            TActorId target = msg->GetSource();
+            TActorId target = event->Sender;
             auto* result = new TEvDataShard::TEvProposeTransactionResult(
                 msg->GetTxKind(),
                 tablets[1],

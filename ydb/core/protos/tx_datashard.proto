@@ -554,7 +554,7 @@ message TMvccSnapshot {
 
 message TEvProposeTransaction {
     optional ETransactionKind TxKind = 1;
-    optional NActorsProto.TActorId Source = 2;
+    optional NActorsProto.TActorId SourceDeprecated = 2 [deprecated = true]; // for compatibility with old tx engine
     optional bytes TxBody = 3;
     optional uint64 TxId = 4;
     optional uint32 ExecLevel = 5;

@@ -1318,7 +1318,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         info.SetMvccSnapshot(TRowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId()));
     }
     TActiveTransaction::TPtr tx = MakeIntrusive<TActiveTransaction>(info);
-    tx->SetTarget(ev->Get()->GetSource());
+    tx->SetTarget(ev->Sender);
     tx->SetTxBody(rec.GetTxBody());
     tx->SetCookie(ev->Cookie);
     tx->Orbit = std::move(ev->Get()->Orbit);

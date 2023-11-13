@@ -1546,7 +1546,7 @@ public:
                            NKikimrTxDataShard::TEvProposeTransactionResult::EStatus& rejectStatus,
                            ERejectReasons& rejectReasons,
                            TString& rejectDescription);
-    bool CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* msg, const TActorContext& ctx);
+    bool CheckDataTxRejectAndReply(const TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
 
     TSysLocks& SysLocksTable() { return SysLocks; }
 

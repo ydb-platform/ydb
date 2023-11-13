@@ -241,7 +241,7 @@ namespace NYql::NDqs {
             YQL_ENSURE(!stageInfo.Tasks.empty());
 
             auto stageSettings = NDq::TDqStageSettings::Parse(stage);
-            if (stageSettings.SinglePartition) {
+            if (stageSettings.PartitionMode == NDq::TDqStageSettings::EPartitionMode::Single) {
                 YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
             }
         }
@@ -545,7 +545,7 @@ namespace NYql::NDqs {
         YQL_ENSURE(datasource);
         const auto stageSettings = TDqStageSettings::Parse(stage);
         auto tasksPerStage = Settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
-        const size_t maxPartitions = stageSettings.SinglePartition ? 1ULL : tasksPerStage;
+        const size_t maxPartitions = TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode ? 1ULL : tasksPerStage;
         TVector<TString> parts;
         if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
             TString clusterName;

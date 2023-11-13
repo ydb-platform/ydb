@@ -220,7 +220,7 @@ private:
                 // If results stage is marked as single_partition, no collect stage needed.
                 // Once we have partitioning constraint we should check it instead of stage setting.
                 auto settings = TDqStageSettings::Parse(resultStage);
-                if (settings.SinglePartition) {
+                if (settings.PartitionMode == TDqStageSettings::EPartitionMode::Single) {
                     needsCollectStage = false;
                 }
 

@@ -379,7 +379,7 @@ TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, IOptimiz
                     .Build()
                 .Build()
             .Build()
-        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Settings(TDqStageSettings().SetPartitionMode(TDqStageSettings::EPartitionMode::Aggregate).BuildNode(ctx, node.Pos()))
         .Done();
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())
@@ -734,7 +734,7 @@ TExprBase DqBuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
                 .Build()
             .Build()
         .Settings(TDqStageSettings::New()
-            .SetSinglePartition()
+            .SetPartitionMode(TDqStageSettings::EPartitionMode::Single)
             .BuildNode(ctx, flatmap.Input().Pos()))
         .Done();
 
@@ -1177,7 +1177,7 @@ TExprBase DqBuildShuffleStage(TExprBase node, TExprContext& ctx, IOptimizationCo
                     .Build()
                 .Build()
             .Build()
-        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Settings(TDqStageSettings().SetPartitionMode(TDqStageSettings::EPartitionMode::Aggregate).BuildNode(ctx, node.Pos()))
         .Done();
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())
@@ -2098,7 +2098,7 @@ TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) {
                 .Build()
             .Build()
         .Settings(TDqStageSettings::New()
-            .SetSinglePartition()
+            .SetPartitionMode(TDqStageSettings::EPartitionMode::Single)
             .BuildNode(ctx, node.Pos()))
         .Done();
 

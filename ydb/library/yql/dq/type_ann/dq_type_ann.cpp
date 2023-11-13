@@ -1114,12 +1114,14 @@ TDqStageSettings TDqStageSettings::Parse(const TDqStageBase& node) {
         } else if (name == LogicalIdSettingName) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.LogicalId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
-        } else if (name == SinglePartitionSettingName) {
-            settings.SinglePartition = true;
+        } else if (name == PartitionModeSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.PartitionMode = FromString<EPartitionMode>(tuple.Value().Cast<TCoAtom>().Value());
         } else if (name == WideChannelsSettingName) {
             settings.WideChannels = true;
             settings.OutputNarrowType = tuple.Value().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
         } else if (name == BlockStatusSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.BlockStatus = FromString<EBlockStatus>(tuple.Value().Cast<TCoAtom>().Value());
         }
     }
@@ -1143,7 +1145,7 @@ bool TDqStageSettings::Validate(const TExprNode& stage, TExprContext& ctx) {
         }
 
         TStringBuf name = setting->Head().Content();
-        if (name == IdSettingName || name == LogicalIdSettingName || name == BlockStatusSettingName) {
+        if (name == IdSettingName || name == LogicalIdSettingName || name == BlockStatusSettingName || name == PartitionModeSettingName) {
             if (setting->ChildrenSize() != 2) {
                 ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Setting " << name << " should contain single value"));
                 return false;
@@ -1161,6 +1163,10 @@ bool TDqStageSettings::Validate(const TExprNode& stage, TExprContext& ctx) {
                 ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Unsupported " << name << " value: " << value->Content()));
                 return false;
             }
+            if (name == PartitionModeSettingName && !TryFromString<EPartitionMode>(value->Content())) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Unsupported " << name << " value: " << value->Content()));
+                return false;
+            }
         } else if (name == WideChannelsSettingName) {
             if (setting->ChildrenSize() != 2) {
                 ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Setting " << name << " should contain single value"));
@@ -1173,11 +1179,6 @@ bool TDqStageSettings::Validate(const TExprNode& stage, TExprContext& ctx) {
 
             auto valueType  = value->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             if (!EnsureStructType(value->Pos(), *valueType, ctx)) {
-                return false;
-            }
-        } else if (name == SinglePartitionSettingName) {
-            if (setting->ChildrenSize() != 1) {
-                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Setting " << name << " should not contain any value"));
                 return false;
             }
         }
@@ -1221,9 +1222,10 @@ NNodes::TCoNameValueTupleList TDqStageSettings::BuildNode(TExprContext& ctx, TPo
             .Done());
     }
 
-    if (SinglePartition) {
+    if (PartitionMode != EPartitionMode::Default) {
         settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build(SinglePartitionSettingName)
+            .Name().Build(PartitionModeSettingName)
+            .Value<TCoAtom>().Build(ToString(PartitionMode))
             .Done());
     }
 

@@ -150,7 +150,7 @@ private:
                                                 .Build()
                                             .Build()
                                         .Build()
-                                    .Settings(TDqStageSettings{.SinglePartition = true}.BuildNode(ctx, fill.Pos()))
+                                    .Settings(TDqStageSettings{.PartitionMode = TDqStageSettings::EPartitionMode::Single}.BuildNode(ctx, fill.Pos()))
                                     .Build()
                                 .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
                                 .Build()
@@ -255,7 +255,7 @@ private:
                                         .Build()
                                     .Build()
                                 .Build()
-                            .Settings(TDqStageSettings{.SinglePartition = true}.BuildNode(ctx, sort.Pos()))
+                            .Settings(TDqStageSettings{.PartitionMode = TDqStageSettings::EPartitionMode::Single}.BuildNode(ctx, sort.Pos()))
                             .Build()
                         .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
                         .Build()
@@ -385,7 +385,7 @@ private:
                                         .Build()
                                     .Build()
                                 .Build()
-                            .Settings(TDqStageSettings{.SinglePartition = ordered}.BuildNode(ctx, map.Pos()))
+                            .Settings(TDqStageSettings{.PartitionMode = ordered ? TDqStageSettings::EPartitionMode::Single : TDqStageSettings::EPartitionMode::Default}.BuildNode(ctx, map.Pos()))
                             .Done();
 
                         if (!ordered) {
@@ -596,7 +596,7 @@ private:
                                         .Build()
                                     .Build()
                                 .Build()
-                            .Settings(TDqStageSettings{.SinglePartition = true}.BuildNode(ctx, reduce.Pos()))
+                            .Settings(TDqStageSettings{.PartitionMode = TDqStageSettings::EPartitionMode::Single}.BuildNode(ctx, reduce.Pos()))
                             .Build()
                         .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
                         .Build()

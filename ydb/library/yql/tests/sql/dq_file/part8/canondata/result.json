@@ -619,9 +619,9 @@
     ],
     "test.test[aggregate-group_by_hop_compact--Debug]": [
         {
-            "checksum": "672811495d0e2b80764e5a3fd0805a70",
-            "size": 2931,
-            "uri": "https://{canondata_backend}/1942100/0aeaf9869b0ddd879ea5b962964545b2e8d4ee29/resource.tar.gz#test.test_aggregate-group_by_hop_compact--Debug_/opt.yql_patched"
+            "checksum": "5f4aea37212fecb42a2afc9f69208e0a",
+            "size": 2966,
+            "uri": "https://{canondata_backend}/1889210/e2ed52d5150d0296ed106dcece44652f0506ca42/resource.tar.gz#test.test_aggregate-group_by_hop_compact--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_hop_compact--Plan]": [
@@ -647,9 +647,9 @@
     ],
     "test.test[aggregate-group_by_hop_only--Debug]": [
         {
-            "checksum": "1f856d7433bea1f737c2be4736a308c6",
-            "size": 2796,
-            "uri": "https://{canondata_backend}/1942100/0aeaf9869b0ddd879ea5b962964545b2e8d4ee29/resource.tar.gz#test.test_aggregate-group_by_hop_only--Debug_/opt.yql_patched"
+            "checksum": "52ce1fbda70cc20cbfcef6844d258c99",
+            "size": 2831,
+            "uri": "https://{canondata_backend}/1889210/e2ed52d5150d0296ed106dcece44652f0506ca42/resource.tar.gz#test.test_aggregate-group_by_hop_only--Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-group_by_hop_only--Plan]": [
@@ -4664,9 +4664,9 @@
     ],
     "test.test[produce-discard_reduce_lambda-default.txt-Debug]": [
         {
-            "checksum": "263e6c870fa22e396a9e36b1ff25f0aa",
-            "size": 1921,
-            "uri": "https://{canondata_backend}/1942100/0aeaf9869b0ddd879ea5b962964545b2e8d4ee29/resource.tar.gz#test.test_produce-discard_reduce_lambda-default.txt-Debug_/opt.yql_patched"
+            "checksum": "fd16e2bcbc64cfcfa636393adea293dc",
+            "size": 1956,
+            "uri": "https://{canondata_backend}/1889210/e2ed52d5150d0296ed106dcece44652f0506ca42/resource.tar.gz#test.test_produce-discard_reduce_lambda-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[produce-discard_reduce_lambda-default.txt-Plan]": [
@@ -4724,9 +4724,9 @@
     ],
     "test.test[produce-reduce_with_presort_diff_order--Debug]": [
         {
-            "checksum": "b126323901feb28b72ace8d328890154",
-            "size": 10688,
-            "uri": "https://{canondata_backend}/1937027/d3548eb0e12456df7d78d12789a5f6e6325fd027/resource.tar.gz#test.test_produce-reduce_with_presort_diff_order--Debug_/opt.yql_patched"
+            "checksum": "1bdf38d171a1a7c8a21efa733394d6a5",
+            "size": 10751,
+            "uri": "https://{canondata_backend}/1889210/e2ed52d5150d0296ed106dcece44652f0506ca42/resource.tar.gz#test.test_produce-reduce_with_presort_diff_order--Debug_/opt.yql_patched"
         }
     ],
     "test.test[produce-reduce_with_presort_diff_order--Plan]": [
@@ -5843,9 +5843,9 @@
     ],
     "test.test[window-rank/unordered--Debug]": [
         {
-            "checksum": "c0845395debac13833cd9450557f03bb",
-            "size": 4395,
-            "uri": "https://{canondata_backend}/1923547/afaeadd931dc450ce4874920f37bf8ac420697e3/resource.tar.gz#test.test_window-rank_unordered--Debug_/opt.yql_patched"
+            "checksum": "4101b03e8f3ffeffdef5401ace1aed80",
+            "size": 4430,
+            "uri": "https://{canondata_backend}/1889210/e2ed52d5150d0296ed106dcece44652f0506ca42/resource.tar.gz#test.test_window-rank_unordered--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-rank/unordered--Plan]": [
@@ -5912,9 +5912,9 @@
     ],
     "test.test[window-win_over_few_partitions--Debug]": [
         {
-            "checksum": "0d17ac5de92a4511d93444ab2023b7a7",
-            "size": 4610,
-            "uri": "https://{canondata_backend}/1942100/0aeaf9869b0ddd879ea5b962964545b2e8d4ee29/resource.tar.gz#test.test_window-win_over_few_partitions--Debug_/opt.yql_patched"
+            "checksum": "eb4c3650c7047d01c39e16dc552b040a",
+            "size": 4645,
+            "uri": "https://{canondata_backend}/1889210/e2ed52d5150d0296ed106dcece44652f0506ca42/resource.tar.gz#test.test_window-win_over_few_partitions--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_over_few_partitions--Plan]": [

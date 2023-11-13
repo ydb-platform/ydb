@@ -36,13 +36,20 @@ bool IsMergeConnectionApplicable(const TVector<const TTypeAnnotationNode*>& sort
 struct TDqStageSettings {
     static constexpr TStringBuf LogicalIdSettingName = "_logical_id";
     static constexpr TStringBuf IdSettingName = "_id";
-    static constexpr TStringBuf SinglePartitionSettingName = "_single_partition";
+    static constexpr TStringBuf PartitionModeSettingName = "_partition_mode";
     static constexpr TStringBuf WideChannelsSettingName = "_wide_channels";
     static constexpr TStringBuf BlockStatusSettingName = "_block_status";
 
     ui64 LogicalId = 0;
     TString Id;
-    bool SinglePartition = false;
+
+    enum class EPartitionMode {
+        Default     /* "default" */,
+        Single      /* "single" */,
+        Aggregate   /* "aggregate" */,
+    };
+
+    EPartitionMode PartitionMode = EPartitionMode::Default;
 
     bool WideChannels = false;
     const TStructExprType* OutputNarrowType = nullptr;
@@ -55,7 +62,7 @@ struct TDqStageSettings {
 
     TMaybe<EBlockStatus> BlockStatus;
 
-    TDqStageSettings& SetSinglePartition(bool value = true) { SinglePartition = value; return *this; }
+    TDqStageSettings& SetPartitionMode(EPartitionMode mode) { PartitionMode = mode; return *this; }
     TDqStageSettings& SetWideChannels(const TStructExprType& narrowType) { WideChannels = true; OutputNarrowType = &narrowType; return *this; }
     TDqStageSettings& SetBlockStatus(EBlockStatus status) { BlockStatus = status; return *this; }
 

@@ -57,7 +57,7 @@ TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, T
                     .Build()
                 .Build()
             .Settings(TDqStageSettings::New()
-                .SetSinglePartition()
+                .SetPartitionMode(TDqStageSettings::EPartitionMode::Single)
                 .BuildNode(ctx, input.Pos()))
             .Done();
 
@@ -162,7 +162,7 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
                     .Build()
                 .Build()
             .Settings(TDqStageSettings::New()
-                .SetSinglePartition()
+                .SetPartitionMode(TDqStageSettings::EPartitionMode::Single)
                 .BuildNode(ctx, read.Pos()))
             .Done();
 
@@ -215,7 +215,7 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
             .Body(phyRead.Cast())
             .Build()
         .Settings(TDqStageSettings::New()
-            .SetSinglePartition(singleKey && UseSource(kqpCtx, tableDesc))
+            .SetPartitionMode(singleKey && UseSource(kqpCtx, tableDesc) ? TDqStageSettings::EPartitionMode::Single : TDqStageSettings::EPartitionMode::Default)
             .BuildNode(ctx, read.Pos()))
         .Done();
 
@@ -262,7 +262,7 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
                         .Build()
                     .Build()
                 .Settings(TDqStageSettings::New()
-                    .SetSinglePartition()
+                    .SetPartitionMode(TDqStageSettings::EPartitionMode::Single)
                     .BuildNode(ctx, read.Pos()))
                 .Done();
         } else {
@@ -694,7 +694,7 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
                             .Build()
                         .Build()
                     .Settings(TDqStageSettings::New()
-                        .SetSinglePartition()
+                        .SetPartitionMode(TDqStageSettings::EPartitionMode::Single)
                         .BuildNode(ctx, lookup.Pos()))
                     .Build()
                 .Index().Build("0")

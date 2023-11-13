@@ -1,7 +1,6 @@
 #pragma once
 
 #include "public.h"
-#include "phoenix.h"
 
 namespace NYT {
 

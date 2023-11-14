@@ -16,6 +16,9 @@ from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     DataSourceType,
     SelectWhat,
     SelectWhere,
+    makeYdbTypeFromTypeID,
+    makeOptionalYdbTypeFromTypeID,
+    makeOptionalYdbTypeFromYdbType,
 )
 
 from ydb.library.yql.providers.generic.connector.tests.test_cases.base import BaseTestCase
@@ -32,6 +35,7 @@ class TestCase(BaseTestCase):
     select_where: Optional[SelectWhere]
     data_out_: Optional[Sequence]
     protocol: EProtocol = EProtocol.NATIVE
+    check_output_schema: bool = False
 
     @property
     def data_out(self) -> Sequence:
@@ -55,123 +59,123 @@ class Factory:
             columns=ColumnList(
                 Column(
                     name='col_01_bool',
-                    ydb_type=Type.BOOL,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.BOOL),
                     data_source_type=DataSourceType(pg=postgresql.Bool()),
                 ),
                 Column(
                     name='col_02_smallint',
-                    ydb_type=Type.INT16,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT16),
                     data_source_type=DataSourceType(pg=postgresql.SmallInt()),
                 ),
                 Column(
                     name='col_03_int2',
-                    ydb_type=Type.INT16,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT16),
                     data_source_type=DataSourceType(pg=postgresql.Int2()),
                 ),
                 Column(
                     name='col_04_smallserial',
-                    ydb_type=Type.INT16,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT16),
                     data_source_type=DataSourceType(pg=postgresql.SmallSerial()),
                 ),
                 Column(
                     name='col_05_serial2',
-                    ydb_type=Type.INT16,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT16),
                     data_source_type=DataSourceType(pg=postgresql.Serial2()),
                 ),
                 Column(
                     name='col_06_integer',
-                    ydb_type=Type.INT32,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT32),
                     data_source_type=DataSourceType(pg=postgresql.Integer()),
                 ),
                 Column(
                     name='col_07_int',
-                    ydb_type=Type.INT32,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT32),
                     data_source_type=DataSourceType(pg=postgresql.Int()),
                 ),
                 Column(
                     name='col_08_int4',
-                    ydb_type=Type.INT32,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT32),
                     data_source_type=DataSourceType(pg=postgresql.Int4()),
                 ),
                 Column(
                     name='col_09_serial',
-                    ydb_type=Type.INT32,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT32),
                     data_source_type=DataSourceType(pg=postgresql.Serial()),
                 ),
                 Column(
                     name='col_10_serial4',
-                    ydb_type=Type.INT32,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT32),
                     data_source_type=DataSourceType(pg=postgresql.Serial4()),
                 ),
                 Column(
                     name='col_11_bigint',
-                    ydb_type=Type.INT64,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT64),
                     data_source_type=DataSourceType(pg=postgresql.BigInt()),
                 ),
                 Column(
                     name='col_12_int8',
-                    ydb_type=Type.INT64,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT64),
                     data_source_type=DataSourceType(pg=postgresql.Int8()),
                 ),
                 Column(
                     name='col_13_bigserial',
-                    ydb_type=Type.INT64,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT64),
                     data_source_type=DataSourceType(pg=postgresql.BigSerial()),
                 ),
                 Column(
                     name='col_14_serial8',
-                    ydb_type=Type.INT64,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT64),
                     data_source_type=DataSourceType(pg=postgresql.Serial8()),
                 ),
                 Column(
                     name='col_15_real',
-                    ydb_type=Type.FLOAT,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.FLOAT),
                     data_source_type=DataSourceType(pg=postgresql.Real()),
                 ),
                 Column(
                     name='col_16_float4',
-                    ydb_type=Type.FLOAT,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.FLOAT),
                     data_source_type=DataSourceType(pg=postgresql.Float4()),
                 ),
                 Column(
                     name='col_17_double_precision',
-                    ydb_type=Type.DOUBLE,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DOUBLE),
                     data_source_type=DataSourceType(pg=postgresql.DoublePrecision()),
                 ),
                 Column(
                     name='col_18_float8',
-                    ydb_type=Type.DOUBLE,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DOUBLE),
                     data_source_type=DataSourceType(pg=postgresql.Float8()),
                 ),
                 # TODO: check unicode strings
                 Column(
                     name='col_19_bytea',
-                    ydb_type=Type.STRING,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.STRING),
                     data_source_type=DataSourceType(pg=postgresql.Bytea()),
                 ),
                 Column(
                     name='col_20_character',
-                    ydb_type=Type.UTF8,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.UTF8),
                     data_source_type=DataSourceType(pg=postgresql.Character()),
                 ),
                 Column(
                     name='col_21_character_varying',
-                    ydb_type=Type.UTF8,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.UTF8),
                     data_source_type=DataSourceType(pg=postgresql.CharacterVarying()),
                 ),
                 Column(
                     name='col_22_text',
-                    ydb_type=Type.UTF8,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.UTF8),
                     data_source_type=DataSourceType(pg=postgresql.Text()),
                 ),
                 Column(
                     name='col_23_date',
-                    ydb_type=Type.DATE,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
                     data_source_type=DataSourceType(pg=postgresql.Date()),
                 ),
                 Column(
                     name='col_24_timestamp',
-                    ydb_type=Type.TIMESTAMP,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
                     data_source_type=DataSourceType(pg=postgresql.TimestampWithoutTimeZone()),
                 ),
                 # TODO: YQ-2297
@@ -274,6 +278,7 @@ class Factory:
             data_source_kind=EDataSourceKind.POSTGRESQL,
             database=Database.make_for_data_source_kind(EDataSourceKind.POSTGRESQL),
             pragmas=dict(),
+            check_output_schema=True,
         )
 
         return [tc]
@@ -283,88 +288,88 @@ class Factory:
             columns=ColumnList(
                 Column(
                     name='col_01_boolean',
-                    ydb_type=Type.BOOL,
+                    ydb_type=makeYdbTypeFromTypeID(Type.BOOL),
                     data_source_type=DataSourceType(ch=clickhouse.Boolean()),
                 ),
                 Column(
                     name='col_02_int8',
-                    ydb_type=Type.INT8,
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT8),
                     data_source_type=DataSourceType(ch=clickhouse.Int8()),
                 ),
                 Column(
                     name='col_03_uint8',
-                    ydb_type=Type.UINT8,
+                    ydb_type=makeYdbTypeFromTypeID(Type.UINT8),
                     data_source_type=DataSourceType(ch=clickhouse.UInt8()),
                 ),
                 Column(
                     name='col_04_int16',
-                    ydb_type=Type.INT16,
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT16),
                     data_source_type=DataSourceType(ch=clickhouse.Int16()),
                 ),
                 Column(
                     name='col_05_uint16',
-                    ydb_type=Type.UINT16,
+                    ydb_type=makeYdbTypeFromTypeID(Type.UINT16),
                     data_source_type=DataSourceType(ch=clickhouse.UInt16()),
                 ),
                 Column(
                     name='col_06_int32',
-                    ydb_type=Type.INT32,
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
                     data_source_type=DataSourceType(ch=clickhouse.Int32()),
                 ),
                 Column(
                     name='col_07_uint32',
-                    ydb_type=Type.UINT32,
+                    ydb_type=makeYdbTypeFromTypeID(Type.UINT32),
                     data_source_type=DataSourceType(ch=clickhouse.UInt32()),
                 ),
                 Column(
                     name='col_08_int64',
-                    ydb_type=Type.INT64,
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT64),
                     data_source_type=DataSourceType(ch=clickhouse.Int64()),
                 ),
                 Column(
                     name='col_09_uint64',
-                    ydb_type=Type.UINT64,
+                    ydb_type=makeYdbTypeFromTypeID(Type.UINT64),
                     data_source_type=DataSourceType(ch=clickhouse.UInt64()),
                 ),
                 Column(
                     name='col_10_float32',
-                    ydb_type=Type.FLOAT,
+                    ydb_type=makeYdbTypeFromTypeID(Type.FLOAT),
                     data_source_type=DataSourceType(ch=clickhouse.Float32()),
                 ),
                 Column(
                     name='col_11_float64',
-                    ydb_type=Type.FLOAT,
+                    ydb_type=makeYdbTypeFromTypeID(Type.DOUBLE),
                     data_source_type=DataSourceType(ch=clickhouse.Float64()),
                 ),
                 Column(
                     name='col_12_string',
-                    ydb_type=Type.STRING,
+                    ydb_type=makeYdbTypeFromTypeID(Type.STRING),
                     data_source_type=DataSourceType(ch=clickhouse.String()),
                 ),
                 Column(
                     name='col_13_fixed_string',
-                    ydb_type=Type.STRING,
+                    ydb_type=makeYdbTypeFromTypeID(Type.STRING),
                     data_source_type=DataSourceType(ch=clickhouse.FixedString()),
                 ),
                 Column(
                     name='col_14_date',
-                    ydb_type=Type.DATE,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
                     data_source_type=DataSourceType(ch=clickhouse.Date()),
                 ),
                 # FIXME: https://st.yandex-team.ru/YQ-2295
                 # Column(
                 #     name='col_15_date32',
-                #     ydb_type=Type.DATE,
+                #     ydb_type=getYdbType(Type.DATE,
                 #     data_source_type=DataSourceType(ch=clickhouse.Date32),
                 # ),
                 Column(
                     name='col_16_datetime',
-                    ydb_type=Type.DATETIME,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATETIME),
                     data_source_type=DataSourceType(ch=clickhouse.DateTime()),
                 ),
                 Column(
                     name='col_17_datetime64',
-                    ydb_type=Type.DATETIME,
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.TIMESTAMP),
                     data_source_type=DataSourceType(ch=clickhouse.DateTime64()),
                 ),
             ),
@@ -454,6 +459,7 @@ class Factory:
             data_source_kind=EDataSourceKind.CLICKHOUSE,
             database=Database.make_for_data_source_kind(EDataSourceKind.CLICKHOUSE),
             pragmas=dict(),
+            check_output_schema=True,
         )
 
         # ClickHouse returns different data if columns are Nullable
@@ -474,7 +480,11 @@ class Factory:
 
             # copy type and example value to new TestCase
             schema_nullable.columns.append(
-                Column(name=col.name, ydb_type=col.ydb_type, data_source_type=DataSourceType(ch=ch_type.to_nullable()))
+                Column(
+                    name=col.name,
+                    ydb_type=makeOptionalYdbTypeFromYdbType(col.ydb_type),
+                    data_source_type=DataSourceType(ch=ch_type.to_nullable()),
+                )
             )
             data_in_nullable[0].append(tc.data_in[0][i])
             data_out_nullable[0].append(tc.data_out_[0][i])
@@ -496,6 +506,7 @@ class Factory:
             data_in=data_in_nullable,
             data_out_=data_out_nullable,
             pragmas=dict(),
+            check_output_schema=True,
         )
 
         return [

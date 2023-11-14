@@ -181,6 +181,7 @@ Dq {
 class Result:
     data_out: Optional[YsonList]
     data_out_with_types: Optional[List]
+    schema: Optional[Schema]
     stdout: str
     stderr: str
 
@@ -219,6 +220,7 @@ class Runner:
 
         data_out = None
         data_out_with_types = None
+        schema = None
 
         if out.returncode == 0:
             # Parse output
@@ -231,6 +233,7 @@ class Runner:
             schema = Schema.from_yson(result[0]['Write'][0]['Type'][1][1])
             data_out_with_types = [schema.cast_row(row) for row in data_out]
 
+            LOGGER.debug('Schema: %s', schema)
             LOGGER.debug('Data out: %s', data_out)
             LOGGER.debug('Data out with types: %s', data_out_with_types)
         else:
@@ -253,6 +256,7 @@ class Runner:
         return Result(
             data_out=data_out,
             data_out_with_types=data_out_with_types,
+            schema=schema,
             stdout=out.stdout.decode('utf-8'),
             stderr=out.stderr.decode('utf-8'),
         )

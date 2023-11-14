@@ -103,6 +103,8 @@ def select_positive(
     result = dqrun_runner.run(test_dir=tmp_path, script=yql_script, generic_settings=test_case.generic_settings)
 
     assert test_case.data_out == result.data_out_with_types, (test_case.data_out, result.data_out_with_types)
+    if test_case.check_output_schema:
+        assert test_case.schema == result.schema, (test_case.schema, result.schema)
 
 
 def select_missing_database(

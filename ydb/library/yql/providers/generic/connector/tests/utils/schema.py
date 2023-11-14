@@ -6,6 +6,7 @@ from yt import yson
 from yt.yson.yson_types import YsonEntity
 import ydb.public.api.protos.ydb_value_pb2 as ydb_value
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from ydb.public.api.protos.ydb_value_pb2 import Type, OptionalType
 
 import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
 import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
@@ -36,6 +37,12 @@ class Column:
     name: str
     ydb_type: ydb_value.Type
     data_source_type: DataSourceType
+
+    def __eq__(self, __value: object) -> bool:
+        if isinstance(__value, self.__class__):
+            return self.name == __value.name and self.ydb_type == __value.ydb_type
+        else:
+            raise Exception(f"can't compare 'Column' with '{__value.__class__}'")
 
     @classmethod
     def from_yson(cls, src: YsonList):
@@ -319,3 +326,17 @@ class Schema:
         '''
         items = [SelectWhat.Item(name=col.name) for col in self.columns]
         return SelectWhat(*items)
+
+
+def makeYdbTypeFromTypeID(type_id: Type.PrimitiveTypeId) -> Type:
+    return Type(type_id=type_id)
+
+
+def makeOptionalYdbTypeFromTypeID(type_id: Type.PrimitiveTypeId) -> Type:
+    return Type(optional_type=OptionalType(item=Type(type_id=type_id)))
+
+
+def makeOptionalYdbTypeFromYdbType(ydb_type: Type) -> Type:
+    if ydb_type.HasField('optional_type'):
+        return ydb_type
+    return Type(optional_type=OptionalType(item=Type(type_id=ydb_type.type_id)))

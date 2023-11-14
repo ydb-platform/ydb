@@ -115,11 +115,7 @@ func ydbTypeToArrowBuilder(typeID Ydb.Type_PrimitiveTypeId, arrowAllocator memor
 	case Ydb.Type_DOUBLE:
 		builder = array.NewFloat64Builder(arrowAllocator)
 	case Ydb.Type_STRING:
-		// FIXME: YQ-2590: map it to arrow.BinaryTypes.Binary
-		// TODO: what about LargeBinary?
-		// https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4N5arrow4Type4type12LARGE_BINARYE
-		// builder = array.NewBinaryBuilder(arrowAllocator, arrow.BinaryTypes.Binary)
-		builder = array.NewStringBuilder(arrowAllocator)
+		builder = array.NewBinaryBuilder(arrowAllocator, arrow.BinaryTypes.Binary)
 	case Ydb.Type_UTF8:
 		// TODO: what about LargeString?
 		// https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4N5arrow4Type4type12LARGE_STRINGE
@@ -166,11 +162,7 @@ func ydbTypeToArrowField(typeID Ydb.Type_PrimitiveTypeId, column *Ydb.Column) (a
 	case Ydb.Type_DOUBLE:
 		field = arrow.Field{Name: column.Name, Type: arrow.PrimitiveTypes.Float64}
 	case Ydb.Type_STRING:
-		// FIXME: YQ-2590: map it to arrow.BinaryTypes.Binary
-		// TODO: what about LargeBinary?
-		// https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4N5arrow4Type4type12LARGE_BINARYE
-		// field = arrow.Field{Name: column.Name, Type: arrow.BinaryTypes.Binary}
-		field = arrow.Field{Name: column.Name, Type: arrow.BinaryTypes.String}
+		field = arrow.Field{Name: column.Name, Type: arrow.BinaryTypes.Binary}
 	case Ydb.Type_UTF8:
 		// TODO: what about LargeString?
 		// https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4N5arrow4Type4type12LARGE_STRINGE

@@ -73,12 +73,11 @@ func (m *streamMock) makeSendMatcher(
 				}
 			}
 
-			// FIXME: YQ-2590: String -> Binary
-			col1 := record.Column(1).(*array.String)
-			require.Equal(t, &arrow.StringType{}, col1.DataType())
+			col1 := record.Column(1).(*array.Binary)
+			require.Equal(t, &arrow.BinaryType{}, col1.DataType())
 
 			for i := 0; i < len(expectedColumnarBlock[1]); i++ {
-				if expectedColumnarBlock[1][i].(string) != col1.Value(i) {
+				if !bytes.Equal([]byte(expectedColumnarBlock[1][i].(string)), col1.Value(i)) {
 					return false
 				}
 			}
@@ -146,7 +145,6 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 	}
 	connection.On("Query", "SELECT col0, col1 FROM example_1").Return(rows, nil).Once()
 
-	// FIXME: YQ-2590: string -> []byte
 	col0Acceptor := new(*int32)
 	*col0Acceptor = new(int32)
 	col1Acceptor := new(*string)

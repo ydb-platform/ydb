@@ -141,8 +141,6 @@ message TPrepareRequest {
 message TSourcePushRequest {
     TData Data = 1;
     int64 Space = 2;
-    repeated bytes String = 3;
-    int32 Chunks = 4;
 }
 
 message TSourcePushChunk {

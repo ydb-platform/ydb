@@ -5122,6 +5122,27 @@
             "uri": "file://test.test_udf-wrong_args_fail--Results_/extracted"
         }
     ],
+    "test.test[union-union_multiin--Debug]": [
+        {
+            "checksum": "30e4adcead5240007aa12e272e70b2ec",
+            "size": 2881,
+            "uri": "https://{canondata_backend}/1936273/ce5250cf0582022a95719de2918070497e9a951b/resource.tar.gz#test.test_union-union_multiin--Debug_/opt.yql"
+        }
+    ],
+    "test.test[union-union_multiin--Plan]": [
+        {
+            "checksum": "742f5a64f5191d662380ced1e9a73eca",
+            "size": 7514,
+            "uri": "https://{canondata_backend}/1936273/ce5250cf0582022a95719de2918070497e9a951b/resource.tar.gz#test.test_union-union_multiin--Plan_/plan.txt"
+        }
+    ],
+    "test.test[union-union_multiin--Results]": [
+        {
+            "checksum": "cad773abc2060185d7a6403a5a655c45",
+            "size": 1924,
+            "uri": "https://{canondata_backend}/1936273/ce5250cf0582022a95719de2918070497e9a951b/resource.tar.gz#test.test_union-union_multiin--Results_/results.txt"
+        }
+    ],
     "test.test[union_all-union_all_fields-default.txt-Debug]": [
         {
             "checksum": "780d675c5bbdd951be862dfcaa0be323",

@@ -1141,6 +1141,33 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["UnionAll"]);
     }
 
+    Y_UNIT_TEST(UnionTest) {
+        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION select subkey FROM plato.Input;");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Union"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
+    }
+
+    Y_UNIT_TEST(UnionAggregationTest) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            SELECT 1 
+            UNION ALL
+                SELECT 1 UNION ALL SELECT 1 UNION ALL SELECT 1
+            UNION
+                SELECT 1 UNION SELECT 1 UNION SELECT 1 UNION SELECT 1
+            UNION ALL
+                SELECT 1 UNION ALL SELECT 1 UNION ALL SELECT 1;
+        )");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Union"), 0}, {TString("UnionAll"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["UnionAll"]);
+        UNIT_ASSERT_VALUES_EQUAL(3, elementStat["Union"]);
+    }
+
     Y_UNIT_TEST(DeclareDecimalParameter) {
         NYql::TAstParseResult res = SqlToYql("declare $value as Decimal(22,9); select $value as cnt;");
         UNIT_ASSERT(res.Root);
@@ -3256,12 +3283,6 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         NYql::TAstParseResult res = SqlToYql("upsert into plato.Output (key, value, subkey) values (2, '3');", 10, TString(NYql::KikimrProviderName));
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:39: Error: VALUES have 2 columns, UPSERT INTO expects: 3\n");
-    }
-
-    Y_UNIT_TEST(UnionNotSupported) {
-        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION select subkey FROM plato.Input;");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:29: Error: UNION without quantifier ALL is not supported yet. Did you mean UNION ALL?\n");
     }
 
     Y_UNIT_TEST(GroupingSetByExprWithoutAlias) {

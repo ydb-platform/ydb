@@ -1340,4 +1340,14 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         TSetup setup;
         setup.Run(cases);
     }
+
+    Y_UNIT_TEST(Union) {
+        TCases cases = {
+            {"select 1 union all select 2 union select 3 union all select 4 union select 5", 
+             "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION ALL\nSELECT\n\t4\nUNION\nSELECT\n\t5;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
 }

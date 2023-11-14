@@ -234,7 +234,7 @@ namespace NSQLTranslationV1 {
     TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, const TString& label = TString());
     TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, const TString& label = TString());
     TSourcePtr BuildRefColumnSource(TPosition pos, const TString& partExpression);
-    TSourcePtr BuildUnionAll(TPosition pos, TVector<TSourcePtr>&& sources, const TWriteSettings& settings);
+    TSourcePtr BuildUnion(TPosition pos, TVector<TSourcePtr>&& sources, bool quantifierAll, const TWriteSettings& settings);
     TSourcePtr BuildOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource);
 
     TNodePtr BuildOrderBy(TPosition pos, const TVector<TNodePtr>& keys, const TVector<bool>& order);

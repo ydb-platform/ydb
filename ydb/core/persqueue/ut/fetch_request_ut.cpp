@@ -89,6 +89,8 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         auto& runtime = setup->GetRuntime();
         StartSchemeCache(runtime);
 
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_TRACE);
+
         ui32 totalPartitions = 5;
         setup->CreateTopic("topic1", "dc1", totalPartitions);
 
@@ -103,6 +105,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
         UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SCHEME_ERROR, ev->Message);
     }
+
     Y_UNIT_TEST(CheckAccess) {
         auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
         auto& runtime = setup->GetRuntime();

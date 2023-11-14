@@ -157,6 +157,9 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     ui64 GetAllowedStep() const;
 
+    void Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& ctx);
+    void ProcessSourceIdRequests(ui32 partitionId);
+
     static constexpr const char * KeyConfig() { return "_config"; }
     static constexpr const char * KeyState() { return "_state"; }
     static constexpr const char * KeyTxInfo() { return "_txinfo"; }
@@ -375,6 +378,8 @@ private:
     bool CanProcessDeleteTxs() const;
 
     bool UseMediatorTimeCast = true;
+
+    THashMap<ui32, TVector<TEvPQ::TEvSourceIdRequest::TPtr>> SourceIdRequests;
 };
 
 

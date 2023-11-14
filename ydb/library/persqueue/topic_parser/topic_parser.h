@@ -264,6 +264,7 @@ public:
 
     bool IsFirstClass() const;
 
+    operator bool() const { return Valid && !ClientsideName; };
 
 private:
     void BuildInternals(const NKikimrPQ::TPQTabletConfig& config);

@@ -34,6 +34,7 @@ struct TSourceIdInfo {
 
     TSourceIdInfo() = default;
     TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs);
+    TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat& heartbeat);
     TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit = false);
 
     TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs) const;

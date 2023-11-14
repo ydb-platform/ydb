@@ -1163,25 +1163,32 @@ void TPersQueue::Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorCon
     CacheCounters = ev->Get()->Counters;
     SetCacheCounters(CacheCounters);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " topic '" << TopicConverter->GetClientsideName()
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " topic '" << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined")
         << "Counters. CacheSize " << CacheCounters.CacheSizeBytes << " CachedBlobs " << CacheCounters.CacheSizeBlobs);
 }
 
 void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& ctx)
 {
-    auto it = Partitions.find(ev->Get()->Partition);
+    const auto partitionId = ev->Get()->Partition;
+    auto it = Partitions.find(partitionId);
     Y_ABORT_UNLESS(it != Partitions.end());
     Y_ABORT_UNLESS(!it->second.InitDone);
     it->second.InitDone = true;
     ++PartitionsInited;
     Y_ABORT_UNLESS(ConfigInited);//partitions are inited only after config
 
-    if (!InitCompleted && PartitionsInited == Partitions.size()) {
+    auto allInitialized = PartitionsInited == Partitions.size();
+    if (!InitCompleted && allInitialized) {
         OnInitComplete(ctx);
     }
 
-    if (NewConfigShouldBeApplied && PartitionsInited == Partitions.size()) {
+    if (NewConfigShouldBeApplied && allInitialized) {
         ApplyNewConfigAndReply(ctx);
+    }
+
+    ProcessSourceIdRequests(partitionId);
+    if (allInitialized) {
+        SourceIdRequests.clear();
     }
 }
 
@@ -1221,7 +1228,7 @@ void TPersQueue::FinishResponse(THashMap<ui64, TAutoPtr<TResponseBuilder>>::iter
 
 
 void TPersQueue::Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx)
-{
+{   
     if (!ConfigInited) {
         UpdateConfigRequests.emplace_back(ev->Release(), ev->Sender);
         return;
@@ -1844,7 +1851,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 LOG_DEBUG_S(
                         ctx, NKikimrServices::PERSQUEUE,
                         "Tablet " << TabletID() <<
-                        " got client PART message topic: " << TopicConverter->GetClientsideName() << " partition: " << req.GetPartition()
+                        " got client PART message topic: " << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined") << " partition: " << req.GetPartition()
                             << " SourceId: \'" << EscapeC(msgs.back().SourceId) << "\' SeqNo: "
                             << msgs.back().SeqNo << " partNo : " << msgs.back().PartNo
                             << " messageNo: " << req.GetMessageNo() << " size: " << data.size()
@@ -1878,7 +1885,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                     "Tablet " << TabletID() <<
-                    " got client message topic: " << TopicConverter->GetClientsideName() <<
+                    " got client message topic: " << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined") <<
                     " partition: " << req.GetPartition() <<
                     " SourceId: \'" << EscapeC(msgs.back().SourceId) <<
                     "\' SeqNo: " << msgs.back().SeqNo << " partNo : " << msgs.back().PartNo <<
@@ -2171,7 +2178,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     ui32 partition = req.GetPartition();
     auto it = Partitions.find(partition);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " got client message batch for topic " << TopicConverter->GetClientsideName() << " partition " << partition);
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " got client message batch for topic '" 
+            << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined") << "' partition " << partition);
 
     if (it == Partitions.end()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::WRONG_PARTITION_NUMBER,
@@ -3613,6 +3621,38 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr &ev, con
     ctx.Send(ev->Sender, new TEvPersQueue::TEvProposeTransactionAttachResult(TabletID(), txId, status), 0, ev->Cookie);
 }
 
+void TPersQueue::Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& ctx) {
+    auto& record = ev->Get()->Record;
+    auto it = Partitions.find(record.GetPartition());
+    if (it == Partitions.end()) {
+        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Unknown partition " << record.GetPartition());
+
+        auto response = THolder<TEvPQ::TEvSourceIdResponse>();
+        response->Record.SetError("Partition was not found");
+        Send(ev->Sender, response.Release());
+
+        return;
+    }
+
+    if (it->second.InitDone) {
+        Forward(ev, it->second.Actor);
+    } else {
+        SourceIdRequests[record.GetPartition()].push_back(ev);
+    }
+}
+
+void TPersQueue::ProcessSourceIdRequests(ui32 partitionId) {
+    auto sit = SourceIdRequests.find(partitionId);
+    if (sit != SourceIdRequests.end()) {
+        auto it = Partitions.find(partitionId);
+        for (auto& r : sit->second) {
+            Forward(r, it->second.Actor);
+        }
+        SourceIdRequests.erase(partitionId);
+    }
+}
+
+
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
     SetActivityType(NKikimrServices::TActivity::PERSQUEUE_ACTOR);
@@ -3654,6 +3694,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
+        HFuncTraced(TEvPQ::TEvSourceIdRequest, Handle);
         default:
             return false;
     }

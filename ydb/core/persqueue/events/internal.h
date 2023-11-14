@@ -138,6 +138,8 @@ struct TEvPQ {
         EvQuotaCountersUpdated,
         EvConsumerRemoved,
         EvFetchResponse,
+        EvSourceIdRequest,
+        EvSourceIdResponse,
         EvEnd
     };
 
@@ -853,6 +855,12 @@ struct TEvPQ {
         Ydb::StatusIds::StatusCode Status;
         TString Message;
         NKikimrClient::TPersQueueFetchResponse Response;
+    };
+
+    struct TEvSourceIdRequest : public TEventPB<TEvSourceIdRequest, NKikimrPQ::TEvSourceIdRequest, EvSourceIdRequest> {
+    };
+
+    struct TEvSourceIdResponse : public TEventPB<TEvSourceIdResponse, NKikimrPQ::TEvSourceIdResponse, EvSourceIdResponse> {
     };
 };
 

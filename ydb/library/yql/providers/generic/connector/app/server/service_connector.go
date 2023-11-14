@@ -263,6 +263,12 @@ func makeGRPCOptions(logger log.Logger, cfg *config.TServerConfig, registry *sol
 		tlsConfig *config.TServerTLSConfig
 	)
 
+	unaryInterceptors := []grpc.UnaryServerInterceptor{UnaryServerMetrics(registry)}
+
+	streamInterceptors := []grpc.StreamServerInterceptor{StreamServerMetrics(registry)}
+
+	opts = append(opts, grpc.ChainUnaryInterceptor(unaryInterceptors...), grpc.ChainStreamInterceptor(streamInterceptors...))
+
 	// TODO: drop deprecated fields after YQ-2057
 	switch {
 	case cfg.GetConnectorServer().GetTls() != nil:
@@ -286,12 +292,7 @@ func makeGRPCOptions(logger log.Logger, cfg *config.TServerConfig, registry *sol
 
 	// for security reasons we do not allow TLS < 1.2, see YQ-1877
 	creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
-
-	unaryInterceptors := []grpc.UnaryServerInterceptor{UnaryServerMetrics(registry)}
-
-	streamInterceptors := []grpc.StreamServerInterceptor{StreamServerMetrics(registry)}
-
-	opts = append(opts, grpc.Creds(creds), grpc.ChainUnaryInterceptor(unaryInterceptors...), grpc.ChainStreamInterceptor(streamInterceptors...))
+	opts = append(opts, grpc.Creds(creds))
 
 	return opts, nil
 }

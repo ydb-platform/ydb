@@ -4,4 +4,10 @@ RECURSE(
     generate
     libcpp
     libgo
+    recipe
 )
+
+RECURSE_FOR_TESTS(
+    tests
+)
+

@@ -32,6 +32,8 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 
 `--save-partial-result`: Save the partial import result. If disabled, an import error results in reverting to the database state before the import.
 
+`--import-data`: a more efficient way to upload data with lower consistency level. Global secondary indexes are not supported in this mode.
+
 ### Workload restriction parameters {#limiters}
 
 Using the below parameters, you can limit the import workload against the database.

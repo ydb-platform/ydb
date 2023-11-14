@@ -28,6 +28,8 @@
 
 #include <library/cpp/yt/misc/cast.h>
 
+#include <library/cpp/yt/string/string.h>
+
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/coding/varint.h>
@@ -892,10 +894,10 @@ public:
     TProtobufWriter(
         ZeroCopyOutputStream* outputStream,
         const TProtobufMessageType* rootType,
-        const TProtobufWriterOptions& options)
+        TProtobufWriterOptions options)
         : OutputStream_(outputStream)
         , RootType_(rootType)
-        , Options_(options)
+        , Options_(std::move(options))
         , BodyOutputStream_(&BodyString_)
         , BodyCodedStream_(&BodyOutputStream_)
         , AttributeValueStream_(AttributeValue_)
@@ -1143,6 +1145,11 @@ private:
 
     void OnMyKeyedItem(TStringBuf key) override
     {
+        TString keyData;
+        if (Options_.ConvertSnakeToCamelCase) {
+            keyData = UnderscoreCaseToCamelCase(key);
+            key = keyData;
+        }
         const auto* field = FieldStack_.back().Field;
         if (field && field->IsYsonMap() && !FieldStack_.back().ParsingYsonMapFromList) {
             OnMyKeyedItemYsonMap(field, key);
@@ -1764,7 +1771,7 @@ private:
 std::unique_ptr<IYsonConsumer> CreateProtobufWriter(
     ZeroCopyOutputStream* outputStream,
     const TProtobufMessageType* rootType,
-    const TProtobufWriterOptions& options)
+    TProtobufWriterOptions options)
 {
     return std::make_unique<TProtobufWriter>(outputStream, rootType, options);
 }
@@ -2976,13 +2983,21 @@ TString YsonStringToProto(
     const TProtobufMessageType* payloadType,
     EUnknownYsonFieldsMode unknownFieldsMode)
 {
-    TString serializedProto;
-    google::protobuf::io::StringOutputStream protobufStream(&serializedProto);
     TProtobufWriterOptions protobufWriterOptions;
     protobufWriterOptions.UnknownYsonFieldModeResolver =
         TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
             unknownFieldsMode);
-    auto protobufWriter = CreateProtobufWriter(&protobufStream, payloadType, protobufWriterOptions);
+    return YsonStringToProto(ysonString, payloadType, std::move(protobufWriterOptions));
+}
+
+TString YsonStringToProto(
+    const TYsonString& ysonString,
+    const TProtobufMessageType* payloadType,
+    TProtobufWriterOptions options)
+{
+    TString serializedProto;
+    google::protobuf::io::StringOutputStream protobufStream(&serializedProto);
+    auto protobufWriter = CreateProtobufWriter(&protobufStream, payloadType, std::move(options));
     ParseYsonStringBuffer(ysonString.AsStringBuf(), EYsonType::Node, protobufWriter.get());
     return serializedProto;
 }

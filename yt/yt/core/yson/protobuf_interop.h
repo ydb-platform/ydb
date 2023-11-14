@@ -130,7 +130,7 @@ constexpr int UnknownYsonFieldNumber = 3005;
 std::unique_ptr<IYsonConsumer> CreateProtobufWriter(
     ::google::protobuf::io::ZeroCopyOutputStream* outputStream,
     const TProtobufMessageType* rootType,
-    const TProtobufWriterOptions& options = TProtobufWriterOptions());
+    TProtobufWriterOptions options = TProtobufWriterOptions());
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -236,7 +236,7 @@ struct TProtobufMessageBytesFieldConverter
 //! This method is called during static initialization and not assumed to be called during runtime.
 void RegisterCustomProtobufBytesFieldConverter(
     const google::protobuf::Descriptor* descriptor,
-    int fieldIndex,
+    int fieldNumber,
     const TProtobufMessageBytesFieldConverter& converter);
 
 #define REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(ProtoType, FieldNumber, Type)             \
@@ -265,6 +265,11 @@ TString YsonStringToProto(
     const TYsonString& ysonString,
     const TProtobufMessageType* payloadType,
     EUnknownYsonFieldsMode unknownFieldsMode);
+
+TString YsonStringToProto(
+    const TYsonString& ysonString,
+    const TProtobufMessageType* payloadType,
+    TProtobufWriterOptions options);
 
 ////////////////////////////////////////////////////////////////////////////////
 

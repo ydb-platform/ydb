@@ -32,7 +32,7 @@ class TDynamicYqlPlugin
 public:
     TDynamicYqlPlugin(std::optional<TString> yqlPluginSharedLibrary)
     {
-        const TString DefaultYqlPluginLibraryName = "./libyqlplugin.so";
+        static const TString DefaultYqlPluginLibraryName = "./libyqlplugin.so";
         auto sharedLibraryPath = yqlPluginSharedLibrary.value_or(DefaultYqlPluginLibraryName);
         Library_.Open(sharedLibraryPath.data());
         #define XX(function) function = reinterpret_cast<TFunc ## function*>(Library_.Sym(#function));
@@ -55,39 +55,21 @@ class TYqlPlugin
     , public IYqlPlugin
 {
 public:
-    explicit TYqlPlugin(TYqlPluginOptions& options)
+    explicit TYqlPlugin(TYqlPluginOptions options)
         : TDynamicYqlPlugin(options.YqlPluginSharedLibrary)
     {
-        std::vector<TBridgeYqlPluginOptions::TBridgeCluster> bridgeClusters;
-        for (const auto& [cluster, proxy]: options.Clusters) {
-            bridgeClusters.push_back({
-               .Cluster = cluster.data(),
-               .Proxy = proxy.data(),
-           });
-        }
-
-        auto operationAttributesString = options.OperationAttributes ? options.OperationAttributes.ToString() : "{}";
-
-        const char* defaultCluster = options.DefaultCluster
-            ? options.DefaultCluster->data()
-            : nullptr;
-
         TString singletonsConfig = options.SingletonsConfig ? options.SingletonsConfig.ToString() : "{}";
 
         TBridgeYqlPluginOptions bridgeOptions {
             .RequiredABIVersion = options.RequiredABIVersion,
             .SingletonsConfig = singletonsConfig.data(),
             .SingletonsConfigLength = static_cast<int>(singletonsConfig.size()),
-            .MRJobBinary = options.MRJobBinary.data(),
-            .UdfDirectory = options.UdfDirectory.data(),
-            .ClusterCount = ssize(bridgeClusters),
-            .Clusters = bridgeClusters.data(),
-            .DefaultCluster = defaultCluster,
-            .OperationAttributes = operationAttributesString.data(),
-            .OperationAttributesLength = static_cast<int>(operationAttributesString.size()),
-            .MaxFilesSizeMb = options.MaxFilesSizeMb,
-            .MaxFileCount = options.MaxFileCount,
-            .DownloadFileRetryCount = options.DownloadFileRetryCount,
+            .GatewayConfig = options.GatewayConfig.AsStringBuf().Data(),
+            .GatewayConfigLength = options.GatewayConfig.AsStringBuf().Size(),
+            .FileStorageConfig = options.FileStorageConfig.AsStringBuf().Data(),
+            .FileStorageConfigLength = options.FileStorageConfig.AsStringBuf().Size(),
+            .OperationAttributes = options.OperationAttributes.AsStringBuf().Data(),
+            .OperationAttributesLength = options.OperationAttributes.AsStringBuf().Size(),
             .YTTokenPath = options.YTTokenPath.data(),
             .LogBackend = &options.LogBackend,
         };
@@ -152,11 +134,11 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<IYqlPlugin> CreateYqlPlugin(TYqlPluginOptions& options) noexcept
+std::unique_ptr<IYqlPlugin> CreateYqlPlugin(TYqlPluginOptions options) noexcept
 {
-    return std::make_unique<NBridge::TYqlPlugin>(options);
+    return std::make_unique<NBridge::TYqlPlugin>(std::move(options));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NYqlPlugin::NBridge
+} // namespace NYT::NYqlPlugin

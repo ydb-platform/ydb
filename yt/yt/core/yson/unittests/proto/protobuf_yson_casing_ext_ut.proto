@@ -1,0 +1,7 @@
+package NYT.NYson.NProto;
+
+message TExternalProtobuf
+{
+    optional int32 SomeField = 1;
+    optional int32 AnotherField123 = 2;
+}

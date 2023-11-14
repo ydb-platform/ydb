@@ -21,12 +21,6 @@ TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOpt
 
     static const TYsonString EmptyMap = TYsonString(TString("{}"));
 
-    THashMap<TString, TString> clusters;
-    for (auto clusterIndex = 0; clusterIndex < bridgeOptions->ClusterCount; ++clusterIndex) {
-        const auto& Cluster = bridgeOptions->Clusters[clusterIndex];
-        clusters[Cluster.Cluster] = Cluster.Proxy;
-    }
-
     auto operationAttributes = bridgeOptions->OperationAttributes
         ? TYsonString(TString(bridgeOptions->OperationAttributes, bridgeOptions->OperationAttributesLength))
         : EmptyMap;
@@ -37,18 +31,13 @@ TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOpt
 
     TYqlPluginOptions options{
         .SingletonsConfig = singletonsConfig,
-        .MRJobBinary = TString(bridgeOptions->MRJobBinary),
-        .UdfDirectory = TString(bridgeOptions->UdfDirectory),
-        .Clusters = std::move(clusters),
-        .DefaultCluster = std::optional<TString>(bridgeOptions->DefaultCluster),
-        .OperationAttributes = operationAttributes,
-        .MaxFilesSizeMb = static_cast<int>(bridgeOptions->MaxFilesSizeMb),
-        .MaxFileCount = static_cast<int>(bridgeOptions->MaxFileCount),
-        .DownloadFileRetryCount = static_cast<int>(bridgeOptions->DownloadFileRetryCount),
+        .GatewayConfig = TYsonString(TStringBuf(bridgeOptions->GatewayConfig, bridgeOptions->GatewayConfigLength)),
+        .FileStorageConfig = TYsonString(TStringBuf(bridgeOptions->FileStorageConfig, bridgeOptions->FileStorageConfigLength)),
+        .OperationAttributes = TYsonString(TStringBuf(bridgeOptions->OperationAttributes, bridgeOptions->OperationAttributesLength)),
         .YTTokenPath = TString(bridgeOptions->YTTokenPath),
         .LogBackend = std::move(*reinterpret_cast<THolder<TLogBackend>*>(bridgeOptions->LogBackend)),
     };
-    auto nativePlugin = CreateYqlPlugin(options);
+    auto nativePlugin = CreateYqlPlugin(std::move(options));
     return nativePlugin.release();
 }
 

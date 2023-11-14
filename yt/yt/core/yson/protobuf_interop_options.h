@@ -45,6 +45,9 @@ struct TProtobufWriterOptions
 
     // Check if |string| fields contain actual UTF-8 strings.
     EUtf8Check CheckUtf8 = EUtf8Check::None;
+
+    //! Convert yson keys from snake case to camel case.
+    bool ConvertSnakeToCamelCase = false;
 };
 
 struct TProtobufParserOptions

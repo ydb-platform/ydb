@@ -18,35 +18,25 @@ struct TBridgeYqlPluginOptions
 {
     ssize_t RequiredABIVersion;
 
-    const char* SingletonsConfig;
-    ssize_t SingletonsConfigLength;
+    const char* SingletonsConfig = nullptr;
+    ssize_t SingletonsConfigLength = 0;
 
-    const char* MRJobBinary;
-    const char* UdfDirectory;
+    const char* GatewayConfig = nullptr;
+    size_t GatewayConfigLength = 0;
 
-    struct TBridgeCluster
-    {
-        const char* Cluster;
-        const char* Proxy;
-    };
-    ssize_t ClusterCount;
-    TBridgeCluster* Clusters;
-    const char* DefaultCluster;
+    const char* FileStorageConfig = nullptr;
+    size_t FileStorageConfigLength = 0;
 
-    const char* OperationAttributes;
-    ssize_t OperationAttributesLength = 0;
+    const char* OperationAttributes = nullptr;
+    size_t OperationAttributesLength = 0;
 
-    ssize_t MaxFilesSizeMb;
-    ssize_t MaxFileCount;
-    ssize_t DownloadFileRetryCount;
-
-    const char* YTTokenPath;
+    const char* YTTokenPath = nullptr;
 
     // TODO(max42): passing C++ objects across shared libraries is incredibly
     // fragile. This is a temporary mean until we come up with something more
     // convenient; get rid of this ASAP.
     using TLogBackendHolder = void;
-    TLogBackendHolder* LogBackend;
+    TLogBackendHolder* LogBackend = nullptr;
 };
 
 // Opaque type representing a YQL plugin.
@@ -85,10 +75,10 @@ enum EQueryFileContentType
 
 struct TBridgeQueryFile
 {
-    const char* Name;
+    const char* Name = nullptr;
     size_t NameLength = 0;
 
-    const char* Content;
+    const char* Content = nullptr;
     size_t ContentLength = 0;
 
     EQueryFileContentType Type;

@@ -29,19 +29,9 @@ public:
     int RequiredABIVersion;
 
     TYsonString SingletonsConfig;
-
-    TString MRJobBinary = "./mrjob";
-    TString UdfDirectory;
-
-    //! Mapping cluster name -> proxy address.
-    THashMap<TString, TString> Clusters;
-    std::optional<TString> DefaultCluster;
-
+    TYsonString GatewayConfig;
+    TYsonString FileStorageConfig;
     TYsonString OperationAttributes;
-
-    int MaxFilesSizeMb;
-    int MaxFileCount;
-    int DownloadFileRetryCount;
 
     TString YTTokenPath;
 

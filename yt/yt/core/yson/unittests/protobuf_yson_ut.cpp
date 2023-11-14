@@ -2,6 +2,7 @@
 
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_ut.pb.h>
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_casing_ut.pb.h>
+#include <yt/yt/core/yson/unittests/proto/protobuf_yson_casing_ext_ut.pb.h>
 
 #include <yt/yt/core/yson/protobuf_interop.h>
 #include <yt/yt/core/yson/null_consumer.h>
@@ -2696,6 +2697,28 @@ TEST(TEnumYsonStorageTypeTest, TestDeserializeSerialize)
 
     // Check that original message is equal to its deserialized + serialized version
     EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(message, resultedMessage));
+}
+
+TEST(TYsonToProtobufTest, Casing)
+{
+    auto ysonNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("some_field").Value(1)
+            .Item("another_field123").Value(2)
+        .EndMap();
+    auto ysonString = ConvertToYsonString(ysonNode);
+
+    NYson::TProtobufWriterOptions protobufWriterOptions;
+    protobufWriterOptions.ConvertSnakeToCamelCase = true;
+
+    NProto::TExternalProtobuf message;
+    message.ParseFromStringOrThrow(NYson::YsonStringToProto(
+        ysonString,
+        NYson::ReflectProtobufMessageType<NProto::TExternalProtobuf>(),
+        protobufWriterOptions));
+
+    EXPECT_EQ(message.somefield(), 1);
+    EXPECT_EQ(message.anotherfield123(), 2);
 }
 
 } // namespace

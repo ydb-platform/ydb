@@ -1890,9 +1890,8 @@ private:
 
         //todo: consider cluster name clashes
         AddClustersFromConfig(gatewaysConfig, clusters);
-        AddClustersFromConnections(YqConnections,
-            Params.Config.GetCommon().GetUseBearerForYdb(),
-            Params.Config.GetCommon().GetObjectStorageEndpoint(),
+        AddClustersFromConnections(Params.Config.GetCommon(),
+            YqConnections,
             monitoringEndpoint,
             Params.AuthToken,
             Params.AccountIdSignatures,

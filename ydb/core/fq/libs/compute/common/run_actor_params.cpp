@@ -73,7 +73,7 @@ TRunActorParams::TRunActorParams(
     , Scope(scope)
     , AuthToken(authToken)
     , DatabaseResolver(databaseResolver)
-    , MdbEndpointGenerator(NFq::MakeMdbEndpointGeneratorGeneric(config.GetCommon().GetMdbTransformHost()))
+    , MdbEndpointGenerator(NFq::MakeMdbEndpointGeneratorGeneric(config.GetCommon().GetMdbTransformHost(), config.GetCommon().GetUseNativeProtocolForClickHouse()))
     , QueryId(queryId)
     , UserId(userId)
     , Owner(owner)

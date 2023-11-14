@@ -198,10 +198,10 @@ std::pair<std::unique_ptr<IBlockBuilder>, TString> CreateBlockBuilder(
     }
 
     switch (state.Format) {
-    case NKikimrTxDataShard::ARROW:
+    case NKikimrDataEvents::FORMAT_ARROW:
         blockBuilder.reset(new NArrow::TArrowBatchBuilder());
         break;
-    case NKikimrTxDataShard::CELLVEC:
+    case NKikimrDataEvents::FORMAT_CELLVEC:
         blockBuilder.reset(new TCellBlockBuilder());
         break;
     default:
@@ -681,12 +681,12 @@ public:
             }
 
             switch (State.Format) {
-            case NKikimrTxDataShard::ARROW: {
+            case NKikimrDataEvents::FORMAT_ARROW: {
                 auto& arrowBuilder = static_cast<NArrow::TArrowBatchBuilder&>(BlockBuilder);
                 result.SetArrowBatch(arrowBuilder.FlushBatch(false));
                 break;
             }
-            case NKikimrTxDataShard::CELLVEC: {
+            case NKikimrDataEvents::FORMAT_CELLVEC: {
                 auto& cellBuilder = static_cast<TCellBlockBuilder&>(BlockBuilder);
                 TOwnedCellVecBatch batch;
                 cellBuilder.FlushBatch(batch);
@@ -1829,7 +1829,7 @@ private:
         auto locks = sysLocks.ApplyLocks();
 
         for (auto& lock : locks) {
-            NKikimrTxDataShard::TLock* addLock;
+            NKikimrDataEvents::TLock* addLock;
             if (lock.IsError()) {
                 addLock = Result->Record.AddBrokenTxLocks();
             } else {
@@ -2063,7 +2063,7 @@ public:
                             ctx.SelfID.NodeId());
                         return true;
                     }
-                    if (record.GetResultFormat() != NKikimrTxDataShard::CELLVEC) {
+                    if (record.GetResultFormat() != NKikimrDataEvents::FORMAT_CELLVEC) {
                         ReplyError(
                             Ydb::StatusIds::UNSUPPORTED,
                             TStringBuilder() << "Unsupported result format "
@@ -2406,7 +2406,7 @@ public:
             }
 
             if (isBroken) {
-                NKikimrTxDataShard::TLock *addLock = record.AddBrokenTxLocks();
+                NKikimrDataEvents::TLock *addLock = record.AddBrokenTxLocks();
                 addLock->SetLockId(state.Lock->GetLockId());
                 addLock->SetDataShard(Self->TabletID());
                 addLock->SetGeneration(state.Lock->GetGeneration());

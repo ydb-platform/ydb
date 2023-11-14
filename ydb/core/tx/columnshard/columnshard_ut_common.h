@@ -535,29 +535,6 @@ namespace NKikimr::NColumnShard {
         bool InStore = true;
     };
 
-    class TArrowDataConstructor : public NKikimr::NEvents::IDataConstructor {
-        std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
-        ui64 Index;
-
-    public:
-        TArrowDataConstructor(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, const ui64 idx)
-            : YdbSchema(ydbSchema)
-            , Index(idx)
-        {
-        }
-
-        void Serialize(NKikimrDataEvents::TOperationData& proto) const override {
-            for (ui32 i = 0; i < YdbSchema.size(); ++i) {
-                proto.AddColumnIds(i + 1);
-            }
-            proto.MutableArrowData()->SetPayloadIndex(Index);
-        }
-
-        ui64 GetSchemaVersion() const override {
-            return 1;
-        }
-    };
-
     void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
                  const TestTableDescription& table = {}, TString codec = "none");
 

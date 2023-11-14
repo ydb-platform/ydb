@@ -1791,7 +1791,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
 
-                UNIT_ASSERT_C(result.GetDiagnostics().empty(), "Query result diagnostics is not empty");
+                UNIT_ASSERT_C(result.GetDiagnostics().empty(), "Query result diagnostics should be empty, but it's not");
             }
         }
     }

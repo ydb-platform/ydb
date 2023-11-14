@@ -295,6 +295,7 @@ int main(int argc, char **argv) {
                 Allow(brk),
                 Allow(chdir),
                 Allow(clock_gettime),
+                Allow(clock_nanosleep),
                 Allow(clone),
                 Allow(close),
 #ifndef _arm64_

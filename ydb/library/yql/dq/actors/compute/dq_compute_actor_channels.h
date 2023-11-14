@@ -66,7 +66,7 @@ public:
         virtual i64 GetInputChannelFreeSpace(ui64 channelId) const = 0;
         virtual void TakeInputChannelData(TChannelDataOOB&& channelData, bool ack) = 0;
         virtual void PeerFinished(ui64 channelId) = 0;
-        virtual void ResumeExecution() = 0;
+        virtual void ResumeExecution(EResumeSource source) = 0;
 
         virtual ~ICallbacks() = default;
     };

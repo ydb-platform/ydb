@@ -1152,7 +1152,7 @@ public:
     }
 
     TString DebugPrintCells(const TEvDataShard::TEvReadResult* result) {
-        if (result->Record.GetResultFormat() == NKikimrTxDataShard::EScanDataFormat::ARROW) {
+        if (result->Record.GetResultFormat() == NKikimrDataEvents::FORMAT_ARROW) {
             return "{ARROW}";
         }
         TStringBuilder builder;
@@ -1244,11 +1244,11 @@ public:
             if (!batch.Defined()) {
                 batch.ConstructInPlace();
                 switch (msg.Record.GetResultFormat()) {
-                    case NKikimrTxDataShard::EScanDataFormat::ARROW:
+                    case NKikimrDataEvents::FORMAT_ARROW:
                         BytesStats.AddStatistics(PackArrow(result, freeSpace));
                         break;
-                    case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
-                    case NKikimrTxDataShard::EScanDataFormat::CELLVEC:
+                    case NKikimrDataEvents::FORMAT_UNSPECIFIED:
+                    case NKikimrDataEvents::FORMAT_CELLVEC:
                         BytesStats.AddStatistics(PackCells(result, freeSpace));
                 }
             }
@@ -1460,8 +1460,8 @@ private:
 
     TQueue<TResult> Results;
 
-    TVector<NKikimrTxDataShard::TLock> Locks;
-    TVector<NKikimrTxDataShard::TLock> BrokenLocks;
+    TVector<NKikimrDataEvents::TLock> Locks;
+    TVector<NKikimrDataEvents::TLock> BrokenLocks;
 
     IKqpGateway::TKqpSnapshot Snapshot;
 

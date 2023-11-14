@@ -103,12 +103,8 @@ void TSingletonsConfig::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("enable_resource_tracker", &TThis::EnableResourceTracker)
         .Default(true);
-    registrar.Parameter("enable_porto_resource_tracker", &TThis::EnablePortoResourceTracker)
-        .Default(false);
     registrar.Parameter("resource_tracker_vcpu_factor", &TThis::ResourceTrackerVCpuFactor)
         .Optional();
-    registrar.Parameter("pod_spec", &TThis::PodSpec)
-        .DefaultNew();
     registrar.Parameter("heap_profiler", &TThis::HeapProfiler)
         .DefaultNew();
 

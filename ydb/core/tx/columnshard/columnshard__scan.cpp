@@ -79,7 +79,7 @@ public:
                      const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
                      ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie,
                      ui64 tabletId, TDuration timeout, std::vector<TTxScan::TReadMetadataPtr>&& readMetadataList,
-                     NKikimrTxDataShard::EScanDataFormat dataFormat, const TScanCounters& scanCountersPool)
+                     NKikimrDataEvents::EDataFormat dataFormat, const TScanCounters& scanCountersPool)
         : StoragesManager(storagesManager)
         , ColumnShardActorId(columnShardActorId)
         , ScanComputeActorId(scanComputeActorId)
@@ -219,7 +219,7 @@ private:
             return false;
         }
 
-        if (ResultYqlSchema.empty() && DataFormat != NKikimrTxDataShard::EScanDataFormat::ARROW) {
+        if (ResultYqlSchema.empty() && DataFormat != NKikimrDataEvents::FORMAT_ARROW) {
             ResultYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetResultYqlSchema();
         }
 
@@ -231,12 +231,12 @@ private:
             return true;
         }
 
-        ACFL_DEBUG("stage", "ready result")("iterator", ScanIterator->DebugString())("format", NKikimrTxDataShard::EScanDataFormat_Name(DataFormat))
+        ACFL_DEBUG("stage", "ready result")("iterator", ScanIterator->DebugString())("format", NKikimrDataEvents::EDataFormat_Name(DataFormat))
             ("columns", numColumns)("rows", numRows);
 
         switch (DataFormat) {
-            case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
-            case NKikimrTxDataShard::EScanDataFormat::CELLVEC: {
+            case NKikimrDataEvents::FORMAT_UNSPECIFIED:
+            case NKikimrDataEvents::FORMAT_CELLVEC: {
                 MakeResult(INIT_BATCH_ROWS);
                 NArrow::TArrowToYdbConverter batchConverter(ResultYqlSchema, *this);
                 TString errStr;
@@ -244,7 +244,7 @@ private:
                 Y_ABORT_UNLESS(ok, "%s", errStr.c_str());
                 break;
             }
-            case NKikimrTxDataShard::EScanDataFormat::ARROW: {
+            case NKikimrDataEvents::FORMAT_ARROW: {
                 MakeResult(0);
                 Result->ArrowBatch = batch;
                 Rows += batch->num_rows();
@@ -353,7 +353,7 @@ private:
         if (!Finished && !Result) {
             Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, ScanGen);
             if (reserveRows) {
-                Y_ABORT_UNLESS(DataFormat != NKikimrTxDataShard::EScanDataFormat::ARROW);
+                Y_ABORT_UNLESS(DataFormat != NKikimrDataEvents::FORMAT_ARROW);
                 Result->Rows.reserve(reserveRows);
             }
         }
@@ -528,7 +528,7 @@ private:
     const ui64 TxId;
     const ui32 ScanGen;
     const ui64 RequestCookie;
-    const NKikimrTxDataShard::EScanDataFormat DataFormat;
+    const NKikimrDataEvents::EDataFormat DataFormat;
     const ui64 TabletId;
 
     std::vector<NOlap::TReadMetadataBase::TConstPtr> ReadMetadataRanges;

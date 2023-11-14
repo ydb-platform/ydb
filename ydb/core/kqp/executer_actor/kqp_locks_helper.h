@@ -7,8 +7,8 @@
 
 namespace NKikimr::NKqp {
 
-void BuildLocks(NKikimrMiniKQL::TResult& result, const TVector<NKikimrTxDataShard::TLock>& locks);
+void BuildLocks(NKikimrMiniKQL::TResult& result, const TVector<NKikimrDataEvents::TLock>& locks);
 
-NKikimrTxDataShard::TLock ExtractLock(const NYql::NDq::TMkqlValueRef& lock);
+NKikimrDataEvents::TLock ExtractLock(const NYql::NDq::TMkqlValueRef& lock);
 
 } // namespace NKikimr::NKqp

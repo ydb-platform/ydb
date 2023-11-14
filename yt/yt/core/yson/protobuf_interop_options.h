@@ -11,6 +11,17 @@ namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TResolveProtobufElementByYPathOptions
+{
+    bool AllowUnknownYsonFields = false;
+};
+
+DEFINE_ENUM(EUtf8Check,
+    (None)
+    (Log)
+    (Throw)
+);
+
 struct TProtobufWriterOptions
 {
     //! Keep: all unknown fields found during YSON parsing
@@ -33,7 +44,21 @@ struct TProtobufWriterOptions
     bool SkipRequiredFields = false;
 
     // Check if |string| fields contain actual UTF-8 strings.
-    bool CheckUtf8 = false;
+    EUtf8Check CheckUtf8 = EUtf8Check::None;
+};
+
+struct TProtobufParserOptions
+{
+    //! If |true| then fields with numbers not found in protobuf metadata are
+    //! silently skipped; otherwise an exception is thrown.
+    bool SkipUnknownFields = false;
+
+    //! If |true| then required fields not found in protobuf metadata are
+    //! silently skipped; otherwise an exception is thrown.
+    bool SkipRequiredFields = false;
+
+    // Check if |string| fields contain actual UTF-8 strings.
+    EUtf8Check CheckUtf8 = EUtf8Check::None;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

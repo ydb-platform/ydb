@@ -2,7 +2,7 @@
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
-#include <ydb/core/tx/ev_write/write_data.h>
+#include <ydb/core/tx/data_events/write_data.h>
 
 namespace NKikimr::NOlap {
 

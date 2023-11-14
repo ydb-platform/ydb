@@ -70,11 +70,11 @@ struct TEvKqpCompute {
             return Remote->SerializeToArcadiaStream(chunker);
         }
 
-        NKikimrTxDataShard::EScanDataFormat GetDataFormat() const {
+        NKikimrDataEvents::EDataFormat GetDataFormat() const {
             if (ArrowBatch != nullptr) {
-                return NKikimrTxDataShard::EScanDataFormat::ARROW;
+                return NKikimrDataEvents::FORMAT_ARROW;
             }
-            return NKikimrTxDataShard::EScanDataFormat::CELLVEC;
+            return NKikimrDataEvents::FORMAT_CELLVEC;
         }
 
 
@@ -128,15 +128,15 @@ struct TEvKqpCompute {
                 }
 
                 switch (GetDataFormat()) {
-                    case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
-                    case NKikimrTxDataShard::EScanDataFormat::CELLVEC: {
+                    case NKikimrDataEvents::FORMAT_UNSPECIFIED:
+                    case NKikimrDataEvents::FORMAT_CELLVEC: {
                         Remote->Record.MutableRows()->Reserve(Rows.size());
                         for (const auto& row: Rows) {
                             Remote->Record.AddRows(TSerializedCellVec::Serialize(row));
                         }
                         break;
                     }
-                    case NKikimrTxDataShard::EScanDataFormat::ARROW: {
+                    case NKikimrDataEvents::FORMAT_ARROW: {
                         Y_DEBUG_ABORT_UNLESS(ArrowBatch != nullptr);
                         auto* protoArrowBatch = Remote->Record.MutableArrowBatch();
                         protoArrowBatch->SetSchema(NArrow::SerializeSchema(*ArrowBatch->schema()));

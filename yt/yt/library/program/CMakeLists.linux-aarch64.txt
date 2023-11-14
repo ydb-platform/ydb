@@ -18,7 +18,6 @@ target_link_libraries(yt-library-program PUBLIC
   yt-yt-core
   core-service_discovery-yp
   yt-library-monitoring
-  yt-library-containers
   library-profiling-solomon
   library-profiling-tcmalloc
   library-profiling-perf

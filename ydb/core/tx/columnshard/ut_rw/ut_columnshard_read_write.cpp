@@ -1872,8 +1872,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId);
-        auto dataPtr = std::make_shared<TArrowDataConstructor>(schema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
-        evWrite->AddReplaceOp(tableId, dataPtr);
+        ui64 payloadIndex = NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, tableId, 1, schema, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
         TActorId sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
@@ -1882,7 +1882,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             TAutoPtr<NActors::IEventHandle> handle;
             auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
             UNIT_ASSERT(event);
-            UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::PREPARED);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
 
             auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(10, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
@@ -1917,8 +1917,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId);
-        auto dataPtr = std::make_shared<TArrowDataConstructor>(schema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
-        evWrite->AddReplaceOp(tableId, dataPtr);
+        ui64 payloadIndex = NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, tableId, 1, schema, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
         TActorId sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
@@ -1928,7 +1928,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             TAutoPtr<NActors::IEventHandle> handle;
             auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
             UNIT_ASSERT(event);
-            UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::PREPARED);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
 
             outdatedStep = event->Record.GetMaxStep() + 1;
             PlanWriteTx(runtime, sender, NOlap::TSnapshot(outdatedStep, txId + 1), false);
@@ -1961,8 +1961,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         UNIT_ASSERT(blobData.size() > TLimits::GetMaxBlobSize());
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId);
-        auto dataPtr = std::make_shared<TArrowDataConstructor>(schema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
-        evWrite->AddReplaceOp(tableId, dataPtr);
+        ui64 payloadIndex = NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, tableId, 1, schema, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
         TActorId sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
@@ -1971,7 +1971,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             TAutoPtr<NActors::IEventHandle> handle;
             auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
             UNIT_ASSERT(event);
-            UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::PREPARED);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
             PlanWriteTx(runtime, sender, NOlap::TSnapshot(11, txId));
         }
 

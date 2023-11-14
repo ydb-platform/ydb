@@ -388,7 +388,7 @@ private:
 
         record.SetMaxRows(Max<ui16>());
         record.SetMaxBytes(5_MB);
-        record.SetResultFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
 
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(request.Release(), shardId, true),
             IEventHandle::FlagTrackDelivery);
@@ -484,8 +484,8 @@ private:
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
-    TVector<NKikimrTxDataShard::TLock> Locks;
-    TVector<NKikimrTxDataShard::TLock> BrokenLocks;
+    TVector<NKikimrDataEvents::TLock> Locks;
+    TVector<NKikimrDataEvents::TLock> BrokenLocks;
     std::unique_ptr<TKqpStreamLookupWorker> StreamLookupWorker;
     ui64 ReadId = 0;
 

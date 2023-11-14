@@ -70,6 +70,9 @@ public:
 
     NObjectClient::TCellTag ClockClusterTag;
 
+    //! Path in Cypress with UDFs.
+    std::optional<NYPath::TYPath> UdfRegistryPath;
+
     REGISTER_YSON_STRUCT(TConnectionConfig);
 
     static void Register(TRegistrar registrar);

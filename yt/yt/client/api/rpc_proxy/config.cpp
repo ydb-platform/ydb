@@ -107,6 +107,9 @@ void TConnectionConfig::Register(TRegistrar registrar)
     registrar.Parameter("clock_cluster_tag", &TThis::ClockClusterTag)
         .Default(NObjectClient::InvalidCellTag);
 
+    registrar.Parameter("udf_registry_path", &TThis::UdfRegistryPath)
+        .Optional();
+
     registrar.Postprocessor([] (TThis* config) {
         if (!config->ProxyEndpoints && !config->ClusterUrl && !config->ProxyAddresses && !config->ProxyUnixDomainSocket) {
             THROW_ERROR_EXCEPTION("Either \"endpoints\" or \"cluster_url\" or \"proxy_addresses\" or \"proxy_unix_domain_socket\" must be specified");

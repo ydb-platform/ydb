@@ -58,9 +58,9 @@ SRCS(
     counters_mediator.proto
     counters.proto
     database_basic_sausage_metainfo.proto
+    data_events.proto
     datashard_load.proto
     drivemodel.proto
-    ev_write.proto
     export.proto
     external_sources.proto
     flat_tx_scheme.proto

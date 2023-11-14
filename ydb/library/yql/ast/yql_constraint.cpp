@@ -1574,7 +1574,7 @@ TPartOfConstraintNode<TOriginalConstraintNode>::GetCommonMapping(const TOriginal
 
 template<class TOriginalConstraintNode>
 void TPartOfConstraintNode<TOriginalConstraintNode>::UniqueMerge(TMapType& output, TMapType&& input) {
-    output.merge(std::move(input));
+    output.merge(input);
     while (!input.empty()) {
         const auto exists = input.extract(input.cbegin());
         auto& target = output[exists.key()];

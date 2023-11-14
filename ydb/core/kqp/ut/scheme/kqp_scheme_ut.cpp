@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
@@ -9,7 +9,6 @@
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/formats/arrow/serializer/full.h>
-
 #include <library/cpp/threading/local_executor/local_executor.h>
 
 #include <util/generic/serialized_enum.h>
@@ -5351,202 +5350,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto resultSuccess = session.ExecuteSchemeQuery("DROP EXTERNAL DATA SOURCE test").GetValueSync();
         UNIT_ASSERT_C(resultSuccess.GetStatus() == EStatus::SCHEME_ERROR, TStringBuilder{} << resultSuccess.GetStatus() << " " << resultSuccess.GetIssues().ToString());
     }
-}
-
-namespace {
-    class TTestHelper {
-    public:
-        class TColumnSchema {
-            YDB_ACCESSOR_DEF(TString, Name);
-            YDB_ACCESSOR_DEF(NScheme::TTypeId, Type);
-            YDB_FLAG_ACCESSOR(Nullable, true);
-        public:
-            TString BuildQuery() const {
-                auto str = TStringBuilder() << Name << " " << NScheme::GetTypeName(Type);
-                if (!NullableFlag) {
-                    str << " NOT NULL";
-                }
-                return str;
-            }
-        };
-
-        using TUpdatesBuilder = NColumnShard::TTableUpdatesBuilder;
-
-        class TColumnTableBase {
-            YDB_ACCESSOR_DEF(TString, Name);
-            YDB_ACCESSOR_DEF(TVector<TColumnSchema>, Schema);
-            YDB_ACCESSOR_DEF(TVector<TString>, PrimaryKey);
-            YDB_ACCESSOR_DEF(TVector<TString>, Sharding);
-            YDB_ACCESSOR(ui32, MinPartitionsCount, 1);
-        public:
-            TString BuildQuery() const {
-                auto str = TStringBuilder() << "CREATE " << GetObjectType() << " `" << Name << "`";
-                str << " (" << BuildColumnsStr(Schema) <<  ", PRIMARY KEY (" << JoinStrings(PrimaryKey, ", ") << "))";
-                if (!Sharding.empty()) {
-                    str << " PARTITION BY HASH(" << JoinStrings(Sharding, ", ") << ")";
-                }
-                str << " WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT =" << MinPartitionsCount << ");";
-                return str;
-            }
-
-            std::shared_ptr<arrow::Schema> GetArrowSchema(const TVector<TColumnSchema>& columns) {
-                std::vector<std::shared_ptr<arrow::Field>> result;
-                for (auto&& col : columns) {
-                    result.push_back(BuildField(col.GetName(), col.GetType(), col.IsNullable()));
-                }
-                return std::make_shared<arrow::Schema>(result);
-            }
-
-        private:
-            virtual TString GetObjectType() const = 0;
-            TString BuildColumnsStr(const TVector<TColumnSchema>& clumns) const {
-                TVector<TString> columnStr;
-                for (auto&& c : clumns) {
-                    columnStr.push_back(c.BuildQuery());
-                }
-                return JoinStrings(columnStr, ", ");
-            }
-
-            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeId& typeId, bool nullable) const {
-                switch(typeId) {
-                case NScheme::NTypeIds::Bool:
-                    return arrow::field(name, arrow::boolean(), nullable);
-                case NScheme::NTypeIds::Int8:
-                    return arrow::field(name, arrow::int8(), nullable);
-                case NScheme::NTypeIds::Int16:
-                    return arrow::field(name, arrow::int16(), nullable);
-                case NScheme::NTypeIds::Int32:
-                    return arrow::field(name, arrow::int32(), nullable);
-                case NScheme::NTypeIds::Int64:
-                    return arrow::field(name, arrow::int64(), nullable);
-                case NScheme::NTypeIds::Uint8:
-                    return arrow::field(name, arrow::uint8(), nullable);
-                case NScheme::NTypeIds::Uint16:
-                    return arrow::field(name, arrow::uint16(), nullable);
-                case NScheme::NTypeIds::Uint32:
-                    return arrow::field(name, arrow::uint32(), nullable);
-                case NScheme::NTypeIds::Uint64:
-                    return arrow::field(name, arrow::uint64(), nullable);
-                case NScheme::NTypeIds::Float:
-                    return arrow::field(name, arrow::float32(), nullable);
-                case NScheme::NTypeIds::Double:
-                    return arrow::field(name, arrow::float64(), nullable);
-                case NScheme::NTypeIds::String:
-                    return arrow::field(name, arrow::binary(), nullable);
-                case NScheme::NTypeIds::Utf8:
-                    return arrow::field(name, arrow::utf8(), nullable);
-                case NScheme::NTypeIds::Json:
-                    return arrow::field(name, arrow::utf8(), nullable);
-                case NScheme::NTypeIds::Yson:
-                    return arrow::field(name, arrow::binary(), nullable);
-                case NScheme::NTypeIds::Date:
-                    return arrow::field(name, arrow::uint16(), nullable);
-                case NScheme::NTypeIds::Datetime:
-                    return arrow::field(name, arrow::uint32(), nullable);
-                case NScheme::NTypeIds::Timestamp:
-                    return arrow::field(name, arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), nullable);
-                case NScheme::NTypeIds::Interval:
-                    return arrow::field(name, arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), nullable);
-                case NScheme::NTypeIds::JsonDocument:
-                    return arrow::field(name, arrow::binary(), nullable);
-                }
-                return nullptr;
-            }
-        };
-
-        class TColumnTable : public TColumnTableBase {
-        private:
-            TString GetObjectType() const override {
-                return "TABLE";
-            }
-        };
-
-        class TColumnTableStore : public TColumnTableBase {
-        private:
-            TString GetObjectType() const override {
-                return "TABLESTORE";
-            }
-        };
-
-    private:
-        TKikimrRunner Kikimr;
-        NYdb::NTable::TTableClient TableClient;
-        NYdb::NLongTx::TClient LongTxClient;
-        NYdb::NTable::TSession Session;
-
-    public:
-        TTestHelper(const TKikimrSettings& settings)
-            : Kikimr(settings)
-            , TableClient(Kikimr.GetTableClient())
-            , LongTxClient(Kikimr.GetDriver())
-            , Session(TableClient.CreateSession().GetValueSync().GetSession())
-        {}
-
-        TKikimrRunner& GetKikimr() {
-            return Kikimr;
-        }
-
-        NYdb::NTable::TSession& GetSession() {
-            return Session;
-        }
-
-        void CreateTable(const TColumnTableBase& table) {
-            std::cerr << (table.BuildQuery()) << std::endl;
-            auto result = Session.ExecuteSchemeQuery(table.BuildQuery()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        void InsertData(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const std::function<void()> onBeforeCommit = {}, const EStatus opStatus = EStatus::SUCCESS) {
-            NLongTx::TLongTxBeginResult resBeginTx = LongTxClient.BeginWriteTx().GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
-
-            auto txId = resBeginTx.GetResult().tx_id();
-            auto batch = updates.BuildArrow();
-            TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
-
-            NLongTx::TLongTxWriteResult resWrite =
-                    LongTxClient.Write(txId, table.GetName(), txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), opStatus, resWrite.Status().GetIssues().ToString());
-
-            if (onBeforeCommit) {
-                onBeforeCommit();
-            }
-
-            NLongTx::TLongTxCommitResult resCommitTx = LongTxClient.CommitTx(txId).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
-        }
-
-        void BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS) {
-            Y_UNUSED(opStatus);
-            NKikimr::Tests::NCS::THelper helper(Kikimr.GetTestServer());
-            auto batch = updates.BuildArrow();
-            helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
-        }
-
-        void ReadData(const TString& query, const TString& expected, const EStatus opStatus = EStatus::SUCCESS) {
-            auto it = TableClient.StreamExecuteScanQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get
-            TString result = StreamResultToYson(it, false, opStatus);
-            if (opStatus == EStatus::SUCCESS) {
-                UNIT_ASSERT_NO_DIFF(ReformatYson(result), ReformatYson(expected));
-            }
-        }
-
-        void RebootTablets(const TString& tableName) {
-            auto runtime = Kikimr.GetTestServer().GetRuntime();
-            TActorId sender = runtime->AllocateEdgeActor();
-            TVector<ui64> shards;
-            {
-                auto describeResult = DescribeTable(&Kikimr.GetTestServer(), sender, tableName);
-                for (auto shard : describeResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards()) {
-                    shards.push_back(shard);
-                }
-            }
-            for (auto shard : shards) {
-                RebootTablet(*runtime, shard, sender);
-            }
-        }
-    };
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapScheme) {

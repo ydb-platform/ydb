@@ -127,7 +127,7 @@ public:
         NKikimr::TControlWrapper PerRequestDataSizeLimit;
         NKikimr::TControlWrapper MaxShardCount;
         TVector<TPhysicalTxData> Transactions;
-        TMap<ui64, TVector<NKikimrTxDataShard::TLock>> DataShardLocks;
+        TMap<ui64, TVector<NKikimrDataEvents::TLock>> DataShardLocks;
         NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
         ELocksOp LocksOp = ELocksOp::Unspecified;
         TMaybe<ui64> AcquireLocksTxId;

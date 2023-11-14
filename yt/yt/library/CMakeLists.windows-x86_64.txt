@@ -6,9 +6,7 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(containers)
 add_subdirectory(monitoring)
-add_subdirectory(process)
 add_subdirectory(profiling)
 add_subdirectory(program)
 add_subdirectory(syncmap)

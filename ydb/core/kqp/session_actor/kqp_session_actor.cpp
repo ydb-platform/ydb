@@ -474,6 +474,7 @@ public:
             return;
         }
 
+
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
 
@@ -1478,6 +1479,8 @@ public:
             }
         }
 
+        response->SetQueryDiagnostics(QueryState->ReplayMessage);
+        
         // Result for scan query is sent directly to target actor.
         Y_ABORT_UNLESS(response->GetArena());
         if (QueryState->PreparedQuery && !QueryState->IsStreamResult()) {

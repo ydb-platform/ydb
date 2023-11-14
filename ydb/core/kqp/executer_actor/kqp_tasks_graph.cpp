@@ -860,19 +860,19 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
             case ETableKind::Unknown:
             case ETableKind::External:
             case ETableKind::SysView: {
-                protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+                protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
                 break;
             }
             case ETableKind::Datashard: {
                 if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) {
-                    protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+                    protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
                 } else {
-                    protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+                    protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
                 }
                 break;
             }
             case ETableKind::Olap: {
-                protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+                protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
                 break;
             }
         }

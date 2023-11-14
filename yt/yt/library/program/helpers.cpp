@@ -16,19 +16,14 @@
 
 #include <yt/yt/library/profiling/resource_tracker/resource_tracker.h>
 
-#include <yt/yt/library/containers/config.h>
-#include <yt/yt/library/containers/porto_resource_tracker.h>
-
 #include <yt/yt/core/logging/log_manager.h>
 
 #include <yt/yt/core/concurrency/execution_stack.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
-#include <yt/yt/core/concurrency/private.h>
 
 #include <tcmalloc/malloc_extension.h>
 
 #include <yt/yt/core/net/address.h>
-#include <yt/yt/core/net/local_address.h>
 
 #include <yt/yt/core/rpc/dispatcher.h>
 #include <yt/yt/core/rpc/grpc/dispatcher.h>
@@ -36,8 +31,6 @@
 #include <yt/yt/core/service_discovery/yp/service_discovery.h>
 
 #include <yt/yt/core/threading/spin_wait_slow_path_logger.h>
-
-#include <library/cpp/yt/threading/spin_wait_hook.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
@@ -235,10 +228,6 @@ void ConfigureSingletonsImpl(const TConfig& config)
         if (config->ResourceTrackerVCpuFactor.has_value()) {
             NProfiling::SetVCpuFactor(config->ResourceTrackerVCpuFactor.value());
         }
-    }
-
-    if (config->EnablePortoResourceTracker) {
-        NContainers::EnablePortoResourceTracker(config->PodSpec);
     }
 }
 

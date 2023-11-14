@@ -1151,7 +1151,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     };
 
     struct TInjectLocks {
-        NKikimrTxDataShard::TKqpLocks_ELocksOp Op = NKikimrTxDataShard::TKqpLocks::Commit;
+        NKikimrDataEvents::TKqpLocks::ELocksOp Op = NKikimrDataEvents::TKqpLocks::Commit;
         TVector<TLockInfo> Locks;
 
         TInjectLocks& AddLocks(const TVector<TLockInfo>& locks) {
@@ -1809,7 +1809,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         for (ui32 columnId : columns) {
             record.AddColumns(columnId);
         }
-        record.SetResultFormat(NKikimrTxDataShard::CELLVEC);
+        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
         return request;
     }
 

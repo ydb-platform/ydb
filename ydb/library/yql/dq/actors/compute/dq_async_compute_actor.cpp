@@ -83,7 +83,7 @@ public:
 
         Become(&TDqAsyncComputeActor::StateFuncWrapper<&TDqAsyncComputeActor::StateFuncBody>);
 
-        auto wakeup = [this]{ ContinueExecute(); };
+        auto wakeup = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
         std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(
             TxId, RuntimeSettings.UseSpilling, std::move(wakeup), TlsActivationContext->AsActorContext());
 
@@ -454,7 +454,7 @@ private:
             ForwardToCheckpoints(std::move(DeferredRestoreFromCheckpointEvent));
         }
 
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CATaskRunnerCreated);
     }
 
     bool ReadyToCheckpoint() const override {
@@ -690,7 +690,7 @@ private:
 
         TakeInputChannelDataRequests.erase(it);
 
-        ResumeExecution();
+        ResumeExecution(EResumeSource::AsyncPopFinished);
     }
 
     void SinkSend(ui64 index,

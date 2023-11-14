@@ -489,7 +489,7 @@ public:
             record.AddColumns(meta.Id);
         }
 
-        record.SetResultFormat(::NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+        record.SetResultFormat(::NKikimrDataEvents::FORMAT_CELLVEC);
 
         for (auto& key : keys) {
             request->Keys.emplace_back(TSerializedCellVec::Serialize(key));

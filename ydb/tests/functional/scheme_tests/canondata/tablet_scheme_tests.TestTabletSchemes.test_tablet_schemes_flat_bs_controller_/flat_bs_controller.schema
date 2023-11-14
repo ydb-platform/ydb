@@ -105,6 +105,11 @@
                 "ColumnId": 21,
                 "ColumnName": "CompatibilityInfo",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "UseSelfHealLocalPolicy",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -130,7 +135,8 @@
                     18,
                     19,
                     20,
-                    21
+                    21,
+                    22
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -110,10 +110,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPartIterator& it, NJson::TJsonValue* statInfo = nullptr) {
+    TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPartIterator& it, NJson::TJsonValue* statInfo = nullptr, NJson::TJsonValue* diagnostics = nullptr) {
         TVector<THashMap<TString, NYdb::TValue>> rows;
         if (statInfo) {
             *statInfo = NJson::JSON_NULL;
+        }
+        if (diagnostics) {
+            *diagnostics = NJson::JSON_NULL;
         }
         for (;;) {
             auto streamPart = it.ReadNext().GetValueSync();
@@ -129,6 +132,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 auto plan = streamPart.GetQueryStats().GetPlan();
                 if (plan && statInfo) {
                     UNIT_ASSERT(NJson::ReadJsonFastTree(*plan, statInfo));
+                }
+            }
+            
+            if (streamPart.HasDiagnostics()) {
+                TString diagnosticsString = streamPart.GetDiagnostics();
+                if (!diagnosticsString.empty() && diagnostics) {
+                    UNIT_ASSERT(NJson::ReadJsonFastTree(diagnosticsString, diagnostics));
                 }
             }
 
@@ -817,6 +827,64 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             const TString plan = jsonStat.GetStringRobust();
             Cerr << plan << Endl;
             UNIT_ASSERT(plan.find("NodesScanShards") != TString::npos);
+        }
+    }
+
+    Y_UNIT_TEST(SimpleQueryOlapDiagnostics) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
+
+        auto client = kikimr.GetTableClient();
+
+        {
+            TStreamExecScanQuerySettings settings;
+            settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT `resource_id`, `timestamp`
+                FROM `/Root/olapStore/olapTable`
+                ORDER BY `resource_id`, `timestamp`
+            )", settings).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            NJson::TJsonValue jsonDiagnostics;
+            CollectRows(it, nullptr, &jsonDiagnostics);
+            UNIT_ASSERT_C(!jsonDiagnostics.IsDefined(), "Query result diagnostics should be empty, but it's not");
+        }
+
+        {
+            TStreamExecScanQuerySettings settings;
+            settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+            settings.CollectFullDiagnostics(true);
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT `resource_id`, `timestamp`
+                FROM `/Root/olapStore/olapTable`
+                ORDER BY `resource_id`, `timestamp`
+            )", settings).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            NJson::TJsonValue jsonDiagnostics;
+            CollectRows(it, nullptr, &jsonDiagnostics);
+            UNIT_ASSERT(!jsonDiagnostics.IsNull());
+
+            UNIT_ASSERT_C(jsonDiagnostics.IsMap(), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_id"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("version"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_text"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_parameter_types"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("table_metadata"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("created_at"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_syntax"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_database"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_cluster"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_plan"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_type"), "Incorrect Diagnostics");
         }
     }
 

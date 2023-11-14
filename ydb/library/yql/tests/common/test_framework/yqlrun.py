@@ -85,7 +85,7 @@ class YQLRun(object):
 
     def yql_exec(self, program=None, program_file=None, files=None, urls=None,
                  run_sql=False, verbose=False, check_error=True, tables=None, pretty_plan=True,
-                 wait=True, parameters={}, extra_env={}):
+                 wait=True, parameters={}, extra_env={}, require_udf_resolver=False):
         del pretty_plan
 
         res_dir = self.res_dir
@@ -235,7 +235,8 @@ class YQLRun(object):
             else:
                 cmd += '--run '
 
-        if yql_utils.get_param('UDF_RESOLVER'):
+        if yql_utils.get_param('UDF_RESOLVER') or require_udf_resolver:
+            assert self.udf_resolver_binary, "Missing udf_resolver binary"
             cmd += '--udf-resolver=' + self.udf_resolver_binary + ' --scan-udfs '
             if not yatest.common.context.sanitize:
                 cmd += ' --udf-resolver-filter-syscalls '

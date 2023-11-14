@@ -884,9 +884,9 @@ protected:
             }
 
             if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) {
-                settings->SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+                settings->SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
             } else {
-                settings->SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+                settings->SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
             }
 
             if (snapshot.IsValid()) {

@@ -106,11 +106,6 @@ struct TProtobufElementResolveResult
     TStringBuf TailPath;
 };
 
-struct TResolveProtobufElementByYPathOptions
-{
-    bool AllowUnknownYsonFields = false;
-};
-
 //! Introspects a given #rootType and locates an element (represented
 //! by TProtobufElement discriminated union) at a given #path.
 //! Throws if some definite error occurs during resolve (i.e. a malformed
@@ -138,20 +133,6 @@ std::unique_ptr<IYsonConsumer> CreateProtobufWriter(
     const TProtobufWriterOptions& options = TProtobufWriterOptions());
 
 ////////////////////////////////////////////////////////////////////////////////
-
-struct TProtobufParserOptions
-{
-    //! If |true| then fields with numbers not found in protobuf metadata are
-    //! silently skipped; otherwise an exception is thrown.
-    bool SkipUnknownFields = false;
-
-    //! If |true| then required fields not found in protobuf metadata are
-    //! silently skipped; otherwise an exception is thrown.
-    bool SkipRequiredFields = false;
-
-    // Check if |string| fields contain actual UTF-8 strings.
-    bool CheckUtf8 = false;
-};
 
 //! Parses a byte sequence and translates it into IYsonConsumer calls.
 /*!

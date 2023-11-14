@@ -1017,30 +1017,38 @@ TEST(TYsonToProtobufTest, Entities)
 
 TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
 {
-    TProtobufWriterOptions options{
-        .CheckUtf8 = true,
-    };
+    for (auto option: {EUtf8Check::None, EUtf8Check::Log, EUtf8Check::Throw}) {
+        TProtobufWriterOptions options{
+            .CheckUtf8 = option,
+        };
 
-    TString invalidUtf8 = "\xc3\x28";
+        TString invalidUtf8 = "\xc3\x28";
 
-    auto check = [&] {
-        TEST_PROLOGUE_WITH_OPTIONS(TMessage, options)
-            .BeginMap()
-                .Item("string_field").Value(invalidUtf8)
-            .EndMap();
-    };
+        auto check = [&] {
+            TEST_PROLOGUE_WITH_OPTIONS(TMessage, options)
+                .BeginMap()
+                    .Item("string_field").Value(invalidUtf8)
+                .EndMap();
+        };
+        if (option == EUtf8Check::Throw) {
+            EXPECT_THROW_WITH_SUBSTRING(check(), "valid UTF-8");
+        } else {
+            EXPECT_NO_THROW(check());
+        }
 
-    EXPECT_THROW_WITH_SUBSTRING(check(), "valid UTF-8");
-
-    NProto::TMessage message;
-    message.set_string_field(invalidUtf8);
-    TString newYsonString;
-    TStringOutput newYsonOutputStream(newYsonString);
-    TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
-
-    EXPECT_THROW_WITH_SUBSTRING(
-        WriteProtobufMessage(&ysonWriter, message, TProtobufParserOptions{.CheckUtf8 = true}),
-        "valid UTF-8");
+        NProto::TMessage message;
+        message.set_string_field(invalidUtf8);
+        TString newYsonString;
+        TStringOutput newYsonOutputStream(newYsonString);
+        TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
+        if (option == EUtf8Check::Throw) {
+            EXPECT_THROW_WITH_SUBSTRING(
+                WriteProtobufMessage(&ysonWriter, message, TProtobufParserOptions{.CheckUtf8 = option}),
+                "valid UTF-8");
+        } else {
+            EXPECT_NO_THROW(WriteProtobufMessage(&ysonWriter, message, TProtobufParserOptions{.CheckUtf8 = option}));
+        }
+    }
 }
 
 TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)

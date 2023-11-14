@@ -56,11 +56,11 @@ public:
 
         auto taskRunner = TaskRunnerFactory(Task, RuntimeSettings.StatsMode, logger);
         SetTaskRunner(taskRunner);
-        auto wakeup = [this]{ ContinueExecute(); };
+        auto wakeup = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
         TDqTaskRunnerExecutionContext execCtx(TxId, RuntimeSettings.UseSpilling, std::move(wakeup), TlsActivationContext->AsActorContext());
         PrepareTaskRunner(execCtx);
 
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CABootstrap);
     }
 
     void FillExtraStats(NDqProto::TDqComputeActorStats* /* dst */, bool /* last */) {

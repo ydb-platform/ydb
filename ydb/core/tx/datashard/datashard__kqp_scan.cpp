@@ -40,7 +40,7 @@ public:
         NDataShard::TUserTable::TCPtr tableInfo, const TSmallVec<TSerializedTableRange>&& tableRanges,
         const TSmallVec<NTable::TTag>&& columnTags, const TSmallVec<bool>&& skipNullKeys,
         const NYql::NDqProto::EDqStatsMode& statsMode, ui64 timeoutMs, ui32 generation,
-        NKikimrTxDataShard::EScanDataFormat dataFormat)
+        NKikimrDataEvents::EDataFormat dataFormat)
         : TActor(&TKqpScan::StateScan)
         , ComputeActorId(computeActorId)
         , DatashardActorId(datashardActorId)
@@ -58,7 +58,7 @@ public:
         , Sleep(true)
         , IsLocal(computeActorId.NodeId() == datashardActorId.NodeId())
     {
-        if (DataFormat == NKikimrTxDataShard::EScanDataFormat::ARROW) {
+        if (DataFormat == NKikimrDataEvents::FORMAT_ARROW) {
             BatchBuilder = MakeHolder<NArrow::TArrowBatchBuilder>();
             TVector<std::pair<TString, NScheme::TTypeInfo>> schema;
             if (!Tags.empty()) {
@@ -384,12 +384,12 @@ private:
         if (!Result) {
             Result = MakeHolder<TEvKqpCompute::TEvScanData>(ScanId, Generation);
             switch (DataFormat) {
-                case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
-                case NKikimrTxDataShard::EScanDataFormat::CELLVEC: {
+                case NKikimrDataEvents::FORMAT_UNSPECIFIED:
+                case NKikimrDataEvents::FORMAT_CELLVEC: {
                     Result->Rows.reserve(INIT_BATCH_ROWS);
                     break;
                 }
-                case NKikimrTxDataShard::EScanDataFormat::ARROW: {
+                case NKikimrDataEvents::FORMAT_ARROW: {
                 }
             }
         }
@@ -405,12 +405,12 @@ private:
             CellvecBytes += std::max((ui64)8, (ui64)cell.Size());
         }
         switch (DataFormat) {
-            case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
-            case NKikimrTxDataShard::EScanDataFormat::CELLVEC: {
+            case NKikimrDataEvents::FORMAT_UNSPECIFIED:
+            case NKikimrDataEvents::FORMAT_CELLVEC: {
                 Result->Rows.emplace_back(TOwnedCellVec::Make(*row));
                 break;
             }
-            case NKikimrTxDataShard::EScanDataFormat::ARROW: {
+            case NKikimrDataEvents::FORMAT_ARROW: {
                 NKikimr::TDbTupleRef key;
                 Y_DEBUG_ABORT_UNLESS((*row).size() == Types.size());
                 NKikimr::TDbTupleRef value = NKikimr::TDbTupleRef(Types.data(), (*row).data(), Types.size());
@@ -433,7 +433,7 @@ private:
             }
             auto sendBytes = CellvecBytes;
 
-            if (DataFormat == NKikimrTxDataShard::EScanDataFormat::ARROW) {
+            if (DataFormat == NKikimrDataEvents::FORMAT_ARROW) {
                 FlushBatchToResult();
                 sendBytes = NArrow::GetBatchDataSize(Result->ArrowBatch);
                 // Batch is stored inside BatchBuilder until we flush it into Result. So we verify number of rows here.
@@ -516,7 +516,7 @@ private:
     const NYql::NDqProto::EDqStatsMode StatsMode;
     const TInstant Deadline;
     const ui32 Generation;
-    const NKikimrTxDataShard::EScanDataFormat DataFormat;
+    const NKikimrDataEvents::EDataFormat DataFormat;
     TChunksLimiter ChunksLimiter;
     bool Sleep;
     const bool IsLocal;

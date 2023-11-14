@@ -69,6 +69,12 @@ static constexpr int ProtobufMapValueFieldNumber = 2;
 
 namespace {
 
+////////////////////////////////////////////////////////////////////////////////
+
+const NLogging::TLogger Logger("ProtobufInterop");
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool IsSignedIntegralType(FieldDescriptor::Type type)
 {
     switch (type) {
@@ -850,6 +856,30 @@ protected:
             }
         }
     }
+
+    void ValidateString(TStringBuf data, EUtf8Check checkOption, TString fieldFullName)
+    {
+        if (checkOption == EUtf8Check::None || IsUtf(data)) {
+            return;
+        }
+        switch (checkOption) {
+            case EUtf8Check::None:
+                break;
+            case EUtf8Check::Log:
+                YT_LOG_WARNING("Field %v accepts only valid UTF-8 sequence, but got (%Qv)",
+                    YPathStack_.GetHumanReadablePath(),
+                    data);
+                break;
+            case EUtf8Check::Throw:
+                THROW_ERROR_EXCEPTION("Field %v accepts only valid UTF-8 sequence, but got (%Qv)",
+                    YPathStack_.GetHumanReadablePath(),
+                    data)
+                    << TErrorAttribute("ypath", YPathStack_.GetPath())
+                    << TErrorAttribute("proto_field", fieldFullName);
+                break;
+        }
+    }
+
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -954,12 +984,7 @@ private:
             const auto* field = FieldStack_.back().Field;
             switch (field->GetType()) {
                 case FieldDescriptor::TYPE_STRING:
-                    if (Options_.CheckUtf8 && !IsUtf(value)) {
-                        THROW_ERROR_EXCEPTION("Field %v accepts only valid UTF-8 sequence",
-                            YPathStack_.GetHumanReadablePath())
-                            << TErrorAttribute("ypath", YPathStack_.GetPath())
-                            << TErrorAttribute("proto_field", field->GetFullName());
-                    }
+                    ValidateString(value, Options_.CheckUtf8, field->GetFullName());
                 case FieldDescriptor::TYPE_BYTES:
                     BodyCodedStream_.WriteVarint64(value.length());
                     BodyCodedStream_.WriteRaw(value.begin(), static_cast<int>(value.length()));
@@ -2475,11 +2500,8 @@ private:
                                 << TErrorAttribute("proto_field", field->GetFullName());
                         }
                         TStringBuf data(PooledString_.data(), length);
-                        if (Options_.CheckUtf8 && field->GetType() == FieldDescriptor::TYPE_STRING && !IsUtf(data)) {
-                            THROW_ERROR_EXCEPTION("Field %v expected to contain valid UTF-8 sequence",
-                                YPathStack_.GetHumanReadablePath())
-                                << TErrorAttribute("ypath", YPathStack_.GetPath())
-                                << TErrorAttribute("proto_field", field->GetFullName());
+                        if (field->GetType() == FieldDescriptor::TYPE_STRING) {
+                            ValidateString(data, Options_.CheckUtf8, field->GetFullName());
                         }
                         ParseScalar([&] {
                             if (field->GetBytesFieldConverter()) {

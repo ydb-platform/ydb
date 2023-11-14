@@ -22,8 +22,6 @@
 
 #include <yt/yt/library/profiling/solomon/exporter.h>
 
-#include <yt/yt/library/containers/config.h>
-
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
 #include <library/cpp/yt/stockpile/stockpile.h>
@@ -149,9 +147,7 @@ public:
     TStockpileConfigPtr Stockpile;
     bool EnableRefCountedTrackerProfiling;
     bool EnableResourceTracker;
-    bool EnablePortoResourceTracker;
     std::optional<double> ResourceTrackerVCpuFactor;
-    NContainers::TPodSpecConfigPtr PodSpec;
     THeapProfilerConfigPtr HeapProfiler;
 
     REGISTER_YSON_STRUCT(TSingletonsConfig);

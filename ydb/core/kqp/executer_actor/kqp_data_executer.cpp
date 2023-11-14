@@ -2058,8 +2058,8 @@ private:
             bool needCommit = Request.LocksOp == ELocksOp::Commit || VolatileTx;
 
             auto locksOp = needCommit
-                ? NKikimrTxDataShard::TKqpLocks::Commit
-                : NKikimrTxDataShard::TKqpLocks::Rollback;
+                ? NKikimrDataEvents::TKqpLocks::Commit
+                : NKikimrDataEvents::TKqpLocks::Rollback;
 
             absl::flat_hash_set<ui64> sendingShardsSet;
             absl::flat_hash_set<ui64> receivingShardsSet;
@@ -2139,13 +2139,13 @@ private:
 
                 for (auto& [_, tx] : topicTxs) {
                     switch (locksOp) {
-                    case NKikimrTxDataShard::TKqpLocks::Commit:
+                    case NKikimrDataEvents::TKqpLocks::Commit:
                         tx.SetOp(NKikimrPQ::TDataTransaction::Commit);
                         break;
-                    case NKikimrTxDataShard::TKqpLocks::Rollback:
+                    case NKikimrDataEvents::TKqpLocks::Rollback:
                         tx.SetOp(NKikimrPQ::TDataTransaction::Rollback);
                         break;
-                    case NKikimrTxDataShard::TKqpLocks::Unspecified:
+                    case NKikimrDataEvents::TKqpLocks::Unspecified:
                         break;
                     }
 
@@ -2403,7 +2403,7 @@ private:
 
     ui64 TxCoordinator = 0;
     THashMap<ui64, TShardState> ShardStates;
-    TVector<NKikimrTxDataShard::TLock> Locks;
+    TVector<NKikimrDataEvents::TLock> Locks;
     bool ReadOnlyTx = true;
     bool VolatileTx = false;
     bool ImmediateTx = false;

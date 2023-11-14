@@ -2,17 +2,15 @@
 
 PY3_LIBRARY()
 
-VERSION(8.16.1)
+VERSION(8.17.1)
 
 LICENSE(BSD-3-Clause)
 
 PEERDIR(
     contrib/python/Pygments
-    contrib/python/backcall
     contrib/python/decorator
     contrib/python/jedi
     contrib/python/matplotlib-inline
-    contrib/python/pickleshare
     contrib/python/prompt-toolkit
     contrib/python/stack-data
     contrib/python/traitlets

@@ -256,7 +256,7 @@ protected:
     }
 
     STFUNC(BaseStateFuncBody) {
-        MetricsReporter.ReportEvent(ev->GetTypeRewrite());
+        MetricsReporter.ReportEvent(ev->GetTypeRewrite(), ev);
 
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDqCompute::TEvResumeExecution, HandleExecuteBase);
@@ -426,7 +426,7 @@ protected:
             // n.b. if c) is not satisfied we will also call ContinueExecute on branch
             // "status != ERunStatus::Finished -> !pollSent -> ProcessOutputsState.DataWasSent"
             // but idk what is the logic behind this
-            ContinueExecute();
+            ContinueExecute(EResumeSource::CAPendingInput);
             return;
         }
 
@@ -442,7 +442,7 @@ protected:
             }
             if (!pollSent) {
                 if (ProcessOutputsState.DataWasSent) {
-                    ContinueExecute();
+                    ContinueExecute(EResumeSource::CADataSent);
                 }
                 return;
             }
@@ -451,7 +451,7 @@ protected:
         if (status == ERunStatus::PendingOutput) {
             if (ProcessOutputsState.DataWasSent) {
                 // we have sent some data, so we have space in output channel(s)
-                ContinueExecute();
+                ContinueExecute(EResumeSource::CAPendingOutput);
             }
             return;
         }
@@ -649,10 +649,10 @@ protected:
         return std::move(log);
     }
 
-    void ContinueExecute() {
+    void ContinueExecute(EResumeSource source = EResumeSource::Default) {
         if (!ResumeEventScheduled && Running) {
             ResumeEventScheduled = true;
-            this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution());
+            this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution{source});
         }
     }
 
@@ -694,7 +694,7 @@ public:
             Channels->SendChannelDataAck(channel->GetChannelId(), channel->GetFreeSpace());
         }
 
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CATakeInput);
     }
 
     void PeerFinished(ui64 channelId) override {
@@ -718,8 +718,8 @@ public:
         DoExecute();
     }
 
-    void ResumeExecution() override {
-        ContinueExecute();
+    void ResumeExecution(EResumeSource source) override {
+        ContinueExecute(source);
     }
 
     void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
@@ -734,12 +734,12 @@ public:
 
     void OnSinkFinished(ui64 outputIndex) override {
         SinksMap.at(outputIndex).FinishIsAcknowledged = true;
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CASinkFinished);
     }
 
     void OnTransformFinished(ui64 outputIndex) override {
         OutputTransformsMap.at(outputIndex).FinishIsAcknowledged = true;
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CATransformFinished);
     }
 
 protected:
@@ -876,7 +876,7 @@ protected:
     void Start() override {
         Running = true;
         State = NDqProto::COMPUTE_STATE_EXECUTING;
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CAStart);
     }
 
     void Stop() override {
@@ -1724,7 +1724,7 @@ protected:
                 // If we have read some data, we must run such reading again
                 // to process the case when async input notified us about new data
                 // but we haven't read all of it.
-                ContinueExecute();
+                ContinueExecute(EResumeSource::CAPollAsync);
             }
 
             MetricsReporter.ReportAsyncInputData(inputIndex, batch.RowCount(), space, watermark);
@@ -1743,7 +1743,7 @@ protected:
             AsyncInputPush(std::move(batch), info, space, finished);
         } else {
             CA_LOG_T("Skip polling async input[" << inputIndex << "]: no free space: " << freeSpace);
-            ContinueExecute(); // If there is no free space in buffer, => we have something to process
+            ContinueExecute(EResumeSource::CAPollAsyncNoSpace); // If there is no free space in buffer, => we have something to process
         }
     }
 
@@ -1772,7 +1772,7 @@ protected:
             SourceCpuTimeMs->Add(cpuTimeDelta.MilliSeconds());
         }
         CpuTimeSpent += cpuTimeDelta;
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CANewAsyncInput);
     }
 
     void OnAsyncInputError(const IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr& ev) {

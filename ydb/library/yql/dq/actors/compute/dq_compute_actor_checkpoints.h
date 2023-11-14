@@ -76,7 +76,7 @@ public:
 
         virtual void Start() = 0;
         virtual void Stop() = 0;
-        virtual void ResumeExecution() = 0;
+        virtual void ResumeExecution(EResumeSource source) = 0;
 
         virtual void LoadState(NDqProto::TComputeActorState&& state) = 0;
 

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.2.8)
+VERSION(0.2.9)
 
 LICENSE(MIT)
 
@@ -11,6 +11,7 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     wcwidth/__init__.py
+    wcwidth/emoji_zwj_sequences.py
     wcwidth/table_wide.py
     wcwidth/table_zero.py
     wcwidth/unicode_versions.py

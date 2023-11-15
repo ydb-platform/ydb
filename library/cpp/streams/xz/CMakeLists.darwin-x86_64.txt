@@ -6,9 +6,13 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(brotli)
-add_subdirectory(bzip2)
-add_subdirectory(lzma)
-add_subdirectory(xz)
-add_subdirectory(zc_memory_input)
-add_subdirectory(zstd)
+
+add_library(cpp-streams-xz)
+target_link_libraries(cpp-streams-xz PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-lzma
+)
+target_sources(cpp-streams-xz PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/streams/xz/decompress.cpp
+)

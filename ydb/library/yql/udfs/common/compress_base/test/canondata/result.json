@@ -1,0 +1,12 @@
+{
+    "test.test[RoundTrip]": [
+        {
+            "uri": "file://test.test_RoundTrip_/results.txt"
+        }
+    ],
+    "test.test[TryDecompress]": [
+        {
+            "uri": "file://test.test_TryDecompress_/results.txt"
+        }
+    ]
+}

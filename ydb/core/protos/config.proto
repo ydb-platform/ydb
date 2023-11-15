@@ -51,6 +51,12 @@ message TActorSystemConfig {
         HYBRID = 3;
     }
 
+    enum EActorSystemProfile {
+        DEFAULT = 1;
+        LOW_CPU_CONSUMPTION = 2;   
+        LOW_LATENCY = 3;
+    }
+
     message TExecutor {
         enum EType {
             BASIC = 1;
@@ -132,6 +138,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
 
     optional bool MonitorStuckActors = 15;
+    optional EActorSystemProfile ActorSystemProfile = 16;
 }
 
 message TStaticNameserviceConfig {

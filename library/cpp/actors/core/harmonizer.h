@@ -6,6 +6,9 @@
 namespace NActors {
     class IExecutorPool;
 
+    template <typename T>
+    struct TWaitingStats;
+
     struct TPoolHarmonizerStats {
         ui64 IncreasingThreadsByNeedyState = 0;
         ui64 IncreasingThreadsByExchange = 0;
@@ -27,6 +30,9 @@ namespace NActors {
         i64 MinConsumedCpu = 0.0;
         i64 MaxBookedCpu = 0.0;
         i64 MinBookedCpu = 0.0;
+
+        double AvgAwakeningTimeUs = 0;
+        double AvgWakingUpTimeUs = 0;
     };
 
     // Pool cpu harmonizer

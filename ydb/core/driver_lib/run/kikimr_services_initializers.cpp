@@ -269,6 +269,18 @@ TDuration GetSelfPingInterval(const NKikimrConfig::TActorSystemConfig& systemCon
         : TDuration::MilliSeconds(10);
 }
 
+
+NActors::EASProfile ConvertActorSystemProfile(NKikimrConfig::TActorSystemConfig::EActorSystemProfile profile) {
+    switch (profile) {
+    case NKikimrConfig::TActorSystemConfig::DEFAULT:
+        return NActors::EASProfile::Default;
+    case NKikimrConfig::TActorSystemConfig::LOW_CPU_CONSUMPTION:
+        return NActors::EASProfile::LowCpuConsumption;
+    case NKikimrConfig::TActorSystemConfig::LOW_LATENCY:
+        return NActors::EASProfile::LowLatency;
+    }
+}
+
 void AddExecutorPool(
     TCpuManagerConfig& cpuManager,
     const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig,
@@ -305,6 +317,7 @@ void AddExecutorPool(
         } else if (systemConfig.HasEventsPerMailbox()) {
             basic.EventsPerMailbox = systemConfig.GetEventsPerMailbox();
         }
+        basic.ActorSystemProfile = ConvertActorSystemProfile(systemConfig.GetActorSystemProfile());
         Y_ABORT_UNLESS(basic.EventsPerMailbox != 0);
         basic.MinThreadCount = poolConfig.GetMinThreads();
         basic.MaxThreadCount = poolConfig.GetMaxThreads();

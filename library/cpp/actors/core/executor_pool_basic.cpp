@@ -13,6 +13,10 @@
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
+
+    const double TWaitingStatsConstants::HistogramResolutionUs = MaxSpinThersholdUs / BucketCount;
+    const ui64 TWaitingStatsConstants::HistogramResolution = NHPTimer::GetCyclesPerSecond() * 0.000001 * HistogramResolutionUs;
+
     constexpr TDuration TBasicExecutorPool::DEFAULT_TIME_PER_MAILBOX;
 
     TBasicExecutorPool::TBasicExecutorPool(
@@ -31,9 +35,11 @@ namespace NActors {
         i16 defaultThreadCount,
         i16 priority)
         : TExecutorPoolBase(poolId, threads, affinity)
-        , SpinThreshold(spinThreshold)
-        , SpinThresholdCycles(spinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
-        , Threads(new TThreadCtx[threads])
+        , DefaultSpinThresholdCycles(spinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
+        , SpinThresholdCycles(DefaultSpinThresholdCycles)
+        , SpinThresholdCyclesPerThread(new NThreading::TPadded<std::atomic<ui64>>[threads])
+        , Threads(new NThreading::TPadded<TThreadCtx>[threads])
+        , WaitingStats(new TWaitingStats<ui64>[threads])
         , PoolName(poolName)
         , TimePerMailbox(timePerMailbox)
         , EventsPerMailbox(eventsPerMailbox)
@@ -56,6 +62,14 @@ namespace NActors {
             } else {
                 LocalQueueSize = NFeatures::TLocalQueuesFeatureFlags::MIN_LOCAL_QUEUE_SIZE;
             }
+        }
+        if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
+            for (ui32 idx = 0; idx < threads; ++idx) {
+                SpinThresholdCyclesPerThread[idx].store(0);
+            }
+        }
+        if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
+            MovingWaitingStats.Reset(new TWaitingStats<double>[threads]);
         }
 
         Y_UNUSED(maxActivityType);
@@ -99,6 +113,7 @@ namespace NActors {
     {
         SetSharedExecutorsCount(cfg.SharedExecutorsCount);
         SoftProcessingDurationTs = cfg.SoftProcessingDurationTs;
+        ActorSystemProfile = cfg.ActorSystemProfile;
     }
 
     TBasicExecutorPool::~TBasicExecutorPool() {
@@ -109,7 +124,7 @@ namespace NActors {
         do {
             timers.HPNow = GetCycleCountFast();
             timers.Elapsed += timers.HPNow - timers.HPStart;
-            if (threadCtx.Pad.Park()) // interrupted
+            if (threadCtx.WaitingPad.Park()) // interrupted
                 return true;
             timers.HPStart = GetCycleCountFast();
             timers.Parked += timers.HPStart - timers.HPNow;
@@ -117,31 +132,25 @@ namespace NActors {
         return false;
     }
 
-    void TBasicExecutorPool::GoToSpin(TThreadCtx& threadCtx) {
-        ui64 start = GetCycleCountFast();
-        bool doSpin = true;
-        while (true) {
-            for (ui32 j = 0; doSpin && j < 12; ++j) {
-                if (GetCycleCountFast() >= (start + SpinThresholdCycles)) {
-                    doSpin = false;
-                    break;
-                }
-                for (ui32 i = 0; i < 12; ++i) {
-                    if (AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_ACTIVE) {
-                        SpinLockPause();
-                    } else {
-                        doSpin = false;
-                        break;
-                    }
-                }
-            }
-            if (!doSpin) {
-                break;
-            }
-            if (RelaxedLoad(&StopFlag)) {
-                break;
-            }
+    ui32 TBasicExecutorPool::GoToSpin(TThreadCtx& threadCtx, i64 start, i64 &end) {
+        ui32 spinPauseCount = 0;
+        i64 spinThresholdCycles = 0;
+        if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
+            spinThresholdCycles = SpinThresholdCyclesPerThread[TlsThreadContext->WorkerId].load();
+        } else {
+            spinThresholdCycles = SpinThresholdCycles.load();
         }
+        do {
+            end = GetCycleCountFast();
+            if (end >= (start + spinThresholdCycles) || AtomicLoad(&threadCtx.WaitingFlag) != TThreadCtx::WS_ACTIVE) {
+                return spinPauseCount;
+            }
+
+            SpinLockPause();
+            spinPauseCount++;
+        } while (!RelaxedLoad(&StopFlag));
+
+        return spinPauseCount;
     }
 
     bool TBasicExecutorPool::GoToWaiting(TThreadCtx& threadCtx, TTimers &timers, bool needToBlock) {
@@ -161,25 +170,54 @@ namespace NActors {
         }
 #endif
 
+        i64 startWaiting = GetCycleCountFast();
+        i64 endSpinning = 0;
         TAtomic state = AtomicLoad(&threadCtx.WaitingFlag);
+        bool wasSleeping = false;
         Y_ABORT_UNLESS(state == TThreadCtx::WS_NONE, "WaitingFlag# %d", int(state));
 
-        if (SpinThreshold > 0 && !needToBlock) {
+        if (SpinThresholdCycles > 0 && !needToBlock) {
             // spin configured period
             AtomicSet(threadCtx.WaitingFlag, TThreadCtx::WS_ACTIVE);
-            GoToSpin(threadCtx);
+            ui32 spinPauseCount = GoToSpin(threadCtx, startWaiting, endSpinning);
+            SpinningTimeUs += endSpinning - startWaiting;
             // then - sleep
             if (AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_ACTIVE) {
                 if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_BLOCKED, TThreadCtx::WS_ACTIVE)) {
+                    if (NFeatures::TCommonFeatureFlags::ProbeSpinCycles) {
+                            LWPROBE(SpinCycles, PoolId, PoolName, spinPauseCount, true);
+                    }
+
+                    wasSleeping = true;
                     if (GoToSleep(threadCtx, timers)) {  // interrupted
                         return true;
                     }
+                    AllThreadsSleep.store(false);
                 }
+            }
+            if (NFeatures::TCommonFeatureFlags::ProbeSpinCycles && !wasSleeping) {
+                LWPROBE(SpinCycles, PoolId, PoolName, spinPauseCount, false);
             }
         } else {
             AtomicSet(threadCtx.WaitingFlag, TThreadCtx::WS_BLOCKED);
+            wasSleeping = true;
             if (GoToSleep(threadCtx, timers)) {  // interrupted
                 return true;
+            }
+            AllThreadsSleep.store(false);
+        }
+
+        i64 needTimeTs = threadCtx.StartWakingTs.exchange(0);
+        if (wasSleeping && needTimeTs) {
+            ui64 waitingDuration = std::max<i64>(0, needTimeTs - startWaiting);
+            ui64 awakingDuration = std::max<i64>(0, GetCycleCountFast() - needTimeTs);
+            WaitingStats[TlsThreadContext->WorkerId].AddAwakening(waitingDuration, awakingDuration);
+        } else {
+            ui64 waitingDuration = std::max<i64>(0, endSpinning - startWaiting);
+            if (wasSleeping) {
+                WaitingStats[TlsThreadContext->WorkerId].AddFastAwakening(waitingDuration);
+            } else {
+                WaitingStats[TlsThreadContext->WorkerId].Add(waitingDuration);
             }
         }
 
@@ -225,6 +263,9 @@ namespace NActors {
 
             if (semaphore.OldSemaphore == 0) {
                 semaphore.CurrentSleepThreadCount++;
+                if (semaphore.CurrentSleepThreadCount == AtomicLoad(&ThreadCount)) {
+                    AllThreadsSleep.store(true);
+                }
                 x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), x);
                 if (x == oldX) {
                     *needToWait = true;
@@ -327,6 +368,25 @@ namespace NActors {
     }
 
     inline void TBasicExecutorPool::WakeUpLoop(i16 currentThreadCount) {
+        if (AllThreadsSleep) {
+            TThreadCtx& hotThreadCtx = Threads[0];
+            if (AtomicCas(&hotThreadCtx.WaitingFlag, TThreadCtx::WS_NONE, TThreadCtx::WS_ACTIVE)) {
+                return;
+            }
+
+            TThreadCtx& coldThreadCtx = Threads[AtomicLoad(&ThreadCount) - 1];
+            if (AtomicCas(&coldThreadCtx.WaitingFlag, TThreadCtx::WS_NONE, TThreadCtx::WS_BLOCKED)) {
+                if (TlsThreadContext && TlsThreadContext->WaitingStats) {
+                    ui64 beforeUnpark = GetCycleCountFast();
+                    coldThreadCtx.StartWakingTs = beforeUnpark;
+                    coldThreadCtx.WaitingPad.Unpark();
+                    TlsThreadContext->WaitingStats->AddWakingUp(GetCycleCountFast() - beforeUnpark);
+                } else {
+                    coldThreadCtx.WaitingPad.Unpark();
+                }
+                return;
+            }
+        }
         for (i16 i = 0;;) {
             TThreadCtx& threadCtx = Threads[i];
             TThreadCtx::EWaitState state = static_cast<TThreadCtx::EWaitState>(AtomicLoad(&threadCtx.WaitingFlag));
@@ -341,7 +401,14 @@ namespace NActors {
                 case TThreadCtx::WS_BLOCKED:
                     if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_NONE, state)) {
                         if (state  == TThreadCtx::WS_BLOCKED) {
-                            threadCtx.Pad.Unpark();
+                            ui64 beforeUnpark = GetCycleCountFast();
+                            threadCtx.StartWakingTs = beforeUnpark;
+                            if (TlsThreadContext && TlsThreadContext->WaitingStats) {
+                                threadCtx.WaitingPad.Unpark();
+                                TlsThreadContext->WaitingStats->AddWakingUp(GetCycleCountFast() - beforeUnpark);
+                            } else {
+                                threadCtx.WaitingPad.Unpark();
+                            }
                         }
                         if (i >= currentThreadCount) {
                             AtomicIncrement(WrongWakenedThreadCount);
@@ -355,12 +422,12 @@ namespace NActors {
         }
     }
 
-    void TBasicExecutorPool::ScheduleActivationExCommon(ui32 activation, ui64 revolvingCounter) {
+    void TBasicExecutorPool::ScheduleActivationExCommon(ui32 activation, ui64 revolvingCounter, TAtomic x) {
+        TSemaphore semaphore = TSemaphore::GetSemaphore(x);
+
         Activations.Push(activation, revolvingCounter);
         bool needToWakeUp = false;
 
-        TAtomic x = AtomicGet(Semaphore);
-        TSemaphore semaphore = TSemaphore::GetSemaphore(x);
         do {
             needToWakeUp = semaphore.CurrentSleepThreadCount > SharedExecutorsCount;
             i64 oldX = semaphore.ConverToI64();
@@ -386,15 +453,39 @@ namespace NActors {
                 LocalQueues[TlsThreadContext->WorkerId].push(activation);
                 return;
             }
+            if (ActorSystemProfile != EASProfile::Default) {
+                TAtomic x = AtomicGet(Semaphore);
+                TSemaphore semaphore = TSemaphore::GetSemaphore(x);
+                if constexpr (NFeatures::TLocalQueuesFeatureFlags::UseIfAllOtherThreadsAreSleeping) {
+                    if (semaphore.CurrentSleepThreadCount == semaphore.CurrentThreadCount - 1 && semaphore.OldSemaphore == 0) {
+                        if (LocalQueues[TlsThreadContext->WorkerId].empty()) {
+                            LocalQueues[TlsThreadContext->WorkerId].push(activation);
+                            return;
+                        }
+                    }
+                }
+
+                if constexpr (NFeatures::TLocalQueuesFeatureFlags::UseOnMicroburst) {
+                    if (semaphore.OldSemaphore >= semaphore.CurrentThreadCount) {
+                        if (LocalQueues[TlsThreadContext->WorkerId].empty() && TlsThreadContext->WriteTurn < 1) {
+                            TlsThreadContext->WriteTurn++;
+                            LocalQueues[TlsThreadContext->WorkerId].push(activation);
+                            return;
+                        }
+                    }
+                }
+                ScheduleActivationExCommon(activation, revolvingWriteCounter, x);
+                return;
+            }
         }
-        ScheduleActivationExCommon(activation, revolvingWriteCounter);
+        ScheduleActivationExCommon(activation, revolvingWriteCounter, AtomicGet(Semaphore));
     }
 
     void TBasicExecutorPool::ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) {
         if constexpr (NFeatures::IsLocalQueues()) {
             ScheduleActivationExLocalQueue(activation, revolvingCounter);
         } else {
-            ScheduleActivationExCommon(activation, revolvingCounter);
+            ScheduleActivationExCommon(activation, revolvingCounter, AtomicGet(Semaphore));
         }
     }
 
@@ -404,6 +495,8 @@ namespace NActors {
         poolStats.CurrentThreadCount = RelaxedLoad(&ThreadCount);
         poolStats.DefaultThreadCount = DefaultThreadCount;
         poolStats.MaxThreadCount = MaxThreadCount;
+        poolStats.SpinningTimeUs = Ts2Us(SpinningTimeUs);
+        poolStats.SpinThresholdUs = Ts2Us(SpinThresholdCycles);
         if (Harmonizer) {
             TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);
             poolStats.IsNeedy = stats.IsNeedy;
@@ -487,7 +580,7 @@ namespace NActors {
         AtomicStore(&StopFlag, true);
         for (i16 i = 0; i != PoolThreads; ++i) {
             Threads[i].Thread->StopFlag = true;
-            Threads[i].Pad.Interrupt();
+            Threads[i].WaitingPad.Interrupt();
         }
     }
 
@@ -596,6 +689,61 @@ namespace NActors {
     void TBasicExecutorPool::SetLocalQueueSize(ui16 size) {
         if constexpr (!NFeatures::TLocalQueuesFeatureFlags::FIXED_LOCAL_QUEUE_SIZE) {
             LocalQueueSize.store(std::max(size, NFeatures::TLocalQueuesFeatureFlags::MAX_LOCAL_QUEUE_SIZE), std::memory_order_relaxed);
+        }
+    }
+
+    void TBasicExecutorPool::Initialize(TWorkerContext& wctx) {
+        if (wctx.WorkerId >= 0) {
+            TlsThreadContext->WaitingStats = &WaitingStats[wctx.WorkerId];
+        }
+    }
+
+    void TBasicExecutorPool::SetSpinThresholdCycles(ui32 cycles) {
+        if (ActorSystemProfile == EASProfile::LowLatency) {
+            if (DefaultSpinThresholdCycles > cycles) {
+                cycles = DefaultSpinThresholdCycles;
+            }
+        }
+        SpinThresholdCycles = cycles;
+        double resolutionUs = TWaitingStatsConstants::HistogramResolutionUs;
+        ui32 bucketIdx = cycles / TWaitingStatsConstants::HistogramResolution;
+        LWPROBE(ChangeSpinThreshold, PoolId, PoolName, cycles, resolutionUs * bucketIdx, bucketIdx);
+    }
+
+    void TBasicExecutorPool::GetWaitingStats(TWaitingStats<ui64> &acc) const {
+        acc.Clear();
+        double resolutionUs = TWaitingStatsConstants::HistogramResolutionUs;
+        for (ui32 idx = 0; idx < ThreadCount; ++idx) {
+            for (ui32 bucketIdx = 0; bucketIdx < TWaitingStatsConstants::BucketCount; ++bucketIdx) {
+                LWPROBE(WaitingHistogramPerThread, PoolId, PoolName, idx, resolutionUs * bucketIdx, resolutionUs * (bucketIdx + 1), WaitingStats[idx].WaitingUntilNeedsTimeHist[bucketIdx].load());
+            }
+            acc.Add(WaitingStats[idx]);
+        }
+        for (ui32 bucketIdx = 0; bucketIdx < TWaitingStatsConstants::BucketCount; ++bucketIdx) {
+            LWPROBE(WaitingHistogram, PoolId, PoolName, resolutionUs * bucketIdx, resolutionUs * (bucketIdx + 1), acc.WaitingUntilNeedsTimeHist[bucketIdx].load());
+        }
+    }
+
+    void TBasicExecutorPool::ClearWaitingStats() const {
+        for (ui32 idx = 0; idx < ThreadCount; ++idx) {
+            WaitingStats[idx].Clear();
+        }
+    }
+
+    void TBasicExecutorPool::CalcSpinPerThread(ui64 wakingUpConsumption) {
+        for (i16 threadIdx = 0; threadIdx < PoolThreads; ++threadIdx) {
+            ui64 newSpinThreshold = 0;
+            if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
+                MovingWaitingStats[threadIdx].Add(WaitingStats[threadIdx], 0.8, 0.2);
+                newSpinThreshold = MovingWaitingStats[threadIdx].CalculateGoodSpinThresholdCycles(wakingUpConsumption);
+            } else {
+                newSpinThreshold = WaitingStats[threadIdx].CalculateGoodSpinThresholdCycles(wakingUpConsumption);
+            }
+            SpinThresholdCyclesPerThread[threadIdx].store(newSpinThreshold);
+
+            double resolutionUs = TWaitingStatsConstants::HistogramResolutionUs;
+            ui32 bucketIdx = newSpinThreshold / TWaitingStatsConstants::HistogramResolution;
+            LWPROBE(ChangeSpinThresholdPerThread, PoolId, PoolName, threadIdx, newSpinThreshold, resolutionUs * bucketIdx, bucketIdx);
         }
     }
 }

@@ -2,6 +2,7 @@
 
 #include "actorsystem.h"
 #include "executor_thread.h"
+#include "executor_pool_basic_feature_flags.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
 #include "harmonizer.h"
@@ -17,17 +18,117 @@
 #include <queue>
 
 namespace NActors {
+
+    struct TWaitingStatsConstants {
+        static constexpr ui64 BucketCount = 128;
+        static constexpr double MaxSpinThersholdUs = 12.8;
+
+        static constexpr ui64 KnownAvgWakingUpTime = 4250;
+        static constexpr ui64 KnownAvgAwakeningTime = 7000;
+
+        static const double HistogramResolutionUs;
+        static const ui64 HistogramResolution;
+    };
+
+    template <typename T>
+    struct TWaitingStats : TWaitingStatsConstants {
+        std::array<std::atomic<T>, BucketCount> WaitingUntilNeedsTimeHist;
+
+        std::atomic<T> WakingUpTotalTime;
+        std::atomic<T> WakingUpCount;
+        std::atomic<T> AwakingTotalTime;
+        std::atomic<T> AwakingCount;
+
+        TWaitingStats()
+        {
+            Clear();
+        }
+
+        void Clear() {
+            std::fill(WaitingUntilNeedsTimeHist.begin(), WaitingUntilNeedsTimeHist.end(), 0);
+            WakingUpTotalTime = 0;
+            WakingUpCount = 0;
+            AwakingTotalTime = 0;
+            AwakingCount = 0;
+        }
+
+        void Add(ui64 waitingUntilNeedsTime) {
+            ui64 waitIdx = std::min(waitingUntilNeedsTime / HistogramResolution, BucketCount - 1);
+            WaitingUntilNeedsTimeHist[waitIdx]++;
+        }
+
+        void AddAwakening(ui64 waitingUntilNeedsTime, ui64 awakingTime) {
+            Add(waitingUntilNeedsTime);
+            AwakingTotalTime += awakingTime;
+            AwakingCount++;
+        }
+
+        void AddFastAwakening(ui64 waitingUntilNeedsTime) {
+            Add(waitingUntilNeedsTime - HistogramResolution);
+        }
+
+        void AddWakingUp(ui64 wakingUpTime) {
+            WakingUpTotalTime += wakingUpTime;
+            WakingUpCount++;
+        }
+
+        void Add(const TWaitingStats<T> &stats) {
+            for (ui32 idx = 0; idx < BucketCount; ++idx) {
+                WaitingUntilNeedsTimeHist[idx] += stats.WaitingUntilNeedsTimeHist[idx];
+            }
+            WakingUpTotalTime += stats.WakingUpTotalTime;
+            WakingUpCount += stats.WakingUpCount;
+            AwakingTotalTime += stats.AwakingTotalTime;
+            AwakingCount += stats.AwakingCount;
+        }
+
+        template <typename T2>
+        void Add(const TWaitingStats<T2> &stats, double oldK, double newK) {
+            for (ui32 idx = 0; idx < BucketCount; ++idx) {
+                WaitingUntilNeedsTimeHist[idx] = oldK * WaitingUntilNeedsTimeHist[idx] + newK * stats.WaitingUntilNeedsTimeHist[idx];
+            }
+            WakingUpTotalTime = oldK * WakingUpTotalTime + newK * stats.WakingUpTotalTime;
+            WakingUpCount = oldK * WakingUpCount + newK * stats.WakingUpCount;
+            AwakingTotalTime = oldK * AwakingTotalTime + newK * stats.AwakingTotalTime;
+            AwakingCount = oldK * AwakingCount + newK * stats.AwakingCount;
+        }
+
+        ui32 CalculateGoodSpinThresholdCycles(ui64 avgWakingUpConsumption) {
+            auto &bucketCount = TWaitingStatsConstants::BucketCount;
+            auto &resolution = TWaitingStatsConstants::HistogramResolution;
+
+            T waitingsCount = std::accumulate(WaitingUntilNeedsTimeHist.begin(), WaitingUntilNeedsTimeHist.end(), 0);
+
+            ui32 bestBucketIdx = 0;
+            T bestCpuConsumption = Max<T>();
+
+            T spinTime = 0;
+            T spinCount = 0;
+
+            for (ui32 bucketIdx = 0; bucketIdx < bucketCount; ++bucketIdx) {
+                auto &bucket = WaitingUntilNeedsTimeHist[bucketIdx];
+                ui64 imaginarySpingThreshold = resolution * bucketIdx;
+                T cpuConsumption = spinTime + (waitingsCount - spinCount) * (avgWakingUpConsumption + imaginarySpingThreshold);
+                if (bestCpuConsumption > cpuConsumption) {
+                    bestCpuConsumption = cpuConsumption;
+                    bestBucketIdx = bucketIdx;
+                }
+                spinTime += (2 * imaginarySpingThreshold + resolution) * bucket / 2;
+                spinCount += bucket;
+                // LWPROBE(WaitingHistogram, Pool->PoolId, Pool->GetName(), resolutionUs * bucketIdx, resolutionUs * (bucketIdx + 1), bucket);
+            }
+            ui64 result = resolution * bestBucketIdx;
+            return result;
+        }
+    };
+
     class TBasicExecutorPool: public TExecutorPoolBase {
         struct TThreadCtx {
             TAutoPtr<TExecutorThread> Thread;
-            TThreadParkPad Pad;
+            TThreadParkPad WaitingPad;
             TAtomic WaitingFlag;
-
-            // different threads must spin/block on different cache-lines.
-            // we add some padding bytes to enforce this rule
-            static const size_t SizeWithoutPadding = sizeof(TAutoPtr<TExecutorThread>) + sizeof(TThreadParkPad) + sizeof(TAtomic);
-            ui8 Padding[64 - SizeWithoutPadding];
-            static_assert(64 >= SizeWithoutPadding);
+            std::atomic<i64> StartWakingTs;
+            std::atomic<i64> EndWakingTs;
 
             enum EWaitState {
                 WS_NONE,
@@ -49,11 +150,16 @@ namespace NActors {
             NHPTimer::STime HPNow;
         };
 
-        const ui64 SpinThreshold;
-        const ui64 SpinThresholdCycles;
+        NThreading::TPadded<std::atomic_bool> AllThreadsSleep = true;
+        const ui64 DefaultSpinThresholdCycles;
+        std::atomic<ui64> SpinThresholdCycles;
+        std::unique_ptr<NThreading::TPadded< std::atomic<ui64>>[]> SpinThresholdCyclesPerThread;
 
-        TArrayHolder<TThreadCtx> Threads;
+        TArrayHolder<NThreading::TPadded<TThreadCtx>> Threads;
+        static_assert(sizeof(std::decay_t<decltype(Threads[0])>) == PLATFORM_CACHE_LINE);
         TArrayHolder<NThreading::TPadded<std::queue<ui32>>> LocalQueues;
+        TArrayHolder<TWaitingStats<ui64>> WaitingStats;
+        TArrayHolder<TWaitingStats<double>> MovingWaitingStats;
         std::atomic<ui16> LocalQueueSize;
 
 
@@ -63,6 +169,7 @@ namespace NActors {
         const TString PoolName;
         const TDuration TimePerMailbox;
         const ui32 EventsPerMailbox;
+        EASProfile ActorSystemProfile;
 
         const int RealtimePriority;
 
@@ -70,6 +177,7 @@ namespace NActors {
         TAtomic MaxUtilizationCounter;
         TAtomic MaxUtilizationAccumulator;
         TAtomic WrongWakenedThreadCount;
+        std::atomic<ui64> SpinningTimeUs;
 
         TAtomic ThreadCount;
         TMutex ChangeThreadsLock;
@@ -129,6 +237,7 @@ namespace NActors {
 
         void SetSharedExecutorsCount(i16 count);
 
+        void Initialize(TWorkerContext& wctx) override;
         ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
         ui32 GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingReadCounter);
         ui32 GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingReadCounter);
@@ -138,7 +247,7 @@ namespace NActors {
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
 
         void ScheduleActivationEx(ui32 activation, ui64 revolvingWriteCounter) override;
-        void ScheduleActivationExCommon(ui32 activation, ui64 revolvingWriteCounter);
+        void ScheduleActivationExCommon(ui32 activation, ui64 revolvingWriteCounter, TAtomic semaphoreValue);
         void ScheduleActivationExLocalQueue(ui32 activation, ui64 revolvingWriteCounter);
 
         void SetLocalQueueSize(ui16 size);
@@ -164,12 +273,18 @@ namespace NActors {
         i16 GetBlockingThreadCount() const override;
         i16 GetPriority() const override;
 
+        void SetSpinThresholdCycles(ui32 cycles) override;
+
+        void GetWaitingStats(TWaitingStats<ui64> &acc) const;
+        void CalcSpinPerThread(ui64 wakingUpConsumption);
+        void ClearWaitingStats() const;
+
     private:
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);
 
         void WakeUpLoop(i16 currentThreadCount);
         bool GoToWaiting(TThreadCtx& threadCtx, TTimers &timers, bool needToBlock);
-        void GoToSpin(TThreadCtx& threadCtx);
+        ui32 GoToSpin(TThreadCtx& threadCtx, i64 start, i64 &end);
         bool GoToSleep(TThreadCtx& threadCtx, TTimers &timers);
         bool GoToBeBlocked(TThreadCtx& threadCtx, TTimers &timers);
     };

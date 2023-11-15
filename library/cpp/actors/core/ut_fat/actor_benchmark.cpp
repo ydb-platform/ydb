@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(HeavyActorBenchmark) {
             threadsList.push_back(threads);
         }
         std::vector<ui32> actorPairsList = {512};
-         TActorBenchmark::RunSendActivateReceiveCSV(threadsList, actorPairsList, {1,100, 200});
+         TActorBenchmark::RunSendActivateReceiveCSV(threadsList, actorPairsList, {1,100, 200}, TDuration::Seconds(1));
     }
 
     Y_UNIT_TEST(StarSendActivateReceiveCSV) {

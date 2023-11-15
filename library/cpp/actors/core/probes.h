@@ -175,6 +175,15 @@
     PROBE(HarmonizeCheckPool, GROUPS("Harmonizer"),                                                                                   \
           TYPES(ui32, TString, double, double, double, double, ui32, ui32, bool, bool, bool),                                         \
           NAMES("poolId", "pool", "booked", "consumed", "lastSecondBooked", "lastSecondConsumed", "threadCount", "maxThreadCount", "isStarved", "isNeedy", "isHoggish")) \
+    PROBE(WakingUpConsumption, GROUPS("Harmonizer"),                                                                                  \
+          TYPES(double, double, double, double, double),                                                                                              \
+          NAMES("avgWakingUpUs", "realAvgWakingUpUs", "avgAwakeningUs", "realAvgAwakeningUs", "total"))                                                                          \
+    PROBE(ChangeSpinThreshold, GROUPS("Harmonizer"),                                                                                  \
+          TYPES(ui32, TString, ui64, double, ui64),                                                                                     \
+          NAMES("poolId", "pool", "spinThreshold", "spinThresholdUs", "bucketIdx"))                                                \
+    PROBE(WaitingHistogram, GROUPS("Harmonizer"),                                                                                     \
+          TYPES(ui32, TString, double, double, ui64),                                                                                 \
+          NAMES("poolId", "pool", "fromUs", "toUs", "count"))                                                                         \
     PROBE(HarmonizeOperation, GROUPS("Harmonizer"),                                                                                   \
           TYPES(ui32, TString, TString, ui32, ui32, ui32),                                                                            \
           NAMES("poolId", "pool", "operation", "newCount", "minCount", "maxCount"))                                                   \
@@ -193,6 +202,15 @@
     PROBE(TryToHarmonizeSuccess, GROUPS("Harmonizer"),                                                                                \
           TYPES(ui64, ui64, ui64),                                                                                                    \
           NAMES("ts", "nextHarmonizeTs", "previousNextHarmonizeTs"))                                                                  \
+    PROBE(SpinCycles, GROUPS("Harmonizer"),                                                                                           \
+          TYPES(ui32, TString, ui64, bool),                                                                                           \
+          NAMES("poolId", "pool", "spinPauseCount", "IsInterrupted"))                                                                 \
+    PROBE(WaitingHistogramPerThread, GROUPS("Harmonizer"),                                                                                     \
+          TYPES(ui32, TString, ui32, double, double, ui64),                                                                                 \
+          NAMES("poolId", "pool", "threadIdx", "fromUs", "toUs", "count"))                                                                         \
+    PROBE(ChangeSpinThresholdPerThread, GROUPS("Harmonizer"),                                                                                  \
+          TYPES(ui32, TString, ui32, ui64, double, ui64),                                                                                     \
+          NAMES("poolId", "pool", "threadIdx", "spinThreshold", "spinThresholdUs", "bucketIdx"))                                                \
     /**/
 
 LWTRACE_DECLARE_PROVIDER(ACTORLIB_PROVIDER)

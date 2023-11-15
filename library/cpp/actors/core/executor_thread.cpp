@@ -6,6 +6,7 @@
 #include "event.h"
 #include "events.h"
 #include "executor_pool_base.h"
+#include "probes.h"
 
 #include <library/cpp/actors/prof/tag.h>
 #include <library/cpp/actors/util/affinity.h>
@@ -43,6 +44,8 @@ namespace NActors {
         , Ctx(workerId, cpuId)
         , ThreadName(threadName)
         , IsUnitedWorker(true)
+        , TimePerMailbox(timePerMailbox)
+        , EventsPerMailbox(eventsPerMailbox)
     {
         Ctx.Switch(
             ExecutorPool,
@@ -347,12 +350,17 @@ namespace NActors {
         return ThreadId;
     }
 
+    TWorkerId TExecutorThread::GetWorkerId() const {
+        return Ctx.WorkerId;
+    }
+
     void TExecutorThread::ProcessExecutorPool(IExecutorPool *pool, bool isSharedThread) {
         ExecutorPool = pool;
         TThreadContext threadCtx;
         TlsThreadContext = &threadCtx;
         TlsThreadContext->Pool = static_cast<IExecutorPool*>(ExecutorPool);
         TlsThreadContext->WorkerId = Ctx.WorkerId;
+        pool->Initialize(Ctx);
 
         ExecutorPool->SetRealTimeMode();
         TAffinityGuard affinity(ExecutorPool->Affinity());

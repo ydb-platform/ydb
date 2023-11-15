@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         for (ui32 actorPairs = 1; actorPairs <= 2 * 32; actorPairs *= 2) {
             actorPairsList.push_back(actorPairs);
         }
-         TActorBenchmark::RunSendActivateReceiveCSV(threadsList, actorPairsList, {1});
+        TActorBenchmark::RunSendActivateReceiveCSV(threadsList, actorPairsList, {1}, TDuration::MilliSeconds(100));
     }
 
     Y_UNIT_TEST(SendActivateReceiveWithMailboxNeighbours) {

@@ -451,6 +451,8 @@ void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
 
     Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
 
+    SourceManager.PassAway();
+
     Die(ctx);
 }
 
@@ -877,13 +879,13 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
+    SourceManager.EnsureSourceIds(ev->Get()->SourceIds);
     MaxSeqNoRequests.emplace_back(ev);
     ProcessMaxSeqNoRequest(ctx);
 }
 
 void TPartition::ProcessMaxSeqNoRequest(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::ProcessMaxSeqNoRequest. Queue size: " << MaxSeqNoRequests.size());
-    SourceManager.EnsureSource(ctx);
 
     while(!MaxSeqNoRequests.empty()) {
         auto& ev =  MaxSeqNoRequests.front();

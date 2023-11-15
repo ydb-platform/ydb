@@ -647,6 +647,9 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     for (auto& msg: ev->Get()->Msgs) {
         size += msg.Data.size();
         bool needToChangeOffset = msg.PartNo + 1 == msg.TotalParts;
+        if (!msg.DisableDeduplication) {
+            SourceManager.EnsureSourceId(msg.SourceId);
+        }
         EmplaceRequest(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg)}, ctx);
         if (offset && needToChangeOffset)
             ++*offset;
@@ -854,7 +857,7 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
         auto& sourceIdBatch = parameters.SourceIdBatch;
         auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
-        if (!sourceId) {
+        if (!p.Msg.DisableDeduplication && !sourceId) {
             return ProcessResult::Break;
         }
 
@@ -1392,7 +1395,7 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, c
 
         EmplaceRequest(TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
             .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletID)),
-            .SeqNo = 0,
+            .SeqNo = 0, // we don't use SeqNo because we disable deduplication
             .PartNo = 0,
             .TotalParts = 1,
             .TotalSize = static_cast<ui32>(heartbeat->Data.size()),
@@ -1489,8 +1492,6 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     }
 
     PQ_LOG_T("TPartition::HandleWrites. Requests.size()=" << Requests.size());
-
-    SourceManager.EnsureSource(ctx);
 
     Become(&TThis::StateWrite);
 

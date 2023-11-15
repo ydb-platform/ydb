@@ -102,6 +102,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         TString producer1 = "producer-1";
         TString producer2 = "producer-2";
         TString producer3 = "producer-3";
+        TString producer4 = "producer-4";
 
         auto writeSettings1 = TWriteSessionSettings()
                         .Path(TEST_TOPIC)
@@ -156,7 +157,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
                                             message.GetData()});
             }
 
-            if (receivedMessages.size() == 5) {
+            if (receivedMessages.size() == 6) {
                 checkedPromise.SetValue();
             }
         });
@@ -189,34 +190,39 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         writeSession1->Write(Msg("message_1.2", 5));
         writeSession2->Write(Msg("message_2.2", 7));
 
+        auto writeSettings4 = TWriteSessionSettings()
+                        .Path(TEST_TOPIC)
+                        .DeduplicationEnabled(false)
+                        .PartitionId(1);
+        auto writeSession4 = client.CreateSimpleBlockingWriteSession(writeSettings4);
+        writeSession4->Write(TWriteMessage("message_4.1"));
+
         Cerr << ">>>>> 5 " << Endl;
 
         checkedPromise.GetFuture().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(5, receivedMessages.size());
+        UNIT_ASSERT_VALUES_EQUAL(6, receivedMessages.size());
 
         Cerr << ">>>>> 6 " << Endl;
 
         for(const auto& info : receivedMessages) {
             if (info.Data == "message_1.1") {
-                UNIT_ASSERT_C(1, info.PartitionId);
-                UNIT_ASSERT_C(2, info.SeqNo);
-                UNIT_ASSERT_C(1, info.Offset);
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(2, info.SeqNo);
             } else if (info.Data == "message_2.1") {
-                UNIT_ASSERT_C(1, info.PartitionId);
-                UNIT_ASSERT_C(3, info.SeqNo);
-                UNIT_ASSERT_C(1, info.Offset);
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(3, info.SeqNo);
             } else if (info.Data == "message_1.2") {
-                UNIT_ASSERT_C(2, info.PartitionId);
-                UNIT_ASSERT_C(5, info.SeqNo);
-                UNIT_ASSERT_C(1, info.Offset);
+                UNIT_ASSERT_EQUAL(2, info.PartitionId);
+                UNIT_ASSERT_EQUAL(5, info.SeqNo);
             } else if (info.Data == "message_2.2") {
-                UNIT_ASSERT_C(3, info.PartitionId);
-                UNIT_ASSERT_C(7, info.SeqNo);
-                UNIT_ASSERT_C(1, info.Offset);
+                UNIT_ASSERT_EQUAL(1, info.PartitionId);
+                UNIT_ASSERT_EQUAL(7, info.SeqNo);
             } else if (info.Data == "message_3.1") {
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(1, info.SeqNo);
+            } else if (info.Data == "message_4.1") {
                 UNIT_ASSERT_C(1, info.PartitionId);
                 UNIT_ASSERT_C(1, info.SeqNo);
-                UNIT_ASSERT_C(1, info.Offset);
             } else {
                 UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
             }
@@ -307,7 +313,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         readSettings.EventHandlers_.StartPartitionSessionHandler(
             [&]
             (TReadSessionEvent::TStartPartitionSessionEvent& ev) mutable {
-                Cerr << ">>>>> Received message " << ev.DebugString() << Endl;
+                Cerr << ">>>>> Received TStartPartitionSessionEvent for partition " << ev.GetPartitionSession()->GetPartitionId() << Endl;
                 partitions.insert(ev.GetPartitionSession()->GetPartitionId());
                 ev.Confirm();
         });
@@ -348,17 +354,14 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
         for(const auto& info : receivedMessages) {
             if (info.Data == TString("message_1.1")) {
-                UNIT_ASSERT_C(1, info.PartitionId);
-                UNIT_ASSERT_C(2, info.SeqNo);
-                UNIT_ASSERT_C(1, info.Offset);
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(2, info.SeqNo);
             } else if (info.Data == TString("message_2.1")) {
-                UNIT_ASSERT_C(2, info.PartitionId);
-                UNIT_ASSERT_C(3, info.SeqNo);
-                UNIT_ASSERT_C(1, info.Offset);
+                UNIT_ASSERT_EQUAL(1, info.PartitionId);
+                UNIT_ASSERT_EQUAL(3, info.SeqNo);
             } else if (info.Data == TString("message_3.2")) {
-                UNIT_ASSERT_C(3, info.PartitionId);
-                UNIT_ASSERT_C(11, info.SeqNo);
-                UNIT_ASSERT_C(1, info.Offset);
+                UNIT_ASSERT_EQUAL(2, info.PartitionId);
+                UNIT_ASSERT_EQUAL(11, info.SeqNo);
             } else {
                 UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
             }

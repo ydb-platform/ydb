@@ -7,7 +7,7 @@
 
 namespace NKikimr::NPQ {
 
-IActor* CreateRequester(TActorId parent, ui32 partition, ui64 tabletId, TPartitionSourceManager::TSourceIdsPtr& sourceIds, ui64 cookie);
+IActor* CreateRequester(TActorId parent, TPartitionSourceManager::TPartitionId partition, ui64 tabletId);
 bool IsResearchRequires(std::optional<const TPartitionGraph::Node*> node);
 
 //
@@ -18,7 +18,7 @@ TPartitionSourceManager::TPartitionSourceManager(TPartition* partition)
     : Partition(partition) {
 }
 
-void TPartitionSourceManager::EnsureSource(const TActorContext& /*ctx*/) {
+void TPartitionSourceManager::ScheduleBatch() {
     if (WaitSources()) {
         return;
     }
@@ -26,25 +26,51 @@ void TPartitionSourceManager::EnsureSource(const TActorContext& /*ctx*/) {
     PendingCookies.clear();
     Responses.clear();
 
+    if (UnknownSourceIds.empty()) {
+        return;
+    }
+
     auto node = GetPartitionNode();
     if (!IsResearchRequires(node)) {
         return;
     }
 
-    auto unknowSourceIds = BuildUnknownSourceIds();
-    if (unknowSourceIds->empty()) {
-        return;
-    }
+    PendingSourceIds = std::move(UnknownSourceIds);
 
     for(const auto* parent : node.value()->HierarhicalParents) {
         PendingCookies.insert(++Cookie);
-        Partition->RegisterWithSameMailbox(CreateRequester(Partition->SelfId(),
-                    parent->Id,
-                    parent->TabletId,
-                    unknowSourceIds,
-                    Cookie));
+
+        TActorId actorId = PartitionRequester(parent->Id, parent->TabletId);
+        Partition->Send(actorId, CreateRequest(parent->Id).release(), 0, Cookie);
     }
 }
+
+void TPartitionSourceManager::EnsureSourceId(const TString& sourceId) {
+    if (!IsResearchRequires(GetPartitionNode())) {
+        return;
+    }
+
+    if (RequireEnqueue(sourceId)) {
+        UnknownSourceIds.insert(sourceId);
+    }
+
+    ScheduleBatch();
+}
+
+void TPartitionSourceManager::EnsureSourceIds(const TVector<TString>& sourceIds) {
+    if (!IsResearchRequires(GetPartitionNode())) {
+        return;
+    }
+
+    for(const auto& sourceId : sourceIds) {
+        if (RequireEnqueue(sourceId)) {
+            UnknownSourceIds.insert(sourceId);
+        }
+    }
+
+    ScheduleBatch();
+}
+
 
 const TPartitionSourceManager::TSourceInfo TPartitionSourceManager::Get(const TString& sourceId) const {
     auto& knownSourceIds = GetSourceIdStorage().GetInMemorySourceIds();
@@ -94,8 +120,16 @@ void TPartitionSourceManager::Handle(TEvPQ::TEvSourceIdResponse::TPtr& ev, const
     if (ev->Get()->Record.HasError()) {
         PQ_LOG_D("Error on request SourceId: " << ev->Get()->Record.GetError());
         Responses.clear();
+        RequesterActors.erase(ev->Get()->Record.GetPartition());
 
-        EnsureSource(ctx);
+        if (UnknownSourceIds.empty()) {
+            UnknownSourceIds = std::move(PendingSourceIds);
+        } else {
+            UnknownSourceIds.insert(PendingSourceIds.begin(), PendingSourceIds.end());
+            PendingSourceIds.clear();
+        }
+
+        ScheduleBatch();
         return;
     }
 
@@ -103,39 +137,12 @@ void TPartitionSourceManager::Handle(TEvPQ::TEvSourceIdResponse::TPtr& ev, const
 
     if (PendingCookies.empty()) {
         FinishBatch(ctx);
+        ScheduleBatch();
     }
 }
 
 TPartitionSourceManager::TPartitionNode TPartitionSourceManager::GetPartitionNode() const {
     return Partition->PartitionGraph.GetPartition(Partition->Partition);
-}
-
-TPartitionSourceManager::TSourceIdsPtr TPartitionSourceManager::BuildUnknownSourceIds() const {
-    auto& knownSourceIds = GetSourceIdStorage().GetInMemorySourceIds();
-    auto unknownSourceIds = std::make_shared<std::set<const TString*>>();
-
-    auto predicate = [&](const TString& sourceId) {
-        return !Sources.contains(sourceId) && !knownSourceIds.contains(sourceId);
-    };
-
-    for(const auto& msg : Partition->Requests) {
-        if (msg.IsWrite()) {
-            const TString& sourceId = msg.GetWrite().Msg.SourceId;
-            if (predicate(sourceId)) {
-                unknownSourceIds->insert(&sourceId);
-            }
-        }
-    }
-
-    for(const auto& ev : Partition->MaxSeqNoRequests) {
-        for (const auto& sourceId : ev->Get()->SourceIds) {
-            if (predicate(sourceId)) {
-                unknownSourceIds->insert(&sourceId);
-            }
-        }
-    }
-
-    return unknownSourceIds;
 }
 
 void TPartitionSourceManager::FinishBatch(const TActorContext& ctx) {
@@ -158,11 +165,18 @@ void TPartitionSourceManager::FinishBatch(const TActorContext& ctx) {
     }
 
     Responses.clear();
+    PendingSourceIds.clear();
 
     if (Partition->CurrentStateFunc() == &TPartition::StateIdle) {
         Partition->HandleWrites(ctx);
     }
     Partition->ProcessMaxSeqNoRequest(ctx);
+}
+
+bool TPartitionSourceManager::RequireEnqueue(const TString& sourceId) {
+    auto& knownSourceIds = GetSourceIdStorage().GetInMemorySourceIds();
+    return !Sources.contains(sourceId) && !knownSourceIds.contains(sourceId) 
+        && !PendingSourceIds.contains(sourceId);
 }
 
 TSourceIdStorage& TPartitionSourceManager::GetSourceIdStorage() const {
@@ -172,6 +186,36 @@ TSourceIdStorage& TPartitionSourceManager::GetSourceIdStorage() const {
 bool TPartitionSourceManager::HasParents() const {
     auto node = Partition->PartitionGraph.GetPartition(Partition->Partition);
     return node && !node.value()->Parents.empty();
+}
+
+TActorId TPartitionSourceManager::PartitionRequester(TPartitionId id, ui64 tabletId) {
+    auto it = RequesterActors.find(id);
+    if (it != RequesterActors.end()) {
+        return it->second;
+    }
+
+    TActorId actorId = Partition->RegisterWithSameMailbox(CreateRequester(Partition->SelfId(),
+                    id,
+                    tabletId));
+    RequesterActors[id] = actorId;
+    return actorId;
+}
+
+std::unique_ptr<TEvPQ::TEvSourceIdRequest> TPartitionSourceManager::CreateRequest(TPartitionSourceManager::TPartitionId id) const {
+    auto request = std::make_unique<TEvPQ::TEvSourceIdRequest>();
+    auto& record = request->Record;
+    record.SetPartition(id);
+    for(const auto& sourceId : PendingSourceIds) {
+        record.AddSourceId(sourceId);
+    }
+    return request;
+}
+
+void TPartitionSourceManager::PassAway() {
+    for(const auto [_, actorId] : RequesterActors) {
+        Partition->Send(actorId, new TEvents::TEvPoison());
+    }
+    RequesterActors.clear();
 }
 
 
@@ -329,12 +373,10 @@ TPartitionSourceManager::TSourceInfo::operator bool() const {
 class TSourceIdRequester : public TActorBootstrapped<TSourceIdRequester> {
     static constexpr TDuration RetryDelay = TDuration::MilliSeconds(100);
 public:
-    TSourceIdRequester(TActorId parent, ui32 partition, ui64 tabletId, TPartitionSourceManager::TSourceIdsPtr& sourceIds, ui64 cookie)
+    TSourceIdRequester(TActorId parent, TPartitionSourceManager::TPartitionId partition, ui64 tabletId)
         : Parent(parent)
         , Partition(partition)
-        , TabletId(tabletId)
-        , SourceIds(sourceIds)
-        , Cookie(cookie) {
+        , TabletId(tabletId) {
     }
 
     void Bootstrap(const TActorContext&) {
@@ -362,30 +404,38 @@ private:
         PipeClient = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), TabletId, config));
     }
 
-    std::unique_ptr<TEvPQ::TEvSourceIdRequest> CreateRequest() {
-        auto request = std::make_unique<TEvPQ::TEvSourceIdRequest>();
-        auto& record = request->Record;
-        record.SetPartition(Partition);
-        for(const auto& sourceId : *SourceIds) {
-            record.AddSourceId(*sourceId);
-        }
-        return request;
+    void Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& /*ctx*/) {
+        Cookie = ev->Cookie;
+        PendingRequest = ev;
+
+        DoRequest();
     }
 
     void Handle(TEvPQ::TEvSourceIdResponse::TPtr& ev, const TActorContext& /*ctx*/) {
         auto msg = std::make_unique<TEvPQ::TEvSourceIdResponse>();
         msg->Record = std::move(ev->Get()->Record);
+        bool hasError = msg->Record.HasError();
 
         Reply(msg);
-        PassAway();
+
+        if (hasError) {
+            PassAway();
+        }
     }
 
     void DoRequest() {
-        NTabletPipe::SendData(SelfId(), PipeClient, CreateRequest().release());
+        if (PendingRequest && PipeConnected) {
+            auto msg = std::make_unique<TEvPQ::TEvSourceIdRequest>();
+            msg->Record = std::move(PendingRequest->Get()->Record);
+            PendingRequest.Reset();
+
+            NTabletPipe::SendData(SelfId(), PipeClient, msg.release());
+        }
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status == NKikimrProto::EReplyStatus::OK) {
+            PipeConnected = true;
             DoRequest();
         } else {
             ReplyWithError("Error connecting to PQ");
@@ -394,12 +444,14 @@ private:
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         if (ev->Get()->TabletId == TabletId) {
+            PipeConnected = false;
             ReplyWithError("Pipe destroyed");
         }
     }
 
     void ReplyWithError(const TString& error) {
         auto msg = std::make_unique<TEvPQ::TEvSourceIdResponse>();
+        msg->Record.SetPartition(Partition);
         msg->Record.SetError(error);
 
         Reply(msg);
@@ -414,6 +466,7 @@ private:
     STFUNC(StateWork)
     {
         switch (ev->GetTypeRewrite()) {
+            HFunc(TEvPQ::TEvSourceIdRequest, Handle);
             HFunc(TEvPQ::TEvSourceIdResponse, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -423,16 +476,17 @@ private:
 
 private:
     TActorId Parent;
-    ui32 Partition;
+    TPartitionSourceManager::TPartitionId Partition;
     ui64 TabletId;
-    TPartitionSourceManager::TSourceIdsPtr SourceIds;
+    TEvPQ::TEvSourceIdRequest::TPtr PendingRequest;
     ui64 Cookie;
 
     TActorId PipeClient;
+    bool PipeConnected = false;
 };
 
-IActor* CreateRequester(TActorId parent, ui32 partition, ui64 tabletId, TPartitionSourceManager::TSourceIdsPtr& sourceIds, ui64 cookie) {
-    return new TSourceIdRequester(parent, partition, tabletId, sourceIds, cookie);
+IActor* CreateRequester(TActorId parent, TPartitionSourceManager::TPartitionId partition, ui64 tabletId) {
+    return new TSourceIdRequester(parent, partition, tabletId);
 }
 
 bool IsResearchRequires(std::optional<const TPartitionGraph::Node*> node)  {

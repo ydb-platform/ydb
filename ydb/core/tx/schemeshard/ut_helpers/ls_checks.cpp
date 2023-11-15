@@ -484,7 +484,8 @@ void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult &record) {
     for (ui32 i = 0; i < descr.GetTable().SplitBoundarySize(); ++i) {
         const auto& b = descr.GetTable().GetSplitBoundary(i);
         TVector<TCell> cells;
-        NMiniKQL::CellsFromTuple(nullptr, b.GetKeyPrefix(), keyColTypes, false, cells, errStr);
+        TVector<TString> memoryOwner;
+        NMiniKQL::CellsFromTuple(nullptr, b.GetKeyPrefix(), keyColTypes, false, cells, errStr, memoryOwner);
         UNIT_ASSERT_VALUES_EQUAL(errStr, "");
 
         TString serialized = TSerializedCellVec::Serialize(cells);

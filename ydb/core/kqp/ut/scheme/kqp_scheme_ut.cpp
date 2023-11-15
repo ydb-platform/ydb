@@ -9,6 +9,8 @@
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/formats/arrow/serializer/full.h>
+#include <ydb/library/uuid/uuid.h>
+
 #include <library/cpp/threading/local_executor/local_executor.h>
 
 #include <util/generic/serialized_enum.h>
@@ -1083,7 +1085,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto describeResult = session.DescribeTable("/Root/moved").GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         }
 
         {
@@ -1096,7 +1098,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         }
 
         {
@@ -1124,11 +1126,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             {
                 auto describeResult = session.DescribeTable("/Root/moved").GetValueSync();
-                UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             }
             {
                 auto describeResult = session.DescribeTable("/Root/movedsecond").GetValueSync();
-                UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             }
         }
 
@@ -1165,12 +1167,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             {
                 auto describeResult = session.DescribeTable("/Root/second").GetValueSync();
-                UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             }
 
             {
                 auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
-                UNIT_ASSERT_C(!describeResult.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_C(!describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             }
         }
 
@@ -1622,7 +1624,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto describeResult = session.DescribeTable(tableName,
             NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4);
 
         AlterTableSetttings(session, tableName, {{"UNIFORM_PARTITIONS", "8"}}, compat,
@@ -1658,7 +1660,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto describeResult = session.DescribeTable(tableName,
             TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 5);
 
         auto extractValue = [](const TValue& val) {
@@ -1724,7 +1726,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto describeResult = session.DescribeTable(tableName,
             TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4);
 
         auto extractValue = [](const TValue& val) {
@@ -1779,7 +1781,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto describeResult = session.DescribeTable(tableName,
             TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4);
 
         auto extractValue = [](const TValue& val) {
@@ -1854,6 +1856,141 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Partition at keys has 2 key values while there are only 1 key columns", "Unexpected error message");
     }
 
+    struct testData {
+        TString condition;
+        ui64 resultRows;
+        ui64 touchedPartitions;
+    };
+
+    void uuidInsertAndCheck(TSession &session, TString tableName, TVector<testData> expectedPartitions) {
+        TVector<TString> uuids {
+                {"AAAAAA00-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA11-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA22-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA33-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA44-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA55-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA66-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA77-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA88-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA99-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAAAA-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAABB-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAACC-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAADD-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAAEE-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAAFF-0000-458F-ABE9-4A0CD520903B"},
+        };
+        {
+            TStringBuilder builder;
+            builder << "REPLACE INTO `" << tableName << "` (Key, Value) VALUES ";
+            for (ui32 i = 0; i < uuids.size() - 1; ++i) {
+                builder << "(Uuid(\"" << uuids[i] << "\"), " << i << "),";
+            }
+            builder << "(Uuid(\"" << uuids[uuids.size() - 1] << "\"), " << uuids.size() - 1 << ");";
+            TString query = builder;
+
+            auto replaceResult = session.ExecuteDataQuery(query,
+                                                          TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(replaceResult.GetStatus(), EStatus::SUCCESS,
+                                       replaceResult.GetIssues().ToString());
+        }
+
+        for (auto &test: expectedPartitions) {
+            TString query = Sprintf("SELECT Key as cnt from `%s` WHERE %s;", tableName.data(), test.condition.data());
+
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+            auto selectResult = session.ExecuteDataQuery(query,
+                                                         TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                                                         execSettings).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS,
+                                       selectResult.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL(selectResult.GetResultSets().size(), 1);
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*selectResult.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(selectResult.GetResultSet(0).RowsCount(), test.resultRows);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), test.touchedPartitions);
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableWithPartitionAtKeysUuid) {
+        TKikimrSettings kikimrSettings;
+        TKikimrRunner kikimr(kikimrSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithPartitionAtKeysSimpleUuid";
+
+        {
+            auto builder = TTableBuilder()
+                    .AddNonNullableColumn("Key", EPrimitiveType::Uuid)
+                    .AddNullableColumn("Value", EPrimitiveType::Int32)
+                    .SetPrimaryKeyColumn("Key");
+
+            // Ordering is not lexicographic as UUID is stored in binary form with the following byte order
+            // from original hex pairs: [3 2 1 0 5 4 7 6 8 9 a b c d e f]
+            // String UUID (with spaces added) 00 11 22 33-44 55-66 77-88 99-AA BB CC DD EE FF
+            // becomes                         33 22 11 00 55 44 77 66 88 99 AA BB CC DD EE FF
+            const TVector <TUuidValue> expectedRanges = {
+                    TUuidValue("FFFFFF11-C00F-458F-ABE9-4A0CD520903B"),
+                    TUuidValue("FFFFFFDD-AF48-428B-9D13-893C220118C4")
+            };
+            auto explicitPartitions = TExplicitPartitions();
+            for (ui32 i = 0; i < expectedRanges.size(); i++) {
+                explicitPartitions.AppendSplitPoints(
+                        TValueBuilder().BeginTuple().AddElement()
+                                .OptionalUuid(expectedRanges[i]).EndTuple().Build()
+                );
+            }
+            auto result = session.CreateTable(tableName,
+                                              builder.Build(),
+                                              TCreateTableSettings()
+                                                      .PartitioningPolicy(TPartitioningPolicy().ExplicitPartitions(explicitPartitions))
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        // See comment above for comparison explanation.
+        TVector<testData> inputs = {
+                {"Key > Cast(\"00000000-FFFF-FFFF-ABE9-4A0CD520903B\" as Uuid)",16, 3},
+                {"Key > Cast(\"FFFFFF11-C00F-458F-ABE9-4A0CD520903B\" as Uuid)", 14, 2},
+                {"Key < Cast(\"FFFFFF11-C00F-458F-ABE9-4A0CD520903B\" as Uuid)", 2, 1}
+        };
+        uuidInsertAndCheck(session, tableName, inputs);
+    }
+
+    Y_UNIT_TEST(CreateTableWithUniformPartitionsUuid) {
+        TKikimrSettings kikimrSettings;
+        TKikimrRunner kikimr(kikimrSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithPartitionAtKeysSimpleUuid";
+
+        {
+            auto builder = TTableBuilder()
+                    .AddNonNullableColumn("Key", EPrimitiveType::Uuid)
+                    .AddNullableColumn("Value", EPrimitiveType::Int32)
+                    .SetPrimaryKeyColumn("Key");
+
+            auto result = session.CreateTable(tableName,
+                                              builder.Build(),
+                                              TCreateTableSettings()
+                                                  .PartitioningPolicy(TPartitioningPolicy().UniformPartitions(4))
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        // See comment above for comparison explanation.
+        TVector<testData> inputs = {
+                {"Key > Cast(\"00000000-FFFF-FFFF-ABE9-4A0CD520903B\" as Uuid)",16, 4},
+                {"Key < Cast(\"0000003F-C00F-458F-ABE9-4A0CD520903B\" as Uuid)", 4, 1},
+                {"Key < Cast(\"0000007F-C00F-458F-ABE9-4A0CD520903B\" as Uuid)", 8, 2},
+                {"Key < Cast(\"000000BF-C00F-458F-ABE9-4A0CD520903B\" as Uuid)", 12, 3},
+                {"Key < Cast(\"000000FF-C00F-458F-ABE9-4A0CD520903B\" as Uuid)", 15, 4}
+        };
+        uuidInsertAndCheck(session, tableName, inputs);
+    }
+
     Y_UNIT_TEST(CreateTableWithFamiliesRegular) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -1876,7 +2013,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
         UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 3);
         for (const auto& family : columnFamilies) {
@@ -1915,7 +2052,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         {
             auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
             UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 2);
             for (const auto& family : columnFamilies) {
@@ -1947,7 +2084,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         {
             auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
             UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 3);
             for (const auto& family : columnFamilies) {
@@ -1992,7 +2129,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto describeResult = session.DescribeTable(tableName).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         UNIT_ASSERT(describeResult.GetTableDescription().GetStorageSettings().GetStoreExternalBlobs().GetOrElse(false));
     }
 
@@ -3189,7 +3326,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         const auto tableDesc = session.DescribeTable(tableName).GetValueSync().GetTableDescription();
         TVector<TTableColumn> columns = tableDesc.GetTableColumns();
         UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
@@ -3831,7 +3968,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
                                        result.GetIssues().ToString());
-        }        
+        }
 
         {
             TString query = R"(
@@ -3898,7 +4035,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
                                        result.GetIssues().ToString());
-        }        
+        }
     }
 
     Y_UNIT_TEST(DefaultValuesForTable3) {
@@ -3923,7 +4060,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
                                         "Default expr Key is nullable or optional, but column has not null constraint");
-        }        
+        }
     }
 
     Y_UNIT_TEST(DefaultValuesForTable4) {
@@ -3949,7 +4086,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
                                        result.GetIssues().ToString());
-        }        
+        }
     }
 
     Y_UNIT_TEST(ChangefeedRetentionPeriod) {

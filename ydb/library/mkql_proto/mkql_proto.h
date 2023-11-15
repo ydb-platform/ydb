@@ -4,6 +4,7 @@
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/library/uuid/uuid.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -31,25 +32,19 @@ TRuntimeNode ImportValueFromProto(const NKikimrMiniKQL::TType& type, const NKiki
 TRuntimeNode ImportValueFromProto(const NKikimrMiniKQL::TParams& params, const TTypeEnvironment& env);
 
 inline void UuidToMkqlProto(const char* str, size_t sz, NKikimrMiniKQL::TValue& res) {
-    union {
-        ui64 half[2];
-        char bytes[sizeof(ui64) * 2];
-    } buf;
-    Y_ABORT_UNLESS(sizeof(buf) == sz);
-    memcpy(buf.bytes, str, sizeof(buf));
-    res.SetLow128(buf.half[0]);
-    res.SetHi128(buf.half[1]);
+    ui64 high = 0, low = 0;
+    NUuid::UuidBytesToHalfs(str, sz, high, low);
+
+    res.SetLow128(low);
+    res.SetHi128(high);
 }
 
 inline void UuidToYdbProto(const char* str, size_t sz, Ydb::Value& res) {
-    union {
-        ui64 half[2];
-        char bytes[sizeof(ui64) * 2];
-    } buf;
-    Y_ABORT_UNLESS(sizeof(buf) == sz);
-    memcpy(buf.bytes, str, sizeof(buf));
-    res.set_low_128(buf.half[0]);
-    res.set_high_128(buf.half[1]);
+    ui64 high = 0, low = 0;
+    NUuid::UuidBytesToHalfs(str, sz, high, low);
+
+    res.set_low_128(low);
+    res.set_high_128(high);
 }
 
 }

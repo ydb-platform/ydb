@@ -7,7 +7,7 @@ nav:
 meta:
   title: YDB
 links:
-  - title: Getting started
+  - title: Getting started 123
     description: Deploy your cluster and perform basic operations with data
     href: getting_started/quickstart
   - title: Concepts

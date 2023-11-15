@@ -1055,7 +1055,7 @@ struct TCreateClientOptions
     /// @brief Use HTTPs (use HTTP client from yt/yt/core always).
     ///
     /// @see UseCoreHttpClient
-    FLUENT_FIELD_DEFAULT(bool, UseTLS, false);
+    FLUENT_FIELD_OPTION(bool, UseTLS);
 
     /// @brief Use HTTP client from yt/yt/core.
     FLUENT_FIELD_DEFAULT(bool, UseCoreHttpClient, false);

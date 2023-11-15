@@ -85,26 +85,6 @@ void THelpers::DbUpdateTrash(const TLogoBlobID &id, ISimpleDb &db, const TActorC
     db.Update(key, value, ctx);
 }
 
-void THelpers::DbUpdateCollect(ui64 collectGeneration, ui64 collectStep,
-    TVector<TLogoBlobID> keep, TVector<TLogoBlobID> doNotKeep, ISimpleDb &db, const TActorContext &ctx) {
-    TString empty;
-    TString key = THelpers::GenerateKeyFor(EIT_COLLECT, empty);
-    TCollectOperationHeader header(collectGeneration, collectStep, keep, doNotKeep);
-    TString value = TString::Uninitialized(
-            sizeof(TCollectOperationHeader) + sizeof(TLogoBlobID) * (keep.size() + doNotKeep.size()));
-    ui8 *data = (ui8*)const_cast<char *>(value.data());
-    memcpy(data, &header, sizeof(header));
-    data += sizeof(header);
-    if (keep.size()) {
-        memcpy(data, (ui8 *) &keep[0], sizeof(TLogoBlobID) * keep.size());
-    }
-    data += sizeof(TLogoBlobID) * keep.size();
-    if (doNotKeep.size()) {
-        memcpy(data, (ui8 *) &doNotKeep[0], sizeof(TLogoBlobID) * doNotKeep.size());
-    }
-    db.Update(key, value, ctx);
-}
-
 void THelpers::DbEraseCollect(ISimpleDb &db, const TActorContext &ctx) {
     TString empty;
     TString key = THelpers::GenerateKeyFor(EIT_COLLECT, empty);

@@ -42,7 +42,19 @@ public:
     {
     }
 
+    enum class EPhase {
+        Content,
+        Other,
+        All
+    };
+
     NKikimr::NMiniKQL::TCallableVisitFunc operator()(NKikimr::NMiniKQL::TInternName name);
+
+    void SetTwoPhaseTransform() {
+        Phase_ = EPhase::Other;
+    }
+
+    bool HasSecondPhase();
 
     inline bool CanExecuteInternally() const {
         return !*RemoteExecutionFlag_ && !*UntrustedUdfFlag_;
@@ -76,8 +88,11 @@ private:
     NKikimr::NMiniKQL::TProgramBuilder& PgmBuilder_;
     TTempFiles& TmpFiles_;
     TMaybe<ui32> PublicId_;
+    EPhase Phase_ = EPhase::All;
+    bool ForceLocalTableContent_;
 
     // Wrap to shared ptr because TGatewayTransformer is passed by value
+    std::shared_ptr<bool> TableContentFlag_;
     std::shared_ptr<bool> RemoteExecutionFlag_;
     std::shared_ptr<bool> UntrustedUdfFlag_;
     std::shared_ptr<ui64> UsedMem_;

@@ -3873,13 +3873,14 @@ private:
         });
     }
 
-    static TFuture<void> ExecSafeFill(const TVector<TRichYPath>& outYPaths,
+    static void ExecSafeFill(const TVector<TRichYPath>& outYPaths,
         TRuntimeNode root,
         const TString& outSpec,
         const TExecContext<TRunOptions>::TPtr& execCtx,
         const TTransactionCache::TEntry::TPtr& entry,
         const TNativeYtLambdaBuilder& builder,
-        TScopedAlloc& alloc
+        TScopedAlloc& alloc,
+        TString filePrefix
     ) {
         NYT::TTableWriterOptions writerOptions;
         auto maxRowWeight = execCtx->Options_.Config()->MaxRowWeight.Get(execCtx->Cluster_);
@@ -3918,7 +3919,7 @@ private:
         mkqlWriter.SetWriteLimit(alloc.GetLimit());
 
         TExploringNodeVisitor explorer;
-        auto localGraph = builder.BuildLocalGraph(GetGatewayNodeFactory(&mkqlWriter, execCtx->UserFiles_),
+        auto localGraph = builder.BuildLocalGraph(GetGatewayNodeFactory(&codecCtx, &mkqlWriter, execCtx->UserFiles_, filePrefix),
             execCtx->Options_.UdfValidateMode(),
             NUdf::EValidatePolicy::Exception, "OFF" /* don't use LLVM locally */, EGraphPerProcess::Multi, explorer, root);
         auto& graph = std::get<0>(localGraph);
@@ -3938,8 +3939,6 @@ private:
         for (auto& writer: writers) {
             writer->Finish();
         }
-
-        return MakeFuture();
     }
 
     static TFuture<void> ExecFill(TString lambda,
@@ -3985,12 +3984,20 @@ private:
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_);
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
                 TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
+                transform.SetTwoPhaseTransform();
+
+                TRuntimeNode root = builder.Deserialize(lambda);
+                root = builder.TransformAndOptimizeProgram(root, transform);
+                if (transform.HasSecondPhase()) {
+                    root = builder.TransformAndOptimizeProgram(root, transform);
+                }
                 size_t nodeCount = 0;
-                TRuntimeNode root = builder.UpdateLambdaCode(lambda, nodeCount, transform);
+                std::tie(lambda, nodeCount) = builder.Serialize(root);
+
                 if (transform.CanExecuteInternally() && !testRun) {
                     const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-                    return ExecSafeFill(outYPaths, root, execCtx->GetOutSpec(!useSkiff, nativeTypeCompat),
-                                        execCtx, entry, builder, alloc);
+                    ExecSafeFill(outYPaths, root, execCtx->GetOutSpec(!useSkiff, nativeTypeCompat), execCtx, entry, builder, alloc, tmpFiles->TmpDir.GetPath() + '/');
+                    return MakeFuture();
                 }
 
                 localRun = localRun && transform.CanExecuteLocally();
@@ -4543,13 +4550,24 @@ private:
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(execCtx->Options_.SecureParams());
             TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, secureParamsProvider.get());
+            THolder<TCodecContext> codecCtx;
+            TString pathPrefix;
             TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
             TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
+            transform.SetTwoPhaseTransform();
+            TRuntimeNode root = builder.Deserialize(lambda);
+            root = builder.TransformAndOptimizeProgram(root, transform);
+            if (transform.HasSecondPhase()) {
+                root = builder.TransformAndOptimizeProgram(root, transform);
+                codecCtx.Reset(new TCodecContext(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_));
+                pathPrefix = tmpFiles->TmpDir.GetPath() + '/';
+            }
             size_t nodeCount = 0;
-            TRuntimeNode root = builder.UpdateLambdaCode(lambda, nodeCount, transform);
+            std::tie(lambda, nodeCount) = builder.Serialize(root);
+
             if (transform.CanExecuteInternally()) {
                 TExploringNodeVisitor explorer;
-                auto localGraph = builder.BuildLocalGraph(GetGatewayNodeFactory(nullptr, execCtx->UserFiles_),
+                auto localGraph = builder.BuildLocalGraph(GetGatewayNodeFactory(codecCtx.Get(), nullptr, execCtx->UserFiles_, pathPrefix),
                     execCtx->Options_.UdfValidateMode(), NUdf::EValidatePolicy::Exception,
                     "OFF" /* don't use LLVM locally */, EGraphPerProcess::Multi, explorer, root);
                 auto& graph = std::get<0>(localGraph);

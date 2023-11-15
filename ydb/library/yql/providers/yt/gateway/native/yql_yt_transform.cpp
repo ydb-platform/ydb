@@ -46,6 +46,8 @@ TGatewayTransformer::TGatewayTransformer(const TExecContextBase& execCtx, TYtSet
     , PgmBuilder_(builder)
     , TmpFiles_(tmpFiles)
     , PublicId_(publicId)
+    , ForceLocalTableContent_(false)
+    , TableContentFlag_(std::make_shared<bool>(false))
     , RemoteExecutionFlag_(std::make_shared<bool>(false))
     , UntrustedUdfFlag_(std::make_shared<bool>(false))
     , UsedMem_(std::make_shared<ui64>(ui64(0)))
@@ -64,322 +66,339 @@ TGatewayTransformer::TGatewayTransformer(const TExecContextBase& execCtx, TYtSet
 
 TCallableVisitFunc TGatewayTransformer::operator()(TInternName name) {
     if (name == TYtTableContent::CallableName()) {
-        return [&](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
-            YQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
-            *RemoteExecutionFlag_ = true;
 
-            const TString cluster(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
-            const TString& server = ExecCtx_.Clusters_->GetServer(cluster);
-            const TString tmpFolder = GetTablesTmpFolder(*Settings_);
-            TTransactionCache::TEntry::TPtr entry = ExecCtx_.Session_->TxCache_.GetEntry(server);
-            auto tx = entry->Tx;
+        *TableContentFlag_ = true;
+        *RemoteExecutionFlag_ = *RemoteExecutionFlag_ || !Settings_->TableContentLocalExecution.Get().GetOrElse(DEFAULT_TABLE_CONTENT_LOCAL_EXEC);
 
-            auto deliveryMode = Settings_->TableContentDeliveryMode.Get(cluster).GetOrElse(ETableContentDeliveryMode::Native);
-            bool useSkiff = Settings_->TableContentUseSkiff.Get(cluster).GetOrElse(DEFAULT_USE_SKIFF);
-            const bool ensureOldTypesOnly = !useSkiff;
-            const ui64 maxChunksForNativeDelivery = Settings_->TableContentMaxChunksForNativeDelivery.Get().GetOrElse(1000ul);
-            TString contentTmpFolder = Settings_->TableContentTmpFolder.Get(cluster).GetOrElse(TString());
-            if (contentTmpFolder.StartsWith("//")) {
-                contentTmpFolder = contentTmpFolder.substr(2);
-            }
-            if (contentTmpFolder.EndsWith('/')) {
-                contentTmpFolder.remove(contentTmpFolder.length() - 1);
-            }
+        if (EPhase::Content == Phase_ || EPhase::All == Phase_) {
+            return [&](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+                YQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
 
-            TString uniqueId = GetGuidAsString(ExecCtx_.Session_->RandomProvider_->GenGuid());
+                const TString cluster(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
+                const TString& server = ExecCtx_.Clusters_->GetServer(cluster);
+                const TString tmpFolder = GetTablesTmpFolder(*Settings_);
+                TTransactionCache::TEntry::TPtr entry = ExecCtx_.Session_->TxCache_.GetEntry(server);
+                auto tx = entry->Tx;
 
-            TListLiteral* groupList = AS_VALUE(TListLiteral, callable.GetInput(1));
-            YQL_ENSURE(groupList->GetItemsCount() == 1);
-            TListLiteral* tableList = AS_VALUE(TListLiteral, groupList->GetItems()[0]);
-
-            NYT::TNode specNode = NYT::TNode::CreateMap();
-            NYT::TNode& tablesNode = specNode[YqlIOSpecTables];
-            NYT::TNode& registryNode = specNode[YqlIOSpecRegistry];
-            THashMap<TString, TString> uniqSpecs;
-            TVector<NYT::TRichYPath> richPaths;
-            TVector<NYT::TNode> formats;
-
-            THashMap<TString, ui32> structColumns;
-            if (useSkiff) {
-                auto itemType = AS_TYPE(TListType, callable.GetType()->GetReturnType())->GetItemType();
-                TStructType* itemTypeStruct = AS_TYPE(TStructType, itemType);
-                if (itemTypeStruct->GetMembersCount() == 0) {
-                    useSkiff = false; // TODO: YT-12235
-                } else {
-                    for (ui32 index = 0; index < itemTypeStruct->GetMembersCount(); ++index) {
-                        structColumns.emplace(itemTypeStruct->GetMemberName(index), index);
-                    }
+                auto deliveryMode = ForceLocalTableContent_ ? ETableContentDeliveryMode::File : Settings_->TableContentDeliveryMode.Get(cluster).GetOrElse(ETableContentDeliveryMode::Native);
+                bool useSkiff = Settings_->TableContentUseSkiff.Get(cluster).GetOrElse(DEFAULT_USE_SKIFF);
+                const bool ensureOldTypesOnly = !useSkiff;
+                const ui64 maxChunksForNativeDelivery = Settings_->TableContentMaxChunksForNativeDelivery.Get().GetOrElse(1000ul);
+                TString contentTmpFolder = ForceLocalTableContent_ ? TString() : Settings_->TableContentTmpFolder.Get(cluster).GetOrElse(TString());
+                if (contentTmpFolder.StartsWith("//")) {
+                    contentTmpFolder = contentTmpFolder.substr(2);
                 }
-            }
-
-            for (ui32 i = 0; i < tableList->GetItemsCount(); ++i) {
-                TTupleLiteral* tuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[i]);
-                YQL_ENSURE(tuple->GetValuesCount() == 7, "Expect 7 elements in the Tuple item");
-
-                TString refName = TStringBuilder() << "$table" << uniqSpecs.size();
-                TString specStr = TString(AS_VALUE(TDataLiteral, tuple->GetValue(2))->AsValue().AsStringRef());
-                const auto specNode = NYT::NodeFromYsonString(specStr);
-
-                NYT::TRichYPath richYPath;
-                NYT::Deserialize(richYPath, NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tuple->GetValue(0))->AsValue().AsStringRef())));
-                const bool isTemporary = AS_VALUE(TDataLiteral, tuple->GetValue(1))->AsValue().Get<bool>();
-                const bool isAnonymous = AS_VALUE(TDataLiteral, tuple->GetValue(5))->AsValue().Get<bool>();
-                const ui32 epoch = AS_VALUE(TDataLiteral, tuple->GetValue(6))->AsValue().Get<ui32>();
-
-                auto tablePath = TransformPath(tmpFolder, richYPath.Path_, isTemporary, ExecCtx_.Session_->UserName_);
-
-                auto res = uniqSpecs.emplace(specStr, refName);
-                if (res.second) {
-                    registryNode[refName] = specNode;
+                if (contentTmpFolder.EndsWith('/')) {
+                    contentTmpFolder.remove(contentTmpFolder.length() - 1);
                 }
-                else {
-                    refName = res.first->second;
-                }
-                tablesNode.Add(refName);
+
+                TString uniqueId = GetGuidAsString(ExecCtx_.Session_->RandomProvider_->GenGuid());
+
+                TListLiteral* groupList = AS_VALUE(TListLiteral, callable.GetInput(1));
+                YQL_ENSURE(groupList->GetItemsCount() == 1);
+                TListLiteral* tableList = AS_VALUE(TListLiteral, groupList->GetItems()[0]);
+
+                NYT::TNode specNode = NYT::TNode::CreateMap();
+                NYT::TNode& tablesNode = specNode[YqlIOSpecTables];
+                NYT::TNode& registryNode = specNode[YqlIOSpecRegistry];
+                THashMap<TString, TString> uniqSpecs;
+                TVector<NYT::TRichYPath> richPaths;
+                TVector<NYT::TNode> formats;
+
+                THashMap<TString, ui32> structColumns;
                 if (useSkiff) {
-                    formats.push_back(SingleTableSpecToInputSkiff(specNode, structColumns, false, false, false));
-                } else {
-                    if (ensureOldTypesOnly && specNode.HasKey(YqlRowSpecAttribute)) {
-                        EnsureSpecDoesntUseNativeYtTypes(specNode, tablePath, true);
-                    }
-                    NYT::TNode formatNode("yson");
-                    formatNode.Attributes()["format"] = "binary";
-                    formats.push_back(formatNode);
-                }
-
-                if (isTemporary && !isAnonymous) {
-                    richYPath.Path_ = NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix);
-                } else {
-                    auto p = entry->Snapshots.FindPtr(std::make_pair(tablePath, epoch));
-                    YQL_ENSURE(p, "Table " << tablePath << " has no snapshot");
-                    richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p));
-                }
-                richPaths.push_back(richYPath);
-
-                const ui64 chunkCount = AS_VALUE(TDataLiteral, tuple->GetValue(3))->AsValue().Get<ui64>();
-                if (chunkCount > maxChunksForNativeDelivery) {
-                    deliveryMode = ETableContentDeliveryMode::File;
-                    YQL_CLOG(DEBUG, ProviderYt) << "Switching to file delivery mode, because table "
-                        << tablePath.Quote() << " has too many chunks: " << chunkCount;
-                }
-            }
-
-            for (size_t i = 0; i < richPaths.size(); ++i) {
-                NYT::TRichYPath richYPath = richPaths[i];
-
-                TString richYPathDesc = NYT::NodeToYsonString(NYT::PathToNode(richYPath));
-                TString fileName = TStringBuilder() << uniqueId << '_' << i;
-
-                if (ETableContentDeliveryMode::Native == deliveryMode) {
-                    richYPath.Format(formats[i]);
-                    richYPath.FileName(fileName);
-                    RemoteFiles_->push_back(richYPath);
-
-                    YQL_CLOG(DEBUG, ProviderYt) << "Passing table " << richYPathDesc << " as remote file "
-                        << fileName.Quote();
-                }
-                else {
-                    NYT::TTableReaderOptions readerOptions;
-                    readerOptions.CreateTransaction(false);
-
-                    auto readerTx = tx;
-                    if (richYPath.TransactionId_) {
-                        readerTx = entry->GetSnapshotTx(*richYPath.TransactionId_);
-                        richYPath.TransactionId_.Clear();
-                    }
-
-                    TTupleLiteral* samplingTuple = AS_VALUE(TTupleLiteral, callable.GetInput(2));
-                    if (samplingTuple->GetValuesCount() != 0) {
-                        YQL_ENSURE(samplingTuple->GetValuesCount() == 3);
-                        double samplingPercent = AS_VALUE(TDataLiteral, samplingTuple->GetValue(0))->AsValue().Get<double>();
-                        ui64 samplingSeed = AS_VALUE(TDataLiteral, samplingTuple->GetValue(1))->AsValue().Get<ui64>();
-                        bool isSystemSampling = AS_VALUE(TDataLiteral, samplingTuple->GetValue(2))->AsValue().Get<bool>();
-                        if (!isSystemSampling) {
-                            NYT::TNode spec = NYT::TNode::CreateMap();
-                            spec["sampling_rate"] = samplingPercent / 100.;
-                            if (samplingSeed) {
-                                spec["sampling_seed"] = static_cast<i64>(samplingSeed);
-                            }
-                            readerOptions.Config(spec);
-                        }
-                    }
-
-                    TRawTableReaderPtr reader;
-                    const int lastAttempt = NYT::TConfig::Get()->ReadRetryCount - 1;
-                    for (int attempt = 0; attempt <= lastAttempt; ++attempt) {
-                        try {
-                            reader = readerTx->CreateRawReader(richYPath, NYT::TFormat(formats[i]), readerOptions);
-                            break;
-                        } catch (const NYT::TErrorResponse& e) {
-                            YQL_CLOG(ERROR, ProviderYt) << "Error creating reader for " << richYPathDesc << ": " << e.what();
-                            // Already retried inside CreateRawReader
-                            throw;
-                        } catch (const yexception& e) {
-                            YQL_CLOG(ERROR, ProviderYt) << "Error creating reader for " << richYPathDesc << ": " << e.what();
-                            if (attempt == lastAttempt) {
-                                throw;
-                            }
-                            NYT::NDetail::TWaitProxy::Get()->Sleep(NYT::TConfig::Get()->RetryInterval);
-                        }
-                    }
-
-                    if (contentTmpFolder) {
-                        entry->GetRoot()->Create(contentTmpFolder, NT_MAP,
-                            TCreateOptions().Recursive(true).IgnoreExisting(true));
-
-                        auto remotePath = TString(contentTmpFolder).append('/').append(fileName);
-
-                        while (true) {
-                            try {
-                                auto out = tx->CreateFileWriter(TRichYPath(remotePath));
-                                TBrotliCompress compressor(out.Get(), Settings_->TableContentCompressLevel.Get(cluster).GetOrElse(8));
-                                TransferData(reader.Get(), &compressor);
-                                compressor.Finish();
-                                out->Finish();
-                            } catch (const yexception& e) {
-                                YQL_CLOG(ERROR, ProviderYt) << "Error transferring " << richYPathDesc << " to " << remotePath << ": " << e.what();
-                                if (reader->Retry(Nothing(), Nothing())) {
-                                    continue;
-                                }
-                                throw;
-                            }
-                            break;
-                        }
-                        entry->DeleteAtFinalize(remotePath);
-                        YQL_CLOG(DEBUG, ProviderYt) << "Passing table " << richYPathDesc << " as remote file " << remotePath.Quote();
-
-                        RemoteFiles_->push_back(NYT::TRichYPath(NYT::AddPathPrefix(remotePath, NYT::TConfig::Get()->Prefix)).FileName(fileName));
-
+                    auto itemType = AS_TYPE(TListType, callable.GetType()->GetReturnType())->GetItemType();
+                    TStructType* itemTypeStruct = AS_TYPE(TStructType, itemType);
+                    if (itemTypeStruct->GetMembersCount() == 0) {
+                        useSkiff = false; // TODO: YT-12235
                     } else {
-                        TString outPath = TmpFiles_.AddFile(fileName);
-
-                        if (PublicId_) {
-                            auto progress = TOperationProgress(TString(YtProviderName), *PublicId_,
-                                TOperationProgress::EState::InProgress, "Preparing table content");
-                            ExecCtx_.Session_->ProgressWriter_(progress);
+                        for (ui32 index = 0; index < itemTypeStruct->GetMembersCount(); ++index) {
+                            structColumns.emplace(itemTypeStruct->GetMemberName(index), index);
                         }
-                        while (true) {
-                            try {
-                                TOFStream out(outPath);
-                                out.SetFinishPropagateMode(false);
-                                out.SetFlushPropagateMode(false);
-                                TBrotliCompress compressor(&out, Settings_->TableContentCompressLevel.Get(cluster).GetOrElse(8));
-                                TransferData(reader.Get(), &compressor);
-                                compressor.Finish();
-                                out.Finish();
-                            } catch (const TIoException& e) {
-                                YQL_CLOG(ERROR, ProviderYt) << "Error reading " << richYPathDesc << ": " << e.what();
-                                // Don't retry IO errors
-                                throw;
-                            } catch (const yexception& e) {
-                                YQL_CLOG(ERROR, ProviderYt) << "Error reading " << richYPathDesc << ": " << e.what();
-                                if (reader->Retry(Nothing(), Nothing())) {
-                                    continue;
-                                }
-                                throw;
-                            }
-                            break;
-                        }
-                        YQL_CLOG(DEBUG, ProviderYt) << "Passing table " << richYPathDesc << " as file "
-                            << fileName.Quote() << " (size=" << TFileStat(outPath).Size << ')';
-
-                        LocalFiles_->emplace_back(outPath, TString());
                     }
                 }
-            }
 
-            TCallableBuilder call(env,
-                TStringBuilder() << TYtTableContent::CallableName() << TStringBuf("Job"),
-                callable.GetType()->GetReturnType());
+                for (ui32 i = 0; i < tableList->GetItemsCount(); ++i) {
+                    TTupleLiteral* tuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[i]);
+                    YQL_ENSURE(tuple->GetValuesCount() == 7, "Expect 7 elements in the Tuple item");
 
-            call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(uniqueId));
-            call.Add(PgmBuilder_.NewDataLiteral(tableList->GetItemsCount()));
-            call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(specNode)));
-            call.Add(PgmBuilder_.NewDataLiteral(useSkiff));
-            call.Add(PgmBuilder_.NewDataLiteral(ETableContentDeliveryMode::File == deliveryMode)); // use compression
-            call.Add(callable.GetInput(3)); // length
-            return TRuntimeNode(call.Build(), false);
-        };
-    }
+                    TString refName = TStringBuilder() << "$table" << uniqSpecs.size();
+                    TString specStr = TString(AS_VALUE(TDataLiteral, tuple->GetValue(2))->AsValue().AsStringRef());
+                    const auto specNode = NYT::NodeFromYsonString(specStr);
 
-    if (name == TStringBuf("Udf") || name == TStringBuf("ScriptUdf")) {
-        return [&](NMiniKQL::TCallable& callable, const TTypeEnvironment& /*env*/) {
-            YQL_ENSURE(callable.GetInputsCount() > 0, "Expected at least one argument");
-            const TString udfName(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
-            const auto moduleName = ModuleName(udfName);
+                    NYT::TRichYPath richYPath;
+                    NYT::Deserialize(richYPath, NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tuple->GetValue(0))->AsValue().AsStringRef())));
+                    const bool isTemporary = AS_VALUE(TDataLiteral, tuple->GetValue(1))->AsValue().Get<bool>();
+                    const bool isAnonymous = AS_VALUE(TDataLiteral, tuple->GetValue(5))->AsValue().Get<bool>();
+                    const ui32 epoch = AS_VALUE(TDataLiteral, tuple->GetValue(6))->AsValue().Get<ui32>();
 
-            *UntrustedUdfFlag_ = *UntrustedUdfFlag_ ||
-                callable.GetType()->GetName() == TStringBuf("ScriptUdf") ||
-                !ExecCtx_.FunctionRegistry_->IsLoadedUdfModule(moduleName) ||
-                moduleName == TStringBuf("Geo");
+                    auto tablePath = TransformPath(tmpFolder, richYPath.Path_, isTemporary, ExecCtx_.Session_->UserName_);
 
-            const auto udfPath = FindUdfPath(moduleName);
-            if (!udfPath.StartsWith(NMiniKQL::StaticModulePrefix)) {
-                const auto fileInfo = ExecCtx_.UserFiles_->GetFile(udfPath);
-                YQL_ENSURE(fileInfo, "Unknown udf path " << udfPath);
-                AddFile(udfPath, *fileInfo, FindUdfPrefix(moduleName));
-            }
+                    auto res = uniqSpecs.emplace(specStr, refName);
+                    if (res.second) {
+                        registryNode[refName] = specNode;
+                    }
+                    else {
+                        refName = res.first->second;
+                    }
+                    tablesNode.Add(refName);
+                    if (useSkiff) {
+                        formats.push_back(SingleTableSpecToInputSkiff(specNode, structColumns, false, false, false));
+                    } else {
+                        if (ensureOldTypesOnly && specNode.HasKey(YqlRowSpecAttribute)) {
+                            EnsureSpecDoesntUseNativeYtTypes(specNode, tablePath, true);
+                        }
+                        NYT::TNode formatNode("yson");
+                        formatNode.Attributes()["format"] = "binary";
+                        formats.push_back(formatNode);
+                    }
 
-            if (moduleName == TStringBuf("Geo")) {
-                if (const auto fileInfo = ExecCtx_.UserFiles_->GetFile("/home/geodata6.bin")) {
-                    AddFile("./geodata6.bin", *fileInfo);
+                    if (isTemporary && !isAnonymous) {
+                        richYPath.Path_ = NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix);
+                    } else {
+                        auto p = entry->Snapshots.FindPtr(std::make_pair(tablePath, epoch));
+                        YQL_ENSURE(p, "Table " << tablePath << " has no snapshot");
+                        richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p));
+                    }
+                    richPaths.push_back(richYPath);
+
+                    const ui64 chunkCount = AS_VALUE(TDataLiteral, tuple->GetValue(3))->AsValue().Get<ui64>();
+                    if (chunkCount > maxChunksForNativeDelivery) {
+                        deliveryMode = ETableContentDeliveryMode::File;
+                        YQL_CLOG(DEBUG, ProviderYt) << "Switching to file delivery mode, because table "
+                            << tablePath.Quote() << " has too many chunks: " << chunkCount;
+                    }
                 }
-            }
 
-            return TRuntimeNode(&callable, false);
-        };
+                for (size_t i = 0; i < richPaths.size(); ++i) {
+                    NYT::TRichYPath richYPath = richPaths[i];
+
+                    TString richYPathDesc = NYT::NodeToYsonString(NYT::PathToNode(richYPath));
+                    TString fileName = TStringBuilder() << uniqueId << '_' << i;
+
+                    if (ETableContentDeliveryMode::Native == deliveryMode) {
+                        richYPath.Format(formats[i]);
+                        richYPath.FileName(fileName);
+                        RemoteFiles_->push_back(richYPath);
+
+                        YQL_CLOG(DEBUG, ProviderYt) << "Passing table " << richYPathDesc << " as remote file "
+                            << fileName.Quote();
+                    }
+                    else {
+                        NYT::TTableReaderOptions readerOptions;
+                        readerOptions.CreateTransaction(false);
+
+                        auto readerTx = tx;
+                        if (richYPath.TransactionId_) {
+                            readerTx = entry->GetSnapshotTx(*richYPath.TransactionId_);
+                            richYPath.TransactionId_.Clear();
+                        }
+
+                        TTupleLiteral* samplingTuple = AS_VALUE(TTupleLiteral, callable.GetInput(2));
+                        if (samplingTuple->GetValuesCount() != 0) {
+                            YQL_ENSURE(samplingTuple->GetValuesCount() == 3);
+                            double samplingPercent = AS_VALUE(TDataLiteral, samplingTuple->GetValue(0))->AsValue().Get<double>();
+                            ui64 samplingSeed = AS_VALUE(TDataLiteral, samplingTuple->GetValue(1))->AsValue().Get<ui64>();
+                            bool isSystemSampling = AS_VALUE(TDataLiteral, samplingTuple->GetValue(2))->AsValue().Get<bool>();
+                            if (!isSystemSampling) {
+                                NYT::TNode spec = NYT::TNode::CreateMap();
+                                spec["sampling_rate"] = samplingPercent / 100.;
+                                if (samplingSeed) {
+                                    spec["sampling_seed"] = static_cast<i64>(samplingSeed);
+                                }
+                                readerOptions.Config(spec);
+                            }
+                        }
+
+                        TRawTableReaderPtr reader;
+                        const int lastAttempt = NYT::TConfig::Get()->ReadRetryCount - 1;
+                        for (int attempt = 0; attempt <= lastAttempt; ++attempt) {
+                            try {
+                                reader = readerTx->CreateRawReader(richYPath, NYT::TFormat(formats[i]), readerOptions);
+                                break;
+                            } catch (const NYT::TErrorResponse& e) {
+                                YQL_CLOG(ERROR, ProviderYt) << "Error creating reader for " << richYPathDesc << ": " << e.what();
+                                // Already retried inside CreateRawReader
+                                throw;
+                            } catch (const yexception& e) {
+                                YQL_CLOG(ERROR, ProviderYt) << "Error creating reader for " << richYPathDesc << ": " << e.what();
+                                if (attempt == lastAttempt) {
+                                    throw;
+                                }
+                                NYT::NDetail::TWaitProxy::Get()->Sleep(NYT::TConfig::Get()->RetryInterval);
+                            }
+                        }
+
+                        if (contentTmpFolder) {
+                            entry->GetRoot()->Create(contentTmpFolder, NT_MAP,
+                                TCreateOptions().Recursive(true).IgnoreExisting(true));
+
+                            auto remotePath = TString(contentTmpFolder).append('/').append(fileName);
+
+                            while (true) {
+                                try {
+                                    auto out = tx->CreateFileWriter(TRichYPath(remotePath));
+                                    TBrotliCompress compressor(out.Get(), Settings_->TableContentCompressLevel.Get(cluster).GetOrElse(8));
+                                    TransferData(reader.Get(), &compressor);
+                                    compressor.Finish();
+                                    out->Finish();
+                                } catch (const yexception& e) {
+                                    YQL_CLOG(ERROR, ProviderYt) << "Error transferring " << richYPathDesc << " to " << remotePath << ": " << e.what();
+                                    if (reader->Retry(Nothing(), Nothing())) {
+                                        continue;
+                                    }
+                                    throw;
+                                }
+                                break;
+                            }
+                            entry->DeleteAtFinalize(remotePath);
+                            YQL_CLOG(DEBUG, ProviderYt) << "Passing table " << richYPathDesc << " as remote file " << remotePath.Quote();
+
+                            RemoteFiles_->push_back(NYT::TRichYPath(NYT::AddPathPrefix(remotePath, NYT::TConfig::Get()->Prefix)).FileName(fileName));
+
+                        } else {
+                            TString outPath = TmpFiles_.AddFile(fileName);
+
+                            if (PublicId_) {
+                                auto progress = TOperationProgress(TString(YtProviderName), *PublicId_,
+                                    TOperationProgress::EState::InProgress, "Preparing table content");
+                                ExecCtx_.Session_->ProgressWriter_(progress);
+                            }
+                            while (true) {
+                                try {
+                                    TOFStream out(outPath);
+                                    out.SetFinishPropagateMode(false);
+                                    out.SetFlushPropagateMode(false);
+                                    TBrotliCompress compressor(&out, Settings_->TableContentCompressLevel.Get(cluster).GetOrElse(8));
+                                    TransferData(reader.Get(), &compressor);
+                                    compressor.Finish();
+                                    out.Finish();
+                                } catch (const TIoException& e) {
+                                    YQL_CLOG(ERROR, ProviderYt) << "Error reading " << richYPathDesc << ": " << e.what();
+                                    // Don't retry IO errors
+                                    throw;
+                                } catch (const yexception& e) {
+                                    YQL_CLOG(ERROR, ProviderYt) << "Error reading " << richYPathDesc << ": " << e.what();
+                                    if (reader->Retry(Nothing(), Nothing())) {
+                                        continue;
+                                    }
+                                    throw;
+                                }
+                                break;
+                            }
+                            YQL_CLOG(DEBUG, ProviderYt) << "Passing table " << richYPathDesc << " as file "
+                                << fileName.Quote() << " (size=" << TFileStat(outPath).Size << ')';
+
+                            LocalFiles_->emplace_back(outPath, TString());
+                        }
+                    }
+                }
+
+                TCallableBuilder call(env,
+                    TStringBuilder() << TYtTableContent::CallableName() << TStringBuf("Job"),
+                    callable.GetType()->GetReturnType());
+
+                call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(uniqueId));
+                call.Add(PgmBuilder_.NewDataLiteral(tableList->GetItemsCount()));
+                call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(specNode)));
+                call.Add(PgmBuilder_.NewDataLiteral(useSkiff));
+                call.Add(PgmBuilder_.NewDataLiteral(ETableContentDeliveryMode::File == deliveryMode)); // use compression
+                call.Add(callable.GetInput(3)); // length
+                return TRuntimeNode(call.Build(), false);
+            };
+        }
     }
 
-    if (name == TStringBuf("FilePath") || name == TStringBuf("FileContent") || name == TStringBuf("FolderPath")) {
-        if (name == TStringBuf("FolderPath")) {
+    if (EPhase::Other == Phase_ || EPhase::All == Phase_) {
+        if (name == TStringBuf("Udf") || name == TStringBuf("ScriptUdf")) {
+            return [&](NMiniKQL::TCallable& callable, const TTypeEnvironment& /*env*/) {
+                YQL_ENSURE(callable.GetInputsCount() > 0, "Expected at least one argument");
+                const TString udfName(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
+                const auto moduleName = ModuleName(udfName);
+
+                *UntrustedUdfFlag_ = *UntrustedUdfFlag_ ||
+                    callable.GetType()->GetName() == TStringBuf("ScriptUdf") ||
+                    !ExecCtx_.FunctionRegistry_->IsLoadedUdfModule(moduleName) ||
+                    moduleName == TStringBuf("Geo");
+
+                const auto udfPath = FindUdfPath(moduleName);
+                if (!udfPath.StartsWith(NMiniKQL::StaticModulePrefix)) {
+                    const auto fileInfo = ExecCtx_.UserFiles_->GetFile(udfPath);
+                    YQL_ENSURE(fileInfo, "Unknown udf path " << udfPath);
+                    AddFile(udfPath, *fileInfo, FindUdfPrefix(moduleName));
+                }
+
+                if (moduleName == TStringBuf("Geo")) {
+                    if (const auto fileInfo = ExecCtx_.UserFiles_->GetFile("/home/geodata6.bin")) {
+                        AddFile("./geodata6.bin", *fileInfo);
+                    }
+                }
+
+                return TRuntimeNode(&callable, false);
+            };
+        }
+
+        if (name == TStringBuf("FilePath") || name == TStringBuf("FileContent") || name == TStringBuf("FolderPath")) {
+            if (name == TStringBuf("FolderPath")) {
+                *RemoteExecutionFlag_ = true;
+            }
+            return [&](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+                YQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arguments");
+                const TString fileName(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
+                const TString fullFileName = TUserDataStorage::MakeFullName(fileName);
+
+                auto callableName = callable.GetType()->GetName();
+                if (callableName == TStringBuf("FolderPath")) {
+                    TVector<TString> files;
+                    if (!ExecCtx_.UserFiles_->FindFolder(fullFileName, files)) {
+                        ythrow yexception() << "Folder not found: " << fullFileName;
+                    }
+                    for (const auto& x : files) {
+                        auto fileInfo = ExecCtx_.UserFiles_->GetFile(x);
+                        YQL_ENSURE(fileInfo, "File not found: " << x);
+                        AddFile(x, *fileInfo);
+                    }
+                } else {
+                    auto fileInfo = ExecCtx_.UserFiles_->GetFile(fullFileName);
+                    YQL_ENSURE(fileInfo, "File not found: " << fullFileName);
+                    AddFile(fileName, *fileInfo);
+                }
+
+                TStringBuilder jobCallable;
+                if (callableName == TStringBuf("FolderPath")) {
+                    jobCallable << "FilePath";
+                } else {
+                    jobCallable << callableName;
+                }
+
+                TCallableBuilder builder(env, jobCallable << TStringBuf("Job"),
+                    callable.GetType()->GetReturnType(), false);
+                builder.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(fullFileName));
+                return TRuntimeNode(builder.Build(), false);
+            };
+        }
+
+        if (name == TYtTablePath::CallableName()
+            || name == TYtTableIndex::CallableName()
+            || name == TYtTableRecord::CallableName()
+            || name == TYtIsKeySwitch::CallableName()
+            || name == TYtRowNumber::CallableName())
+        {
             *RemoteExecutionFlag_ = true;
         }
-        return [&](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
-            YQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arguments");
-            const TString fileName(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
-            const TString fullFileName = TUserDataStorage::MakeFullName(fileName);
-
-            auto callableName = callable.GetType()->GetName();
-            if (callableName == TStringBuf("FolderPath")) {
-                TVector<TString> files;
-                if (!ExecCtx_.UserFiles_->FindFolder(fullFileName, files)) {
-                    ythrow yexception() << "Folder not found: " << fullFileName;
-                }
-                for (const auto& x : files) {
-                    auto fileInfo = ExecCtx_.UserFiles_->GetFile(x);
-                    YQL_ENSURE(fileInfo, "File not found: " << x);
-                    AddFile(x, *fileInfo);
-                }
-            } else {
-                auto fileInfo = ExecCtx_.UserFiles_->GetFile(fullFileName);
-                YQL_ENSURE(fileInfo, "File not found: " << fullFileName);
-                AddFile(fileName, *fileInfo);
-            }
-
-            TStringBuilder jobCallable;
-            if (callableName == TStringBuf("FolderPath")) {
-                jobCallable << "FilePath";
-            } else {
-                jobCallable << callableName;
-            }
-
-            TCallableBuilder builder(env, jobCallable << TStringBuf("Job"),
-                callable.GetType()->GetReturnType(), false);
-            builder.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(fullFileName));
-            return TRuntimeNode(builder.Build(), false);
-        };
-    }
-
-    if (name == TYtTablePath::CallableName()
-        || name == TYtTableIndex::CallableName()
-        || name == TYtTableRecord::CallableName()
-        || name == TYtIsKeySwitch::CallableName()
-        || name == TYtRowNumber::CallableName())
-    {
-        *RemoteExecutionFlag_ = true;
     }
 
     return TCallableVisitFunc();
+}
+
+bool TGatewayTransformer::HasSecondPhase() {
+    YQL_ENSURE(EPhase::Other == Phase_);
+    if (!*TableContentFlag_) {
+        return false;
+    }
+    ForceLocalTableContent_ = CanExecuteInternally();
+    Phase_ = EPhase::Content;
+    return true;
 }
 
 void TGatewayTransformer::ApplyJobProps(TYqlJobBase& job) {

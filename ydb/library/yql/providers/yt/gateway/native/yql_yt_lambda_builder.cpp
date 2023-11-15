@@ -6,6 +6,7 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/comp_nodes/yql_mkql_output.h>
+#include <ydb/library/yql/providers/yt/comp_nodes/yql_mkql_table_content.h>
 
 #include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
@@ -39,9 +40,9 @@ using namespace NCommon;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
-NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TMkqlWriterImpl* writer, TUserFiles::TPtr files) {
+NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TCodecContext* codecCtx, TMkqlWriterImpl* writer, TUserFiles::TPtr files, TStringBuf filePrefix) {
     TMaybe<ui32> exprContextObject;
-    return [exprContextObject, writer, files](NMiniKQL::TCallable& callable, const TComputationNodeFactoryContext& ctx) mutable -> IComputationNode* {
+    return [exprContextObject, codecCtx, writer, files, filePrefix](NMiniKQL::TCallable& callable, const TComputationNodeFactoryContext& ctx) mutable -> IComputationNode* {
         if (callable.GetType()->GetName() == TYtTablePath::CallableName()
             || callable.GetType()->GetName() == TYtTableIndex::CallableName()
             || callable.GetType()->GetName() == TYtTableRecord::CallableName()
@@ -63,6 +64,11 @@ NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TMkqlWriterImpl
         if (callable.GetType()->GetName() == "YtOutput") {
             YQL_ENSURE(writer);
             return WrapYtOutput(callable, ctx, *writer);
+        }
+
+        if (callable.GetType()->GetName() == "YtTableContentJob") {
+            YQL_ENSURE(codecCtx);
+            return WrapYtTableContent(*codecCtx, ctx.Mutables, callable, "OFF" /* no LLVM for local exec */, filePrefix);
         }
 
         if (!exprContextObject) {

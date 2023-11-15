@@ -818,18 +818,6 @@
       - $U/ntddk.h
       - contrib/tools/fluent-bit-full/lib/msgpack-c/include/msgpack/gcc_atomic.h
 
-- source_filter: "^mail/xiva/msgpack"
-  includes:
-    - _msgpack_atomic_counter_header:
-      - $U/windows.h
-      - mail/xiva/msgpack/include/msgpack/gcc_atomic.h
-
-- source_filter: "^skynet/packages/libraries/liner/msgpack"
-  includes:
-    - _msgpack_atomic_counter_header:
-      - $U/windows.h
-      - skynet/packages/libraries/liner/msgpack/gcc_atomic.h
-
 - source_filter: "^contrib/libs/opencv/modules/calib3d"
   includes:
     - CV_CPU_SIMD_FILENAME: contrib/libs/opencv/modules/calib3d/src/undistort.simd.hpp
@@ -1185,27 +1173,6 @@
     - IETF_YANG_METADATA_PATH: contrib/libs/libyang/models/ietf-yang-metadata@2016-08-05.h
     - IETF_YANG_TYPES_PATH: contrib/libs/libyang/models/ietf-yang-types@2013-07-15.h
     - YANG_PATH: contrib/libs/libyang/models/yang@2017-02-20.h
-
-# adfox/amacs and mds/cocaine are legacy projects which is set to removal from the repo.
-# Resolve macro includes into nothing as nobody needs sandboxed build to be functional in these places.
-- source_filter: "^adfox/amacs/deps/luabind"
-  includes:
-    - BOOST_PP_ITERATE()
-
-- source_filter: "^mds/cocaine/core"
-  includes:
-    - BOOST_PP_ITERATE()
-
-# market uses include-via-define by design, just ignore this includes
-- source_filter: "^market/media_adv/library/experiments"
-  includes:
-    - MARKET_MADV_EXP_FLAGS_FILENAME
-
-- source_filter: "^yt/yt/experiments/tabletvis/allegro5-headers"
-  includes:
-    - ALLEGRO_EXTRA_HEADER:
-      - yt/yt/experiments/tabletvis/allegro5-headers/allegro5/platform/alunix.h
-      - yt/yt/experiments/tabletvis/allegro5-headers/allegro5/platform/alwin.h
 
 # Connectedhomeip contrib uses a special type of imports for third-party includes https://github.com/project-chip/connectedhomeip/issues/4354
 # Also empty MACROs here defined for Linux and ESP32 platforms, but esp32 files use third-party library esp-idf

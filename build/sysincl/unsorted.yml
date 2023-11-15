@@ -254,7 +254,7 @@
   includes:
   - timers.h
 
-- source_filter: "^(contrib/libs/curl|taxi/external/curl)"
+- source_filter: "^contrib/libs/curl"
   includes:
   - lwip/init.h
   - lwip/netdb.h

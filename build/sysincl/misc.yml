@@ -294,12 +294,6 @@
   includes:
     - patchlevel.h
 
-- source_filter: "^metrika/uatraits"
-  includes:
-    - note.h
-    - could_not_find_Perl_patchlevel.h
-    - patchlevel.h
-
 - source_filter: "^(contrib/restricted/boost/boost/mpi|catboost/cuda/cuda_lib/mpi)"
   includes:
     - mpi.h
@@ -357,10 +351,6 @@
 - source_filter: "^contrib/libs/h3"
   includes:
     - alloc.h: contrib/libs/h3/h3lib/include/alloc.h
-
-- source_filter: "^cloud/iam/token_agent/daemon"
-  includes:
-    - contrib/libs/grpc/include/grpcpp/impl/codegen/server_context_impl.h
 
 - source_filter: "^contrib/libs/libyang"
   includes:

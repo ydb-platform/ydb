@@ -559,7 +559,7 @@ void TGuardedGrpcCompletionQueue::Shutdown()
             return;
         }
         State_ = EState::Shutdown;
-        if (LocksCount_ != 0) {
+        if (LocksCount_.load() != 0) {
             guard.Release();
             ReleaseDone_.Wait();
         }
@@ -582,7 +582,7 @@ grpc_completion_queue* TGuardedGrpcCompletionQueue::UnwrapUnsafe()
 void TGuardedGrpcCompletionQueue::Release()
 {
     auto guard = ReaderGuard(SpinLock_);
-    if (LocksCount_.fetch_sub(1, std::memory_order::release) == 0 && State_ == EState::Shutdown) {
+    if (LocksCount_.fetch_sub(1, std::memory_order::release) == 1 && State_ == EState::Shutdown) {
         guard.Release();
         ReleaseDone_.NotifyOne();
     }

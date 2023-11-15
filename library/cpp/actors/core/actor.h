@@ -719,19 +719,19 @@ namespace NActors {
         template <typename T>
         void Become(T stateFunc) {
             // TODO(kruall): have to uncomment asserts after end of sync contrib/ydb
-            // static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
+            static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
             this->IActorCallback::Become(stateFunc);
         }
 
         template <typename T, typename... TArgs>
         void Become(T stateFunc, const TActorContext& ctx, TArgs&&... args) {
-            // static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
+            static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
             this->IActorCallback::Become(stateFunc, ctx, std::forward<TArgs>(args)...);
         }
 
         template <typename T, typename... TArgs>
         void Become(T stateFunc, TArgs&&... args) {
-            // static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
+            static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
             this->IActorCallback::Become(stateFunc, std::forward<TArgs>(args)...);
         }
     };

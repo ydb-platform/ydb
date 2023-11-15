@@ -811,7 +811,7 @@ public:
 
     void OnBootstrap() override {
         Register(new TCheckLeaseStatusQueryActor(Database, ExecutionId, Cookie));
-        Become(&TCheckLeaseStatusActor::StateFunc);
+        UnsafeBecome(&TCheckLeaseStatusActor::StateFunc);
     }
 
     void OnLeaseVerified() override {
@@ -1190,7 +1190,7 @@ public:
 
     void OnBootstrap() override {
         Register(new TGetScriptExecutionOperationQueryActor(Request->Get()->Database, Request->Get()->OperationId));
-        Become(&TGetScriptExecutionOperationActor::StateFunc);
+        UnsafeBecome(&TGetScriptExecutionOperationActor::StateFunc);
     }
 
     void OnLeaseVerified() override {

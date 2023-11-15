@@ -735,7 +735,7 @@ public:
         IOptimizationContext& optCtx) override
     {
         auto queryType = SessionCtx->Query().Type;
-        if (queryType == EKikimrQueryType::Scan) {
+        if (queryType == EKikimrQueryType::Scan || queryType == EKikimrQueryType::Query) {
             return source;
         }
 

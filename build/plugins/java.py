@@ -285,6 +285,8 @@ def onexternal_jar(unit, *args):
 
 def on_check_java_srcdir(unit, *args):
     args = list(args)
+    if 'SKIP_CHECK_SRCDIR' in args:
+        return
     for arg in args:
         if not '$' in arg:
             arc_srcdir = os.path.join(unit.get('MODDIR'), arg)

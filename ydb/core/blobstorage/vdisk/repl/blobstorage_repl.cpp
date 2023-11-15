@@ -349,8 +349,7 @@ namespace NKikimr {
             bool finished = false;
 
             if (info->Eof) { // when it is the last quantum for some donor, rotate the blob sets
-                BlobsToReplicatePtr = std::move(UnreplicatedBlobsPtr);
-                UnreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
+                BlobsToReplicatePtr = std::exchange(UnreplicatedBlobsPtr, std::make_shared<TBlobIdQueue>());
 
 #ifndef NDEBUG
                 Y_VERIFY_DEBUG_S(BlobsToReplicatePtr->size() == UnreplicatedBlobRecords.size(),

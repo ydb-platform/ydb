@@ -675,6 +675,13 @@ private:
         RowCount_ = 0;
     }
 
+    void WriteEndOfStream() override
+    {
+        auto output = GetOutputStream();
+        ui32 zero = 0;
+        output->Write(&zero, sizeof(zero));
+    }
+
     void DoWrite(TRange<TUnversionedRow> rows) override
     {
         Reset();

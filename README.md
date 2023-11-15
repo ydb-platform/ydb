@@ -71,7 +71,6 @@ For development purposes we test that YDB could be built and run under latest ve
 1. Run available [example application](https://ydb.tech/en/docs/reference/ydb-sdk/example/go/).
 1. Develop an application using [YDB SDK](https://ydb.tech/en/docs/reference/ydb-sdk/).
 
-
 ## How to Build from Source Code
 * Build server (ydbd) and client (ydb) binaries [from source code](BUILD.md).
 

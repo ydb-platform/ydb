@@ -1908,8 +1908,11 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         record.SetExtendedTabletInfo(true);
     }
     for (auto it = Nodes.begin(); it != Nodes.end(); ++it) {
-        auto& nodeStats = *record.AddNodeStats();
         const TNodeInfo& node = it->second;
+        if (node.IsUnknown()) {
+            continue;
+        }
+        auto& nodeStats = *record.AddNodeStats();
         nodeStats.SetNodeId(node.Id);
         if (!node.ServicedDomains.empty()) {
             nodeStats.MutableNodeDomain()->CopyFrom(node.ServicedDomains.front());

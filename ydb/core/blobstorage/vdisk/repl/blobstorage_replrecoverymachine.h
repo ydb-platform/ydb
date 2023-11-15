@@ -109,26 +109,18 @@ namespace NKikimr {
                 }
             };
 
-            enum class ERecoverStatus {
-                UNKNOWN,
-                RESTORED,
-                PHANTOM_CHECK,
-                RETRY,
-            };
-
         public:
             TRecoveryMachine(
                     std::shared_ptr<TReplCtx> replCtx,
-                    TEvReplFinished::TInfoPtr replInfo,
-                    TBlobIdQueuePtr unreplicatedBlobsPtr)
+                    TEvReplFinished::TInfoPtr replInfo)
                 : ReplCtx(std::move(replCtx))
                 , ReplInfo(replInfo)
-                , UnreplicatedBlobsPtr(std::move(unreplicatedBlobsPtr))
                 , LostVec(TMemoryConsumer(ReplCtx->VCtx->Replication))
                 , Arena(&TRopeArenaBackend::Allocate)
             {}
 
-            ERecoverStatus Recover(TPartSet& item, TRecoveredBlobsQueue& rbq, NMatrix::TVectorType& parts, TIngress& ingress) {
+            template<typename TBlobProcessor>
+            void Recover(TPartSet& item, TRecoveredBlobsQueue& rbq, TBlobProcessor&& processor) {
                 const TLogoBlobID& id = item.Id;
                 Y_ABORT_UNLESS(!id.PartId());
                 Y_ABORT_UNLESS(!LastRecoveredId || *LastRecoveredId < id);
@@ -137,23 +129,22 @@ namespace NKikimr {
                 RecoverMetadata(id, rbq);
 
                 while (!LostVec.empty() && LostVec.front().Id < id) {
-                    SkipItem(LostVec.front());
+                    SkipItem(LostVec.front(), processor);
                     LostVec.pop_front();
                 }
 
                 if (LostVec.empty() || LostVec.front().Id != id) {
                     STLOG(PRI_ERROR, BS_REPL, BSVR27, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "blob not in LostVec"),
                         (BlobId, id));
-                    return ERecoverStatus::RESTORED;
+                    return;
                 }
 
                 const TLost& lost = LostVec.front();
                 Y_ABORT_UNLESS(lost.Id == id);
 
-                const TBlobStorageGroupType groupType = ReplCtx->VCtx->Top->GType;
+                const NMatrix::TVectorType parts = lost.PartsToRecover;
 
-                parts = lost.PartsToRecover;
-                ingress = lost.Ingress;
+                const TBlobStorageGroupType groupType = ReplCtx->VCtx->Top->GType;
 
                 ui32 partsSize = 0;
                 bool hasExactParts = false;
@@ -169,19 +160,18 @@ namespace NKikimr {
                 Y_DEBUG_ABORT_UNLESS((item.PartsMask >> groupType.TotalPartCount()) == 0);
                 const ui32 presentParts = PopCount(item.PartsMask);
                 bool canRestore = presentParts >= groupType.MinimalRestorablePartCount();
-                ERecoverStatus status = ERecoverStatus::UNKNOWN;
 
                 // first of all, count present parts and recover only if there are enough of these parts
                 if (!canRestore && needToRestore && !hasExactParts) {
                     if (lost.PossiblePhantom) {
-                        status = ERecoverStatus::PHANTOM_CHECK;
+                        processor.AddPhantomBlobRecord(item, lost.Ingress, lost.PartsToRecover);
                     } else {
                         STLOG(PRI_INFO, BS_REPL, BSVR28, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "not enough data parts to recover"),
                             (BlobId, id), (NumPresentParts, presentParts), (MinParts, groupType.DataParts()),
                             (PartSet, item.ToString()), (Ingress, lost.Ingress.ToString(ReplCtx->VCtx->Top.get(),
                             ReplCtx->VCtx->ShortSelfVDisk, id)));
-                        BlobDone(id, false, true, &TEvReplFinished::TInfo::ItemsNotRecovered);
-                        status = ERecoverStatus::RETRY;
+                        BlobDone(item, false /*success*/, true /*unrecovered*/, &TEvReplFinished::TInfo::ItemsNotRecovered,
+                            lost.Ingress, false /*looksLikePhantom*/, processor);
                     }
                 } else {
                     // recover
@@ -235,59 +225,66 @@ namespace NKikimr {
                         ReplInfo->BytesRecovered += partsSize;
 
                         if (!numMissingParts) {
-                            BlobDone(id, true, false, &TEvReplFinished::TInfo::ItemsRecovered);
+                            BlobDone(item, true /*success*/, false /*unrecovered*/, &TEvReplFinished::TInfo::ItemsRecovered,
+                                {}, false /*looksLikePhantom*/, processor);
                             if (lost.PossiblePhantom) {
                                 ++ReplCtx->MonGroup.ReplPhantomLikeRecovered();
                             }
-                            status = ERecoverStatus::RESTORED;
                         } else if (lost.PossiblePhantom) {
-                            status = ERecoverStatus::PHANTOM_CHECK; // run phantom check for this blob
+                            processor.AddPhantomBlobRecord(item, lost.Ingress, lost.PartsToRecover);
                         } else {
-                            BlobDone(id, false, true, &TEvReplFinished::TInfo::ItemsPartiallyRecovered);
-                            status = ERecoverStatus::RETRY;
+                            BlobDone(item, false /*success*/, true /*unrecovered*/, &TEvReplFinished::TInfo::ItemsPartiallyRecovered,
+                                lost.Ingress, false /*looksLikePhantom*/, processor);
                         }
                     } catch (const std::exception& ex) {
                         ++ReplCtx->MonGroup.ReplRecoveryGroupTypeErrors();
                         STLOG(PRI_ERROR, BS_REPL, BSVR29, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "recovery exception"),
                             (BlobId, id), (Error, TString(ex.what())));
-                        BlobDone(id, false, true, &TEvReplFinished::TInfo::ItemsException);
-                        status = ERecoverStatus::RETRY;
+                        BlobDone(item, false /*success*/, true /*unrecovered*/, &TEvReplFinished::TInfo::ItemsException,
+                            lost.Ingress, false /*looksLikePhantom*/, processor);
                     }
                 }
 
                 LostVec.pop_front();
-                Y_ABORT_UNLESS(status != ERecoverStatus::UNKNOWN);
-                return status;
             }
 
-            void ProcessPhantomBlob(const TLogoBlobID& id, NMatrix::TVectorType parts, bool isPhantom, bool looksLikePhantom) {
+            template<typename TBlobProcessor>
+            void ProcessPhantomBlob(const TPartSet& item, NMatrix::TVectorType parts, bool isPhantom, bool looksLikePhantom,
+                    TIngress ingress, TBlobProcessor&& processor) {
                 STLOG(PRI_INFO, BS_REPL, BSVR00, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "phantom check completed"),
-                    (BlobId, id), (Parts, parts), (IsPhantom, isPhantom), (LooksLikePhantom, looksLikePhantom));
+                    (BlobId, item.Id), (Parts, parts), (IsPhantom, isPhantom), (LooksLikePhantom, looksLikePhantom));
 
                 const bool success = isPhantom; // confirmed phantom blob
+                const bool unrecovered = !looksLikePhantom; // if blob doesn't look like phantom, then it is ordinary unrecovered blob
                 Y_DEBUG_ABORT_UNLESS(isPhantom <= looksLikePhantom);
 
                 ++(success
                     ? ReplCtx->MonGroup.ReplPhantomLikeDropped()
                     : ReplCtx->MonGroup.ReplPhantomLikeUnrecovered());
 
-                BlobDone(id, success, !looksLikePhantom, looksLikePhantom
-                    ? &TEvReplFinished::TInfo::ItemsPhantom
-                    : &TEvReplFinished::TInfo::ItemsNonPhantom);
+                auto counter = success ? &TEvReplFinished::TInfo::ItemsPhantom :
+                    looksLikePhantom ? &TEvReplFinished::TInfo::ItemsNonPhantom :
+                    &TEvReplFinished::TInfo::ItemsNotRecovered;
+
+                BlobDone(item, success, unrecovered, counter, ingress, looksLikePhantom, processor);
             }
 
-            void BlobDone(TLogoBlobID id, bool success, bool unrecovered, ui64 TEvReplFinished::TInfo::*counter) {
-                STLOG(PRI_DEBUG, BS_REPL, BSVR35, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "BlobDone"), (BlobId, id),
+            template<typename TBlobProcessor>
+            void BlobDone(const TPartSet& item, bool success, bool unrecovered, ui64 TEvReplFinished::TInfo::*counter,
+                    TIngress ingress, bool looksLikePhantom, TBlobProcessor&& processor) {
+                STLOG(PRI_DEBUG, BS_REPL, BSVR35, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "BlobDone"), (BlobId, item.Id),
                     (Success, success));
 
+                const ui32 size = item.Id.BlobSize();
                 if (success) {
-                    ReplInfo->WorkUnitsPerformed += id.BlobSize();
-                    ReplCtx->MonGroup.ReplWorkUnitsDone() += id.BlobSize();
-                    ReplCtx->MonGroup.ReplWorkUnitsRemaining() -= id.BlobSize();
+                    ReplInfo->WorkUnitsPerformed += size;
+                    ReplCtx->MonGroup.ReplWorkUnitsDone() += size;
+                    ReplCtx->MonGroup.ReplWorkUnitsRemaining() -= size;
                     ++ReplCtx->MonGroup.ReplItemsDone();
                     --ReplCtx->MonGroup.ReplItemsRemaining();
+                    processor.DropUnreplicatedBlobRecord(item.Id);
                 } else {
-                    UnreplicatedBlobsPtr->push_back(id);
+                    processor.AddUnreplicatedBlobRecord(item, ingress, looksLikePhantom);
                 }
 
                 ++((*ReplInfo).*counter);
@@ -295,15 +292,13 @@ namespace NKikimr {
             }
 
             // finish work
-            void Finish(TRecoveredBlobsQueue& rbq) {
+            template<typename TBlobProcessor>
+            void Finish(TRecoveredBlobsQueue& rbq, TBlobProcessor&& processor) {
                 RecoverMetadata(TLogoBlobID(Max<ui64>(), Max<ui64>(), Max<ui64>()), rbq);
                 for (auto&& item : LostVec) {
-                    SkipItem(item);
+                    SkipItem(item, processor);
                 }
                 LostVec.clear();
-                
-                // sort unreplicated blobs vector as it may contain records in incorrect order due to phantom checking
-                std::sort(UnreplicatedBlobsPtr->begin(), UnreplicatedBlobsPtr->end());
             }
 
             // add next task during preparation phase
@@ -361,7 +356,6 @@ namespace NKikimr {
 
             std::shared_ptr<TReplCtx> ReplCtx;
             TEvReplFinished::TInfoPtr ReplInfo;
-            TBlobIdQueuePtr UnreplicatedBlobsPtr;
             TLostVec LostVec;
             TDeque<TLogoBlobID> MetadataParts;
             TRopeArena Arena;
@@ -404,14 +398,15 @@ namespace NKikimr {
                 }
             }
 
-            void SkipItem(const TLost& item) {
+            template<typename TBlobProcessor>
+            void SkipItem(const TLost& item, TBlobProcessor&& processor) {
                 STLOG(PRI_INFO, BS_REPL, BSVR31, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TRecoveryMachine::SkipItem"),
                     (BlobId, item.Id));
                 ++ReplInfo->ItemsNotRecovered;
-                UnreplicatedBlobsPtr->push_back(item.Id);
                 if (item.PossiblePhantom) {
                     ++ReplCtx->MonGroup.ReplPhantomLikeUnrecovered();
                 }
+                processor.AddUnreplicatedBlobRecord({item.Id, ReplCtx->VCtx->Top->GType}, item.Ingress, item.PossiblePhantom);
             }
         };
 

@@ -28,7 +28,8 @@ public:
     TKqpStreamLookupActor(ui64 inputIndex, NYql::NDq::TCollectStatsLevel statsLevel, const NUdf::TUnboxedValue& input,
         const NActors::TActorId& computeActorId, const NMiniKQL::TTypeEnvironment& typeEnv,
         const NMiniKQL::THolderFactory& holderFactory, std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc,
-        NKikimrKqp::TKqpStreamLookupSettings&& settings, TIntrusivePtr<TKqpCounters> counters)
+        const NYql::NDqProto::TTaskInput& inputDesc, NKikimrKqp::TKqpStreamLookupSettings&& settings,
+        TIntrusivePtr<TKqpCounters> counters)
         : LogPrefix(TStringBuilder() << "StreamLookupActor, inputIndex: " << inputIndex << ", CA Id " << computeActorId)
         , InputIndex(inputIndex)
         , Input(input)
@@ -38,7 +39,7 @@ public:
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
-        , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), typeEnv, holderFactory))
+        , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), typeEnv, holderFactory, inputDesc))
         , Counters(counters)
     {
         IngressStats.Level = statsLevel;
@@ -179,8 +180,8 @@ private:
         YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
 
         auto replyResultStats = StreamLookupWorker->ReplyResult(batch, freeSpace);
-        ReadRowsCount += replyResultStats.RowsCount;
-        ReadBytesCount += replyResultStats.BytesCount;
+        ReadRowsCount += replyResultStats.ReadRowsCount;
+        ReadBytesCount += replyResultStats.ReadBytesCount;
 
         auto status = FetchInputRows();
 
@@ -192,10 +193,10 @@ private:
             && AllReadsFinished()
             && StreamLookupWorker->AllRowsProcessed();
 
-        CA_LOG_D("Returned " << replyResultStats.BytesCount << " bytes, " << replyResultStats.RowsCount
+        CA_LOG_D("Returned " << replyResultStats.ResultBytesCount << " bytes, " << replyResultStats.ResultRowsCount
             << " rows, finished: " << finished);
 
-        return replyResultStats.BytesCount;
+        return replyResultStats.ResultBytesCount;
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {
@@ -501,10 +502,10 @@ private:
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateStreamLookupActor(ui64 inputIndex,
     NYql::NDq::TCollectStatsLevel statsLevel, const NUdf::TUnboxedValue& input, const NActors::TActorId& computeActorId,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
-    std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc, NKikimrKqp::TKqpStreamLookupSettings&& settings,
-    TIntrusivePtr<TKqpCounters> counters) {
+    std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc, const NYql::NDqProto::TTaskInput& inputDesc,
+    NKikimrKqp::TKqpStreamLookupSettings&& settings, TIntrusivePtr<TKqpCounters> counters) {
     auto actor = new TKqpStreamLookupActor(inputIndex, statsLevel, input, computeActorId, typeEnv, holderFactory,
-        alloc, std::move(settings), counters);
+        alloc, inputDesc, std::move(settings), counters);
     return {actor, actor};
 }
 

@@ -265,9 +265,6 @@ int main(int argc, char** argv) {
     backendConfig.SetToken(coordinatorConfig.GetToken());
     backendConfig.SetClusterName(coordinatorConfig.GetClusterName());
 
-    TString fileCacheDir = "./file_cache123";
-    IFileCache::TPtr fileCache = new TFileCache(fileCacheDir, 16000000000L);
-
     Cerr << host + ":" + ToString(ip) << Endl;
 
     TMaybe<ui32> maybeNodeId;
@@ -283,6 +280,9 @@ int main(int argc, char** argv) {
     );
 
     Cerr << "My nodeId: " << nodeId << Endl;
+    TString fileCacheDir = "./file_cache/" + ToString(nodeId);
+    IFileCache::TPtr fileCache = new TFileCache(fileCacheDir, 16000000000L);
+
 
     TString udfsDir = res.GetOrElse("udfs", "");
 
@@ -313,8 +313,8 @@ int main(int argc, char** argv) {
 
         for (auto& m : functionRegistry->GetAllModuleNames()) {
             auto path = *functionRegistry->FindUdfPath(m);
-            Cout << m << '\t' << path << Endl;
             TString objectId = MD5::Calc(path); // Production env uses MD5::File as an Id. For testing purpose we use fast version.
+            Cout << m << '\t' << path << "\t" << objectId << Endl;
             if (!fileCache->Contains(objectId)) {
                 TString newPath = fileCacheDir + "/" + objectId;
                 NFs::Copy(path, newPath);

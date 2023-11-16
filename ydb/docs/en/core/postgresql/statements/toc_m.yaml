@@ -1,0 +1,22 @@
+items:
+- name: CREATE TABLE
+  href: create_table.md
+  hidden: false
+- name: DROP TABLE
+  href: drop_table.md
+  hidden: false
+- name: DELETE FROM
+  href: delete_from.md
+  hidden: false  
+- name: INSERT INTO 
+  href: insert_into.md
+  hidden: false  
+- name: SELECT
+  href: select.md
+  hidden: false
+- name: UPDATE
+  href: update.md
+  hidden: false  
+- name: TRANSACTIONS
+  href: begin_commit_rollback.md
+  hidden: false    

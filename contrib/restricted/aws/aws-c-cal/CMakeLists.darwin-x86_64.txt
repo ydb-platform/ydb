@@ -21,6 +21,10 @@ target_link_libraries(restricted-aws-aws-c-cal PUBLIC
   contrib-libs-openssl
   restricted-aws-aws-c-common
 )
+target_link_options(restricted-aws-aws-c-cal INTERFACE
+  -framework
+  Security
+)
 target_sources(restricted-aws-aws-c-cal PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/cal.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/der.c
@@ -28,9 +32,11 @@ target_sources(restricted-aws-aws-c-cal PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hash.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hmac.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/symmetric_cipher.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/openssl_aes.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/openssl_platform_init.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_ecc.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_hash.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_hmac.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/commoncrypto_aes.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/commoncrypto_hmac.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/commoncrypto_md5.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/commoncrypto_platform_init.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/commoncrypto_sha1.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/commoncrypto_sha256.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/securityframework_ecc.c
 )

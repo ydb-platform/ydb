@@ -31,6 +31,7 @@
   - CommonCrypto/CommonHMAC.h
   - CommonCrypto/CommonKeyDerivation.h
   - CommonCrypto/CommonRandom.h
+  - CommonCrypto/CommonSymmetricKeywrap.h
   - ConditionalMacros.h
   - DiskArbitration/DiskArbitration.h
   - Endian.h
@@ -115,6 +116,7 @@
   - nlist.h
   - objc/objc-sync.h
   - objc/runtime.h
+  - os/availability.h
   - os/lock.h
   - os/log.h
   - os/proc.h
@@ -236,6 +238,7 @@
   - Security/SecImportExport.h
   - Security/SecKey.h
   - Security/SecRandom.h
+  - Security/SecSignVerifyTransform.h
   - Security/SecureTransport.h
   - Security/Security.h
   - SystemConfiguration/SystemConfiguration.h

@@ -290,6 +290,7 @@ public:
         } else {
             static const TDuration defaultIdleCheckInterval = TDuration::Seconds(2);
             ScheduleIdleSessionCheck(defaultIdleCheckInterval);
+            SendWhiteboardStats();
         }
     }
 
@@ -1224,6 +1225,11 @@ public:
             KQP_PROXY_LOG_D("Session closed, sessionId: " << event.GetResponse().GetSessionId()
                 << ", workerId: " << workerId << ", local sessions count: " << LocalSessions->size());
         }
+    }
+
+    void SendWhiteboardStats() {
+        TActorId whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
+        Send(whiteboardId, NNodeWhiteboard::TEvWhiteboard::CreateTotalSessionsUpdateRequest(LocalSessions->size()));
     }
 
     STATEFN(MainState) {

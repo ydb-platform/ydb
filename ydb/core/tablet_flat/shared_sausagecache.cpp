@@ -7,6 +7,7 @@
 #include <ydb/core/util/page_map.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/set.h>
@@ -73,7 +74,7 @@ public:
 
 class TSharedPageCacheMemTableTracker : public std::enable_shared_from_this<TSharedPageCacheMemTableTracker> {
     friend TSharedPageCacheMemTableRegistration;
-    
+
 public:
     TSharedPageCacheMemTableTracker(TIntrusivePtr<TSharedPageCacheCounters> counters)
         : Counters(counters)
@@ -93,7 +94,7 @@ public:
             ret = MakeIntrusive<TSharedPageCacheMemTableRegistration>(owner, table, weak_from_this());
             NonCompacting.insert(ret);
         }
-        return ret;        
+        return ret;
     }
 
     void Unregister(TActorId owner, ui32 table) {
@@ -203,6 +204,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         PageStateEvicted,
     };
 
+    static const ui64 DO_GC_TAG = 1;
+    static const ui64 UPDATE_WHITEBOARD_TAG = 2;
+
     struct TCollection;
 
     struct TPage
@@ -212,7 +216,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         ui32 State : 4;
         ui32 CacheGeneration : 3;
         ui32 InMemory : 1;
-        
+
         const ui32 PageId;
         const size_t Size;
 
@@ -338,7 +342,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     // 0 means unlimited
     ui64 MemLimitBytes = 0;
     ui64 ConfigLimitBytes;
-    
+
     void ActualizeCacheSizeLimit() {
         if ((ui64)SizeOverride != Config->CacheConfig->Limit) {
             Config->CacheConfig->SetLimit(SizeOverride);
@@ -971,10 +975,26 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void GCWakeup() {
-        GCScheduled = false;
+    void Wakeup(TKikimrEvents::TEvWakeup::TPtr& ev) {
+        switch (ev->Get()->Tag) {
+        case DO_GC_TAG: {
+            GCScheduled = false;
+            ProcessGCList();
+            break;
+        }
+        case UPDATE_WHITEBOARD_TAG: {
+            SendWhiteboardStats();
+            Schedule(TDuration::Seconds(1), new TKikimrEvents::TEvWakeup(UPDATE_WHITEBOARD_TAG));
+            break;
+        }
+        default:
+            Y_ABORT("Unknown wakeup tag: %lu", ev->Get()->Tag);
+        }
+    }
 
-        ProcessGCList();
+    void SendWhiteboardStats() {
+        TActorId whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
+        Send(whiteboardId, NNodeWhiteboard::TEvWhiteboard::CreateSharedCacheStatsUpdateRequest(GetStatAllBytes(), MemLimitBytes));
     }
 
     void ProcessGCList() {
@@ -1015,7 +1035,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     void TryScheduleGC() {
         if (!GCScheduled) {
-            TActivationContext::AsActorContext().Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup());
+            TActivationContext::AsActorContext().Schedule(TDuration::Seconds(15), new TKikimrEvents::TEvWakeup(DO_GC_TAG));
             GCScheduled = true;
         }
     }
@@ -1191,13 +1211,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     void Evict(TIntrusiveList<TPage>&& pages) {
         while (!pages.Empty()) {
             TPage* page = pages.PopFront();
-            
+
             Y_VERIFY_S(page->CacheGeneration == TCacheCacheConfig::CacheGenEvicted, "unexpected " << page->CacheGeneration << " page cache generation");
             page->CacheGeneration = TCacheCacheConfig::CacheGenNone;
 
             Y_VERIFY_S(page->State == PageStateLoaded, "unexpected " << page->State << " page state");
             page->State = PageStateEvicted;
-            
+
             RemoveActivePage(page);
             AddPassivePage(page);
             if (page->UnUse()) {
@@ -1212,7 +1232,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         Y_VERIFY_S(page->State == PageStateLoaded, "unexpected " << page->State << " page state");
         page->State = PageStateEvicted;
-        
+
         RemoveActivePage(page);
         AddPassivePage(page);
         if (page->UnUse()) {
@@ -1321,6 +1341,7 @@ public:
         });
 
         Become(&TThis::StateFunc);
+        Schedule(TDuration::Seconds(1), new TKikimrEvents::TEvWakeup(UPDATE_WHITEBOARD_TAG));
     }
 
     STFUNC(StateFunc) {
@@ -1337,7 +1358,7 @@ public:
 
             hFunc(NBlockIO::TEvData, Handle);
             hFunc(TEvSharedPageCache::TEvConfigure, Handle);
-            cFunc(TEvents::TSystem::Wakeup, GCWakeup);
+            hFunc(TKikimrEvents::TEvWakeup, Wakeup);
             cFunc(TEvents::TSystem::PoisonPill, TakePoison);
         }
     }

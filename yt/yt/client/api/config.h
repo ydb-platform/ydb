@@ -127,6 +127,7 @@ DEFINE_REFCOUNTED_TYPE(TPersistentQueuePollerConfig)
 class TFileReaderConfig
     : public virtual NChunkClient::TMultiChunkReaderConfig
 {
+public:
     REGISTER_YSON_STRUCT(TFileReaderConfig);
 
     static void Register(TRegistrar)
@@ -141,6 +142,7 @@ class TFileWriterConfig
     : public NChunkClient::TMultiChunkWriterConfig
     , public NFileClient::TFileChunkWriterConfig
 {
+public:
     REGISTER_YSON_STRUCT(TFileWriterConfig);
 
     static void Register(TRegistrar)
@@ -155,6 +157,7 @@ class TJournalReaderConfig
     : public NJournalClient::TChunkReaderConfig
     , public TWorkloadConfig
 {
+public:
     REGISTER_YSON_STRUCT(TJournalReaderConfig);
 
     static void Register(TRegistrar)

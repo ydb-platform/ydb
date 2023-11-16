@@ -267,4 +267,7 @@ message TTableServiceConfig {
     optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = DISABLED];
 
     optional bool EnableColumnsWithDefault = 51 [default = true];
+
+    optional bool EnableAstCache = 52 [default = false];
+    optional bool EnablePgConstsToParams = 53 [default = false];
 };

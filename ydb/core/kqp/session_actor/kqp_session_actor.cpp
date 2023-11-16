@@ -693,7 +693,16 @@ public:
         }
 
         try {
-            QueryState->QueryData->ParseParameters(QueryState->GetYdbParameters());
+            auto parameters = QueryState->GetYdbParameters();
+            if (QueryState->CompileResult && QueryState->CompileResult->Ast) {
+                auto& params = QueryState->CompileResult->Ast->PgAutoParamValues;
+                if (params) {
+                    for(const auto& [name, param] : *params) {
+                        parameters.insert({name, param});
+                    }
+                }
+            }
+            QueryState->QueryData->ParseParameters(parameters);
         } catch(const yexception& ex) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         }
@@ -1172,7 +1181,7 @@ public:
         ExecuterId = TActorId{};
 
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
-            LOG_I("TEvTxResponse has non-success status, CurrentTx: " << QueryState->CurrentTx);
+            LOG_D("TEvTxResponse has non-success status, CurrentTx: " << QueryState->CurrentTx);
 
             auto status = response->GetStatus();
             TIssues issues;

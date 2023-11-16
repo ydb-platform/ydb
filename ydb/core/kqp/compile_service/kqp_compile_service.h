@@ -8,6 +8,11 @@
 namespace NKikimr {
 namespace NKqp {
 
+enum class ECompileActorAction {
+    COMPILE,
+    PARSE
+};
+
 IActor* CreateKqpCompileService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
@@ -30,6 +35,8 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     TKqpDbCountersPtr dbCounters, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     NWilson::TTraceId traceId = {},
     TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
+    ECompileActorAction compileAction = ECompileActorAction::COMPILE,
+    TMaybe<TQueryAst> astResult = {},
     bool collectFullDiagnostics = false);
 
 IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,

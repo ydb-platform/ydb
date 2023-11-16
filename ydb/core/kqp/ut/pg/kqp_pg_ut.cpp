@@ -2851,6 +2851,213 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST(CheckPgAutoParams) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::Pg)
+            .StatsMode(NYdb::NQuery::EStatsMode::Basic);
+
+        {
+            // Check disable setting
+            appConfig.MutableTableServiceConfig()->SetEnablePgConstsToParams(false);
+            auto setting = NKikimrKqp::TKqpSetting();
+            auto serverSettings = TKikimrSettings()
+                .SetAppConfig(appConfig)
+                .SetKqpSettings({setting});
+            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+            auto db = kikimr.GetQueryClient();
+            const auto query = Q_(R"(
+                CREATE TABLE PgTable (
+                key int4 PRIMARY KEY,
+                value text
+            ))");
+            db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+
+            {
+                const auto query = Q_(R"(
+                    SELECT * FROM PgTable WHERE key = 1;
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats1 = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats1.compilation().from_cache(), false);
+            }
+
+            {
+                const auto query = Q_(R"(
+                    SELECT * FROM PgTable WHERE key = 2;
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+        }
+
+        appConfig.MutableTableServiceConfig()->SetEnablePgConstsToParams(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        const auto query = Q_(R"(
+            CREATE TABLE PgTable (
+            key int4 PRIMARY KEY,
+            value text
+        ))");
+        db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+
+        {
+            // Check the same queries and differend values
+            {
+                const auto query = Q_(R"(
+                    SELECT * FROM PgTable WHERE key = 3;
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+
+            {
+                const auto query = Q_(R"(
+                    SELECT * FROM PgTable WHERE key = 4;
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+            }
+        }
+
+        {
+            // Check values without table
+            {
+                const auto query = Q_(R"(
+                    SELECT 1;
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+
+            {
+                const auto query = Q_(R"(
+                    SELECT 'a';
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+
+            {
+                const auto query = Q_(R"(
+                    SELECT true;
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            }
+
+            {
+                const auto query = Q_(R"(
+                    SELECT 2;
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+            }
+
+            {
+                const auto query = Q_(R"(
+                    SELECT (1, 2);
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetIssues().ToString().Contains("alternative is not implemented yet : 138"));
+            }
+        }
+
+        {
+            // Check wrong values type for table
+            {
+                const auto query = Q_(R"(
+                    SELECT * FROM PgTable WHERE key = '3';
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            {
+                const auto query = Q_(R"(
+                    SELECT * FROM PgTable WHERE value = 4;
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetIssues().ToString().Contains("Unable to find an overload for operator = with given argument type(s): (text,int4)"));
+            }
+
+            {
+                const auto query = Q_(R"(
+                    SELECT * FROM PgTable WHERE key = 3 and value = 4;
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetIssues().ToString().Contains("Unable to find an overload for operator = with given argument type(s): (text,int4)"));
+            }
+
+            {
+                const auto query = Q_(R"(
+                    SELECT * FROM PgTable WHERE key = 'a';
+                )");
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+
+        {
+            // Check insert
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE PgTable1(id int4, value text, primary key(id));
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = db.ExecuteQuery(R"(
+                CREATE TABLE PgTable2(id uint64, primary key(id));
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            {
+                auto result = db.ExecuteQuery(R"(
+                    INSERT INTO PgTable1 VALUES (1, 'a', 'a');
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetIssues().ToString().Contains("VALUES have 3 columns, INSERT INTO expects: 2"));
+            }
+            {
+                auto result = db.ExecuteQuery(R"(
+                    INSERT INTO PgTable2 VALUES ('a');
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetIssues().ToString().Contains("Failed to convert 'id': pgunknown to Optional<Uint64>"));
+            }
+            {
+                auto result = db.ExecuteQuery(R"(
+                    INSERT INTO PgTable1 VALUES ('a', 1);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type integer: \"a\""));
+            }
+        }
+    }
 }
 
 } // namespace NKqp

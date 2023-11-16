@@ -607,6 +607,7 @@ TAstParseResult::TAstParseResult(TAstParseResult&& other)
     : Pool(std::move(other.Pool))
     , Root(other.Root)
     , Issues(std::move(other.Issues))
+    , PgAutoParamValues(std::move(other.PgAutoParamValues))
 {
     other.Root = nullptr;
 }
@@ -617,6 +618,7 @@ TAstParseResult& TAstParseResult::operator=(TAstParseResult&& other) {
     Root = other.Root;
     other.Root = nullptr;
     Issues = std::move(other.Issues);
+    PgAutoParamValues = std::move(other.PgAutoParamValues);
     return *this;
 }
 

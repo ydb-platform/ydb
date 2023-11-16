@@ -475,7 +475,6 @@ void TQueryData::Clear() {
     {
         auto g = TypeEnv().BindAllocator();
         Params.clear();
-        
         TUnboxedParamsMap emptyMap;
         UnboxedData.swap(emptyMap);
 

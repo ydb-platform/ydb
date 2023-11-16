@@ -159,6 +159,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableColumnsWithDefault = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
     NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode IndexAutoChooserMode;
+    bool EnableAstCache = false;
+    bool EnablePgConstsToParams = false;
 };
 
 }

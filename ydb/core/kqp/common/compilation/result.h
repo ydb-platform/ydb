@@ -3,39 +3,30 @@
 #include <ydb/core/kqp/common/simple/query_id.h>
 #include <ydb/core/kqp/common/simple/helpers.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/ast/yql_ast.h>
 
 namespace NKikimr::NKqp {
 
 class TPreparedQueryHolder;
+struct TQueryAst;
 
 struct TKqpCompileResult {
     using TConstPtr = std::shared_ptr<const TKqpCompileResult>;
 
-    TKqpCompileResult(const TString& uid, TKqpQueryId&& query, const Ydb::StatusIds::StatusCode& status,
-        const NYql::TIssues& issues, ETableReadType maxReadType)
+    TKqpCompileResult(const TString& uid, const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues,
+            ETableReadType maxReadType, TMaybe<TKqpQueryId> query = {}, std::shared_ptr<NYql::TAstParseResult> ast = {})
         : Status(status)
         , Issues(issues)
         , Query(std::move(query))
         , Uid(uid)
-        , MaxReadType(maxReadType) {}
-
-    TKqpCompileResult(const TString& uid, const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues,
-        ETableReadType maxReadType)
-        : Status(status)
-        , Issues(issues)
-        , Uid(uid)
-        , MaxReadType(maxReadType) {}
-
-    static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, TKqpQueryId&& query,
-        const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues, ETableReadType maxReadType)
-    {
-        return std::make_shared<TKqpCompileResult>(uid, std::move(query), status, issues, maxReadType);
-    }
+        , MaxReadType(maxReadType)
+        , Ast(std::move(ast)) {}
 
     static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, const Ydb::StatusIds::StatusCode& status,
-        const NYql::TIssues& issues, ETableReadType maxReadType)
+        const NYql::TIssues& issues, ETableReadType maxReadType, TMaybe<TKqpQueryId> query = {},
+        std::shared_ptr<NYql::TAstParseResult> ast = {})
     {
-        return std::make_shared<TKqpCompileResult>(uid, status, issues, maxReadType);
+        return std::make_shared<TKqpCompileResult>(uid, status, issues, maxReadType, std::move(query), std::move(ast));
     }
 
     Ydb::StatusIds::StatusCode Status;
@@ -46,6 +37,7 @@ struct TKqpCompileResult {
 
     ETableReadType MaxReadType;
     bool AllowCache = true;
+    std::shared_ptr<NYql::TAstParseResult> Ast;
 
     std::shared_ptr<const TPreparedQueryHolder> PreparedQuery;
 };

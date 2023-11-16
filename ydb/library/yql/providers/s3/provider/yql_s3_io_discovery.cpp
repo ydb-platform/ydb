@@ -1,6 +1,8 @@
 #include "yql_s3_provider_impl.h"
 #include "yql_s3_listing_strategy.h"
 
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
@@ -9,8 +11,7 @@
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/utils/aws_credentials.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/url_builder.h>
 
@@ -567,7 +568,7 @@ private:
         TS3DataSource dataSource = source.DataSource().Maybe<TS3DataSource>().Cast();
         const auto& connect = State_->Configuration->Clusters.at(dataSource.Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(dataSource.Cluster().StringValue());
-        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token);
+        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token, false, ConvertBasicToAwsToken);
 
         const TString url = connect.Url;
         const TString tokenStr = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
@@ -725,7 +726,7 @@ private:
 
         const auto& connect = State_->Configuration->Clusters.at(read.DataSource().Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(read.DataSource().Cluster().StringValue());
-        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token);
+        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token, false, ConvertBasicToAwsToken);
 
         const TString url = connect.Url;
         const TString tokenStr = credentialsProviderFactory->CreateProvider()->GetAuthInfo();

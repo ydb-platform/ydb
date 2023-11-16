@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/yql/providers/common/proto
     ydb/library/yql/public/issue
     ydb/library/yql/utils/log
+    ydb/library/yql/utils
 )
 
 YQL_LAST_ABI_VERSION()

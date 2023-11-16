@@ -53,6 +53,7 @@
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
+#include <ydb/library/yql/utils/aws_credentials.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
@@ -2897,7 +2898,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     ReadPathsList(params, taskParams, readRanges, paths);
 
     const auto token = secureParams.Value(params.GetToken(), TString{});
-    const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
+    const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, false, ConvertBasicToAwsToken);
     const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
     const auto& settings = params.GetSettings();

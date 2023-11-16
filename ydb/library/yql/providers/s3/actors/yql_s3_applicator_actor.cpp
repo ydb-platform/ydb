@@ -5,7 +5,9 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+#include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
+#include <ydb/library/yql/utils/aws_credentials.h>
 #include <ydb/library/yql/utils/url_builder.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -505,7 +507,7 @@ public:
 
     TString GetSecureToken(const TString& token) {
         const auto secureToken = SecureParams.Value(token, TString{});
-        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, secureToken);
+        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, secureToken, false, ConvertBasicToAwsToken);
         return credentialsProviderFactory->CreateProvider()->GetAuthInfo();
     }
 

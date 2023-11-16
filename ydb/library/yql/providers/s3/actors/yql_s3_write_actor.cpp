@@ -5,8 +5,9 @@
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
+#include <ydb/library/yql/providers/s3/compressors/factory.h>
+#include <ydb/library/yql/utils/aws_credentials.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -655,7 +656,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy)
 {
     const auto token = secureParams.Value(params.GetToken(), TString{});
-    const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
+    const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, false, ConvertBasicToAwsToken);
     const auto actor = new TS3WriteActor(
         outputIndex,
         statsLevel,

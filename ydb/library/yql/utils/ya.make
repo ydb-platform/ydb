@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    aws_credentials.cpp
+    aws_credentials.h
     bind_in_range.cpp
     bind_in_range.h
     cast.h
@@ -8,8 +10,8 @@ SRCS(
     debug_info.h
     future_action.cpp
     future_action.h
-    hash.h
     hash.cpp
+    hash.h
     md5_stream.cpp
     md5_stream.h
     method_index.cpp

@@ -15,6 +15,7 @@ SRCS(
     intrusive_ptr_ut.cpp
     shared_range_ut.cpp
     weak_ptr_ut.cpp
+    ref_ut.cpp
 )
 
 IF (NOT OS_WINDOWS)

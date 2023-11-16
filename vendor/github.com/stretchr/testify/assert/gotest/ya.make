@@ -11,6 +11,8 @@ GO_SKIP_TESTS(
     TestFileExists
     TestNoDirExists
     TestNoFileExists
+    TestDidPanic
+    TestPanicsWithValue
 )
 
 TAG(ya:go_total_report)

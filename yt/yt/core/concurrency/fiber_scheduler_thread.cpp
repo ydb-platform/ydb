@@ -11,6 +11,8 @@
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/singleton.h>
 
+#include <library/cpp/yt/threading/spin_lock_count.h>
+
 #include <yt/yt/core/tracing/trace_context.h>
 
 #include <library/cpp/yt/memory/memory_tag.h>
@@ -948,6 +950,7 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
         return;
     }
 
+    NThreading::VerifyNoSpinLockAffinity();
     YT_VERIFY(invoker != GetSyncInvoker());
 
     // Ensure canceler created.

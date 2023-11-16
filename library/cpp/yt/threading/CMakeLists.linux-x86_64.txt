@@ -32,6 +32,7 @@ target_sources(cpp-yt-threading PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/recursive_spin_lock.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/rw_spin_lock.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/spin_lock_base.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/spin_lock_count.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/spin_lock.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/spin_wait.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/yt/threading/spin_wait_hook.cpp

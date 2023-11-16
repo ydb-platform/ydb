@@ -24,6 +24,8 @@ TEST_SRCS(
     array_api/tests/test_creation_functions.py
     array_api/tests/test_data_type_functions.py
     array_api/tests/test_elementwise_functions.py
+    array_api/tests/test_indexing_functions.py
+    array_api/tests/test_manipulation_functions.py
     array_api/tests/test_set_functions.py
     array_api/tests/test_sorting_functions.py
     array_api/tests/test_validation.py
@@ -115,9 +117,11 @@ TEST_SRCS(
     #f2py/tests/test_assumed_shape.py
     #f2py/tests/test_block_docstring.py
     #f2py/tests/test_callback.py
+    #f2py/tests/test_character.py
     #f2py/tests/test_common.py
     #f2py/tests/test_compile_function.py
     #f2py/tests/test_crackfortran.py
+    #f2py/tests/test_docs.py
     #f2py/tests/test_f2cmap.py
     #f2py/tests/test_f2py2e.py
     #f2py/tests/test_kind.py
@@ -135,6 +139,7 @@ TEST_SRCS(
     #f2py/tests/test_size.py
     #f2py/tests/test_string.py
     #f2py/tests/test_symbolic.py
+    #f2py/tests/test_value_attrspec.py
     #f2py/tests/util.py
     fft/tests/__init__.py
     fft/tests/test_helper.py
@@ -209,20 +214,19 @@ TEST_SRCS(
     random/tests/test_seed_sequence.py
     random/tests/test_smoke.py
     testing/tests/__init__.py
-    #testing/tests/test_doctesting.py
     testing/tests/test_utils.py
     tests/__init__.py
     tests/test__all__.py
     #tests/test_ctypeslib.py
     tests/test_lazyloading.py
     tests/test_matlib.py
+    tests/test_numpy_config.py
     tests/test_numpy_version.py
     tests/test_public_api.py
     tests/test_reloading.py
     #tests/test_scripts.py
     tests/test_warnings.py
     typing/tests/__init__.py
-    typing/tests/test_generic_alias.py
     #typing/tests/test_isfile.py
     #typing/tests/test_runtime.py
     typing/tests/test_typing.py

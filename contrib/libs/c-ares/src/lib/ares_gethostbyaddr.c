@@ -153,13 +153,13 @@ static void addr_callback(void *arg, int status, int timeouts,
         {
           addrlen = sizeof(aquery->addr.addrV4);
           status = ares_parse_ptr_reply(abuf, alen, &aquery->addr.addrV4,
-                                        (int)addrlen, AF_INET, &host, NULL);
+                                        (int)addrlen, AF_INET, &host);
         }
       else
         {
           addrlen = sizeof(aquery->addr.addrV6);
           status = ares_parse_ptr_reply(abuf, alen, &aquery->addr.addrV6,
-                                        (int)addrlen, AF_INET6, &host, NULL);
+                                        (int)addrlen, AF_INET6, &host);
         }
       end_aquery(aquery, status, host);
     }

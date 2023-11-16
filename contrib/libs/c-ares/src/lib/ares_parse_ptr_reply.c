@@ -40,21 +40,16 @@
 #  include <strings.h>
 #endif
 
-#ifdef HAVE_LIMITS_H
-#  include <limits.h>
-#endif
-
 #include "ares.h"
 #include "ares_dns.h"
 #include "ares_nowarn.h"
 #include "ares_private.h"
 
 int ares_parse_ptr_reply(const unsigned char *abuf, int alen, const void *addr,
-                         int addrlen, int family, struct hostent **host,
-                         int *hostttl)
+                         int addrlen, int family, struct hostent **host)
 {
   unsigned int qdcount, ancount;
-  int status, i, rr_type, rr_class, rr_len, rr_ttl;
+  int status, i, rr_type, rr_class, rr_len;
   long len;
   const unsigned char *aptr;
   char *ptrname, *hostname, *rr_name, *rr_data;
@@ -66,8 +61,6 @@ int ares_parse_ptr_reply(const unsigned char *abuf, int alen, const void *addr,
 
   /* Set *host to NULL for all failure cases. */
   *host = NULL;
-  if (hostttl)
-    *hostttl = INT_MAX;
 
   /* Give up if abuf doesn't have room for a header. */
   if (alen < HFIXEDSZ)
@@ -115,7 +108,6 @@ int ares_parse_ptr_reply(const unsigned char *abuf, int alen, const void *addr,
       rr_type = DNS_RR_TYPE(aptr);
       rr_class = DNS_RR_CLASS(aptr);
       rr_len = DNS_RR_LEN(aptr);
-      rr_ttl = DNS_RR_TTL(aptr);
       aptr += RRFIXEDSZ;
       if (aptr + rr_len > abuf + alen)
         {
@@ -158,13 +150,6 @@ int ares_parse_ptr_reply(const unsigned char *abuf, int alen, const void *addr,
               break;
             }
             aliases = ptr;
-          }
-          if (hostttl)
-          {
-            if (*hostttl > rr_ttl)
-            {
-              *hostttl = rr_ttl;
-            }
           }
         }
 

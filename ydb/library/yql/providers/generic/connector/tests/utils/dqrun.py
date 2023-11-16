@@ -244,14 +244,14 @@ class Runner:
             for line in out.stderr.decode('utf-8').splitlines():
                 LOGGER.error(line)
 
-            unique_suffix = test_dir.name
-            err_file = yatest.common.output_path(f'dqrun-{unique_suffix}.err')
-            with open(err_file, "w") as f:
-                f.write(out.stderr.decode('utf-8'))
+        unique_suffix = test_dir.name
+        err_file = yatest.common.output_path(f'dqrun-{unique_suffix}.err')
+        with open(err_file, "w") as f:
+            f.write(out.stderr.decode('utf-8'))
 
-            out_file = yatest.common.output_path(f'dqrun-{unique_suffix}.out')
-            with open(out_file, "w") as f:
-                f.write(out.stdout.decode('utf-8'))
+        out_file = yatest.common.output_path(f'dqrun-{unique_suffix}.out')
+        with open(out_file, "w") as f:
+            f.write(out.stdout.decode('utf-8'))
 
         return Result(
             data_out=data_out,

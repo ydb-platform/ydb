@@ -7,6 +7,7 @@ SRCS(
     endpoint.go
     errors.go
     logger.go
+    predicate_builder.go
     protobuf.go
     select_helpers.go
     sql.go

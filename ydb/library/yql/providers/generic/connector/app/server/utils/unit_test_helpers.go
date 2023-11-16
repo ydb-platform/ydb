@@ -6,30 +6,96 @@ import (
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
+func NewPrimitiveType(t Ydb.Type_PrimitiveTypeId) *Ydb.Type {
+	return &Ydb.Type{
+		Type: &Ydb.Type_TypeId{
+			TypeId: t,
+		},
+	}
+}
+
+// NewDefaultWhat generates default What field with a pair of columns
+func NewDefaultWhat() *api_service_protos.TSelect_TWhat {
+	return &api_service_protos.TSelect_TWhat{
+		Items: []*api_service_protos.TSelect_TWhat_TItem{
+			&api_service_protos.TSelect_TWhat_TItem{
+				Payload: &api_service_protos.TSelect_TWhat_TItem_Column{
+					Column: &Ydb.Column{
+						Name: "col0",
+						Type: NewPrimitiveType(Ydb.Type_INT32),
+					},
+				},
+			},
+			&api_service_protos.TSelect_TWhat_TItem{
+				Payload: &api_service_protos.TSelect_TWhat_TItem_Column{
+					Column: &Ydb.Column{
+						Name: "col1",
+						Type: NewPrimitiveType(Ydb.Type_STRING),
+					},
+				},
+			},
+		},
+	}
+}
+
+func NewColumnExpression(name string) *api_service_protos.TExpression {
+	return &api_service_protos.TExpression{
+		Payload: &api_service_protos.TExpression_Column{
+			Column: name,
+		},
+	}
+}
+
+func NewInt32ValueExpression(val int32) *api_service_protos.TExpression {
+	return &api_service_protos.TExpression{
+		Payload: &api_service_protos.TExpression_TypedValue{
+			TypedValue: &Ydb.TypedValue{
+				Type: NewPrimitiveType(Ydb.Type_INT32),
+				Value: &Ydb.Value{
+					Value: &Ydb.Value_Int32Value{
+						Int32Value: val,
+					},
+				},
+			},
+		},
+	}
+}
+
+func NewUint64ValueExpression(val uint64) *api_service_protos.TExpression {
+	return &api_service_protos.TExpression{
+		Payload: &api_service_protos.TExpression_TypedValue{
+			TypedValue: &Ydb.TypedValue{
+				Type: NewPrimitiveType(Ydb.Type_UINT64),
+				Value: &Ydb.Value{
+					Value: &Ydb.Value_Uint64Value{
+						Uint64Value: val,
+					},
+				},
+			},
+		},
+	}
+}
+
+func NewTextValueExpression(val string) *api_service_protos.TExpression {
+	return &api_service_protos.TExpression{
+		Payload: &api_service_protos.TExpression_TypedValue{
+			TypedValue: &Ydb.TypedValue{
+				Type: NewPrimitiveType(Ydb.Type_UTF8),
+				Value: &Ydb.Value{
+					Value: &Ydb.Value_TextValue{
+						TextValue: val,
+					},
+				},
+			},
+		},
+	}
+}
+
 func MakeTestSplit() *api_service_protos.TSplit {
 	return &api_service_protos.TSplit{
 		Select: &api_service_protos.TSelect{
 			DataSourceInstance: &api_common.TDataSourceInstance{},
-			What: &api_service_protos.TSelect_TWhat{
-				Items: []*api_service_protos.TSelect_TWhat_TItem{
-					{
-						Payload: &api_service_protos.TSelect_TWhat_TItem_Column{
-							Column: &Ydb.Column{
-								Name: "col0",
-								Type: &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_INT32}},
-							},
-						},
-					},
-					{
-						Payload: &api_service_protos.TSelect_TWhat_TItem_Column{
-							Column: &Ydb.Column{
-								Name: "col1",
-								Type: &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_STRING}},
-							},
-						},
-					},
-				},
-			},
+			What:               NewDefaultWhat(),
 			From: &api_service_protos.TSelect_TFrom{
 				Table: "example_1",
 			},

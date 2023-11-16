@@ -11,6 +11,7 @@ import (
 )
 
 type handlerPreset struct {
+	sqlFormatter      utils.SQLFormatter
 	queryExecutor     utils.QueryExecutor
 	connectionManager utils.ConnectionManager
 	typeMapper        utils.TypeMapper
@@ -42,11 +43,13 @@ func NewHandlerFactory(qlf utils.QueryLoggerFactory) HandlerFactory {
 
 	return &handlerFactoryImpl{
 		clickhouse: handlerPreset{
+			sqlFormatter:      clickhouse.NewSQLFormatter(),
 			queryExecutor:     clickhouse.NewQueryExecutor(),
 			connectionManager: clickhouse.NewConnectionManager(connManagerCfg),
 			typeMapper:        clickhouse.NewTypeMapper(),
 		},
 		postgresql: handlerPreset{
+			sqlFormatter:      postgresql.NewSQLFormatter(),
 			queryExecutor:     postgresql.NewQueryExecutor(),
 			connectionManager: postgresql.NewConnectionManager(connManagerCfg),
 			typeMapper:        postgresql.NewTypeMapper(),

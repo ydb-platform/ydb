@@ -198,6 +198,7 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 	typeMapper := clickhouse.NewTypeMapper()
 
 	handlerFactory := &rdbms.HandlerFactoryMock{
+		SQLFormatter:      clickhouse.NewSQLFormatter(),
 		ConnectionManager: connectionManager,
 		TypeMapper:        typeMapper,
 	}

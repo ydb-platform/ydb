@@ -33,3 +33,7 @@ type ConnectionManagerBase struct {
 type QueryExecutor interface {
 	DescribeTable(ctx context.Context, conn Connection, request *api_service_protos.TDescribeTableRequest) (Rows, error)
 }
+
+type SQLFormatter interface {
+	FormatRead(logger log.Logger, selectReq *api_service_protos.TSelect) (string, error)
+}

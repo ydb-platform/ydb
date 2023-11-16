@@ -3,7 +3,6 @@ package rdbms
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
@@ -13,6 +12,7 @@ import (
 
 type handlerImpl struct {
 	typeMapper        utils.TypeMapper
+	sqlFormatter      utils.SQLFormatter
 	queryBuilder      utils.QueryExecutor
 	connectionManager utils.ConnectionManager
 	logger            log.Logger
@@ -66,65 +66,13 @@ func (h *handlerImpl) DescribeTable(
 	return &api_service_protos.TDescribeTableResponse{Schema: schema}, nil
 }
 
-func (h *handlerImpl) makeReadSplitQuery(
-	logger log.Logger,
-	split *api_service_protos.TSplit,
-) (string, error) {
-	// SELECT $columns
-	// interpolate request
-	var sb strings.Builder
-
-	sb.WriteString("SELECT ")
-
-	columns, err := utils.SelectWhatToYDBColumns(split.Select.What)
-	if err != nil {
-		return "", fmt.Errorf("convert Select.What.Items to Ydb.Columns: %w", err)
-	}
-
-	// for the case of empty column set select some constant for constructing a valid sql statement
-	if len(columns) == 0 {
-		sb.WriteString("0")
-	} else {
-		for i, column := range columns {
-			sb.WriteString(column.GetName())
-
-			if i != len(columns)-1 {
-				sb.WriteString(", ")
-			}
-		}
-	}
-
-	// SELECT $columns FROM $from
-	tableName := split.GetSelect().GetFrom().GetTable()
-	if tableName == "" {
-		return "", fmt.Errorf("empty table name")
-	}
-
-	sb.WriteString(" FROM ")
-	sb.WriteString(tableName)
-
-	if split.Select.Where != nil {
-		clause, err := FormatWhereClause(split.Select.Where)
-		if err != nil {
-			logger.Error("Failed to format WHERE clause", log.Error(err), log.String("where", split.Select.Where.String()))
-		} else {
-			sb.WriteString(" ")
-			sb.WriteString(clause)
-		}
-	}
-
-	// execute query
-
-	return sb.String(), nil
-}
-
 func (h *handlerImpl) doReadSplit(
 	ctx context.Context,
 	logger log.Logger,
 	split *api_service_protos.TSplit,
 	sink paging.Sink,
 ) error {
-	query, err := h.makeReadSplitQuery(logger, split)
+	query, err := h.sqlFormatter.FormatRead(logger, split.Select)
 	if err != nil {
 		return fmt.Errorf("make read split query: %w", err)
 	}
@@ -187,6 +135,7 @@ func newHandler(
 ) Handler {
 	return &handlerImpl{
 		logger:            logger,
+		sqlFormatter:      preset.sqlFormatter,
 		queryBuilder:      preset.queryExecutor,
 		connectionManager: preset.connectionManager,
 		typeMapper:        preset.typeMapper,

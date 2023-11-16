@@ -2,7 +2,7 @@ GO_LIBRARY()
 
 SRCS(
     cmd.go
-    config.go 
+    config.go
     doc.go
     grpc_metrics.go
     httppuller.go

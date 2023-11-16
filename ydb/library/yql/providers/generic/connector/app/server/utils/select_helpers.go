@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
@@ -35,4 +36,42 @@ func SelectWhatToYDBColumns(selectWhat *api_service_protos.TSelect_TWhat) ([]*Yd
 	}
 
 	return columns, nil
+}
+
+func FormatSelectColumns(selectWhat *api_service_protos.TSelect_TWhat, tableName string, fakeZeroOnEmptyColumnsSet bool) (string, error) {
+	// SELECT $columns FROM $from
+	if tableName == "" {
+		return "", ErrEmptyTableName
+	}
+
+	var sb strings.Builder
+
+	sb.WriteString("SELECT ")
+
+	columns, err := SelectWhatToYDBColumns(selectWhat)
+	if err != nil {
+		return "", fmt.Errorf("convert Select.What.Items to Ydb.Columns: %w", err)
+	}
+
+	// for the case of empty column set select some constant for constructing a valid sql statement
+	if len(columns) == 0 {
+		if fakeZeroOnEmptyColumnsSet {
+			sb.WriteString("0")
+		} else {
+			return "", fmt.Errorf("empty columns set")
+		}
+	} else {
+		for i, column := range columns {
+			sb.WriteString(column.GetName())
+
+			if i != len(columns)-1 {
+				sb.WriteString(", ")
+			}
+		}
+	}
+
+	sb.WriteString(" FROM ")
+	sb.WriteString(tableName)
+
+	return sb.String(), nil
 }

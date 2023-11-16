@@ -89,7 +89,7 @@ static PyObject *DecompressionObj_decompress(ZstdDecompressionObj *self,
             }
         }
 
-        if (0 == zresult) {
+        if (0 == zresult && !self->readAcrossFrames) {
             self->finished = 1;
 
             /* We should only get here at most once. */
@@ -97,6 +97,13 @@ static PyObject *DecompressionObj_decompress(ZstdDecompressionObj *self,
             self->unused_data = PyBytes_FromStringAndSize((char *)(input.src) + input.pos, input.size - input.pos);
 
             break;
+        }
+        else if (0 == zresult && self->readAcrossFrames) {
+            if (input.pos == input.size) {
+                break;
+            } else {
+                output.pos = 0;
+            }
         }
         else if (input.pos == input.size && output.pos == 0) {
             break;

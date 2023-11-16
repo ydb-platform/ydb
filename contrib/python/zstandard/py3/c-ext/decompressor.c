@@ -397,13 +397,14 @@ finally:
 static ZstdDecompressionObj *Decompressor_decompressobj(ZstdDecompressor *self,
                                                         PyObject *args,
                                                         PyObject *kwargs) {
-    static char *kwlist[] = {"write_size", NULL};
+    static char *kwlist[] = {"write_size", "read_across_frames", NULL};
 
     ZstdDecompressionObj *result = NULL;
     size_t outSize = ZSTD_DStreamOutSize();
+    PyObject *readAcrossFrames = NULL;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|k:decompressobj", kwlist,
-                                     &outSize)) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|kO:decompressobj", kwlist,
+                                     &outSize, &readAcrossFrames)) {
         return NULL;
     }
 
@@ -426,6 +427,8 @@ static ZstdDecompressionObj *Decompressor_decompressobj(ZstdDecompressor *self,
     result->decompressor = self;
     Py_INCREF(result->decompressor);
     result->outSize = outSize;
+    result->readAcrossFrames =
+        readAcrossFrames ? PyObject_IsTrue(readAcrossFrames) : 0;
 
     return result;
 }

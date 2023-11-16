@@ -31,7 +31,7 @@
 
 /* Remember to change the string in zstandard/__init__.py, rust-ext/src/lib.rs,
    and debian/changelog as well */
-#define PYTHON_ZSTANDARD_VERSION "0.21.0"
+#define PYTHON_ZSTANDARD_VERSION "0.22.0"
 
 typedef enum {
     compressorobj_flush_finish,
@@ -220,6 +220,7 @@ typedef struct {
 
         ZstdDecompressor *decompressor;
     size_t outSize;
+    int readAcrossFrames;
     int finished;
     PyObject *unused_data;
 } ZstdDecompressionObj;

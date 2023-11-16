@@ -333,7 +333,6 @@ enum ETenantType {
     Serverless = 4;
 }
 
-
 message TStorageUsage {
     enum EType {
         None = 0;
@@ -341,7 +340,8 @@ message TStorageUsage {
         SSD = 2;
     }
     EType Type = 1;
-    float Usage = 2;
+    uint64 Size = 2;
+    uint64 Limit = 3;
 }
 
 message TTenant {

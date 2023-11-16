@@ -21,6 +21,7 @@ DEPENDS(
 
 TEST_SRCS(
     test_bindings.py
+    test_compressions.py
     test_early_finish.py
     test_explicit_partitioning.py
     test_format_setting.py

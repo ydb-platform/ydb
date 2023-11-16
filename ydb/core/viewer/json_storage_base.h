@@ -356,7 +356,7 @@ public:
             if (storagePoolName.empty()) {
                 continue;
             }
-            if (FilterNodeIds.empty() || FilterNodeIds.contains(nodeId)) {
+            if (FilterNodeIds.empty() || FilterNodeIds.contains(info.GetNodeId())) {
                 StoragePoolInfo[storagePoolName].Groups.emplace(ToString(info.GetGroupID()));
                 TString groupId(ToString(info.GetGroupID()));
                 if (FilterGroupIds.empty() || BinarySearch(FilterGroupIds.begin(), FilterGroupIds.end(), groupId)) {

@@ -62,7 +62,7 @@ public:
 
         TInstant CreatedAt() const {
             return Group
-                ? TInstant::FromValue(Group)
+                ? TInstant::MicroSeconds(Group)
                 : TInstant::MilliSeconds(Step);
         }
     };

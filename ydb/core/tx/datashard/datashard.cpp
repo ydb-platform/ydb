@@ -690,7 +690,7 @@ ui64 TDataShard::AllocateChangeRecordOrder(NIceDb::TNiceDb& db, ui64 count) {
 }
 
 ui64 TDataShard::AllocateChangeRecordGroup(NIceDb::TNiceDb& db) {
-    const ui64 now = TInstant::Now().GetValue();
+    const ui64 now = TInstant::Now().MicroSeconds();
     const ui64 result = now > LastChangeRecordGroup ? now : (LastChangeRecordGroup + 1);
 
     LastChangeRecordGroup = result;

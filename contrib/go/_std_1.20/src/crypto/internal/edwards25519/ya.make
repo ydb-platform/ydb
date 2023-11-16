@@ -1,0 +1,16 @@
+GO_LIBRARY()
+
+SRCS(
+    doc.go
+    edwards25519.go
+    scalar.go
+    scalar_fiat.go
+    scalarmult.go
+    tables.go
+)
+
+END()
+
+RECURSE(
+    field
+)

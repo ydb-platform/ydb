@@ -1,0 +1,5 @@
+RECURSE(
+    gracefulswitch
+    nop
+    stub
+)

@@ -1,0 +1,14 @@
+GO_LIBRARY()
+
+SRCS(
+    decode.go
+    encode.go
+    fold.go
+    indent.go
+    scanner.go
+    stream.go
+    tables.go
+    tags.go
+)
+
+END()

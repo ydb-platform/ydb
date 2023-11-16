@@ -1,0 +1,90 @@
+GO_LIBRARY()
+
+SRCS(
+    abs.go
+    acosh.go
+    asin.go
+    asinh.go
+    atan.go
+    atan2.go
+    atanh.go
+    bits.go
+    cbrt.go
+    const.go
+    copysign.go
+    dim.go
+    dim_asm.go
+    erf.go
+    erfinv.go
+    exp.go
+    exp_asm.go
+    expm1.go
+    floor.go
+    floor_asm.go
+    fma.go
+    frexp.go
+    gamma.go
+    hypot.go
+    j0.go
+    j1.go
+    jn.go
+    ldexp.go
+    lgamma.go
+    log.go
+    log10.go
+    log1p.go
+    logb.go
+    mod.go
+    modf.go
+    nextafter.go
+    pow.go
+    pow10.go
+    remainder.go
+    signbit.go
+    sin.go
+    sincos.go
+    sinh.go
+    sqrt.go
+    stubs.go
+    tan.go
+    tanh.go
+    trig_reduce.go
+    unsafe.go
+)
+
+IF (ARCH_ARM64)
+    SRCS(
+        dim_arm64.s
+        exp2_asm.go
+        exp_arm64.s
+        floor_arm64.s
+        hypot_noasm.go
+        log_stub.go
+        modf_arm64.s
+        modf_asm.go
+    )
+ENDIF()
+
+IF (ARCH_X86_64)
+    SRCS(
+        dim_amd64.s
+        exp2_noasm.go
+        exp_amd64.go
+        exp_amd64.s
+        floor_amd64.s
+        hypot_amd64.s
+        hypot_asm.go
+        log_amd64.s
+        log_asm.go
+        modf_noasm.go
+    )
+ENDIF()
+
+END()
+
+RECURSE(
+    big
+    bits
+    cmplx
+    rand
+)

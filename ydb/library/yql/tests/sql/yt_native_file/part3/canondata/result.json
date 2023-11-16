@@ -2977,21 +2977,21 @@
         {
             "checksum": "a9b9a22fe5ada5f8ca32c10a77ab5406",
             "size": 65835,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1880306/c1d6dba7747df032be5968badafc6c3e670b205c/resource.tar.gz#test.test_pg-palloc_big_string-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1880306/c1d6dba7747df032be5968badafc6c3e670b205c/resource.tar.gz#test.test_pg-palloc_big_string-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-palloc_big_string-default.txt-Plan]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
             "size": 505,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1880306/c1d6dba7747df032be5968badafc6c3e670b205c/resource.tar.gz#test.test_pg-palloc_big_string-default.txt-Plan_/plan.txt"
+            "uri": "https://{canondata_backend}/1880306/c1d6dba7747df032be5968badafc6c3e670b205c/resource.tar.gz#test.test_pg-palloc_big_string-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[pg-palloc_big_string-default.txt-Results]": [
         {
             "checksum": "c65065490267bf2b366b4a368de8a828",
             "size": 66150,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1880306/c1d6dba7747df032be5968badafc6c3e670b205c/resource.tar.gz#test.test_pg-palloc_big_string-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1880306/c1d6dba7747df032be5968badafc6c3e670b205c/resource.tar.gz#test.test_pg-palloc_big_string-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg-pg_array_compare-default.txt-Debug]": [

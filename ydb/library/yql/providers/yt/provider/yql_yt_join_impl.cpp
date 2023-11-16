@@ -1062,6 +1062,8 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
     }
 
     TVector<bool> sortDirections(sortTableOrder.size(), true);
+    ui64 nativeTypeFlags = state.Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
+    TMaybe<NYT::TNode> nativeType;
 
     if (needRemapBeforeSort) {
         inputSection = Build<TYtSection>(ctx, pos)
@@ -1095,13 +1097,22 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
             .Done();
 
         inputWorld = Build<TCoWorld>(ctx, pos).Done();
+    } else {
+        auto inputRowSpec = TYtTableBaseInfo::GetRowSpec(section.Paths().Item(0).Table());
+        // Use types from first input only, because all of them shoud be equal (otherwise remap is required)
+        nativeTypeFlags = inputRowSpec->GetNativeYtTypeFlags();
+        nativeType = inputRowSpec->GetNativeYtType();
     }
 
-    TYtOutTableInfo sortOut(sortTableType, state.Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo sortOut(sortTableType, nativeTypeFlags);
     sortOut.RowSpec->SortMembers = sortTableOrder;
     sortOut.RowSpec->SortedBy = sortTableOrder;
     sortOut.RowSpec->SortedByTypes = sortedByTypes;
     sortOut.RowSpec->SortDirections = sortDirections;
+
+    if (nativeType) {
+        sortOut.RowSpec->CopyTypeOrders(*nativeType);
+    }
 
     return Build<TYtSection>(ctx, pos)
         .Paths()

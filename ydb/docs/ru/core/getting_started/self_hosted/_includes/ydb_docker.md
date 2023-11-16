@@ -69,9 +69,13 @@ docker run -d --rm --name ydb-local -h localhost \
       -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
       {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
     ```
+    
     {% note warning %}
+
     На данный момент хранение данных на диске не поддерживается на Apple Silicon (M1 or M2). Используйте команду с вкладки "Хранение данных в памяти", если хотите попробовать {{ ydb-short-name }} на данных процессорах.
+
     {% endnote %}
+
 - Хранение данных в памяти
     ```bash
     docker run -d --rm --name ydb-local -h localhost \
@@ -106,8 +110,11 @@ docker run -d --rm --name ydb-local -h localhost \
 - `YDB_TABLE_ENABLE_PREPARED_DDL` - временная опция, нужна для запуска Postgres-слоя совместимости, в будущем будет удалена.
 {% include [_includes/storage-device-requirements.md](../../../_includes/storage-device-requirements.md) %}
 `-p`: Опубликовать порты контейнера на хост-системе. Все применяемые порты должны быть явно перечислены, даже если используются значения по умолчанию.
+
 {% note info %}
+
 Инициализация Docker-контейнера, в зависимости от выделенных ресурсов, может занять несколько минут. До окончания инициализации база данных будет недоступна.
+
 {% endnote %}
 
 ## Выполнение запросов {#request}

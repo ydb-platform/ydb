@@ -247,6 +247,8 @@ struct TComputeRuntimeSettings {
     std::function<void(bool success, const TIssues& issues)> TerminateHandler;
     TMaybe<NDqProto::TRlPath> RlPath;
 
+    i64 AsyncInputPushLimit = std::numeric_limits<i64>::max();
+
     inline bool CollectNone() const {
         return StatsMode <= NDqProto::DQ_STATS_MODE_NONE;
     }

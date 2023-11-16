@@ -1714,7 +1714,7 @@ protected:
             NKikimr::NMiniKQL::TUnboxedValueBatch batch;
             Y_ABORT_UNLESS(info.AsyncInput);
             bool finished = false;
-            const i64 space = info.AsyncInput->GetAsyncInputData(batch, watermark, finished, freeSpace);
+            const i64 space = info.AsyncInput->GetAsyncInputData(batch, watermark, finished, std::min(freeSpace, RuntimeSettings.AsyncInputPushLimit));
             CA_LOG_T("Poll async input " << inputIndex
                 << ". Buffer free space: " << freeSpace
                 << ", read from async input: " << space << " bytes, "

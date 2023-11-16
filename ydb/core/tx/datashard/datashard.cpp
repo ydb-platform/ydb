@@ -916,7 +916,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
         }
     }
 
-    UpdateChangeDeliveryLag(AppData()->TimeProvider->Now());
+    UpdateChangeExchangeLag(AppData()->TimeProvider->Now());
     ChangesQueue.erase(it);
 
     IncCounter(COUNTER_CHANGE_RECORDS_REMOVED);
@@ -965,7 +965,7 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
         }
     }
 
-    UpdateChangeDeliveryLag(now);
+    UpdateChangeExchangeLag(now);
     IncCounter(COUNTER_CHANGE_RECORDS_ENQUEUED, forward.size());
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
 
@@ -973,10 +973,13 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
     Send(OutChangeSender, new TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
 }
 
-void TDataShard::UpdateChangeDeliveryLag(TInstant now) {
+void TDataShard::UpdateChangeExchangeLag(TInstant now) {
     if (!ChangesList.Empty()) {
-        SetCounter(COUNTER_CHANGE_DELIVERY_LAG, (now - ChangesList.Front()->EnqueuedAt).MilliSeconds());
+        const auto* front = ChangesList.Front();
+        SetCounter(COUNTER_CHANGE_DATA_LAG, Max(now - front->CreatedAt, TDuration::Zero()).MilliSeconds());
+        SetCounter(COUNTER_CHANGE_DELIVERY_LAG, (now - front->EnqueuedAt).MilliSeconds());
     } else {
+        SetCounter(COUNTER_CHANGE_DATA_LAG, 0);
         SetCounter(COUNTER_CHANGE_DELIVERY_LAG, 0);
     }
 }
@@ -3265,7 +3268,7 @@ void TDataShard::CheckChangesQueueNoOverflow() {
 
 void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     UpdateLagCounters(ctx);
-    UpdateChangeDeliveryLag(ctx.Now());
+    UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);
     SendPeriodicTableStats(ctx);
     CollectCpuUsage(ctx);

@@ -162,11 +162,14 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
 
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                     "ReadTable scan complete for " << *op << " at "
-                    << DataShard.TabletID() << " error: " << result->Error);
+                    << DataShard.TabletID() << " error: " << result->Error << ", IsFatalError: " << result->IsFatalError);
 
         tx->SetScanTask(0);
 
-        if (result->SchemaChanged) {
+        if (result->IsFatalError) {
+            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR)
+                ->SetExecutionError(NKikimrTxDataShard::TError::PROGRAM_ERROR, result->Error);
+        } else if (result->SchemaChanged) {
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR)
                 ->AddError(NKikimrTxDataShard::TError::SCHEME_CHANGED, result->Error);
         } else if (result->Error) {

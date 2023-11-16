@@ -10,6 +10,7 @@
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx_proxy/upload_rows.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
@@ -1790,6 +1791,29 @@ void ExecSQL(Tests::TServer::TPtr server,
     runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code);
+}
+
+void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values)
+{
+    auto txTypes = std::make_shared<NTxProxy::TUploadTypes>();
+    std::transform(types.cbegin(), types.cend(), std::back_inserter(*txTypes), [](const auto& iter) {
+        const TString& columnName = iter.first;
+        Ydb::Type columnType;
+        columnType.set_type_id(iter.second);
+        return std::make_pair(columnName, columnType);
+    });
+
+    auto txRows = std::make_shared<NTxProxy::TUploadRows>();
+    TSerializedCellVec serializedKey(keys);
+    TString serializedValues(TSerializedCellVec::Serialize(values));
+    txRows->emplace_back(serializedKey, serializedValues);
+
+    auto uploadSender = runtime.AllocateEdgeActor();
+    auto actor = NTxProxy::CreateUploadRowsInternal(uploadSender, tablePath, txTypes, txRows);
+    runtime.Register(actor);
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvUploadRowsResponse>(uploadSender);
+    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, Ydb::StatusIds::SUCCESS, "Status: " << ev->Get()->Status << " Issues: " << ev->Get()->Issues.ToOneLineString());
 }
 
 void WaitTabletBecomesOffline(TServer::TPtr server, ui64 tabletId)

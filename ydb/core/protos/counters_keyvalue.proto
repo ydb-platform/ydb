@@ -128,6 +128,11 @@ enum ESimpleCounters {
     COUNTER_REQ_RO_INLINE_IN_FLY = 11                                [(CounterOpts) = {Name: "ReqRoInlineInFly"}];
 
     COUNTER_REQ_AGE_MS = 12                                          [(CounterOpts) = {Name: "ReqAgeMs"}];
+
+    COUNTER_UNCOMMITTED_TRASH_COUNT = 13                             [(CounterOpts) = {Name: "UncommittedTrashCount"}];
+    COUNTER_UNCOMMITTED_TRASH_BYTES = 14                             [(CounterOpts) = {Name: "UncommittedTrashBytes"}];
+    COUNTER_VIRTUAL_TRASH_COUNT = 15                                 [(CounterOpts) = {Name: "VirtualTrashCount"}];
+    COUNTER_VIRTUAL_TRASH_BYTES = 16                                 [(CounterOpts) = {Name: "VirtualTrashBytes"}];
 }
 
 enum EPercentileCounters {

@@ -161,8 +161,8 @@ public:
         DiskSize = SectorMap->DeviceSize;
         PDiskGuid = 1;
         PDiskKey = 1;
-        MainKey = {1};
-        FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.back(), "queue_test",
+        MainKey = NPDisk::TMainKey{ .Keys = { 1 } };
+        FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.Keys.back(), "queue_test",
                 false, false, SectorMap, false);
 
         PDiskId = MakeBlobStoragePDiskID(1, 1);

@@ -78,7 +78,8 @@ namespace NKikimr {
     void CompactFreshSegment(
             TIntrusivePtr<THullDs> &hullDs,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKey, TMemRec>> &rtCtx,
-            const TActorContext &ctx)
+            const TActorContext &ctx,
+            bool allowGarbageCollection)
     {
         using TFreshSegment = ::NKikimr::TFreshSegment<TKey, TMemRec>;
         using TFreshSegmentSnapshot = ::NKikimr::TFreshSegmentSnapshot<TKey, TMemRec>;
@@ -105,7 +106,7 @@ namespace NKikimr {
         ui64 lastLsn = freshSegment->GetLastLsn();
         std::unique_ptr<TFreshCompaction> compaction(new TFreshCompaction(
                 hullCtx, rtCtx, freshSegment, freshSegmentSnap, std::move(barriersSnap), std::move(levelSnap),
-                mergeElementsApproximation, it, firstLsn, lastLsn, TDuration::Max(), {}));
+                mergeElementsApproximation, it, firstLsn, lastLsn, TDuration::Max(), {}, allowGarbageCollection));
 
         LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                 VDISKP(hullCtx->VCtx->VDiskLogPrefix,
@@ -170,6 +171,7 @@ namespace NKikimr {
         TFullCompactionState FullCompactionState;
         bool CompactionScheduled = false;
         TInstant NextCompactionWakeup;
+        bool AllowGarbageCollection = false;
 
         friend class TActorBootstrapped<TThis>;
 
@@ -197,7 +199,7 @@ namespace NKikimr {
             auto fullCompactionAttrs = FullCompactionState.GetFullCompactionAttrsForLevelCompactionSelector(RTCtx);
             NHullComp::TSelectorParams params = {Boundaries, rateThreshold, TInstant::Seconds(0), fullCompactionAttrs};
             auto selector = std::make_unique<TSelectorActor>(HullDs->HullCtx, params, std::move(levelSnap),
-                std::move(barriersSnap), ctx.SelfID, std::move(CompactionTask));
+                std::move(barriersSnap), ctx.SelfID, std::move(CompactionTask), AllowGarbageCollection);
             auto aid = RunInBatchPool(ctx, selector.release());
             ActiveActors.Insert(aid);
             return true;
@@ -223,7 +225,8 @@ namespace NKikimr {
 
         void ScheduleCompaction(const TActorContext &ctx) {
             // schedule fresh if required
-            CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx, FullCompactionState.ForceFreshCompaction(RTCtx));
+            CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx, FullCompactionState.ForceFreshCompaction(RTCtx),
+                AllowGarbageCollection);
             if (!RunLevelCompactionSelector(ctx)) {
                 ScheduleCompactionWakeup(ctx);
             }
@@ -251,7 +254,8 @@ namespace NKikimr {
 
             std::unique_ptr<TLevelCompaction> compaction(new TLevelCompaction(
                     HullDs->HullCtx, RTCtx, nullptr, nullptr, std::move(barriersSnap), std::move(levelSnap),
-                    mergeElementsApproximation, it, firstLsn, lastLsn, TDuration::Minutes(2), {}));
+                    mergeElementsApproximation, it, firstLsn, lastLsn, TDuration::Minutes(2), {},
+                    AllowGarbageCollection));
             NActors::TActorId actorId = RunInBatchPool(ctx, compaction.release());
             ActiveActors.Insert(actorId);
         }
@@ -520,7 +524,7 @@ namespace NKikimr {
                         ScheduleCompaction(ctx);
                     } else {
                         CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx,
-                            FullCompactionState.ForceFreshCompaction(RTCtx));
+                            FullCompactionState.ForceFreshCompaction(RTCtx), AllowGarbageCollection);
                     }
                     break;
                 case THullCommitFinished::CommitAdvanceLsn:
@@ -544,7 +548,7 @@ namespace NKikimr {
             RTCtx->SetFreeUpToLsn(freeUpToLsn);
             // we check if we need to start fresh compaction, FreeUpToLsn influence our decision
             const bool freshCompStarted = CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx,
-                FullCompactionState.ForceFreshCompaction(RTCtx));
+                FullCompactionState.ForceFreshCompaction(RTCtx), AllowGarbageCollection);
             // just for valid info output to the log
             bool moveEntryPointStarted = false;
             if (!freshCompStarted && !AdvanceCommitInProgress) {
@@ -626,6 +630,10 @@ namespace NKikimr {
             TThis::Die(ctx);
         }
 
+        void HandlePermitGarbageCollection(const TActorContext& /*ctx*/) {
+            AllowGarbageCollection = true;
+        }
+
         STRICT_STFUNC(StateFunc,
             HFunc(THullCommitFinished, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
@@ -636,6 +644,7 @@ namespace NKikimr {
             HTemplFunc(TEvAddBulkSst, Handle)
             HTemplFunc(TSelected, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            CFunc(TEvBlobStorage::EvPermitGarbageCollection, HandlePermitGarbageCollection);
         )
 
     public:

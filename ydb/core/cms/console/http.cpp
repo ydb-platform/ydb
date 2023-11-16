@@ -21,9 +21,9 @@ void OutputStaticPart(IOutputStream &os)
 {
     HTML(os) {
         HEAD() {
-            os << "<link rel='stylesheet' href='https://yastatic.net/bootstrap/3.3.1/css/bootstrap.min.css'>" << Endl
-               << "<script language='javascript' type='text/javascript' src='https://yastatic.net/jquery/2.1.3/jquery.min.js'></script>" << Endl
-               << "<script language='javascript' type='text/javascript' src='https://yastatic.net/bootstrap/3.3.1/js/bootstrap.min.js'></script>" << Endl;
+            os << "<link rel='stylesheet' href='../static/css/bootstrap.min.css'>" << Endl
+               << "<script language='javascript' type='text/javascript' src='../static/js/jquery.min.js'></script>" << Endl
+               << "<script language='javascript' type='text/javascript' src='../static/js/bootstrap.min.js'></script>" << Endl;
         }
         OutputStyles(os);
     }

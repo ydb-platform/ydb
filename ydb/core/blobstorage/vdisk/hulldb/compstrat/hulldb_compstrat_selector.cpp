@@ -30,7 +30,7 @@ namespace NKikimr {
             // calculate storage ratio and gather space consumption statistics
             TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriersEssence = BarriersSnap.CreateEssence(HullCtx);
             BarriersSnap.Destroy();
-            TStrategyStorageRatio(HullCtx, LevelSnap, std::move(barriersEssence)).Work();
+            TStrategyStorageRatio(HullCtx, LevelSnap, std::move(barriersEssence), AllowGarbageCollection).Work();
 
             // delete free ssts
             action = TStrategyDelSst(HullCtx, LevelSnap, Task).Select();

@@ -174,7 +174,8 @@ namespace NKikimr {
             if (iter.Seek(id); iter.Valid() && iter.GetCurKey().LogoBlobID() == id) {
                 iter.PutToMerger(&merger);
                 merger.Finish();
-                keepData = barriers.Keep(id, merger.GetMemRec(), merger.GetMemRecsMerged(), snap.HullCtx->AllowKeepFlags).KeepData;
+                keepData = barriers.Keep(id, merger.GetMemRec(), merger.GetMemRecsMerged(), snap.HullCtx->AllowKeepFlags,
+                    true /*allowGarbageCollection*/).KeepData;
                 merger.Clear();
             }
 

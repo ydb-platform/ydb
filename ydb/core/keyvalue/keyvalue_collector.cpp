@@ -1,6 +1,7 @@
 #include "keyvalue_flat_impl.h"
 
 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/dsproxy/blobstorage_backoff.h>
 #include <ydb/core/util/stlog.h>
@@ -8,16 +9,6 @@
 
 namespace NKikimr {
 namespace NKeyValue {
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Collector
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-struct TGroupCollector {
-    TDeque<TLogoBlobID> Keep;
-    TDeque<TLogoBlobID> DoNotKeep;
-    ui32 CountOfSentFlags = 0;
-    ui32 NextCountOfSentFlags = 0;
-};
 
 class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
     TActorId KeyValueActorId;
@@ -25,14 +16,18 @@ class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     ui32 RecordGeneration;
     ui32 PerGenerationCounter;
-    TBackoffTimer BackoffTimer;
-    ui64 CollectorErrors;
-    bool IsSpringCleanup;
-    bool IsRepeatedRequest = false;
+    std::set<TMonotonic> WakeupScheduled;
 
-    // [channel][groupId]
-    TVector<TMap<ui32, TGroupCollector>> CollectorForGroupForChannel;
-    ui32 EndChannel = 0;
+    using TCollectKey = std::tuple<ui32, ui8>; // groupId, channel
+    struct TCollectInfo {
+        TVector<TLogoBlobID> Keep;
+        TVector<TLogoBlobID> DoNotKeep;
+        ui32 TryCounter = 0;
+        bool RequestInFlight = false;
+        TMonotonic NextTryTimestamp;
+        TBackoffTimer BackoffTimer{CollectorErrorInitialBackoffMs, CollectorErrorMaxBackoffMs};
+    };
+    THashMap<TCollectKey, TCollectInfo> Collects;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -40,289 +35,138 @@ public:
     }
 
     TKeyValueCollector(const TActorId &keyValueActorId, TIntrusivePtr<TCollectOperation> &collectOperation,
-            const TTabletStorageInfo *tabletInfo, ui32 recordGeneration, ui32 perGenerationCounter,
-            bool isSpringCleanup)
+            const TTabletStorageInfo *tabletInfo, ui32 recordGeneration, ui32 perGenerationCounter)
         : KeyValueActorId(keyValueActorId)
         , CollectOperation(collectOperation)
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
         , RecordGeneration(recordGeneration)
         , PerGenerationCounter(perGenerationCounter)
-        , BackoffTimer(CollectorErrorInitialBackoffMs, CollectorErrorMaxBackoffMs)
-        , CollectorErrors(0)
-        , IsSpringCleanup(isSpringCleanup)
     {
         Y_VERIFY(CollectOperation.Get());
     }
 
-    ui32 GetVecIdxFromChannelIdx(ui32 channelIdx) {
-        return EndChannel - 1 - channelIdx;
-    }
-
-    ui32 GetChannelIdFromVecIdx(ui32 deqIdx) {
-        return EndChannel - 1 - deqIdx;
-    }
-
     void Bootstrap() {
-        EndChannel = TabletInfo->Channels.size();
-        CollectorForGroupForChannel.resize(EndChannel - BLOB_CHANNEL);
-        for (ui32 channelIdx = BLOB_CHANNEL; channelIdx < EndChannel; ++channelIdx) {
-            const auto *channelInfo = TabletInfo->ChannelInfo(channelIdx);
-            for (auto historyIt = channelInfo->History.begin(); historyIt != channelInfo->History.end(); ++historyIt) {
-                if (IsSpringCleanup) {
-                    CollectorForGroupForChannel[GetVecIdxFromChannelIdx(channelIdx)][historyIt->GroupID];
-                } else {
-                    auto nextHistoryIt = historyIt;
-                    nextHistoryIt++;
-                    if (nextHistoryIt == channelInfo->History.end()) {
-                        CollectorForGroupForChannel[GetVecIdxFromChannelIdx(channelIdx)][historyIt->GroupID];
-                    }
+        STLOG(PRI_DEBUG, KEYVALUE_GC, KVC04, "Start KeyValueCollector", (TabletId, TabletInfo->TabletID));
+
+        // prepare keep/doNotKeep flags
+        auto push = [&](const TLogoBlobID& id, auto flagsMember) {
+            const ui32 groupId = TabletInfo->GroupFor(id);
+            const TCollectKey key(groupId, id.Channel());
+            auto& info = Collects[key];
+            auto& v = info.*flagsMember;
+            v.push_back(id);
+        };
+        for (const auto& id : CollectOperation->Keep) {
+            push(id, &TCollectInfo::Keep);
+        }
+        for (const auto& id : CollectOperation->DoNotKeep) {
+            push(id, &TCollectInfo::DoNotKeep);
+        }
+        Y_VERIFY(!CollectOperation->Keep || CollectOperation->AdvanceBarrier);
+
+        // fill in required channel/group pairs
+        if (CollectOperation->AdvanceBarrier) {
+            for (const auto& channel : TabletInfo->Channels) {
+                if (channel.Channel < BLOB_CHANNEL) { // skip system channels
+                    continue;
+                }
+                if (!channel.History.empty()) {
+                    const auto& history = channel.History.back();
+                    Collects.try_emplace(TCollectKey(history.GroupID, channel.Channel));
                 }
             }
         }
 
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC04, "Start KeyValueCollector",
-            (TabletId, TabletInfo->TabletID),
-            (Keep, CollectOperation->Keep.size()), (DoNotKeep, CollectOperation->DoNotKeep.size()));
-
-        Sort(CollectOperation->Keep);
-        for (const auto &blob: CollectOperation->Keep) {
-            ui32 groupId = TabletInfo->ChannelInfo(blob.Channel())->GroupForGeneration(blob.Generation());
-            Y_VERIFY(groupId != Max<ui32>(), "Keep Blob# %s is mapped to an invalid group (-1)!",
-                    blob.ToString().c_str());
-            CollectorForGroupForChannel[GetVecIdxFromChannelIdx(blob.Channel())][groupId].Keep.push_back(blob);
-        }
-        for (const auto &blob: CollectOperation->DoNotKeep) {
-            const ui32 groupId = TabletInfo->ChannelInfo(blob.Channel())->GroupForGeneration(blob.Generation());
-            Y_VERIFY(groupId != Max<ui32>(), "DoNotKeep Blob# %s is mapped to an invalid group (-1)!",
-                    blob.ToString().c_str());
-            CollectorForGroupForChannel[GetVecIdxFromChannelIdx(blob.Channel())][groupId].DoNotKeep.push_back(blob);
-        }
-        ui64 maxDoNotKeepSizeInGroupChannel = 0;
-        for (auto &groups : CollectorForGroupForChannel) {
-            for (auto &[groupId, collector] : groups) {
-                maxDoNotKeepSizeInGroupChannel = Max(maxDoNotKeepSizeInGroupChannel, collector.DoNotKeep.size());
-            }
-        }
-
-        SendTheRequest();
+        Action();
         Become(&TThis::StateWait);
     }
 
-    ui32 GetCurretChannelId() {
-        return GetChannelIdFromVecIdx(CollectorForGroupForChannel.size() - 1);
+    void Action() {
+        const TMonotonic now = TActivationContext::Monotonic();
+        TMonotonic nextTryTimestamp = TMonotonic::Max();
+        for (auto& [key, value] : Collects) {
+            if (value.RequestInFlight) {
+                continue;
+            } else if (now < value.NextTryTimestamp) { // time hasn't come yet
+                nextTryTimestamp = Min(nextTryTimestamp, value.NextTryTimestamp);
+                continue;
+            }
+
+            const auto [groupId, channel] = key;
+            const bool advanceBarrier = CollectOperation->AdvanceBarrier;
+            auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletInfo->TabletID, RecordGeneration,
+                PerGenerationCounter, channel, advanceBarrier, CollectOperation->Header.CollectGeneration,
+                CollectOperation->Header.CollectStep, value.Keep ? new TVector<TLogoBlobID>(value.Keep) : nullptr,
+                value.DoNotKeep ? new TVector<TLogoBlobID>(value.DoNotKeep) : nullptr, TInstant::Max(), true);
+            STLOG(PRI_DEBUG, KEYVALUE_GC, KVC00, "Sending TEvCollectGarbage", (TabletId, TabletInfo->TabletID),
+                (GroupId, groupId), (Channel, (int)channel), (RecordGeneration, RecordGeneration),
+                (PerGenerationCounter, PerGenerationCounter), (AdvanceBarrier, advanceBarrier),
+                (CollectGeneration, CollectOperation->Header.CollectGeneration),
+                (CollectStep, CollectOperation->Header.CollectStep), (Keep.size, value.Keep.size()),
+                (DoNotKeep.size, value.DoNotKeep.size()));
+            SendToBSProxy(SelfId(), groupId, ev.release(), static_cast<ui64>(groupId) << 8 | channel);
+            value.RequestInFlight = true;
+        }
+        if (nextTryTimestamp != TMonotonic::Max() && (WakeupScheduled.empty() || nextTryTimestamp < *WakeupScheduled.begin())) {
+            TActivationContext::Schedule(nextTryTimestamp, new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {},
+                nullptr, nextTryTimestamp.GetValue()));
+            WakeupScheduled.insert(nextTryTimestamp);
+        }
+        if (Collects.empty()) {
+            SendCompleteGCAndDie();
+        }
     }
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
         NKikimrProto::EReplyStatus status = ev->Get()->Status;
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC11, "Receive TEvCollectGarbageResult",
-            (TabletId, TabletInfo->TabletID),
+
+        const TCollectKey key(ev->Cookie >> 8, static_cast<ui8>(ev->Cookie));
+
+        STLOG(PRI_DEBUG, KEYVALUE_GC, KVC11, "Receive TEvCollectGarbageResult",
+            (TabletId, TabletInfo->TabletID), (GroupId, std::get<0>(key)), (Channel, (int)std::get<1>(key)),
             (Status, status));
 
-        auto collectorsOfCurrentChannel = CollectorForGroupForChannel.rbegin();
-        if (collectorsOfCurrentChannel == CollectorForGroupForChannel.rend()) {
-            STLOG(NLog::PRI_ERROR, NKikimrServices::KEYVALUE_GC, KVC17,
-                "Collectors must be exist when we recieve TEvCollectGarbageResult",
-                (TabletId, TabletInfo->TabletID), (CollectorErrors, CollectorErrors));
-            HandleErrorAndDie();
-            return;
-        }
-
-        auto currentCollectorIterator = collectorsOfCurrentChannel->begin();
-        if  (currentCollectorIterator == collectorsOfCurrentChannel->end()) {
-            STLOG(NLog::PRI_ERROR, NKikimrServices::KEYVALUE_GC, KVC17,
-                "Collectors must be exist in the current channel when we recieve TEvCollectGarbageResult",
-                (TabletId, TabletInfo->TabletID), (Channel, GetCurretChannelId()), (CollectorErrors, CollectorErrors));
-            HandleErrorAndDie();
-            return;
-        }
+        const auto it = Collects.find(key);
+        Y_VERIFY(it != Collects.end());
+        TCollectInfo& info = it->second;
+        Y_VERIFY(info.RequestInFlight);
+        info.RequestInFlight = false;
 
         if (status == NKikimrProto::OK) {
-            // Success
-            bool isLastRequestInCollector = false;
-            {
-                TGroupCollector &collector = currentCollectorIterator->second;
-                collector.CountOfSentFlags = collector.NextCountOfSentFlags;
-                isLastRequestInCollector = (collector.CountOfSentFlags == collector.Keep.size() + collector.DoNotKeep.size());
-            }
-            if (isLastRequestInCollector) {
-                STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC08, "Last group was empty, it's erased",
-                    (TabletId, TabletInfo->TabletID), (GroupId, currentCollectorIterator->first), (Channel, GetCurretChannelId()));
-                currentCollectorIterator = collectorsOfCurrentChannel->erase(currentCollectorIterator);
-            }
-            if (currentCollectorIterator == collectorsOfCurrentChannel->end()) {
-                STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC08, "Last channel was empty, it's erased",
-                    (TabletId, TabletInfo->TabletID), (Channel, GetCurretChannelId()));
-                CollectorForGroupForChannel.pop_back();
-            }
-            if (CollectorForGroupForChannel.empty()) {
-                SendCompleteGCAndDie();
-                return;
-            }
-            SendTheRequest();
-            return;
-        }
-
-        ui32 channelId = GetCurretChannelId();
-        ui32 groupId = currentCollectorIterator->first;
-
-        CollectorErrors++;
-        if (status == NKikimrProto::RACE || status == NKikimrProto::BLOCKED || status == NKikimrProto::NO_GROUP || CollectorErrors > CollectorMaxErrors) {
-            STLOG(NLog::PRI_ERROR, NKikimrServices::KEYVALUE_GC, KVC01, "Collector got not OK status",
-                (TabletId, TabletInfo->TabletID), (GroupId, groupId), (Channel, channelId), (Status, status),
-                (CollectorErrors, CollectorErrors), (CollectorMaxErrors, CollectorMaxErrors));
-            HandleErrorAndDie();
-            return;
-        }
-
-        // Rertry
-        IsRepeatedRequest = true;
-        ui64 backoffMs = BackoffTimer.NextBackoffMs();
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC02, "Collector got not OK status, retry",
-            (TabletId, TabletInfo->TabletID), (GroupId, groupId), (Channel, channelId),
-            (Status, status), (BackoffMs, backoffMs), (RetryingImmediately, (backoffMs ? "no" : "yes")));
-        if (backoffMs) {
-            const TDuration &timeout = TDuration::MilliSeconds(backoffMs);
-            TActivationContext::Schedule(timeout, new IEventHandle(TEvents::TEvWakeup::EventType, 0, SelfId(), SelfId(), nullptr, 0));
+            Collects.erase(it);
+        } else if (++info.TryCounter < CollectorMaxErrors) {
+            info.NextTryTimestamp = TActivationContext::Monotonic() + TDuration::MilliSeconds(info.BackoffTimer.NextBackoffMs());
         } else {
-            SendTheRequest();
+            return HandleErrorAndDie();
         }
+
+        Action();
     }
 
     void SendCompleteGCAndDie() {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC19, "Collector send CompleteGC",
-            (TabletId, TabletInfo->TabletID));
-        Send(KeyValueActorId, new TEvKeyValue::TEvCompleteGC());
-        PassAway();
-    }
-
-    void SendTheRequest() {
-        auto collectorsOfCurrentChannel = CollectorForGroupForChannel.rbegin();
-        if (collectorsOfCurrentChannel == CollectorForGroupForChannel.rend()) {
-            STLOG(NLog::PRI_ERROR, NKikimrServices::KEYVALUE_GC, KVC30,
-                "Collectors must be exist when we try to send the request",
-                (TabletId, TabletInfo->TabletID), (CollectorErrors, CollectorErrors));
-            HandleErrorAndDie();
-            return;
-        }
-
-        auto currentCollectorIterator = collectorsOfCurrentChannel->begin();
-        if  (currentCollectorIterator == collectorsOfCurrentChannel->end()) {
-            STLOG(NLog::PRI_ERROR, NKikimrServices::KEYVALUE_GC, KVC31,
-                "Collectors must be exist in the current channel we try to send the request",
-                (TabletId, TabletInfo->TabletID), (Channel, GetCurretChannelId()), (CollectorErrors, CollectorErrors));
-            HandleErrorAndDie();
-            return;
-        }
-
-        THolder<TVector<TLogoBlobID>> keep;
-        THolder<TVector<TLogoBlobID>> doNotKeep;
-
-        TGroupCollector &collector = currentCollectorIterator->second;
-        collector.NextCountOfSentFlags = collector.CountOfSentFlags;
-
-        ui32 doNotKeepSize = collector.DoNotKeep.size();
-        if (collector.NextCountOfSentFlags < doNotKeepSize) {
-            doNotKeepSize -= collector.NextCountOfSentFlags;
-        } else {
-            doNotKeepSize = 0;
-        }
-
-        if (doNotKeepSize) {
-            doNotKeepSize = Min(doNotKeepSize, (ui32)MaxCollectGarbageFlagsPerMessage);
-            doNotKeep.Reset(new TVector<TLogoBlobID>(doNotKeepSize));
-            auto begin = collector.DoNotKeep.begin() + collector.NextCountOfSentFlags;
-            auto end = begin + doNotKeepSize;
-
-            collector.NextCountOfSentFlags += doNotKeepSize;
-            Copy(begin, end, doNotKeep->begin());
-        }
-
-        ui32 keepStartIdx = 0;
-        if (collector.NextCountOfSentFlags >= collector.DoNotKeep.size()) {
-            keepStartIdx = collector.NextCountOfSentFlags - collector.DoNotKeep.size();
-        }
-        ui32 keepSize = Min(collector.Keep.size() - keepStartIdx, MaxCollectGarbageFlagsPerMessage - doNotKeepSize);
-        if (keepSize) {
-            keep.Reset(new TVector<TLogoBlobID>(keepSize));
-            TMaybe<THelpers::TGenerationStep> collectedGenStep;
-            THelpers::TGenerationStep prevGenStep = THelpers::GenerationStep(collector.Keep.front());
-            auto begin = collector.Keep.begin() + keepStartIdx;
-            auto end = begin + keepSize;
-            ui32 idx = 0;
-            for (auto it = begin; it != end; ++it, ++idx) {
-                THelpers::TGenerationStep genStep = THelpers::GenerationStep(*it);
-                if (prevGenStep != genStep) {
-                    collectedGenStep = prevGenStep;
-                    prevGenStep = genStep;
-                }
-                (*keep)[idx] = *it;
-            }
-            collector.NextCountOfSentFlags += idx;
-        }
-
-        bool isLast = (collector.Keep.size() + collector.DoNotKeep.size() == collector.NextCountOfSentFlags);
-
-        ui32 collectGeneration = CollectOperation->Header.CollectGeneration;
-        ui32 collectStep = CollectOperation->Header.CollectStep;
-        ui32 channelIdx = GetChannelIdFromVecIdx(CollectorForGroupForChannel.size() - 1);
-        ui32 groupId = currentCollectorIterator->first;
-
-
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC16, "Send GC request",
-            (TabletId, TabletInfo->TabletID), (CollectGeneration, collectGeneration),
-            (CollectStep, collectStep), (ChannelIdx, channelIdx), (GroupId, groupId),
-            (KeepSize, keepSize), (DoNotKeepSize, doNotKeepSize), (IsLast, isLast));
-        SendToBSProxy(TActivationContext::AsActorContext(), groupId,
-            new TEvBlobStorage::TEvCollectGarbage(TabletInfo->TabletID, RecordGeneration, PerGenerationCounter,
-                channelIdx, isLast, collectGeneration, collectStep,
-                keep.Release(), doNotKeep.Release(), TInstant::Max(), true), (ui64)TKeyValueState::ECollectCookie::Soft);
-        IsRepeatedRequest = false;
-    }
-
-    void HandleWakeUp() {
-        auto collectorsOfCurrentChannel = CollectorForGroupForChannel.rbegin();
-        if (collectorsOfCurrentChannel == CollectorForGroupForChannel.rend()) {
-            STLOG(NLog::PRI_ERROR, NKikimrServices::KEYVALUE_GC, KVC17,
-                "Collectors must be exist when we try to resend the request",
-                (TabletId, TabletInfo->TabletID), (CollectorErrors, CollectorErrors));
-            HandleErrorAndDie();
-            return;
-        }
-
-        auto currentCollectorIterator = collectorsOfCurrentChannel->begin();
-        if  (currentCollectorIterator == collectorsOfCurrentChannel->end()) {
-            STLOG(NLog::PRI_ERROR, NKikimrServices::KEYVALUE_GC, KVC17,
-                "Collectors must be exist in the current channel we try to resend the request",
-                (TabletId, TabletInfo->TabletID), (Channel, GetCurretChannelId()), (CollectorErrors, CollectorErrors));
-            HandleErrorAndDie();
-            return;
-        }
-
-        ui32 channelId = GetCurretChannelId();
-        ui32 groupId = currentCollectorIterator->first;
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC03, "Collector retrying",
-            (TabletId, TabletInfo->TabletID), (GroupId, groupId), (Channel, channelId));
-        SendTheRequest();
-    }
-
-    void HandlePoisonPill() {
-        STLOG(NLog::PRI_ERROR, NKikimrServices::KEYVALUE_GC, KVC12, "Poisoned",
-            (TabletId, TabletInfo->TabletID));
+        STLOG(PRI_DEBUG, KEYVALUE_GC, KVC19, "Collector send CompleteGC", (TabletId, TabletInfo->TabletID));
+        Send(KeyValueActorId, new TEvKeyValue::TEvCompleteGC(false));
         PassAway();
     }
 
     void HandleErrorAndDie() {
-        STLOG(NLog::PRI_ERROR, NKikimrServices::KEYVALUE_GC, KVC18, "Garbage Collector catch the error, send PoisonPill to the tablet",
+        STLOG(PRI_ERROR, KEYVALUE_GC, KVC18, "Garbage Collector catch the error, send PoisonPill to the tablet",
             (TabletId, TabletInfo->TabletID));
         Send(KeyValueActorId, new TEvents::TEvPoisonPill());
         PassAway();
     }
 
+    void HandleWakeup(STATEFN_SIG) {
+        const size_t numErased = WakeupScheduled.erase(TMonotonic::FromValue(ev->Cookie));
+        Y_VERIFY(numErased == 1);
+        Action();
+    }
+
     STATEFN(StateWait) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
-            cFunc(TEvents::TEvWakeup::EventType, HandleWakeUp);
-            cFunc(TEvents::TEvPoisonPill::EventType, HandlePoisonPill);
+            fFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            cFunc(TEvents::TSystem::Poison, PassAway);
             default:
                 break;
         }
@@ -330,9 +174,8 @@ public:
 };
 
 IActor* CreateKeyValueCollector(const TActorId &keyValueActorId, TIntrusivePtr<TCollectOperation> &collectOperation,
-        const TTabletStorageInfo *TabletInfo, ui32 recordGeneration, ui32 perGenerationCounter, bool isSpringCleanup) {
-    return new TKeyValueCollector(keyValueActorId, collectOperation, TabletInfo, recordGeneration,
-        perGenerationCounter, isSpringCleanup);
+        const TTabletStorageInfo *TabletInfo, ui32 recordGeneration, ui32 perGenerationCounter) {
+    return new TKeyValueCollector(keyValueActorId, collectOperation, TabletInfo, recordGeneration, perGenerationCounter);
 }
 
 } // NKeyValue

@@ -12,7 +12,7 @@ public:
     TServiceCounterCB(::NMonitoring::TDynamicCounterPtr counters, TActorSystem *actorSystem);
 
     NGrpc::ICounterBlockPtr operator()(const char* serviceName, const char* requestName,
-        bool percentile = true, bool streaming = false) const;
+        bool streaming = false) const;
 
 private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;

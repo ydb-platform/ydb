@@ -7,6 +7,7 @@
 
 
 add_subdirectory(counter_time_keeper)
+add_subdirectory(deprecated)
 add_subdirectory(obfuscate)
 add_subdirectory(tests)
 add_subdirectory(topic_parser)

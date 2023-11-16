@@ -517,37 +517,55 @@ bool NKikimr::ObtainTenantKey(TEncryptionKey *key, const NKikimrProto::TKeyConfi
     }
 }
 
-bool NKikimr::ObtainPDiskKey(TVector<TEncryptionKey> *keys, const NKikimrProto::TKeyConfig& keyConfig) {
+bool NKikimr::ObtainPDiskKey(NPDisk::TMainKey *mainKey, const NKikimrProto::TKeyConfig& keyConfig) {
+    Y_VERIFY(mainKey);
+    *mainKey = NPDisk::TMainKey{};
+
     ui32 keysSize = keyConfig.KeysSize();
     if (!keysSize) {
         Cerr << "No Keys in PDiskKeyConfig! Encrypted pdisks will not start" << Endl;
+        mainKey->ErrorReason = "Empty PDiskKeyConfig";
+        mainKey->Keys = { NPDisk::YdbDefaultPDiskSequence };
+        mainKey->IsInitialized = true;
         return false;
     }
 
-    keys->resize(keysSize);
+    TVector<TEncryptionKey> keys(keysSize);
     for (ui32 i = 0; i < keysSize; ++i) {
         auto &record = keyConfig.GetKeys(i);
         if (record.GetId() == "0" && record.GetContainerPath() == "") {
             // use default pdisk key
-            (*keys)[i].Id = "0";
-            (*keys)[i].Version = record.GetVersion();
+            keys[i].Id = "0";
+            keys[i].Version = record.GetVersion();
 
             ui8 *keyBytes = 0;
             ui32 keySize = 0;
-            (*keys)[i].Key.MutableKeyBytes(&keyBytes, &keySize);
+            keys[i].Key.MutableKeyBytes(&keyBytes, &keySize);
 
             ui64* p = (ui64*)keyBytes;
             p[0] = NPDisk::YdbDefaultPDiskSequence;
         } else {
-            if (!ObtainKey(&(*keys)[i], record)) {
+            if (!ObtainKey(&keys[i], record)) {
+                mainKey->Keys = {};
+                mainKey->ErrorReason = "Cannot obtain key, ContainerPath# " + record.GetContainerPath();
+                mainKey->IsInitialized = true;
                 return false;
             }
         }
     }
 
-    std::sort(keys->begin(), keys->end(), [&](const TEncryptionKey& l, const TEncryptionKey& r) {
+    std::sort(keys.begin(), keys.end(), [&](const TEncryptionKey& l, const TEncryptionKey& r) {
         return l.Version < r.Version;
     });
+
+    for (ui32 i = 0; i < keys.size(); ++i) {
+        const ui8 *key;
+        ui32 keySize;
+        keys[i].Key.GetKeyBytes(&key, &keySize);
+        Y_VERIFY_DEBUG(keySize == sizeof(ui64));
+        mainKey->Keys.push_back(*(ui64*)key);
+    }
+    mainKey->IsInitialized = true;
     return true;
 }
 

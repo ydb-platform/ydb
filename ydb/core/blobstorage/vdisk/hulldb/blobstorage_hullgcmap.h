@@ -107,12 +107,13 @@ namespace NKikimr {
         //////////////// Iterator //////////////////////////////////////////////
 
 
-        TGcMap(TIntrusivePtr<THullCtx> &&hullCtx, ui64 incomingElementsApproximation)
+        TGcMap(TIntrusivePtr<THullCtx> &&hullCtx, ui64 incomingElementsApproximation, bool allowGarbageCollection)
             : HullCtx(std::move(hullCtx))
             , IncomingElementsApproximation(incomingElementsApproximation)
             , IndexKeepMap()
             , DataKeepMap()
             , Stat()
+            , AllowGarbageCollection(allowGarbageCollection)
         {}
 
         // Prepares a map of keep/don't keep commands for every record
@@ -139,7 +140,8 @@ namespace NKikimr {
                 Y_UNUSED(subsMerger);
                 bool allowKeepFlags = HullCtx->AllowKeepFlags;
                 NGc::TKeepStatus keep = barriersEssence->Keep(dbIt.GetCurKey(), dbMerger.GetMemRec(),
-                                                              dbMerger.GetMemRecsMerged(), allowKeepFlags);
+                                                              dbMerger.GetMemRecsMerged(), allowKeepFlags,
+                                                              AllowGarbageCollection);
                 Stat.Update(dbIt.GetCurKey(), keep);
                 if (keep.KeepIndex) {
                     IndexKeepMap.Set(Stat.ItemsTotal - 1);
@@ -177,14 +179,16 @@ namespace NKikimr {
         TDynBitMap IndexKeepMap;
         TDynBitMap DataKeepMap;
         TStat Stat;
+        const bool AllowGarbageCollection;
     };
 
 
     template <class TKey, class TMemRec>
     TIntrusivePtr<TGcMap<TKey, TMemRec>> CreateGcMap(
                 TIntrusivePtr<THullCtx> hullCtx,
-                ui64 incomingElementsApproximation) {
-        return new TGcMap<TKey, TMemRec>(std::move(hullCtx), incomingElementsApproximation);
+                ui64 incomingElementsApproximation,
+                bool allowGarbageCollection) {
+        return new TGcMap<TKey, TMemRec>(std::move(hullCtx), incomingElementsApproximation, allowGarbageCollection);
     }
 
 } // NKikimr

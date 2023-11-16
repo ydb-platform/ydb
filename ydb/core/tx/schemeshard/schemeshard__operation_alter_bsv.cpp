@@ -531,6 +531,15 @@ public:
             return result;
         }
 
+        if (alterVolumeConfig->HasFillGeneration() &&
+            alterVolumeConfig->GetFillGeneration() != volume->VolumeConfig.GetFillGeneration())
+        {
+            result->SetError(
+                NKikimrScheme::StatusPreconditionFailed,
+                "Wrong FillGeneration in VolumeConfig");
+            return result;
+        }
+
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;

@@ -770,7 +770,7 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     NodeServiceStartEventDelivery = KqpGroup->GetHistogram(
         "NodeService/StartEventDeliveryUs", NMonitoring::ExponentialHistogram(20, 2, 1));
     NodeServiceProcessTime = KqpGroup->GetHistogram(
-        "jodeService/ProcessStartEventUs", NMonitoring::ExponentialHistogram(20, 2, 1));
+        "NodeService/ProcessStartEventUs", NMonitoring::ExponentialHistogram(20, 2, 1));
     NodeServiceProcessCancelTime = KqpGroup->GetHistogram(
         "NodeService/ProcessCancelEventUs", NMonitoring::ExponentialHistogram(20, 2, 1));
     RmMaxSnapshotLatency = KqpGroup->GetCounter("RM/MaxSnapshotLatency", false);

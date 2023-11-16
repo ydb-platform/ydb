@@ -95,6 +95,7 @@
 #include <ydb/services/maintenance/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
 #include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
+#include <ydb/services/deprecated/persqueue_v0/persqueue.h>
 #include <ydb/services/persqueue_v1/persqueue.h>
 #include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
@@ -810,6 +811,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasKesus) {
             server.AddService(new NKesus::TKesusGRpcService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasKesus.IsRlAllowed()));
+        }
+
+        if (hasPQ) {
+            server.AddService(new NKikimr::NGRpcService::TGRpcPersQueueService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id()));
         }
 
         if (hasPQv1) {

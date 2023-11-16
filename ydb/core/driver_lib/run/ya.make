@@ -156,6 +156,7 @@ PEERDIR(
     ydb/services/ext_index/metadata
     ydb/services/monitoring
     ydb/services/persqueue_cluster_discovery
+    ydb/services/deprecated/persqueue_v0
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/ydb

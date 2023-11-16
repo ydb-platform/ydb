@@ -29,33 +29,6 @@ namespace NKikimr {
 namespace NKeyValue {
 
 class TKeyValueState {
-    struct TRangeSet {
-        TMap<ui64, ui64> EndForBegin;
-
-        TRangeSet() {
-        }
-
-        void Add(ui64 begin, ui64 end) {
-            Y_VERIFY(begin < end, "begin# %" PRIu64 " end# %" PRIu64, (ui64)begin, (ui64)end);
-            EndForBegin[begin] = end;
-        }
-
-        bool Remove(ui64 x) {
-            auto it = EndForBegin.upper_bound(x);
-            if (it != EndForBegin.begin()) {
-                it--;
-            } else {
-                return false;
-            }
-            if (x >= it->second) {
-                return false;
-            }
-            Y_VERIFY(it->first <= x);
-            EndForBegin.erase(it);
-            return true;
-        }
-    };
-
 public:
     using TIndex = TMap<TString, TIndexRecord>;
     using TCommand = NKikimrKeyValue::ExecuteTransactionRequest::Command;
@@ -250,11 +223,9 @@ protected:
 
     using TKeySet = TIncrementalKeySet;
 
-    TVector<TRangeSet> ChannelRangeSets;
     TIndex Index;
     THashMap<TLogoBlobID, ui32> RefCounts;
     TSet<TLogoBlobID> Trash;
-    THashMap<ui64, TVector<TLogoBlobID>> TrashBeingCommitted;
     TMap<ui64, ui64> InFlightForStep;
     TMap<std::tuple<ui64, ui32>, ui32> RequestUidStepToCount;
     THashSet<ui64> CmdTrimLeakedBlobsUids;
@@ -263,14 +234,13 @@ protected:
     ui64 NextRequestUid = 1;
     TIntrusivePtr<TCollectOperation> CollectOperation;
     bool IsCollectEventSent;
-    bool IsSpringCleanupDone;
+    bool InitWithoutCollect;
     std::array<ui64, 256> ChannelDataUsage;
     std::bitset<256> UsedChannels;
     THolder<TChannelBalancer::TWeightManager> WeightManager;
 
     ui64 TabletId;
     TActorId KeyValueActorId;
-    TActorId CollectorActorId;
     ui32 ExecutorGeneration;
     bool IsStatePresent;
     bool IsEmptyDbStart;
@@ -299,6 +269,8 @@ protected:
     TVector<TLogoBlobID> PartialCollectedDoNotKeep;
     bool RepeatGCTX = false;
 
+    ui64 TotalTrashSize = 0;
+
 public:
     TKeyValueState();
     void Clear();
@@ -311,10 +283,14 @@ public:
     void CountRequestTakeOffOrEnqueue(TRequestType::EType requestType);
     void CountRequestOtherError(TRequestType::EType requestType);
     void CountRequestIncoming(TRequestType::EType requestType);
-    void CountTrashRecord(ui32 sizeBytes);
-    void CountWriteRecord(ui8 channel, ui32 sizeBytes);
-    void CountInitialTrashRecord(ui32 sizeBytes);
-    void CountTrashCollected(ui32 sizeBytes);
+    void CountTrashRecord(const TLogoBlobID& id);
+    void CountWriteRecord(const TLogoBlobID& id);
+    void CountDeleteInline(ui32 sizeBytes);
+    void CountInitialTrashRecord(const TLogoBlobID& id);
+    void CountUncommittedTrashRecord(const TLogoBlobID& id);
+    void CountTrashCollected(const TLogoBlobID& id);
+    void CountTrashCommitted(const TLogoBlobID& id);
+    void CountTrashDeleted(const TLogoBlobID& id);
     void CountOverrun();
     void CountLatencyBsOps(const TRequestStat &stat);
     void CountLatencyBsCollect();
@@ -328,17 +304,17 @@ public:
     void Load(const TString &key, const TString& value);
     void InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 executorGeneration, ISimpleDb &db,
         const TActorContext &ctx, const TTabletStorageInfo *info);
-    bool RegisterInitialCollectResult(const TActorContext &ctx);
+    void InitComplete(const TActorContext& ctx, const TTabletStorageInfo *info);
+    bool RegisterInitialCollectResult(const TActorContext &ctx, const TTabletStorageInfo *info);
     void RegisterInitialGCCompletionExecute(ISimpleDb &db, const TActorContext &ctx);
     void RegisterInitialGCCompletionComplete(const TActorContext &ctx, const TTabletStorageInfo *info);
-    void SendCutHistory(const TActorContext &ctx);
+    void SendCutHistory(const TActorContext &ctx, const TTabletStorageInfo *info);
     void OnInitQueueEmpty(const TActorContext &ctx);
     void OnStateWork(const TActorContext &ctx);
     void RequestExecute(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
         const TTabletStorageInfo *info);
     void RequestComplete(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
-    void DropRefCountsOnErrorInTx(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, ISimpleDb& db, const TActorContext& ctx,
-        ui64 requestUid);
+    void DropRefCountsOnErrorInTx(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, ISimpleDb& db, const TActorContext& ctx);
     void DropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool>>& refCountsIncr /*in-out*/, bool writesMade,
         const TActorContext& ctx);
     void ProcessPostponedTrims(const TActorContext& ctx, const TTabletStorageInfo *info);
@@ -352,9 +328,9 @@ public:
     void StartGC(const TActorContext &ctx, TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep,
         TVector<TLogoBlobID>& trashGoingToCollect);
     void StartCollectingIfPossible(const TActorContext &ctx);
-    ui64 OnEvCollect(const TActorContext &ctx);
-    void OnEvCollectDone(ui64 perGenerationCounterStepSize, TActorId collector, const TActorContext &ctx);
-    void OnEvCompleteGC();
+    bool OnEvCollect(const TActorContext &ctx);
+    void OnEvCollectDone(const TActorContext &ctx);
+    void OnEvCompleteGC(bool repeat);
 
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
@@ -425,14 +401,15 @@ public:
         return CollectOperation;
     }
 
-    void Dereference(const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx, ui64 requestUid);
+    void Dereference(const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx);
     void UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx);
-    void Dereference(const TLogoBlobID& id, ISimpleDb& db, const TActorContext& ctx, bool initial,
-        ui64 requestUid);
+    void Dereference(const TLogoBlobID& id, ISimpleDb& db, const TActorContext& ctx, bool initial);
 
     ui32 GetPerGenerationCounter() {
         return PerGenerationCounter;
     }
+
+    void PushTrashBeingCommitted(TVector<TLogoBlobID>& trashBeingCommitted, const TActorContext& ctx);
 
     void OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActorContext &ctx,
             const TTabletStorageInfo *info);
@@ -514,7 +491,10 @@ public:
         return false;
     }
 
-    void SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, ui32 storageChannelIdx, TIntermediate *intermediate);
+    void RegisterRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
+        const TTabletStorageInfo *info, ui32 tabletGeneration);
+
+    void SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, ui32 storageChannelIdx);
 
     bool PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, bool &outIsInlineOnly);
@@ -666,7 +646,7 @@ public:
             if (to->KeyFrom > to->KeyTo) {
                 TString msg = TStringBuilder() << "KeyValue# " << TabletId
                         << " Range.KeyFrom > Range.KeyTo and both exclusive in " << cmd
-                        << " Marker# KV33";
+                        << " Marker# KV36";
                 return TConvertRangeResult{msg, true};
             }
         }
@@ -718,20 +698,12 @@ public:
         IsTabletYellowMove = isTabletYellow;
     }
 
-    bool GetIsSpringCleanupDone() const {
-        return IsSpringCleanupDone;
-    }
-
-    void SetIsSpringCleanupDone() {
-        IsSpringCleanupDone = true;
-    }
-
     ui64 GetTrashTotalBytes() const {
-        ui64 res = 0;
-        for (const TLogoBlobID& id : Trash) {
-            res += id.BlobSize();
-        }
-        return res;
+        return TotalTrashSize;
+    }
+
+    ui32 GetTrashCount() const {
+        return Trash.size();
     }
 
 public: // For testing

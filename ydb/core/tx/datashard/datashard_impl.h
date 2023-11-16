@@ -1944,6 +1944,22 @@ public:
      */
     void BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volatileDependencies);
 
+    enum ELogThrottlerType {
+        CheckDataTxUnit_Execute = 0,
+        TxProposeTransactionBase_Execute,
+        FinishProposeUnit_CompleteRequest,
+        FinishProposeUnit_UpdateCounters,
+        UploadRows_Reject,
+        EraseRows_Reject,
+
+        LAST
+    };
+
+    TTrivialLogThrottler& GetLogThrottler(ELogThrottlerType type) {
+        Y_VERIFY(type != ELogThrottlerType::LAST);
+        return LogThrottlers[type];
+    };
+
 private:
     ///
     class TLoanReturnTracker {
@@ -2709,6 +2725,8 @@ private:
     NTable::ITransactionObserverPtr BreakWriteConflictsTxObserver;
 
     bool UpdateFollowerReadEdgePending = false;
+
+    std::vector<TTrivialLogThrottler> LogThrottlers = {ELogThrottlerType::LAST, TDuration::Seconds(1)};
 
 public:
     auto& GetLockChangeRecords() {

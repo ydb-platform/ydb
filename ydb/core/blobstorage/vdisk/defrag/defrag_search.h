@@ -120,7 +120,7 @@ namespace NKikimr {
         void Finish() {
             if (!Merger.Empty()) {
                 Y_VERIFY(!Merger.HasSmallBlobs());
-                NGc::TKeepStatus status = Barriers->Keep(Key, MemRec, NumMemRecsMerged, AllowKeepFlags);
+                NGc::TKeepStatus status = Barriers->Keep(Key, MemRec, NumMemRecsMerged, AllowKeepFlags, true /*allowGarbageCollection*/);
                 const auto& hugeMerger = Merger.GetHugeBlobMerger();
                 const auto& local = MemRec.GetIngress().LocalParts(GType);
                 ui8 partIdx = local.FirstPosition();

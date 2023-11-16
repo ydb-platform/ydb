@@ -14,10 +14,13 @@ namespace NKeyValue {
 class TSimpleDbFlat : public ISimpleDb {
 protected:
     NTable::TDatabase &Db;
+    TVector<TLogoBlobID>& TrashBeingCommitted;
+
 public:
-    TSimpleDbFlat(NTable::TDatabase &db);
+    TSimpleDbFlat(NTable::TDatabase &db, TVector<TLogoBlobID>& trashBeingCommitted);
     void Erase(const TString &key, const TActorContext &ctx) override;
     void Update(const TString &key, const TString &value, const TActorContext &ctx) override;
+    void AddTrash(const TLogoBlobID& id) override;
 };
 
 } // NKeyValue

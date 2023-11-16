@@ -573,6 +573,42 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "key = 6, value = 66\n");
     }
 
+    Y_UNIT_TEST(CorruptedDyNumber) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        runtime.GetAppData().AllowReadTableImmediate = true;
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "Table",
+            TShardedTableOptions().Columns({
+                {"key", "Uint32", true, false},
+                {"value", "DyNumber", false, false}
+            }));
+
+        // Write bad DyNumber
+        UploadRows(runtime, "/Root/Table", 
+            {{"key", Ydb::Type::UINT32}, {"value", Ydb::Type::DYNUMBER}},
+            {TCell::Make(ui32(1))}, {TCell::Make(ui32(55555))}
+            );
+
+        auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/Table", true));
+
+        UNIT_ASSERT(!table1state.Next());
+
+        UNIT_ASSERT(table1state.IsError);
+        UNIT_ASSERT_VALUES_EQUAL(table1state.LastResult, "ERROR: ExecError\n");
+    }    
+
 } // Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots)
 
 } // namespace NKikimr

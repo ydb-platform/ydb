@@ -203,11 +203,11 @@ public:
                 ->GetSubgroup("pdisk", Sprintf("%09" PRIu32, (ui32)cfg->PDiskId))
                 ->GetSubgroup("media", to_lower(cfg->PDiskCategory.TypeStrShort())))
     {
-        Y_VERIFY(!MainKey.empty());
+        Y_VERIFY(MainKey.IsInitialized);
     }
 
     ~TPDiskActor() {
-        SecureWipeBuffer((ui8*)MainKey.data(), sizeof(NPDisk::TKey) * MainKey.size());
+        SecureWipeBuffer((ui8*)MainKey.Keys.data(), sizeof(NPDisk::TKey) * MainKey.Keys.size());
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -244,7 +244,13 @@ public:
 
         bool isOk = PDisk->Initialize(TlsActivationContext->ActorSystem(), SelfId());
 
-        if (!isOk) {
+        if (!MainKey) {
+            TStringStream str;
+            str << "PDiskId# " << (ui32)PDisk->PDiskId
+                << " MainKey is invalid, ErrorReason# " << MainKey.ErrorReason;
+            InitError(str.Str());
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_PDISK, str.Str());
+        } else if (!isOk) {
             TStringStream str;
             str << "PDiskId# " << (ui32)PDisk->PDiskId
                 << " bootstrapped to the StateError, reason# " << PDisk->ErrorStr
@@ -364,12 +370,12 @@ public:
                         try {
                             try {
                                 FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
-                                    cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.back(), TString(), false,
+                                    cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
                                     cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
                                     cfg->FeatureFlags.GetEnableSmallDiskOptimization());
                             } catch (NPDisk::TPDiskFormatBigChunkException) {
                                 FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
-                                    cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.back(), TString(), false,
+                                    cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
                                     cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
                                     cfg->FeatureFlags.GetEnableSmallDiskOptimization());
                             }
@@ -384,7 +390,7 @@ public:
 
             FormattingThread->Start();
         } else {
-            SecureWipeBuffer((ui8*)MainKey.data(), sizeof(NPDisk::TKey) * MainKey.size());
+            SecureWipeBuffer((ui8*)MainKey.Keys.data(), sizeof(NPDisk::TKey) * MainKey.Keys.size());
             *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
             *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
             *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorPDiskCannotBeInitialised;
@@ -486,12 +492,12 @@ public:
         } else {
             if (res.IsReencryptionRequired) {
                 // Format reencryption required
-                ReencryptDiskFormat(PDisk->Format, MainKey.back());
+                ReencryptDiskFormat(PDisk->Format, MainKey.Keys.back());
                 // We still need main key after restart
                 // SecureWipeBuffer((ui8*)MainKey.data(), sizeof(NPDisk::TKey) * MainKey.size());
             } else {
                 // Format is read OK
-                SecureWipeBuffer((ui8*)MainKey.data(), sizeof(NPDisk::TKey) * MainKey.size());
+                SecureWipeBuffer((ui8*)MainKey.Keys.data(), sizeof(NPDisk::TKey) * MainKey.Keys.size());
                 LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
                         << " Successfully read format record# " << PDisk->Format.ToString());
                 TString info;
@@ -969,7 +975,7 @@ public:
         }
 
         MainKey = ev->Get()->MainKey;
-        SecureWipeBuffer((ui8*)ev->Get()->MainKey.data(), sizeof(NPDisk::TKey) * ev->Get()->MainKey.size());
+        SecureWipeBuffer((ui8*)ev->Get()->MainKey.Keys.data(), sizeof(NPDisk::TKey) * ev->Get()->MainKey.Keys.size());
         LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
                 << " Going to restart PDisk since recieved TEvRestartPDisk");
         PDisk->Stop();

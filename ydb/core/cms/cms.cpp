@@ -282,6 +282,7 @@ void TCms::AddPermissionExtensions(const TAction& action, TPermission& perm) con
     switch (action.GetType()) {
         case TAction::RESTART_SERVICES:
         case TAction::SHUTDOWN_HOST:
+        case TAction::REBOOT_HOST:
             AddHostExtensions(action.GetHost(), perm);
             break;
         default:
@@ -339,6 +340,7 @@ bool TCms::CheckAction(const TAction &action,
         case TAction::RESTART_SERVICES:
             return CheckActionRestartServices(action, opts, error, ctx);
         case TAction::SHUTDOWN_HOST:
+        case TAction::REBOOT_HOST:
             return CheckActionShutdownHost(action, opts, error, ctx);
         case TAction::REPLACE_DEVICES:
             return CheckActionReplaceDevices(action, opts.PermissionDuration, error);
@@ -427,8 +429,12 @@ bool TCms::CheckActionShutdownHost(const TAction &action,
                                    TErrorInfo &error,
                                    const TActorContext &ctx) const
 {
+    const bool forciblyAllow = action.GetType() == TAction::REBOOT_HOST;
     for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
         if (!CheckActionShutdownNode(action, opts, *node, error, ctx)) {
+            if (forciblyAllow && node->State == DOWN) {
+                continue;
+            }
             return false;
         }
     }

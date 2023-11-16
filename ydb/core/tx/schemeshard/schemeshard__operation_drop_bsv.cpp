@@ -138,7 +138,7 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& drop = Transaction.GetDrop();
+        const NKikimrSchemeOp::TDrop& drop = Transaction.GetDrop();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
@@ -176,6 +176,31 @@ public:
                     result->SetPathId(path.Base()->PathId.LocalPathId);
                 }
                 return result;
+            }
+        }
+
+        TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(path.Base()->PathId);
+        Y_VERIFY(volume);
+
+        {
+            const NKikimrSchemeOp::TDropBlockStoreVolume& dropParams = Transaction.GetDropBlockStoreVolume();
+
+            ui64 proposedFillGeneration = dropParams.GetFillGeneration();
+            ui64 actualFillGeneration = volume->VolumeConfig.GetFillGeneration();
+            const bool isFillFinished = volume->VolumeConfig.GetIsFillFinished();
+
+            if (proposedFillGeneration > 0) {
+                if (isFillFinished) {
+                    result->SetError(NKikimrScheme::StatusSuccess,
+                                     TStringBuilder() << "Filling is finished, deletion is no-op");
+                    return result;
+                } else if (proposedFillGeneration < actualFillGeneration) {
+                    result->SetError(NKikimrScheme::StatusSuccess,
+                                     TStringBuilder() << "Proposed fill generation "
+                                        << "is less than fill generation of the volume: "
+                                        << proposedFillGeneration << " < " << actualFillGeneration);
+                    return result;
+                }
             }
         }
 
@@ -221,9 +246,6 @@ public:
         txState.State = TTxState::DeleteParts;
 
         NIceDb::TNiceDb db(context.GetDB());
-
-        TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(path.Base()->PathId);
-        Y_VERIFY(volume);
 
         TVector<TShardIdx> shards;
         shards.push_back(volume->VolumeShardIdx);

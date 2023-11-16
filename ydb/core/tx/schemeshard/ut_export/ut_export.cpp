@@ -1370,4 +1370,41 @@ partitioning_settings {
         env.TestWaitNotification(runtime, exportId);
         TestGetExport(runtime, exportId, "/MyRoot");
     }
+
+    Y_UNIT_TEST(CorruptedDyNumber) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().DisableStatsBatching(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "DyNumber" }
+                KeyColumnNames: ["key"]
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Write bad DyNumber
+        UploadRows(runtime, "/MyRoot/Table", 0, {1}, {2}, {1});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: ""
+                }
+                }
+            )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+    }
 }

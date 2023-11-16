@@ -37,8 +37,15 @@ namespace NActors {
     void TSyncHttpMon::Start(TActorSystem*) {
         TBase::Register(new TIndexRedirectMonPage(IndexMonPage));
         TBase::Register(new NMonitoring::TVersionMonPage);
+        TBase::Register(new NMonitoring::TBootstrapCssMonPage);
         TBase::Register(new NMonitoring::TTablesorterCssMonPage);
+        TBase::Register(new NMonitoring::TBootstrapJsMonPage);
+        TBase::Register(new NMonitoring::TJQueryJsMonPage);
         TBase::Register(new NMonitoring::TTablesorterJsMonPage);
+        TBase::Register(new NMonitoring::TBootstrapFontsEotMonPage);
+        TBase::Register(new NMonitoring::TBootstrapFontsSvgMonPage);
+        TBase::Register(new NMonitoring::TBootstrapFontsTtfMonPage);
+        TBase::Register(new NMonitoring::TBootstrapFontsWoffMonPage);
 
         NLwTraceMonPage::RegisterPages(IndexMonPage.Get());
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(ACTORLIB_PROVIDER));

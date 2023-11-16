@@ -154,7 +154,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
     blockDevice->PreadSync(formatRaw->Data(), formatSectorsSize, 0,
             NPDisk::TReqId(NPDisk::TReqId::ReadFormatInfo, 0), {});
 
-    for (auto& key : mainKey) { 
+    for (auto& key : mainKey.Keys) { 
         NPDisk::TPDiskStreamCypher cypher(true); // Format record is always encrypted
         cypher.SetKey(key);
         bool isOk = false;

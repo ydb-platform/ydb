@@ -142,6 +142,7 @@ target_link_libraries(run PUBLIC
   services-ext_index-metadata
   ydb-services-monitoring
   ydb-services-persqueue_cluster_discovery
+  services-deprecated-persqueue_v0
   ydb-services-persqueue_v1
   ydb-services-rate_limiter
   ydb-services-ydb

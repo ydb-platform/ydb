@@ -329,7 +329,8 @@ namespace NKikimr {
                         ui64 firstLsn,
                         ui64 lastLsn,
                         TDuration restoreDeadline,
-                        std::optional<TKey> partitionKey)
+                        std::optional<TKey> partitionKey,
+                        bool allowGarbageCollection)
             : TActorBootstrapped<TThis>()
             , HullCtx(std::move(hullCtx))
             , PDiskCtx(rtCtx->PDiskCtx)
@@ -340,7 +341,7 @@ namespace NKikimr {
             , LevelSnap(std::move(levelSnap))
             , Hmp(CreateHandoffMap<TKey, TMemRec>(HullCtx, rtCtx->HandoffDelegate, rtCtx->RunHandoff,
                     rtCtx->SkeletonId))
-            , Gcmp(CreateGcMap<TKey, TMemRec>(HullCtx, mergeElementsApproximation))
+            , Gcmp(CreateGcMap<TKey, TMemRec>(HullCtx, mergeElementsApproximation, allowGarbageCollection))
             , It(it)
             , Worker(HullCtx, PDiskCtx, rtCtx->LevelIndex, it, (bool)FreshSegment, firstLsn, lastLsn, restoreDeadline,
                     partitionKey)

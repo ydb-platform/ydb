@@ -6,7 +6,7 @@ namespace NKikimr {
 namespace NKeyValue {
 
 IActor* CreateKeyValueCollector(const TActorId &keyValueActorId, TIntrusivePtr<TCollectOperation> &collectOperation,
-        const TTabletStorageInfo *tabletInfo, ui32 recordGeneration, ui32 perGenerationCounter, bool isSpringCleanup);
+        const TTabletStorageInfo *tabletInfo, ui32 recordGeneration, ui32 perGenerationCounter);
 
 } // NKeyValue
 } // NKikimr

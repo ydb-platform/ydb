@@ -51,13 +51,16 @@ struct TCollectOperation : public TThrRefBase {
     TVector<TLogoBlobID> Keep;
     TVector<TLogoBlobID> DoNotKeep;
     TVector<TLogoBlobID> TrashGoingToCollect;
+    const bool AdvanceBarrier;
 
     TCollectOperation(ui64 collectGeneration, ui64 collectStep,
-            TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&doNotKeep, TVector<TLogoBlobID>&& trashGoingToCollect)
+            TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&doNotKeep, TVector<TLogoBlobID>&& trashGoingToCollect,
+            bool advanceBarrier)
         : Header(collectGeneration, collectStep, keep, doNotKeep)
         , Keep(std::move(keep))
         , DoNotKeep(std::move(doNotKeep))
         , TrashGoingToCollect(std::move(trashGoingToCollect))
+        , AdvanceBarrier(advanceBarrier)
     {}
 };
 

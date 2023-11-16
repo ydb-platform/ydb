@@ -36,7 +36,7 @@ private:
 
 public:
     TActorId Sender;
-    NPDisk::TMainKey MainKey = { NPDisk::YdbDefaultPDiskSequence };
+    NPDisk::TMainKey MainKey{ .Keys = { NPDisk::YdbDefaultPDiskSequence }, .IsInitialized = true };
     TTestContext TestCtx;
     TSettings Settings;
 

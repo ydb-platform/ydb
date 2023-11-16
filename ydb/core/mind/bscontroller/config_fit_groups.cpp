@@ -369,7 +369,7 @@ namespace NKikimr {
                             const TVDiskIdShort pos(slot->RingIdx, slot->FailDomainIdx, slot->VDiskIdx);
                             if (const auto it = replacedSlots.find(pos); it != replacedSlots.end()) {
                                 auto *item = Status.AddReassignedItem();
-                                VDiskIDFromVDiskID(TVDiskID(groupInfo->ID, groupInfo->Generation - 1, pos), item->MutableVDiskId());
+                                VDiskIDFromVDiskID(TVDiskID(groupInfo->ID, groupInfo->Generation, pos), item->MutableVDiskId());
                                 Serialize(item->MutableFrom(), it->second);
                                 Serialize(item->MutableTo(), slot->VSlotId);
                                 if (auto *pdisk = State.PDisks.Find(it->second.ComprisingPDiskId())) {

@@ -25,6 +25,7 @@ target_link_libraries(ydb-core-actorlib_impl PUBLIC
   cpp-lwtrace-mon
   cpp-messagebus-monitoring
   cpp-monlib-dynamic_counters
+  service-pages-resources
   service-pages-tablesorter
   library-cpp-packedtypes
   library-cpp-sliding_window

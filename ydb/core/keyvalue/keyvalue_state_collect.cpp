@@ -7,25 +7,20 @@ namespace NKeyValue {
 void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::KEYVALUE, "PrepareCollectIfNeeded KeyValue# " << TabletId << " Marker# KV61");
 
-    if (CmdTrimLeakedBlobsUids) {
-        // Do not start garbage collection while we are trimming to avoid race.
-        return;
-    }
-
-    if (IsCollectEventSent || InitialCollectsSent) {
-        // We already are trying to collect something, just pass this time.
-        return;
-    }
-
-    if (Trash.empty()) {
-        // There is nothing to collect.
+    if (CmdTrimLeakedBlobsUids || IsCollectEventSent || Trash.empty()) { // can't start GC right now
         return;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // calculate maximum blob id in trash
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    TLogoBlobID maxId = *Trash.rbegin();
+    const TLogoBlobID minTrashId = *Trash.begin();
+    const TLogoBlobID maxTrashId = *--Trash.end();
+    if (THelpers::GenerationStep(minTrashId) == THelpers::TGenerationStep(ExecutorGeneration, NextLogoBlobStep) &&
+            InFlightForStep.contains(NextLogoBlobStep)) {
+        // do not generate more blobs with this NextLogoBlobStep as they are already fully blocking tablet from GC
+        Step();
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // derive new collect step for this operation
@@ -37,27 +32,21 @@ void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
         inflightGenStep = THelpers::TGenerationStep(ExecutorGeneration, step - 1);
     }
     const auto storedGenStep = THelpers::TGenerationStep(StoredState.GetCollectGeneration(), StoredState.GetCollectStep());
-    const auto requiredGenStep = Max(storedGenStep, THelpers::GenerationStep(maxId));
+    const auto requiredGenStep = Max(storedGenStep, THelpers::GenerationStep(maxTrashId));
     const auto collectGenStep = Min(inflightGenStep, requiredGenStep);
-    Y_VERIFY(THelpers::TGenerationStep(ExecutorGeneration, 0) <= collectGenStep);
+    Y_VERIFY(THelpers::TGenerationStep(ExecutorGeneration, 0) <= collectGenStep ||
+        collectGenStep == THelpers::TGenerationStep(ExecutorGeneration - 1, Max<ui32>()));
     Y_VERIFY(storedGenStep <= collectGenStep);
 
     // check if it is useful to start any collection
-    const TLogoBlobID minTrashId = *Trash.begin();
     if (collectGenStep < THelpers::GenerationStep(minTrashId)) {
-        if (collectGenStep < requiredGenStep && collectGenStep == THelpers::TGenerationStep(ExecutorGeneration, NextLogoBlobStep - 1)) {
-            // collection is blocked by inflight requests in current step -- we have to advance to prevent this loop
-            Step();
-        }
         return; // we do not have the opportunity to collect anything here with this allowed barrier
     }
 
     // create basic collect operation with zero keep/doNotKeep flag vectors; they will be calculated just before sending
     CollectOperation.Reset(new TCollectOperation(std::get<0>(collectGenStep), std::get<1>(collectGenStep),
-        {} /* keep */, {} /* doNoKeep */, {} /* trashGoingToCollect */));
-    if (std::get<1>(collectGenStep) == NextLogoBlobStep) {
-        // advance to the next step if we are going to collect everything up to current one; otherwise we can keep
-        // current step
+        {} /* keep */, {} /* doNoKeep */, {} /* trashGoingToCollect */, storedGenStep < collectGenStep /* advanceBarrier */));
+    if (collectGenStep == THelpers::TGenerationStep(ExecutorGeneration, NextLogoBlobStep)) {
         Step();
     }
 
@@ -68,12 +57,13 @@ bool TKeyValueState::RemoveCollectedTrash(ISimpleDb &db, const TActorContext &ct
     if (auto& trash = CollectOperation->TrashGoingToCollect) {
         ui32 collected = 0;
 
-        for (ui32 maxItemsToStore = 10'000; trash && maxItemsToStore; trash.pop_back(), --maxItemsToStore) {
+        for (ui32 maxItemsToStore = 200'000; trash && maxItemsToStore; trash.pop_back(), --maxItemsToStore) {
             const TLogoBlobID& id = trash.back();
             THelpers::DbEraseTrash(id, db, ctx);
             ui32 num = Trash.erase(id);
             Y_VERIFY(num == 1);
-            CountTrashCollected(id.BlobSize());
+            TotalTrashSize -= id.BlobSize();
+            CountTrashDeleted(id);
             ++collected;
         }
 
@@ -110,12 +100,12 @@ void TKeyValueState::CompleteGCComplete(const TActorContext &ctx, const TTabletS
         STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC20, "Repeat CompleteGC",
             (TabletId, TabletId),
             (TrashCount, Trash.size()));
-        ctx.Send(ctx.SelfID, new TEvKeyValue::TEvCompleteGC());
+        ctx.Send(ctx.SelfID, new TEvKeyValue::TEvCompleteGC(true));
         RepeatGCTX = false;
         return;
     }
     Y_VERIFY(CollectOperation);
-    CollectOperation.Reset(nullptr);
+    CollectOperation.Reset();
     IsCollectEventSent = false;
     STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC22, "CompleteGC Complete",
         (TabletId, TabletId),
@@ -186,7 +176,7 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
         if (collectGenStep < genStep) {
             break;
         }
-        if (genStep <= storedGenStep || id.Generation() < ExecutorGeneration) { // assume Keep flag was issued to these blobs
+        if (genStep <= storedGenStep) {
             doNotKeep.push_back(id);
         }
         Y_VERIFY(genStep <= collectGenStep);
@@ -203,28 +193,24 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
     StartGC(ctx, keep, doNotKeep, trashGoingToCollect);
 }
 
-ui64 TKeyValueState::OnEvCollect(const TActorContext &ctx) {
-    Y_UNUSED(ctx);
-    LastCollectStartedAt = TAppData::TimeProvider->Now();
+bool TKeyValueState::OnEvCollect(const TActorContext &ctx) {
     Y_VERIFY(CollectOperation.Get());
-    ui64 perGenerationCounterStepSize = TEvBlobStorage::TEvCollectGarbage::PerGenerationCounterStepSize(
-            &CollectOperation->Keep, &CollectOperation->DoNotKeep);
-    ui64 nextPerGenerationCounter = ui64(PerGenerationCounter) + perGenerationCounterStepSize;
-    if (nextPerGenerationCounter > ui64(Max<ui32>())) {
-        return 0;
+    LastCollectStartedAt = ctx.Now();
+    return !CollectOperation->AdvanceBarrier || PerGenerationCounter != Max<ui32>();
+}
+
+void TKeyValueState::OnEvCollectDone(const TActorContext& /*ctx*/) {
+    PerGenerationCounter += CollectOperation->AdvanceBarrier;
+}
+
+void TKeyValueState::OnEvCompleteGC(bool repeat) {
+    if (!repeat) {
+        CountLatencyBsCollect();
+        Y_VERIFY(CollectOperation);
+        for (const auto& id : CollectOperation->TrashGoingToCollect) {
+            CountTrashCollected(id);
+        }
     }
-    return perGenerationCounterStepSize;
-}
-
-void TKeyValueState::OnEvCollectDone(ui64 perGenerationCounterStepSize, TActorId collector, const TActorContext &ctx) {
-    Y_UNUSED(ctx);
-    Y_VERIFY(perGenerationCounterStepSize >= 1);
-    PerGenerationCounter += perGenerationCounterStepSize;
-    CollectorActorId = collector;
-}
-
-void TKeyValueState::OnEvCompleteGC() {
-    CountLatencyBsCollect();
 }
 
 } // NKeyValue

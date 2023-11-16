@@ -886,8 +886,6 @@ namespace NSchemeShardUT_Private {
     // nbs
     GENERIC_HELPERS(CreateBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume, &NKikimrSchemeOp::TModifyScheme::MutableCreateBlockStoreVolume)
     GENERIC_HELPERS(AlterBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlockStoreVolume, &NKikimrSchemeOp::TModifyScheme::MutableAlterBlockStoreVolume)
-    GENERIC_HELPERS(DropBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
-    DROP_BY_PATH_ID_HELPERS(DropBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume)
 
     // external table
     GENERIC_HELPERS(CreateExternalTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateExternalTable)
@@ -919,6 +917,28 @@ namespace NSchemeShardUT_Private {
             const NKikimrSchemeOp::TAlterUserAttributes& userAttrs)
     {
         return TestUserAttrs(runtime, txId, parentPath, name, {NKikimrScheme::StatusAccepted}, userAttrs);
+    }
+
+    void AsyncDropBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
+            ui64 fillGeneration)
+    {
+        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+        auto transaction = evTx->Record.AddTransaction();
+        transaction->SetWorkingDir(parentPath);
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume);
+
+        transaction->MutableDrop()->SetName(name);
+
+        transaction->MutableDropBlockStoreVolume()->SetFillGeneration(fillGeneration);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, evTx);
+    }
+
+    void TestDropBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
+            ui64 fillGeneration, const TVector<TExpectedResult>& expectedResults)
+    {
+        AsyncDropBlockStoreVolume(runtime, txId, parentPath, name, fillGeneration);
+        TestModificationResults(runtime, txId, expectedResults);
     }
 
     void AsyncAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
@@ -2200,5 +2220,36 @@ namespace NSchemeShardUT_Private {
         TVector<std::pair<ui64, TString>> data;
         data.push_back({1, message});
         NKikimr::NPQ::CmdWrite(&runtime, tabletId, edge, partitionId, "sourceid0", msgSeqNo, data, false, {}, true, cookie, 0);
+    }
+
+    void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<ui32>& recordIds)
+    {
+        auto tableDesc = DescribePath(runtime, tablePath, true, true);
+        const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+        UNIT_ASSERT(partitionIdx < tablePartitions.size());
+
+        auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+        ev->Record.SetTableId(tableDesc.GetPathId());
+
+        auto& scheme = *ev->Record.MutableRowScheme();
+        for (ui32 tag : keyTags) {
+            scheme.AddKeyColumnIds(tag);
+        }
+        for (ui32 tag : valueTags) {
+            scheme.AddValueColumnIds(tag);
+        }
+
+        for (ui32 i : recordIds) {
+            auto key = TVector<TCell>{TCell::Make(i)};
+            auto value = TVector<TCell>{TCell::Make(i)};
+
+            auto& row = *ev->Record.AddRows();
+            row.SetKeyColumns(TSerializedCellVec::Serialize(key));
+            row.SetValueColumns(TSerializedCellVec::Serialize(value));
+        }
+
+        const auto& sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, tablePartitions[partitionIdx].GetDatashardId(), sender, ev.Release());
+        runtime.GrabEdgeEvent<TEvDataShard::TEvUploadRowsResponse>(sender);
     }
 }

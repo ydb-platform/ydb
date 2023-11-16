@@ -191,7 +191,11 @@ struct TEvKeyValue {
     };
 
     struct TEvCompleteGC : public TEventLocal<TEvCompleteGC, EvCompleteGC> {
-        TEvCompleteGC() { }
+        const bool Repeat;
+
+        TEvCompleteGC(bool repeat)
+            : Repeat(repeat)
+        {}
     };
 };
 

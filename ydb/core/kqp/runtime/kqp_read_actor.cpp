@@ -616,15 +616,20 @@ public:
             if (partition.ShardId == state->TabletId) {
                 // we re-resolved the same shard
                 NYql::TIssues issues;
+                Ydb::Issue::IssueMessage lastIssue;
                 for (auto& issue : state->Issues) {
-                    issues.AddIssue(issue.message());
+                    // avoid add duplicate messages
+                    if (lastIssue.message() != issue.message() || lastIssue.issue_code() != issue.issue_code()) {
+                        issues.AddIssue(issue.message());
+                    }
+                    lastIssue = issue;
                 }
-                RuntimeError(TStringBuilder() << "Too many retries for shard " << state->TabletId, NDqProto::StatusIds::StatusIds::INTERNAL_ERROR, issues);
+                RuntimeError(TStringBuilder() << "Too many retries for shard " << state->TabletId, NDqProto::StatusIds::StatusIds::UNAVAILABLE, issues);
                 PendingShards.PushBack(state.Release());
                 return;
             }
         } else if (!Snapshot.IsValid()) {
-            return RuntimeError("inconsistent reads after shards split", NDqProto::StatusIds::INTERNAL_ERROR);
+            return RuntimeError("inconsistent reads after shards split", NDqProto::StatusIds::UNAVAILABLE);
         }
 
         if (keyDesc->GetPartitions().empty()) {

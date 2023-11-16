@@ -353,6 +353,10 @@ public:
             return Max<ui32>();
     }
 
+    ui32 GroupFor(const TLogoBlobID& id) const {
+        return GroupFor(id.Channel(), id.Generation());
+    }
+
     TString ToString() const {
         TStringStream str;
         str << "{Version# " << Version;
@@ -697,6 +701,7 @@ struct TEvBlobStorage {
         EvFormatReencryptionFinish,
         EvDetectedPhantomBlobCommitted,
         EvGetLogoBlobIndexStatRequest,
+        EvPermitGarbageCollection,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

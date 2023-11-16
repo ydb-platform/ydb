@@ -36,6 +36,7 @@ namespace NKikimr {
         TActorSystem *ActorSystem;
         const bool BarrierValidation;
         TDelayedResponses DelayedResponses;
+        bool AllowGarbageCollection = false;
 
         TFields(TIntrusivePtr<THullDs> hullDs,
                 TIntrusivePtr<TLsnMngr> &&lsnMngr,
@@ -207,7 +208,8 @@ namespace NKikimr {
         ReplayAddLogoBlobCmd(ctx, id, partId, ingress, std::move(buffer), lsn, THullDbRecovery::NORMAL);
 
         // run compaction if required
-        CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx);
+        CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx, false,
+            Fields->AllowGarbageCollection);
     }
 
     void THull::AddHugeLogoBlob(
@@ -220,7 +222,8 @@ namespace NKikimr {
         ReplayAddHugeLogoBlobCmd(ctx, id, ingress, diskAddr, lsn, THullDbRecovery::NORMAL);
 
         // run compaction if required
-        CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx);
+        CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx, false,
+            Fields->AllowGarbageCollection);
     }
 
     void THull::AddAnubisOsirisLogoBlob(
@@ -233,7 +236,8 @@ namespace NKikimr {
         ReplayAddLogoBlobCmd(ctx, id, ingress, seg.Point(), THullDbRecovery::NORMAL);
 
         // run compaction if required
-        CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx);
+        CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx, false,
+            Fields->AllowGarbageCollection);
     }
 
     void THull::AddBulkSst(
@@ -278,7 +282,8 @@ namespace NKikimr {
         Fields->DelayedResponses.ConfirmLsn(lsn, replySender);
 
         // run compaction if required
-        CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, Fields->BlocksRunTimeCtx, ctx);
+        CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, Fields->BlocksRunTimeCtx, ctx, false,
+            Fields->AllowGarbageCollection);
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -464,8 +469,10 @@ namespace NKikimr {
         ReplayAddGCCmd(ctx, record, ingress, seg.Last);
 
         // run compaction if required
-        CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx);
-        CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, Fields->BarriersRunTimeCtx, ctx);
+        CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx, false,
+            Fields->AllowGarbageCollection);
+        CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, Fields->BarriersRunTimeCtx, ctx, false,
+            Fields->AllowGarbageCollection);
     }
 
     void THull::CollectPhantoms(
@@ -604,9 +611,12 @@ namespace NKikimr {
         Y_VERIFY_DEBUG(curLsn == seg.Last + 1);
 
         // run compaction if required
-        CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx);
-        CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, Fields->BlocksRunTimeCtx, ctx);
-        CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, Fields->BarriersRunTimeCtx, ctx);
+        CompactFreshSegmentIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(HullDs, Fields->LogoBlobsRunTimeCtx, ctx, false,
+            Fields->AllowGarbageCollection);
+        CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, Fields->BlocksRunTimeCtx, ctx, false,
+            Fields->AllowGarbageCollection);
+        CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, Fields->BarriersRunTimeCtx, ctx, false,
+            Fields->AllowGarbageCollection);
     }
 
     // run fresh segment or fresh appendix compaction if required
@@ -615,10 +625,12 @@ namespace NKikimr {
             const TActorContext &ctx,
             TIntrusivePtr<THullDs> &hullDs,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKey, TMemRec>> &rtCtx,
-            TLevelIndex<TKey, TMemRec> &levelIndex)
+            TLevelIndex<TKey, TMemRec> &levelIndex,
+            bool allowGarbageCollection)
     {
         // try to start fresh compaction
-        bool freshSegmentCompaction = CompactFreshSegmentIfRequired<TKey, TMemRec>(hullDs, rtCtx, ctx);
+        bool freshSegmentCompaction = CompactFreshSegmentIfRequired<TKey, TMemRec>(hullDs, rtCtx, ctx, false,
+            allowGarbageCollection);
         if (!freshSegmentCompaction) {
             // if not, try to start appendix compaction
             auto cjob = levelIndex.CompactFreshAppendix();
@@ -643,7 +655,7 @@ namespace NKikimr {
             ReplaySyncDataCmd_LogoBlobsBatch(ctx, std::move(freshBatch.LogoBlobs), s, THullDbRecovery::NORMAL);
             curLsn += logoBlobsCount;
             CompactFreshIfRequired<TKeyLogoBlob, TMemRecLogoBlob>(ctx, HullDs,
-                    Fields->LogoBlobsRunTimeCtx, *HullDs->LogoBlobs);
+                    Fields->LogoBlobsRunTimeCtx, *HullDs->LogoBlobs, Fields->AllowGarbageCollection);
         }
 
         if (freshBatch.Blocks) {
@@ -660,7 +672,8 @@ namespace NKikimr {
 
             ReplaySyncDataCmd_BlocksBatch(ctx, std::move(freshBatch.Blocks), s, THullDbRecovery::NORMAL);
             // curLsn already updated in cycle
-            CompactFreshIfRequired<TKeyBlock, TMemRecBlock>(ctx, HullDs, Fields->BlocksRunTimeCtx, *HullDs->Blocks);
+            CompactFreshIfRequired<TKeyBlock, TMemRecBlock>(ctx, HullDs,
+                Fields->BlocksRunTimeCtx, *HullDs->Blocks, Fields->AllowGarbageCollection);
         }
 
         if (freshBatch.Barriers) {
@@ -669,7 +682,7 @@ namespace NKikimr {
             ReplaySyncDataCmd_BarriersBatch(ctx, std::move(freshBatch.Barriers), s, THullDbRecovery::NORMAL);
             curLsn += barriersCount;
             CompactFreshIfRequired<TKeyBarrier, TMemRecBarrier>(ctx, HullDs,
-                    Fields->BarriersRunTimeCtx, *HullDs->Barriers);
+                Fields->BarriersRunTimeCtx, *HullDs->Barriers, Fields->AllowGarbageCollection);
         }
         Y_VERIFY(curLsn == seg.Last + 1);
     }
@@ -681,6 +694,13 @@ namespace NKikimr {
 
     THullDsSnap THull::GetIndexSnapshot() const {
         return HullDs->GetIndexSnapshot();
+    }
+
+    void THull::PermitGarbageCollection(const TActorContext& ctx) {
+        Fields->AllowGarbageCollection = true;
+        ctx.Send(HullDs->LogoBlobs->LIActor, new TEvPermitGarbageCollection);
+        ctx.Send(HullDs->Blocks->LIActor, new TEvPermitGarbageCollection);
+        ctx.Send(HullDs->Barriers->LIActor, new TEvPermitGarbageCollection);
     }
 
 } // NKikimr

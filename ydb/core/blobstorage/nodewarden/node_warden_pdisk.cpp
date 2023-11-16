@@ -111,13 +111,13 @@ namespace NKikimr::NStorage {
             pdiskConfig->EnableSectorEncryption = !pdiskConfig->SectorMap;
         }
 
-        NPDisk::TMainKey pdiskKey = Cfg->CreatePDiskKey();
+        const NPDisk::TMainKey& pdiskKey = Cfg->PDiskKey;
         TString keyPrintSalt = "@N2#_lW19)2-31!iifI@n1178349617";
-        pdiskConfig->HashedMainKey.resize(pdiskKey.size());
-        for (ui32 i = 0; i < pdiskKey.size(); ++i) {
+        pdiskConfig->HashedMainKey.resize(pdiskKey.Keys.size());
+        for (ui32 i = 0; i < pdiskKey.Keys.size(); ++i) {
             THashCalculator hasher;
             hasher.Hash(keyPrintSalt.Detach(), keyPrintSalt.Size());
-            hasher.Hash(&pdiskKey[i], sizeof(pdiskKey[i]));
+            hasher.Hash(&pdiskKey.Keys[i], sizeof(pdiskKey.Keys[i]));
             pdiskConfig->HashedMainKey[i] = TStringBuilder() << Hex(hasher.GetHashResult(), HF_ADDX);
         }
 
@@ -170,8 +170,8 @@ namespace NKikimr::NStorage {
         const TString& path = pdisk.GetPath();
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
         const ui64 pdiskCategory = pdisk.GetPDiskCategory();
-        Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig,
-            Cfg->CreatePDiskKey(), AppData()->SystemPoolId, LocalNodeId);
+        Cfg->PDiskKey.Initialize();
+        Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey, AppData()->SystemPoolId, LocalNodeId);
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(pdiskID, path, pdiskGuid, pdiskCategory));
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Storage"));
     }
@@ -208,7 +208,8 @@ namespace NKikimr::NStorage {
         }
 
         const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
-        Send(actorId, new TEvBlobStorage::TEvRestartPDisk(pdiskId, Cfg->CreatePDiskKey(), pdiskConfig));
+        Cfg->PDiskKey.Initialize();
+        Send(actorId, new TEvBlobStorage::TEvRestartPDisk(pdiskId, Cfg->PDiskKey, pdiskConfig));
         STLOG(PRI_NOTICE, BS_NODE, NW69, "RestartLocalPDisk is started", (PDiskId, pdiskId));
     }
 

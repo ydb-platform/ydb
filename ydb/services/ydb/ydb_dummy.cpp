@@ -178,7 +178,7 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
             },
             *ActorSystem_,
             "DummyService/BiStreamPing",
-            getCounterBlock("dummy", "biStreamPing", true, true),
+            getCounterBlock("dummy", "biStreamPing", true),
             nullptr);
     }
 }

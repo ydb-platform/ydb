@@ -88,7 +88,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         pDiskConfig->UseT1ha0HashInFooter = runCfg.UseT1ha0Hasher;
         pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(false);
 
-        NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
+        NPDisk::TMainKey mainKey{ .Keys = {NPDisk::YdbDefaultPDiskSequence}, .IsInitialized = true };
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
                     mainKey, mainCounters), TMailboxType::Revolving, 0);
         setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(pDiskId, std::move(pDiskSetup)));

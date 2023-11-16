@@ -122,7 +122,8 @@ namespace NKikimr {
                         const TIngress ingress = memRec.GetIngress();
                         const auto parts = ingress.PartsWeMustHaveLocally(&topology, ReplCtx->VCtx->ShortSelfVDisk,
                             StartKey) - ingress.LocalParts(topology.GType);
-                        if (!parts.Empty() && barriers->Keep(StartKey, memRec, it.GetMemRecsMerged(), allowKeepFlags).KeepData) {
+                        if (!parts.Empty() && barriers->Keep(StartKey, memRec, it.GetMemRecsMerged(), allowKeepFlags,
+                                true /*allowGarbageCollection*/).KeepData) {
                             ++ReplInfo->ItemsTotal;
                             ReplInfo->WorkUnitsTotal += StartKey.BlobSize();
                         }
@@ -160,7 +161,8 @@ namespace NKikimr {
                 return; // nothing to recover
             }
 
-            const NGc::TKeepStatus status = barriers.Keep(key, it.GetMemRec(), it.GetMemRecsMerged(), allowKeepFlags);
+            const NGc::TKeepStatus status = barriers.Keep(key, it.GetMemRec(), it.GetMemRecsMerged(), allowKeepFlags,
+                true /*allowGarbageCollection*/);
             if (!status.KeepData) {
                 return; // no need to recover
             }

@@ -164,7 +164,7 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
 
     TString errors = res->GetError();
     if (errors.size()) {
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
+        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_CompleteRequest), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
                     "Errors while proposing transaction txid " << op->GetTxId()
                     << " at tablet " << DataShard.TabletID() << " status: "
                     << res->GetStatus() << " errors: " << errors);
@@ -233,7 +233,7 @@ void TFinishProposeUnit::UpdateCounters(TOperation::TPtr op,
 
         if (res->IsError()) {
             DataShard.IncCounter(COUNTER_PREPARE_ERROR);
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
+            LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_UpdateCounters), ctx,  NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
                         "Prepare transaction failed. txid " << op->GetTxId()
                         << " at tablet " << DataShard.TabletID()  << " errors: "
                         << PrintErrors(res->Record));

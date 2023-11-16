@@ -361,7 +361,7 @@ private:
         const bool dmlAuditEnabled = requestBaseCtx->IsAuditable() && IsAuditEnabledFor(userSID);
 
         if (dmlAuditEnabled) {
-            AuditContextStart(requestBaseCtx, databaseName, userSID);
+            AuditContextStart(requestBaseCtx, databaseName, userSID, Attributes_);
             requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
                 AuditContextEnd(requestBaseCtx);
                 AuditLog(status, parts);

@@ -948,6 +948,35 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(52).Select(table1).HasN(1_u64, 11_u64, 13_u64);
     }
 
+    Y_UNIT_TEST(UncommittedChangesCommitWithUpdates) {
+        TDbExec me;
+
+        const ui32 table1 = 1;
+
+        me.To(10).Begin();
+        me.To(11).Apply(*TAlter()
+                .AddTable("me_1", table1)
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64))
+                .AddColumnToKey(table1, 1));
+        me.To(12).PutN(table1, 1_u64, 11_u64, 12_u64);
+        me.To(13).Commit();
+
+        me.To(20).Begin();
+        me.To(21).WriteTx(123).PutN(table1, 1_u64, ECellOp::Empty, 22_u64);
+        me.To(22).Commit();
+
+        me.To(30).Begin();
+        me.To(31).WriteVer({ 1, 51 });
+        me.To(32).CommitTx(table1, 123);
+        me.To(33).PutN(table1, 1_u64, 21_u64, ECellOp::Empty);
+        me.To(34).Commit();
+
+        me.To(41).ReadVer({ 1, 50 }).Select(table1).HasN(1_u64, 11_u64, 12_u64);
+        me.To(42).ReadVer({ 1, 51 }).Select(table1).HasN(1_u64, 21_u64, 22_u64);
+    }
+
     Y_UNIT_TEST(ReplayNewTable) {
         TDbExec me;
 

@@ -63,7 +63,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                         << Self->TabletID() << " status: " << result->GetStatus());
             TString errors = result->GetError();
             if (errors.Size()) {
-                LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
+                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
                             "Errors while proposing transaction txid " << TxId
                             << " at tablet " << Self->TabletID() << " status: "
                             << result->GetStatus() << " errors: " << errors);

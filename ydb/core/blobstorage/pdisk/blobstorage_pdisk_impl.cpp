@@ -118,11 +118,11 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
     TGuard<TMutex> guard(StateMutex);
 
     Format.SectorSize = FormatSectorSize;
-    ui32 mainKeySize = mainKey.size();
+    ui32 mainKeySize = mainKey.Keys.size();
 
     for (ui32 k = 0; k < mainKeySize; ++k) {
         TPDiskStreamCypher cypher(true); // Format record is always encrypted
-        cypher.SetKey(mainKey[k]);
+        cypher.SetKey(mainKey.Keys[k]);
 
         ui32 lastGoodIdx = (ui32)-1;
         bool isBad[ReplicationFactor];

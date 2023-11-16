@@ -96,14 +96,34 @@ public:
     template<typename T, typename = TStdLayout<T>>
     T AsValue() const noexcept
     {
-        Y_VERIFY(sizeof(T) == Size(), "AsValue<T>() type doesn't match TCell");
+        Y_VERIFY(sizeof(T) == Size(), "AsValue<T>() type size %" PRISZT " doesn't match TCell size %" PRIu32, sizeof(T), Size());
 
         return ReadUnaligned<T>(Data());
     }
 
-    template<typename T, typename = TStdLayout<T>>
-    static inline TCell Make(const T &val) noexcept
-    {
+    template <typename T, typename = TStdLayout<T>>
+    bool ToValue(T& value, TString& err) const noexcept {
+        if (sizeof(T) != Size()) {
+            err = Sprintf("ToValue<T>() type size %" PRISZT " doesn't match TCell size %" PRIu32, sizeof(T), Size());
+            return false;
+        }
+
+        value = ReadUnaligned<T>(Data());
+        return true;
+    }
+
+    template <typename T, typename = TStdLayout<T>>
+    bool ToStream(IOutputStream& out, TString& err) const noexcept {
+        T value;
+        if (!ToValue(value, err))
+            return false;
+
+        out << value;
+        return true;
+    }
+
+    template <typename T, typename = TStdLayout<T>>
+    static inline TCell Make(const T& val) noexcept {
         auto *ptr = static_cast<const char*>(static_cast<const void*>(&val));
 
         return TCell{ ptr, sizeof(val) };

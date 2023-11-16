@@ -168,21 +168,6 @@ namespace {
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
 
-    void WriteRow(TTestActorRuntime& runtime, ui64 tabletId, const TString& key, const TString& value) {
-        NKikimrMiniKQL::TResult result;
-        TString error;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
-            (
-                (let key '( '('key (Utf8 '%s) ) ) )
-                (let row '( '('value (Utf8 '%s) ) ) )
-                (return (AsList (UpdateRow '__user__Table key row) ))
-            )
-        )", key.c_str(), value.c_str()), result, error);
-
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-        UNIT_ASSERT_VALUES_EQUAL(error, "");
-    }
-
 } // anonymous
 
 Y_UNIT_TEST_SUITE(TExportToS3Tests) {
@@ -708,8 +693,8 @@ partitioning_settings {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "a", "valueA");
-        WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "b", "valueB");
+        WriteRow(runtime, "a", "valueA");
+        WriteRow(runtime, "b", "valueB");
 
         runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
@@ -849,7 +834,7 @@ partitioning_settings {
         env.TestWaitNotification(runtime, txId);
 
         for (int i = 1; i < 500; ++i) {
-            WriteRow(runtime, TTestTxConfig::FakeHiveTablets, Sprintf("a%i", i), "value");
+            WriteRow(runtime, Sprintf("a%i", i), "value");
         }
 
         // trigger memtable's compaction
@@ -946,7 +931,7 @@ partitioning_settings {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "a", "valueA");
+        WriteRow(runtime, "a", "valueA");
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -1298,8 +1283,8 @@ partitioning_settings {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "a", "valueA");
-        WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "b", "valueB");
+        WriteRow(runtime, "a", "valueA");
+        WriteRow(runtime, "b", "valueB");
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
         TPortManager portManager;

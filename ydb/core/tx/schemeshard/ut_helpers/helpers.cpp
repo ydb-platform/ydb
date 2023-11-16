@@ -2251,6 +2251,36 @@ namespace NSchemeShardUT_Private {
         NKikimr::NPQ::CmdWrite(&runtime, tabletId, edge, partitionId, "sourceid0", msgSeqNo, data, false, {}, true, cookie, 0);
     }
 
+    void WriteRow(TTestActorRuntime& runtime, const TString& key, const TString& value, ui64 tabletId) {
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
+            (
+                (let key '( '('key (Utf8 '%s) ) ) )
+                (let row '( '('value (Utf8 '%s) ) ) )
+                (return (AsList (UpdateRow '__user__Table key row) ))
+            )
+        )", key.c_str(), value.c_str()), result, error);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+    }
+
+    void WriteRowPg(TTestActorRuntime& runtime, const TString& key, ui32 value, ui64 tabletId) {
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
+            (
+                (let key '( '('key (Utf8 '%s) ) ) )
+                (let row '( '('value (PgConst '%u (PgType 'int4)) ) ) )
+                (return (AsList (UpdateRow '__user__Table key row) ))
+            )
+        )", key.c_str(), value), result, error);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+    }
+
     void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<ui32>& recordIds)
     {
         auto tableDesc = DescribePath(runtime, tablePath, true, true);
@@ -2271,6 +2301,7 @@ namespace NSchemeShardUT_Private {
         for (ui32 i : recordIds) {
             auto key = TVector<TCell>{TCell::Make(i)};
             auto value = TVector<TCell>{TCell::Make(i)};
+            Cerr << value[0].AsBuf().Size() << Endl;
 
             auto& row = *ev->Record.AddRows();
             row.SetKeyColumns(TSerializedCellVec::Serialize(key));

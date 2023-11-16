@@ -232,6 +232,8 @@
   - QuartzCore/CAEAGLLayer.h
   - QuartzCore/CAMetalLayer.h
   - Security/SecCertificate.h
+  - Security/SecItem.h
+  - Security/SecImportExport.h
   - Security/SecKey.h
   - Security/SecRandom.h
   - Security/SecureTransport.h

@@ -444,6 +444,16 @@ void ValidateDuplicateAndRequiredValueColumns(
     const TNameTableToSchemaIdMapping& idMapping,
     std::vector<bool>* columnPresenceBuffer);
 
+//! Checks that #row contains write lock for non-key columns and returns true if any non-key columns encountered.
+bool ValidateNonKeyColumnsAgainstLock(
+    TUnversionedRow row,
+    const TLockMask& locks,
+    const TTableSchema& schema,
+    const TNameTableToSchemaIdMapping& idMapping,
+    const TNameTablePtr nameTable,
+    const std::vector<int>& columnIndexToLockIndex,
+    bool allowSharedWriteLocks);
+
 //! Checks that #key is a valid client-side key. Throws on failure.
 /*! The components must pass #ValidateKeyValue check. */
 void ValidateClientKey(TLegacyKey key);

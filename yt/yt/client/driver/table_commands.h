@@ -346,6 +346,7 @@ private:
     NYPath::TRichYPath Path;
     bool Update;
     bool Aggregate;
+    NTableClient::ELockType LockType;
 
     void DoExecute(ICommandContextPtr context) override;
 };

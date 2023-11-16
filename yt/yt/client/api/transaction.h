@@ -193,7 +193,8 @@ struct ITransaction
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<NTableClient::TUnversionedRow> rows,
-        const TModifyRowsOptions& options = {});
+        const TModifyRowsOptions& options = {},
+        NTableClient::ELockType lockType = NTableClient::ELockType::Exclusive);
 
     void WriteRows(
         const NYPath::TYPath& path,

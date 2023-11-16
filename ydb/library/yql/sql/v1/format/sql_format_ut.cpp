@@ -1345,6 +1345,22 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         TCases cases = {
             {"select 1 union all select 2 union select 3 union all select 4 union select 5", 
              "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION ALL\nSELECT\n\t4\nUNION\nSELECT\n\t5;\n\n"},
+             };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(CommentAfterLastSelect) {
+        TCases cases = {
+            {"SELECT 1--comment\n",
+             "SELECT\n\t1--comment\n;\n\n"},
+            {"SELECT 1\n\n--comment\n",
+             "SELECT\n\t1--comment\n;\n\n"},
+            {"SELECT 1\n\n--comment",
+             "SELECT\n\t1--comment\n;\n\n"},
+            {"SELECT * FROM Input\n\n\n\n/* comment */\n\n\n\n",
+             "SELECT\n\t*\nFROM Input/* comment */;\n\n"},
         };
 
         TSetup setup;

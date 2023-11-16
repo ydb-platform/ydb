@@ -2194,12 +2194,15 @@ public:
 
             TVector<NSQLTranslation::TParsedToken> comments;
             TParsedTokenList parsedTokens, stmtTokens;
+            bool hasTrailingComments = false;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtTokens.push_back(token);
                 if (token.Name == "COMMENT") {
                     comments.emplace_back(std::move(token));
+                    hasTrailingComments = true;
                 } else if (token.Name != "WS" && token.Name != "EOF") {
                     parsedTokens.emplace_back(std::move(token));
+                    hasTrailingComments = false;
                 }
             };
 
@@ -2210,7 +2213,11 @@ public:
             NYql::TIssues parserIssues;
             auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
             if (!message) {
-                finalFormattedQuery << currentQuery << "\n";
+                finalFormattedQuery << currentQuery;
+                if (!currentQuery.EndsWith("\n")) {
+                    finalFormattedQuery << "\n";
+                }
+                
                 continue;
             }
 
@@ -2232,7 +2239,12 @@ public:
             }
 
             finalFormattedQuery << currentFormattedQuery;
-            if (!currentFormattedQuery.EndsWith(";\n")) {
+            if (parsedTokens.back().Name != "SEMICOLON") {
+                if (hasTrailingComments 
+                     && !comments.back().Content.EndsWith("\n")
+                     && comments.back().Content.StartsWith("--")) {
+                    finalFormattedQuery << "\n";
+                }
                 finalFormattedQuery << ";\n";
             }
 

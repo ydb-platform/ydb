@@ -457,6 +457,7 @@ private:
 
         bool enableKqpDataQueryStreamLookup = TableServiceConfig.GetEnableKqpDataQueryStreamLookup();
         bool enableKqpScanQueryStreamLookup = TableServiceConfig.GetEnableKqpScanQueryStreamLookup();
+        bool enableKqpDataQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
         bool enableKqpScanQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
 
         bool enableKqpDataQuerySourceRead = TableServiceConfig.GetEnableKqpDataQuerySourceRead();
@@ -485,6 +486,7 @@ private:
             TableServiceConfig.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
             TableServiceConfig.GetEnableKqpScanQueryStreamLookup() != enableKqpScanQueryStreamLookup ||
             TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
+            TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin() != enableKqpDataQueryStreamIdxLookupJoin ||
             TableServiceConfig.GetEnableKqpDataQuerySourceRead() != enableKqpDataQuerySourceRead ||
             TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
             TableServiceConfig.GetEnablePredicateExtractForDataQueries() != enableKqpDataQueryPredicateExtract ||
@@ -492,20 +494,14 @@ private:
             TableServiceConfig.GetPredicateExtract20() != predicateExtract20 ||
             TableServiceConfig.GetEnableSequentialReads() != enableSequentialReads ||
             TableServiceConfig.GetEnableKqpImmediateEffects() != enableKqpImmediateEffects ||
-            TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser || 
-            TableServiceConfig.GetEnableSequences() != enableSequences || 
+            TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser ||
+            TableServiceConfig.GetEnableSequences() != enableSequences ||
             TableServiceConfig.GetEnableColumnsWithDefault() != enableColumnsWithDefault) {
 
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                "Iterator read flags was changed. StreamLookup from " << enableKqpDataQueryStreamLookup <<
-                " to " << TableServiceConfig.GetEnableKqpDataQueryStreamLookup() << " for data queries, from " <<
-                enableKqpScanQueryStreamLookup << " to " << TableServiceConfig.GetEnableKqpScanQueryStreamLookup() << ", from "
-                << enableKqpScanQueryStreamIdxLookupJoin << " to " << TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin()
-                << " scan queries. Sources for data queries from " << enableKqpDataQuerySourceRead << " to "
-                << TableServiceConfig.GetEnableKqpDataQuerySourceRead() << "for scan queries from " << enableKqpScanQuerySourceRead
-                << " to " << TableServiceConfig.GetEnableKqpScanQuerySourceRead());
-
             QueryCache.Clear();
+
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
+                "Query cache was invalidated due to config change");
         }
     }
 

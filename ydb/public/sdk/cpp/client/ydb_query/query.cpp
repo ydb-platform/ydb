@@ -33,22 +33,6 @@ std::string_view StatsModeToString(const EStatsMode statsMode) {
     }
 }
 
-const TVector<TResultSet>& TExecuteQueryResult::GetResultSets() const {
-    return ResultSets_;
-}
-
-TResultSet TExecuteQueryResult::GetResultSet(size_t resultIndex) const {
-    if (resultIndex >= ResultSets_.size()) {
-        RaiseError(TString("Requested index out of range\n"));
-    }
-
-    return ResultSets_[resultIndex];
-}
-
-TResultSetParser TExecuteQueryResult::GetResultSetParser(size_t resultIndex) const {
-    return TResultSetParser(GetResultSet(resultIndex));
-}
-
 TScriptExecutionOperation::TScriptExecutionOperation(TStatus&& status, Ydb::Operations::Operation&& operation)
     : TOperation(std::move(status), std::move(operation))
 {

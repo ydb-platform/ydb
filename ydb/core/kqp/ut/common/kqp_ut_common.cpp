@@ -849,8 +849,8 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
         }
 
         if constexpr (std::is_same_v<TIterator, NYdb::NQuery::TExecuteQueryIterator>) {
-            UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.GetStats(),
-                "Unexpected empty query service  response.");
+            UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.GetStats() || streamPart.GetTransaction(),
+                "Unexpected empty query service response.");
 
             if (streamPart.HasResultSet()) {
                 auto resultSet = streamPart.ExtractResultSet();

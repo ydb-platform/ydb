@@ -67,18 +67,18 @@ public:
     }
 
     TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query, const TTxControl& txControl,
-        const TMaybe<TParams>& params, const TExecuteQuerySettings& settings, const TString& sessionId = {})
+        const TMaybe<TParams>& params, const TExecuteQuerySettings& settings, const TMaybe<TSession>& session = {})
     {
         return TExecQueryImpl::StreamExecuteQuery(
-            Connections_, DbDriverState_, query, txControl, params, settings, sessionId);
+            Connections_, DbDriverState_, query, txControl, params, settings, session);
     }
 
     TAsyncExecuteQueryResult ExecuteQuery(const TString& query, const TTxControl& txControl,
         const TMaybe<TParams>& params, const TExecuteQuerySettings& settings,
-        const TString& sessionId = {})
+        const TMaybe<TSession>& session = {})
     {
         return TExecQueryImpl::ExecuteQuery(
-            Connections_, DbDriverState_, query, txControl, params, settings, sessionId);
+            Connections_, DbDriverState_, query, txControl, params, settings, session);
     }
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script, const TExecuteScriptSettings& settings) {
@@ -610,7 +610,7 @@ TAsyncExecuteQueryResult TSession::ExecuteQuery(const TString& query, const TTxC
 {
     return NSessionPool::InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->ExecuteQuery(query, txControl, {}, settings, SessionImpl_->GetId()),
+        Client_->ExecuteQuery(query, txControl, {}, settings, *this),
         true,
         Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
@@ -620,7 +620,7 @@ TAsyncExecuteQueryResult TSession::ExecuteQuery(const TString& query, const TTxC
 {
     return NSessionPool::InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->ExecuteQuery(query, txControl, params, settings, SessionImpl_->GetId()),
+        Client_->ExecuteQuery(query, txControl, params, settings, *this),
         true,
         Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
@@ -630,7 +630,7 @@ TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(const TString& query, co
 {
     return NSessionPool::InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->StreamExecuteQuery(query, txControl, {}, settings, SessionImpl_->GetId()),
+        Client_->StreamExecuteQuery(query, txControl, {}, settings, *this),
         true,
         Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
@@ -640,7 +640,7 @@ TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(const TString& query, co
 {
     return NSessionPool::InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->StreamExecuteQuery(query, txControl, params, settings, SessionImpl_->GetId()),
+        Client_->StreamExecuteQuery(query, txControl, params, settings, *this),
         true,
         Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
@@ -676,6 +676,22 @@ TBeginTransactionResult::TBeginTransactionResult(TStatus&& status, TTransaction 
 const TTransaction& TBeginTransactionResult::GetTransaction() const {
     CheckStatusOk("TBeginTransactionResult::GetTransaction");
     return Transaction_;
+}
+
+const TVector<TResultSet>& TExecuteQueryResult::GetResultSets() const {
+    return ResultSets_;
+}
+
+TResultSet TExecuteQueryResult::GetResultSet(size_t resultIndex) const {
+    if (resultIndex >= ResultSets_.size()) {
+        RaiseError(TString("Requested index out of range\n"));
+    }
+
+    return ResultSets_[resultIndex];
+}
+
+TResultSetParser TExecuteQueryResult::GetResultSetParser(size_t resultIndex) const {
+    return TResultSetParser(GetResultSet(resultIndex));
 }
 
 } // namespace NYdb::NQuery

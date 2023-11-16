@@ -3,6 +3,7 @@
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -227,6 +228,44 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto commitTxResult = transaction.Commit().ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(commitTxResult.GetStatus(), EStatus::ABORTED, commitTxResult.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExecuteQueryInteractiveTx) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        auto sessionResult = db.GetSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), EStatus::SUCCESS, sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+
+        const TString query = "UPDATE TwoShard SET Value2 = 0";
+        auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto transaction = result.GetTransaction();
+        UNIT_ASSERT(transaction->IsActive());
+
+        auto checkResult = [&](TString expected) {
+            auto selectRes = db.ExecuteQuery(
+                "SELECT * FROM TwoShard ORDER BY Key",
+                TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_C(selectRes.IsSuccess(), selectRes.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(selectRes.GetResultSet(0)));
+        };
+        checkResult(R"([[[1u];["One"];[-1]];[[2u];["Two"];[0]];[[3u];["Three"];[1]];[[4000000001u];["BigOne"];[-1]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[1]]])");
+
+        auto txRes = transaction->Commit().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(txRes.GetStatus(), EStatus::SUCCESS, txRes.GetIssues().ToString());
+
+        checkResult(R"([[[1u];["One"];[0]];[[2u];["Two"];[0]];[[3u];["Three"];[0]];[[4000000001u];["BigOne"];[0]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[0]]])");
+    }
+
+    Y_UNIT_TEST(ForbidInteractiveTxOnImplicitSession) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        const TString query = "SELECT 1";
+        UNIT_ASSERT_EXCEPTION(db.ExecuteQuery(query, TTxControl::BeginTx()).ExtractValueSync(), NYdb::TContractViolation);
     }
 
     Y_UNIT_TEST(ExecuteRetryQuery) {

@@ -238,6 +238,7 @@ private:
 
         Ydb::Table::TransactionControl* txControl = nullptr;
         if (req->has_tx_control()) {
+            ReplyTxMeta = !req->tx_control().commit_tx();
             txControl = google::protobuf::Arena::CreateMessage<Ydb::Table::TransactionControl>(Request_->GetArena());
             if (!FillTxControl(req->tx_control(), *txControl, issues)) {
                 return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, std::move(issues));
@@ -364,20 +365,31 @@ private:
 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             Request_->SetRuHeader(record.GetConsumedRu());
-        }
-
-        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS && NeedReportStats(*Request_->GetProtoRequest())) {
-            Ydb::Query::ExecuteQueryResponsePart response;
-            response.set_status(Ydb::StatusIds::SUCCESS);
 
             auto& kqpResponse = record.GetResponse();
-            FillQueryStats(*response.mutable_exec_stats(), kqpResponse);
+
+            Ydb::Query::ExecuteQueryResponsePart response;
 
             AuditContextAppend(Request_.get(), *Request_->GetProtoRequest(), response);
 
-            TString out;
-            Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
-            Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
+            bool hasTrailingMessage = false;
+
+            if (kqpResponse.HasTxMeta() && ReplyTxMeta) {
+                hasTrailingMessage = true;
+                response.mutable_tx_meta()->set_id(kqpResponse.GetTxMeta().id());
+            }
+
+            if (NeedReportStats(*Request_->GetProtoRequest())) {
+                hasTrailingMessage = true;
+                FillQueryStats(*response.mutable_exec_stats(), kqpResponse);
+            }
+
+            if (hasTrailingMessage) {
+                response.set_status(Ydb::StatusIds::SUCCESS);
+                TString out;
+                Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+                Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
+            }
         }
 
         ReplyFinishStream(record.GetYdbStatus(), issues);
@@ -454,6 +466,7 @@ private:
 
     TRpcFlowControlState FlowControl_;
     TMap<TActorId, TProducerState> StreamProducers_;
+    bool ReplyTxMeta = false;
 };
 
 } // namespace

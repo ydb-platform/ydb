@@ -951,7 +951,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 if (!page || !page->HasMissingBody())
                     continue;
 
-                if (page->State == PageStateRequested || page->State == PageStateRequestedAsync) {
+                if (IsInFlyPage(page)) {
                     RemoveInFlyPage(page);
                 }
 
@@ -1137,7 +1137,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 continue;
             }
 
-            if (page->State == PageStateRequested) {
+            if (IsInFlyPage(page)) {
                 // Request is technically inflight, but response will be ignored
                 // Pretend request is cancelled for simplicity
                 RemoveInFlyPage(page);
@@ -1314,12 +1314,20 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     inline void RemoveInFlyPage(const TPage* page) {
-        Y_DEBUG_ABORT_UNLESS(StatLoadInFlyBytes >= sizeof(TPage) + page->Size);
+        if (StatLoadInFlyBytes < sizeof(TPage) + page->Size) {
+            Y_DEBUG_ABORT_UNLESS(false, "Some race has happened");
+            return;
+        }
+
         StatLoadInFlyBytes -= sizeof(TPage) + page->Size;
         if (Config->Counters) {
             --*Config->Counters->LoadInFlyPages;
             *Config->Counters->LoadInFlyBytes -= sizeof(TPage) + page->Size;
         }
+    }
+
+    inline bool IsInFlyPage(const TPage* page) const {
+        return page->State == PageStateRequested || page->State == PageStateRequestedAsync;
     }
 
 public:

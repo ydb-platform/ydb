@@ -219,7 +219,16 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
             .Build()
         .Done();
 
-    TVector<TExprBase> rowTuples;
+    // rows to be added into the index table in case if the given key hasn't been found in the main table
+    TVector<TExprBase> absentKeyRow;
+    absentKeyRow.reserve(indexColumns.size());
+
+    // rows to be updated in the index table in case if the given key has been found in the main table
+    TVector<TExprBase> presentKeyRow;
+    presentKeyRow.reserve(indexColumns.size());
+
+    auto payload = TCoArgument(ctx.NewArgument(pos, "payload"));
+
     for (const auto& column : indexColumns) {
         auto columnAtom = ctx.NewAtom(pos, column);
 
@@ -232,34 +241,44 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
                     .Build()
                 .Done();
 
-            rowTuples.emplace_back(tuple);
+            absentKeyRow.emplace_back(tuple);
+            presentKeyRow.emplace_back(tuple);
         } else {
             auto columnType = table.GetColumnType(TString(column));
-
-            auto tuple = Build<TCoNameValueTuple>(ctx, pos)
-                .Name(columnAtom)
-                .Value<TCoIfPresent>()
-                    .Optional(lookup)
-                    .PresentHandler<TCoLambda>()
-                        .Args({"payload"})
-                        .Body<TCoMember>()
-                            .Struct("payload")
-                            .Name(columnAtom)
-                            .Build()
-                        .Build()
-                    .MissingValue<TCoNothing>()
+            absentKeyRow.emplace_back(
+                Build<TCoNameValueTuple>(ctx, pos)
+                    .Name(columnAtom)
+                    .Value<TCoNothing>()
                         .OptionalType(NCommon::BuildTypeExpr(pos, *columnType, ctx))
                         .Build()
-                    .Build()
-                .Done();
-
-            rowTuples.emplace_back(tuple);
+                    .Done()
+            );
+            presentKeyRow.emplace_back(
+                Build<TCoNameValueTuple>(ctx, pos)
+                    .Name(columnAtom)
+                    .Value<TCoMember>()
+                        .Struct(payload)
+                        .Name(columnAtom)
+                        .Build()
+                    .Done()
+            );
         }
     }
 
-    TExprBase flatmapBody = Build<TCoJust>(ctx, pos)
-        .Input<TCoAsStruct>()
-            .Add(rowTuples)
+    TExprBase flatmapBody = Build<TCoIfPresent>(ctx, pos)
+        .Optional(lookup)
+        .PresentHandler<TCoLambda>()
+            .Args(payload)
+            .Body<TCoJust>()
+                .Input<TCoAsStruct>()
+                    .Add(presentKeyRow)
+                    .Build()
+                .Build()
+            .Build()
+        .MissingValue<TCoJust>()
+            .Input<TCoAsStruct>()
+                .Add(absentKeyRow)
+                .Build()
             .Build()
         .Done();
 

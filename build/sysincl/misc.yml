@@ -7,16 +7,6 @@
   # DB2_ODBC_CLI
   - sqlcli1.h
 
-
-# We have lots of ADDINCLs to contrib/libs/libiconv all around the repo
-# so we need to add it to sysincl for consistent resolving.
-# We can go the other way here and remove iconv.h from all sysincl configs
-# and try to fix all places where we really need iconv.h from libc
-# Btw: seems that this ADDINCL should be made global and removed from projects
-# that use this header
-- includes:
-    - iconv.h:       contrib/libs/libiconv/include/iconv.h
-
 - includes:
   - cudnn.h:         contrib/libs/nvidia/cudnn/cudnn.h
 
@@ -31,13 +21,6 @@
 - source_filter: "[.]swg([.](h|c(c|pp|xx)?))?$"
   includes:
   - Python.h:        contrib/libs/python/Include/Python.h
-
-# libidn uses gnulib, allow overriding libc includes
-- source_filter: "^contrib/libs/libidn/"
-  includes:
-    - alloca.h:     contrib/libs/libidn/gl/alloca.h
-    - error.h:      contrib/libs/libidn/gl/error.h
-    - iconv.h:      contrib/libs/libidn/lib/gl/iconv.h
 
 # Same as libunistring - lftp has own libc header wrappers/replacements.
 # However here we have GLOBAL ADDINCL to contrib/libs/lftp{,/trio,/lib}

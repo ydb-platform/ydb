@@ -40,7 +40,7 @@ public:
         NDataShard::TUserTable::TCPtr tableInfo, const TSmallVec<TSerializedTableRange>&& tableRanges,
         const TSmallVec<NTable::TTag>&& columnTags, const TSmallVec<bool>&& skipNullKeys,
         const NYql::NDqProto::EDqStatsMode& statsMode, ui64 timeoutMs, ui32 generation,
-        NKikimrDataEvents::EDataFormat dataFormat)
+        NKikimrDataEvents::EDataFormat dataFormat, const ui64 tabletId)
         : TActor(&TKqpScan::StateScan)
         , ComputeActorId(computeActorId)
         , DatashardActorId(datashardActorId)
@@ -57,6 +57,7 @@ public:
         , DataFormat(dataFormat)
         , Sleep(true)
         , IsLocal(computeActorId.NodeId() == datashardActorId.NodeId())
+        , TabletId(tabletId)
     {
         if (DataFormat == NKikimrDataEvents::FORMAT_ARROW) {
             BatchBuilder = MakeHolder<NArrow::TArrowBatchBuilder>();
@@ -189,7 +190,7 @@ private:
         ScanActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
         // propagate self actor id
-        Send(ComputeActorId, new TEvKqpCompute::TEvScanInitActor(ScanId, ScanActorId, Generation),
+        Send(ComputeActorId, new TEvKqpCompute::TEvScanInitActor(ScanId, ScanActorId, Generation, TabletId),
              IEventHandle::FlagTrackDelivery);
 
         Sleep = true;
@@ -338,7 +339,7 @@ private:
             << ", abortEvent: " << (AbortEvent ? AbortEvent->Record.ShortDebugString() : TString("<none>")));
 
         if (abort != EAbort::None || AbortEvent) {
-            auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(Generation);
+            auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(Generation, TabletId);
 
             if (AbortEvent) {
                 ev->Record.SetStatus(NYql::NDq::DqStatusToYdbStatus(AbortEvent->Record.GetStatusCode()));
@@ -520,6 +521,7 @@ private:
     TChunksLimiter ChunksLimiter;
     bool Sleep;
     const bool IsLocal;
+    const ui64 TabletId;
 
     IDriver* Driver = nullptr;
     TActorId ScanActorId;
@@ -577,7 +579,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
     auto infoIt = TableInfos.find(request.GetLocalPathId());
 
     auto reportError = [this, scanComputeActor, generation] (const TString& table, const TString& detailedReason) {
-        auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation);
+        auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation, TabletID());
         ev->Record.SetStatus(Ydb::StatusIds::ABORTED);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() <<
             "Table '" << table << "' scheme changed.");
@@ -629,7 +631,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
             << " Unexpected process program in datashard scan at " << TabletID();
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, msg);
 
-        auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation);
+        auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation, TabletID());
         ev->Record.SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::DEFAULT_ERROR, msg);
         IssueToMessage(issue, ev->Record.MutableIssues()->Add());
@@ -672,7 +674,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
         request.GetStatsMode(),
         request.GetTimeoutMs(),
         generation,
-        request.GetDataFormat()
+        request.GetDataFormat(),
+        TabletID()
     );
 
     auto scanOptions = TScanOptions()

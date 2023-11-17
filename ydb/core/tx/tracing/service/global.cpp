@@ -14,6 +14,12 @@ std::shared_ptr<NKikimr::NTracing::TTraceClient> TTracing::GetClient(const TStri
     return client;
 }
 
+std::shared_ptr<NKikimr::NTracing::TTraceClient> TTracing::GetLocalClient(const TString& type, const TString& clientId) {
+    auto client = std::make_shared<TTraceClient>(clientId, "");
+    client->SetType(type);
+    return client;
+}
+
 TTracing::TTracing() {
     if (NActors::TlsActivationContext) {
         NActors::TActivationContext::Register(new TRegularTracesCleanerActor());

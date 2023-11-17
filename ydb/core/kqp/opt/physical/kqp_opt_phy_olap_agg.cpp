@@ -214,22 +214,58 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
     }
 
     auto aggCombine = node.Cast<TCoAggregateCombine>();
-    if (aggCombine.Handlers().Size() == 0) {
-        return node;
-    }
 
-    // temporary for keys grouping push down not useful
-    if (!aggCombine.Keys().Empty()) {
+    if (aggCombine.Handlers().Size() == 0) {
         return node;
     }
 
     auto maybeRead = aggCombine.Input().Maybe<TKqpReadOlapTableRanges>();
     if (!maybeRead) {
         maybeRead = aggCombine.Input().Maybe<TCoExtractMembers>().Input().Maybe<TKqpReadOlapTableRanges>();
+        if (!maybeRead) {
+            maybeRead = aggCombine.Input().Maybe<TCoFlatMap>().Input().Maybe<TKqpReadOlapTableRanges>();
+        }
     }
 
     if (!maybeRead) {
         return node;
+    }
+
+    // temporary for keys grouping push down not useful
+    if (!aggCombine.Keys().Empty()) {
+        if (NYql::HasSetting(maybeRead.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames)) {
+            return node;
+        }
+        auto newSettings = NYql::AddSetting(maybeRead.Settings().Cast().Ref(), maybeRead.Settings().Cast().Pos(),
+            TString(TKqpReadTableSettings::GroupByFieldNames.data(), TKqpReadTableSettings::GroupByFieldNames.size()), aggCombine.Keys().Ptr(), ctx);
+        if (auto read = aggCombine.Input().Maybe<TKqpReadOlapTableRanges>()) {
+            return
+                Build<TCoAggregateCombine>(ctx, node.Pos()).InitFrom(node.Cast<TCoAggregateCombine>())
+                    .Input<TKqpReadOlapTableRanges>().InitFrom(read.Cast())
+                            .Settings(newSettings)
+                    .Build()
+                .Done();
+        } else if (auto read = aggCombine.Input().Maybe<TCoExtractMembers>().Input().Maybe<TKqpReadOlapTableRanges>()) {
+            return
+                Build<TCoAggregateCombine>(ctx, node.Pos()).InitFrom(node.Cast<TCoAggregateCombine>())
+                    .Input<TCoExtractMembers>().InitFrom(aggCombine.Input().Maybe<TCoExtractMembers>().Cast())
+                        .Input<TKqpReadOlapTableRanges>().InitFrom(read.Cast())
+                            .Settings(newSettings)
+                        .Build()
+                    .Build()
+                .Done();
+        } else if (auto read = aggCombine.Input().Maybe<TCoFlatMap>().Input().Maybe<TKqpReadOlapTableRanges>()) {
+            return
+                Build<TCoAggregateCombine>(ctx, node.Pos()).InitFrom(node.Cast<TCoAggregateCombine>())
+                    .Input<TCoFlatMap>().InitFrom(aggCombine.Input().Maybe<TCoFlatMap>().Cast())
+                        .Input<TKqpReadOlapTableRanges>().InitFrom(read.Cast())
+                            .Settings(newSettings)
+                        .Build()
+                    .Build()
+                .Done();
+        } else {
+            Y_ABORT_UNLESS(false);
+        }
     }
 
     auto read = maybeRead.Cast();

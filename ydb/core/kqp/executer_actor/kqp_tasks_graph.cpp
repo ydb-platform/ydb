@@ -887,6 +887,10 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
             }
             protoTaskMeta.SetReadType(ReadTypeToProto(task.Meta.ReadInfo.ReadType));
 
+            for (auto&& i : task.Meta.ReadInfo.GroupByColumnNames) {
+                protoTaskMeta.AddGroupByColumnNames(i.data(), i.size());
+            }
+
             for (auto columnType : task.Meta.ReadInfo.ResultColumnsTypes) {
                 auto* protoResultColumn = protoTaskMeta.AddResultColumns();
                 protoResultColumn->SetId(0);

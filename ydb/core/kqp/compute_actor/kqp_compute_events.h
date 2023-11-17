@@ -6,6 +6,7 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <ydb/core/formats/arrow/serializer/full.h>
 
 namespace NKikimr::NKqp {
 
@@ -25,7 +26,7 @@ struct TEvKqpCompute {
      * TEvScanDataAck follows the same pattern mostly for symmetry reasons.
      */
     struct TEvScanData : public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::EvScanData> {
-        TEvScanData(ui32 scanId, ui32 generation = 0)
+        TEvScanData(const ui32 scanId, const ui32 generation = 0)
             : ScanId(scanId)
             , Generation(generation)
             , Finished(false) {}
@@ -35,6 +36,8 @@ struct TEvKqpCompute {
         ui32 Generation;
         TVector<TOwnedCellVec> Rows;
         std::shared_ptr<arrow::RecordBatch> ArrowBatch;
+        std::vector<std::shared_ptr<arrow::RecordBatch>> SplittedBatches;
+        
         TOwnedCellVec LastKey;
         TDuration CpuTime;
         TDuration WaitTime;
@@ -47,6 +50,12 @@ struct TEvKqpCompute {
         ui32 GetRowsCount() const {
             if (ArrowBatch) {
                 return ArrowBatch->num_rows();
+            } else if (SplittedBatches.size()) {
+                ui32 recordsCount = 0;
+                for (auto&& i : SplittedBatches) {
+                    recordsCount += i->num_rows();
+                }
+                return recordsCount;
             } else {
                 return Rows.size();
             }
@@ -71,7 +80,7 @@ struct TEvKqpCompute {
         }
 
         NKikimrDataEvents::EDataFormat GetDataFormat() const {
-            if (ArrowBatch != nullptr) {
+            if (ArrowBatch != nullptr || SplittedBatches.size()) {
                 return NKikimrDataEvents::FORMAT_ARROW;
             }
             return NKikimrDataEvents::FORMAT_CELLVEC;
@@ -80,9 +89,8 @@ struct TEvKqpCompute {
 
         static NActors::IEventBase* Load(TEventSerializedData* data) {
             auto pbEv = THolder<TEvRemoteScanData>(static_cast<TEvRemoteScanData *>(TEvRemoteScanData::Load(data)));
-            auto ev = MakeHolder<TEvScanData>(pbEv->Record.GetScanId());
+            auto ev = MakeHolder<TEvScanData>(pbEv->Record.GetScanId(), pbEv->Record.GetGeneration());
 
-            ev->Generation = pbEv->Record.GetGeneration();
             ev->CpuTime = TDuration::MicroSeconds(pbEv->Record.GetCpuTimeUs());
             ev->WaitTime = TDuration::MilliSeconds(pbEv->Record.GetWaitTimeMs());
             ev->PageFault = pbEv->Record.GetPageFault();
@@ -104,6 +112,9 @@ struct TEvKqpCompute {
                 auto batch = pbEv->Record.GetArrowBatch();
                 auto schema = NArrow::DeserializeSchema(batch.GetSchema());
                 ev->ArrowBatch = NArrow::DeserializeBatch(batch.GetBatch(), schema);
+            }
+            for (auto&& i : pbEv->Record.GetSplittedArrowBatches()) {
+                ev->SplittedBatches.emplace_back(NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TFullDataDeserializer().Deserialize(i)));
             }
             return ev.Release();
         }
@@ -143,6 +154,9 @@ struct TEvKqpCompute {
                         protoArrowBatch->SetBatch(NArrow::SerializeBatchNoCompression(ArrowBatch));
                         break;
                     }
+                }
+                for (auto&& i : SplittedBatches) {
+                    Remote->Record.AddSplittedArrowBatches(NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(i));
                 }
             }
         }
@@ -201,20 +215,23 @@ struct TEvKqpCompute {
     struct TEvScanError : public NActors::TEventPB<TEvScanError, NKikimrKqp::TEvScanError,
         TKqpComputeEvents::EvScanError>
     {
-        TEvScanError(ui32 generation = 0) {
+        TEvScanError() = default;
+        TEvScanError(const ui32 generation, const ui64 tabletId) {
             Record.SetGeneration(generation);
+            Record.SetTabletId(tabletId);
         }
     };
 
     struct TEvScanInitActor : public NActors::TEventPB<TEvScanInitActor, NKikimrKqp::TEvScanInitActor,
         TKqpComputeEvents::EvScanInitActor>
     {
-        TEvScanInitActor() {}
+        TEvScanInitActor() = default;
 
-        TEvScanInitActor(ui64 scanId, const NActors::TActorId& scanActor, ui32 generation = 0) {
+        TEvScanInitActor(ui64 scanId, const NActors::TActorId& scanActor, ui32 generation, const ui64 tabletId) {
             Record.SetScanId(scanId);
             ActorIdToProto(scanActor, Record.MutableScanActorId());
             Record.SetGeneration(generation);
+            Record.SetTabletId(tabletId);
         }
     };
 

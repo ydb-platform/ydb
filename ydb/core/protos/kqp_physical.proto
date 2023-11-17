@@ -193,6 +193,8 @@ message TKqpPhyOpReadOlapRanges {
 
     // Type of read result: unboxed values or Arrow blocks of data
     EReadType ReadType = 13;
+
+    repeated string GroupByColumnNames = 14;
 }
 
 message TKqpPhyOpReadRanges {

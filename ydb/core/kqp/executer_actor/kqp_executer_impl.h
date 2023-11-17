@@ -1082,9 +1082,16 @@ protected:
                 taskMeta.ReadInfo.ResultColumnsTypes.push_back(NScheme::TTypeInfo(memberDataType->GetSchemeType()));
             }
         }
-
         if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) {
             return;
+        }
+        {
+            Y_ABORT_UNLESS(taskMeta.ReadInfo.GroupByColumnNames.empty());
+            std::vector<std::string> groupByColumns;
+            for (auto&& i : readOlapRange->GetGroupByColumnNames()) {
+                groupByColumns.emplace_back(i);
+            }
+            std::swap(taskMeta.ReadInfo.GroupByColumnNames, groupByColumns);
         }
         taskMeta.ReadInfo.ReadType = OlapReadTypeFromProto(readOlapRange->GetReadType());
         taskMeta.ReadInfo.OlapProgram.Program = readOlapRange->GetOlapProgram();

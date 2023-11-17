@@ -152,6 +152,7 @@ public:
 
     static TTraceClientGuard GetClient(const TString& type, const TString& clientId, const TString& parentId);
     static TTraceClientGuard GetClientUnique(const TString& type, const TString& clientId, const TString& parentId);
+    static TTraceClientGuard GetLocalClient(const TString& type, const TString& clientId);
     static TTraceClientGuard GetTypeUnique(const TString& type, const TString& parentId);
 };
 

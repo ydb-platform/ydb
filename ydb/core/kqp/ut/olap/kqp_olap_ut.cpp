@@ -3838,7 +3838,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         if (prevIsFinished) {
                             Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event");
                             Cerr.Flush();
-                            auto resp = std::make_unique<NKqp::TEvKqpCompute::TEvScanError>(msg->Generation);
+                            auto resp = std::make_unique<NKqp::TEvKqpCompute::TEvScanError>(msg->Generation, 0);
                             runtime->Send(new IEventHandle(ev->Recipient, ev->Sender, resp.release()));
                         } else {
                             prevIsFinished = msg->Finished;

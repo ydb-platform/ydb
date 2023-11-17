@@ -211,6 +211,7 @@ message TKqpTransaction {
         repeated TColumnMeta ResultColumns = 12;
         // Type of read result: unboxed values or Arrow blocks of data
         optional EReadType ReadType = 14;
+        repeated string GroupByColumnNames = 15;
     }
 
     optional EKqpTransactionType Type = 1;
@@ -1448,6 +1449,12 @@ message TEvCdcStreamScanResponse {
     optional TStats Stats = 6;
 }
 
+message TComputeShardingPolicy {
+    repeated string ColumnNames = 1;
+    optional uint32 ShardsCount = 2 [default = 0];
+
+}
+
 message TEvKqpScan {
     optional uint64 TxId = 1;
     optional uint64 ScanId = 2;
@@ -1472,6 +1479,7 @@ message TEvKqpScan {
     optional bytes OlapProgram = 19;
     optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 20;
     optional bool CostDataOnly = 21[default = false];
+    optional TComputeShardingPolicy ComputeShardingPolicy = 23;
 }
 
 message TEvCompactTable {

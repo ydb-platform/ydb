@@ -18,6 +18,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
+#include <ydb/core/tx/tracing/usage/tracing.h>
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -76,10 +77,10 @@ public:
     }
 
     TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
-                     const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
-                     ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie,
-                     ui64 tabletId, TDuration timeout, std::vector<TTxScan::TReadMetadataPtr>&& readMetadataList,
-                     NKikimrDataEvents::EDataFormat dataFormat, const TScanCounters& scanCountersPool)
+        const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const NOlap::TComputeShardingPolicy& computeShardingPolicy,
+        ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie,
+        ui64 tabletId, TDuration timeout, std::vector<TTxScan::TReadMetadataPtr>&& readMetadataList,
+        NKikimrDataEvents::EDataFormat dataFormat, const TScanCounters& scanCountersPool)
         : StoragesManager(storagesManager)
         , ColumnShardActorId(columnShardActorId)
         , ScanComputeActorId(scanComputeActorId)
@@ -94,7 +95,8 @@ public:
         , ReadMetadataIndex(0)
         , Deadline(TInstant::Now() + (timeout ? timeout + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT))
         , ScanCountersPool(scanCountersPool)
-        , Stats(ScanCountersPool)
+        , Stats(NTracing::TTraceClient::GetLocalClient("SHARD", ::ToString(TabletId)/*, "SCAN_TXID:" + ::ToString(TxId)*/))
+        , ComputeShardingPolicy(computeShardingPolicy)
     {
         KeyYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetKeyYqlSchema();
     }
@@ -103,7 +105,7 @@ public:
         TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN)
             ("SelfId", SelfId())("TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)
         );
-        auto g = Stats.MakeGuard("processing");
+        auto g = Stats->MakeGuard("bootstrap");
         ScanActorId = ctx.SelfID;
         Schedule(Deadline, new TEvents::TEvWakeup);
 
@@ -113,11 +115,11 @@ public:
         ReadCoordinatorActorId = ctx.Register(new NOlap::NBlobOperations::NRead::TReadCoordinatorActor(TabletId, SelfId()));
 
         std::shared_ptr<NOlap::TReadContext> context = std::make_shared<NOlap::TReadContext>(StoragesManager, ScanCountersPool, false,
-            ReadMetadataRanges[ReadMetadataIndex], SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId);
+            ReadMetadataRanges[ReadMetadataIndex], SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
-        Send(ScanComputeActorId, new TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen), IEventHandle::FlagTrackDelivery);
+        Send(ScanComputeActorId, new TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId), IEventHandle::FlagTrackDelivery);
 
         Become(&TColumnShardScan::StateScan);
         ContinueProcessing();
@@ -125,7 +127,7 @@ public:
 
 private:
     STATEFN(StateScan) {
-        auto g = Stats.MakeGuard("processing");
+        auto g = Stats->MakeGuard("processing");
         TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN)
             ("SelfId", SelfId())("TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)
         );
@@ -136,7 +138,7 @@ private:
             hFunc(TEvents::TEvWakeup, HandleScan);
             hFunc(NConveyor::TEvExecution::TEvTaskProcessedResult, HandleScan);
             default:
-                Y_ABORT("TColumnShardScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
     }
 
@@ -148,10 +150,10 @@ private:
 
     void HandleScan(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev) {
         --InFlightReads;
-        auto g = Stats.MakeGuard("task_result");
+        auto g = Stats->MakeGuard("task_result");
         if (ev->Get()->GetErrorMessage()) {
             ACFL_ERROR("event", "TEvTaskProcessedResult")("error", ev->Get()->GetErrorMessage());
-            SendScanError(ev->Get()->GetErrorMessage());
+            SendScanError("task_error:" + ev->Get()->GetErrorMessage());
             Finish();
         } else {
             ACFL_DEBUG("event", "TEvTaskProcessedResult");
@@ -165,7 +167,7 @@ private:
     }
 
     void HandleScan(TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
-        auto g = Stats.MakeGuard("ack");
+        auto g = Stats->MakeGuard("ack");
         Y_ABORT_UNLESS(!AckReceivedInstant);
         AckReceivedInstant = TMonotonic::Now();
 
@@ -186,7 +188,7 @@ private:
 
     // Returns true if it was able to produce new batch
     bool ProduceResults() noexcept {
-        auto g = Stats.MakeGuard("ProduceResults");
+        auto g = Stats->MakeGuard("ProduceResults");
         TLogContextGuard gLogging(NActors::TLogContextBuilder::Build()("method", "produce result"));
 
         ACFL_DEBUG("stage", "start")("iterator", ScanIterator->DebugString());
@@ -234,6 +236,10 @@ private:
         ACFL_DEBUG("stage", "ready result")("iterator", ScanIterator->DebugString())("format", NKikimrDataEvents::EDataFormat_Name(DataFormat))
             ("columns", numColumns)("rows", numRows);
 
+        std::optional<NArrow::TShardedRecordBatch> shardedBatch;
+        if (NArrow::THashConstructor::BuildHashUI64(batch, ComputeShardingPolicy.GetColumnNames(), "__compute_sharding_hash")) {
+            shardedBatch = NArrow::TShardingSplitIndex::Apply(ComputeShardingPolicy.GetShardsCount(), batch, "__compute_sharding_hash");
+        }
         switch (DataFormat) {
             case NKikimrDataEvents::FORMAT_UNSPECIFIED:
             case NKikimrDataEvents::FORMAT_CELLVEC: {
@@ -246,7 +252,13 @@ private:
             }
             case NKikimrDataEvents::FORMAT_ARROW: {
                 MakeResult(0);
-                Result->ArrowBatch = batch;
+                if (ComputeShardingPolicy.IsEnabled() && shardedBatch) {
+                    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_success")("count", shardedBatch->GetSplittedByShards().size());
+                    Result->SplittedBatches = shardedBatch->GetSplittedByShards();
+                } else {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_problems")("sb", !!shardedBatch)("policy", ComputeShardingPolicy.IsEnabled());
+                    Result->ArrowBatch = batch;
+                }
                 Rows += batch->num_rows();
                 Bytes += NArrow::GetBatchDataSize(batch);
                 ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetBatchDataSize(batch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
@@ -302,7 +314,7 @@ private:
 
     void HandleScan(TEvKqp::TEvAbortExecution::TPtr& ev) noexcept {
         auto& msg = ev->Get()->Record;
-        TString reason = ev->Get()->GetIssues().ToOneLineString();
+        const TString reason = ev->Get()->GetIssues().ToOneLineString();
 
         auto prio = msg.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
         LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_COLUMNSHARD_SCAN,
@@ -312,7 +324,6 @@ private:
             << " reason: " << reason);
 
         AbortReason = std::move(reason);
-        SendScanError();
         Finish();
     }
 
@@ -336,16 +347,12 @@ private:
         Finish();
     }
 
-    void HandleScan(TEvents::TEvWakeup::TPtr& ev) {
-        if (ev->Get()->Tag) {
-            ContinueProcessing();
-        } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
-                "Scan " << ScanActorId << " guard execution timeout"
-                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
+    void HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " guard execution timeout"
+            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
 
-            Finish();
-        }
+        Finish();
     }
 
 private:
@@ -360,7 +367,7 @@ private:
     }
 
     void NextReadMetadata() {
-        auto g = Stats.MakeGuard("NextReadMetadata");
+        auto g = Stats->MakeGuard("NextReadMetadata");
         if (++ReadMetadataIndex == ReadMetadataRanges.size()) {
             // Send empty batch with "finished" flag
             MakeResult();
@@ -369,7 +376,8 @@ private:
             return Finish();
         }
 
-        auto context = std::make_shared<NOlap::TReadContext>(StoragesManager, ScanCountersPool, false, ReadMetadataRanges[ReadMetadataIndex], SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId);
+        auto context = std::make_shared<NOlap::TReadContext>(StoragesManager, ScanCountersPool, false, ReadMetadataRanges[ReadMetadataIndex], SelfId(),
+            ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
         // Used in TArrowToYdbConverter
         ResultYqlSchema.clear();
@@ -431,13 +439,12 @@ private:
 
         Finished = Result->Finished;
         if (Finished) {
-            Stats.Finish();
             ALS_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN) <<
                 "Scanner finished " << ScanActorId << " and sent to " << ScanComputeActorId
-                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
-                << " bytes: " << Bytes << " rows: " << Rows << " page faults: " << Result->PageFaults
+                << " packs: " << PacksSum << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
+                << " bytes: " << Bytes << "/" << BytesSum << " rows: " << Rows << "/" << RowsSum << " page faults: " << Result->PageFaults
                 << " finished: " << Result->Finished << " pageFault: " << Result->PageFault
-                << " stats:" << Stats.DebugString() << ";iterator:" << (ScanIterator ? ScanIterator->DebugString(false) : "NO");
+                << " stats:" << Stats->ToJson() << ";iterator:" << (ScanIterator ? ScanIterator->DebugString(false) : "NO");
         } else {
             Y_ABORT_UNLESS(ChunksLimiter.Take(Bytes));
             Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
@@ -459,7 +466,7 @@ private:
             msg += ", reason: " + reason;
         }
 
-        auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(ScanGen);
+        auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(ScanGen, TabletId);
         ev->Record.SetStatus(Ydb::StatusIds::GENERIC_ERROR);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE, msg);
         NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
@@ -586,142 +593,12 @@ private:
         }
     };
 
-    class TScanStats {
-    private:
-        THashMap<NBlobCache::TBlobRange, TInstant> StartBlobRequest;
-        const TInstant StartInstant = Now();
-        TDuration BlobsWaiting;
-        TInstant FinishInstant = TInstant::Zero();
-        ui32 RequestsCount = 0;
-        ui64 RequestedBytes = 0;
-        TBlobStats CacheBlobs;
-        TBlobStats MissBlobs;
-        THashMap<TString, TDuration> GuardedDurations;
-        THashMap<TString, TInstant> StartGuards;
-        THashMap<TString, TInstant> SectionFirst;
-        THashMap<TString, TInstant> SectionLast;
-        const TConcreteScanCounters Counters;
-    public:
-
-        ~TScanStats() {
-            Counters.OnScanDuration(TInstant::Now() - StartInstant);
-
-        }
-
-        TDuration GetScanDuration() const {
-            return TInstant::Now() - StartInstant;
-        }
-
-        TScanStats(const TConcreteScanCounters& counters)
-            : CacheBlobs(counters.HistogramCacheBlobsCountDuration, counters.HistogramCacheBlobBytesDuration)
-            , MissBlobs(counters.HistogramMissCacheBlobsCountDuration, counters.HistogramMissCacheBlobBytesDuration)
-            , Counters(counters)
-        {
-
-        }
-
-        void OnBlobsWaitDuration(const TDuration d) {
-            BlobsWaiting += d;
-        }
-
-        TString DebugString() const {
-            const TInstant now = TInstant::Now();
-            TStringBuilder sb;
-            sb << "SCAN_STATS;";
-            sb << "start=" << StartInstant << ";";
-            sb << "d=" << FinishInstant - StartInstant << ";blobs_d=" << BlobsWaiting << ";";
-            if (RequestsCount) {
-                sb << "req:{count=" << RequestsCount << ";bytes=" << RequestedBytes << ";bytes_avg=" << RequestedBytes / RequestsCount << "};";
-                sb << "cache:{" << CacheBlobs.DebugString() << "};";
-                sb << "miss:{" << MissBlobs.DebugString() << "};";
-            } else {
-                sb << "NO_REQUESTS;";
-            }
-            std::map<ui32, std::vector<TString>> points;
-            for (auto&& i : SectionFirst) {
-                points[(i.second - StartInstant).MilliSeconds()].emplace_back("f_" + i.first);
-            }
-            for (auto&& i : SectionLast) {
-                auto it = StartGuards.find(i.first);
-                if (it != StartGuards.end()) {
-                    points[(now - StartInstant).MilliSeconds()].emplace_back("l_" + i.first);
-                } else {
-                    points[(i.second - StartInstant).MilliSeconds()].emplace_back("l_" + i.first);
-                }
-            }
-            sb << "tline:(";
-            for (auto&& i : points) {
-                sb << Sprintf("%0.3f", 0.001 * i.first) << ":" << JoinSeq(",", i.second) << ";";
-            }
-            sb << ");";
-            for (auto&& i : GuardedDurations) {
-                auto it = StartGuards.find(i.first);
-                TDuration delta;
-                if (it != StartGuards.end()) {
-                    delta = now - it->second;
-                }
-                sb << i.first << "=" << i.second + delta << ";";
-            }
-            return sb;
-        }
-
-        class TGuard {
-        private:
-            TScanStats& Owner;
-            const TInstant Start = Now();
-            const TString SectionName;
-        public:
-            TGuard(const TString& sectionName, TScanStats& owner)
-                : Owner(owner)
-                , SectionName(sectionName)
-            {
-                if (!Owner.SectionFirst.contains(SectionName)) {
-                    Owner.SectionFirst.emplace(SectionName, Start);
-                }
-                Y_ABORT_UNLESS(Owner.StartGuards.emplace(SectionName, Start).second);
-            }
-
-            ~TGuard() {
-                const TInstant finish = TInstant::Now();
-                Owner.GuardedDurations[SectionName] += finish - Start;
-                Owner.StartGuards.erase(SectionName);
-                Owner.SectionLast[SectionName] = finish;
-            }
-        };
-
-        TGuard MakeGuard(const TString& sectionName) {
-            return TGuard(sectionName, *this);
-        }
-
-        void RequestSent(const THashSet<NBlobCache::TBlobRange>& ranges) {
-            ++RequestsCount;
-            const TInstant now = Now();
-            for (auto&& i : ranges) {
-                Y_ABORT_UNLESS(StartBlobRequest.emplace(i, now).second);
-                RequestedBytes += i.Size;
-            }
-        }
-
-        void BlobReceived(const NBlobCache::TBlobRange& br, const bool fromCache, const TInstant replyInstant) {
-            auto it = StartBlobRequest.find(br);
-            Y_ABORT_UNLESS(it != StartBlobRequest.end());
-            const TDuration d = replyInstant - it->second;
-            if (fromCache) {
-                CacheBlobs.Received(br, d);
-            } else {
-                MissBlobs.Received(br, d);
-            }
-            StartBlobRequest.erase(it);
-        }
-
-        void Finish() {
-            Y_ABORT_UNLESS(!FinishInstant);
-            FinishInstant = Now();
-        }
-    };
-
-    TScanStats Stats;
+    NTracing::TTraceClientGuard Stats;
+    const NOlap::TComputeShardingPolicy ComputeShardingPolicy;
     ui64 Rows = 0;
+    ui64 BytesSum = 0;
+    ui64 RowsSum = 0;
+    ui64 PacksSum = 0;
     ui64 Bytes = 0;
     ui32 PageFaults = 0;
     TDuration LastReportedElapsedTime;
@@ -946,7 +823,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 << detailedInfo.Str()
                 << " at tablet " << Self->TabletID());
 
-        auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(scanGen);
+        auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(scanGen, Self->TabletID());
 
         ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
@@ -965,8 +842,11 @@ void TTxScan::Complete(const TActorContext& ctx) {
     Self->IncCounter(COUNTER_READ_INDEX_ROWS, statsDelta.Rows);
     Self->IncCounter(COUNTER_READ_INDEX_BYTES, statsDelta.Bytes);
 
+    NOlap::TComputeShardingPolicy shardingPolicy;
+    AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
+
     auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, std::move(ReadMetadataRanges), dataFormat, Self->ScanCounters));
+        shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, std::move(ReadMetadataRanges), dataFormat, Self->ScanCounters));
 
     LOG_S_DEBUG("TTxScan starting " << scanActor
                 << " txId: " << txId

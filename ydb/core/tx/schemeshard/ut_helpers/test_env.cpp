@@ -746,13 +746,13 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitNotification(NActors::TTestActorR
     TestWaitNotification(runtime, ids, schemeshardId);
 }
 
-void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActorRuntime &runtime, TSet<ui64> tabletIds) {
+void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActorRuntime &runtime, TSet<ui64> tabletIds, ui64 hive) {
     TActorId sender = runtime.AllocateEdgeActor();
 
     for (ui64 tabletId : tabletIds) {
         Cerr << "wait until " << tabletId << " is deleted" << Endl;
         auto ev = new TEvFakeHive::TEvSubscribeToTabletDeletion(tabletId);
-        ForwardToTablet(runtime, TTestTxConfig::Hive, sender, ev);
+        ForwardToTablet(runtime, hive, sender, ev);
     }
 
     TAutoPtr<IEventHandle> handle;
@@ -768,8 +768,8 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActo
     }
 }
 
-void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActorRuntime &runtime, ui64 tabletId) {
-    TestWaitTabletDeletion(runtime, TSet<ui64>{tabletId});
+void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActorRuntime &runtime, ui64 tabletId, ui64 hive) {
+    TestWaitTabletDeletion(runtime, TSet<ui64>{tabletId}, hive);
 }
 
 void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActorRuntime &runtime, ui64 schemeShard, TSet<TShardIdx> shardIds) {

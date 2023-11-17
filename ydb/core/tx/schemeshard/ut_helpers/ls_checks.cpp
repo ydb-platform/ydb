@@ -212,6 +212,19 @@ TCheckFunc StoragePoolsEqual(TSet<TString> poolNames) {
     };
 }
 
+TCheckFunc SharedHive(ui64 sharedHiveId) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
+
+        const auto& domainDesc = record.GetPathDescription().GetDomainDescription();
+        if (sharedHiveId) {
+            UNIT_ASSERT_VALUES_EQUAL(domainDesc.GetSharedHive(), sharedHiveId);
+        } else {
+            UNIT_ASSERT(!domainDesc.HasSharedHive());
+        }
+    };
+}
+
 TCheckFunc DomainCoordinators(TVector<ui64> coordinators) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());

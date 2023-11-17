@@ -5742,6 +5742,85 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             WaitForTabletIsUp(runtime, tablet, 1);
         }
     }
+
+    Y_UNIT_TEST(TestLocalRegistrationInSharedHive) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::SchemeShard, TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0); // root hive good
+        MakeSureTabletIsUp(runtime, TTestTxConfig::SchemeShard, 0); // root ss good
+
+        TActorId sender = runtime.AllocateEdgeActor(0);
+        InitSchemeRoot(runtime, sender);
+
+        // Create subdomain
+        ui32 txId = 100;
+        TSubDomainKey subdomainKey;
+        do {
+            auto modifyScheme = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            modifyScheme->Record.SetTxId(++txId);
+            auto* transaction = modifyScheme->Record.AddTransaction();
+            transaction->SetWorkingDir("/dc-1");
+            transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExtSubDomain);
+            auto* subdomain = transaction->MutableSubDomain();
+            subdomain->SetName("tenant1");
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, modifyScheme.Release());
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
+            if (reply) {
+                subdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
+                break;
+            }
+        } while (true);
+
+        // Create shared hive
+        THolder<TEvHive::TEvCreateTablet> createSharedHive = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, TTabletTypes::Hive, BINDED_CHANNELS);
+        createSharedHive->Record.AddAllowedDomains();
+        createSharedHive->Record.MutableAllowedDomains(0)->SetSchemeShard(TTestTxConfig::SchemeShard);
+        createSharedHive->Record.MutableAllowedDomains(0)->SetPathId(1);
+        ui64 sharedHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createSharedHive), 0, false);
+        MakeSureTabletIsUp(runtime, sharedHiveTablet, 0); // shared hive good
+
+        // Setup resolving shared hive for subdomain
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
+                auto* record = event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord();
+                TSubDomainKey resolvingSubdomainKey(record->GetPathOwnerId(), record->GetPathId());
+                if (resolvingSubdomainKey == subdomainKey) {
+                    record->MutablePathDescription()->MutableDomainDescription()->SetSharedHive(sharedHiveTablet);   
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        // Start local for subdomain
+        SendKillLocal(runtime, 1);
+        CreateLocalForTenant(runtime, 1, "/dc-1/tenant1");
+        
+        bool seenLocalRegistrationInSharedHive = false;
+        TTestActorRuntime::TEventObserver prevObserverFunc;
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvLocal::EvRegisterNode) {
+                const auto& record = event->Get<TEvLocal::TEvRegisterNode>()->Record;
+                if (record.GetHiveId() == sharedHiveTablet 
+                    && !record.GetServicedDomains().empty()
+                    && TSubDomainKey(record.GetServicedDomains().Get(0)) == subdomainKey) {
+                        seenLocalRegistrationInSharedHive = true;
+                    }
+            }
+            return prevObserverFunc(event);
+        });
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvLocal::EvRegisterNode, 2);
+        runtime.DispatchEvents(options);
+        UNIT_ASSERT(seenLocalRegistrationInSharedHive);
+    }
 }
 
 }

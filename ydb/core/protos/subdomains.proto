@@ -101,6 +101,7 @@ message TDomainDescription {
     optional NLoginProto.TSecurityState SecurityState = 20;
 
     optional TAuditSettings AuditSettings = 21;
+    optional fixed64 SharedHive = 22;
 }
 
 message TSchemeQuotas {

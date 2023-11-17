@@ -8,6 +8,8 @@
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 
+#include <ydb/library/yql/utils/utf8.h>
+
 namespace NYql {
 namespace NDetail {
 namespace {
@@ -1831,6 +1833,120 @@ TExprNode::TPtr DoBuildMultiColumnComputeNode(const TStructExprType& rowType, co
     return ctx.NewCallable(pos, range->IsCallable("RangeOr") ? "RangeUnion" : "RangeIntersect", std::move(output));
 }
 
+IGraphTransformer::TStatus ConvertLiteral(TExprNode::TPtr& node, const NYql::TTypeAnnotationNode & sourceType, const NYql::TTypeAnnotationNode & expectedType, NYql::TExprContext& ctx) {
+    if (IsSameAnnotation(sourceType, expectedType)) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (expectedType.GetKind() == ETypeAnnotationKind::Optional) {
+        auto nextType = expectedType.Cast<TOptionalExprType>()->GetItemType();
+        auto originalNode = node;
+        auto status1 = ConvertLiteral(node, sourceType, *nextType, ctx);
+        if (status1.Level != IGraphTransformer::TStatus::Error) {
+            node = ctx.NewCallable(node->Pos(), "Just", { node });
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        node = originalNode;
+        if (node->IsCallable("Just")) {
+            auto sourceItemType = sourceType.Cast<TOptionalExprType>()->GetItemType();
+            auto value = node->HeadRef();
+            auto status = ConvertLiteral(value, *sourceItemType, *nextType, ctx);
+            if (status.Level != IGraphTransformer::TStatus::Error) {
+                node = ctx.NewCallable(node->Pos(), "Just", { value });
+                return IGraphTransformer::TStatus::Repeat;
+            }
+        } else if (sourceType.GetKind() == ETypeAnnotationKind::Optional) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsNull(sourceType)) {
+            node = ctx.NewCallable(node->Pos(), "Nothing", { ExpandType(node->Pos(), expectedType, ctx) });
+            return IGraphTransformer::TStatus::Repeat;
+        }
+    }
+
+    if (expectedType.GetKind() == ETypeAnnotationKind::Data && sourceType.GetKind() == ETypeAnnotationKind::Data) {
+        const auto from = sourceType.Cast<TDataExprType>()->GetSlot();
+        const auto to = expectedType.Cast<TDataExprType>()->GetSlot();
+        if (from == EDataSlot::Utf8 && to == EDataSlot::String) {
+            auto pos = node->Pos();
+            node = ctx.NewCallable(pos, "ToString", { std::move(node) });
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (node->IsCallable("String") && to == EDataSlot::Utf8) {
+            if (const  auto atom = node->Head().Content(); IsUtf8(atom)) {
+                node = ctx.RenameNode(*node, "Utf8");
+                return IGraphTransformer::TStatus::Repeat;
+            }
+        }
+
+        if (IsDataTypeNumeric(from) && IsDataTypeNumeric(to)) {
+            {
+                auto current = node;
+                bool negate = false;
+                for (;;) {
+                    if (current->IsCallable("Plus")) {
+                        current = current->HeadPtr();
+                    }
+                    else if (current->IsCallable("Minus")) {
+                        current = current->HeadPtr();
+                        negate = !negate;
+                    }
+                    else {
+                        break;
+                    }
+                }
+
+                if (const auto maybeInt = TMaybeNode<TCoIntegralCtor>(current)) {
+                    TString atomValue;
+                    if (AllowIntegralConversion(maybeInt.Cast(), false, to, &atomValue)) {
+                        node = ctx.NewCallable(node->Pos(), expectedType.Cast<TDataExprType>()->GetName(),
+                            {ctx.NewAtom(node->Pos(), atomValue, TNodeFlags::Default)});
+                        return IGraphTransformer::TStatus::Repeat;
+                    }
+                }
+            }
+
+            if (GetNumericDataTypeLevel(to) < GetNumericDataTypeLevel(from)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto castResult = NKikimr::NUdf::GetCastResult(from, to);
+            if (!castResult || *castResult & NKikimr::NUdf::Impossible) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (*castResult != NKikimr::NUdf::ECastOptions::Complete) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const auto pos = node->Pos();
+            auto type = ExpandType(pos, expectedType, ctx);
+            node = ctx.NewCallable(pos, "Convert", {std::move(node), std::move(type)});
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        auto fromFeatures = NUdf::GetDataTypeInfo(from).Features;
+        auto toFeatures = NUdf::GetDataTypeInfo(to).Features;
+        if ((fromFeatures & NUdf::TzDateType) && (toFeatures & (NUdf::DateType| NUdf::TzDateType)) ||
+            (toFeatures & NUdf::TzDateType) && (fromFeatures & (NUdf::DateType | NUdf::TzDateType))) {
+            node = ctx.Builder(node->Pos())
+                .Callable("Apply")
+                    .Callable(0, "Udf")
+                        .Atom(0, TString("DateTime2.Make") + expectedType.Cast<TDataExprType>()->GetName())
+                    .Seal()
+                    .Add(1, node->HeadPtr())
+                .Seal()
+                .Build();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+    }
+
+    return IGraphTransformer::TStatus::Error;
+}
+
 void NormalizeRangeHint(TMaybe<TRangeHint>& hint, const TVector<TString>& indexKeys, const TStructExprType& rowType, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (!hint) {
         return;
@@ -1854,10 +1970,10 @@ void NormalizeRangeHint(TMaybe<TRangeHint>& hint, const TVector<TString>& indexK
                 [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                     output = input;
 
-                    auto status = TrySilentConvertTo(output, *unwrapOptional, ctx);
+                    auto status = ConvertLiteral(output, *output->GetTypeAnn(), *unwrapOptional, ctx);
                     if (status == IGraphTransformer::TStatus::Error) {
                         output = input;
-                        status = TrySilentConvertTo(output, *columnType, ctx);
+                        status = ConvertLiteral(output, *output->GetTypeAnn(), *columnType, ctx);
                     }
 
                     if (status == IGraphTransformer::TStatus::Repeat) {

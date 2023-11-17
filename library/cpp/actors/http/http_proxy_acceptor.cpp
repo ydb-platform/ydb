@@ -116,6 +116,12 @@ protected:
             SocketAddressType addr;
             std::optional<SocketType> s = Socket->Socket.Accept(addr);
             if (!s) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    Y_ABORT_UNLESS(PollerToken);
+                    if (PollerToken->RequestReadNotificationAfterWouldBlock()) {
+                        continue; // we can try it again
+                    }
+                }
                 break;
             }
             TIntrusivePtr<TSocketDescriptor> socket = new TSocketDescriptor(std::move(s).value());
@@ -129,11 +135,6 @@ protected:
             NActors::TActorId connectionId = ctx.Register(connectionSocket);
             ctx.Send(Poller, new NActors::TEvPollerRegister(socket, connectionId, connectionId));
             Connections.emplace(connectionId);
-        }
-        int err = errno;
-        if (err == EAGAIN || err == EWOULDBLOCK) { // request poller for further connection polling
-            Y_ABORT_UNLESS(PollerToken);
-            PollerToken->Request(true, false);
         }
     }
 

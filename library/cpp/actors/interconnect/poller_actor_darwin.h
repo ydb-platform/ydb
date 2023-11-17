@@ -92,7 +92,8 @@ namespace NActors {
             SafeKevent(ev, 2);
         }
 
-        bool Request(const TIntrusivePtr<TSocketRecord>& /*socket*/, bool /*read*/, bool /*write*/, bool /*suppressNotify*/) {
+        bool Request(const TIntrusivePtr<TSocketRecord>& /*socket*/, bool /*read*/, bool /*write*/, bool /*suppressNotify*/,
+                bool /*afterWouldBlock*/) {
             return false; // no special processing here as we use kqueue in edge-triggered mode
         }
     };

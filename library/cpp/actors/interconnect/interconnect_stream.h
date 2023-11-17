@@ -69,7 +69,8 @@ namespace NInterconnect {
         ui32 GetSendBufferSize() const;
 
         virtual void Request(NActors::TPollerToken& token, bool read, bool write);
-        virtual bool RequestEx(NActors::TPollerToken& token, bool read, bool write);
+        virtual bool RequestReadNotificationAfterWouldBlock(NActors::TPollerToken& token);
+        virtual bool RequestWriteNotificationAfterWouldBlock(NActors::TPollerToken& token);
 
         virtual size_t ExpectedWriteLength() const;
     };
@@ -124,7 +125,8 @@ namespace NInterconnect {
         bool WantRead() const;
         bool WantWrite() const;
         void Request(NActors::TPollerToken& token, bool read, bool write) override;
-        bool RequestEx(NActors::TPollerToken& token, bool read, bool write) override;
+        bool RequestReadNotificationAfterWouldBlock(NActors::TPollerToken& token) override;
+        bool RequestWriteNotificationAfterWouldBlock(NActors::TPollerToken& token) override;
         size_t ExpectedWriteLength() const override;
     };
 

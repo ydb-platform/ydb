@@ -94,7 +94,8 @@ namespace NActors {
             ExecuteSyncOperation(TPollerWakeup());
         }
 
-        bool Request(const TIntrusivePtr<TSocketRecord>& record, bool read, bool write, bool /*suppressNotify*/) {
+        bool Request(const TIntrusivePtr<TSocketRecord>& record, bool read, bool write, bool /*suppressNotify*/,
+                bool /*afterWouldBlock*/) {
             with_lock (Mutex) {
                 const auto it = Descriptors.find(record->Socket->GetDescriptor());
                 Y_ABORT_UNLESS(it != Descriptors.end());

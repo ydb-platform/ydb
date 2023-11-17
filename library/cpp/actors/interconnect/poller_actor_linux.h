@@ -62,7 +62,8 @@ namespace NActors {
                 if (auto *record = static_cast<TSocketRecord*>(ev.data.ptr)) {
                     const bool read = ev.events & (EPOLLIN | EPOLLHUP | EPOLLRDHUP | EPOLLERR);
                     const bool write = ev.events & (EPOLLOUT | EPOLLERR);
-                    UpdateFlags(record, (read ? ReadHit : 0) | (write ? WriteHit : 0), false);
+                    UpdateFlags(record, (read ? ReadHit : 0) | (write ? WriteHit : 0), false /*suppressNotify*/,
+                        false /*checkQueues*/);
                 } else {
                     res = true;
                 }
@@ -71,19 +72,32 @@ namespace NActors {
             return res;
         }
 
-        bool UpdateFlags(TSocketRecord *record, ui32 addMask, bool suppressNotify) {
+        bool UpdateFlags(TSocketRecord *record, ui32 addMask, bool suppressNotify, bool checkQueues) {
             ui32 flags = record->Flags.load(std::memory_order_acquire);
             for (;;) {
                 ui32 updated = flags | addMask;
                 static constexpr ui32 fullRead = ReadExpected | ReadHit;
                 static constexpr ui32 fullWrite = WriteExpected | WriteHit;
-                const bool read = (updated & fullRead) == fullRead;
-                const bool write = (updated & fullWrite) == fullWrite;
+                bool read = (updated & fullRead) == fullRead;
+                bool write = (updated & fullWrite) == fullWrite;
                 updated &= ~((read ? fullRead : 0) | (write ? fullWrite : 0));
                 if (record->Flags.compare_exchange_weak(flags, updated, std::memory_order_acq_rel)) {
                     if (suppressNotify) {
                         return read || write;
                     } else {
+                        if (checkQueues) {
+                            pollfd fd;
+                            fd.fd = record->Socket->GetDescriptor();
+                            const bool queryRead = updated & ReadExpected && !read;
+                            const bool queryWrite = updated & WriteExpected && !write;
+                            if (queryRead || queryWrite) {
+                                fd.events = (queryRead ? POLLIN : 0) | (queryWrite ? POLLOUT : 0);
+                                if (poll(&fd, 1, 0) != -1) {
+                                    read = queryRead && fd.revents & (POLLIN | POLLHUP | POLLRDHUP | POLLERR);
+                                    write = queryWrite && fd.revents & (POLLOUT | POLLERR);
+                                }
+                            }
+                        }
                         Notify(record, read, write);
                         return false;
                     }
@@ -106,8 +120,10 @@ namespace NActors {
             }
         }
 
-        bool Request(const TIntrusivePtr<TSocketRecord>& record, bool read, bool write, bool suppressNotify) {
-            return UpdateFlags(record.Get(), (read ? ReadExpected : 0) | (write ? WriteExpected : 0), suppressNotify);
+        bool Request(const TIntrusivePtr<TSocketRecord>& record, bool read, bool write, bool suppressNotify,
+                bool afterWouldBlock) {
+            return UpdateFlags(record.Get(), (read ? ReadExpected : 0) | (write ? WriteExpected : 0), suppressNotify,
+                !afterWouldBlock);
         }
     };
 

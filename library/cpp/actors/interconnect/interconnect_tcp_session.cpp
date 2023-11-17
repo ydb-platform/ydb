@@ -545,17 +545,18 @@ namespace NActors {
 
     void TInterconnectSessionTCP::Handle(TEvPollerRegisterResult::TPtr ev) {
         auto *msg = ev->Get();
+        bool sendPollerReady = false;
 
         if (msg->Socket == Socket) {
             PollerToken = std::move(msg->PollerToken);
-            if (ReceiveContext->MainWriteBlocked) {
-                Socket->Request(*PollerToken, false, true);
-            }
+            sendPollerReady = ReceiveContext->MainWriteBlocked;
         } else if (msg->Socket == XdcSocket) {
             XdcPollerToken = std::move(msg->PollerToken);
-            if (ReceiveContext->XdcWriteBlocked) {
-                XdcSocket->Request(*XdcPollerToken, false, true);
-            }
+            sendPollerReady = ReceiveContext->XdcWriteBlocked;
+        }
+
+        if (sendPollerReady) {
+            Send(SelfId(), new TEvPollerReady(msg->Socket, false, true));
         }
     }
 
@@ -573,7 +574,7 @@ namespace NActors {
                         stream.Advance(r);
                         totalWritten += r;
                     } else if (r == -1) {
-                        if (token && socket->RequestEx(*token, false, true)) {
+                        if (token && socket->RequestWriteNotificationAfterWouldBlock(*token)) {
                             continue; // we can try again
                         }
                         *writeBlocked = true;

@@ -742,7 +742,7 @@ namespace NActors {
                     throw TExReestablishConnection{CloseInputSessionRequested ? TDisconnectReason::Debug() :
                         recvres == 0 ? TDisconnectReason::EndOfStream() : TDisconnectReason::FromErrno(-recvres)};
                 } else if (token && !*readPending) {
-                    if (socket.RequestEx(*token, true, false)) {
+                    if (socket.RequestReadNotificationAfterWouldBlock(*token)) {
                         continue; // can try again
                     } else {
                         *readPending = true;

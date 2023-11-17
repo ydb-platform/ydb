@@ -74,7 +74,7 @@ void TKqpComputeActor::DoBootstrap() {
     auto wakeup = [this]{ ContinueExecute(); };
     try {
         PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling,
-            std::move(wakeup), TlsActivationContext->AsActorContext()));
+            std::move(wakeup)));
     } catch (const NMiniKQL::TKqpEnsureFail& e) {
         InternalError((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
         return;

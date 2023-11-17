@@ -10,14 +10,13 @@ namespace NDq {
 
 class TDqTaskRunnerExecutionContext : public TDqTaskRunnerExecutionContextBase {
 public:
-    TDqTaskRunnerExecutionContext(TTxId txId, bool withSpilling, IDqChannelStorage::TWakeUpCallback&& wakeUp, const NActors::TActorContext& ctx);
+    TDqTaskRunnerExecutionContext(TTxId txId, bool withSpilling, IDqChannelStorage::TWakeUpCallback&& wakeUp);
 
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const override;
 
 private:
     const TTxId TxId_;
     const IDqChannelStorage::TWakeUpCallback WakeUp_;
-    const NActors::TActorContext& Ctx_;
     const bool WithSpilling_;
 };
 

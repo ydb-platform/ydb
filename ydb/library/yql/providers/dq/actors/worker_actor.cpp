@@ -263,7 +263,7 @@ private:
 
         auto wakeup = [this]{ ResumeExecution(EResumeSource::Default); };
         std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(
-            TraceId, UseSpilling, std::move(wakeup), TlsActivationContext->AsActorContext());
+            TraceId, UseSpilling, std::move(wakeup));
 
         Send(TaskRunnerActor, new TEvTaskRunnerCreate(std::move(ev->Get()->Record.GetTask()), limits, NDqProto::DQ_STATS_MODE_BASIC, execCtx));
     }

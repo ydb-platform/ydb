@@ -7,6 +7,6 @@
 namespace NYql::NDq {
 
 NYql::NDq::IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId,
-    NYql::NDq::IDqChannelStorage::TWakeUpCallback wakeUpCb, const NActors::TActorContext& ctx);
+    NYql::NDq::IDqChannelStorage::TWakeUpCallback wakeUpCb);
 
 } // namespace NYql::NDq

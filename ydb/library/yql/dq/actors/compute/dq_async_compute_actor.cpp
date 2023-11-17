@@ -85,7 +85,7 @@ public:
 
         auto wakeup = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
         std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(
-            TxId, RuntimeSettings.UseSpilling, std::move(wakeup), TlsActivationContext->AsActorContext());
+            TxId, RuntimeSettings.UseSpilling, std::move(wakeup));
 
         Send(TaskRunnerActorId,
             new NTaskRunnerActor::TEvTaskRunnerCreate(

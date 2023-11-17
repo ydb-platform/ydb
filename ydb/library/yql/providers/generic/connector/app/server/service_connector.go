@@ -107,14 +107,26 @@ func (s *serviceConnector) doListSplitsHandleSelect(
 	totalSplits *int,
 ) error {
 	logger := utils.AnnotateLogger(s.logger, "ListSplits", slct.DataSourceInstance)
-	logger.Debug("responding selects", log.Int("split_id", *totalSplits), log.String("select", slct.String()))
+
+	args := []log.Field{
+		log.Int("split_id", *totalSplits),
+	}
+	args = append(args, utils.SelectToFields(slct)...)
+
+	logger.Debug("responding selects", args...)
+
 	resp := &api_service_protos.TListSplitsResponse{
 		Error:  utils.NewSuccess(),
 		Splits: []*api_service_protos.TSplit{{Select: slct}},
 	}
 
 	for _, split := range resp.Splits {
-		logger.Debug("responding split", log.Int("split_id", *totalSplits), log.String("split", split.Select.String()))
+		args := []log.Field{
+			log.Int("split_id", *totalSplits),
+		}
+		args = append(args, utils.SelectToFields(split.Select)...)
+
+		logger.Debug("responding split", args...)
 
 		*totalSplits++
 	}
@@ -199,7 +211,7 @@ func (s *serviceConnector) readSplit(
 	split *api_service_protos.TSplit,
 	handler rdbms.Handler,
 ) error {
-	logger.Debug("split reading started")
+	logger.Debug("split reading started", utils.SelectToFields(split.Select)...)
 
 	columnarBufferFactory, err := paging.NewColumnarBufferFactory(
 		logger,

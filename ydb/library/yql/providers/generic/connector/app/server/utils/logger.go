@@ -64,20 +64,31 @@ func NewDefaultLogger() (log.Logger, error) {
 func NewTestLogger(t *testing.T) log.Logger { return &zap.Logger{L: zaptest.NewLogger(t)} }
 
 func DumpReadSplitsResponse(logger log.Logger, resp *api_service_protos.TReadSplitsResponse) {
-	if columnSet := resp.GetColumnSet(); columnSet != nil {
-		for i := range columnSet.Data {
-			data := columnSet.Data[i]
-			meta := columnSet.Meta[i]
+	switch t := resp.GetPayload().(type) {
+	case *api_service_protos.TReadSplitsResponse_ArrowIpcStreaming:
+		if dump := resp.GetArrowIpcStreaming(); dump != nil {
+			logger.Debug("response", log.Int("arrow_blob_length", len(dump)))
+		}
+	case *api_service_protos.TReadSplitsResponse_ColumnSet:
+		for i := range t.ColumnSet.Data {
+			data := t.ColumnSet.Data[i]
+			meta := t.ColumnSet.Meta[i]
 
 			logger.Debug("response", log.Int("column_id", i), log.String("meta", meta.String()), log.String("data", data.String()))
 		}
+	default:
+		panic(fmt.Sprintf("unexpected message type %v", t))
+	}
+}
 
-		return
+func SelectToFields(slct *api_service_protos.TSelect) []log.Field {
+	result := []log.Field{
+		log.Any("from", slct.From),
+		log.Any("what", slct.What),
+		log.Any("where", slct.Where),
 	}
 
-	if dump := resp.GetArrowIpcStreaming(); dump != nil {
-		logger.Debug("response", log.Int("arrow_blob_length", len(dump)))
-	}
+	return result
 }
 
 type QueryLoggerFactory struct {

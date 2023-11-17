@@ -153,6 +153,21 @@ public:
         return result;
     }
 
+    // All values less than minBoundary but bigger than beginLimit will be inserted after minBoundary
+    size_t AddShifted(
+        const TTimeSeriesMap<T>& tsm,
+        TInstant minBoundary,
+        TInstant beginLimit = TInstant::Max())
+    {
+        size_t result = 0;
+        for (auto [id, value] : tsm.Values) {
+            if (AddShifted(id, value, minBoundary, beginLimit)) {
+                result++;
+            }
+        }
+        return result;
+    }
+
 private:
     ui64 BeginId() const {
         return Id + 1 - Size();
@@ -181,6 +196,32 @@ private:
             Values[id % Size()] += *values++;
         }
         return added;
+    }
+
+    // All values less than minBoundary but bigger than beginLimit will be inserted after minBoundary
+    bool AddShifted(
+        ui64 id,
+        T value,
+        TInstant minBoundary,
+        TInstant beginLimit = TInstant::Max())
+    {
+        if (beginLimit != TInstant::Max()) {
+            ui64 limitId = beginLimit.MicroSeconds() / IntervalUs + Size() - 1;
+            if (id > limitId) {
+                Propagate(limitId); // actually do propagation even on failure to be consistent
+                return false; // limit exceeded
+            }
+        }
+        ui64 minId = minBoundary.MicroSeconds() / IntervalUs + 1;
+        if (id < minId) {
+            id = minId;
+        }
+        Propagate(id);
+        if (id < BeginId()) {
+            return true; // skip value from past, successfully
+        }
+        Values[id % Size()] += value;
+        return true; // added successfully
     }
 
     bool Add(ui64 id, T value, TInstant beginLimit = TInstant::Max()) {

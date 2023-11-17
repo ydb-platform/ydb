@@ -66,6 +66,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
         THolder<TTimeSeriesVec<double>> History;
         bool PendingAccountingReport = false; // History contains data to send
         TInstant HistoryAccepted; // Do not report history before this instant
+        TInstant LastAccountingReportEnd; // Do not write history before this instant
         TInstant LastAccountingReport; // Aligned to `ReportPeriod` grid timestamp of last sent report
         TDuration AccountingReportPeriod = TDuration::Max();
 
@@ -699,6 +700,7 @@ private:
                 resInfo->SetResourceId(res.ResId);
                 resInfo->SetStartUs(start.MicroSeconds());
                 resInfo->SetIntervalUs(res.History->Interval().MicroSeconds());
+                res.LastAccountingReportEnd = start + resInfo->GetAmount().size() * res.History->Interval();
             } else {
                 // We have no useful data to report
                 res.PendingAccountingReport = false;
@@ -734,7 +736,7 @@ private:
                 res.QueueWeight = stat.QueueWeight;
                 res.Counters.AddConsumed(stat.Consumed);
                 if (res.History) {
-                    res.History->Add(stat.History);
+                    res.History->AddShifted(stat.History, res.LastAccountingReportEnd);
                     res.PendingAccountingReport = true;
                     CheckAccountingReport(res, TActivationContext::Now());
                 }

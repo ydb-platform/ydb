@@ -1,4 +1,5 @@
 /* syntax version 1 */
+/* skip double format */
 
 $merge_dicts = ($dict1, $dict2) -> { return SetUnion($dict1, $dict2, ($_key, $a, $b) -> { RETURN Coalesce($a, 0) + Coalesce($b, 0) }) };
 

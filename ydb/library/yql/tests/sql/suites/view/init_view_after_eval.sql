@@ -1,4 +1,5 @@
 /* postgres can not */
+/* skip double format */
 use plato;
 
 $i = select * from Input;

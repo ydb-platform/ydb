@@ -1,3 +1,4 @@
+/* skip double format */
 SELECT
     AsList(
         ListMap(AsList(1,2),($_x)->{

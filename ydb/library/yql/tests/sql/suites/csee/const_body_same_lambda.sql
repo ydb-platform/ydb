@@ -1,3 +1,4 @@
+/* skip double format */
 SELECT
     AsTuple(
         ListMap(AsList(1,2),($_x)->{return 3+4}),

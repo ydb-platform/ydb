@@ -1,5 +1,6 @@
 /* postgres can not */
 /* syntax version 1 */
+/* skip double format */
 select FormatCode(
     ListCode(
         AtomCode("1"),

@@ -110,6 +110,11 @@
                 "ColumnId": 22,
                 "ColumnName": "UseSelfHealLocalPolicy",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "TryToRelocateBrokenDisksLocallyFirst",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -136,7 +141,8 @@
                     19,
                     20,
                     21,
-                    22
+                    22,
+                    23
                 ],
                 "RoomID": 0,
                 "Codec": 0,

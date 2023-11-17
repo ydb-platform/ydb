@@ -1491,7 +1491,8 @@ private:
     TActorId StatProcessorActorId;
     TInstant LastMetricsCommit;
     bool SelfHealEnable = false;
-    bool UseSelfHealLocalPolicy;
+    bool UseSelfHealLocalPolicy = false;
+    bool TryToRelocateBrokenDisksLocallyFirst = false;
     bool DonorMode = false;
     TDuration ScrubPeriodicity;
     NKikimrBlobStorage::TStorageConfig StorageConfig;

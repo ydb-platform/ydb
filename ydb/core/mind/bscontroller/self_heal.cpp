@@ -161,7 +161,6 @@ namespace NKikimr::NBsController {
                 cmd->SetFailRealmIdx(VDiskToReplace->FailRealm);
                 cmd->SetFailDomainIdx(VDiskToReplace->FailDomain);
                 cmd->SetVDiskIdx(VDiskToReplace->VDisk);
-                cmd->SetTargetNodeId(Group.VDisks.at(*VDiskToReplace).Location.NodeId);
             } else {
                 ev->GroupLayoutSanitizer = true;
                 auto *cmd = request->AddCommand()->MutableSanitizeGroup();

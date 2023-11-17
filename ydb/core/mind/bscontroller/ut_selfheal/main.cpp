@@ -53,12 +53,16 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
         }
 
-        void SetSelfHealLocalPolicyTimeout(TDuration timeout) {
+        void SetBSCSettings(std::optional<bool> useSelfHealLocalPolicy, std::optional<bool> tryToRelocateBrokenDisksLocallyFirst, ui32 additionalSlots) {
             NKikimrBlobStorage::TConfigRequest request;
             auto *cmd = request.AddCommand()->MutableUpdateSettings();
-            Y_UNUSED(timeout);
-            cmd->AddUseSelfHealLocalPolicy(true);
-            cmd->AddGroupReserveMin(8 + 4);
+            if (useSelfHealLocalPolicy.has_value()) {
+                cmd->AddUseSelfHealLocalPolicy(*useSelfHealLocalPolicy);
+            }
+            if (tryToRelocateBrokenDisksLocallyFirst.has_value()) {
+                cmd->AddTryToRelocateBrokenDisksLocallyFirst(*tryToRelocateBrokenDisksLocallyFirst);
+            }
+            cmd->AddGroupReserveMin(additionalSlots);
             cmd->AddEnableDonorMode(true);
             auto response = Env.Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
@@ -84,10 +88,12 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
             return active;
         }
 
-        TPDiskId Move(std::set<TPDiskId>& from, std::set<TPDiskId>& to, NKikimrBlobStorage::EDriveStatus status) {
+        TPDiskId Move(std::set<TPDiskId>& from, std::set<TPDiskId>& to, NKikimrBlobStorage::EDriveStatus status, bool random=true) {
             auto it = from.begin();
             auto pDiskId = *it;
-            std::advance(it, RandomNumber(from.size()));
+            if (random) {
+                std::advance(it, RandomNumber(from.size()));
+            }
             Ctest << "PDisk# " << *it
                 << " setting status to " << NKikimrBlobStorage::EDriveStatus_Name(status)
                 << Endl;
@@ -114,7 +120,6 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
                 if (pdisk.GetDriveStatus() == NKikimrBlobStorage::ACTIVE) {
                     UNIT_ASSERT(active.count(pdiskId));
                 } else {
-                    UNIT_ASSERT(pdisk.GetDriveStatus() == NKikimrBlobStorage::FAULTY);
                     UNIT_ASSERT(faulty.count(pdiskId));
                 }
             }
@@ -122,9 +127,11 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
 
         void CheckDiskLocations(const std::set<TPDiskId>& active, std::set<TPDiskId>& faulty) {
             auto conf = RequestBasicConfig();
+            THashMap<std::pair<ui32, ui32>, ui32> myMap;
             for (const auto& vslot : conf.GetVSlot()) {
                 const auto& id = vslot.GetVSlotId();
                 const TPDiskId pdiskId(id.GetNodeId(), id.GetPDiskId());
+                myMap[std::make_pair(id.GetNodeId(), id.GetPDiskId())] += 1;
                 if (!active.count(pdiskId)) {
                     Ctest << "active# { ";
                     for (auto id : active) {
@@ -139,6 +146,10 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
                     Ctest << "pdiskId# " << pdiskId.ToString() << Endl;
                     UNIT_FAIL("non-active disk is present in group");
                 }
+            }
+            Ctest << "ajdnsjkbfhkbsfksj" << Endl;
+            for (const auto& [k, v]: myMap) {
+                Ctest << "(" << k.first << " : " << k.second << ") = " << v << Endl;
             }
         }
 
@@ -178,23 +189,55 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
             return result;
         }
 
-        void RunTestCorrectLocalMoves() {
-            InitCluster();
-            SetSelfHealLocalPolicyTimeout(TDuration::Days(1));
-            std::set<TPDiskId> active = GetActiveDisks(), faulty;
-            auto checkVDisksPerNode = [&]() {
-                for (const auto& [_, count]: CountVDisksPerNode()) {
-                    UNIT_ASSERT_VALUES_EQUAL(count, 8 * NumDisksPerNode);
+        bool CheckUniformPDisksPerNode() {
+            for (const auto& [_, count]: CountVDisksPerNode()) {
+                if (count != 8 * NumDisksPerNode) {
+                    return false;
                 }
-            };
-            checkVDisksPerNode();
+            }
+            return true;
+        }
+
+        void RunTestCorrectLocalMovesFaulty() {
+            InitCluster();
+            SetBSCSettings(true, std::nullopt, 0);
+            std::set<TPDiskId> active = GetActiveDisks(), faulty;
+            UNIT_ASSERT(CheckUniformPDisksPerNode());
+
+            CheckDiskLocations(active, faulty);
 
             Env.Wait(TDuration::Seconds(300));
             Move(active, faulty, NKikimrBlobStorage::FAULTY);
             Env.Wait(TDuration::Seconds(300 * 8));
 
             CheckDiskStatuses(active, faulty);
-            checkVDisksPerNode();
+            UNIT_ASSERT(CheckUniformPDisksPerNode());
+            CheckDiskLocations(active, faulty);
+        }
+
+        void RunTestCorrectLocalMovesIfPossibleBroken() {
+            InitCluster();
+            SetBSCSettings(std::nullopt, true, 4);
+            std::set<TPDiskId> active = GetActiveDisks(), faulty;
+
+            Env.Wait(TDuration::Seconds(300));
+
+            Move(active, faulty, NKikimrBlobStorage::BROKEN, false);
+            Env.Wait(TDuration::Seconds(300 * 8));
+            CheckDiskStatuses(active, faulty);
+            UNIT_ASSERT(CheckUniformPDisksPerNode());
+            CheckDiskLocations(active, faulty);
+
+            Move(active, faulty, NKikimrBlobStorage::BROKEN, false);
+            Env.Wait(TDuration::Seconds(300 * 8));
+            CheckDiskStatuses(active, faulty);
+            UNIT_ASSERT(CheckUniformPDisksPerNode());
+            CheckDiskLocations(active, faulty);
+
+            Move(active, faulty, NKikimrBlobStorage::BROKEN, false);
+            Env.Wait(TDuration::Seconds(300 * 8));
+            CheckDiskStatuses(active, faulty);
+            UNIT_ASSERT(!CheckUniformPDisksPerNode());
             CheckDiskLocations(active, faulty);
         }
 
@@ -301,6 +344,10 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
     }
 
     Y_UNIT_TEST(TestLocalSelfHeal) {
-        TTestSelfHeal(3, 4, 3, 4, 128, "mirror-3-dc", TBlobStorageGroupType::ErasureMirror3dc).RunTestCorrectLocalMoves();
+        TTestSelfHeal(3, 4, 3, 4, 3 * 4 * 3 * 4 / 9 * 8, "mirror-3-dc", TBlobStorageGroupType::ErasureMirror3dc).RunTestCorrectLocalMovesFaulty();
+    }
+
+    Y_UNIT_TEST(TestLocalBrokenRelocation) {
+        TTestSelfHeal(3, 4, 3, 4, 3 * 4 * 3 * 4 / 9 * 8, "mirror-3-dc", TBlobStorageGroupType::ErasureMirror3dc).RunTestCorrectLocalMovesIfPossibleBroken();
     }
 }

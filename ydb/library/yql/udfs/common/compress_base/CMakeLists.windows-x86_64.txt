@@ -8,31 +8,6 @@
 
 add_subdirectory(lib)
 
-add_shared_library(compress_udf.dyn)
-set_property(TARGET compress_udf.dyn PROPERTY
-  OUTPUT_NAME compress_udf
-)
-target_compile_options(compress_udf.dyn PRIVATE
-  -DBUILD_UDF
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=23
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(compress_udf.dyn PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-  common-compress_base-lib
-)
-target_sources(compress_udf.dyn PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/compress_base/compress_udf.cpp
-)
-use_export_script(compress_udf.dyn
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
-)
-vcs_info(compress_udf.dyn)
-
 add_library(compress_udf INTERFACE)
 target_link_libraries(compress_udf INTERFACE
   contrib-libs-cxxsupp
@@ -58,3 +33,28 @@ target_link_libraries(compress_udf.global PUBLIC
 target_sources(compress_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/compress_base/compress_udf.cpp
 )
+
+add_shared_library(compress_udf.dyn)
+set_property(TARGET compress_udf.dyn PROPERTY
+  OUTPUT_NAME compress_udf
+)
+target_compile_options(compress_udf.dyn PRIVATE
+  -DBUILD_UDF
+  -DUDF_ABI_VERSION_MAJOR=2
+  -DUDF_ABI_VERSION_MINOR=23
+  -DUDF_ABI_VERSION_PATCH=0
+)
+target_link_libraries(compress_udf.dyn PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  common-compress_base-lib
+)
+target_sources(compress_udf.dyn PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/compress_base/compress_udf.cpp
+)
+use_export_script(compress_udf.dyn
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
+)
+vcs_info(compress_udf.dyn)

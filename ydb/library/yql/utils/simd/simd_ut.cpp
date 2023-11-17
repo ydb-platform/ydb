@@ -162,13 +162,21 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
                                 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
         UNIT_ASSERT_EQUAL((Shift5Right == arr.Shuffle(mask0)).All(), true);
         UNIT_ASSERT_EQUAL((Shift5 == arr.Shuffle(mask1)).All(), true);
+
+        UNIT_ASSERT_EQUAL((Shift5Right == arr.template ByteShift<5>()).All(), true);
+        UNIT_ASSERT_EQUAL((Shift5 == arr.template ByteShift<-5>()).All(), true);
+
+
+        TSimd8<i8> Rotate5( 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4,
+                            5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4);
+        UNIT_ASSERT_EQUAL((Rotate5 == arr.template Rotate<-5>()).All(), true);
     }
 
     Y_UNIT_TEST(UnpackMask) {
         TSimd8<i8> unpackMask = NSimd::CreateUnpackMask<NSimd::TSimdAVX2Traits>(2, 1, false);
         unpackMask.Log<i8>(Cerr);
         UNIT_ASSERT_EQUAL((unpackMask == TSimd8<i8>(0, 1, -1, 2, 3, -1, 4, 5, -1, 6, 7, -1, 8, 9, -1, 10, 11,
-                                                        -1, 12, 13, -1, 14, 15, -1, 16, 17, -1, 18, 19, -1, 20, 21)).All(), true);
+                                                    -1, 12, 13, -1, 14, 15, -1, 16, 17, -1, 18, 19, -1, 20, 21)).All(), true);
     }
 
     Y_UNIT_TEST(CRC) {
@@ -315,6 +323,17 @@ Y_UNIT_TEST_SUITE(TSimdSSE42) {
         TSimd8<i8> Shift5Right(0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
         UNIT_ASSERT_EQUAL((Shift5Right == arr.Shuffle(mask0)).All(), true);
         UNIT_ASSERT_EQUAL((Shift5 == arr.Shuffle(mask1)).All(), true);
+
+        UNIT_ASSERT_EQUAL((Shift5Right == arr.template ByteShift<5>()).All(), true);
+        UNIT_ASSERT_EQUAL((Shift5 == arr.template ByteShift<-5>()).All(), true);
+
+        TSimd8<i8> Rotate5(5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4);
+        UNIT_ASSERT_EQUAL((Rotate5 == arr.template Rotate<-5>()).All(), true);
+
+        TSimd8<i8> a(i8(0));
+        TSimd8<i8> b(i8(1));
+        TSimd8<i8> c(1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        UNIT_ASSERT_EQUAL((a.ByteShiftWithCarry<3>(b) == c).All(), true);
     }
 
 

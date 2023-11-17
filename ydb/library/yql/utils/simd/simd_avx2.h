@@ -106,8 +106,8 @@ struct TSimd8 {
         return _mm256_load_si256(reinterpret_cast<const __m256i *>(values));
     }
 
-    static inline TSimd8<T> LoadStream(T dst[32]) {
-        return _mm256_stream_load_si256(reinterpret_cast<__m256i *>(dst));
+    static inline TSimd8<T> LoadStream(const T values[32]) {
+        return _mm256_stream_load_si256(reinterpret_cast<__m256i *>(values));
     }
 
     inline void Store(T dst[32]) const {
@@ -122,15 +122,25 @@ struct TSimd8 {
         return _mm256_stream_si256(reinterpret_cast<__m256i *>(dst), this->Value);
     }
 
+    inline void StoreMasked(void* dst, const TSimd8<T>& mask) const {
+        _mm_maskmoveu_si128(_mm256_castsi256_si128(this->Value), _mm256_castsi256_si128(mask.Value), dst);
+        _mm_maskmoveu_si128(_mm256_extracti128_si256(this->Value, 1), _mm256_extracti128_si256(mask.Value, 1), (char*) dst);
+    }
+
+    template<bool CanBeNegative = true>
     inline TSimd8<T> Shuffle(const TSimd8<T>& other) const {
-        TSimd8<T> mask0(0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70,
-                        0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0);
-        TSimd8<T> mask1(0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
-                        0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70);
+        const TSimd8<T> mask0(0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70,
+                              0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0);
+        const TSimd8<T> mask1(0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
+                              0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70);
         TSimd8<T> perm = _mm256_permute4x64_epi64(this->Value, 0x4E);
-        TSimd8<T> tmp = Shuffle128(other + mask0) | perm.Shuffle128(other + mask1);
-        TSimd8<T> mask = _mm256_cmpgt_epi8(other.Value, _mm256_set1_epi8(-1));
-        return tmp & mask;
+        if constexpr (CanBeNegative) {
+            TSimd8<T> tmp = Shuffle128(other + mask0) | perm.Shuffle128(other + mask1);
+            TSimd8<T> mask = _mm256_cmpgt_epi8(other.Value, _mm256_set1_epi8(-1));
+            return tmp & mask;
+        } else {
+            return Shuffle128(other + mask0) | perm.Shuffle128(other + mask1);
+        }
     }
 
     inline TSimd8<T> Shuffle128(const TSimd8<T>& other) const {
@@ -138,17 +148,137 @@ struct TSimd8 {
     }
 
     template<int N>
-    inline TSimd8<T> Blend16(const TSimd8<T>& other) {
+    inline TSimd8<T> Blend16(const TSimd8<T>& other) const {
         return _mm256_blend_epi16(this->Value, other.Value, N);
     }
 
     template<int N>
-    inline TSimd8<T> Blend32(const TSimd8<T>& other) {
+    inline TSimd8<T> Blend32(const TSimd8<T>& other) const {
         return _mm256_blend_epi32(this->Value, other.Value, N);
     }
 
-    inline TSimd8<T> BlendVar(const TSimd8<T>& other, const TSimd8<T>& mask) {
+    inline TSimd8<T> BlendVar(const TSimd8<T>& other, const TSimd8<T>& mask) const {
         return _mm256_blendv_epi8(this->Value, other.Value, mask.Value);
+    }
+
+    template<int N>
+    inline TSimd8<T> ByteShift128() const {
+        if constexpr (N < 0) {
+            return _mm256_bsrli_epi128(this->Value, -N);
+        } else {
+            return _mm256_bslli_epi128(this->Value, N);
+        }
+    }
+
+    template<int N>
+    inline TSimd8<T> ByteShift() const {
+        constexpr T A0 = N > 0 ? -(0 < N) : -(0 >= 32 + N);
+        constexpr T A1 = N > 0 ? -(1 < N) : -(1 >= 32 + N);
+        constexpr T A2 = N > 0 ? -(2 < N) : -(2 >= 32 + N);
+        constexpr T A3 = N > 0 ? -(3 < N) : -(3 >= 32 + N);
+        constexpr T A4 = N > 0 ? -(4 < N) : -(4 >= 32 + N);
+        constexpr T A5 = N > 0 ? -(5 < N) : -(5 >= 32 + N);
+        constexpr T A6 = N > 0 ? -(6 < N) : -(6 >= 32 + N);
+        constexpr T A7 = N > 0 ? -(7 < N) : -(7 >= 32 + N);
+        constexpr T A8 = N > 0 ? -(8 < N) : -(8 >= 32 + N);
+        constexpr T A9 = N > 0 ? -(9 < N) : -(9 >= 32 + N);
+        constexpr T A10 = N > 0 ? -(10 < N) : -(10 >= 32 + N);
+        constexpr T A11 = N > 0 ? -(11 < N) : -(11 >= 32 + N);
+        constexpr T A12 = N > 0 ? -(12 < N) : -(12 >= 32 + N);
+        constexpr T A13 = N > 0 ? -(13 < N) : -(13 >= 32 + N);
+        constexpr T A14 = N > 0 ? -(14 < N) : -(14 >= 32 + N);
+        constexpr T A15 = N > 0 ? -(15 < N) : -(15 >= 32 + N);
+        constexpr T A16 = N > 0 ? -(16 < N) : -(16 >= 32 + N);
+        constexpr T A17 = N > 0 ? -(17 < N) : -(17 >= 32 + N);
+        constexpr T A18 = N > 0 ? -(18 < N) : -(18 >= 32 + N);
+        constexpr T A19 = N > 0 ? -(19 < N) : -(19 >= 32 + N);
+        constexpr T A20 = N > 0 ? -(20 < N) : -(20 >= 32 + N);
+        constexpr T A21 = N > 0 ? -(21 < N) : -(21 >= 32 + N);
+        constexpr T A22 = N > 0 ? -(22 < N) : -(22 >= 32 + N);
+        constexpr T A23 = N > 0 ? -(23 < N) : -(23 >= 32 + N);
+        constexpr T A24 = N > 0 ? -(24 < N) : -(24 >= 32 + N);
+        constexpr T A25 = N > 0 ? -(25 < N) : -(25 >= 32 + N);
+        constexpr T A26 = N > 0 ? -(26 < N) : -(26 >= 32 + N);
+        constexpr T A27 = N > 0 ? -(27 < N) : -(27 >= 32 + N);
+        constexpr T A28 = N > 0 ? -(28 < N) : -(28 >= 32 + N);
+        constexpr T A29 = N > 0 ? -(29 < N) : -(29 >= 32 + N);
+        constexpr T A30 = N > 0 ? -(30 < N) : -(30 >= 32 + N);
+        constexpr T A31 = N > 0 ? -(31 < N) : -(31 >= 32 + N);
+        return Rotate<N>().BlendVar(TSimd8<T>(T(0)),
+                                    TSimd8<T>(A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15,
+                                              A16, A17, A18, A19, A20, A21, A22, A23, A24, A25, A26, A27, A28, A29, A30, A31));
+    }
+
+    template<int N>
+    inline TSimd8<T> ByteShiftWithCarry(const TSimd8<T>& other) const {
+        return Rotate<N>().BlendVar(other.Rotate<N>(), ~TSimd8<T>(T(-1)).ByteShift<N>());
+    }
+
+    template<int N>
+    inline TSimd8<T> Rotate128() const {
+        if constexpr (N % 16 == 0) {
+            return *this;
+        } else {
+            constexpr T A0 = (16 - N) % 16;
+            constexpr T A1 = (16 - N + 1) % 16;
+            constexpr T A2 = (16 - N + 2) % 16;
+            constexpr T A3 = (16 - N + 3) % 16;
+            constexpr T A4 = (16 - N + 4) % 16;
+            constexpr T A5 = (16 - N + 5) % 16;
+            constexpr T A6 = (16 - N + 6) % 16;
+            constexpr T A7 = (16 - N + 7) % 16;
+            constexpr T A8 = (16 - N + 8) % 16;
+            constexpr T A9 = (16 - N + 9) % 16;
+            constexpr T A10 = (16 - N + 10) % 16;
+            constexpr T A11 = (16 - N + 11) % 16;
+            constexpr T A12 = (16 - N + 12) % 16;
+            constexpr T A13 = (16 - N + 13) % 16;
+            constexpr T A14 = (16 - N + 14) % 16;
+            constexpr T A15 = (16 - N + 15) % 16;
+            return Shuffle128(Repeat16(A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15));
+        }
+    }
+
+    template<int N>
+    inline TSimd8<T> Rotate() const {
+        if constexpr (N % 32 == 0) {
+            return *this;
+        } else {
+            constexpr T A0 = (32 - N) % 32;
+            constexpr T A1 = (32 - N + 1) % 32;
+            constexpr T A2 = (32 - N + 2) % 32;
+            constexpr T A3 = (32 - N + 3) % 32;
+            constexpr T A4 = (32 - N + 4) % 32;
+            constexpr T A5 = (32 - N + 5) % 32;
+            constexpr T A6 = (32 - N + 6) % 32;
+            constexpr T A7 = (32 - N + 7) % 32;
+            constexpr T A8 = (32 - N + 8) % 32;
+            constexpr T A9 = (32 - N + 9) % 32;
+            constexpr T A10 = (32 - N + 10) % 32;
+            constexpr T A11 = (32 - N + 11) % 32;
+            constexpr T A12 = (32 - N + 12) % 32;
+            constexpr T A13 = (32 - N + 13) % 32;
+            constexpr T A14 = (32 - N + 14) % 32;
+            constexpr T A15 = (32 - N + 15) % 32;
+            constexpr T A16 = (32 - N + 16) % 32;
+            constexpr T A17 = (32 - N + 17) % 32;
+            constexpr T A18 = (32 - N + 18) % 32;
+            constexpr T A19 = (32 - N + 19) % 32;
+            constexpr T A20 = (32 - N + 20) % 32;
+            constexpr T A21 = (32 - N + 21) % 32;
+            constexpr T A22 = (32 - N + 22) % 32;
+            constexpr T A23 = (32 - N + 23) % 32;
+            constexpr T A24 = (32 - N + 24) % 32;
+            constexpr T A25 = (32 - N + 25) % 32;
+            constexpr T A26 = (32 - N + 26) % 32;
+            constexpr T A27 = (32 - N + 27) % 32;
+            constexpr T A28 = (32 - N + 28) % 32;
+            constexpr T A29 = (32 - N + 29) % 32;
+            constexpr T A30 = (32 - N + 30) % 32;
+            constexpr T A31 = (32 - N + 31) % 32;
+            return Shuffle(TSimd8<T>(A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15,
+                                     A16, A17, A18, A19, A20, A21, A22, A23, A24, A25, A26, A27, A28, A29, A30, A31));
+        }
     }
 
     static inline TSimd8<T> Repeat16(

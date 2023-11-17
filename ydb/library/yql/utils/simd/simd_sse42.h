@@ -99,6 +99,10 @@ struct TSimd8 {
         return TSimd8<T>(values);
     }
 
+    static inline TSimd8<T> Load128(const T values[16]) {
+        return Load(values);
+    }
+
     static inline TSimd8<T> LoadAligned(const T values[16]) {
         return _mm_load_si128(reinterpret_cast<const __m128i *>(values));
     }
@@ -119,6 +123,11 @@ struct TSimd8 {
         return _mm_stream_si128(reinterpret_cast<__m128i *>(dst), this->Value);
     }
 
+    inline void StoreMasked(void* dst, const TSimd8<T>& mask) const {
+        _mm_maskmoveu_si128(this->Value, mask.Value, dst);
+    }
+
+    template<bool CanBeNegative = true>
     inline TSimd8<T> Shuffle(const TSimd8<T>& other) const {
         return Shuffle128(other);
     }
@@ -129,17 +138,66 @@ struct TSimd8 {
     }
 
     template<int N>
-    inline TSimd8<T> Blend16(const TSimd8<T>& other) {
+    inline TSimd8<T> Blend16(const TSimd8<T>& other) const {
         return _mm_blend_epi16(this->Value, other.Value, N);
     }
 
     template<int N>
-    inline TSimd8<T> Blend32(const TSimd8<T>& other) {
+    inline TSimd8<T> Blend32(const TSimd8<T>& other) const {
         return _mm_blend_epi32(this->Value, other.Value, N);
     }
 
-    inline TSimd8<T> BlendVar(const TSimd8<T>& other, const TSimd8<T>& mask) {
+    inline TSimd8<T> BlendVar(const TSimd8<T>& other, const TSimd8<T>& mask) const {
         return _mm_blendv_epi8(this->Value, other.Value, mask.Value);
+    }
+
+    template<int N>
+    inline TSimd8<T> ByteShift128() const {
+        if constexpr (N < 0) {
+            return _mm_bsrli_si128(this->Value, -N);
+        } else {
+            return _mm_bslli_si128(this->Value, N);
+        }
+    }
+
+    template<int N>
+    inline TSimd8<T> ByteShift() const {
+        return ByteShift128<N>();
+    }
+
+    template<int N>
+    inline TSimd8<T> ByteShiftWithCarry(const TSimd8<T>& other) const {
+        return Rotate<N>().BlendVar(other.Rotate<N>(), ~TSimd8<T>(T(-1)).ByteShift<N>());
+    }
+
+    template<int N>
+    inline TSimd8<T> Rotate128() const {
+        if constexpr (N % 16 == 0) {
+            return *this;
+        } else {
+            constexpr T A0 = (16 - N) % 16;
+            constexpr T A1 = (16 - N + 1) % 16;
+            constexpr T A2 = (16 - N + 2) % 16;
+            constexpr T A3 = (16 - N + 3) % 16;
+            constexpr T A4 = (16 - N + 4) % 16;
+            constexpr T A5 = (16 - N + 5) % 16;
+            constexpr T A6 = (16 - N + 6) % 16;
+            constexpr T A7 = (16 - N + 7) % 16;
+            constexpr T A8 = (16 - N + 8) % 16;
+            constexpr T A9 = (16 - N + 9) % 16;
+            constexpr T A10 = (16 - N + 10) % 16;
+            constexpr T A11 = (16 - N + 11) % 16;
+            constexpr T A12 = (16 - N + 12) % 16;
+            constexpr T A13 = (16 - N + 13) % 16;
+            constexpr T A14 = (16 - N + 14) % 16;
+            constexpr T A15 = (16 - N + 15) % 16;
+            return Shuffle128(TSimd8<T>(A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15));
+        }
+    }
+
+    template<int N>
+    inline TSimd8<T> Rotate() const {
+        return Rotate128<N>();
     }
 
     static inline TSimd8<T> Repeat16(

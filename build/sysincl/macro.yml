@@ -1200,3 +1200,7 @@
     - PLATFORMMANAGERIMPL_HEADER
     - THREADSTACKMANAGERIMPL_HEADER
     - BLEMANAGERIMPL_HEADER
+
+- source_filter: "^contrib/libs/sdbus-cpp"
+  includes:
+    - SDBUS_HEADER: contrib/libs/systemd/src/systemd/sd-bus.h

@@ -7,7 +7,7 @@ REQUIREMENTS(
 
 SIZE(MEDIUM)
 
-FORK_TESTS()
+FORK_SUBTESTS()
 
 PEERDIR(
     contrib/python/numpy

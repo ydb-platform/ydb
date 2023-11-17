@@ -1932,14 +1932,9 @@ IGraphTransformer::TStatus ConvertLiteral(TExprNode::TPtr& node, const NYql::TTy
         auto toFeatures = NUdf::GetDataTypeInfo(to).Features;
         if ((fromFeatures & NUdf::TzDateType) && (toFeatures & (NUdf::DateType| NUdf::TzDateType)) ||
             (toFeatures & NUdf::TzDateType) && (fromFeatures & (NUdf::DateType | NUdf::TzDateType))) {
-            node = ctx.Builder(node->Pos())
-                .Callable("Apply")
-                    .Callable(0, "Udf")
-                        .Atom(0, TString("DateTime2.Make") + expectedType.Cast<TDataExprType>()->GetName())
-                    .Seal()
-                    .Add(1, node->HeadPtr())
-                .Seal()
-                .Build();
+            const auto pos = node->Pos();
+            auto type = ExpandType(pos, expectedType, ctx);
+            node = ctx.NewCallable(pos, "SafeCast", {std::move(node), std::move(type)});
             return IGraphTransformer::TStatus::Repeat;
         }
     }

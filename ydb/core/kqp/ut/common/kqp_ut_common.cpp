@@ -124,6 +124,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetEnableUniqConstraint(true);
+    ServerSettings->SetUseRealThreads(settings.UseRealThreads);
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);
@@ -139,7 +140,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
     Server->EnableGRpc(grpcPort);
-    Server->SetupDefaultProfiles();
+
+    RunCall([this, domain = settings.DomainRoot] {
+        this->Server->SetupDefaultProfiles();
+        return true;
+    });
 
     Client.Reset(MakeHolder<Tests::TClient>(*ServerSettings));
 
@@ -459,10 +464,16 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_NODE, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
 
-    Client->InitRootScheme(settings.DomainRoot);
-
+    RunCall([this, domain = settings.DomainRoot]{
+        this->Client->InitRootScheme(domain);
+        return true;
+    });
+    
     if (settings.WithSampleTables) {
-        CreateSampleTables();
+        RunCall([this] {
+            this->CreateSampleTables();
+            return true;
+        });
     }
 }
 

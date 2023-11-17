@@ -24,6 +24,7 @@ struct TEvKqpExecuter {
         TVector<TKqpExecuterTxResult> TxResults;
 
         NLWTrace::TOrbit Orbit;
+        IKqpGateway::TKqpSnapshot Snapshot;
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
 

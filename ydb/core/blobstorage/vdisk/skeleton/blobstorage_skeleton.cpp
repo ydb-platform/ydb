@@ -720,6 +720,7 @@ namespace NKikimr {
                 NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
                 auto hugeWrite = CreateHullWriteHugeBlob(ev->Sender, ev->Cookie, ignoreBlock, handleClass, info,
                     std::move(result));
+                hugeWrite->Orbit = std::move(ev->Get()->Orbit);
                 ctx.Send(Db->HugeKeeperID, hugeWrite.release(), 0, 0, std::move(info.TraceId));
             } else {
                 ctx.Send(SelfId(), new TEvHullLogHugeBlob(0, info.BlobId, info.Ingress, TDiskPart(), ignoreBlock,

@@ -934,6 +934,8 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
     bool DoFlush;
     bool IsSeqWrite; // sequential write to this chunk (normally, it is 'true', for huge blobs -- 'false')
 
+    mutable NLWTrace::TOrbit Orbit;
+
     ///////////////////// TNonOwningParts ///////////////////////////////
     class TNonOwningParts : public IParts {
         const TPart *Parts;
@@ -1118,6 +1120,8 @@ struct TEvChunkWriteResult : public TEventLocal<TEvChunkWriteResult, TEvBlobStor
     void *Cookie;
     TStatusFlags StatusFlags;
     TString ErrorReason;
+
+    mutable NLWTrace::TOrbit Orbit;
 
     TEvChunkWriteResult(NKikimrProto::EReplyStatus status, TChunkIdx chunkIdx, void *cookie,
             TStatusFlags statusFlags, const TString &errorReason)

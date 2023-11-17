@@ -24,6 +24,8 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
 
+        mutable NLWTrace::TOrbit Orbit;
+
         TEvHullWriteHugeBlob(const TActorId &senderId,
                              ui64 cookie,
                              const TLogoBlobID &logoBlobId,

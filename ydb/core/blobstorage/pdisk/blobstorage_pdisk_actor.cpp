@@ -679,8 +679,10 @@ public:
         const NPDisk::TEvChunkWrite &evChunkWrite = *ev->Get();
         PDisk->Mon.GetWriteCounter(evChunkWrite.PriorityClass)->CountRequest(0);
         PDisk->Mon.GetWriteCounter(evChunkWrite.PriorityClass)->CountResponse();
-        Send(ev->Sender, new NPDisk::TEvChunkWriteResult(NKikimrProto::CORRUPTED,
-            evChunkWrite.ChunkIdx, evChunkWrite.Cookie, 0, StateErrorReason));
+        auto res = std::make_unique<NPDisk::TEvChunkWriteResult>(NKikimrProto::CORRUPTED,
+            evChunkWrite.ChunkIdx, evChunkWrite.Cookie, 0, StateErrorReason);
+        res->Orbit = std::move(ev->Get()->Orbit);
+        Send(ev->Sender, res.release());
     }
 
     void ErrorHandle(NPDisk::TEvChunkRead::TPtr &ev) {
@@ -802,6 +804,7 @@ public:
     void Handle(NPDisk::TEvChunkWrite::TPtr &ev) {
         double burstMs;
         TChunkWrite* request = PDisk->ReqCreator.CreateChunkWrite(*ev->Get(), ev->Sender, burstMs, std::move(ev->TraceId));
+        request->Orbit = std::move(ev->Get()->Orbit);
         CheckBurst(request->IsSensitive, burstMs);
         PDisk->InputRequest(request);
     }

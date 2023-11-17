@@ -5,6 +5,7 @@
 #include "top.h"
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/blobstorage/base/utility.h>
+#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/vdisk/common/align.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_lsnmngr.h>
@@ -17,6 +18,8 @@ using namespace NKikimrServices;
 using namespace NKikimr::NHuge;
 
 namespace NKikimr {
+
+LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
     ////////////////////////////////////////////////////////////////////////////
     // THugeBlobLogLsnFifo
@@ -171,6 +174,8 @@ namespace NKikimr {
         }
 
         void Bootstrap(const TActorContext &ctx) {
+            LWTRACK(HugeWriterStart, Item->Orbit);
+
             // prepare write
             const ui8 partId = Item->LogoBlobId.PartId();
             Y_ABORT_UNLESS(partId != 0);
@@ -189,10 +194,11 @@ namespace NKikimr {
                             "writtenSize# %u", HugeSlot.ToString().data(), chunkId, offset,
                             storedBlobSize, writtenSize));
             Span.Event("Send_TEvChunkWrite", NWilson::TKeyValueList{{{"ChunkId", chunkId}, {"Offset", offset}, {"WrittenSize", writtenSize}}});
-            ctx.Send(HugeKeeperCtx->PDiskCtx->PDiskId,
-                    new NPDisk::TEvChunkWrite(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
+            auto ev = std::make_unique<NPDisk::TEvChunkWrite>(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
                         HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, chunkId, offset,
-                        partsPtr, Cookie, true, GetWritePriority(), false));
+                        partsPtr, Cookie, true, GetWritePriority(), false);
+            ev->Orbit = std::move(Item->Orbit);
+            ctx.Send(HugeKeeperCtx->PDiskCtx->PDiskId, ev.release());
             DiskAddr = TDiskPart(chunkId, offset, storedBlobSize);
 
             // wait response
@@ -200,6 +206,7 @@ namespace NKikimr {
         }
 
         void Handle(NPDisk::TEvChunkWriteResult::TPtr &ev, const TActorContext &ctx) {
+            LWTRACK(HugeWriterFinish, Item->Orbit, NKikimrProto::EReplyStatus_Name(ev->Get()->Status));
             if (ev->Get()->Status == NKikimrProto::OK) {
                 Span.EndOk();
             } else {
@@ -655,6 +662,7 @@ namespace NKikimr {
                 ActiveActors.Insert(aid);
                 return true;
             } else if (AllocatingChunkPerSlotSize.insert(slotSize).second) {
+                LWTRACK(HugeBlobChunkAllocatorStart, ev.Get()->Orbit);
                 auto aid = ctx.RegisterWithSameMailbox(new THullHugeBlobChunkAllocator(HugeKeeperCtx, ctx.SelfID, State.Pers));
                 ActiveActors.Insert(aid);
             }
@@ -755,6 +763,7 @@ namespace NKikimr {
         void Handle(TEvHullWriteHugeBlob::TPtr &ev, const TActorContext &ctx) {
             LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                 "THullHugeKeeper: TEvHullWriteHugeBlob: %s", std::data(ev->Get()->ToString())));
+            LWTRACK(HugeKeeperWriteHugeBlobReceived, ev->Get()->Orbit);
             std::unique_ptr<TEvHullWriteHugeBlob::THandle> item(ev.Release());
             if (!ProcessWrite(*item, ctx, false)) {
                 PutToWaitQueue(std::move(item));

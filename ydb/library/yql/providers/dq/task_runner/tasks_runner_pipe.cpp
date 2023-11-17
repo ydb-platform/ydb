@@ -10,6 +10,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/rope_over_buffer.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
@@ -49,6 +50,41 @@ extern "C" int pipe(int pipefd[2]);
 extern "C" int kill(int pid, int sig);
 extern "C" int waitpid(int pid, int* status, int options);
 #endif
+
+void SaveRopeToPipe(IOutputStream& output, const TRope& rope) {
+    for (const auto& [data, size] : rope) {
+        output.Write(&size, sizeof(size_t));
+        YQL_ENSURE(size != 0);
+        output.Write(data, size);
+    }
+    size_t zero = 0;
+    output.Write(&zero, sizeof(size_t));
+}
+
+namespace {
+
+void Load(IInputStream& input, void* buf, size_t size) {
+    char* p = (char*)buf;
+    while (size) {
+        auto len = input.Read(p, size);
+        p += len;
+        size -= len;
+    }
+}
+
+}
+
+void LoadRopeFromPipe(IInputStream& input, TRope& rope) {
+    size_t size;
+    do {
+        Load(input, &size, sizeof(size_t));
+        if (size) {
+            auto buffer = std::shared_ptr<char[]>(new char[size]);
+            Load(input, buffer.get(), size);            
+            rope.Insert(rope.End(), NYql::MakeReadOnlyRope(buffer, buffer.get(), size));
+        }
+    } while (size != 0);
+}
 
 class TChildProcess: private TNonCopyable {
 public:
@@ -525,8 +561,10 @@ public:
         header.SetChannelId(ChannelId);
         header.Save(&Output);
 
-        YQL_ENSURE(!data.IsOOB(), "OOB Transport is not supported here");
         data.Proto.Save(&Output);
+        if (data.IsOOB()) {
+            SaveRopeToPipe(Output, data.Payload);
+        }
     }
 
     void Finish() override {
@@ -722,8 +760,8 @@ public:
     }
 
     void Push(NDq::TDqSerializedBatch&& serialized, i64 space) override {
-        YQL_ENSURE(!serialized.IsOOB());
         NDqProto::TSourcePushRequest data;
+        bool isOOB = serialized.IsOOB();
         *data.MutableData() = std::move(serialized.Proto);
         data.SetSpace(space);
 
@@ -734,6 +772,9 @@ public:
         header.SetChannelId(PushStats.InputIndex);
         header.Save(&Output);
         data.Save(&Output);
+        if (isOOB) {
+            SaveRopeToPipe(Output, serialized.Payload);
+        }
     }
 
     void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) override {
@@ -826,7 +867,9 @@ public:
         response.Load(&Input);
         data.Clear();
         data.Proto = std::move(*response.MutableData());
-        YQL_ENSURE(!data.IsOOB());
+        if (data.IsOOB()) {
+            LoadRopeFromPipe(Input, data.Payload);
+        }
         return response;
     }
 

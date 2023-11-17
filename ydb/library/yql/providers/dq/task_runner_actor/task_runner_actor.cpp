@@ -260,7 +260,10 @@ private:
         YQL_ENSURE(!batch.IsWide());
 
         auto source = TaskRunner->GetSource(index);
-        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), 
+            // NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0
+            NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0
+        );
         TDqSerializedBatch serialized = dataSerializer.Serialize(batch, source->GetInputType());
 
         Invoker->Invoke([serialized=std::move(serialized),taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {

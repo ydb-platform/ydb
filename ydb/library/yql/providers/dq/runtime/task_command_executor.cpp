@@ -339,6 +339,9 @@ public:
 
                 NDq::TDqSerializedBatch data;
                 data.Proto.Load(&input);
+                if (data.IsOOB()) {
+                    LoadRopeFromPipe(input, data.Payload);
+                }
 
                 auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
                 channel->Push(std::move(data));
@@ -354,11 +357,14 @@ public:
                 request.Load(&input);
 
                 auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
-                NDq::TDqDataSerializer dataSerializer(Runner->GetTypeEnv(), Runner->GetHolderFactory(),
-                    NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0);
                 NKikimr::NMiniKQL::TUnboxedValueBatch buffer(source->GetInputType());
                 NDq::TDqSerializedBatch batch;
                 batch.Proto = std::move(*request.MutableData());
+                if (batch.IsOOB()) {
+                    LoadRopeFromPipe(input, batch.Payload);
+                }
+                NDq::TDqDataSerializer dataSerializer(Runner->GetTypeEnv(), Runner->GetHolderFactory(),
+                    (NDqProto::EDataTransportVersion)batch.Proto.GetTransportVersion());
                 dataSerializer.Deserialize(std::move(batch), source->GetInputType(), buffer);
 
                 source->Push(std::move(buffer), request.GetSpace());
@@ -439,7 +445,7 @@ public:
 
                 NDq::TDqSerializedBatch batch;
                 response.SetResult(channel->Pop(batch));
-                YQL_ENSURE(!batch.IsOOB());
+                bool isOOB = batch.IsOOB();
                 *response.MutableData() = std::move(batch.Proto);
                 UpdateOutputChannelStats(channel);
 
@@ -450,6 +456,9 @@ public:
 
                 response.MutableStats()->PackFrom(GetStats(taskId));
                 response.Save(&output);
+                if (isOOB) {
+                    SaveRopeToPipe(output, batch.Payload);
+                }
 
                 break;
             }
@@ -586,12 +595,15 @@ public:
                 NDq::TDqDataSerializer dataSerializer(
                     Runner->GetTypeEnv(),
                     Runner->GetHolderFactory(),
-                    NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
+                    DataTransportVersion);
                 NDq::TDqSerializedBatch serialized = dataSerializer.Serialize(batch, outputType);
-                YQL_ENSURE(!serialized.IsOOB());
+                bool isOOB = serialized.IsOOB();
                 *response.MutableData() = std::move(serialized.Proto);
                 response.SetBytes(bytes);
                 response.Save(&output);
+                if (isOOB) {
+                    SaveRopeToPipe(output, serialized.Payload);
+                }
                 break;
             }
             case NDqProto::TCommandHeader::SINK_STATS: {
@@ -633,6 +645,13 @@ public:
         DqConfiguration->FreezeDefaults();
         if (!DqConfiguration->CollectCoreDumps.Get().GetOrElse(false)) {
             DontCollectDumps();
+        }
+        const bool fastPickle = DqConfiguration->UseFastPickleTransport.Get().GetOrElse(TDqSettings::TDefault::UseFastPickleTransport);
+        const bool oob = DqConfiguration->UseOOBTransport.Get().GetOrElse(TDqSettings::TDefault::UseOOBTransport);
+        if (oob) {
+            DataTransportVersion = fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0 : NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0; 
+        } else {
+            DataTransportVersion = fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 : NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
         }
         // TODO: Maybe use taskParams from task.GetTask().GetParameters()
         THashMap<TString, TString> taskParams;
@@ -713,6 +732,7 @@ public:
     TTaskCounters QueryStat;
     TTaskCounters PrevStat;
     TDqConfiguration::TPtr DqConfiguration = MakeIntrusive<TDqConfiguration>();
+    NDqProto::EDataTransportVersion DataTransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     NDq::TDqTaskRunnerContext Ctx;
     const NKikimr::NMiniKQL::TUdfModuleRemappings EmptyRemappings;

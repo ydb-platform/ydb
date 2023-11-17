@@ -1681,7 +1681,7 @@ private:
         NWilson::TSpan prepareTasksSpan(TWilsonKqp::DataExecuterPrepareTasks, ExecuterStateSpan.GetTraceId(), "PrepareTasks", NWilson::EFlags::AUTO_END);
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
-        size_t readActors = 0;
+        size_t sourceScanPartitionsCount = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
@@ -1720,8 +1720,11 @@ private:
                 if (stage.SourcesSize() > 0) {
                     switch (stage.GetSources(0).GetTypeCase()) {
                         case NKqpProto::TKqpSource::kReadRangesSource:
-                            if (auto actors = BuildScanTasksFromSource(stageInfo)) {
-                                readActors += *actors;
+                            if (auto partitionsCount = BuildScanTasksFromSource(
+                                    stageInfo,
+                                    /* shardsResolved */ StreamResult,
+                                    /* limitTasksPerNode */ StreamResult)) {
+                                sourceScanPartitionsCount += *partitionsCount;
                             } else {
                                 UnknownAffectedShardCount = true;
                             }
@@ -1783,6 +1786,9 @@ private:
             }
         }
 
+        // For generic query all shards are already resolved
+        YQL_ENSURE(!StreamResult || remoteComputeTasks.empty());
+
         for(const auto& channel: TasksGraph.GetChannels()) {
             if (IsCrossShardChannel(TasksGraph, channel)) {
                 HasPersistentChannels = true;
@@ -1802,7 +1808,7 @@ private:
         if (i64 msc = (i64) Request.MaxShardCount; msc > 0) {
             shardsLimit = std::min(shardsLimit, (ui32) msc);
         }
-        size_t shards = datashardTasks.size() + remoteComputeTasks.size();
+        size_t shards = datashardTasks.size() + sourceScanPartitionsCount;
         if (shardsLimit > 0 && shards > shardsLimit) {
             LOG_W("Too many affected shards: datashardTasks=" << shards << ", limit: " << shardsLimit);
             Counters->TxProxyMon->TxResultError->Inc();
@@ -1822,7 +1828,7 @@ private:
         auto datashardTxs = BuildDatashardTxs(datashardTasks, topicTxs);
 
         // Single-shard transactions are always immediate
-        ImmediateTx = (datashardTxs.size() + Request.TopicOperations.GetSize() + readActors) <= 1 && !UnknownAffectedShardCount;
+        ImmediateTx = (datashardTxs.size() + Request.TopicOperations.GetSize() + sourceScanPartitionsCount) <= 1 && !UnknownAffectedShardCount;
 
         switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true
@@ -1860,6 +1866,7 @@ private:
         TasksGraph.GetMeta().UseFollowers = GetUseFollowers();
 
         if (RemoteComputeTasks) {
+            YQL_ENSURE(!StreamResult);
             TSet<ui64> shardIds;
             for (const auto& [shardId, _] : RemoteComputeTasks) {
                 shardIds.insert(shardId);
@@ -1877,12 +1884,16 @@ private:
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
 
-        TSet<ui64> shardIds;
         if (StreamResult) {
+            TSet<ui64> shardIds;
             for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
                 if (stageInfo.Meta.IsOlap()) {
                     HasOlapTable = true;
-                    break;
+                }
+                const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                    YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
+                    HasDatashardSourceScan = true;
                 }
             }
             if (HasOlapTable) {
@@ -1893,14 +1904,29 @@ private:
                         }
                     }
                 }
-                if (shardIds) {
-                    LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
-                    auto kqpShardsResolver = CreateKqpShardsResolver(
-                        this->SelfId(), TxId, false, std::move(shardIds));
-                    KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
-                } else {
-                    GetResourcesSnapshot();
+            }
+            if (HasDatashardSourceScan) {
+                for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+                    YQL_ENSURE(stageId == stageInfo.Id);
+                    const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+                    if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                        const auto& source = stage.GetSources(0).GetReadRangesSource();
+                        SourceScanStageIdToParititions[stageInfo.Id] = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv());
+                        for (const auto& [shardId, _] : SourceScanStageIdToParititions.at(stageId)) {
+                            shardIds.insert(shardId);
+                        }
+                    }
                 }
+            }
+
+            if ((HasOlapTable || HasDatashardSourceScan) && shardIds) {
+                LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
+                auto kqpShardsResolver = CreateKqpShardsResolver(
+                    this->SelfId(), TxId, false, std::move(shardIds));
+                KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
+                return;
+            } else if (HasOlapTable) {
+                GetResourcesSnapshot();
                 return;
             }
         }
@@ -1912,7 +1938,11 @@ private:
         if (HasOlapTable) {
             GetResourcesSnapshot();
             return;
+        } else if (HasDatashardSourceScan) {
+            DoExecute();
+            return;
         }
+
         OnShardsResolve();
     }
 
@@ -2188,7 +2218,7 @@ private:
 
         const bool enableOptForTasks = !UnknownAffectedShardCount && !HasExternalSources;
         const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.size() == 0);
-        const bool localComputeTasks = !((HasExternalSources || HasOlapTable) && DatashardTxs.size() == 0);
+        const bool localComputeTasks = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.size() == 0);
 
         Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, false, Nothing(),

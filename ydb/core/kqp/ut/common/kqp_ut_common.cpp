@@ -652,6 +652,37 @@ void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize
     }
 }
 
+void CreateManyShardsTable(TKikimrRunner& kikimr, ui32 totalRows, ui32 shards, ui32 batchSizeRows)
+{
+    kikimr.GetTestClient().CreateTable("/Root", R"(
+        Name: "ManyShardsTable"
+        Columns { Name: "Key", Type: "Uint32" }
+        Columns { Name: "Data", Type: "Int32" }
+        KeyColumnNames: ["Key"]
+        UniformPartitionsCount: 
+    )" + std::to_string(shards));
+
+    auto client = kikimr.GetTableClient();
+
+    for (ui32 rows = 0; rows < totalRows; rows += batchSizeRows) {
+        auto rowsBuilder = NYdb::TValueBuilder();
+        rowsBuilder.BeginList();
+        for (ui32 i = 0; i < batchSizeRows && rows + i < totalRows; ++i) {
+            rowsBuilder.AddListItem()
+                .BeginStruct()
+                .AddMember("Key")
+                    .OptionalUint32((std::numeric_limits<ui32>::max() / totalRows) * (rows + i))
+                .AddMember("Data")
+                    .OptionalInt32(i)
+                .EndStruct();
+        }
+        rowsBuilder.EndList();
+
+        auto result = client.BulkUpsert("/Root/ManyShardsTable", rowsBuilder.Build()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+}
+
 void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& writer) {
     auto columns = resultSet.GetColumnsMeta();
 

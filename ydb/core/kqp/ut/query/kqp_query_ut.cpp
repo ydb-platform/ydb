@@ -1144,7 +1144,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             SELECT * FROM `/Root/LargeTable`;
         )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
         UNIT_ASSERT(!result.GetResultSet(0).Truncated());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 10000);
 
@@ -1152,7 +1151,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             SELECT * FROM `/Root/LargeTable` LIMIT 5000;
         )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
         UNIT_ASSERT(!result.GetResultSet(0).Truncated());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 5000);
     }

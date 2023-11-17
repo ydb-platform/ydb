@@ -494,6 +494,8 @@ public:
             }
         }
 
+        CA_LOG_D("Shards State: " << state.ToString(KeyColumnTypes));
+
         if (!Settings->HasShardIdHint()) {
             InFlightShards.PushBack(&state);
             ResolveShard(&state);

@@ -791,8 +791,9 @@ int RunMain(int argc, const char* argv[])
             size_t requestTimeout = gatewaysConfig.HasHttpGateway() && gatewaysConfig.GetHttpGateway().HasRequestTimeoutSeconds() ? gatewaysConfig.GetHttpGateway().GetRequestTimeoutSeconds() : 100;
             size_t maxRetries = gatewaysConfig.HasHttpGateway() && gatewaysConfig.GetHttpGateway().HasMaxRetries() ? gatewaysConfig.GetHttpGateway().GetMaxRetries() : 2;
 
+            const bool enableSpilling = true;
             dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories,
-                false/*spilling*/, CreateAsyncIoFactory(driver, httpGateway, genericClient, requestTimeout, maxRetries), threads,
+                enableSpilling, CreateAsyncIoFactory(driver, httpGateway, genericClient, requestTimeout, maxRetries), threads,
                 metricsRegistry,
                 metricsPusherFactory);
         }

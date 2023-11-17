@@ -920,7 +920,7 @@ void FillRequestBySelectRowsOptionsBase(
     if (options.UdfRegistryPath) {
         request->set_udf_registry_path(*options.UdfRegistryPath);
     } else if (defaultUdfRegistryPath) {
-        request->set_udf_registry_path(*options.UdfRegistryPath);
+        request->set_udf_registry_path(*defaultUdfRegistryPath);
     }
 }
 

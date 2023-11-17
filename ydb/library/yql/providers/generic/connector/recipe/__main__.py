@@ -56,6 +56,11 @@ def _render_config(grpc_host: str, grpc_port: int) -> Path:
         log_level: TRACE
         enable_sql_query_logging: true
     }
+
+    paging {
+        bytes_per_page: 1024
+        prefetch_queue_capacity: 2
+    }
     '''
     template = jinja2.Environment(loader=jinja2.BaseLoader).from_string(template_)
 

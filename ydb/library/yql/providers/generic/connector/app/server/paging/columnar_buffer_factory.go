@@ -32,17 +32,15 @@ func (cbf *columnarBufferFactoryImpl) MakeBuffer() (ColumnarBuffer, error) {
 		if len(cbf.ydbTypes) == 0 {
 			return &columnarBufferArrowIPCStreamingEmptyColumns{
 				arrowAllocator: cbf.arrowAllocator,
-				readLimiter:    cbf.readLimiterFactory.MakeReadLimiter(cbf.logger),
 				typeMapper:     cbf.typeMapper,
 				schema:         cbf.schema,
 				rowsAdded:      0,
 			}, nil
 		}
 
-		return &columnarBufferArrowIPCStreaming{
+		return &columnarBufferArrowIPCStreamingDefault{
 			arrowAllocator: cbf.arrowAllocator,
 			builders:       builders,
-			readLimiter:    cbf.readLimiterFactory.MakeReadLimiter(cbf.logger),
 			typeMapper:     cbf.typeMapper,
 			ydbTypes:       cbf.ydbTypes,
 			schema:         cbf.schema,

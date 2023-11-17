@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/clickhouse"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms"
@@ -50,6 +51,7 @@ func (m *streamMock) makeSendMatcher(
 	expectedRowCount int,
 ) func(response *api_service_protos.TReadSplitsResponse) bool {
 	return func(response *api_service_protos.TReadSplitsResponse) bool {
+		// Check values in data blocks
 		buf := bytes.NewBuffer(response.GetArrowIpcStreaming())
 
 		reader, err := ipc.NewReader(buf)
@@ -85,13 +87,27 @@ func (m *streamMock) makeSendMatcher(
 
 		reader.Release()
 
+		// Check stats
+		require.NotNil(t, response.Stats)
+		require.Equal(t, uint64(len(expectedColumnarBlock[0])), response.Stats.Rows)
+
+		// TODO: come up with more elegant way of expected data size computing
+		var expectedBytes int
+
+		expectedBytes += len(expectedColumnarBlock[0]) * 4 // int32 -> 4 bytes
+		for _, val := range expectedColumnarBlock[1] {
+			expectedBytes += len(val.(string))
+		}
+
+		require.Equal(t, uint64(expectedBytes), response.Stats.Bytes)
+
 		return true
 	}
 }
 
 type testCaseStreaming struct {
 	src                 [][]any
-	rowsPerBlock        int
+	rowsPerPage         int
 	bufferQueueCapacity int
 	scanErr             error
 	sendErr             error
@@ -99,24 +115,24 @@ type testCaseStreaming struct {
 
 func (tc testCaseStreaming) name() string {
 	return fmt.Sprintf(
-		"totalRows_%d_rowsPerBlock_%d_bufferQueueCapacity_%d",
-		len(tc.src), tc.rowsPerBlock, tc.bufferQueueCapacity)
+		"totalRows_%d_rowsPerBlock_%d_bufferQueueCapacity_%d_scanErr_%v_sendErr_%v",
+		len(tc.src), tc.rowsPerPage, tc.bufferQueueCapacity, tc.scanErr != nil, tc.sendErr != nil)
 }
 
 func (tc testCaseStreaming) messageParams() (sentMessages, rowsInLastMessage int) {
-	modulo := len(tc.src) % tc.rowsPerBlock
+	modulo := len(tc.src) % tc.rowsPerPage
 
 	if modulo == 0 {
-		sentMessages = len(tc.src) / tc.rowsPerBlock
-		rowsInLastMessage = tc.rowsPerBlock
+		sentMessages = len(tc.src) / tc.rowsPerPage
+		rowsInLastMessage = tc.rowsPerPage
 	} else {
-		sentMessages = len(tc.src)/tc.rowsPerBlock + 1
+		sentMessages = len(tc.src)/tc.rowsPerPage + 1
 		rowsInLastMessage = modulo
 	}
 
 	if tc.scanErr != nil {
 		sentMessages--
-		rowsInLastMessage = tc.rowsPerBlock
+		rowsInLastMessage = tc.rowsPerPage
 	}
 
 	return
@@ -162,7 +178,7 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 	} else {
 		rows.On("MakeAcceptors").Return(acceptors, nil).Once()
 		rows.On("Next").Return(true).Times(len(rows.PredefinedData) + 1)
-		rows.On("Scan", acceptors...).Return(nil).Times(len(rows.PredefinedData) - 1)
+		rows.On("Scan", acceptors...).Return(nil).Times(len(rows.PredefinedData))
 		// instead of the last message, an error occurs
 		rows.On("Scan", acceptors...).Return(tc.scanErr).Once()
 		rows.On("Err").Return(nil).Once()
@@ -171,13 +187,13 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 
 	totalMessages, rowsInLastMessage := tc.messageParams()
 
-	expectedColumnarBlocks := utils.DataConverter{}.RowsToColumnBlocks(rows.PredefinedData, tc.rowsPerBlock)
+	expectedColumnarBlocks := utils.DataConverter{}.RowsToColumnBlocks(rows.PredefinedData, tc.rowsPerPage)
 
 	if tc.sendErr == nil {
 		for sendCallID := 0; sendCallID < totalMessages; sendCallID++ {
 			expectedColumnarBlock := expectedColumnarBlocks[sendCallID]
 
-			rowsInMessage := tc.rowsPerBlock
+			rowsInMessage := tc.rowsPerPage
 			if sendCallID == totalMessages-1 {
 				rowsInMessage = rowsInLastMessage
 			}
@@ -206,7 +222,7 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 	handler, err := handlerFactory.Make(logger, api_common.EDataSourceKind_CLICKHOUSE)
 	require.NoError(t, err)
 
-	cbf, err := paging.NewColumnarBufferFactory(
+	columnarBufferFactory, err := paging.NewColumnarBufferFactory(
 		logger,
 		memory.NewGoAllocator(),
 		paging.NewReadLimiterFactory(nil),
@@ -215,12 +231,22 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 		typeMapper)
 	require.NoError(t, err)
 
-	sink, err := paging.NewSinkFactory(cbf, tc.bufferQueueCapacity, tc.rowsPerBlock).MakeSink(ctx, logger, nil)
+	pagingCfg := &config.TPagingConfig{RowsPerPage: uint64(tc.rowsPerPage)}
+	trafficTracker := paging.NewTrafficTracker(pagingCfg)
+	readLimiterFactory := paging.NewReadLimiterFactory(nil)
+	sink, err := paging.NewSink(
+		ctx,
+		logger,
+		trafficTracker,
+		columnarBufferFactory,
+		readLimiterFactory.MakeReadLimiter(logger),
+		tc.bufferQueueCapacity,
+	)
 	require.NoError(t, err)
 
 	streamer := NewStreamer(logger, stream, request, split, sink, handler)
 
-	_, err = streamer.Run()
+	err = streamer.Run()
 
 	switch {
 	case tc.scanErr != nil:
@@ -253,7 +279,11 @@ func TestStreaming(t *testing.T) {
 		},
 	}
 	rowsPerBlockValues := []int{2}
-	bufferQueueCapacityValues := []int{0, 1, 10}
+	bufferQueueCapacityValues := []int{
+		0,
+		1,
+		10,
+	}
 
 	var testCases []testCaseStreaming
 
@@ -262,7 +292,7 @@ func TestStreaming(t *testing.T) {
 			for _, bufferQueueCapacity := range bufferQueueCapacityValues {
 				tc := testCaseStreaming{
 					src:                 src,
-					rowsPerBlock:        rowsPerBlock,
+					rowsPerPage:         rowsPerBlock,
 					bufferQueueCapacity: bufferQueueCapacity,
 				}
 

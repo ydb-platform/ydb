@@ -2,6 +2,7 @@ GO_LIBRARY()
 
 SRCS(
     arrow_helpers.go
+    counter.go
     converters.go
     doc.go
     endpoint.go
@@ -18,6 +19,7 @@ SRCS(
 )
 
 GO_TEST_SRCS(
+    counter_test.go
     time_test.go
     unit_test_helpers_test.go
 )

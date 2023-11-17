@@ -220,15 +220,13 @@ message TReadSplitsRequest {
     // Determines the format of data representation
     EFormat format = 4;
 
-    // Pagination helps to manage the process of fragmentation data stream from the data source into the fragments.
-    // If empty, the whole result will be sent back in a single message.
-    TPagination pagination = 5;
-
     // Specifies the location of split from where to start reading.
     // If stream has been recently interrupted, YQ may retry reading the split from the interrupted block
     // instead of reading the split from scratch.
     // If empty, the connector will return the split data from the very beginning.
     TContinuation continuation = 6;
+
+    reserved 5;
 }
 
 
@@ -264,43 +262,20 @@ message TReadSplitsResponse {
     // received for the last time.
     TContinuation continuation = 4;
 
+    // Contains information about the page (a particular block of data
+    // returned by the Connector within a ReadSplits stream).
+    message TStats {
+        // Number of rows read from the data source in order to make this page.
+        uint64 rows = 1;
+        // Number of bytes read from the data source in order to make this page.
+        // (measured in terms of Go type system).
+        uint64 bytes = 2;
+    }
+
+    TStats stats = 5;
+
     // Call result
     TError error = 100;
-}
-
-// Pagination describes how to split data stream from data source into fragments
-// in order to return them as separate GRPC messages to YQ.
-message TPagination {
-    // In the RDBMS the default pagination method is LIMIT/OFFSET.
-    // Instead of full table scan:
-    //
-    // SELECT col1 FROM table
-    //
-    // connector may internally invoke multiple requests to the data:
-    //
-    // SELECT col1 FROM table LIMIT $rows                     // return first $rows to YQ
-    // SELECT col1 FROM table LIMIT $rows OFFSET $rows        // return next  $rows to YQ
-    // SELECT col1 FROM table LIMIT $rows OFFSET $rows        // (...)
-    // SELECT col1 FROM table LIMIT $rows OFFSET $rows
-    // (...)
-    //
-    // Some RDBMS may support cursors as the more advanced way of pagination.
-    //
-    // BEGIN;
-    // DECLARE cur CURSOR FOR SELECT col1 FROM table;
-    // FETCH $rows FROM cur;                                   // return first $rows to YQ
-    // FETCH $rows FROM cur;                                   // return next  $rows to YQ
-    // FETCH $rows FROM cur;                                   // (...)
-    // (...)
-    // COMMIT;
-    //
-    // The choice of pagination method is the responsibility of the connector (at least now),
-    // but the engine can specify how many rows to return in each message of the stream.
-    uint64 rows = 1;
-
-    // Memory limitation helps to control the effective size of a block returned in every response.
-    // It may override the previous limit.
-    uint64 bytes = 2;
 }
 
 // Continuation is a special type useful for the request retry.

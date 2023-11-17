@@ -21,15 +21,14 @@ const (
 var _ Sink = (*sinkImpl)(nil)
 
 type sinkImpl struct {
-	currBuffer    ColumnarBuffer                  // accumulates incoming rows
-	resultQueue   chan *ReadResult                // outgoing buffer queue
-	bufferFactory ColumnarBufferFactory           // creates new buffer
-	pagination    *api_service_protos.TPagination // settings
-	rowsReceived  uint64                          // simple stats
-	rowsPerBuffer uint64                          // TODO: use cfg
-	logger        log.Logger                      // annotated logger
-	state         sinkState                       // flag showing if it's ready to return data
-	ctx           context.Context                 // client context
+	currBuffer     ColumnarBuffer        // accumulates incoming rows
+	resultQueue    chan *ReadResult      // outgoing buffer queue
+	bufferFactory  ColumnarBufferFactory // creates new buffer
+	trafficTracker *TrafficTracker       // tracks the amount of data passed through the sink
+	readLimiter    ReadLimiter           // helps to restrict the number of rows read in every request
+	logger         log.Logger            // annotated logger
+	state          sinkState             // flag showing if it's ready to return data
+	ctx            context.Context       // client context
 }
 
 func (s *sinkImpl) AddRow(acceptors []any) error {
@@ -37,16 +36,32 @@ func (s *sinkImpl) AddRow(acceptors []any) error {
 		panic(s.unexpectedState(operational))
 	}
 
-	if err := s.currBuffer.AddRow(acceptors); err != nil {
-		return fmt.Errorf("acceptors to row set: %w", err)
+	if err := s.readLimiter.addRow(); err != nil {
+		return fmt.Errorf("add row to read limiter: %w", err)
 	}
 
-	s.rowsReceived++
+	// Check if we can add one more data row
+	// without exceeding page size limit.
+	ok, err := s.trafficTracker.tryAddRow(acceptors)
+	if err != nil {
+		return fmt.Errorf("add row to traffic tracker: %w", err)
+	}
 
-	if s.isEnough() {
+	// If page is already too large, flush buffer to the channel and create a new one
+	if !ok {
 		if err := s.flush(true); err != nil {
 			return fmt.Errorf("flush: %w", err)
 		}
+
+		_, err := s.trafficTracker.tryAddRow(acceptors)
+		if err != nil {
+			return fmt.Errorf("add row to traffic tracker: %w", err)
+		}
+	}
+
+	// Add physical data to the buffer
+	if err := s.currBuffer.addRow(acceptors); err != nil {
+		return fmt.Errorf("add row to buffer: %w", err)
 	}
 
 	return nil
@@ -57,14 +72,9 @@ func (s *sinkImpl) AddError(err error) {
 		panic(s.unexpectedState(operational))
 	}
 
-	s.respondWith(nil, err)
+	s.respondWith(nil, nil, err)
 
 	s.state = failed
-}
-
-func (s *sinkImpl) isEnough() bool {
-	// TODO: implement pagination logic, check limits provided by client or config
-	return s.rowsReceived%s.rowsPerBuffer == 0
 }
 
 func (s *sinkImpl) flush(makeNewBuffer bool) error {
@@ -72,9 +82,14 @@ func (s *sinkImpl) flush(makeNewBuffer bool) error {
 		return nil
 	}
 
-	s.respondWith(s.currBuffer, nil)
+	stats := s.trafficTracker.DumpStats(false)
 
+	// enqueue message to GRPC stream
+	s.respondWith(s.currBuffer, stats, nil)
+
+	// create empty buffer and reset counters
 	s.currBuffer = nil
+	s.trafficTracker.refreshCounters()
 
 	if makeNewBuffer {
 		var err error
@@ -97,7 +112,7 @@ func (s *sinkImpl) Finish() {
 	if s.state == operational {
 		err := s.flush(false)
 		if err != nil {
-			s.respondWith(nil, fmt.Errorf("flush: %w", err))
+			s.respondWith(nil, nil, fmt.Errorf("flush: %w", err))
 			s.state = failed
 		} else {
 			s.state = finished
@@ -112,9 +127,12 @@ func (s *sinkImpl) ResultQueue() <-chan *ReadResult {
 	return s.resultQueue
 }
 
-func (s *sinkImpl) respondWith(buf ColumnarBuffer, err error) {
+func (s *sinkImpl) respondWith(
+	buf ColumnarBuffer,
+	stats *api_service_protos.TReadSplitsResponse_TStats,
+	err error) {
 	select {
-	case s.resultQueue <- &ReadResult{ColumnarBuffer: buf, Error: err}:
+	case s.resultQueue <- &ReadResult{ColumnarBuffer: buf, Stats: stats, Error: err}:
 	case <-s.ctx.Done():
 	}
 }
@@ -123,4 +141,29 @@ func (s *sinkImpl) unexpectedState(expected ...sinkState) error {
 	return fmt.Errorf(
 		"unexpected state '%v' (expected are '%v'): %w",
 		s.state, expected, utils.ErrInvariantViolation)
+}
+
+func NewSink(
+	ctx context.Context,
+	logger log.Logger,
+	trafficTracker *TrafficTracker,
+	columnarBufferFactory ColumnarBufferFactory,
+	readLimiter ReadLimiter,
+	resultQueueCapacity int,
+) (Sink, error) {
+	buffer, err := columnarBufferFactory.MakeBuffer()
+	if err != nil {
+		return nil, fmt.Errorf("wrap buffer: %w", err)
+	}
+
+	return &sinkImpl{
+		bufferFactory:  columnarBufferFactory,
+		readLimiter:    readLimiter,
+		resultQueue:    make(chan *ReadResult, resultQueueCapacity),
+		trafficTracker: trafficTracker,
+		currBuffer:     buffer,
+		logger:         logger,
+		state:          operational,
+		ctx:            ctx,
+	}, nil
 }

@@ -150,7 +150,7 @@ func (s *serviceConnector) ReadSplits(
 	logger := utils.AnnotateLogger(s.logger, "ReadSplits", request.DataSourceInstance)
 	logger.Info("request handling started", log.Int("total_splits", len(request.Splits)))
 
-	totalBytes, err := s.doReadSplits(logger, request, stream)
+	err := s.doReadSplits(logger, request, stream)
 	if err != nil {
 		logger.Error("request handling failed", log.Error(err))
 
@@ -161,7 +161,7 @@ func (s *serviceConnector) ReadSplits(
 		}
 	}
 
-	logger.Info("request handling finished", log.UInt64("total_bytes", totalBytes))
+	logger.Info("request handling finished")
 
 	return nil
 }
@@ -170,52 +170,26 @@ func (s *serviceConnector) doReadSplits(
 	logger log.Logger,
 	request *api_service_protos.TReadSplitsRequest,
 	stream api_service.Connector_ReadSplitsServer,
-) (uint64, error) {
+) error {
 	if err := ValidateReadSplitsRequest(logger, request); err != nil {
-		return 0, fmt.Errorf("validate read splits request: %w", err)
+		return fmt.Errorf("validate read splits request: %w", err)
 	}
-
-	var totalBytes uint64
 
 	handler, err := s.handlerFactory.Make(logger, request.DataSourceInstance.Kind)
 	if err != nil {
-		return 0, fmt.Errorf("make handler: %w", err)
+		return fmt.Errorf("make handler: %w", err)
 	}
 
 	for i, split := range request.Splits {
-		columnarBufferFactory, err := paging.NewColumnarBufferFactory(
-			logger,
-			s.memoryAllocator,
-			s.readLimiterFactory,
-			request.Format,
-			split.Select.What,
-			handler.TypeMapper())
+		splitLogger := log.With(logger, log.Int("split_id", i))
+
+		err = s.readSplit(splitLogger, stream, request, split, handler)
 		if err != nil {
-			return 0, fmt.Errorf("new columnar buffer factory: %w", err)
+			return fmt.Errorf("read split %d: %w", i, err)
 		}
-
-		// TODO: use configs
-		const (
-			resultQueueCapacity = 10
-			rowsPerBuffer       = 10000
-		)
-
-		sinkFactory := paging.NewSinkFactory(columnarBufferFactory, resultQueueCapacity, rowsPerBuffer)
-
-		sink, err := sinkFactory.MakeSink(stream.Context(), logger, request.Pagination)
-		if err != nil {
-			return 0, fmt.Errorf("new sink: %w", err)
-		}
-
-		bytesInSplit, err := s.readSplit(logger, stream, request, split, sink, handler)
-		if err != nil {
-			return 0, fmt.Errorf("read split %d: %w", i, err)
-		}
-
-		totalBytes += bytesInSplit
 	}
 
-	return totalBytes, nil
+	return nil
 }
 
 func (s *serviceConnector) readSplit(
@@ -223,10 +197,34 @@ func (s *serviceConnector) readSplit(
 	stream api_service.Connector_ReadSplitsServer,
 	request *api_service_protos.TReadSplitsRequest,
 	split *api_service_protos.TSplit,
-	sink paging.Sink,
 	handler rdbms.Handler,
-) (uint64, error) {
+) error {
 	logger.Debug("split reading started")
+
+	columnarBufferFactory, err := paging.NewColumnarBufferFactory(
+		logger,
+		s.memoryAllocator,
+		s.readLimiterFactory,
+		request.Format,
+		split.Select.What,
+		handler.TypeMapper())
+	if err != nil {
+		return fmt.Errorf("new columnar buffer factory: %w", err)
+	}
+
+	trafficTracker := paging.NewTrafficTracker(s.cfg.Paging)
+
+	sink, err := paging.NewSink(
+		stream.Context(),
+		logger,
+		trafficTracker,
+		columnarBufferFactory,
+		s.readLimiterFactory.MakeReadLimiter(logger),
+		int(s.cfg.Paging.PrefetchQueueCapacity),
+	)
+	if err != nil {
+		return fmt.Errorf("new sink: %w", err)
+	}
 
 	streamer := streaming.NewStreamer(
 		logger,
@@ -237,14 +235,19 @@ func (s *serviceConnector) readSplit(
 		handler,
 	)
 
-	totalBytesSent, err := streamer.Run()
-	if err != nil {
-		return 0, fmt.Errorf("run paging streamer: %w", err)
+	if err := streamer.Run(); err != nil {
+		return fmt.Errorf("run paging streamer: %w", err)
 	}
 
-	logger.Debug("split reading finished", log.UInt64("total_bytes_sent", totalBytesSent))
+	readStats := trafficTracker.DumpStats(true)
 
-	return totalBytesSent, nil
+	logger.Debug(
+		"split reading finished",
+		log.UInt64("total_bytes", readStats.GetBytes()),
+		log.UInt64("total_rows", readStats.GetRows()),
+	)
+
+	return nil
 }
 
 func (s *serviceConnector) start() error {

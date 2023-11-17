@@ -25,6 +25,7 @@ var (
 	ErrInvariantViolation                  = fmt.Errorf("implementation error (invariant violation)")
 	ErrUnimplementedArithmeticalExpression = fmt.Errorf("unimplemented arithmetical expression")
 	ErrEmptyTableName                      = fmt.Errorf("empty table name")
+	ErrPageSizeExceeded                    = fmt.Errorf("page size exceeded, check service configuration")
 )
 
 func NewSuccess() *api_service_protos.TError {
@@ -73,6 +74,8 @@ func NewAPIErrorFromStdError(err error) *api_service_protos.TError {
 		status = Ydb.StatusIds_UNSUPPORTED
 	case errors.Is(err, ErrEmptyTableName):
 		status = Ydb.StatusIds_BAD_REQUEST
+	case errors.Is(err, ErrPageSizeExceeded):
+		status = Ydb.StatusIds_INTERNAL_ERROR
 	default:
 		status = Ydb.StatusIds_INTERNAL_ERROR
 	}

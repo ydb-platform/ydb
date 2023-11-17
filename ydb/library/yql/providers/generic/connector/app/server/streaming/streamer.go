@@ -14,15 +14,14 @@ import (
 )
 
 type Streamer struct {
-	stream         api_service.Connector_ReadSplitsServer
-	request        *api_service_protos.TReadSplitsRequest
-	handler        rdbms.Handler
-	split          *api_service_protos.TSplit
-	sink           paging.Sink
-	totalBytesSent uint64 // TODO: replace with stats accumulator
-	logger         log.Logger
-	ctx            context.Context // clone of a stream context
-	cancel         context.CancelFunc
+	stream  api_service.Connector_ReadSplitsServer
+	request *api_service_protos.TReadSplitsRequest
+	handler rdbms.Handler
+	split   *api_service_protos.TSplit
+	sink    paging.Sink
+	logger  log.Logger
+	ctx     context.Context // clone of a stream context
+	cancel  context.CancelFunc
 }
 
 func (s *Streamer) writeDataToStream() error {
@@ -42,7 +41,7 @@ func (s *Streamer) writeDataToStream() error {
 			}
 
 			// handle next data block
-			if err := s.sendBufferToStream(result.ColumnarBuffer); err != nil {
+			if err := s.sendResultToStream(result); err != nil {
 				return fmt.Errorf("send buffer to stream: %w", err)
 			}
 		case <-s.stream.Context().Done():
@@ -52,15 +51,17 @@ func (s *Streamer) writeDataToStream() error {
 	}
 }
 
-func (s *Streamer) sendBufferToStream(buffer paging.ColumnarBuffer) error {
+func (s *Streamer) sendResultToStream(result *paging.ReadResult) error {
 	// buffer must be explicitly marked as unused,
 	// otherwise memory will leak
-	defer buffer.Release()
+	defer result.ColumnarBuffer.Release()
 
-	resp, err := buffer.ToResponse()
+	resp, err := result.ColumnarBuffer.ToResponse()
 	if err != nil {
 		return fmt.Errorf("buffer to response: %w", err)
 	}
+
+	resp.Stats = result.Stats
 
 	utils.DumpReadSplitsResponse(s.logger, resp)
 
@@ -68,19 +69,17 @@ func (s *Streamer) sendBufferToStream(buffer paging.ColumnarBuffer) error {
 		return fmt.Errorf("stream send: %w", err)
 	}
 
-	s.totalBytesSent += uint64(len(resp.GetArrowIpcStreaming()))
-
 	return nil
 }
 
-func (s *Streamer) Run() (uint64, error) {
+func (s *Streamer) Run() error {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 
 	defer wg.Wait()
 
-	// launch read from the data source;
-	// subsriber goroutine controls publisher goroutine lifetime
+	// Launch reading from the data source.
+	// Subsriber goroutine controls publisher goroutine lifetime.
 	go func() {
 		defer wg.Done()
 
@@ -89,10 +88,10 @@ func (s *Streamer) Run() (uint64, error) {
 
 	// pass received blocks into the GRPC channel
 	if err := s.writeDataToStream(); err != nil {
-		return s.totalBytesSent, fmt.Errorf("write data to stream: %w", err)
+		return fmt.Errorf("write data to stream: %w", err)
 	}
 
-	return s.totalBytesSent, nil
+	return nil
 }
 
 func NewStreamer(

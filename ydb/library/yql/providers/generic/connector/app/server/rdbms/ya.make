@@ -10,6 +10,7 @@ SRCS(
 )
 
 GO_TEST_SRCS(
+    handler_test.go
     schema_builder_test.go
 )
 

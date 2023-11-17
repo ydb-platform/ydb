@@ -67,18 +67,20 @@ func (m *RowsMock) Scan(dest ...any) error {
 	args := m.Called(dest...)
 
 	// mutate acceptors by reference
-	row := m.PredefinedData[m.scanCalls]
+	if m.scanCalls < len(m.PredefinedData) {
+		row := m.PredefinedData[m.scanCalls]
 
-	for i, d := range dest {
-		switch t := d.(type) {
-		case **int32:
-			**t = row[i].(int32)
-		case **string:
-			**t = row[i].(string)
+		for i, d := range dest {
+			switch t := d.(type) {
+			case **int32:
+				**t = row[i].(int32)
+			case **string:
+				**t = row[i].(string)
+			}
 		}
-	}
 
-	m.scanCalls++
+		m.scanCalls++
+	}
 
 	return args.Error(0)
 }

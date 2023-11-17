@@ -23,14 +23,16 @@ func validateServerConfig(c *config.TServerConfig) error {
 		return fmt.Errorf("validate `pprof_server`: %w", err)
 	}
 
+	if err := validatePagingConfig(c.Paging); err != nil {
+		return fmt.Errorf("validate `paging`: %w", err)
+	}
+
 	return nil
 }
 
 func validateConnectorServerConfig(c *config.TConnectorServerConfig) error {
 	if c == nil {
-		// TODO: make it required after YQ-2057
-		// return fmt.Errorf("required field is missing")
-		return nil
+		return fmt.Errorf("required section is missing")
 	}
 
 	if err := validateEndpoint(c.Endpoint); err != nil {
@@ -46,7 +48,7 @@ func validateConnectorServerConfig(c *config.TConnectorServerConfig) error {
 
 func validateEndpoint(c *api_common.TEndpoint) error {
 	if c == nil {
-		return fmt.Errorf("required field is missing")
+		return fmt.Errorf("required section is missing")
 	}
 
 	if c.Host == "" {
@@ -103,6 +105,25 @@ func validatePprofServerConfig(c *config.TPprofServerConfig) error {
 
 	if err := validateServerTLSConfig(c.Tls); err != nil {
 		return fmt.Errorf("validate `tls`: %w", err)
+	}
+
+	return nil
+}
+
+const maxInterconnectMessageSize = 50 * 1024 * 1024
+
+func validatePagingConfig(c *config.TPagingConfig) error {
+	if c == nil {
+		return fmt.Errorf("required section is missing")
+	}
+
+	limitIsSet := c.BytesPerPage != 0 || c.RowsPerPage != 0
+	if !limitIsSet {
+		return fmt.Errorf("you must set either `bytes_per_page` or `rows_per_page` or both of them")
+	}
+
+	if c.BytesPerPage > maxInterconnectMessageSize {
+		return fmt.Errorf("`bytes_per_page` limit exceeds the limits of interconnect system used by YDB engine")
 	}
 
 	return nil

@@ -508,7 +508,7 @@ TSortedConstraintNode::DoGetComplicatedForType(const TTypeAnnotationNode& type, 
 
 const TConstraintWithFieldsNode*
 TSortedConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const {
-    if (Content_.size() == 1U && Content_.front().first.size() == 1U && Content_.front().first.front().size() == 1U && Content_.front().first.front().front().empty())
+    if (Content_.size() == 1U && Content_.front().first.size() == 1U && Content_.front().first.front().empty())
         return DoGetComplicatedForType(type, ctx);
 
     const auto& rowType = GetSeqItemType(type);

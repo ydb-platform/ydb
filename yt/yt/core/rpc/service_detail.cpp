@@ -297,13 +297,13 @@ public:
             std::move(acceptedRequest.Message),
             std::move(logger),
             acceptedRequest.RuntimeInfo->LogLevel.load(std::memory_order::relaxed))
-        , Service_(service)
+        , Service_(std::move(service))
         , RequestId_(acceptedRequest.RequestId)
         , ReplyBus_(std::move(acceptedRequest.ReplyBus))
         , RuntimeInfo_(acceptedRequest.RuntimeInfo)
         , TraceContext_(std::move(acceptedRequest.TraceContext))
         , RequestQueue_(acceptedRequest.RequestQueue)
-        , ThrottledError_(acceptedRequest.ThrottledError)
+        , ThrottledError_(std::move(acceptedRequest.ThrottledError))
         , MethodPerformanceCounters_(Service_->GetMethodPerformanceCounters(
             RuntimeInfo_,
             {GetAuthenticationIdentity().UserTag, RequestQueue_}))
@@ -2039,11 +2039,8 @@ void TServiceBase::RegisterRequest(TServiceContext* context)
     {
         auto* bucket = GetReplyBusBucket(replyBus);
         auto guard = Guard(bucket->Lock);
-        auto it = bucket->ReplyBusToContexts.find(context->GetReplyBus());
-        if (it == bucket->ReplyBusToContexts.end()) {
-            subscribe = true;
-            it = bucket->ReplyBusToContexts.emplace(replyBus, THashSet<TServiceContext*>()).first;
-        }
+        auto [it, inserted] = bucket->ReplyBusToContexts.try_emplace(replyBus);
+        subscribe = inserted;
         auto& contexts = it->second;
         contexts.insert(context);
     }

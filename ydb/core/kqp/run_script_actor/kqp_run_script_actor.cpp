@@ -448,7 +448,7 @@ private:
     }
 
     EFinalizationStatus GetFinalizationStatusFromRunState() const {
-        if (Status == Ydb::StatusIds::SUCCESS && (RunState == ERunState::Finishing || RunState == ERunState::Finished)) {
+        if ((Status == Ydb::StatusIds::SUCCESS || Status == Ydb::StatusIds::CANCELLED) && !IsExecuting()) {
             return EFinalizationStatus::FS_COMMIT;
         }
         return EFinalizationStatus::FS_ROLLBACK;

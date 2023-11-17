@@ -49,13 +49,29 @@ bool TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>& w
                 }
             }
 
-            if (data) {
-                o << RightPad(data.SubStr(0, width), width);
-            } else {
-                o << RightPad(' ', width);
+            // counter of previously uncounted bytes
+            size_t extraBytes = 0;
+            for (char ch : data) {
+                size_t n = 0;
+                // if the first bit of the character is not 0, we met a multibyte
+                // counting the number of single bits at the beginning of a byte
+                while ((ch & 0x80) != 0) {
+                    n++;
+                    ch <<= 1;
+                }
+                // update counter
+                if (n != 0) {
+                    extraBytes += n - 1;
+                }
             }
 
-            if (data.size() > width) {
+            if (data) {
+                o << RightPad(data.SubStr(0, width + extraBytes), width + extraBytes);
+            } else {
+                o << RightPad(' ', width + extraBytes);
+            }
+
+            if (data.size() > width + extraBytes) {
                 next = true;
             }
         }

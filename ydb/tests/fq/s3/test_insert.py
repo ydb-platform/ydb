@@ -73,6 +73,82 @@ class TestS3(object):
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_big_json_list_insert(self, kikimr, s3, client):
+        resource = boto3.resource(
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("big_data_bucket")
+        bucket.create(ACL='public-read-write')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key"
+        )
+
+        taxi = R'''VendorID'''
+        for i in range(37):
+            taxi += "\n" + str(i)
+        s3_client.put_object(Body=taxi, Bucket='big_data_bucket', Key='src/taxi.csv', ContentType='text/plain')
+
+        connection_response = client.create_storage_connection("big_data_bucket", "big_data_bucket")
+
+        vendorID = ydb.Column(name="VendorID", type=ydb.Type(
+            optional_type=ydb.OptionalType(item=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))))
+        client.create_object_storage_binding(name="taxi_src_csv_with_names",
+                                             path="src/",
+                                             format="csv_with_names",
+                                             connection_id=connection_response.result.connection_id,
+                                             columns=[vendorID])
+
+        client.create_object_storage_binding(name="taxi_dst_json_list_zstd",
+                                             path="dst/",
+                                             format="json_list",
+                                             compression="zstd",
+                                             connection_id=connection_response.result.connection_id,
+                                             columns=[vendorID])
+
+        client.create_storage_connection("ibucket", "insert_bucket")
+
+        sql = R'''
+            pragma s3.JsonListSizeLimit="10";
+            INSERT INTO bindings.`taxi_dst_json_list_zstd`
+            SELECT
+                VendorID
+            FROM bindings.`taxi_src_csv_with_names`
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        sql = R'''
+
+            SELECT
+                count(*)
+            FROM bindings.`taxi_dst_json_list_zstd`
+        '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 1
+        assert result_set.columns[0].name == "column0"
+        assert result_set.columns[0].type.type_id == ydb.Type.UINT64
+        assert len(result_set.rows) == 1
+        assert result_set.rows[0].items[0].uint64_value == 37
+        assert sum(kikimr.control_plane.get_metering()) == 20
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_insert_csv_delimiter(self, kikimr, s3, client):
         resource = boto3.resource(
             "s3",

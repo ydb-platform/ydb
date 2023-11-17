@@ -74,7 +74,7 @@ runs:
             ;;
         esac
         
-        ./ya make --build "${build_type}" --force-build-depends -D'BUILD_LANGUAGES=CPP PY3 PY2' -T --stat  \
+        ./ya make -k --build "${build_type}" --force-build-depends -D'BUILD_LANGUAGES=CPP PY3 PY2 GO' -T --stat  \
           --log-file "$TMP_DIR/ya_log.txt" --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
           --dump-graph --dump-graph-to-file "$TMP_DIR/ya_graph.json" \
           --cache-size 512G --link-threads "${{ inputs.link_threads }}" \

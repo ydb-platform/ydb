@@ -16,7 +16,7 @@ namespace NYT::NClient::NCache {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NCompression::ECodec GetResponseCodecFromProto(ECompressionCodec protoCodec)
+NCompression::ECodec GetCompressionCodecFromProto(ECompressionCodec protoCodec)
 {
     switch (protoCodec) {
         case ECompressionCodec::None:
@@ -58,7 +58,8 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
 
 #undef SET_TIMEOUT_OPTION
 
-    connectionConfig->ResponseCodec = GetResponseCodecFromProto(config.GetResponseCodec());
+    connectionConfig->RequestCodec = GetCompressionCodecFromProto(config.GetRequestCodec());
+    connectionConfig->ResponseCodec = GetCompressionCodecFromProto(config.GetResponseCodec());
     connectionConfig->EnableRetries = config.GetEnableRetries();
 
     if (config.HasRetryBackoffTime()) {

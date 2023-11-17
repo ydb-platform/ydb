@@ -27,6 +27,7 @@ message TConfig
     optional uint32 DefaultPingPeriod = 10;
     optional uint32 ModifyRowsBatchCapacity = 11;
 
+    optional ECompressionCodec RequestCodec = 17 [default = None];
     optional ECompressionCodec ResponseCodec = 12 [default = None];
 
     optional bool EnableRetries = 13;

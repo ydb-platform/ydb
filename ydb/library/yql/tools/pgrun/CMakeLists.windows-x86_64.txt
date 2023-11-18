@@ -6,12 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
 
 add_executable(pgrun)
 target_compile_options(pgrun PRIVATE
@@ -46,22 +40,9 @@ target_link_libraries(pgrun PUBLIC
   yt-gateway-file
   yql-core-url_preprocessing
   yql-parser-pg_wrapper
-  library-cpp-resource
 )
 target_sources(pgrun PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/pgrun/pgrun.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/pgrun/bad9f76ae5ff92ff1d60596e5ab477d0.cpp
-)
-resources(pgrun
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/pgrun/bad9f76ae5ff92ff1d60596e5ab477d0.cpp
-  INPUTS
-  ${CMAKE_SOURCE_DIR}/yql/cfg/local/gateways.conf
-  ${CMAKE_SOURCE_DIR}/yql/cfg/local/fs.conf
-  ${CMAKE_SOURCE_DIR}/yql/cfg/local/fs_arc.conf
-  KEYS
-  gateways.conf
-  fs.conf
-  fs_arc.conf
 )
 target_allocator(pgrun
   system_allocator

@@ -34,13 +34,6 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper
 )
 
-
-RESOURCE(
-yql/cfg/local/gateways.conf gateways.conf
-yql/cfg/local/fs.conf fs.conf
-yql/cfg/local/fs_arc.conf fs_arc.conf
-)
-
 YQL_LAST_ABI_VERSION()
 
 END()

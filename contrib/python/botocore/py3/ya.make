@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.31.77)
+VERSION(1.31.78)
 
 LICENSE(Apache-2.0)
 
@@ -1013,6 +1013,9 @@ RESOURCE_FILES(
     botocore/data/lambda/2015-03-31/paginators-1.json
     botocore/data/lambda/2015-03-31/service-2.json
     botocore/data/lambda/2015-03-31/waiters-2.json
+    botocore/data/launch-wizard/2018-05-10/endpoint-rule-set-1.json.gz
+    botocore/data/launch-wizard/2018-05-10/paginators-1.json
+    botocore/data/launch-wizard/2018-05-10/service-2.json
     botocore/data/lex-models/2017-04-19/endpoint-rule-set-1.json.gz
     botocore/data/lex-models/2017-04-19/examples-1.json
     botocore/data/lex-models/2017-04-19/paginators-1.json

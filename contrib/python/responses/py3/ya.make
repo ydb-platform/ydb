@@ -2,14 +2,13 @@
 
 PY3_LIBRARY()
 
-VERSION(0.23.3)
+VERSION(0.24.0)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/python/PyYAML
     contrib/python/requests
-    contrib/python/types-PyYAML
     contrib/python/urllib3
 )
 

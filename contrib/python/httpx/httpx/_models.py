@@ -43,7 +43,6 @@ from ._types import (
 )
 from ._urls import URL
 from ._utils import (
-    guess_json_utf,
     is_known_encoding,
     normalize_header_key,
     normalize_header_value,
@@ -603,6 +602,16 @@ class Response:
 
     @encoding.setter
     def encoding(self, value: str) -> None:
+        """
+        Set the encoding to use for decoding the byte content into text.
+
+        If the `text` attribute has been accessed, attempting to set the
+        encoding will throw a ValueError.
+        """
+        if hasattr(self, "_text"):
+            raise ValueError(
+                "Setting encoding after `text` has been accessed is not allowed."
+            )
         self._encoding = value
 
     @property
@@ -749,11 +758,7 @@ class Response:
         raise HTTPStatusError(message, request=request, response=self)
 
     def json(self, **kwargs: typing.Any) -> typing.Any:
-        if self.charset_encoding is None and self.content and len(self.content) > 3:
-            encoding = guess_json_utf(self.content)
-            if encoding is not None:
-                return jsonlib.loads(self.content.decode(encoding), **kwargs)
-        return jsonlib.loads(self.text, **kwargs)
+        return jsonlib.loads(self.content, **kwargs)
 
     @property
     def cookies(self) -> "Cookies":

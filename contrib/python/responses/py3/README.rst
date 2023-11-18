@@ -17,7 +17,7 @@ A utility library for mocking out the ``requests`` Python library.
 
 ..  note::
 
-    Responses requires Python 3.7 or newer, and requests >= 2.30.0
+    Responses requires Python 3.8 or newer, and requests >= 2.30.0
 
 
 Table of Contents
@@ -1078,6 +1078,59 @@ Assert that the request was called exactly n times.
         responses.assert_call_count("http://www.example.com", 1) is True
         responses.assert_call_count("http://www.example.com?hello=world", 1) is True
 
+
+Assert Request Calls data
+-------------------------
+
+``Request`` object has ``calls`` list which elements correspond to ``Call`` objects
+in the global list of ``Registry``. This can be useful when the order of requests is not
+guaranteed, but you need to check their correctness, for example in multithreaded
+applications.
+
+.. code-block:: python
+
+    import concurrent.futures
+    import responses
+    import requests
+
+
+    @responses.activate
+    def test_assert_calls_on_resp():
+        rsp1 = responses.patch("http://www.foo.bar/1/", status=200)
+        rsp2 = responses.patch("http://www.foo.bar/2/", status=400)
+        rsp3 = responses.patch("http://www.foo.bar/3/", status=200)
+
+        def update_user(uid, is_active):
+            url = f"http://www.foo.bar/{uid}/"
+            response = requests.patch(url, json={"is_active": is_active})
+            return response
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            future_to_uid = {
+                executor.submit(update_user, uid, is_active): uid
+                for (uid, is_active) in [("3", True), ("2", True), ("1", False)]
+            }
+            for future in concurrent.futures.as_completed(future_to_uid):
+                uid = future_to_uid[future]
+                response = future.result()
+                print(f"{uid} updated with {response.status_code} status code")
+
+        assert len(responses.calls) == 3  # total calls count
+
+        assert rsp1.call_count == 1
+        assert rsp1.calls[0] in responses.calls
+        assert rsp1.calls[0].response.status_code == 200
+        assert json.loads(rsp1.calls[0].request.body) == {"is_active": False}
+
+        assert rsp2.call_count == 1
+        assert rsp2.calls[0] in responses.calls
+        assert rsp2.calls[0].response.status_code == 400
+        assert json.loads(rsp2.calls[0].request.body) == {"is_active": True}
+
+        assert rsp3.call_count == 1
+        assert rsp3.calls[0] in responses.calls
+        assert rsp3.calls[0].response.status_code == 200
+        assert json.loads(rsp3.calls[0].request.body) == {"is_active": True}
 
 Multiple Responses
 ------------------

@@ -2,11 +2,12 @@
 
 PY3_LIBRARY()
 
-VERSION(0.25.0)
+VERSION(0.25.1)
 
 LICENSE(BSD-3-Clause)
 
 PEERDIR(
+    contrib/python/anyio
     contrib/python/certifi
     contrib/python/httpcore
     contrib/python/idna

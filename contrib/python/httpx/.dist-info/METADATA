@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: httpx
-Version: 0.25.0
+Version: 0.25.1
 Summary: The next generation HTTP client.
 Project-URL: Changelog, https://github.com/encode/httpx/blob/master/CHANGELOG.md
 Project-URL: Documentation, https://www.python-httpx.org
@@ -22,10 +22,12 @@ Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
 Classifier: Topic :: Internet :: WWW/HTTP
 Requires-Python: >=3.8
+Requires-Dist: anyio
 Requires-Dist: certifi
-Requires-Dist: httpcore<0.19.0,>=0.18.0
+Requires-Dist: httpcore
 Requires-Dist: idna
 Requires-Dist: sniffio
 Provides-Extra: brotli
@@ -192,23 +194,14 @@ inspiration around the lower-level networking details.
 
 ## Release Information
 
-### Removed
+### 0.25.1 (3rd November, 2023)
 
-* Drop support for Python 3.7. (#2813)
-
-### Added
-
-* Support HTTPS proxies. (#2845)
-* Change the type of `Extensions` from `Mapping[Str, Any]` to `MutableMapping[Str, Any]`. (#2803)
-* Add `socket_options` argument to `httpx.HTTPTransport` and `httpx.AsyncHTTPTransport` classes. (#2716)
-* The `Response.raise_for_status()` method now returns the response instance. For example: `data = httpx.get('...').raise_for_status().json()`. (#2776)
+* Add support for Python 3.12. (#2854)
+* Add support for httpcore 1.0 (#2885)
 
 ### Fixed
 
-* Return `500` error response instead of exceptions when `raise_app_exceptions=False` is set on `ASGITransport`. (#2669)
-* Ensure all `WSGITransport` environs have a `SERVER_PROTOCOL`. (#2708)
-* Always encode forward slashes as `%2F` in query parameters (#2723)
-* Use Mozilla documentation instead of `httpstatuses.com` for HTTP error reference (#2768)
+* Raise `ValueError` on `Response.encoding` being set after `Response.text` has been accessed. (#2852)
 
 
 ---

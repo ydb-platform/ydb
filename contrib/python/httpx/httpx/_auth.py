@@ -1,5 +1,4 @@
 import hashlib
-import netrc
 import os
 import re
 import time
@@ -8,7 +7,7 @@ from base64 import b64encode
 from urllib.request import parse_http_list
 
 from ._exceptions import ProtocolError
-from ._models import Request, Response
+from ._models import Cookies, Request, Response
 from ._utils import to_bytes, to_str, unquote
 
 if typing.TYPE_CHECKING:  # pragma: no cover
@@ -148,6 +147,10 @@ class NetRCAuth(Auth):
     """
 
     def __init__(self, file: typing.Optional[str] = None):
+        # Lazily import 'netrc'.
+        # There's no need for us to load this module unless 'NetRCAuth' is being used.
+        import netrc
+
         self._netrc_info = netrc.netrc(file)
 
     def auth_flow(self, request: Request) -> typing.Generator[Request, Response, None]:
@@ -217,6 +220,8 @@ class DigestAuth(Auth):
         request.headers["Authorization"] = self._build_auth_header(
             request, self._last_challenge
         )
+        if response.cookies:
+            Cookies(response.cookies).set_cookie_header(request=request)
         yield request
 
     def _parse_challenge(

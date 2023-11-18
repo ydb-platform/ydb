@@ -56,7 +56,7 @@ public:
         return *Scanner;
     }
 
-    void OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard);
+    void OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result);
 
     TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& context);
     ~TPlainReadData() {

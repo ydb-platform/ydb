@@ -399,9 +399,7 @@ std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSche
 
     for (const ui32 id: ids) {
         auto it = columns.find(id);
-        if (it == columns.end()) {
-            continue;
-        }
+        AFL_VERIFY(it != columns.end());
 
         const auto& column = it->second;
         std::string colName(column.Name.data(), column.Name.size());

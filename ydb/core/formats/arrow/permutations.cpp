@@ -150,6 +150,7 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
         if constexpr (arrow::has_string_view<typename TWrap::T>::value) {
             ui64 sumByIndexes = 0;
             for (auto&& idx : indexes) {
+                Y_ABORT_UNLESS(idx < (ui64)column.length());
                 sumByIndexes += column.GetView(idx).size();
             }
             TStatusValidator::Validate(builderImpl.ReserveData(sumByIndexes));
@@ -351,6 +352,11 @@ std::shared_ptr<arrow::UInt64Array> TShardingSplitIndex::BuildPermutation() cons
     std::shared_ptr<arrow::UInt64Array> out;
     Y_ABORT_UNLESS(builder.Finish(&out).ok());
     return out;
+}
+
+std::shared_ptr<arrow::RecordBatch> ReverseRecords(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    auto permutation = NArrow::MakePermutation(batch->num_rows(), true);
+    return NArrow::TStatusValidator::GetValid(arrow::compute::Take(batch, permutation)).record_batch();
 }
 
 }

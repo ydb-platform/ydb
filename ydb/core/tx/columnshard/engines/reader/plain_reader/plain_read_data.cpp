@@ -51,16 +51,15 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& conte
 }
 
 std::vector<NKikimr::NOlap::TPartialReadResult> TPlainReadData::DoExtractReadyResults(const int64_t maxRowsInBatch) {
-    if ((!ReadyResultsCount || (GetContext().GetIsInternalRead() && ReadyResultsCount < maxRowsInBatch)) && !Scanner->IsFinished()) {
+    if ((ReadyResultsCount < maxRowsInBatch || (GetContext().GetIsInternalRead() && ReadyResultsCount < maxRowsInBatch)) && !Scanner->IsFinished()) {
         return {};
     }
     ReadyResultsCount = 0;
 
-    auto result = TPartialReadResult::SplitResults(PartialResults, maxRowsInBatch, GetContext().GetIsInternalRead());
+    auto result = TPartialReadResult::SplitResults(std::move(PartialResults), maxRowsInBatch, GetContext().GetIsInternalRead());
     PartialResults.clear();
     ui32 count = 0;
     for (auto&& r: result) {
-        r.BuildLastKey(GetReadMetadata()->GetIndexInfo().GetReplaceKey());
         r.StripColumns(GetReadMetadata()->GetResultSchema());
         count += r.GetRecordsCount();
         r.ApplyProgram(GetReadMetadata()->GetProgram());
@@ -73,14 +72,10 @@ bool TPlainReadData::DoReadNextInterval() {
     return Scanner->BuildNextInterval();
 }
 
-void TPlainReadData::OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) {
-    if (batch && batch->num_rows()) {
-        AFL_VERIFY(resourcesGuard);
-        resourcesGuard->Update(NArrow::GetBatchMemorySize(batch));
-        TPartialReadResult result({resourcesGuard}, batch);
-        ReadyResultsCount += result.GetRecordsCount();
-        PartialResults.emplace_back(std::move(result));
-    }
+void TPlainReadData::OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result) {
+    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
+    ReadyResultsCount += result->GetRecordsCount();
+    PartialResults.emplace_back(std::move(*result));
 }
 
 }

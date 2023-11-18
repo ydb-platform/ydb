@@ -11,11 +11,13 @@ std::optional<NOlap::TPartialReadResult> TStatsIterator::GetBatch() {
     auto lastKey = keyBatch->Slice(keyBatch->num_rows() - 1, 1);
 
     ApplyRangePredicates(batch);
-
+    if (!batch->num_rows()) {
+        return {};
+    }
     // Leave only requested columns
     auto resultBatch = NArrow::ExtractColumns(batch, ResultSchema);
 
-    NOlap::TPartialReadResult out({}, resultBatch, lastKey);
+    NOlap::TPartialReadResult out(resultBatch, lastKey);
 
     out.ApplyProgram(ReadMetadata->GetProgram());
     return std::move(out);

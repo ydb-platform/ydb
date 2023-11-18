@@ -33,17 +33,22 @@ std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan(const 
 
 bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor, std::string& error) {
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-
-    std::vector<ui32> resultColumnsIds;
-    if (readDescription.ColumnIds.size()) {
-        resultColumnsIds = readDescription.ColumnIds;
-    } else if (readDescription.ColumnNames.size()) {
-        resultColumnsIds = indexInfo.GetColumnIds(readDescription.ColumnNames);
-    } else {
-        error = "Empty column list requested";
-        return false;
+    {
+        std::vector<ui32> resultColumnsIds;
+        if (readDescription.ColumnIds.size()) {
+            resultColumnsIds = readDescription.ColumnIds;
+        } else if (readDescription.ColumnNames.size()) {
+            resultColumnsIds = indexInfo.GetColumnIds(readDescription.ColumnNames);
+        } else {
+            error = "Empty column list requested";
+            return false;
+        }
+        ResultColumnsIds.swap(resultColumnsIds);
     }
-    ResultColumnsIds.swap(resultColumnsIds);
+
+    for (auto&& i : GetProgram().GetSourceColumns()) {
+        RequestColumns.emplace_back(i.first);
+    }
 
     if (!GetResultSchema()) {
         error = "Could not get ResultSchema.";
@@ -58,12 +63,11 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
     /// So '1:foo' would be omitted in blob records for the column in new snapshots. And '2:foo' - in old ones.
     /// It's not possible for blobs with several columns. There should be a special logic for them.
     {
-        Y_ABORT_UNLESS(!ResultColumnsIds.empty(), "Empty column list");
+        AFL_VERIFY(ResultColumnsIds.size())("event", "Empty column list");
         THashSet<TString> requiredColumns = indexInfo.GetRequiredColumns();
 
         // Snapshot columns
-        requiredColumns.insert(NOlap::TIndexInfo::SPEC_COL_PLAN_STEP);
-        requiredColumns.insert(NOlap::TIndexInfo::SPEC_COL_TX_ID);
+        requiredColumns.insert(NOlap::TIndexInfo::GetSpecialColumnNames().begin(), NOlap::TIndexInfo::GetSpecialColumnNames().end());
 
         for (auto&& i : readDescription.PKRangesFilter.GetColumnNames()) {
             requiredColumns.emplace(i);

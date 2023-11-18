@@ -134,6 +134,7 @@ private:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     std::vector<ui32> AllColumns;
     std::vector<ui32> ResultColumnsIds;
+    std::vector<ui32> RequestColumns;
     mutable std::map<TSnapshot, ISnapshotSchema::TPtr> SchemasByVersionCache;
     mutable ISnapshotSchema::TPtr EmptyVersionSchemaCache;
 public:
@@ -142,8 +143,20 @@ public:
     NIndexedReader::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
     std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<NOlap::TReadContext>& context) const;
 
+    const std::vector<ui32>& GetResultColumnIds() const {
+        return ResultColumnsIds;
+    }
+
     const std::vector<ui32>& GetAllColumns() const {
         return AllColumns;
+    }
+
+    std::set<ui32> GetProcessingColumnIds() const {
+        std::set<ui32> result;
+        for (auto&& i : GetProgram().GetProcessingColumns()) {
+            result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnId(i));
+        }
+        return result;
     }
     std::shared_ptr<TSelectInfo> SelectInfo;
     std::vector<TCommittedBlob> CommittedBlobs;

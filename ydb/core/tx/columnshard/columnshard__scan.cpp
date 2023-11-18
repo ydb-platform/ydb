@@ -893,44 +893,36 @@ namespace NKikimr::NOlap {
 
 class TCurrentBatch {
 private:
-    std::vector<std::shared_ptr<arrow::RecordBatch>> Batches;
-    ui32 RecordsCount = 0;
-    std::vector<std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>> Guards;
+    std::vector<TPartialReadResult> Results;
 public:
-    void AddChunk(const std::shared_ptr<arrow::RecordBatch>& chunk, const std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>& rGuards) {
-        AFL_VERIFY(chunk);
-        AFL_VERIFY(chunk->num_rows());
-        Batches.emplace_back(chunk);
-        RecordsCount += chunk->num_rows();
-        Guards.emplace_back(rGuards);
+    void AddChunk(TPartialReadResult&& res) {
+        Results.emplace_back(std::move(res));
     }
 
-    ui32 GetRecordsCount() const {
-        return RecordsCount;
-    }
-
-    void FillResult(std::vector<TPartialReadResult>& result, const bool mergePartsToMax) const {
-        AFL_VERIFY(Batches.size());
-        if (mergePartsToMax) {
-            auto res = NArrow::CombineBatches(Batches);
-            AFL_VERIFY(res);
-            std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>> guards;
-            for (auto&& i : Guards) {
-                guards.insert(guards.end(), i.begin(), i.end());
-            }
-            result.emplace_back(TPartialReadResult(guards, res));
-        } else {
-            ui32 idx = 0;
-            for (auto&& i : Batches) {
-                result.emplace_back(TPartialReadResult(Guards[idx], i));
-                ++idx;
-            }
+    void FillResult(std::vector<TPartialReadResult>& result, const bool /*mergePartsToMax*/) const {
+        if (Results.empty()) {
+            return;
         }
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>> guards;
+        for (auto&& i : Results) {
+            batches.emplace_back(i.GetResultBatchPtrVerified());
+            guards.insert(guards.end(), i.GetResourcesGuards().begin(), i.GetResourcesGuards().end());
+        }
+        auto res = NArrow::CombineBatches(batches);
+        AFL_VERIFY(res);
+        result.emplace_back(TPartialReadResult(guards, res, Results.back().GetLastReadKey()));
     }
 };
 
-std::vector<NKikimr::NOlap::TPartialReadResult> TPartialReadResult::SplitResults(const std::vector<TPartialReadResult>& resultsExt, const ui32 maxRecordsInResult, const bool mergePartsToMax) {
+std::vector<NKikimr::NOlap::TPartialReadResult> TPartialReadResult::SplitResults(std::vector<TPartialReadResult>&& resultsExt, const ui32 /*maxRecordsInResult*/, const bool /*mergePartsToMax*/) {
     TCurrentBatch currentBatch;
+    for (auto&& i : resultsExt) {
+        currentBatch.AddChunk(std::move(i));
+    }
+    std::vector<TPartialReadResult> result;
+    currentBatch.FillResult(result, true);
+    /*
     std::vector<TCurrentBatch> resultBatches;
     for (auto&& i : resultsExt) {
         std::shared_ptr<arrow::RecordBatch> currentBatchSplitting = i.ResultBatch;
@@ -957,6 +949,7 @@ std::vector<NKikimr::NOlap::TPartialReadResult> TPartialReadResult::SplitResults
         Y_UNUSED(mergePartsToMax);
         i.FillResult(result, true);
     }
+    */
     return result;
 }
 

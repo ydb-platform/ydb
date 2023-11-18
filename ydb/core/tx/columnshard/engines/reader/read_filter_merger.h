@@ -351,8 +351,8 @@ public:
     }
 
     bool DrainAll(TRecordBatchBuilder& builder);
-    std::shared_ptr<arrow::RecordBatch> SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish);
-    bool DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish);
+    std::shared_ptr<arrow::RecordBatch> SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition = nullptr);
+    bool DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TSortableBatchPosition>* lastResultPosition = nullptr);
     std::vector<std::shared_ptr<arrow::RecordBatch>> DrainAllParts(const std::map<TSortableBatchPosition, bool>& positions,
         const std::vector<std::shared_ptr<arrow::Field>>& resultFields);
 };

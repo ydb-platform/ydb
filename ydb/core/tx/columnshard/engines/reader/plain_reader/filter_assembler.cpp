@@ -12,19 +12,22 @@ bool TAssembleFilter::DoExecute() {
 
     TPortionInfo::TPreparedBatchData::TAssembleOptions options;
     options.IncludedColumnIds = FilterColumnIds;
-    if (RecordsMaxSnapshot <= ReadMetadata->GetSnapshot() && UseFilter) {
+    ui32 needSnapshotColumnsRestore = 0;
+    const bool needSnapshotsFilter = ReadMetadata->GetSnapshot() < RecordsMaxSnapshot;
+    if (!needSnapshotsFilter && UseFilter) {
         for (auto&& i : TIndexInfo::GetSpecialColumnIds()) {
-            options.IncludedColumnIds->erase(i);
+            needSnapshotColumnsRestore += options.IncludedColumnIds->erase(i) ? 1 : 0;
         }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_special_columns");
     }
+    AFL_VERIFY(needSnapshotColumnsRestore == 0 || needSnapshotColumnsRestore == TIndexInfo::GetSpecialColumnIds().size());
 
     auto batchConstructor = BuildBatchConstructor(FilterColumnIds);
 
     auto batch = batchConstructor.AssembleTable(options);
     Y_ABORT_UNLESS(batch);
     Y_ABORT_UNLESS(batch->num_rows());
-    if (RecordsMaxSnapshot <= ReadMetadata->GetSnapshot() && UseFilter) {
+    if (!needSnapshotsFilter && UseFilter && needSnapshotColumnsRestore) {
         for (auto&& f : TIndexInfo::ArrowSchemaSnapshot()->fields()) {
             auto c = NArrow::TStatusValidator::GetValid(arrow::MakeArrayOfNull(f->type(), batch->num_rows()));
             batch = NArrow::TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), f, std::make_shared<arrow::ChunkedArray>(c)));
@@ -33,7 +36,7 @@ bool TAssembleFilter::DoExecute() {
     }
 
     OriginalCount = batch->num_rows();
-    AppliedFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::FilterPortion(batch, *ReadMetadata, ReadMetadata->GetSnapshot() < RecordsMaxSnapshot));
+    AppliedFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::FilterPortion(batch, *ReadMetadata, needSnapshotsFilter));
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "first_filter_using");
     if (!AppliedFilter->Apply(batch)) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount)("columns_count", FilterColumnIds.size());

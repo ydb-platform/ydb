@@ -5,15 +5,21 @@
 
 namespace NKikimr::NOlap::NPlainReader {
 
-void TScanHead::OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& newBatch, const ui32 intervalIdx, TPlainReadData& reader) {
+void TScanHead::OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& newBatch, const std::shared_ptr<arrow::RecordBatch>& lastPK, const ui32 intervalIdx, TPlainReadData& reader) {
     auto itInterval = FetchingIntervals.find(intervalIdx);
     AFL_VERIFY(itInterval != FetchingIntervals.end());
     if (!Context->GetCommonContext()->GetReadMetadata()->IsSorted()) {
-        reader.OnIntervalResult(newBatch, itInterval->second->GetResourcesGuard());
+        if (newBatch && newBatch->num_rows()) {
+            reader.OnIntervalResult(std::make_shared<TPartialReadResult>(itInterval->second->GetResourcesGuard(), newBatch, lastPK));
+        }
         AFL_VERIFY(FetchingIntervals.erase(intervalIdx));
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count", newBatch ? newBatch->num_rows() : 0);
     } else {
-        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, newBatch).second);
+        if (newBatch && newBatch->num_rows()) {
+            AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(itInterval->second->GetResourcesGuard(), newBatch, lastPK)).second);
+        } else {
+            AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, nullptr).second);
+        }
         Y_ABORT_UNLESS(FetchingIntervals.size());
         while (FetchingIntervals.size()) {
             const auto interval = FetchingIntervals.begin()->second;
@@ -22,10 +28,11 @@ void TScanHead::OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& newB
             if (it == ReadyIntervals.end()) {
                 break;
             }
-            const std::shared_ptr<arrow::RecordBatch>& batch = it->second;
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count", batch ? batch->num_rows() : 0);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count", it->second ? it->second->GetRecordsCount() : 0);
             FetchingIntervals.erase(FetchingIntervals.begin());
-            reader.OnIntervalResult(batch, interval->GetResourcesGuard());
+            if (it->second) {
+                reader.OnIntervalResult(it->second);
+            }
             ReadyIntervals.erase(it);
         }
         if (FetchingIntervals.empty()) {

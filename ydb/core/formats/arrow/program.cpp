@@ -894,14 +894,21 @@ NArrow::TColumnFilter TProgram::MakeEarlyFilter(const std::shared_ptr<arrow::Tab
 }
 
 std::set<std::string> TProgram::GetEarlyFilterColumns() const {
-    std::set<std::string> result;
     if (Steps.empty()) {
-        return result;
+        return {};
     }
     if (Steps[0]->Filters.empty()) {
-        return result;
+        return {};
     }
     return Steps[0]->GetColumnsInUsage();
+}
+
+std::set<std::string> TProgram::GetProcessingColumns() const {
+    std::set<std::string> result;
+    for (auto&& i : SourceColumns) {
+        result.emplace(std::string(i.second.data(), i.second.size()));
+    }
+    return result;
 }
 
 }

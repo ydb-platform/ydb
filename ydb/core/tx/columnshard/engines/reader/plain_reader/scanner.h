@@ -40,7 +40,7 @@ private:
     std::map<ui32, std::shared_ptr<IDataSource>> CurrentSegments;
     std::optional<NIndexedReader::TSortableBatchPosition> CurrentStart;
     std::map<ui32, std::shared_ptr<TFetchingInterval>> FetchingIntervals;
-    THashMap<ui32, std::shared_ptr<arrow::RecordBatch>> ReadyIntervals;
+    THashMap<ui32, std::shared_ptr<TPartialReadResult>> ReadyIntervals;
     ui32 SegmentIdxCounter = 0;
     std::vector<TIntervalStat> IntervalStats;
     void DrainSources();
@@ -74,7 +74,7 @@ public:
         return sb;
     }
 
-    void OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 intervalIdx, TPlainReadData& reader);
+    void OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::RecordBatch>& lastPK, const ui32 intervalIdx, TPlainReadData& reader);
 
     TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
 

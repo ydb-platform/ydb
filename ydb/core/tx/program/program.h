@@ -38,6 +38,7 @@ public:
     std::shared_ptr<NArrow::TColumnFilter> BuildEarlyFilter(const std::shared_ptr<arrow::Table>& batch) const;
     std::shared_ptr<NArrow::TColumnFilter> BuildEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch) const;
     std::set<std::string> GetEarlyFilterColumns() const;
+    std::set<std::string> GetProcessingColumns() const;
 
     bool HasEarlyFilterOnly() const;
 private:

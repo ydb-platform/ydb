@@ -15,7 +15,11 @@ public:
 
     const std::vector<TString>& GetColumnNamesVector() const {
         if (!ColumnNamesVector) {
-            ColumnNamesVector = std::vector<TString>(ColumnNames.begin(), ColumnNames.end());
+            std::vector<TString> result;
+            for (auto&& i : Schema->field_names()) {
+                result.emplace_back(i);
+            }
+            ColumnNamesVector = std::move(result);
         }
         return *ColumnNamesVector;
     }

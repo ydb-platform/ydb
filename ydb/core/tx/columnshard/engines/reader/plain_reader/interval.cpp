@@ -9,6 +9,7 @@ class TMergeTask: public NColumnShard::IDataTasksProcessor::ITask {
 private:
     using TBase = NColumnShard::IDataTasksProcessor::ITask;
     std::shared_ptr<arrow::RecordBatch> ResultBatch;
+    std::shared_ptr<arrow::RecordBatch> LastPK;
     const NColumnShard::TCounterGuard Guard;
     std::shared_ptr<TSpecialReadContext> Context;
     std::map<ui32, std::shared_ptr<IDataSource>> Sources;
@@ -18,10 +19,27 @@ protected:
     virtual bool DoApply(NOlap::IDataReader& indexedDataRead) const override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoApply")("interval_idx", MergingContext->GetIntervalIdx());
         auto& reader = static_cast<TPlainReadData&>(indexedDataRead);
-        reader.MutableScanner().OnIntervalResult(ResultBatch, IntervalIdx, reader);
+        reader.MutableScanner().OnIntervalResult(ResultBatch, LastPK, IntervalIdx, reader);
         return true;
     }
     virtual bool DoExecute() override {
+        if (MergingContext->IsExclusiveInterval(Sources.size())) {
+            ResultBatch = Sources.begin()->second->GetBatch();
+            LastPK = Sources.begin()->second->GetLastPK();
+            Sources.clear();
+            if (ResultBatch && ResultBatch->num_rows()) {
+                ResultBatch = NArrow::ExtractColumnsValidate(ResultBatch, Context->GetResultColumns()->GetColumnNamesVector());
+                AFL_VERIFY(ResultBatch)("info", Context->GetResultColumns()->GetSchema()->ToString());
+                Context->GetCommonContext()->GetCounters().OnNoScanInterval(ResultBatch->num_rows());
+                if (Context->GetCommonContext()->IsReverse()) {
+                    ResultBatch = NArrow::ReverseRecords(ResultBatch);
+                }
+            } else {
+                ResultBatch = nullptr;
+                LastPK = nullptr;
+            }
+            return true;
+        }
         std::shared_ptr<NIndexedReader::TMergePartialStream> merger = Context->BuildMerger();
         for (auto&& [_, i] : Sources) {
             if (auto rb = i->GetBatch()) {
@@ -39,24 +57,25 @@ protected:
 
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExecute")("interval_idx", MergingContext->GetIntervalIdx());
         merger->SkipToLowerBound(MergingContext->GetStart(), MergingContext->GetIncludeStart());
+        std::optional<NIndexedReader::TSortableBatchPosition> lastResultPosition;
         if (merger->GetSourcesCount() == 1) {
-            ResultBatch = merger->SingleSourceDrain(MergingContext->GetFinish(), MergingContext->GetIncludeFinish());
+            ResultBatch = merger->SingleSourceDrain(MergingContext->GetFinish(), MergingContext->GetIncludeFinish(), &lastResultPosition);
             if (ResultBatch) {
-                if (MergingContext->IsExclusiveInterval(1)) {
-                    Context->GetCommonContext()->GetCounters().OnNoScanInterval(ResultBatch->num_rows());
-                } else {
-                    Context->GetCommonContext()->GetCounters().OnLogScanInterval(ResultBatch->num_rows());
-                }
-                Y_ABORT_UNLESS(ResultBatch->schema()->Equals(Context->GetResultSchema()));
+                Context->GetCommonContext()->GetCounters().OnLogScanInterval(ResultBatch->num_rows());
+                AFL_VERIFY(ResultBatch->schema()->Equals(Context->GetResultColumns()->GetSchema()))("res", ResultBatch->schema()->ToString())("ctx", Context->GetResultColumns()->GetSchema()->ToString());
             }
             if (MergingContext->GetIncludeFinish() && originalSourcesCount == 1) {
                 AFL_VERIFY(merger->IsEmpty())("merging_context_finish", MergingContext->GetFinish().DebugJson().GetStringRobust())("merger", merger->DebugString());
             }
         } else {
-            auto rbBuilder = std::make_shared<NIndexedReader::TRecordBatchBuilder>(Context->GetResultFields());
-            merger->DrainCurrentTo(*rbBuilder, MergingContext->GetFinish(), MergingContext->GetIncludeFinish());
+            auto rbBuilder = std::make_shared<NIndexedReader::TRecordBatchBuilder>(Context->GetResultColumns()->GetSchema()->fields());
+            merger->DrainCurrentTo(*rbBuilder, MergingContext->GetFinish(), MergingContext->GetIncludeFinish(), &lastResultPosition);
             Context->GetCommonContext()->GetCounters().OnLinearScanInterval(rbBuilder->GetRecordsCount());
             ResultBatch = rbBuilder->Finalize();
+        }
+        AFL_VERIFY(!!lastResultPosition == (!!ResultBatch && ResultBatch->num_rows()));
+        if (lastResultPosition) {
+            LastPK = lastResultPosition->ExtractSortingPosition();
         }
         return true;
     }

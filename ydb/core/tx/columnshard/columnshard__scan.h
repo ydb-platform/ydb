@@ -20,15 +20,18 @@ private:
     std::shared_ptr<arrow::RecordBatch> LastReadKey;
 
 public:
-    ui64 GetRecordsCount() const {
-        return ResultBatch ? ResultBatch->num_rows() : 0;
+    const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& GetResourcesGuardOnly() const {
+        AFL_VERIFY(ResourcesGuards.size() == 1);
+        AFL_VERIFY(!!ResourcesGuards.front());
+        return ResourcesGuards.front();
     }
 
-    void InitDirection(const bool reverse) {
-        if (reverse && ResultBatch && ResultBatch->num_rows()) {
-            auto permutation = NArrow::MakePermutation(ResultBatch->num_rows(), true);
-            ResultBatch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(ResultBatch, permutation)).record_batch();
-        }
+    ui64 GetMemorySize() const {
+        return NArrow::GetBatchMemorySize(ResultBatch);
+    }
+
+    ui64 GetRecordsCount() const {
+        return ResultBatch ? ResultBatch->num_rows() : 0;
     }
 
     void StripColumns(const std::shared_ptr<arrow::Schema>& schema) {
@@ -37,16 +40,7 @@ public:
         }
     }
 
-    void BuildLastKey(const std::shared_ptr<arrow::Schema>& schema) {
-        Y_ABORT_UNLESS(!LastReadKey);
-        if (ResultBatch && ResultBatch->num_rows()) {
-            auto keyColumns = NArrow::ExtractColumns(ResultBatch, schema);
-            Y_ABORT_UNLESS(keyColumns);
-            LastReadKey = keyColumns->Slice(keyColumns->num_rows() - 1);
-        }
-    }
-
-    static std::vector<TPartialReadResult> SplitResults(const std::vector<TPartialReadResult>& resultsExt, const ui32 maxRecordsInResult, const bool mergePartsToMax);
+    static std::vector<TPartialReadResult> SplitResults(std::vector<TPartialReadResult>&& resultsExt, const ui32 maxRecordsInResult, const bool mergePartsToMax);
 
     void Slice(const ui32 offset, const ui32 length) {
         ResultBatch = ResultBatch->Slice(offset, length);
@@ -80,21 +74,27 @@ public:
 
     explicit TPartialReadResult(
         const std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>& resourcesGuards,
-        std::shared_ptr<arrow::RecordBatch> batch)
-        : ResourcesGuards(resourcesGuards)
-        , ResultBatch(batch)
-    {
-        Y_ABORT_UNLESS(ResultBatch);
-    }
-
-    explicit TPartialReadResult(
-        const std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>& resourcesGuards,
         std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<arrow::RecordBatch> lastKey)
         : ResourcesGuards(resourcesGuards)
         , ResultBatch(batch)
-        , LastReadKey(lastKey)
-    {
+        , LastReadKey(lastKey) {
+        for (auto&& i : ResourcesGuards) {
+            AFL_VERIFY(i);
+        }
         Y_ABORT_UNLESS(ResultBatch);
+        Y_ABORT_UNLESS(ResultBatch->num_rows());
+        Y_ABORT_UNLESS(LastReadKey);
+    }
+
+    explicit TPartialReadResult(
+        const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuards,
+        std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<arrow::RecordBatch> lastKey)
+        : TPartialReadResult(std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>({resourcesGuards}), batch, lastKey) {
+        AFL_VERIFY(resourcesGuards);
+    }
+
+    explicit TPartialReadResult(std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<arrow::RecordBatch> lastKey)
+        : TPartialReadResult(std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>>(), batch, lastKey) {
     }
 };
 }

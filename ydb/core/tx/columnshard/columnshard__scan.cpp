@@ -53,7 +53,6 @@ private:
 };
 
 
-constexpr ui64 INIT_BATCH_ROWS = 1000;
 constexpr i64 DEFAULT_READ_AHEAD_BYTES = (i64)2 * 1024 * 1024 * 1024;
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10);
 constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
@@ -98,7 +97,6 @@ public:
         , Stats(NTracing::TTraceClient::GetLocalClient("SHARD", ::ToString(TabletId)/*, "SCAN_TXID:" + ::ToString(TxId)*/))
         , ComputeShardingPolicy(computeShardingPolicy)
     {
-        KeyYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetKeyYqlSchema();
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -221,10 +219,6 @@ private:
             return false;
         }
 
-        if (ResultYqlSchema.empty() && DataFormat != NKikimrDataEvents::FORMAT_ARROW) {
-            ResultYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetResultYqlSchema();
-        }
-
         auto batch = result.GetResultBatchPtrVerified();
         int numRows = batch->num_rows();
         int numColumns = batch->num_columns();
@@ -240,31 +234,20 @@ private:
         if (NArrow::THashConstructor::BuildHashUI64(batch, ComputeShardingPolicy.GetColumnNames(), "__compute_sharding_hash")) {
             shardedBatch = NArrow::TShardingSplitIndex::Apply(ComputeShardingPolicy.GetShardsCount(), batch, "__compute_sharding_hash");
         }
-        switch (DataFormat) {
-            case NKikimrDataEvents::FORMAT_UNSPECIFIED:
-            case NKikimrDataEvents::FORMAT_CELLVEC: {
-                MakeResult(INIT_BATCH_ROWS);
-                NArrow::TArrowToYdbConverter batchConverter(ResultYqlSchema, *this);
-                TString errStr;
-                bool ok = batchConverter.Process(*batch, errStr);
-                Y_ABORT_UNLESS(ok, "%s", errStr.c_str());
-                break;
+        AFL_VERIFY(DataFormat == NKikimrDataEvents::FORMAT_ARROW);
+        {
+            MakeResult(0);
+            if (ComputeShardingPolicy.IsEnabled() && shardedBatch) {
+                AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_success")("count", shardedBatch->GetSplittedByShards().size());
+                Result->SplittedBatches = shardedBatch->GetSplittedByShards();
+            } else {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_problems")("sb", !!shardedBatch)("policy", ComputeShardingPolicy.IsEnabled());
+                Result->ArrowBatch = batch;
             }
-            case NKikimrDataEvents::FORMAT_ARROW: {
-                MakeResult(0);
-                if (ComputeShardingPolicy.IsEnabled() && shardedBatch) {
-                    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_success")("count", shardedBatch->GetSplittedByShards().size());
-                    Result->SplittedBatches = shardedBatch->GetSplittedByShards();
-                } else {
-                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_problems")("sb", !!shardedBatch)("policy", ComputeShardingPolicy.IsEnabled());
-                    Result->ArrowBatch = batch;
-                }
-                Rows += batch->num_rows();
-                Bytes += NArrow::GetBatchDataSize(batch);
-                ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetBatchDataSize(batch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
-                break;
-            }
-        } // switch DataFormat
+            Rows += batch->num_rows();
+            Bytes += NArrow::GetBatchDataSize(batch);
+            ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetBatchDataSize(batch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
+        }
         if (result.GetLastReadKey()) {
             Result->LastKey = ConvertLastKey(result.GetLastReadKey());
         } else {
@@ -379,8 +362,6 @@ private:
         auto context = std::make_shared<NOlap::TReadContext>(StoragesManager, ScanCountersPool, false, ReadMetadataRanges[ReadMetadataIndex], SelfId(),
             ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
-        // Used in TArrowToYdbConverter
-        ResultYqlSchema.clear();
     }
 
     void AddRow(const TConstArrayRef<TCell>& row) override {
@@ -542,7 +523,6 @@ private:
     ui32 ReadMetadataIndex;
     std::unique_ptr<TScanIteratorBase> ScanIterator;
 
-    std::vector<std::pair<TString, NScheme::TTypeInfo>> ResultYqlSchema;
     std::vector<std::pair<TString, NScheme::TTypeInfo>> KeyYqlSchema;
     const TSerializedTableRange TableRange;
     const TSmallVec<bool> SkipNullKeys;

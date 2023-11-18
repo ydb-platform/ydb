@@ -110,7 +110,6 @@ public:
     bool IsDescSorted() const { return Sorting == ESorting::DESC; }
     bool IsSorted() const { return IsAscSorted() || IsDescSorted(); }
 
-    virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const = 0;
     virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const = 0;
     virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const = 0;
 
@@ -243,19 +242,6 @@ public:
         return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
     }
 
-    std::vector<TNameTypeInfo> GetResultYqlSchema() const override {
-        auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-        auto resultSchema = GetResultSchema();
-        Y_ABORT_UNLESS(resultSchema);
-        std::vector<NTable::TTag> columnIds;
-        columnIds.reserve(resultSchema->num_fields());
-        for (const auto& field: resultSchema->fields()) {
-            TString name = TStringBuilder() << field->name();
-            columnIds.emplace_back(indexInfo.GetColumnId(name));
-        }
-        return indexInfo.GetColumns(columnIds);
-    }
-
     std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
         return ResultIndexSchema->GetIndexInfo().GetPrimaryKey();
     }
@@ -306,8 +292,6 @@ public:
         : TBase(sorting, ssaProgram)
         , TabletId(tabletId)
     {}
-
-    std::vector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const override;
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
 

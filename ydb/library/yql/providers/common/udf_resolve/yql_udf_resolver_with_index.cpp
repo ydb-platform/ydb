@@ -187,6 +187,8 @@ private:
         }
 
         function.NormalizedUserType = std::get<0>(ctx.SingletonTypeCache);
+        function.IsStrict = info.IsStrict;
+        function.SupportsBlocks = info.SupportsBlocks;
         return true;
     }
 

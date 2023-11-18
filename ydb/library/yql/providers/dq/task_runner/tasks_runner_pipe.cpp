@@ -1105,12 +1105,15 @@ public:
 
             NDqProto::TSinkPopRequest request;
             request.SetBytes(bytes);
-            header.Save(&Output);
+            request.Save(&Output);
 
             NDqProto::TSinkPopResponse response;
             response.Load(&Input);
 
             batch.Proto = std::move(*response.MutableData());
+            if (batch.IsOOB()) {
+                LoadRopeFromPipe(Input, batch.Payload);
+            }
             return response.GetBytes();
         } catch (...) {
             TaskRunner->RaiseException();
@@ -1118,35 +1121,10 @@ public:
     }
 
     ui64 Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, ui64 bytes) override {
-        try {
-            NDqProto::TCommandHeader header;
-            header.SetVersion(5);
-            header.SetCommand(NDqProto::TCommandHeader::SINK_POP);
-            header.SetTaskId(TaskId);
-            header.SetChannelId(PopStats.OutputIndex);
-            header.Save(&Output);
-
-            NDqProto::TSinkPopRequest request;
-            request.SetBytes(bytes);
-            header.Save(&Output);
-
-            NDqProto::TSinkPopResponse response;
-            response.Load(&Input);
-
-            TDqDataSerializer dataSerializer(
-                TaskRunner->GetTypeEnv(),
-                TaskRunner->GetHolderFactory(),
-                NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-            
-            TDqSerializedBatch serialized;
-            serialized.Proto = std::move(*response.MutableData());
-
-            dataSerializer.Deserialize(std::move(serialized), GetOutputType(), batch);
-
-            return response.GetBytes();
-        } catch (...) {
-            TaskRunner->RaiseException();
-        }
+        Y_UNUSED(batch);
+        Y_UNUSED(bytes);
+        Y_ABORT("Unimplemented");
+        return 0;
     }
 
     bool IsFinished() const override {

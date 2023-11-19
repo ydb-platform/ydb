@@ -16,10 +16,12 @@ std::optional<NOlap::TPartialReadResult> TStatsIterator::GetBatch() {
     }
     // Leave only requested columns
     auto resultBatch = NArrow::ExtractColumns(batch, ResultSchema);
-
+    NArrow::TStatusValidator::Validate(ReadMetadata->GetProgram().ApplyProgram(resultBatch));
+    if (!resultBatch->num_rows()) {
+        return {};
+    }
     NOlap::TPartialReadResult out(resultBatch, lastKey);
 
-    out.ApplyProgram(ReadMetadata->GetProgram());
     return std::move(out);
 }
 

@@ -188,7 +188,7 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr
     auto srcSchema = srcBatch->schema();
     for (auto& name : columnNames) {
         const int pos = srcSchema->GetFieldIndex(name);
-        AFL_VERIFY(pos >= 0)("field_name", name)("fields", srcBatch->schema()->ToString());
+        AFL_VERIFY(pos >= 0)("field_name", name)("names", JoinSeq(",", columnNames))("fields", JoinSeq(",", srcBatch->schema()->field_names()));
         fields.push_back(srcSchema->field(pos));
         columns.push_back(srcBatch->column(pos));
     }

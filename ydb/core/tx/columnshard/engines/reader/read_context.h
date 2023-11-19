@@ -17,6 +17,10 @@ private:
     YDB_READONLY(ui32, ShardsCount, 0);
     YDB_READONLY_DEF(std::vector<std::string>, ColumnNames);
 public:
+    TString DebugString() const {
+        return TStringBuilder() << "shards_count:" << ShardsCount << ";columns=" << JoinSeq(",", ColumnNames) << ";";
+    }
+
     TComputeShardingPolicy() = default;
     bool DeserializeFromProto(const NKikimrTxDataShard::TComputeShardingPolicy& policy) {
         ShardsCount = policy.GetShardsCount();

@@ -18,16 +18,30 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, RecordBatch);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::RecordBatch>>, SplittedByShards);
 public:
-    TShardedRecordBatch() = default;
-    TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch)
-        : RecordBatch(batch) {
-        SplittedByShards = {RecordBatch};
+    TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
+
+    void Cut(const ui32 limit) {
+        RecordBatch = RecordBatch->Slice(0, limit);
+        for (auto&& i : SplittedByShards) {
+            if (i->num_rows() > limit) {
+                i = i->Slice(0, limit);
+            }
+        }
     }
 
-    TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, std::vector<std::shared_ptr<arrow::RecordBatch>>&& splittedByShards)
-        : RecordBatch(batch)
-        , SplittedByShards(std::move(splittedByShards))
-    {
+    bool IsSharded() const {
+        return SplittedByShards.size() > 1;
+    }
+
+    TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, std::vector<std::shared_ptr<arrow::RecordBatch>>&& splittedByShards);
+
+    void StripColumns(const std::shared_ptr<arrow::Schema>& schema) {
+        if (RecordBatch) {
+            RecordBatch = NArrow::ExtractColumns(RecordBatch, schema);
+        }
+        for (auto&& i : SplittedByShards) {
+            i = NArrow::ExtractColumns(i, schema);
+        }
     }
 
     ui64 GetMemorySize() const;

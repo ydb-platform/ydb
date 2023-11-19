@@ -15,29 +15,54 @@ private:
     std::map<ui32, std::shared_ptr<IDataSource>> Sources;
     std::shared_ptr<TMergingContext> MergingContext;
     const ui32 IntervalIdx;
+    std::optional<NArrow::TShardedRecordBatch> ShardedBatch;
+
+    void PrepareResultBatch() {
+        if (!ResultBatch || ResultBatch->num_rows() == 0) {
+            ResultBatch = nullptr;
+            LastPK = nullptr;
+            return;
+        }
+        {
+            ResultBatch = NArrow::ExtractColumns(ResultBatch, Context->GetReadMetadata()->GetResultSchema());
+            AFL_VERIFY(ResultBatch->num_columns() == Context->GetReadMetadata()->GetResultSchema()->num_fields());
+            NArrow::TStatusValidator::Validate(Context->GetReadMetadata()->GetProgram().ApplyProgram(ResultBatch));
+        }
+        if (ResultBatch->num_rows()) {
+            const auto& shardingPolicy = Context->GetCommonContext()->GetComputeShardingPolicy();
+            if (NArrow::THashConstructor::BuildHashUI64(ResultBatch, shardingPolicy.GetColumnNames(), "__compute_sharding_hash")) {
+                ShardedBatch = NArrow::TShardingSplitIndex::Apply(shardingPolicy.GetShardsCount(), ResultBatch, "__compute_sharding_hash");
+            } else {
+                ShardedBatch = NArrow::TShardedRecordBatch(ResultBatch);
+            }
+            AFL_VERIFY(!!LastPK == !!ShardedBatch->GetRecordsCount())("lpk", !!LastPK)("sb", ShardedBatch->GetRecordsCount());
+        } else {
+            ResultBatch = nullptr;
+            LastPK = nullptr;
+        }
+    }
 protected:
     virtual bool DoApply(NOlap::IDataReader& indexedDataRead) const override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoApply")("interval_idx", MergingContext->GetIntervalIdx());
         auto& reader = static_cast<TPlainReadData&>(indexedDataRead);
-        reader.MutableScanner().OnIntervalResult(ResultBatch, LastPK, IntervalIdx, reader);
+        reader.MutableScanner().OnIntervalResult(ShardedBatch, LastPK, IntervalIdx, reader);
         return true;
     }
     virtual bool DoExecute() override {
-        if (MergingContext->IsExclusiveInterval(Sources.size())) {
+        if (MergingContext->IsExclusiveInterval()) {
             ResultBatch = Sources.begin()->second->GetBatch();
-            LastPK = Sources.begin()->second->GetLastPK();
-            Sources.clear();
             if (ResultBatch && ResultBatch->num_rows()) {
+                LastPK = Sources.begin()->second->GetLastPK();
                 ResultBatch = NArrow::ExtractColumnsValidate(ResultBatch, Context->GetResultColumns()->GetColumnNamesVector());
                 AFL_VERIFY(ResultBatch)("info", Context->GetResultColumns()->GetSchema()->ToString());
                 Context->GetCommonContext()->GetCounters().OnNoScanInterval(ResultBatch->num_rows());
                 if (Context->GetCommonContext()->IsReverse()) {
                     ResultBatch = NArrow::ReverseRecords(ResultBatch);
                 }
-            } else {
-                ResultBatch = nullptr;
-                LastPK = nullptr;
+                PrepareResultBatch();
             }
+            Sources.clear();
+            AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
             return true;
         }
         std::shared_ptr<NIndexedReader::TMergePartialStream> merger = Context->BuildMerger();
@@ -73,10 +98,11 @@ protected:
             Context->GetCommonContext()->GetCounters().OnLinearScanInterval(rbBuilder->GetRecordsCount());
             ResultBatch = rbBuilder->Finalize();
         }
-        AFL_VERIFY(!!lastResultPosition == (!!ResultBatch && ResultBatch->num_rows()));
         if (lastResultPosition) {
             LastPK = lastResultPosition->ExtractSortingPosition();
         }
+        AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
+        PrepareResultBatch();
         return true;
     }
 public:
@@ -129,9 +155,9 @@ void TFetchingInterval::OnSourceFilterStageReady(const ui32 /*sourceIdx*/) {
 
 TFetchingInterval::TFetchingInterval(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
     const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
-    const bool includeFinish, const bool includeStart)
-    : TTaskBase(0, context->GetMemoryForSources(sources, TMergingContext::IsExclusiveInterval(sources.size(), includeStart, includeFinish)), "", context->GetCommonContext()->GetResourcesTaskContext())
-    , MergingContext(std::make_shared<TMergingContext>(start, finish, intervalIdx, includeFinish, includeStart))
+    const bool includeFinish, const bool includeStart, const bool isExclusiveInterval)
+    : TTaskBase(0, context->GetMemoryForSources(sources, isExclusiveInterval), "", context->GetCommonContext()->GetResourcesTaskContext())
+    , MergingContext(std::make_shared<TMergingContext>(start, finish, intervalIdx, includeFinish, includeStart, isExclusiveInterval))
     , Context(context)
     , TaskGuard(Context->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
     , Sources(sources)
@@ -148,7 +174,7 @@ void TFetchingInterval::DoOnAllocationSuccess(const std::shared_ptr<NResourceBro
         ("resources", guard->DebugString())("start", MergingContext->GetIncludeStart())("finish", MergingContext->GetIncludeFinish())("sources", Sources.size());
     OnInitResourcesGuard(guard);
     for (auto&& [_, i] : Sources) {
-        i->InitFetchingPlan(Context->GetColumnsFetchingPlan(MergingContext->IsExclusiveInterval(Sources.size())), i);
+        i->InitFetchingPlan(Context->GetColumnsFetchingPlan(MergingContext->IsExclusiveInterval()), i);
     }
 }
 

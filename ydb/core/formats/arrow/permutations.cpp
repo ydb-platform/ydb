@@ -4,6 +4,7 @@
 #include "size_calcer.h"
 #include <ydb/core/formats/arrow/common/validation.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
+#include <ydb/library/services/services.pb.h>
 #include <library/cpp/actors/core/log.h>
 
 namespace NKikimr::NArrow {
@@ -181,6 +182,7 @@ bool THashConstructor::BuildHashUI64(std::shared_ptr<arrow::RecordBatch>& batch,
     if (fieldNames.size() == 1) {
         auto column = batch->GetColumnByName(fieldNames.front());
         if (!column) {
+            AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_build_hash")("reason", "field_not_found")("field_name", fieldNames.front());
             return false;
         }
         Y_ABORT_UNLESS(column);
@@ -202,6 +204,7 @@ bool THashConstructor::BuildHashUI64(std::shared_ptr<arrow::RecordBatch>& batch,
             }
         }
         if (columns.empty()) {
+            AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_build_hash")("reason", "fields_not_found")("field_names", JoinSeq(",", fieldNames));
             return false;
         }
         for (i64 i = 0; i < batch->num_rows(); ++i) {
@@ -298,25 +301,37 @@ ui64 TShardedRecordBatch::GetMemorySize() const {
     return NArrow::GetBatchMemorySize(RecordBatch);
 }
 
+TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch): RecordBatch(batch) {
+    AFL_VERIFY(RecordBatch);
+    SplittedByShards = {RecordBatch};
+}
+
+TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, std::vector<std::shared_ptr<arrow::RecordBatch>>&& splittedByShards)
+    : RecordBatch(batch)
+    , SplittedByShards(std::move(splittedByShards))
+{
+    AFL_VERIFY(RecordBatch);
+    AFL_VERIFY(SplittedByShards.size());
+}
+
 std::vector<std::shared_ptr<arrow::RecordBatch>> TShardingSplitIndex::Apply(const std::shared_ptr<arrow::RecordBatch>& input) {
-    Y_ABORT_UNLESS(input);
-    Y_ABORT_UNLESS(input->num_rows() == RecordsCount);
+    AFL_VERIFY(input);
+    AFL_VERIFY(input->num_rows() == RecordsCount);
     auto permutation = BuildPermutation();
     auto resultBatch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(input, *permutation)).record_batch();
-    Y_ABORT_UNLESS(resultBatch->num_rows() == RecordsCount);
+    AFL_VERIFY(resultBatch->num_rows() == RecordsCount);
     std::vector<std::shared_ptr<arrow::RecordBatch>> result;
     ui64 startIndex = 0;
     for (auto&& i : Remapping) {
         result.emplace_back(resultBatch->Slice(startIndex, i.size()));
         startIndex += i.size();
     }
+    AFL_VERIFY(startIndex == RecordsCount);
     return result;
 }
 
 NKikimr::NArrow::TShardedRecordBatch TShardingSplitIndex::Apply(const ui32 shardsCount, const std::shared_ptr<arrow::RecordBatch>& input, const std::string& hashColumnName) {
-    if (!input) {
-        return TShardedRecordBatch();
-    }
+    AFL_VERIFY(input);
     if (shardsCount == 1) {
         return TShardedRecordBatch(input);
     }
@@ -336,7 +351,8 @@ NKikimr::NArrow::TShardedRecordBatch TShardingSplitIndex::Apply(const ui32 shard
     } else {
         Y_ABORT_UNLESS(false);
     }
-    return TShardedRecordBatch(input, splitter->Apply(input));
+    auto resultBatch = NArrow::TStatusValidator::GetValid(input->RemoveColumn(input->schema()->GetFieldIndex(hashColumnName)));
+    return TShardedRecordBatch(resultBatch, splitter->Apply(resultBatch));
 }
 
 std::shared_ptr<arrow::UInt64Array> TShardingSplitIndex::BuildPermutation() const {

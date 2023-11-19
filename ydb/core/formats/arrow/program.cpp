@@ -895,12 +895,13 @@ std::shared_ptr<NArrow::TColumnFilter> TProgram::ApplyEarlyFilter(std::shared_pt
             NArrow::TStatusValidator::Validate(step->ApplyAssignes(*datumBatch, NArrow::GetCustomExecContext()));
             NArrow::TColumnFilter local = NArrow::TColumnFilter::BuildAllowFilter();
             NArrow::TStatusValidator::Validate(step->MakeCombinedFilter(*datumBatch, local));
-            *filter = filter->CombineSequentialAnd(local);
             if (!useFilter) {
-                break;
-            }
-            if (!local.Apply(batch)) {
-                break;
+                *filter = filter->And(local);
+            } else {
+                *filter = filter->CombineSequentialAnd(local);
+                if (!local.Apply(batch)) {
+                    break;
+                }
             }
         } catch (const std::exception& ex) {
             AFL_VERIFY(false);

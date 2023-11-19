@@ -97,6 +97,7 @@ public:
         , Stats(NTracing::TTraceClient::GetLocalClient("SHARD", ::ToString(TabletId)/*, "SCAN_TXID:" + ::ToString(TxId)*/))
         , ComputeShardingPolicy(computeShardingPolicy)
     {
+        KeyYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetKeyYqlSchema();
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -219,40 +220,42 @@ private:
             return false;
         }
 
-        auto batch = result.GetResultBatchPtrVerified();
-        int numRows = batch->num_rows();
-        int numColumns = batch->num_columns();
-        if (!numRows) {
+        if (!result.GetRecordsCount()) {
             ACFL_DEBUG("stage", "got empty batch")("iterator", ScanIterator->DebugString());
             return true;
         }
 
-        ACFL_DEBUG("stage", "ready result")("iterator", ScanIterator->DebugString())("format", NKikimrDataEvents::EDataFormat_Name(DataFormat))
-            ("columns", numColumns)("rows", numRows);
+        auto& shardedBatch = result.GetShardedBatch();
+        auto batch = shardedBatch.GetRecordBatch();
+        int numRows = batch->num_rows();
+        int numColumns = batch->num_columns();
+        ACFL_DEBUG("stage", "ready result")("iterator", ScanIterator->DebugString())("columns", numColumns)("rows", result.GetRecordsCount());
 
-        std::optional<NArrow::TShardedRecordBatch> shardedBatch;
-        if (NArrow::THashConstructor::BuildHashUI64(batch, ComputeShardingPolicy.GetColumnNames(), "__compute_sharding_hash")) {
-            shardedBatch = NArrow::TShardingSplitIndex::Apply(ComputeShardingPolicy.GetShardsCount(), batch, "__compute_sharding_hash");
-        }
         AFL_VERIFY(DataFormat == NKikimrDataEvents::FORMAT_ARROW);
         {
             MakeResult(0);
-            if (ComputeShardingPolicy.IsEnabled() && shardedBatch) {
-                AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_success")("count", shardedBatch->GetSplittedByShards().size());
-                Result->SplittedBatches = shardedBatch->GetSplittedByShards();
+            if (shardedBatch.IsSharded()) {
+                AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_success")("count", shardedBatch.GetSplittedByShards().size())("info", ComputeShardingPolicy.DebugString());
+                Result->SplittedBatches = shardedBatch.GetSplittedByShards();
+                Result->ArrowBatch = shardedBatch.GetRecordBatch();
             } else {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_problems")("sb", !!shardedBatch)("policy", ComputeShardingPolicy.IsEnabled());
-                Result->ArrowBatch = batch;
+                if (ComputeShardingPolicy.IsEnabled()) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_problems")("info", ComputeShardingPolicy.DebugString());
+                }
+                Result->ArrowBatch = shardedBatch.GetRecordBatch();
             }
             Rows += batch->num_rows();
             Bytes += NArrow::GetBatchDataSize(batch);
             ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetBatchDataSize(batch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
         }
-        if (result.GetLastReadKey()) {
-            Result->LastKey = ConvertLastKey(result.GetLastReadKey());
-        } else {
-            Y_ABORT_UNLESS(numRows == 0, "Got non-empty result batch without last key");
+        if (CurrentLastReadKey) {
+            NOlap::NIndexedReader::TSortableBatchPosition pNew(result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, false);
+            NOlap::NIndexedReader::TSortableBatchPosition pOld(CurrentLastReadKey, 0, CurrentLastReadKey->schema()->field_names(), {}, false);
+            AFL_VERIFY(pOld < pNew);
         }
+        CurrentLastReadKey = result.GetLastReadKey();
+        
+        Result->LastKey = ConvertLastKey(result.GetLastReadKey());
         SendResult(false, false);
         ACFL_DEBUG("stage", "finished")("iterator", ScanIterator->DebugString());
         return true;
@@ -533,6 +536,7 @@ private:
 
     TChunksLimiter ChunksLimiter;
     THolder<TEvKqpCompute::TEvScanData> Result;
+    std::shared_ptr<arrow::RecordBatch> CurrentLastReadKey;
     i64 InFlightReads = 0;
     bool Finished = false;
 
@@ -874,50 +878,48 @@ namespace NKikimr::NOlap {
 class TCurrentBatch {
 private:
     std::vector<TPartialReadResult> Results;
+    ui64 RecordsCount = 0;
 public:
+    ui64 GetRecordsCount() const {
+        return RecordsCount;
+    }
+
     void AddChunk(TPartialReadResult&& res) {
+        RecordsCount += res.GetRecordsCount();
         Results.emplace_back(std::move(res));
     }
 
-    void FillResult(std::vector<TPartialReadResult>& result, const bool /*mergePartsToMax*/) const {
+    void FillResult(std::vector<TPartialReadResult>& result, const bool mergePartsToMax) const {
         if (Results.empty()) {
             return;
         }
-        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-        std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>> guards;
-        for (auto&& i : Results) {
-            batches.emplace_back(i.GetResultBatchPtrVerified());
-            guards.insert(guards.end(), i.GetResourcesGuards().begin(), i.GetResourcesGuards().end());
+        if (mergePartsToMax) {
+            std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+            std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>> guards;
+            for (auto&& i : Results) {
+                batches.emplace_back(i.GetResultBatchPtrVerified());
+                guards.insert(guards.end(), i.GetResourcesGuards().begin(), i.GetResourcesGuards().end());
+            }
+            auto res = NArrow::CombineBatches(batches);
+            AFL_VERIFY(res);
+            result.emplace_back(TPartialReadResult(guards, NArrow::TShardedRecordBatch(res), Results.back().GetLastReadKey()));
+        } else {
+            for (auto&& i : Results) {
+                result.emplace_back(std::move(i));
+            }
         }
-        auto res = NArrow::CombineBatches(batches);
-        AFL_VERIFY(res);
-        result.emplace_back(TPartialReadResult(guards, res, Results.back().GetLastReadKey()));
     }
 };
 
-std::vector<NKikimr::NOlap::TPartialReadResult> TPartialReadResult::SplitResults(std::vector<TPartialReadResult>&& resultsExt, const ui32 /*maxRecordsInResult*/, const bool /*mergePartsToMax*/) {
+std::vector<NKikimr::NOlap::TPartialReadResult> TPartialReadResult::SplitResults(std::vector<TPartialReadResult>&& resultsExt, const ui32 maxRecordsInResult, const bool mergePartsToMax) {
+    std::vector<TCurrentBatch> resultBatches;
     TCurrentBatch currentBatch;
     for (auto&& i : resultsExt) {
+        AFL_VERIFY(i.GetRecordsCount());
         currentBatch.AddChunk(std::move(i));
-    }
-    std::vector<TPartialReadResult> result;
-    currentBatch.FillResult(result, true);
-    /*
-    std::vector<TCurrentBatch> resultBatches;
-    for (auto&& i : resultsExt) {
-        std::shared_ptr<arrow::RecordBatch> currentBatchSplitting = i.ResultBatch;
-        while (currentBatchSplitting && currentBatchSplitting->num_rows()) {
-            const ui32 currentRecordsCount = currentBatch.GetRecordsCount();
-            if (currentRecordsCount + currentBatchSplitting->num_rows() < maxRecordsInResult) {
-                currentBatch.AddChunk(currentBatchSplitting, i.GetResourcesGuards());
-                currentBatchSplitting = nullptr;
-            } else {
-                auto currentSlice = currentBatchSplitting->Slice(0, maxRecordsInResult - currentRecordsCount);
-                currentBatch.AddChunk(currentSlice, i.GetResourcesGuards());
-                resultBatches.emplace_back(std::move(currentBatch));
-                currentBatch = TCurrentBatch();
-                currentBatchSplitting = currentBatchSplitting->Slice(maxRecordsInResult - currentRecordsCount);
-            }
+        if (currentBatch.GetRecordsCount() >= maxRecordsInResult) {
+            resultBatches.emplace_back(std::move(currentBatch));
+            currentBatch = TCurrentBatch();
         }
     }
     if (currentBatch.GetRecordsCount()) {
@@ -926,10 +928,8 @@ std::vector<NKikimr::NOlap::TPartialReadResult> TPartialReadResult::SplitResults
 
     std::vector<TPartialReadResult> result;
     for (auto&& i : resultBatches) {
-        Y_UNUSED(mergePartsToMax);
-        i.FillResult(result, true);
+        i.FillResult(result, mergePartsToMax);
     }
-    */
     return result;
 }
 

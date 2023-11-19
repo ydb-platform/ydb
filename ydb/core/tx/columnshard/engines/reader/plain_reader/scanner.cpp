@@ -5,18 +5,18 @@
 
 namespace NKikimr::NOlap::NPlainReader {
 
-void TScanHead::OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& newBatch, const std::shared_ptr<arrow::RecordBatch>& lastPK, const ui32 intervalIdx, TPlainReadData& reader) {
+void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch>& newBatch, const std::shared_ptr<arrow::RecordBatch>& lastPK, const ui32 intervalIdx, TPlainReadData& reader) {
     auto itInterval = FetchingIntervals.find(intervalIdx);
     AFL_VERIFY(itInterval != FetchingIntervals.end());
     if (!Context->GetCommonContext()->GetReadMetadata()->IsSorted()) {
-        if (newBatch && newBatch->num_rows()) {
-            reader.OnIntervalResult(std::make_shared<TPartialReadResult>(itInterval->second->GetResourcesGuard(), newBatch, lastPK));
+        if (newBatch && newBatch->GetRecordsCount()) {
+            reader.OnIntervalResult(std::make_shared<TPartialReadResult>(itInterval->second->GetResourcesGuard(), *newBatch, lastPK));
         }
         AFL_VERIFY(FetchingIntervals.erase(intervalIdx));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count", newBatch ? newBatch->num_rows() : 0);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count", newBatch ? newBatch->GetRecordsCount() : 0);
     } else {
-        if (newBatch && newBatch->num_rows()) {
-            AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(itInterval->second->GetResourcesGuard(), newBatch, lastPK)).second);
+        if (newBatch && newBatch->GetRecordsCount()) {
+            AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(itInterval->second->GetResourcesGuard(), *newBatch, lastPK)).second);
         } else {
             AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, nullptr).second);
         }
@@ -72,7 +72,6 @@ bool TScanHead::BuildNextInterval() {
     while (BorderPoints.size()) {
         auto firstBorderPointInfo = std::move(BorderPoints.begin()->second);
         bool includeStart = firstBorderPointInfo.GetStartSources().size();
-
         for (auto&& i : firstBorderPointInfo.GetStartSources()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("add_source", i->GetSourceIdx());
             AFL_VERIFY(CurrentSegments.emplace(i->GetSourceIdx(), i).second)("idx", i->GetSourceIdx());
@@ -83,7 +82,7 @@ bool TScanHead::BuildNextInterval() {
             const ui32 intervalIdx = SegmentIdxCounter++;
             auto it = FetchingIntervals.emplace(intervalIdx, std::make_shared<TFetchingInterval>(
                 BorderPoints.begin()->first, BorderPoints.begin()->first, intervalIdx, CurrentSegments,
-                Context, true, true)).first;
+                Context, true, true, false)).first;
             IntervalStats.emplace_back(CurrentSegments.size(), true);
             NResourceBroker::NSubscribe::ITask::StartResourceSubscription(Context->GetCommonContext()->GetResourceSubscribeActorId(), it->second);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)("interval", it->second->DebugJson());
@@ -100,9 +99,10 @@ bool TScanHead::BuildNextInterval() {
             Y_ABORT_UNLESS(BorderPoints.size());
             const bool includeFinish = BorderPoints.begin()->second.GetStartSources().empty();
             const ui32 intervalIdx = SegmentIdxCounter++;
+            const bool isExclusiveInterval = (CurrentSegments.size() == 1) && includeStart && includeFinish;
             auto it = FetchingIntervals.emplace(intervalIdx, std::make_shared<TFetchingInterval>(
                 *CurrentStart, BorderPoints.begin()->first, intervalIdx, CurrentSegments,
-                Context, includeFinish, includeStart)).first;
+                Context, includeFinish, includeStart, isExclusiveInterval)).first;
             IntervalStats.emplace_back(CurrentSegments.size(), false);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_interval")("interval_idx", intervalIdx)("interval", it->second->DebugJson());
             NResourceBroker::NSubscribe::ITask::StartResourceSubscription(Context->GetCommonContext()->GetResourceSubscribeActorId(), it->second);

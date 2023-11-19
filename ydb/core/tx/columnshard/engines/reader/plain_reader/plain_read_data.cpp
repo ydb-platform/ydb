@@ -51,19 +51,19 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& conte
 }
 
 std::vector<NKikimr::NOlap::TPartialReadResult> TPlainReadData::DoExtractReadyResults(const int64_t maxRowsInBatch) {
-    if ((ReadyResultsCount < maxRowsInBatch || (GetContext().GetIsInternalRead() && ReadyResultsCount < maxRowsInBatch)) && !Scanner->IsFinished()) {
+    if ((GetContext().GetIsInternalRead() && ReadyResultsCount < maxRowsInBatch) && !Scanner->IsFinished()) {
         return {};
     }
-    ReadyResultsCount = 0;
-
     auto result = TPartialReadResult::SplitResults(std::move(PartialResults), maxRowsInBatch, GetContext().GetIsInternalRead());
-    PartialResults.clear();
     ui32 count = 0;
     for (auto&& r: result) {
-        r.StripColumns(GetReadMetadata()->GetResultSchema());
         count += r.GetRecordsCount();
-        r.ApplyProgram(GetReadMetadata()->GetProgram());
     }
+    AFL_VERIFY(count == ReadyResultsCount);
+
+    ReadyResultsCount = 0;
+    PartialResults.clear();
+
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractReadyResults")("result", result.size())("count", count)("finished", Scanner->IsFinished());
     return result;
 }

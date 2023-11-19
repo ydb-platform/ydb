@@ -13,7 +13,7 @@ bool TAssembleFilter::DoExecute() {
     TPortionInfo::TPreparedBatchData::TAssembleOptions options;
     options.IncludedColumnIds = FilterColumnIds;
     ui32 needSnapshotColumnsRestore = 0;
-    const bool needSnapshotsFilter = ReadMetadata->GetSnapshot() < RecordsMaxSnapshot;
+    const bool needSnapshotsFilter = true;// ReadMetadata->GetSnapshot() <= RecordsMaxSnapshot;
     if (!needSnapshotsFilter && UseFilter) {
         for (auto&& i : TIndexInfo::GetSpecialColumnIds()) {
             needSnapshotColumnsRestore += options.IncludedColumnIds->erase(i) ? 1 : 0;

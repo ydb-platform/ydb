@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include "program.h"
+#include "custom_registry.h"
 #include "arrow_helpers.h"
 
 #ifndef WIN32
@@ -858,49 +859,19 @@ std::set<std::string> TProgramStep::GetColumnsInUsage() const {
     return result;
 }
 
-NArrow::TColumnFilter TProgram::MakeEarlyFilter(const std::shared_ptr<TProgramStep::TDatumBatch>& rb, arrow::compute::ExecContext* ctx) const {
-    NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
-    try {
-        if (Steps.empty()) {
-            return result;
-        }
-        auto& step = Steps[0];
-        if (step->Filters.empty()) {
-            return result;
-        }
-
-        if (!step->ApplyAssignes(*rb, ctx).ok()) {
-            return result;
-        }
-        NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
-        if (!step->MakeCombinedFilter(*rb, filter).ok()) {
-            return result;
-        }
-        return filter;
-    } catch (const std::exception& ex) {
-        return result;
-    }
-    return result;
-}
-
-NArrow::TColumnFilter TProgram::MakeEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-    arrow::compute::ExecContext* ctx) const {
-    return MakeEarlyFilter(TProgramStep::TDatumBatch::FromRecordBatch(srcBatch), ctx);
-}
-
-NArrow::TColumnFilter TProgram::MakeEarlyFilter(const std::shared_ptr<arrow::Table>& srcBatch,
-    arrow::compute::ExecContext* ctx) const {
-    return MakeEarlyFilter(TProgramStep::TDatumBatch::FromTable(srcBatch), ctx);
-}
-
 std::set<std::string> TProgram::GetEarlyFilterColumns() const {
     if (Steps.empty()) {
         return {};
     }
-    if (Steps[0]->Filters.empty()) {
-        return {};
+    std::set<std::string> result;
+    for (ui32 i = 0; i < Steps.size(); ++i) {
+        if (Steps[i]->Filters.empty()) {
+            break;
+        }
+        auto stepFields = Steps[i]->GetColumnsInUsage();
+        result.insert(stepFields.begin(), stepFields.end());
     }
-    return Steps[0]->GetColumnsInUsage();
+    return result;
 }
 
 std::set<std::string> TProgram::GetProcessingColumns() const {
@@ -909,6 +880,33 @@ std::set<std::string> TProgram::GetProcessingColumns() const {
         result.emplace(std::string(i.second.data(), i.second.size()));
     }
     return result;
+}
+
+std::shared_ptr<NArrow::TColumnFilter> TProgram::ApplyEarlyFilter(std::shared_ptr<arrow::Table>& batch, const bool useFilter) const {
+    std::shared_ptr<NArrow::TColumnFilter> filter = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
+    for (ui32 i = 0; i < Steps.size(); ++i) {
+        auto datumBatch = TDatumBatch::FromTable(batch);
+        try {
+            auto& step = Steps[i];
+            if (step->Filters.empty()) {
+                break;
+            }
+
+            NArrow::TStatusValidator::Validate(step->ApplyAssignes(*datumBatch, NArrow::GetCustomExecContext()));
+            NArrow::TColumnFilter local = NArrow::TColumnFilter::BuildAllowFilter();
+            NArrow::TStatusValidator::Validate(step->MakeCombinedFilter(*datumBatch, local));
+            *filter = filter->CombineSequentialAnd(local);
+            if (!useFilter) {
+                break;
+            }
+            if (!local.Apply(batch)) {
+                break;
+            }
+        } catch (const std::exception& ex) {
+            AFL_VERIFY(false);
+        }
+    }
+    return filter;
 }
 
 }

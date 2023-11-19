@@ -426,20 +426,6 @@ bool TProgramContainer::HasProgram() const {
     return !!Program;
 }
 
-std::shared_ptr<NArrow::TColumnFilter> TProgramContainer::BuildEarlyFilter(const std::shared_ptr<arrow::Table>& batch) const {
-    if (Program) {
-        return std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, Program));
-    }
-    return nullptr;
-}
-
-std::shared_ptr<NArrow::TColumnFilter> TProgramContainer::BuildEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch) const {
-    if (Program) {
-        return std::make_shared<NArrow::TColumnFilter>(NOlap::EarlyFilter(batch, Program));
-    }
-    return nullptr;
-}
-
 std::set<std::string> TProgramContainer::GetEarlyFilterColumns() const {
     if (Program) {
         return Program->GetEarlyFilterColumns();

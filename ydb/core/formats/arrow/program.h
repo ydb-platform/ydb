@@ -300,12 +300,7 @@ struct TProgram {
 
     std::set<std::string> GetEarlyFilterColumns() const;
     std::set<std::string> GetProcessingColumns() const;
-    NArrow::TColumnFilter MakeEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
-        arrow::compute::ExecContext* ctx) const;
-    NArrow::TColumnFilter MakeEarlyFilter(const std::shared_ptr<arrow::Table>& batch,
-        arrow::compute::ExecContext* ctx) const;
-
-    NArrow::TColumnFilter MakeEarlyFilter(const std::shared_ptr<TProgramStep::TDatumBatch>& batch, arrow::compute::ExecContext* ctx) const;
+    std::shared_ptr<NArrow::TColumnFilter> ApplyEarlyFilter(std::shared_ptr<arrow::Table>& batch, const bool useFilter) const;
 };
 
 inline arrow::Status ApplyProgram(

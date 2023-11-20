@@ -67,6 +67,7 @@ void Load(IInputStream& input, void* buf, size_t size) {
     char* p = (char*)buf;
     while (size) {
         auto len = input.Read(p, size);
+        YQL_ENSURE(len != 0);
         p += len;
         size -= len;
     }

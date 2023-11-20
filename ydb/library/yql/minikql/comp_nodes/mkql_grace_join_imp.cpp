@@ -720,7 +720,7 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys) {
             }
 
             ui64 * stringsStart;
-            if (storedKeysSize < t.SlotSize) {
+            if (storedKeysSize <= t.SlotSize) {
                 stringsStart = it + HeaderSize;
             } else {
                 ui64 spillOffset = *(it + HeaderSize);

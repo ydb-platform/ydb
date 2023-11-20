@@ -5,6 +5,7 @@
 
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 
@@ -188,6 +189,16 @@ struct TDqSettings {
         }
 
         return copy;
+    }
+
+    NDqProto::EDataTransportVersion GetDataTransportVersion() const {
+        const bool fastPickle = UseFastPickleTransport.Get().GetOrElse(TDqSettings::TDefault::UseFastPickleTransport);
+        const bool oob = UseOOBTransport.Get().GetOrElse(TDqSettings::TDefault::UseOOBTransport);
+        if (oob) {
+            return fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0 : NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0;
+        } else {
+            return fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 : NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
+        }
     }
 };
 

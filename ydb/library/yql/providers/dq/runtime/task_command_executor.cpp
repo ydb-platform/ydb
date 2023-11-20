@@ -647,13 +647,7 @@ public:
         if (!DqConfiguration->CollectCoreDumps.Get().GetOrElse(false)) {
             DontCollectDumps();
         }
-        const bool fastPickle = DqConfiguration->UseFastPickleTransport.Get().GetOrElse(TDqSettings::TDefault::UseFastPickleTransport);
-        const bool oob = DqConfiguration->UseOOBTransport.Get().GetOrElse(TDqSettings::TDefault::UseOOBTransport);
-        if (oob) {
-            DataTransportVersion = fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0 : NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0; 
-        } else {
-            DataTransportVersion = fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 : NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
-        }
+        DataTransportVersion = DqConfiguration->GetDataTransportVersion();
         // TODO: Maybe use taskParams from task.GetTask().GetParameters()
         THashMap<TString, TString> taskParams;
         for (const auto& x: taskMeta.GetTaskParams()) {

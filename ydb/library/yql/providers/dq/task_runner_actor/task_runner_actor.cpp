@@ -260,10 +260,7 @@ private:
         YQL_ENSURE(!batch.IsWide());
 
         auto source = TaskRunner->GetSource(index);
-        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), 
-            // NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0
-            NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0
-        );
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), DataTransportVersion);
         TDqSerializedBatch serialized = dataSerializer.Serialize(batch, source->GetInputType());
 
         Invoker->Invoke([serialized=std::move(serialized),taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
@@ -370,7 +367,7 @@ private:
         auto guard = TaskRunner->BindAllocator();
         NKikimr::NMiniKQL::TUnboxedValueBatch batch;
         auto sink = TaskRunner->GetSink(ev->Get()->Index);
-        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), (NDqProto::EDataTransportVersion)ev->Get()->Batch.Proto.GetTransportVersion());
         dataSerializer.Deserialize(std::move(ev->Get()->Batch), sink->GetOutputType(), batch);
 
         Parent->SinkSend(
@@ -459,6 +456,7 @@ private:
             ev->Get()->Task.GetMeta().UnpackTo(&taskMeta);
             Settings->Dispatch(taskMeta.GetSettings());
             Settings->FreezeDefaults();
+            DataTransportVersion = Settings->GetDataTransportVersion();
             StageId = taskMeta.GetStageId();
 
             NDq::TDqTaskSettings settings(&ev->Get()->Task);
@@ -578,6 +576,7 @@ private:
     THashSet<ui32> Inputs;
     THashSet<ui32> Sources;
     TIntrusivePtr<TDqConfiguration> Settings;
+    NDqProto::EDataTransportVersion DataTransportVersion;
     ui64 StageId;
     TWorkerRuntimeData* RuntimeData;
     TString ClusterName;

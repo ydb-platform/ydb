@@ -193,7 +193,7 @@ namespace NKikimr::NBlobDepot {
         if (ev->Get()->Status == NKikimrProto::OK) {
             Y_ABORT_UNLESS(record.CollectGarbageRequestInFlight);
             record.OnSuccessfulCollect(this);
-            ExecuteConfirmGC(record.Channel, record.GroupId, std::exchange(record.TrashInFlight, {}),
+            ExecuteConfirmGC(record.Channel, record.GroupId, std::exchange(record.TrashInFlight, {}), 0,
                 record.LastConfirmedGenStep);
         } else {
             record.TrashInFlight.clear();
@@ -201,8 +201,62 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TData::OnCommitConfirmedGC(ui8 channel, ui32 groupId) {
+    void TData::OnCommitConfirmedGC(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted) {
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
+
+        const TTabletStorageInfo *info = Self->Info();
+        Y_ABORT_UNLESS(info);
+        const TTabletChannelInfo *ch = info->ChannelInfo(channel);
+        Y_ABORT_UNLESS(ch);
+        auto& history = ch->History;
+        Y_ABORT_UNLESS(!history.empty());
+
+        const ui64 tabletId = Self->TabletID();
+
+        ui32 prevGenerationBegin = 0;
+        ui32 prevGenerationEnd = 0;
+
+        Y_DEBUG_ABORT_UNLESS(std::is_sorted(trashDeleted.begin(), trashDeleted.end()));
+
+        for (const TLogoBlobID& id : trashDeleted) {
+            Y_ABORT_UNLESS(id.TabletID() == tabletId);
+            Y_ABORT_UNLESS(id.Channel() == channel);
+
+            const ui32 generation = id.Generation();
+            if (prevGenerationBegin <= generation && generation < prevGenerationEnd) {
+                // the range was already processed, skip
+            } else if (history.back().FromGeneration <= generation) {
+                // in current generation, skip; this is also the last range, as the prefix is equal for all items
+                // and they are in sorted order -- it's safe to quit now
+                break;
+            } else {
+                auto it = std::upper_bound(history.begin(), history.end(), generation,
+                    TTabletChannelInfo::THistoryEntry::TCmp());
+                Y_ABORT_UNLESS(it != history.end());
+                prevGenerationEnd = it->FromGeneration;
+                Y_ABORT_UNLESS(it != history.begin());
+                prevGenerationBegin = std::prev(it)->FromGeneration;
+                Y_ABORT_UNLESS(prevGenerationBegin <= generation && generation < prevGenerationEnd);
+
+                TLogoBlobID min(tabletId, prevGenerationBegin, 0, channel, 0, 0);
+                TLogoBlobID max(tabletId, prevGenerationEnd - 1, Max<ui32>(), channel, TLogoBlobID::MaxBlobSize,
+                    TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode);
+
+                if (record.Used.lower_bound(min) != record.Used.upper_bound(max)) {
+                    // we have some used records in this range, skip it
+                } else if (record.Trash.lower_bound(min) != record.Trash.upper_bound(max)) {
+                    // we have some still undeleted trash in this range, skip it too
+                } else if (AlreadyCutHistory.emplace(channel, prevGenerationBegin).second) {
+                    auto ev = std::make_unique<TEvTablet::TEvCutTabletHistory>();
+                    auto& record = ev->Record;
+                    record.SetTabletID(tabletId);
+                    record.SetChannel(channel);
+                    record.SetFromGeneration(prevGenerationBegin);
+                    Self->Send(MakeLocalID(Self->SelfId().NodeId()), ev.release());
+                }
+            }
+        }
+
         record.ClearInFlight(this);
     }
 

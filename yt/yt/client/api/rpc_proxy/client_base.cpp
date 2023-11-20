@@ -764,6 +764,9 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
     req->SetTimeout(options.Timeout.value_or(GetRpcProxyConnection()->GetConfig()->DefaultLookupRowsTimeout));
 
     req->set_path(path);
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().push_back({"yt.table_path", path});
+    }
     req->Attachments() = SerializeRowset(nameTable, keys, req->mutable_rowset_descriptor());
 
     if (!options.ColumnFilter.IsUniversal()) {
@@ -808,6 +811,9 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     req->SetTimeout(options.Timeout.value_or(GetRpcProxyConnection()->GetConfig()->DefaultLookupRowsTimeout));
 
     req->set_path(path);
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().push_back({"yt.table_path", path});
+    }
     req->Attachments() = SerializeRowset(nameTable, keys, req->mutable_rowset_descriptor());
 
     if (!options.ColumnFilter.IsUniversal()) {
@@ -873,6 +879,15 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookup(
             protoSubrequest->mutable_rowset_descriptor());
         protoSubrequest->set_attachment_count(rowset.size());
         req->Attachments().insert(req->Attachments().end(), rowset.begin(), rowset.end());
+    }
+
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        std::vector<TString> paths;
+        paths.reserve(subrequests.size());
+        for (const auto& subrequest : subrequests) {
+            paths.push_back(subrequest.Path);
+        }
+        req->TracingTags().push_back({"yt.table_paths", NYson::ConvertToYsonString(paths).ToString()});
     }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));

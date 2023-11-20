@@ -332,7 +332,7 @@ public:
         const auto& mapping = cmsConfig.GetDatabaseMapping();
         for (const auto& config: mapping.GetCommon()) {
             const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
             Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor});
         }
 
@@ -340,7 +340,7 @@ public:
 
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
             const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
             Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor};
         }
     }
@@ -349,7 +349,7 @@ public:
         const auto& mapping = controlPlaneConfig.GetDatabaseMapping();
         for (const auto& config: mapping.GetCommon()) {
             const auto clientActor = Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
             Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor});
         }
 
@@ -357,7 +357,7 @@ public:
 
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
             const auto clientActor = Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
             Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor};
         }
     }

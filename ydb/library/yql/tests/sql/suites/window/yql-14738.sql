@@ -1,6 +1,5 @@
 /* postgres can not */
 /* syntax version 1 */
-/* skip double format */
 USE plato;
 
 SELECT

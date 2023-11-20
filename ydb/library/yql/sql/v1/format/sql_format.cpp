@@ -265,6 +265,7 @@ private:
     struct TTokenInfo {
         bool OpeningBracket = false;
         bool ClosingBracket = false;
+        bool BracketForcedExpansion = false;
         ui32 ClosingBracketIndex = 0;
     };
 
@@ -343,6 +344,17 @@ private:
             if (value.Alt_case() == TRule_select_kind_parenthesis::kAltSelectKindParenthesis2) {
                 suppressExpr = true;
             }
+        } else if (descr == TRule_window_specification::GetDescriptor()) {
+            const auto& value = dynamic_cast<const TRule_window_specification&>(msg);
+            const auto& details = value.GetRule_window_specification_details2();
+            const bool needsNewline = details.HasBlock1() || details.HasBlock2() ||
+                                      details.HasBlock3() || details.HasBlock4();
+            if (needsNewline) {
+                auto& paren = value.GetToken1();
+                ForceExpandedColumn = paren.GetColumn();
+                ForceExpandedLine = paren.GetLine();
+            }
+            suppressExpr = true;
         }
 
         const bool expr = (descr == TRule_expr::GetDescriptor() || descr == TRule_in_expr::GetDescriptor());
@@ -402,11 +414,17 @@ private:
     void PopBracket(const TString& expected) {
         Y_ENSURE(!MarkTokenStack.empty());
         Y_ENSURE(MarkTokenStack.back() < ParsedTokens.size());
-        Y_ENSURE(ParsedTokens[MarkTokenStack.back()].Content == expected);
+        auto& openToken = ParsedTokens[MarkTokenStack.back()];
+        Y_ENSURE(openToken.Content == expected);
         auto& openInfo = MarkedTokens[MarkTokenStack.back()];
+        auto& closeInfo = MarkedTokens[TokenIndex];
+        const bool forcedExpansion = openToken.Line == ForceExpandedLine && openToken.LinePos <= ForceExpandedColumn;
+
         if (openInfo.OpeningBracket) {
             openInfo.ClosingBracketIndex = TokenIndex;
-            MarkedTokens[TokenIndex].ClosingBracket = true;
+            openInfo.BracketForcedExpansion = forcedExpansion;
+            closeInfo.BracketForcedExpansion = forcedExpansion;
+            closeInfo.ClosingBracket = true;
         }
 
         MarkTokenStack.pop_back();
@@ -1290,7 +1308,7 @@ private:
         if (markedInfo.ClosingBracket) {
             Y_ENSURE(!MarkTokenStack.empty());
             auto beginTokenIndex = MarkTokenStack.back();
-            if (ParsedTokens[beginTokenIndex].Line != ParsedTokens[TokenIndex].Line) {
+            if (markedInfo.BracketForcedExpansion || ParsedTokens[beginTokenIndex].Line != ParsedTokens[TokenIndex].Line) {
                 // multiline
                 PopCurrentIndent();
                 NewLine();
@@ -1306,7 +1324,7 @@ private:
 
         if (markedInfo.OpeningBracket) {
             MarkTokenStack.push_back(TokenIndex);
-            if (ParsedTokens[TokenIndex].Line != ParsedTokens[markedInfo.ClosingBracketIndex].Line) {
+            if (markedInfo.BracketForcedExpansion || ParsedTokens[TokenIndex].Line != ParsedTokens[markedInfo.ClosingBracketIndex].Line) {
                 // multiline
                 PushCurrentIndent();
                 NewLine();
@@ -1850,9 +1868,14 @@ private:
 
     void VisitWindowSpecification(const TRule_window_specification& msg) {
         Visit(msg.GetToken1());
-        NewLine();
-        PushCurrentIndent();
         const auto& details = msg.GetRule_window_specification_details2();
+        const bool needsNewline = details.HasBlock1() || details.HasBlock2() ||
+                                  details.HasBlock3() || details.HasBlock4();
+        if (needsNewline) {
+            NewLine();
+            PushCurrentIndent();
+        }
+        
         if (details.HasBlock1()) {
             NewLine();
             Visit(details.GetBlock1());
@@ -1873,8 +1896,11 @@ private:
             Visit(details.GetBlock4());
         }
 
-        NewLine();
-        PopCurrentIndent();
+        if (needsNewline) {
+            NewLine();
+            PopCurrentIndent();
+        }
+
         Visit(msg.GetToken3());
     }
 
@@ -2010,7 +2036,9 @@ private:
     bool AfterDigits = false;
     bool AfterQuestion = false;
     bool AfterLess = false;
-    bool AfterKeyExpr = false;
+    bool AfterKeyExpr = false; 
+    ui32 ForceExpandedLine = 0;
+    ui32 ForceExpandedColumn = 0;
 
     ui32 TokenIndex = 0;
     TMarkTokenStack MarkTokenStack;

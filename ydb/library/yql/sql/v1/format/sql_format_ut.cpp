@@ -790,7 +790,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
             {"select 1 from user assume order by key",
              "SELECT\n\t1\nFROM user\nASSUME ORDER BY\n\tkey;\n\n"},
             {"select 1 from user window w1 as (), w2 as ()",
-             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t),\n\tw2 AS (\n\t);\n\n"},
+             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (),\n\tw2 AS ();\n\n"},
             {"select 1 from user window w1 as (user)",
              "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tuser\n\t);\n\n"},
             {"select 1 from user window w1 as (partition by user)",
@@ -1361,6 +1361,20 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
              "SELECT\n\t1--comment\n;\n\n"},
             {"SELECT * FROM Input\n\n\n\n/* comment */\n\n\n\n",
              "SELECT\n\t*\nFROM Input/* comment */;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(WindowFunctionInsideExpr) {
+        TCases cases = {
+            {"SELECT CAST(ROW_NUMBER() OVER () AS String) AS x,\nFROM Input;", 
+             "SELECT\n\tCAST(ROW_NUMBER() OVER () AS String) AS x,\nFROM Input;\n\n"},
+            {"SELECT CAST(ROW_NUMBER() OVER (PARTITION BY key) AS String) AS x,\nFROM Input;", 
+             "SELECT\n\tCAST(\n\t\tROW_NUMBER() OVER (\n\t\t\tPARTITION BY\n\t\t\t\tkey\n\t\t) AS String\n\t) AS x,\nFROM Input;\n\n"},
+            {"SELECT CAST(ROW_NUMBER() OVER (users) AS String) AS x,\nFROM Input;", 
+            "SELECT\n\tCAST(\n\t\tROW_NUMBER() OVER (\n\t\t\tusers\n\t\t) AS String\n\t) AS x,\nFROM Input;\n\n"},
         };
 
         TSetup setup;

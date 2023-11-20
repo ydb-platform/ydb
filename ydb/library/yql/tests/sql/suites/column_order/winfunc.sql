@@ -1,4 +1,3 @@
-/* skip double format */
 use plato;
 pragma OrderedColumns; 
 

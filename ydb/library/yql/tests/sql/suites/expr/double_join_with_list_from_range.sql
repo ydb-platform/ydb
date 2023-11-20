@@ -1,5 +1,4 @@
 /* postgres can not */
-/* skip double format */
 $list = select lst, row_number() over (order by lst) as rn from (
     select * from (
         select ListFromRange(1us, 333us) as lst

@@ -658,7 +658,7 @@ private:
     TInstant CreationTime;
     TDuration InitDuration;
     bool InitDone;
-    const bool NewPartition;
+    bool NewPartition;
 
     THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners;
     THashSet<TActorId> OwnerPipes;

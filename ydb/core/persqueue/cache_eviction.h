@@ -230,11 +230,10 @@ namespace NPQ {
             }
         };
 
-        TIntabletCache(ui64 tabletId, ui32 l1Size)
+        explicit TIntabletCache(ui64 tabletId)
             : TabletId(tabletId)
             , L1Strategy(nullptr)
         {
-            Y_UNUSED(l1Size);
         }
 
         const TMapType& CachedMap() const { return Cache; }

@@ -29,6 +29,8 @@ TEvTx* CreateRequest(ui64 txId, NKikimrSchemeOp::TModifyScheme&& tx) {
 }
 
 void DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
+    Sleep(TDuration::Seconds(1));
+
     Cerr << "ALTER_SCHEME: " << scheme << Endl;
 
     const auto sender = setup.GetRuntime().AllocateEdgeActor();
@@ -54,6 +56,8 @@ void DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueu
     auto e = setup.GetRuntime().GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
     UNIT_ASSERT_EQUAL_C(e->Record.GetStatus(), TEvSchemeShard::EStatus::StatusAccepted,
         "Unexpected status " << NKikimrScheme::EStatus_Name(e->Record.GetStatus()) << " " << e->Record.GetReason());
+
+    Sleep(TDuration::Seconds(1));
 }
 
 void SplitPartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partition, TString boundary) {
@@ -82,65 +86,60 @@ auto Msg(const TString& data, ui64 seqNo) {
     return msg;
 }
 
+TTopicSdkTestSetup CreateSetup() {
+    NKikimrConfig::TFeatureFlags ff;
+    ff.SetEnableTopicSplitMerge(true);
+    ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
 
+    auto settings = TTopicSdkTestSetup::MakeServerSettings();
+    settings.SetFeatureFlags(ff);
 
-Y_UNIT_TEST_SUITE(TopicSplitMerge) {
-    Y_UNIT_TEST(PartitionSplit) {
-        TTopicSdkTestSetup setup("TopicSplitMerge", TTopicSdkTestSetup::MakeServerSettings(), false);
+    auto setup = TTopicSdkTestSetup("TopicSplitMerge", settings, false);
 
-        auto& ff = setup.GetRuntime().GetAppData().FeatureFlags;
-        ff.SetEnableTopicSplitMerge(true);
-        ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
 
-        setup.CreateTopic();
+    return setup;
+}
 
-        TTopicClient client = setup.MakeClient();
+std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition = std::nullopt) {
+    auto writeSettings = TWriteSessionSettings()
+                    .Path(TEST_TOPIC)
+                    .ProducerId(producer);
+    if (partition) {
+        writeSettings.PartitionId(*partition);
+    } else {
+        writeSettings.MessageGroupId(producer);
+    }
 
-        setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
+    writeSettings.EventHandlers_.AcksHandler([&](TWriteSessionEvent::TAcksEvent& ev) {
+        Cerr << ">>>>> Received TWriteSessionEvent::TAcksEvent " <<  ev.DebugString() << Endl << Flush;
+    });
 
-        TString producer1 = "producer-1";
-        TString producer2 = "producer-2";
-        TString producer3 = "producer-3";
-        TString producer4 = "producer-4";
+    return client.CreateSimpleBlockingWriteSession(writeSettings);
+}
 
-        auto writeSettings1 = TWriteSessionSettings()
-                        .Path(TEST_TOPIC)
-                        .ProducerId(producer1)
-                        .MessageGroupId(producer1);
-        auto writeSession1 = client.CreateSimpleBlockingWriteSession(writeSettings1);
+struct TTestReadSession {
+    struct MsgInfo {
+        ui64 PartitionId;
+        ui64 SeqNo;
+        ui64 Offset;
+        TString Data;
+    };
 
-        auto writeSettings2 = TWriteSessionSettings()
-                        .Path(TEST_TOPIC)
-                        .ProducerId(producer2)
-                        .MessageGroupId(producer2);
-        auto writeSession2 = client.CreateSimpleBlockingWriteSession(writeSettings2);
+    std::shared_ptr<IReadSession> Session;
 
-        auto writeSettings3 = TWriteSessionSettings()
-                        .Path(TEST_TOPIC)
-                        .ProducerId(producer3)
-                        .PartitionId(0);
-        auto writeSession3 = client.CreateSimpleBlockingWriteSession(writeSettings3);
+    NThreading::TPromise<void> Promise = NThreading::NewPromise<void>();
+    std::vector<MsgInfo> ReceivedMessages;
+    std::set<size_t> Partitions;
 
-        Cerr << ">>>>> 1 " << Endl;
-
-        struct MsgInfo {
-            ui64 PartitionId;
-            ui64 SeqNo;
-            ui64 Offset;
-            TString Data;
-        };
-
-        NThreading::TPromise<void> checkedPromise = NThreading::NewPromise<void>();
-        std::vector<MsgInfo> receivedMessages;
-        std::set<size_t> partitions;
-
+    TTestReadSession(TTopicClient& client, size_t expectedMessagesCount) {
         auto readSettings = TReadSessionSettings()
             .ConsumerName(TEST_CONSUMER)
             .AppendTopics(TEST_TOPIC);
 
         readSettings.EventHandlers_.SimpleDataHandlers(
-            [&]
+            [&, expectedMessagesCount]
             (TReadSessionEvent::TDataReceivedEvent& ev) mutable {
             auto& messages = ev.GetMessages();
             for (size_t i = 0u; i < messages.size(); ++i) {
@@ -151,14 +150,14 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
                      << ", seqNo=" << message.GetSeqNo()
                      << ", offset=" << message.GetOffset()
                      << Endl;
-                receivedMessages.push_back({message.GetPartitionSession()->GetPartitionId(),
+                ReceivedMessages.push_back({message.GetPartitionSession()->GetPartitionId(),
                                             message.GetSeqNo(),
                                             message.GetOffset(),
                                             message.GetData()});
             }
 
-            if (receivedMessages.size() == 6) {
-                checkedPromise.SetValue();
+            if (ReceivedMessages.size() == expectedMessagesCount) {
+                Promise.SetValue();
             }
         });
 
@@ -166,24 +165,70 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
             [&]
             (TReadSessionEvent::TStartPartitionSessionEvent& ev) mutable {
                 Cerr << ">>>>> Received TStartPartitionSessionEvent message " << ev.DebugString() << Endl;
-                partitions.insert(ev.GetPartitionSession()->GetPartitionId());
+                Partitions.insert(ev.GetPartitionSession()->GetPartitionId());
                 ev.Confirm();
         });
 
-        auto readSession = client.CreateReadSession(readSettings);
+        Session = client.CreateReadSession(readSettings);
+    }
 
-        Cerr << ">>>>> 2 " << Endl;
+    void WaitAllMessages() {
+        Promise.GetFuture().GetValueSync();
+    }
+};
+
+Y_UNIT_TEST_SUITE(TopicSplitMerge) {
+
+    Y_UNIT_TEST(Simple) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic();
+
+        TTopicClient client = setup.MakeClient();
+
+        auto writeSession1 = CreateWriteSession(client, "producer-1");
+        auto writeSession2 = CreateWriteSession(client, "producer-2");
+
+        TTestReadSession ReadSession(client, 2);
+
+        UNIT_ASSERT(writeSession1->Write(Msg("message_1.1", 2)));
+        UNIT_ASSERT(writeSession2->Write(Msg("message_2.1", 3)));
+
+        ReadSession.WaitAllMessages();
+
+        for(const auto& info : ReadSession.ReceivedMessages) {
+            if (info.Data == "message_1.1") {
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(2, info.SeqNo);
+            } else if (info.Data == "message_2.1") {
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(3, info.SeqNo);
+            } else {
+                UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
+            }
+        }
+
+        writeSession1->Close(TDuration::Seconds(1));
+        writeSession2->Close(TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST(PartitionSplit) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic();
+
+        TTopicClient client = setup.MakeClient();
+
+        auto writeSession1 = CreateWriteSession(client, "producer-1");
+        auto writeSession2 = CreateWriteSession(client, "producer-2");
+        auto writeSession3 = CreateWriteSession(client, "producer-3", 0);
+
+        TTestReadSession ReadSession(client, 6);
 
         UNIT_ASSERT(writeSession1->Write(Msg("message_1.1", 2)));
         UNIT_ASSERT(writeSession2->Write(Msg("message_2.1", 3)));
         UNIT_ASSERT(writeSession3->Write(Msg("message_3.1", 1)));
 
-        Cerr << ">>>>> 3 " << Endl;
-
-        ui64 txId = 0;
+        ui64 txId = 1006;
         SplitPartition(setup, ++txId, 0, "a");
-
-        Cerr << ">>>>> 4 " << Endl;
 
         writeSession1->Write(Msg("message_1.2_2", 2)); // Will be ignored because duplicated SeqNo
         writeSession3->Write(Msg("message_3.2", 11)); // Will be fail because partition is not writable after split
@@ -197,14 +242,9 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         auto writeSession4 = client.CreateSimpleBlockingWriteSession(writeSettings4);
         writeSession4->Write(TWriteMessage("message_4.1"));
 
-        Cerr << ">>>>> 5 " << Endl;
+        ReadSession.WaitAllMessages();
 
-        checkedPromise.GetFuture().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(6, receivedMessages.size());
-
-        Cerr << ">>>>> 6 " << Endl;
-
-        for(const auto& info : receivedMessages) {
+        for(const auto& info : ReadSession.ReceivedMessages) {
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -228,131 +268,39 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
             }
         }
 
-        Cerr << ">>>>> 7 " << Endl;
-
         writeSession1->Close(TDuration::Seconds(1));
         writeSession2->Close(TDuration::Seconds(1));
         writeSession3->Close(TDuration::Seconds(1));
-        readSession->Close(TDuration::Seconds(1));
-
-        Cerr << ">>>>> 8 " << Endl;
     }
 
     Y_UNIT_TEST(PartitionMerge) {
-        TTopicSdkTestSetup setup("TopicSplitMerge", TTopicSdkTestSetup::MakeServerSettings(), false);
-
-        auto& ff = setup.GetRuntime().GetAppData().FeatureFlags;
-        ff.SetEnableTopicSplitMerge(true);
-        ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
-
+        TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
 
         TTopicClient client = setup.MakeClient();
 
-        setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
+        auto writeSession1 = CreateWriteSession(client, "producer-1", 0);
+        auto writeSession2 = CreateWriteSession(client, "producer-2", 1);
 
-        TString producer1 = "producer-1";
-        TString producer2 = "producer-2";
-        TString producer3 = "producer-3";
-
-        auto writeSettings1 = TWriteSessionSettings()
-                        .Path(TEST_TOPIC)
-                        .ProducerId(producer1)
-                        .MessageGroupId(producer1)
-                        .PartitionId(0);
-        auto writeSession1 = client.CreateSimpleBlockingWriteSession(writeSettings1);
-
-        auto writeSettings2 = TWriteSessionSettings()
-                        .Path(TEST_TOPIC)
-                        .ProducerId(producer2)
-                        .MessageGroupId(producer2)
-                        .PartitionId(1);
-        auto writeSession2 = client.CreateSimpleBlockingWriteSession(writeSettings2);
-
-        Cerr << ">>>>> 1 " << Endl;
-
-        struct MsgInfo {
-            ui64 PartitionId;
-            ui64 SeqNo;
-            ui64 Offset;
-            TString Data;
-        };
-
-        NThreading::TPromise<void> checkedPromise = NThreading::NewPromise<void>();
-        std::vector<MsgInfo> receivedMessages;
-        std::set<size_t> partitions;
-
-        auto readSettings = TReadSessionSettings()
-            .ConsumerName(TEST_CONSUMER)
-            .AppendTopics(TEST_TOPIC);
-
-        readSettings.EventHandlers_.SimpleDataHandlers(
-            [&]
-            (TReadSessionEvent::TDataReceivedEvent& ev) mutable {
-            auto& messages = ev.GetMessages();
-            for (size_t i = 0u; i < messages.size(); ++i) {
-                auto& message = messages[i];
-
-                Cerr << ">>>>> Received message partitionId=" << message.GetPartitionSession()->GetPartitionId() 
-                     << ", message=" << message.GetData() 
-                     << ", seqNo=" << message.GetSeqNo()
-                     << ", offset=" << message.GetOffset()
-                     << Endl;
-                receivedMessages.push_back({message.GetPartitionSession()->GetPartitionId(),
-                                            message.GetSeqNo(),
-                                            message.GetOffset(),
-                                            message.GetData()});
-            }
-
-            if (receivedMessages.size() == 3) {
-                checkedPromise.SetValue();
-            }
-        });
-
-        readSettings.EventHandlers_.StartPartitionSessionHandler(
-            [&]
-            (TReadSessionEvent::TStartPartitionSessionEvent& ev) mutable {
-                Cerr << ">>>>> Received TStartPartitionSessionEvent for partition " << ev.GetPartitionSession()->GetPartitionId() << Endl;
-                partitions.insert(ev.GetPartitionSession()->GetPartitionId());
-                ev.Confirm();
-        });
-
-        auto readSession = client.CreateReadSession(readSettings);
-
-        Cerr << ">>>>> 2 " << Endl;
+        TTestReadSession ReadSession(client, 3);
 
         UNIT_ASSERT(writeSession1->Write(Msg("message_1.1", 2)));
         UNIT_ASSERT(writeSession2->Write(Msg("message_2.1", 3)));
 
-        Cerr << ">>>>> 3 " << Endl;
-
-        ui64 txId = 0;
+        ui64 txId = 1012;
         MergePartition(setup, ++txId, 0, 1);
-
-        Cerr << ">>>>> 4 " << Endl;
 
         UNIT_ASSERT(writeSession1->Write(Msg("message_1.2", 5))); // Will be fail because partition is not writable after merge
         UNIT_ASSERT(writeSession2->Write(Msg("message_2.2", 7))); // Will be fail because partition is not writable after merge
 
-        auto writeSettings3 = TWriteSessionSettings()
-                        .Path(TEST_TOPIC)
-                        .ProducerId(producer1)
-                        .MessageGroupId(producer1);
-        auto writeSession3 = client.CreateSimpleBlockingWriteSession(writeSettings3);
+        auto writeSession3 = CreateWriteSession(client, "producer-2", 2);
 
         UNIT_ASSERT(writeSession3->Write(Msg("message_3.1", 2)));  // Will be ignored because duplicated SeqNo
         UNIT_ASSERT(writeSession3->Write(Msg("message_3.2", 11)));
 
+        ReadSession.WaitAllMessages();
 
-        Cerr << ">>>>> 5 " << Endl;
-
-        checkedPromise.GetFuture().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(3, receivedMessages.size());
-
-        Cerr << ">>>>> 6 " << Endl;
-
-        for(const auto& info : receivedMessages) {
+        for(const auto& info : ReadSession.ReceivedMessages) {
             if (info.Data == TString("message_1.1")) {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_EQUAL(2, info.SeqNo);
@@ -367,14 +315,9 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
             }
         }
 
-        Cerr << ">>>>> 7 " << Endl;
-
         writeSession1->Close(TDuration::Seconds(1));
         writeSession2->Close(TDuration::Seconds(1));
         writeSession3->Close(TDuration::Seconds(1));
-        readSession->Close(TDuration::Seconds(1));
-
-        Cerr << ">>>>> 8 " << Endl;
     }
 
 }

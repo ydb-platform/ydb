@@ -21,15 +21,13 @@ namespace NPQ {
             return NKikimrServices::TActivity::PERSQUEUE_CACHE_ACTOR;
         }
 
-        TPQCacheProxy(const TActorId& tablet, TString topicName, ui64 tabletId, ui32 size)
+        TPQCacheProxy(const TActorId& tablet, ui64 tabletId)
         : Tablet(tablet)
-        , TopicName(topicName)
         , TabletId(tabletId)
         , Cookie(0)
-        , Cache(tabletId, size)
+        , Cache(tabletId)
         , CountersUpdateTime(TAppData::TimeProvider->Now())
         {
-            Y_ABORT_UNLESS(topicName.size(), "CacheProxy with empty topic name");
         }
 
         void Bootstrap(const TActorContext& ctx)
@@ -92,7 +90,9 @@ namespace NPQ {
 
         void Handle(TEvPQ::TEvChangeCacheConfig::TPtr& ev, const TActorContext& ctx)
         {
-            Y_UNUSED(ev);
+            if (ev->Get()->TopicName) {
+                TopicName = ev->Get()->TopicName;
+            }
             Cache.Touch(ctx);
         }
 

@@ -160,6 +160,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& ctx);
     void ProcessSourceIdRequests(ui32 partitionId);
 
+    TString LogPrefix() const;
+
     static constexpr const char * KeyConfig() { return "_config"; }
     static constexpr const char * KeyState() { return "_state"; }
     static constexpr const char * KeyTxInfo() { return "_txinfo"; }

@@ -69,8 +69,20 @@ TString TPartition::LogPrefix() const {
 }
 
 bool TPartition::CanWrite() const {
-    return (PartitionConfig == nullptr || PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) 
-        && (!PendingPartitionConfig || PendingPartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active);
+    if (PartitionConfig == nullptr) {
+        // Old format without AllPartitions configuration field. 
+        // It is not split/merge partition.
+        return true;
+    }
+    if (NewPartition && PartitionConfig->ParentPartitionIdsSize() > 0) {
+        // A tx of create partition configuration is not commited.
+        return false;
+    }
+    if (PendingPartitionConfig && PendingPartitionConfig->GetStatus() != NKikimrPQ::ETopicPartitionStatus::Active) {
+        // Pending configuration tx inactivate this partition.
+        return false;
+    }
+    return PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
 }
 
 bool TPartition::CanEnqueue() const {
@@ -1742,6 +1754,10 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
 
 
     ProcessTxsAndUserActs(ctx);
+
+    if (ChangeConfig && CurrentStateFunc() == &TThis::StateIdle) {
+        HandleWrites(ctx);
+    }
 }
 
 void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
@@ -1752,6 +1768,7 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
     PartitionConfig = GetPartitionConfig(Config, Partition);
     PartitionGraph.Rebuild(Config);
     TopicConverter = topicConverter;
+    NewPartition = false;
 
     Y_ABORT_UNLESS(Config.GetPartitionConfig().GetTotalPartitions() > 0);
 

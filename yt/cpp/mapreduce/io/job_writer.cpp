@@ -14,12 +14,9 @@ TJobWriterStream::TJobWriterStream(int fd)
 { }
 
 TJobWriterStream::TJobWriterStream(const TFile& file)
-    : FdFile(file)
-    , FdOutput(FdFile)
-    , BufferedOutput(&FdOutput, BufferSize)
-{ }
-
-TJobWriterStream::~TJobWriterStream()
+    : FDFile(file)
+    , FDOutput(FDFile)
+    , BufferedOutput(&FDOutput, BufferSize)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -31,14 +28,14 @@ TJobWriterStream::~TJobWriterStream()
 TJobWriter::TJobWriter(size_t outputTableCount)
 {
     for (size_t i = 0; i < outputTableCount; ++i) {
-        Streams_.emplace_back(MakeHolder<NDetail::TJobWriterStream>(int(i * 3 + 1)));
+        Streams_.emplace_back(std::make_unique<NDetail::TJobWriterStream>(static_cast<int>(i * 3 + 1)));
     }
 }
 
 TJobWriter::TJobWriter(const TVector<TFile>& fileList)
 {
     for (const auto& f : fileList) {
-        Streams_.emplace_back(MakeHolder<NDetail::TJobWriterStream>(f));
+        Streams_.emplace_back(std::make_unique<NDetail::TJobWriterStream>(f));
     }
 }
 
@@ -76,7 +73,7 @@ THolder<IProxyOutput> CreateRawJobWriter(size_t outputTableCount)
 
 TSingleStreamJobWriter::TSingleStreamJobWriter(size_t tableIndex)
     : TableIndex_(tableIndex)
-    , Stream_(MakeHolder<NDetail::TJobWriterStream>(int(tableIndex * 3 + 1)))
+    , Stream_(std::make_unique<NDetail::TJobWriterStream>(static_cast<int>(tableIndex * 3 + 1)))
 { }
 
 size_t TSingleStreamJobWriter::GetStreamCount() const

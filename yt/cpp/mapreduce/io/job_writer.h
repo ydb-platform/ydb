@@ -15,16 +15,17 @@ namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJobWriterStream {
+class TJobWriterStream
+{
 public:
     explicit TJobWriterStream(int fd);
     explicit TJobWriterStream(const TFile& file);
-    ~TJobWriterStream();
+    ~TJobWriterStream() = default;
 
 public:
     static constexpr size_t BufferSize = 1 << 20;
-    TFile FdFile;
-    TUnbufferedFileOutput FdOutput;
+    TFile FDFile;
+    TUnbufferedFileOutput FDOutput;
     TBufferedOutput BufferedOutput;
 };
 
@@ -47,7 +48,7 @@ public:
     void OnRowFinished(size_t tableIndex) override;
 
 private:
-    TVector<THolder<NDetail::TJobWriterStream>> Streams_;
+    TVector<std::unique_ptr<NDetail::TJobWriterStream>> Streams_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -65,7 +66,7 @@ public:
 
 private:
     const size_t TableIndex_;
-    THolder<NDetail::TJobWriterStream> Stream_;
+    std::unique_ptr<NDetail::TJobWriterStream> Stream_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

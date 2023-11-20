@@ -21,7 +21,7 @@ class TProgramBuilder {
     mutable THashMap<TString, std::shared_ptr<arrow::Scalar>> Constants;
     TString Error;
 public:
-    mutable THashMap<ui32, TString> Sources;
+    mutable THashMap<ui32, NSsa::TColumnInfo> Sources;
 
     explicit TProgramBuilder(const IColumnResolver& columnResolver, const TKernelsRegistry& kernelsRegistry)
         : ColumnResolver(columnResolver)
@@ -32,15 +32,15 @@ public:
         return Error;
     }
 private:
-    std::string GetName(const NKikimrSSA::TProgram::TColumn& column) const {
-        ui32 columnId = column.GetId();
-        TString name = ColumnResolver.GetColumnName(columnId, false);
+    NSsa::TColumnInfo GetColumnInfo(const NKikimrSSA::TProgram::TColumn& column) const {
+        const ui32 columnId = column.GetId();
+        const TString name = ColumnResolver.GetColumnName(columnId, false);
         if (name.Empty()) {
-            return GenerateName(column);
+            return NSsa::TColumnInfo::Generated(columnId, GenerateName(column));
         } else {
-            Sources[columnId] = name;
+            Sources.emplace(columnId, NSsa::TColumnInfo::Original(columnId, name));
+            return NSsa::TColumnInfo::Original(columnId, name);
         }
-        return std::string(name.data(), name.size());
     }
 
     std::string GenerateName(const NKikimrSSA::TProgram::TColumn& column) const {
@@ -52,11 +52,11 @@ private:
         }
         return std::string(name.data(), name.size());
     }
-    TAssign MakeFunction(const std::string& name,
+    TAssign MakeFunction(const NSsa::TColumnInfo& name,
         const NKikimrSSA::TProgram::TAssignment::TFunction& func);
-    NSsa::TAssign MakeConstant(const std::string& name, const NKikimrSSA::TProgram::TConstant& constant);
-    NSsa::TAggregateAssign MakeAggregate(const std::string& name, const NKikimrSSA::TProgram::TAggregateAssignment::TAggregateFunction& func);
-    NSsa::TAssign MaterializeParameter(const std::string& name, const NKikimrSSA::TProgram::TParameter& parameter, const std::shared_ptr<arrow::RecordBatch>& parameterValues);
+    NSsa::TAssign MakeConstant(const NSsa::TColumnInfo& name, const NKikimrSSA::TProgram::TConstant& constant);
+    NSsa::TAggregateAssign MakeAggregate(const NSsa::TColumnInfo& name, const NKikimrSSA::TProgram::TAggregateAssignment::TAggregateFunction& func);
+    NSsa::TAssign MaterializeParameter(const NSsa::TColumnInfo& name, const NKikimrSSA::TProgram::TParameter& parameter, const std::shared_ptr<arrow::RecordBatch>& parameterValues);
 
 public:
     bool ExtractAssign(NSsa::TProgramStep& step, const NKikimrSSA::TProgram::TAssignment& assign,
@@ -67,13 +67,13 @@ public:
     bool ExtractGroupBy(NSsa::TProgramStep& step, const NKikimrSSA::TProgram::TGroupBy& groupBy);
 };
 
-TAssign TProgramBuilder::MakeFunction(const std::string& name,
+TAssign TProgramBuilder::MakeFunction(const NSsa::TColumnInfo& name,
     const NKikimrSSA::TProgram::TAssignment::TFunction& func) {
     using TId = NKikimrSSA::TProgram::TAssignment;
 
-    std::vector<std::string> arguments;
+    std::vector<NSsa::TColumnInfo> arguments;
     for (auto& col : func.GetArguments()) {
-        arguments.push_back(GetName(col));
+        arguments.push_back(GetColumnInfo(col));
     }
 
     auto mkCastOptions = [](std::shared_ptr<arrow::DataType> dataType) {
@@ -84,14 +84,14 @@ TAssign TProgramBuilder::MakeFunction(const std::string& name,
     };
 
     auto mkLikeOptions = [&](bool ignoreCase) {
-        if (arguments.size() != 2 || !Constants.contains(arguments[1])) {
+        if (arguments.size() != 2 || !Constants.contains(arguments[1].GetColumnName())) {
             return std::shared_ptr<arrow::compute::MatchSubstringOptions>();
         }
-        auto patternScalar = Constants[arguments[1]];
+        auto patternScalar = Constants[arguments[1].GetColumnName()];
         if (!arrow::is_base_binary_like(patternScalar->type->id())) {
             return std::shared_ptr<arrow::compute::MatchSubstringOptions>();
         }
-        arguments.resize(1);
+        arguments.pop_back();
         auto& pattern = static_cast<arrow::BaseBinaryScalar&>(*patternScalar).value;
         return std::make_shared<arrow::compute::MatchSubstringOptions>(pattern->ToString(), ignoreCase);
     };
@@ -99,7 +99,7 @@ TAssign TProgramBuilder::MakeFunction(const std::string& name,
     if (func.GetFunctionType() == NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL) {
         auto kernelFunction = KernelsRegistry.GetFunction(func.GetKernelIdx());
         if (!kernelFunction) {
-            Error = TStringBuilder() << "Unknown kernel for " << name << ";kernel_idx=" << func.GetKernelIdx();
+            Error = TStringBuilder() << "Unknown kernel for " << name.GetColumnName() << ";kernel_idx=" << func.GetKernelIdx();
             return TAssign(name, EOperation::Unspecified, std::move(arguments));
         }
         return TAssign(name, kernelFunction, std::move(arguments), nullptr);
@@ -231,7 +231,7 @@ TAssign TProgramBuilder::MakeFunction(const std::string& name,
     return TAssign(name, EOperation::Unspecified, std::move(arguments));
 }
 
-NSsa::TAssign TProgramBuilder::MakeConstant(const std::string& name, const NKikimrSSA::TProgram::TConstant& constant) {
+NSsa::TAssign TProgramBuilder::MakeConstant(const NSsa::TColumnInfo& name, const NKikimrSSA::TProgram::TConstant& constant) {
     using TId = NKikimrSSA::TProgram::TConstant;
 
     switch (constant.GetValueCase()) {
@@ -265,11 +265,11 @@ NSsa::TAssign TProgramBuilder::MakeConstant(const std::string& name, const NKiki
     return TAssign(name, EOperation::Unspecified, {});
 }
 
-NSsa::TAggregateAssign TProgramBuilder::MakeAggregate(const std::string& name, const NKikimrSSA::TProgram::TAggregateAssignment::TAggregateFunction& func) {
+NSsa::TAggregateAssign TProgramBuilder::MakeAggregate(const NSsa::TColumnInfo& name, const NKikimrSSA::TProgram::TAggregateAssignment::TAggregateFunction& func) {
     using TId = NKikimrSSA::TProgram::TAggregateAssignment;
 
     if (func.GetFunctionType() == NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL) {
-        std::string argument = GetName(func.GetArguments()[0]);
+        const NSsa::TColumnInfo argument = GetColumnInfo(func.GetArguments()[0]);
         auto kernelFunction = KernelsRegistry.GetFunction(func.GetKernelIdx());
         if (!kernelFunction) {
             Error = TStringBuilder() << "Unknown kernel for " << func.GetId() << ";kernel_idx=" << func.GetKernelIdx();
@@ -279,7 +279,7 @@ NSsa::TAggregateAssign TProgramBuilder::MakeAggregate(const std::string& name, c
     }
 
     if (func.ArgumentsSize() == 1) {
-        std::string argument = GetName(func.GetArguments()[0]);
+        NSsa::TColumnInfo argument = GetColumnInfo(func.GetArguments()[0]);
 
         switch (func.GetId()) {
             case TId::AGG_SOME:
@@ -306,7 +306,7 @@ NSsa::TAggregateAssign TProgramBuilder::MakeAggregate(const std::string& name, c
     return TAggregateAssign(name); // !ok()
 }
 
-NSsa::TAssign TProgramBuilder::MaterializeParameter(const std::string& name, const NKikimrSSA::TProgram::TParameter& parameter, const std::shared_ptr<arrow::RecordBatch>& parameterValues) {
+NSsa::TAssign TProgramBuilder::MaterializeParameter(const NSsa::TColumnInfo& name, const NKikimrSSA::TProgram::TParameter& parameter, const std::shared_ptr<arrow::RecordBatch>& parameterValues) {
     auto parameterName = parameter.GetName();
     auto column = parameterValues->GetColumnByName(parameterName);
 #if 0
@@ -331,7 +331,7 @@ bool TProgramBuilder::ExtractAssign(NSsa::TProgramStep& step, const NKikimrSSA::
 
     using TId = NKikimrSSA::TProgram::TAssignment;
 
-    std::string columnName = GetName(assign.GetColumn());
+    const NSsa::TColumnInfo columnName = GetColumnInfo(assign.GetColumn());
 
     switch (assign.GetExpressionCase()) {
         case TId::kFunction:
@@ -340,7 +340,7 @@ bool TProgramBuilder::ExtractAssign(NSsa::TProgramStep& step, const NKikimrSSA::
             if (!func.IsOk()) {
                 return false;
             }
-            step.Assignes.emplace_back(std::move(func));
+            step.AddAssigne(std::move(func));
             break;
         }
         case TId::kConstant:
@@ -349,8 +349,8 @@ bool TProgramBuilder::ExtractAssign(NSsa::TProgramStep& step, const NKikimrSSA::
             if (!cnst.IsConstant()) {
                 return false;
             }
-            Constants[columnName] = cnst.GetConstant();
-            step.Assignes.emplace_back(std::move(cnst));
+            Constants[columnName.GetColumnName()] = cnst.GetConstant();
+            step.AddAssigne(std::move(cnst));
             break;
         }
         case TId::kParameter:
@@ -359,7 +359,7 @@ bool TProgramBuilder::ExtractAssign(NSsa::TProgramStep& step, const NKikimrSSA::
             if (!param.IsConstant()) {
                 return false;
             }
-            step.Assignes.emplace_back(std::move(param));
+            step.AddAssigne(std::move(param));
             break;
         }
         case TId::kExternalFunction:
@@ -376,16 +376,15 @@ bool TProgramBuilder::ExtractFilter(NSsa::TProgramStep& step, const NKikimrSSA::
         return false;
     }
     // NOTE: Name maskes Id for column. If column assigned with name it's accessible only by name.
-    step.Filters.push_back(GetName(column));
+    step.AddFilter(GetColumnInfo(column));
     return true;
 }
 
 bool TProgramBuilder::ExtractProjection(NSsa::TProgramStep& step,
     const NKikimrSSA::TProgram::TProjection& projection) {
-    step.Projection.reserve(projection.ColumnsSize());
     for (auto& col : projection.GetColumns()) {
         // NOTE: Name maskes Id for column. If column assigned with name it's accessible only by name.
-        step.Projection.push_back(GetName(col));
+        step.AddProjection(GetColumnInfo(col));
     }
     return true;
 }
@@ -395,29 +394,26 @@ bool TProgramBuilder::ExtractGroupBy(NSsa::TProgramStep& step, const NKikimrSSA:
         return false;
     }
 
-    step.GroupBy.reserve(groupBy.AggregatesSize());
-    step.GroupByKeys.reserve(groupBy.KeyColumnsSize());
     for (auto& agg : groupBy.GetAggregates()) {
-        auto& resColumn = agg.GetColumn();
-        TString columnName = GenerateName(resColumn);
+        const NSsa::TColumnInfo columnName = GetColumnInfo(agg.GetColumn());
 
         auto func = MakeAggregate(columnName, agg.GetFunction());
         if (!func.IsOk()) {
             return false;
         }
-        step.GroupBy.push_back(std::move(func));
+        step.AddGroupBy(std::move(func));
     }
     for (auto& key : groupBy.GetKeyColumns()) {
-        step.GroupByKeys.push_back(GetName(key));
+        step.AddGroupByKeys(GetColumnInfo(key));
     }
 
     return true;
 }
 }
 
-const THashMap<ui32, TString>& TProgramContainer::GetSourceColumns() const {
+const THashMap<ui32, NSsa::TColumnInfo>& TProgramContainer::GetSourceColumns() const {
     if (!Program) {
-        return Default<THashMap<ui32, TString>>();
+        return Default<THashMap<ui32, NSsa::TColumnInfo>>();
     }
     return Program->SourceColumns;
 }
@@ -431,18 +427,6 @@ std::set<std::string> TProgramContainer::GetEarlyFilterColumns() const {
         return Program->GetEarlyFilterColumns();
     }
     return Default<std::set<std::string>>();
-}
-
-bool TProgramContainer::HasEarlyFilterOnly() const {
-    if (!Program) {
-        return true;
-    }
-    for (ui32 i = 1; i < Program->Steps.size(); ++i) {
-        if (Program->Steps[i]->Filters.size()) {
-            return false;
-        }
-    }
-    return true;
 }
 
 bool TProgramContainer::Init(const IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram, TString& error) {
@@ -553,7 +537,7 @@ bool TProgramContainer::ParseProgram(const IColumnResolver& columnResolver, cons
         auto it = ydbSchema.Columns.find(key);
         Y_ABORT_UNLESS(it != ydbSchema.Columns.end());
 
-        ssaProgram->SourceColumns[key] = it->second.Name;
+        ssaProgram->SourceColumns.emplace(key, NSsa::TColumnInfo::Original(key, it->second.Name));
     }
 
     if (!ssaProgram->Steps.empty()) {

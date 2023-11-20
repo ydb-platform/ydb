@@ -25,6 +25,14 @@ private:
 public:
     bool Init(const IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram, TString& error);
 
+    const std::vector<std::shared_ptr<NSsa::TProgramStep>>& GetSteps() const {
+        if (!Program) {
+            return Default<std::vector<std::shared_ptr<NSsa::TProgramStep>>>();
+        } else {
+            return Program->Steps;
+        }
+    }
+
     std::shared_ptr<NArrow::TColumnFilter> ApplyEarlyFilter(std::shared_ptr<arrow::Table>& batch, const bool useFilter) const {
         if (Program) {
             return Program->ApplyEarlyFilter(batch, useFilter);
@@ -40,7 +48,7 @@ public:
         return arrow::Status::OK();
     }
 
-    const THashMap<ui32, TString>& GetSourceColumns() const;
+    const THashMap<ui32, NSsa::TColumnInfo>& GetSourceColumns() const;
     bool HasProgram() const;
 
     std::set<std::string> GetEarlyFilterColumns() const;

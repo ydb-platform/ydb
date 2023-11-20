@@ -196,6 +196,7 @@ public:
 
             FuncRegistry_->SetSystemModulePaths(systemModules);
 
+            NYql::NUserData::TUserData::UserDataToLibraries({}, Modules_);
             auto userDataTable = GetYqlModuleResolver(ExprContext_, ModuleResolver_, {}, Clusters_, {});
 
             if (!userDataTable) {

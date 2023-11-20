@@ -1,8 +1,12 @@
 #include <cstring>
+#include <vector>
 
 #include <library/cpp/actors/core/event.h>
+#include <library/cpp/actors/core/event_pb.h>
+#include <library/cpp/int128/int128.h>
 #include <library/cpp/testing/benchmark/bench.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/yexception.h>
 #include <util/stream/input.h>
 #include <util/stream/output.h>
@@ -87,73 +91,120 @@ const char* storeString256 =
 "................................"
 ;
 
+struct TTestStats {
+    ui128 BytesWritten{0};
+    size_t EvCount{0};
+    TDuration SerializeDuration{TDuration::MilliSeconds(0)};
+    TDuration DeserializeDuration{TDuration::MilliSeconds(0)};
+
+    TTestStats& operator+=(const TTestStats& that) {
+        BytesWritten += that.BytesWritten;
+        EvCount += that.EvCount;
+        SerializeDuration += that.SerializeDuration;
+        DeserializeDuration += that.DeserializeDuration;
+        return *this;
+    }
+};
+
+// using TEvVPut = NKikimr::TEvBlobStorage::TEvVPut;
+using TEvVPut = NKikimrBlobStorage::TEvVPut;
+// using NActors::TChunkSerializer;
+
+template <typename InitFunc>
+ui128 InitializeEvents(std::span<TEvVPut> evs, InitFunc& initFunc) {
+    ui128 bytesWritten = 0;
+    for (auto& ev : evs) {
+        bytesWritten += initFunc(ev);
+    }
+    return bytesWritten;
+}
+
+void SerializeEvents(std::span<TEvVPut> evs, std::span<IOutputStream*> streams) {
+    for (size_t i = 0; i < evs.size(); ++i) {
+        auto& ev = evs[i];
+        auto* stream = streams[i];
+        ev.Save(stream);
+    }
+}
+
+void DeserializeEvents(std::span<TEvVPut> evs, std::span<IInputStream*> streams) {
+    for (size_t i = 0; i < evs.size(); ++i) {
+        auto& ev = evs[i];
+        auto* stream = streams[i];
+        ev.Load(stream);
+    }
+}
+
+template <size_t max_bytes, typename InitFunc>
+TTestStats DoTest(size_t evCount, InitFunc&& initFunc) {
+    TTestStats stats;
+    stats.EvCount = evCount;
+
+    std::vector<TEvVPut> evs(evCount);
+    std::vector<Buffer<max_bytes>> streams(evCount);
+    std::vector<IInputStream*> inputs;
+    std::vector<IOutputStream*> outputs;
+    inputs.reserve(streams.size());
+    outputs.reserve(streams.size());
+    for (auto& s : streams) {
+        inputs.push_back(&s);
+        outputs.push_back(&s);
+    }
+
+    stats.BytesWritten = InitializeEvents(evs, initFunc);
+
+    {
+        auto start = TInstant::Now();
+        SerializeEvents(evs, outputs);
+        auto end = TInstant::Now();
+        stats.SerializeDuration = end - start;
+    }
+
+    {
+        auto start = TInstant::Now();
+        DeserializeEvents(evs, inputs);
+        auto end = TInstant::Now();
+        stats.DeserializeDuration = end - start;
+    }
+
+    return stats;
+}
+
 template <std::derived_from<NActors::IEventBase> Event>
 void SerDeLoopIteration(Event& ev, size_t iterations) {
     for (size_t i = 0; i < iterations; ++i) {
         NActors::TAllocChunkSerializer serializer;
         ev.SerializeToArcadiaStream(&serializer);
         auto data = serializer.Release(ev.CreateSerializationInfo());
-        NKikimr::TEvBlobStorage::TEvVPut::Load(data.Get());
+        Event::Load(data.Get());
     }
 }
 
 } // namespace
 
-Y_CPU_BENCHMARK(Put_32, info) {
-    NKikimr::TEvBlobStorage::TEvVPut ev;
-    ev.StorePayload(TRope(storeString32));
-    SerDeLoopIteration(ev, info.Iterations());
+int main() {
+    constexpr static size_t kLogMin = 10;
+    constexpr static size_t kLogMax = 18;
+    constexpr static size_t kIterations = 80;
+
+    TTestStats stats;
+    for (size_t k = kLogMin; k < kLogMax; ++k) {
+        for (size_t i = 0; i < kIterations; ++i) {
+            stats += DoTest<128>(1U << k, [](TEvVPut& ev) {
+                Y_UNUSED(ev);
+                return 0;
+            });
+        }
+    }
+    Cout
+    << stats.BytesWritten << " BytesWritten" << Endl
+    << stats.EvCount << " EvCount" << Endl
+    << stats.SerializeDuration << " SerializeDuration" << Endl
+    << stats.DeserializeDuration << " DeserializeDuration" << Endl
+    << Endl
+    << stats.EvCount / stats.SerializeDuration.MilliSeconds() << " Ev/ms write" << Endl
+    << stats.BytesWritten / stats.SerializeDuration.MilliSeconds() << " B/ms write" << Endl
+    << stats.EvCount / stats.DeserializeDuration.MilliSeconds() << " Ev/ms read" << Endl
+    << stats.BytesWritten / stats.DeserializeDuration.MilliSeconds() << " B/ms read" << Endl
+    ;
 }
-
-Y_CPU_BENCHMARK(Put_64, info) {
-    NKikimr::TEvBlobStorage::TEvVPut ev;
-    ev.StorePayload(TRope(storeString64));
-    SerDeLoopIteration(ev, info.Iterations());
-}
-
-Y_CPU_BENCHMARK(Put_128, info) {
-    NKikimr::TEvBlobStorage::TEvVPut ev;
-    ev.StorePayload(TRope(storeString128));
-    SerDeLoopIteration(ev, info.Iterations());
-}
-
-Y_CPU_BENCHMARK(Put_256, info) {
-    NKikimr::TEvBlobStorage::TEvVPut ev;
-    ev.StorePayload(TRope(storeString256));
-    SerDeLoopIteration(ev, info.Iterations());
-}
-
-Y_CPU_BENCHMARK(Get, info) {
-    NKikimr::TEvBlobStorage::TEvVGet ev;
-    SerDeLoopIteration(ev, info.Iterations());
-}
-
-// Y_CPU_BENCHMARK(Get_64, info) {
-//     SerDeLoopIteration<NKikimr::TEvBlobStorage::TEvVGet>(storeString64, info.Iterations());
-// }
-
-// Y_CPU_BENCHMARK(Get_128, info) {
-//     SerDeLoopIteration<NKikimr::TEvBlobStorage::TEvVGet>(storeString128, info.Iterations());
-// }
-
-// Y_CPU_BENCHMARK(Get_256, info) {
-//     SerDeLoopIteration<NKikimr::TEvBlobStorage::TEvVGet>(storeString256, info.Iterations());
-// }
-
-// Y_CPU_BENCHMARK(Get_1_1, info) {
-//     NKikimrBlobStorage::TEvVGet evGet;
-//     Buffer<2048> buf;
-//     SerDeLoop(evGet, buf, info.Iterations(), 1);
-// }
-
-// Y_CPU_BENCHMARK(Put_1_3, info) {
-//     NKikimrBlobStorage::TEvVPut evPut;
-//     Buffer<2048> buf;
-//     SerDeLoop(evPut, buf, info.Iterations(), 3);
-// }
-
-// Y_CPU_BENCHMARK(Get_1_3, info) {
-//     NKikimrBlobStorage::TEvVGet evGet;
-//     Buffer<2048> buf;
-//     SerDeLoop(evGet, buf, info.Iterations(), 3);
-// }

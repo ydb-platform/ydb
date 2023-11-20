@@ -1,7 +1,7 @@
 add_executable(vdisk_bench)
 target_link_libraries(vdisk_bench PUBLIC
   contrib-libs-linux-headers
-  testing-benchmark-main
+  # testing-benchmark-main
   blobstorage-vdisk-common
 )
 target_link_options(corobenchmark PRIVATE

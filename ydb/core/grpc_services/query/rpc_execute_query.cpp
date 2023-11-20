@@ -238,7 +238,6 @@ private:
 
         Ydb::Table::TransactionControl* txControl = nullptr;
         if (req->has_tx_control()) {
-            ReplyTxMeta = !req->tx_control().commit_tx();
             txControl = google::protobuf::Arena::CreateMessage<Ydb::Table::TransactionControl>(Request_->GetArena());
             if (!FillTxControl(req->tx_control(), *txControl, issues)) {
                 return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, std::move(issues));
@@ -374,7 +373,7 @@ private:
 
             bool hasTrailingMessage = false;
 
-            if (kqpResponse.HasTxMeta() && ReplyTxMeta) {
+            if (kqpResponse.HasTxMeta()) {
                 hasTrailingMessage = true;
                 response.mutable_tx_meta()->set_id(kqpResponse.GetTxMeta().id());
             }
@@ -466,7 +465,6 @@ private:
 
     TRpcFlowControlState FlowControl_;
     TMap<TActorId, TProducerState> StreamProducers_;
-    bool ReplyTxMeta = false;
 };
 
 } // namespace

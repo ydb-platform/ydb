@@ -2,10 +2,14 @@
 #include "permutations.h"
 #include "replace_key.h"
 #include "size_calcer.h"
+
 #include <ydb/core/formats/arrow/common/validation.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <ydb/library/services/services.pb.h>
+
 #include <library/cpp/actors/core/log.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/xxhash/xxhash.h>
 
 namespace NKikimr::NArrow {
 
@@ -252,17 +256,17 @@ size_t THashConstructor::TypedHash(const arrow::Array& ar, const int pos) {
         case arrow::Type::STRING:
         {
             const auto& str = static_cast<const arrow::StringArray&>(ar).GetView(pos);
-            return CityHash64(str.data(), str.size());
+            return XXH64(str.data(), str.size(), 0);
         }
         case arrow::Type::BINARY:
         {
             const auto& str = static_cast<const arrow::BinaryArray&>(ar).GetView(pos);
-            return CityHash64(str.data(), str.size());
+            return XXH64(str.data(), str.size(), 0);
         }
         case arrow::Type::FIXED_SIZE_BINARY:
         {
             const auto& str = static_cast<const arrow::FixedSizeBinaryArray&>(ar).GetView(pos);
-            return CityHash64(str.data(), str.size());
+            return XXH64(str.data(), str.size(), 0);
         }
         case arrow::Type::TIMESTAMP:
             return THash<i64>()(static_cast<const arrow::TimestampArray&>(ar).Value(pos));
